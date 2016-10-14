@@ -21,7 +21,6 @@ import (
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
-	basictracer "github.com/opentracing/basictracer-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -42,9 +41,6 @@ type Txn struct {
 	Proto        roachpb.Transaction
 	UserPriority roachpb.UserPriority
 	Context      context.Context // must not be nil
-	// CollectedSpans receives spans from remote hosts for "EXPLAIN(TRACE)"
-	// statements.
-	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool

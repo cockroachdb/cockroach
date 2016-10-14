@@ -268,6 +268,9 @@ func (e *explainPlanNode) Values() parser.DTuple      { return e.results.Values(
 func (e *explainPlanNode) DebugValues() debugValues   { return debugValues{} }
 func (e *explainPlanNode) MarkDebug(mode explainMode) {}
 func (e *explainPlanNode) Start() error {
+	// Note that we don't call start on e.plan. That's on purpose, Start() can
+	// have side effects. And it's supposed to not be needed for the way in which
+	// we're going to use e.plan.
 	return e.p.populateExplain(&e.explainer, e.results, e.plan)
 }
 
