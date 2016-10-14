@@ -1295,13 +1295,16 @@ func populateViewBackrefs(
 		}
 		ref := sqlbase.TableDescriptor_Reference{
 			ID:        tbl.ID,
-			ColumnIDs: make([]sqlbase.ColumnID, len(scan.cols)),
+			ColumnIDs: make([]sqlbase.ColumnID, 0, len(scan.cols)),
 		}
 		if scan.specifiedIndex != nil {
 			ref.IndexID = scan.specifiedIndex.ID
 		}
 		for i := range scan.cols {
-			ref.ColumnIDs[i] = scan.cols[i].ID
+			// Only include the columns that are actually needed.
+			if scan.valNeededForCol[i] {
+				ref.ColumnIDs = append(ref.ColumnIDs, scan.cols[i].ID)
+			}
 		}
 		desc.DependedOnBy = append(desc.DependedOnBy, ref)
 	}
