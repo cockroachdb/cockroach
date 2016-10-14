@@ -366,6 +366,8 @@ type Replica struct {
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
+		// Cached applied index byte size.
+		appliedIndexSysBytes int64
 
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
@@ -677,6 +679,12 @@ func (r *Replica) initLocked(
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
+
+	// Calculate the current size of the applied index keys to the stats. This is
+	// used to avoid reading the previous value of the applied index keys on
+	// every write operation.
+	r.mu.appliedIndexSysBytes = calcAppliedIndexSysBytes(
+		r.RangeID, r.mu.state.RaftAppliedIndex, r.mu.state.LeaseAppliedIndex)
 
 	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -3312,7 +3320,9 @@ func (r *Replica) processRaftCommand(
 		if raftCmd.WriteBatch != nil {
 			writeBatch = raftCmd.WriteBatch
 		}
-		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
+		raftCmd.ReplicatedEvalResult.Delta,
+			raftCmd.ReplicatedEvalResult.AppliedIndexSysBytesDelta,
+			pErr = r.applyRaftCommand(ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
 
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -3465,7 +3475,7 @@ func (r *Replica) applyRaftCommand(
 	idKey storagebase.CmdIDKey,
 	rResult storagebase.ReplicatedEvalResult,
 	writeBatch *storagebase.WriteBatch,
-) (enginepb.MVCCStats, *roachpb.Error) {
+) (_ enginepb.MVCCStats, appliedIndexSysBytesDelta int64, _ *roachpb.Error) {
 	if rResult.State.RaftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
@@ -3473,13 +3483,14 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Lock()
 	oldIndex := r.mu.state.RaftAppliedIndex
 	ms := r.mu.state.Stats
+	appliedIndexOldSysBytes := r.mu.appliedIndexSysBytes
 	r.mu.Unlock()
 
 	if rResult.State.RaftAppliedIndex != oldIndex+1 {
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+		return enginepb.MVCCStats{}, 0, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Errorf("applied index jumped from %d to %d", oldIndex, rResult.State.RaftAppliedIndex)))
 	}
 
@@ -3487,7 +3498,7 @@ func (r *Replica) applyRaftCommand(
 	defer batch.Close()
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data); err != nil {
-			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+			return enginepb.MVCCStats{}, 0, roachpb.NewError(NewReplicaCorruptionError(
 				errors.Wrap(err, "unable to apply WriteBatch")))
 		}
 	}
@@ -3498,20 +3509,24 @@ func (r *Replica) applyRaftCommand(
 	//
 	writer := batch.Distinct()
 
-	// Advance the last applied index.
-	if err := setAppliedIndex(
-		ctx, writer, &rResult.Delta, r.RangeID, rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex,
-	); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+	// Advance the last applied index. We use a blind write in order to avoid
+	// reading the previous applied index keys on every write operation. This
+	// requires a little additional work in order maintain the MVCC stats.
+	var appliedIndexNewMS enginepb.MVCCStats
+	if err := setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS, r.RangeID,
+		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
+		return enginepb.MVCCStats{}, 0, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
+	appliedIndexSysBytesDelta = appliedIndexNewMS.SysBytes - appliedIndexOldSysBytes
+	rResult.Delta.SysBytes += appliedIndexSysBytesDelta
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	ms.Add(rResult.Delta)
 	if err := setMVCCStats(ctx, writer, r.RangeID, ms); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+		return enginepb.MVCCStats{}, 0, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
 	}
 
@@ -3522,10 +3537,11 @@ func (r *Replica) applyRaftCommand(
 	writer.Close()
 
 	if err := batch.Commit(); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+		return enginepb.MVCCStats{}, 0, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "could not commit batch")))
 	}
-	return rResult.Delta, nil
+
+	return rResult.Delta, appliedIndexSysBytesDelta, nil
 }
 
 // applyRaftCommandInBatch executes the command in a batch engine and returns

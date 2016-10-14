@@ -254,6 +254,8 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	coalesceBool(&p.Local.maybeGossipSystemConfig, &q.Local.maybeGossipSystemConfig)
 	coalesceBool(&p.Local.maybeAddToSplitQueue, &q.Local.maybeAddToSplitQueue)
 
+	// AppliedIndexSysBytesDelta is only set during final evaluation of a
+	// request. We'll error out on the check below if it was accidentally set.
 	if (q != EvalResult{}) {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
 	}
@@ -596,6 +598,13 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 		r.mu.Unlock()
 		rResult.RaftLogDelta = nil
+	}
+
+	if rResult.AppliedIndexSysBytesDelta != 0 {
+		r.mu.Lock()
+		r.mu.appliedIndexSysBytes += rResult.AppliedIndexSysBytesDelta
+		r.mu.Unlock()
+		rResult.AppliedIndexSysBytesDelta = 0
 	}
 
 	if (rResult != storagebase.ReplicatedEvalResult{}) {
