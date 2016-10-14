@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package tracing
 
@@ -71,28 +72,6 @@ func JoinOrNew(
 		}
 	}
 	return tr.StartSpan(opName), nil
-}
-
-// JoinOrNewSnowball returns a Span which records directly via the specified
-// callback. If the given DelegatingCarrier is nil, a new Span is created.
-// otherwise, the created Span is a child.
-//
-// The recorder should be nil if we don't need to record spans.
-//
-// TODO(andrei): JoinOrNewSnowball creates a new tracer, which is not kosher.
-// Also this can't use the lightstep tracer.
-func JoinOrNewSnowball(
-	opName string, carrier *SpanContextCarrier, recorder func(sp basictracer.RawSpan),
-) (opentracing.Span, error) {
-	tr := basictracer.NewWithOptions(basictracerOptions(recorder))
-	sp, err := JoinOrNew(tr, carrier, opName)
-	if err == nil {
-		// We definitely want to sample a Snowball trace.
-		// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
-		otext.SamplingPriority.Set(sp, 1)
-		sp.SetBaggageItem(Snowball, "1")
-	}
-	return sp, err
 }
 
 // NewTracerAndSpanFor7881 creates a new tracer and a root span. The tracer is
@@ -367,6 +346,12 @@ func (tr *RecordedTrace) addSpan(rs basictracer.RawSpan) {
 	tr.spans = append(tr.spans, rs)
 }
 
+// AddDummySpan is an external version of addSpan.
+// TODO(andrei): get rid of this when explainTraceNode goes away.
+func (tr *RecordedTrace) AddDummySpan(rs basictracer.RawSpan) {
+	tr.addSpan(rs)
+}
+
 // GetSpans returns all accumulated spans.
 func (tr *RecordedTrace) GetSpans() []basictracer.RawSpan {
 	tr.Lock()
@@ -379,6 +364,15 @@ func (tr *RecordedTrace) Done() {
 	tr.Lock()
 	defer tr.Unlock()
 	tr.done = true
+}
+
+// ClearSpans clears the spans accumulated so far.
+// TODO(andrei): remove this once the we get rid of explainTraceNode and its
+// weird use case for this.
+func (tr *RecordedTrace) ClearSpans() {
+	tr.Lock()
+	defer tr.Unlock()
+	tr.spans = nil
 }
 
 // contextRecorderKeyType is an empty type for the handle associated with the
