@@ -200,7 +200,9 @@ func TestFindTimeSeries(t *testing.T) {
 			},
 		},
 	} {
-		actual, err := findTimeSeries(e, tcase.start, tcase.end)
+		snap := e.NewSnapshot()
+		actual, err := findTimeSeries(snap, tcase.start, tcase.end)
+		snap.Close()
 		if err != nil {
 			t.Fatalf("case %d: unexpected error %q", i, err)
 		}
