@@ -314,7 +314,9 @@ func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
 // in the mutations.
 func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 	indexes := make([]IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
-	indexes = append(indexes, desc.PrimaryIndex)
+	if desc.IsPhysicalTable() {
+		indexes = append(indexes, desc.PrimaryIndex)
+	}
 	indexes = append(indexes, desc.Indexes...)
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {

@@ -447,9 +447,24 @@ func forEachDatabaseDesc(p *planner, fn func(*sqlbase.DatabaseDescriptor) error)
 func forEachTableDesc(
 	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
+	return forEachTableDescWithTableLookup(p, func(
+		db *sqlbase.DatabaseDescriptor,
+		table *sqlbase.TableDescriptor,
+		_ tableLookupFn,
+	) error {
+		return fn(db, table)
+	})
+}
+
+type tableLookupFn func(tableID sqlbase.ID) (*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor)
+
+func forEachTableDescWithTableLookup(
+	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
+) error {
 	type dbDescTables struct {
-		desc   *sqlbase.DatabaseDescriptor
-		tables map[string]*sqlbase.TableDescriptor
+		desc       *sqlbase.DatabaseDescriptor
+		tables     map[string]*sqlbase.TableDescriptor
+		tablesByID map[sqlbase.ID]*sqlbase.TableDescriptor
 	}
 	databases := make(map[string]dbDescTables)
 
@@ -465,8 +480,9 @@ func forEachTableDesc(
 		if db, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
 			dbIDsToName[db.GetID()] = db.GetName()
 			databases[db.GetName()] = dbDescTables{
-				desc:   db,
-				tables: make(map[string]*sqlbase.TableDescriptor),
+				desc:       db,
+				tables:     make(map[string]*sqlbase.TableDescriptor),
+				tablesByID: make(map[sqlbase.ID]*sqlbase.TableDescriptor),
 			}
 		}
 	}
@@ -479,7 +495,8 @@ func forEachTableDesc(
 				return errors.Errorf("no database with ID %d found", table.GetParentID())
 			}
 			dbTables := databases[dbName]
-			dbTables.tables[table.GetName()] = table
+			dbTables.tables[table.Name] = table
+			dbTables.tablesByID[table.ID] = table
 		}
 	}
 
@@ -493,6 +510,18 @@ func forEachTableDesc(
 			desc:   schema.desc,
 			tables: dbTables,
 		}
+	}
+
+	// Create table lookup function, which some callers of this function, like those
+	// dealing with foreign keys, will need.
+	tableLookup := func(id sqlbase.ID) (*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) {
+		for _, db := range databases {
+			table, ok := db.tablesByID[id]
+			if ok {
+				return db.desc, table
+			}
+		}
+		return nil, nil
 	}
 
 	// Below we use the same trick twice of sorting a slice of strings lexicographically
@@ -513,7 +542,7 @@ func forEachTableDesc(
 		for _, tableName := range dbTableNames {
 			tableDesc := db.tables[tableName]
 			if userCanSeeTable(tableDesc, p.session.User) {
-				if err := fn(db.desc, tableDesc); err != nil {
+				if err := fn(db.desc, tableDesc, tableLookup); err != nil {
 					return err
 				}
 			}

@@ -143,7 +143,6 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM information_schema.tables
 ----
 Table   Name     Type  Column(s)  Details
-tables  PRIMARY  KEY   NULL         NULL
 
 query TTT colnames
 SHOW GRANTS ON information_schema.tables
@@ -346,6 +345,7 @@ xyz
 pg_attrdef
 pg_attribute
 pg_class
+pg_constraint
 pg_indexes
 pg_namespace
 pg_tables
@@ -374,6 +374,7 @@ rangelog
 pg_tables
 pg_namespace
 pg_indexes
+pg_constraint
 pg_class
 pg_attribute
 pg_attrdef
@@ -395,6 +396,7 @@ def            other_db            xyz                BASE TABLE   2
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
@@ -432,6 +434,7 @@ def            information_schema  tables             SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
@@ -458,6 +461,7 @@ def            other_db            xyz                BASE TABLE   6
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
