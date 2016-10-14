@@ -107,7 +107,7 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	fmt.Fprintf(buf, "ON %s (", node.Table)
 	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
-	if node.Storing != nil {
+	if len(node.Storing) > 0 {
 		buf.WriteString(" STORING (")
 		FormatNode(buf, f, node.Storing)
 		buf.WriteByte(')')

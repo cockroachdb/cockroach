@@ -346,6 +346,7 @@ xyz
 pg_attrdef
 pg_attribute
 pg_class
+pg_indexes
 pg_namespace
 pg_tables
 descriptor
@@ -372,6 +373,7 @@ schema_privileges
 rangelog
 pg_tables
 pg_namespace
+pg_indexes
 pg_class
 pg_attribute
 pg_attrdef
@@ -393,6 +395,7 @@ def            other_db            xyz                BASE TABLE   2
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
@@ -429,6 +432,7 @@ def            information_schema  tables             SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
@@ -454,6 +458,7 @@ def            other_db            xyz                BASE TABLE   6
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
