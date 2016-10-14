@@ -17,12 +17,16 @@
 package sql
 
 import (
+	"bytes"
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"hash/fnv"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -38,6 +42,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
+		pgCatalogConstraintTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
@@ -272,6 +277,195 @@ CREATE TABLE pg_catalog.pg_class (
 	},
 }
 
+var (
+	conTypeCheck     = parser.NewDString("c")
+	conTypeFK        = parser.NewDString("f")
+	conTypePKey      = parser.NewDString("p")
+	conTypeUnique    = parser.NewDString("u")
+	conTypeTrigger   = parser.NewDString("t")
+	conTypeExclusion = parser.NewDString("x")
+
+	// Avoid unused warning for constants.
+	_ = conTypeTrigger
+	_ = conTypeExclusion
+
+	fkActionNone       = parser.NewDString("a")
+	fkActionRestrict   = parser.NewDString("r")
+	fkActionCascade    = parser.NewDString("c")
+	fkActionSetNull    = parser.NewDString("n")
+	fkActionSetDefault = parser.NewDString("d")
+
+	// Avoid unused warning for constants.
+	_ = fkActionRestrict
+	_ = fkActionCascade
+	_ = fkActionSetNull
+	_ = fkActionSetDefault
+
+	fkMatchTypeFull    = parser.NewDString("f")
+	fkMatchTypePartial = parser.NewDString("p")
+	fkMatchTypeSimple  = parser.NewDString("s")
+
+	// Avoid unused warning for constants.
+	_ = fkMatchTypeFull
+	_ = fkMatchTypePartial
+)
+
+var pgCatalogConstraintTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_constraint (
+	oid INT,
+	conname STRING,
+	connamespace INT,
+	contype STRING,
+	condeferrable BOOL,
+	condeferred BOOL,
+	convalidated BOOL,
+	conrelid INT,
+	contypid INT,
+	conindid INT,
+	confrelid INT,
+	confupdtype STRING,
+	confdeltype STRING,
+	confmatchtype STRING,
+	conislocal BOOL,
+	coninhcount INT,
+	connoinherit BOOL,
+	conkey STRING,
+	confkey STRING,
+	conpfeqop STRING,
+	conppeqop STRING,
+	conffeqop STRING,
+	conexclop STRING,
+	conbin STRING,
+	consrc STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDescWithTableLookup(p,
+			func(
+				db *sqlbase.DatabaseDescriptor,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				info, err := table.GetConstraintInfoWithLookup(func(id sqlbase.ID) (
+					*sqlbase.TableDescriptor, error,
+				) {
+					if _, t := tableLookup(id); t != nil {
+						return t, nil
+					}
+					return nil, errors.Errorf("could not find referenced table with ID %v", id)
+				})
+				if err != nil {
+					return err
+				}
+
+				for name, c := range info {
+					oid := parser.DNull
+					contype := parser.DNull
+					conindid := zeroVal
+					confrelid := zeroVal
+					confupdtype := parser.DNull
+					confdeltype := parser.DNull
+					confmatchtype := parser.DNull
+					conkey := parser.DNull
+					confkey := parser.DNull
+					consrc := parser.DNull
+
+					// Determine constraint kind-specific fields.
+					switch c.Kind {
+					case sqlbase.ConstraintTypePK:
+						oid = h.PrimaryKeyConstraintOid(db, table, c.Index)
+						contype = conTypePKey
+						conindid = h.IndexOid(db, table, c.Index)
+						conkey = colIDArrayToDatum(c.Index.ColumnIDs)
+
+					case sqlbase.ConstraintTypeFK:
+						referencedDB, _ := tableLookup(c.ReferencedTable.ID)
+						if referencedDB == nil {
+							panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
+						}
+
+						oid = h.ForeignKeyConstraintOid(db, table, c.FK)
+						contype = conTypeFK
+						conindid = h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
+						confrelid = h.TableOid(referencedDB, c.ReferencedTable)
+						confupdtype = fkActionNone
+						confdeltype = fkActionNone
+						confmatchtype = fkMatchTypeSimple
+						conkey = colIDArrayToDatum(c.Index.ColumnIDs)
+						confkey = colIDArrayToDatum(c.ReferencedIndex.ColumnIDs)
+
+					case sqlbase.ConstraintTypeUnique:
+						oid = h.UniqueConstraintOid(db, table, c.Index)
+						contype = conTypeUnique
+						conindid = h.IndexOid(db, table, c.Index)
+						conkey = colIDArrayToDatum(c.Index.ColumnIDs)
+
+					case sqlbase.ConstraintTypeCheck:
+						oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
+						contype = conTypeCheck
+						// TODO(nvanbenschoten) We currently do not store the referenced columns for a check
+						// constraint. We should add an array of column indexes to
+						// sqlbase.TableDescriptor_CheckConstraint and use that here.
+						consrc = parser.NewDString(c.Details)
+					}
+
+					if err := addRow(
+						oid,                                            // oid
+						dStringOrNull(name),                            // conname
+						h.DBOid(db),                                    // connamespace
+						contype,                                        // contype
+						parser.MakeDBool(false),                        // condeferrable
+						parser.MakeDBool(false),                        // condeferred
+						parser.MakeDBool(parser.DBool(!c.Unvalidated)), // convalidated
+						h.TableOid(db, table),                          // conrelid
+						zeroVal,                                        // contypid
+						conindid,                                       // conindid
+						confrelid,                                      // confrelid
+						confupdtype,                                    // confupdtype
+						confdeltype,                                    // confdeltype
+						confmatchtype,                                  // confmatchtype
+						parser.MakeDBool(true),                         // conislocal
+						zeroVal,                                        // coninhcount
+						parser.MakeDBool(true),                         // connoinherit
+						conkey,                                         // conkey
+						confkey,                                        // confkey
+						parser.DNull,                                   // conpfeqop
+						parser.DNull,                                   // conppeqop
+						parser.DNull,                                   // conffeqop
+						parser.DNull,                                   // conexclop
+						consrc,                                         // conbin
+						consrc,                                         // consrc
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		)
+	},
+}
+
+// colIDArrayToDatum returns a mock int[] as a DString for a slice of ColumnIDs.
+// TODO(nvanbenschoten) use real int arrays when they are supported.
+func colIDArrayToDatum(arr []sqlbase.ColumnID) parser.Datum {
+	if len(arr) == 0 {
+		return parser.DNull
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, val := range arr {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(strconv.Itoa(int(val)))
+	}
+	buf.WriteByte('}')
+	return parser.NewDString(buf.String())
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-indexes.html.
 var pgCatalogIndexesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_indexes (
@@ -460,6 +654,10 @@ const (
 	tableTypeTag
 	indexTypeTag
 	columnTypeTag
+	checkConstraintTypeTag
+	fkConstraintTypeTag
+	pKeyConstraintTypeTag
+	uniqueConstraintTypeTag
 	typeTypeTag
 )
 
@@ -490,6 +688,17 @@ func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
 func (h oidHasher) writeColumn(column *sqlbase.ColumnDescriptor) {
 	h.writeUInt32(uint32(column.ID))
 	h.writeStr(column.Name)
+}
+
+func (h oidHasher) writeCheckConstraint(check *sqlbase.TableDescriptor_CheckConstraint) {
+	h.writeStr(check.Name)
+	h.writeStr(check.Expr)
+}
+
+func (h oidHasher) writeForeignKeyReference(fk *sqlbase.ForeignKeyReference) {
+	h.writeUInt32(uint32(fk.Table))
+	h.writeUInt32(uint32(fk.Index))
+	h.writeStr(fk.Name)
 }
 
 func (h oidHasher) writeType(typ parser.Type) {
@@ -528,6 +737,48 @@ func (h oidHasher) ColumnOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeColumn(column)
+	return h.getOid()
+}
+
+func (h oidHasher) CheckConstraintOid(
+	db *sqlbase.DatabaseDescriptor,
+	table *sqlbase.TableDescriptor,
+	check *sqlbase.TableDescriptor_CheckConstraint,
+) *parser.DInt {
+	h.writeTypeTag(checkConstraintTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeCheckConstraint(check)
+	return h.getOid()
+}
+
+func (h oidHasher) PrimaryKeyConstraintOid(
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, pkey *sqlbase.IndexDescriptor,
+) *parser.DInt {
+	h.writeTypeTag(pKeyConstraintTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeIndex(pkey)
+	return h.getOid()
+}
+
+func (h oidHasher) ForeignKeyConstraintOid(
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, fk *sqlbase.ForeignKeyReference,
+) *parser.DInt {
+	h.writeTypeTag(fkConstraintTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeForeignKeyReference(fk)
+	return h.getOid()
+}
+
+func (h oidHasher) UniqueConstraintOid(
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) *parser.DInt {
+	h.writeTypeTag(uniqueConstraintTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeIndex(index)
 	return h.getOid()
 }
 
