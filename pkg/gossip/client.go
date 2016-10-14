@@ -37,7 +37,8 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	ctx                   context.Context
+	log.AmbientContext
+
 	createdAt             time.Time
 	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
 	addr                  net.Addr                 // Peer node network address
@@ -58,11 +59,11 @@ func extractKeys(delta map[string]*Info) string {
 }
 
 // newClient creates and returns a client struct.
-func newClient(ctx context.Context, addr net.Addr, nodeMetrics Metrics) *client {
+func newClient(ambient log.AmbientContext, addr net.Addr, nodeMetrics Metrics) *client {
 	return &client{
-		ctx:       ctx,
-		createdAt: timeutil.Now(),
-		addr:      addr,
+		AmbientContext: ambient,
+		createdAt:      timeutil.Now(),
+		addr:           addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
 		clientMetrics:         makeMetrics(),
@@ -82,7 +83,7 @@ func (c *client) start(
 	breaker *circuit.Breaker,
 ) {
 	stopper.RunWorker(func() {
-		ctx, cancel := context.WithCancel(c.ctx)
+		ctx, cancel := context.WithCancel(c.AnnotateCtx(context.Background()))
 		var wg sync.WaitGroup
 		defer func() {
 			// This closes the outgoing stream, causing any attempt to send or
@@ -185,10 +186,17 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 		c.nodeMetrics.InfosSent.Inc(infosSent)
 
 		if log.V(1) {
+			ctx := c.AnnotateCtx(stream.Context())
 			if c.peerID != 0 {
-				log.Infof(c.ctx, "node %d: sending %s to node %d (%s)", g.mu.is.NodeID, extractKeys(args.Delta), c.peerID, c.addr)
+				log.Infof(
+					ctx, "node %d: sending %s to node %d (%s)",
+					g.mu.is.NodeID, extractKeys(args.Delta), c.peerID, c.addr,
+				)
 			} else {
-				log.Infof(c.ctx, "node %d: sending %s to %s", g.mu.is.NodeID, extractKeys(args.Delta), c.addr)
+				log.Infof(
+					ctx, "node %d: sending %s to %s",
+					g.mu.is.NodeID, extractKeys(args.Delta), c.addr,
+				)
 			}
 		}
 
@@ -201,7 +209,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 
 // handleResponse handles errors, remote forwarding, and combines delta
 // gossip infos from the remote server with this node's infostore.
-func (c *client) handleResponse(g *Gossip, reply *Response) error {
+func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -216,11 +224,11 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	if reply.Delta != nil {
 		freshCount, err := g.mu.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(c.ctx, "node %d: failed to fully combine delta from node %d: %s", g.mu.is.NodeID, reply.NodeID, err)
+			log.Warningf(ctx, "node %d: failed to fully combine delta from node %d: %s", g.mu.is.NodeID, reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(c.ctx, "node %d: received %s from node %d (%d fresh)", g.mu.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(ctx, "node %d: received %s from node %d (%d fresh)", g.mu.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTightenLocked()
@@ -297,7 +305,7 @@ func (c *client) gossip(
 				if err != nil {
 					return err
 				}
-				if err := c.handleResponse(g, reply); err != nil {
+				if err := c.handleResponse(ctx, g, reply); err != nil {
 					return err
 				}
 			}

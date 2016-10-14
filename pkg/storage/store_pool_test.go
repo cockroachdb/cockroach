@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -67,7 +68,7 @@ func createTestStorePool(
 	clock := hlc.NewClock(mc.UnixNano)
 	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
@@ -493,7 +494,7 @@ func TestStorePoolReserve(t *testing.T) {
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	server := rpc.NewServer(rpcCtx) // never started
-	g := gossip.New(context.TODO(), rpcCtx, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(log.AmbientContext{}, rpcCtx, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(

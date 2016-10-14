@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -80,7 +81,7 @@ func createCluster(
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(ctx, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext)
-	g := gossip.New(ctx, rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
 	// instance to prevent conflicts with real NodeIDs.
 	g.SetNodeID(-1)

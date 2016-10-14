@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1162,7 +1163,7 @@ func Example_rebalancing() {
 	// randomly adding / removing stores and adding bytes.
 	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(context.Background(), rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(

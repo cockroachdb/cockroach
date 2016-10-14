@@ -149,7 +149,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 		rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.New(
-			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry())
+			log.AmbientContext{}, rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {
