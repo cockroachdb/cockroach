@@ -358,15 +358,7 @@ func (cli resilientDockerClient) ContainerCreate(
 func (cli resilientDockerClient) ContainerRemove(
 	ctx context.Context, container string, options types.ContainerRemoveOptions,
 ) error {
-	err := cli.APIClient.ContainerRemove(ctx, container, options)
-
-	if os.Getenv("CIRCLECI") == "true" {
-		// HACK: Removal of docker containers on circleci reports the error:
-		// "Driver btrfs failed to remove root filesystem". So if we're running on
-		// circleci, just ignore the error, the containers are still removed.
-		return nil
-	}
-	return err
+	return cli.APIClient.ContainerRemove(ctx, container, options)
 }
 
 // retryingDockerClient proxies the Docker client api and retries problematic
