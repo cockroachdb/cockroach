@@ -138,9 +138,7 @@ type SessionArgs struct {
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
-	if tracing.TracerFromCtx(ctx) == nil && opentracing.SpanFromContext(ctx) == nil {
-		panic("Session's context must have a tracer or a span")
-	}
+	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
 		Database:   args.Database,
 		SearchPath: []string{"pg_catalog"},
@@ -158,13 +156,12 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
-	remoteStr := "<internal>"
-	if remote != nil {
-		remoteStr = remote.String()
-	}
-	ctx = log.WithLogTagStr(ctx, "client", remoteStr)
 
 	if opentracing.SpanFromContext(ctx) == nil {
+		remoteStr := "<internal>"
+		if remote != nil {
+			remoteStr = remote.String()
+		}
 		// Set up an EventLog for session events.
 		ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 		s.finishEventLog = true
@@ -328,7 +325,7 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			sp = tracer.StartSpan("sql txn", opentracing.ChildOf(parentSp.Context()))
 		} else {
 			// Create a root span for this SQL txn.
-			tracer := tracing.TracerFromCtx(ctx)
+			tracer := e.cfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan("sql txn")
 		}
 		ctx = opentracing.ContextWithSpan(ctx, sp)
@@ -456,6 +453,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	if planMaker.txn != nil {
 		panic("trying to execute schema changes while still in a transaction")
 	}
+	ctx := e.AnnotateCtx(context.TODO())
 	// Release the leases once a transaction is complete.
 	planMaker.releaseLeases()
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
@@ -469,7 +467,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
-				log.Warning(e.cfg.Context, err)
+				log.Warning(ctx, err)
 				break
 			} else if done {
 				break
@@ -490,7 +488,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{Err: err}
 				}
-				log.Warningf(e.cfg.Context, "Error executing schema change: %s", err)
+				log.Warningf(ctx, "error executing schema change: %s", err)
 			}
 			break
 		}
