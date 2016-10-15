@@ -398,7 +398,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
-	ch, _, err := r.proposeRaftCommand(context.Background(), ba)
+	ch, _, err := r.propose(context.Background(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -638,7 +638,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(*ProposalData) error {
+	rng.mu.submitProposalFn = func(*ProposalData) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -978,7 +978,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.rng.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, err := tc.rng.proposeRaftCommand(context.Background(), ba)
+	ch, _, err := tc.rng.propose(context.Background(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -1625,11 +1625,11 @@ func TestLeaseConcurrent(t *testing.T) {
 
 			var seen int32
 			tc.rng.mu.Lock()
-			tc.rng.mu.proposeRaftCommandFn = func(cmd *ProposalData) error {
+			tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 				ll, ok := cmd.RaftCommand.Cmd.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
-					return defaultProposeRaftCommandLocked(tc.rng, cmd)
+					return defaultSubmitProposalLocked(tc.rng, cmd)
 				}
 				if c := atomic.AddInt32(&seen, 1); c > 1 {
 					// Morally speaking, this is an error, but reproposals can
@@ -1651,7 +1651,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						}
 						return
 					}
-					if err := defaultProposeRaftCommandLocked(tc.rng, cmd); err != nil {
+					if err := defaultSubmitProposalLocked(tc.rng, cmd); err != nil {
 						panic(err) // unlikely, so punt on proper handling
 					}
 				}()
@@ -3085,7 +3085,7 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft replay) and
 		// also avoid updating the timestamp cache; verify WriteTooOldError.
 		ba.Timestamp = txn.OrigTimestamp
-		ch, _, err := tc.rng.proposeRaftCommand(context.Background(), ba)
+		ch, _, err := tc.rng.propose(context.Background(), ba)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -5013,15 +5013,15 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Mock proposeRaftCommand to return an roachpb.RaftGroupDeletedError.
-	proposeRaftCommandFn := func(*ProposalData) error {
+	// Mock propose to return an roachpb.RaftGroupDeletedError.
+	submitProposalFn := func(*ProposalData) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 
 	rng := tc.rng
 
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = proposeRaftCommandFn
+	rng.mu.submitProposalFn = submitProposalFn
 	rng.mu.Unlock()
 
 	gArgs := getArgs(roachpb.Key("a"))
@@ -5564,7 +5564,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if cancelEarly {
 				cancel()
 				tc.rng.mu.Lock()
-				tc.rng.mu.proposeRaftCommandFn = func(*ProposalData) error {
+				tc.rng.mu.submitProposalFn = func(*ProposalData) error {
 					return nil
 				}
 				tc.rng.mu.Unlock()
@@ -5791,7 +5791,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 
 	// Stop the command from being proposed to the raft group and being removed.
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(p *ProposalData) error { return nil }
+	rng.mu.submitProposalFn = func(p *ProposalData) error { return nil }
 	rng.mu.Unlock()
 
 	// Add a command to the pending list.
@@ -5803,7 +5803,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 			Key: roachpb.Key("a"),
 		},
 	})
-	_, _, err := rng.proposeRaftCommand(context.Background(), ba)
+	_, _, err := rng.propose(context.Background(), ba)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5813,7 +5813,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	commandProposed := make(chan struct{}, 1)
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
-	rng.mu.proposeRaftCommandFn = func(p *ProposalData) error {
+	rng.mu.submitProposalFn = func(p *ProposalData) error {
 		if p.RaftCommand.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
@@ -5852,14 +5852,14 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 	var c int32 // updated atomically
 
 	tc.rng.mu.Lock()
-	tc.rng.mu.proposeRaftCommandFn = func(cmd *ProposalData) error {
+	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			curAttempt := atomic.AddInt32(&c, 1)
 			if (repropose || curAttempt == 2) && withErr {
 				return errors.New("boom")
 			}
 		}
-		return defaultProposeRaftCommandLocked(tc.rng, cmd)
+		return defaultSubmitProposalLocked(tc.rng, cmd)
 	}
 	tc.rng.mu.Unlock()
 
@@ -5903,7 +5903,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		// Make a new command, but pretend it didn't increment the assignment
 		// counter. This leaks some implementation, but not too much.
 		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
-		cmd := tc.rng.prepareRaftCommandLocked(
+		cmd := tc.rng.evaluateProposalLocked(
 			context.WithValue(context.Background(), magicKey{}, "foo"),
 			makeIDKey(), repDesc, ba)
 		cmd.RaftCommand.MaxLeaseIndex = preAssigned
@@ -5912,12 +5912,12 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 			fatalf("%s", err)
 		}
 		cmd.RaftCommand.MaxLeaseIndex = wrongIndex
-		tc.rng.insertRaftCommandLocked(cmd)
+		tc.rng.insertProposalLocked(cmd)
 		if repropose {
 			if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 				fatalf("%s", err)
 			}
-		} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
+		} else if err := tc.rng.submitProposalLocked(cmd); err != nil {
 			fatalf("%s", err)
 		}
 		return cmd.done
@@ -6003,8 +6003,8 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd := rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), repDesc, ba)
-			rng.insertRaftCommandLocked(cmd)
+			cmd := rng.evaluateProposalLocked(context.Background(), makeIDKey(), repDesc, ba)
+			rng.insertProposalLocked(cmd)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
 			// the command and it isn't reproposed due to the
@@ -6012,7 +6012,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
 				delete(rng.mu.proposals, cmd.idKey)
-			} else if err := rng.proposePendingCmdLocked(cmd); err != nil {
+			} else if err := rng.submitProposalLocked(cmd); err != nil {
 				t.Fatal(err)
 			} else {
 
@@ -6049,11 +6049,11 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	var seenCmds []int
 	tc.rng.mu.Lock()
-	tc.rng.mu.proposeRaftCommandFn = func(cmd *ProposalData) error {
+	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(cmd.RaftCommand.MaxLeaseIndex))
 		}
-		return defaultProposeRaftCommandLocked(tc.rng, cmd)
+		return defaultSubmitProposalLocked(tc.rng, cmd)
 	}
 	tc.rng.mu.Unlock()
 
@@ -6075,8 +6075,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
-			tc.rng.insertRaftCommandLocked(cmd)
+			cmd := tc.rng.evaluateProposalLocked(ctx, makeIDKey(), repDesc, ba)
+			tc.rng.insertProposalLocked(cmd)
 			chs = append(chs, cmd.done)
 		}
 
@@ -6167,10 +6167,10 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.clock.Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
-		cmd := r.prepareRaftCommandLocked(context.Background(),
+		cmd := r.evaluateProposalLocked(context.Background(),
 			storagebase.CmdIDKey(id), repDesc, ba)
-		r.insertRaftCommandLocked(cmd)
-		if err := r.proposePendingCmdLocked(cmd); err != nil {
+		r.insertProposalLocked(cmd)
+		if err := r.submitProposalLocked(cmd); err != nil {
 			t.Fatal(err)
 		}
 		// Build a map from command key to proposed-at-ticks.
@@ -6230,7 +6230,7 @@ func TestReplicaDoubleRefurbish(t *testing.T) {
 	// Make a Raft command; we'll set things up so that it will be considered
 	// for refurbishment multiple times.
 	tc.rng.mu.Lock()
-	cmd := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), repDesc, ba)
+	cmd := tc.rng.evaluateProposalLocked(context.Background(), makeIDKey(), repDesc, ba)
 	ch := cmd.done // must not use cmd outside of mutex
 	tc.rng.mu.Unlock()
 
@@ -6255,9 +6255,9 @@ func TestReplicaDoubleRefurbish(t *testing.T) {
 		// and the second would decide to not repropose, but accidentally send
 		// the error to the client, so that the successful refurbishment would
 		// be the second result received by the client.
-		tc.rng.insertRaftCommandLocked(cmd)
+		tc.rng.insertProposalLocked(cmd)
 		for i := 0; i < num; i++ {
-			if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
+			if err := tc.rng.submitProposalLocked(cmd); err != nil {
 				t.Fatal(err)
 			}
 		}
