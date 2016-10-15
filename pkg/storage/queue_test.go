@@ -47,7 +47,7 @@ type testQueueImpl struct {
 }
 
 func (tq *testQueueImpl) shouldQueue(
-	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	_ context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
@@ -85,7 +85,7 @@ func makeTestBaseQueue(
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	return newBaseQueue(context.TODO(), name, impl, store, gossip, cfg)
+	return newBaseQueue(name, impl, store, gossip, cfg)
 }
 
 // TestQueuePriorityQueue verifies priority queue implementation.

@@ -99,7 +99,7 @@ type gcQueue struct {
 func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
 	gcq.baseQueue = newBaseQueue(
-		store.Ctx(), "gc", gcq, store, gossip,
+		"gc", gcq, store, gossip,
 		queueConfig{
 			maxSize:              gcQueueMaxSize,
 			needsLease:           true,
@@ -121,12 +121,12 @@ type resolveFunc func([]roachpb.Intent, bool, bool) error
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(
-	now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf(gcq.ctx, "could not find zone config for range %s: %s", repl, err)
+		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
 		return
 	}
 
@@ -321,7 +321,8 @@ func (gcq *gcQueue) process(
 	// We have the "luxury" of having two relevant contexts here: One which
 	// goes to the queue's EventLog and one which goes to tracing for this
 	// operation.
-	log.Infof(gcq.ctx, "completed with stats %+v", info)
+	queueCtx := gcq.AnnotateCtx(context.TODO())
+	log.Infof(queueCtx, "completed with stats %+v", info)
 	log.Eventf(ctx, "completed with stats %+v", info)
 
 	info.updateMetrics(gcq.store.metrics)

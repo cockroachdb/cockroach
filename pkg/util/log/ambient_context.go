@@ -100,7 +100,6 @@ func (ac *AmbientContext) SetEventLog(family, title string) {
 // record events from contexts that use this event log embedded are allowed.
 func (ac *AmbientContext) FinishEventLog() {
 	ac.eventLog.finish()
-	ac.eventLog = nil
 }
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:

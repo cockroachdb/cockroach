@@ -41,7 +41,7 @@ import (
 // persisted consistently to every store and the most recent bootstrap
 // information to be read at node startup.
 type Stores struct {
-	ctx        context.Context
+	log.AmbientContext
 	clock      *hlc.Clock
 	mu         syncutil.RWMutex           // Protects storeMap and addrs
 	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
@@ -54,11 +54,11 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(ctx context.Context, clock *hlc.Clock) *Stores {
+func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 	return &Stores{
-		ctx:      ctx,
-		clock:    clock,
-		storeMap: map[roachpb.StoreID]*Store{},
+		AmbientContext: ambient,
+		clock:          clock,
+		storeMap:       map[roachpb.StoreID]*Store{},
 	}
 }
 
@@ -101,7 +101,8 @@ func (ls *Stores) AddStore(s *Store) {
 	// all stores have the most recent values.
 	if !ls.biLatestTS.Equal(hlc.ZeroTimestamp) {
 		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
-			log.Errorf(ls.ctx, "failed to update bootstrap info on newly added store: %s", err)
+			ctx := ls.AnnotateCtx(context.TODO())
+			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %s", err)
 		}
 	}
 }
@@ -212,7 +213,8 @@ func (ls *Stores) LookupReplica(
 
 		// Verify that the descriptor contains the entire range.
 		if desc := replica.Desc(); !desc.ContainsKeyRange(start, end) {
-			log.Warningf(ls.ctx, "range not contained in one range: [%s,%s), but have [%s,%s)",
+			ctx := ls.AnnotateCtx(context.TODO())
+			log.Warningf(ctx, "range not contained in one range: [%s,%s), but have [%s,%s)",
 				start, end, desc.StartKey, desc.EndKey)
 			err := roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
 			return 0, roachpb.ReplicaDescriptor{}, err
@@ -277,10 +279,12 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	defer ls.mu.RUnlock()
 	latestTS := hlc.ZeroTimestamp
 
+	ctx := ls.AnnotateCtx(context.TODO())
+
 	// Find the most recent bootstrap info.
 	for _, s := range ls.storeMap {
 		var storeBI gossip.BootstrapInfo
-		ok, err := engine.MVCCGetProto(ls.ctx, s.engine, keys.StoreGossipKey(), hlc.ZeroTimestamp, true, nil, &storeBI)
+		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.ZeroTimestamp, true, nil, &storeBI)
 		if err != nil {
 			return err
 		}
@@ -289,7 +293,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 			*bi = storeBI
 		}
 	}
-	log.Infof(ls.ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
+	log.Infof(ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
 	return ls.updateBootstrapInfo(bi)
 }
 
@@ -304,7 +308,8 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if err := ls.updateBootstrapInfo(bi); err != nil {
 		return err
 	}
-	log.Infof(ls.ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
+	ctx := ls.AnnotateCtx(context.TODO())
+	log.Infof(ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
 	return nil
 }
 
@@ -312,12 +317,13 @@ func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if bi.Timestamp.Less(ls.biLatestTS) {
 		return nil
 	}
+	ctx := ls.AnnotateCtx(context.TODO())
 	// Update the latest timestamp and set cached version.
 	ls.biLatestTS = bi.Timestamp
 	ls.latestBI = protoutil.Clone(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
 	for _, s := range ls.storeMap {
-		if err := engine.MVCCPutProto(ls.ctx, s.engine, nil, keys.StoreGossipKey(), hlc.ZeroTimestamp, nil, bi); err != nil {
+		if err := engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.ZeroTimestamp, nil, bi); err != nil {
 			return err
 		}
 	}

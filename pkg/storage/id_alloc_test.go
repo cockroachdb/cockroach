@@ -43,7 +43,9 @@ func TestIDAllocator(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	allocd := make(chan int, 100)
-	idAlloc, err := newIDAllocator(context.TODO(), keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(
+		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+	)
 	if err != nil {
 		t.Errorf("failed to create idAllocator: %v", err)
 	}
@@ -98,7 +100,9 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	if newValue != -1024 {
 		t.Errorf("expected new value to be -1024; got %d", newValue)
 	}
-	idAlloc, err := newIDAllocator(context.TODO(), keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(
+		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+	)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -119,7 +123,9 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 		{2, 0},  // blockSize < 1
 	}
 	for i := range args {
-		if _, err := newIDAllocator(context.TODO(), nil, nil, args[i][0], args[i][1], nil); err == nil {
+		if _, err := newIDAllocator(
+			log.AmbientContext{}, nil, nil, args[i][0], args[i][1], nil,
+		); err == nil {
 			t.Errorf("expect to have error return, but got nil")
 		}
 	}
@@ -138,7 +144,9 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	allocd := make(chan int, 10)
 
 	// Firstly create a valid IDAllocator to get some ID.
-	idAlloc, err := newIDAllocator(context.TODO(), keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(
+		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+	)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -222,7 +230,9 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 func TestAllocateWithStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
-	idAlloc, err := newIDAllocator(context.TODO(), keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper)
+	idAlloc, err := newIDAllocator(
+		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+	)
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}

@@ -57,7 +57,7 @@ func newReplicateQueue(
 		updateChan: make(chan struct{}, 1),
 	}
 	rq.baseQueue = newBaseQueue(
-		store.Ctx(), "replicate", rq, store, g,
+		"replicate", rq, store, g,
 		queueConfig{
 			maxSize:              replicateQueueMaxSize,
 			needsLease:           true,
@@ -85,7 +85,7 @@ func newReplicateQueue(
 }
 
 func (rq *replicateQueue) shouldQueue(
-	now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish first.
@@ -103,14 +103,14 @@ func (rq *replicateQueue) shouldQueue(
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Error(rq.ctx, err)
+		log.Error(ctx, err)
 		return
 	}
 
 	action, priority := rq.allocator.ComputeAction(zone, desc)
 	if action != AllocatorNoop {
 		if log.V(2) {
-			log.Infof(rq.ctx, "%s repair needed (%s), enqueuing", repl, action)
+			log.Infof(ctx, "%s repair needed (%s), enqueuing", repl, action)
 		}
 		return true, priority
 	}
@@ -123,9 +123,9 @@ func (rq *replicateQueue) shouldQueue(
 		zone.Constraints, desc.Replicas, leaseStoreID)
 	if log.V(2) {
 		if target != nil {
-			log.Infof(rq.ctx, "%s rebalance target found, enqueuing", repl)
+			log.Infof(ctx, "%s rebalance target found, enqueuing", repl)
 		} else {
-			log.Infof(rq.ctx, "%s no rebalance target found, not enqueuing", repl)
+			log.Infof(ctx, "%s no rebalance target found, not enqueuing", repl)
 		}
 	}
 	return target != nil, 0
