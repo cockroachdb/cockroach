@@ -57,7 +57,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 		db: db,
 	}
 	rlq.baseQueue = newBaseQueue(
-		store.Ctx(), "raftlog", rlq, store, gossip,
+		"raftlog", rlq, store, gossip,
 		queueConfig{
 			maxSize:              raftLogQueueMaxSize,
 			needsLease:           false,
@@ -180,9 +180,10 @@ func getBehindIndex(raftStatus *raft.Status) uint64 {
 func (rlq *raftLogQueue) shouldQueue(
 	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	truncatableIndexes, _, err := getTruncatableIndexes(rlq.ctx, r)
+	ctx := rlq.AnnotateCtx(context.TODO())
+	truncatableIndexes, _, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
-		log.Warning(rlq.ctx, err)
+		log.Warning(ctx, err)
 		return false, 0
 	}
 
@@ -195,7 +196,7 @@ func (rlq *raftLogQueue) shouldQueue(
 func (rlq *raftLogQueue) process(
 	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) error {
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rlq.ctx, r)
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
 		return err
 	}

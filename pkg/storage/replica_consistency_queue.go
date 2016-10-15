@@ -40,7 +40,7 @@ type replicaConsistencyQueue struct {
 func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaConsistencyQueue {
 	rcq := &replicaConsistencyQueue{}
 	rcq.baseQueue = newBaseQueue(
-		store.Ctx(), "replica consistency checker", rcq, store, gossip,
+		"replica consistency checker", rcq, store, gossip,
 		queueConfig{
 			maxSize:              replicaConsistencyQueueSize,
 			needsLease:           true,

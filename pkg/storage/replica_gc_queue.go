@@ -75,7 +75,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 		db: db,
 	}
 	q.baseQueue = newBaseQueue(
-		store.Ctx(), "replicaGC", q, store, gossip,
+		"replicaGC", q, store, gossip,
 		queueConfig{
 			maxSize:              replicaGCQueueMaxSize,
 			needsLease:           false,
@@ -100,7 +100,8 @@ func (q *replicaGCQueue) shouldQueue(
 ) (bool, float64) {
 	lastCheck, err := rng.getLastReplicaGCTimestamp()
 	if err != nil {
-		log.Errorf(q.ctx, "could not read last replica GC timestamp: %s", err)
+		ctx := q.AnnotateCtx(context.TODO())
+		log.Errorf(ctx, "could not read last replica GC timestamp: %s", err)
 		return false, 0
 	}
 

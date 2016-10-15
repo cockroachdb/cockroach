@@ -121,8 +121,8 @@ func createTestStoreWithEngine(
 	storeCfg.Gossip.SetNodeID(nodeDesc.NodeID)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
 	tracer := tracing.NewTracer()
-	storeCfg.Ctx = tracing.WithTracer(context.Background(), tracer)
-	stores := storage.NewStores(context.TODO(), clock)
+	storeCfg.AmbientCtx.Tracer = tracer
+	stores := storage.NewStores(log.AmbientContext{}, clock)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -136,7 +136,8 @@ func createTestStoreWithEngine(
 		RPCRetryOptions:  &retryOpts,
 	}, storeCfg.Gossip)
 
-	sender := kv.NewTxnCoordSender(storeCfg.Ctx, distSender, clock, false, stopper,
+	ctx := tracing.WithTracer(context.TODO(), tracer)
+	sender := kv.NewTxnCoordSender(ctx, distSender, clock, false, stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval))
 	storeCfg.Clock = clock
 	storeCfg.DB = client.NewDB(sender)
@@ -718,7 +719,7 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
 
-	stores := storage.NewStores(context.TODO(), clock)
+	stores := storage.NewStores(log.AmbientContext{}, clock)
 	stores.AddStore(store)
 	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
 	storage.RegisterConsistencyServer(grpcServer, storesServer)
@@ -731,7 +732,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.mu.Lock()
 	m.stores[idx] = store
 	m.stoppers[idx] = stopper
-	sender := storage.NewStores(context.TODO(), clock)
+	sender := storage.NewStores(log.AmbientContext{}, clock)
 	sender.AddStore(store)
 	m.senders[idx] = sender
 	// Save the store identities for later so we can use them in

@@ -86,7 +86,7 @@ func newTimeSeriesMaintenanceQueue(
 		db:     db,
 	}
 	tsmq.baseQueue = newBaseQueue(
-		store.Ctx(), "timeSeriesMaintenance", tsmq, store, g,
+		"timeSeriesMaintenance", tsmq, store, g,
 		queueConfig{
 			maxSize:              timeSeriesMaintenanceQueueMaxSize,
 			needsLease:           true,

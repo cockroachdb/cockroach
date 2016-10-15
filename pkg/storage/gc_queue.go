@@ -97,9 +97,10 @@ type gcQueue struct {
 
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
+	// TODO(radu): pass ambient instead.
 	gcq := &gcQueue{}
 	gcq.baseQueue = newBaseQueue(
-		store.Ctx(), "gc", gcq, store, gossip,
+		"gc", gcq, store, gossip,
 		queueConfig{
 			maxSize:              gcQueueMaxSize,
 			needsLease:           true,
@@ -126,7 +127,8 @@ func (gcq *gcQueue) shouldQueue(
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf(gcq.ctx, "could not find zone config for range %s: %s", repl, err)
+		ctx := gcq.AnnotateCtx(context.TODO())
+		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
 		return
 	}
 
@@ -321,7 +323,8 @@ func (gcq *gcQueue) process(
 	// We have the "luxury" of having two relevant contexts here: One which
 	// goes to the queue's EventLog and one which goes to tracing for this
 	// operation.
-	log.Infof(gcq.ctx, "completed with stats %+v", info)
+	queueCtx := gcq.AnnotateCtx(context.TODO())
+	log.Infof(queueCtx, "completed with stats %+v", info)
 	log.Eventf(ctx, "completed with stats %+v", info)
 
 	info.updateMetrics(gcq.store.metrics)

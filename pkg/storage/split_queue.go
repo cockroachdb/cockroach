@@ -50,7 +50,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 		db: db,
 	}
 	sq.baseQueue = newBaseQueue(
-		store.Ctx(), "split", sq, store, gossip,
+		"split", sq, store, gossip,
 		queueConfig{
 			maxSize:              splitQueueMaxSize,
 			needsLease:           true,
@@ -81,7 +81,8 @@ func (sq *splitQueue) shouldQueue(
 	// size for the zone it's in.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Error(sq.ctx, err)
+		ctx := sq.AnnotateCtx(context.TODO())
+		log.Error(ctx, err)
 		return
 	}
 
