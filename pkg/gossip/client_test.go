@@ -57,9 +57,7 @@ func startGossipAtAddr(
 	var ac log.AmbientContext
 	ac.AddLogTagInt("n", int(nodeID))
 
-	rpcContext := rpc.NewContext(
-		ac.AnnotateCtx(context.TODO()), &base.Config{Insecure: true}, nil, stopper,
-	)
+	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
 	g := New(ac, rpcContext, server, nil, stopper, registry)
@@ -119,7 +117,7 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 // faked gossip service just for check the client message.
 func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	lRPCContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+	lRPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
 	local := New(log.AmbientContext{}, lRPCContext, lserver, nil, stopper, metric.NewRegistry())
@@ -129,7 +127,7 @@ func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Sto
 	}
 	local.start(lln.Addr())
 
-	rRPCContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+	rRPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
@@ -150,7 +148,7 @@ func gossipSucceedsSoon(
 	f func() error,
 ) {
 	// Use an insecure context since we don't need a valid cert.
-	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 
 	for c := range gossip {
 		disconnected <- c
@@ -270,7 +268,7 @@ func TestClientNodeID(t *testing.T) {
 	local.SetNodeID(nodeID)
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
-	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	c := newClient(log.AmbientContext{}, &remote.nodeAddr, makeMetrics())
 	disconnected := make(chan *client, 1)
 	disconnected <- c
@@ -415,7 +413,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	var g []*Gossip
 	var gossipAddr string
 	for i := 0; i < 3; i++ {
-		RPCContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+		RPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 
 		server := rpc.NewServer(RPCContext)
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
