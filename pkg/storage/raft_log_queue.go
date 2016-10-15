@@ -57,7 +57,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 		db: db,
 	}
 	rlq.baseQueue = newBaseQueue(
-		store.Ctx(), "raftlog", rlq, store, gossip,
+		"raftlog", rlq, store, gossip,
 		queueConfig{
 			maxSize:              raftLogQueueMaxSize,
 			needsLease:           false,
@@ -178,11 +178,11 @@ func getBehindIndex(raftStatus *raft.Status) uint64 {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) shouldQueue(
-	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	truncatableIndexes, _, err := getTruncatableIndexes(rlq.ctx, r)
+	truncatableIndexes, _, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
-		log.Warning(rlq.ctx, err)
+		log.Warning(ctx, err)
 		return false, 0
 	}
 
@@ -195,7 +195,7 @@ func (rlq *raftLogQueue) shouldQueue(
 func (rlq *raftLogQueue) process(
 	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) error {
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rlq.ctx, r)
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
 		return err
 	}

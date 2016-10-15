@@ -127,7 +127,7 @@ func RangeLeaseDurations(
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig() StoreConfig {
 	return StoreConfig{
-		Ctx:                            tracing.WithTracer(context.Background(), tracing.NewTracer()),
+		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		RaftTickInterval:               100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
 		RaftElectionTimeoutTicks:       3,
@@ -482,9 +482,7 @@ var _ client.Sender = &Store{}
 // All fields holding a pointer or an interface are required to create
 // a store; the rest will have sane defaults set if omitted.
 type StoreConfig struct {
-	// Base context to be used for logs and traces inside the node or store; must
-	// have a Tracer set.
-	Ctx context.Context
+	AmbientCtx log.AmbientContext
 
 	Clock        *hlc.Clock
 	DB           *client.DB
@@ -632,7 +630,7 @@ func (sc *StoreConfig) Valid() bool {
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
 		sc.ConsistencyCheckInterval >= 0 &&
-		sc.Ctx != nil && sc.Ctx.Done() == nil && tracing.TracerFromCtx(sc.Ctx) != nil
+		sc.AmbientCtx.Tracer != nil
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -687,13 +685,16 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
 	}
 
+	ctx := s.AnnotateCtx(context.Background())
+
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
-	s.scheduler = newRaftScheduler(cfg.Ctx, s.metrics, s, storeSchedulerConcurrency)
+	// TODO(radu): should pass ambient
+	s.scheduler = newRaftScheduler(ctx, s.metrics, s, storeSchedulerConcurrency)
 
 	storeMuLogger := syncutil.ThresholdLogger(
-		s.Ctx(),
+		ctx,
 		defaultStoreMutexWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "storeMu: "+msg, args...)
@@ -714,8 +715,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
+		// TODO(radu): should pass ambient
 		s.scanner = newReplicaScanner(
-			cfg.Ctx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
+			ctx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
@@ -727,8 +729,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
+		// TODO(radu): should pass ambient
 		s.consistencyScanner = newReplicaScanner(
-			cfg.Ctx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
+			ctx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
 		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
@@ -762,17 +765,16 @@ func (s *Store) String() string {
 	return fmt.Sprintf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
 }
 
-// Ctx returns the base context for the store.
-func (s *Store) Ctx() context.Context {
-	return s.cfg.Ctx
+// AnnotateCtx is a convenience wrapper; see AmbientContext.
+func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
+	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
-// logContext adds the node and store log tags to a context. Used to
-// personalize an operation context with this Store's identity.
-func (s *Store) logContext(ctx context.Context) context.Context {
-	// Copy the log tags from the base context. This allows us to opaquely set the
-	// log tags that were passed by the upper layers.
-	return log.WithLogTagsFromCtx(ctx, s.Ctx())
+// AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
+func (s *Store) AnnotateCtxWithSpan(
+	ctx context.Context, opName string,
+) (context.Context, opentracing.Span) {
+	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
 // DrainLeases (when called with 'true') prevents all of the Store's
@@ -905,11 +907,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Set the store ID for logging.
-	s.cfg.Ctx = log.WithLogTagInt(s.cfg.Ctx, "s", int(s.StoreID()))
+	s.cfg.AmbientCtx.AddLogTagInt("s", int(s.StoreID()))
 
 	// Create ID allocators.
 	idAlloc, err := newIDAllocator(
-		s.cfg.Ctx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
 	)
 	if err != nil {
 		return err
@@ -978,7 +980,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
-	if s.stopper.RunAsyncTask(s.Ctx(), func(ctx context.Context) {
+	if s.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -1134,9 +1136,10 @@ func (s *Store) startGossip() {
 	for _, gossipFn := range gossipFns {
 		gossipFn := gossipFn // per-iteration copy
 		s.stopper.RunWorker(func() {
+			ctx := s.AnnotateCtx(context.Background())
 			// Run the first time without waiting for the Ticker and signal the WaitGroup.
 			if err := gossipFn.fn(); err != nil {
-				log.Warningf(s.Ctx(), "error gossiping %s: %s", gossipFn.description, err)
+				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
 			}
 			s.initComplete.Done()
 			ticker := time.NewTicker(gossipFn.interval)
@@ -1145,7 +1148,7 @@ func (s *Store) startGossip() {
 				select {
 				case <-ticker.C:
 					if err := gossipFn.fn(); err != nil {
-						log.Warningf(s.Ctx(), "error gossiping %s: %s", gossipFn.description, err)
+						log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
 					}
 				case <-s.stopper.ShouldStop():
 					return
@@ -1184,6 +1187,7 @@ func (s *Store) maybeGossipFirstRange() error {
 // and acquires the range lease for them which in turn will trigger
 // Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
 func (s *Store) maybeGossipSystemData() error {
+	ctx := s.AnnotateCtx(context.TODO())
 	for _, span := range keys.GossipedSystemSpans {
 		rng := s.LookupReplica(roachpb.RKey(span.Key), nil)
 		if rng == nil {
@@ -1194,7 +1198,7 @@ func (s *Store) maybeGossipSystemData() error {
 		// gossip. If an unexpected error occurs (i.e. nobody else seems to
 		// have an active lease but we still failed to obtain it), return
 		// that error.
-		if _, pErr := rng.getLeaseForGossip(s.Ctx()); pErr != nil {
+		if _, pErr := rng.getLeaseForGossip(ctx); pErr != nil {
 			return pErr.GoError()
 		}
 	}
@@ -1297,6 +1301,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 	if err := s.engine.Open(); err != nil {
 		return err
 	}
+	ctx := s.AnnotateCtx(context.Background())
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine,
 		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
@@ -1306,7 +1311,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
 		if ok, err := engine.MVCCGetProto(
-			s.Ctx(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident,
+			ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident,
 		); err != nil {
 			return errors.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
 		} else if ok {
@@ -1318,7 +1323,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		}
 		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
-	err = engine.MVCCPutProto(s.Ctx(), s.engine, nil,
+	err = engine.MVCCPutProto(ctx, s.engine, nil,
 		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
 	if err != nil {
 		return err
@@ -1526,7 +1531,7 @@ func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
 // Tracer accessor.
-func (s *Store) Tracer() opentracing.Tracer { return tracing.TracerFromCtx(s.Ctx()) }
+func (s *Store) Tracer() opentracing.Tracer { return s.cfg.AmbientCtx.Tracer }
 
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
@@ -1635,7 +1640,8 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		// If we have an uninitialized replica of the new range we require pointer
 		// equivalence with newRng. See Store.splitTriggerPostCommit()
 		if exRng != newRng {
-			log.Fatalf(s.Ctx(), "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
+			ctx := s.AnnotateCtx(context.TODO())
+			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
 		}
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
 		delete(s.mu.replicas, newDesc.RangeID)
@@ -1768,9 +1774,11 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
 	case nil:
-		log.Fatalf(s.Ctx(), "range=%d: placeholder not found", rngID)
+		ctx := s.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "range=%d: placeholder not found", rngID)
 	default:
-		log.Fatalf(s.Ctx(), "range=%d: expected placeholder, got %T", rngID, exRng)
+		ctx := s.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "range=%d: expected placeholder, got %T", rngID, exRng)
 	}
 	return false // appease the compiler
 }
@@ -1819,7 +1827,7 @@ func (s *Store) removeReplicaImpl(
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
 		s.mu.Unlock()
-		log.Fatalf(s.Ctx(), "replica %s unexpectedly overlapped by %v", rep, kr)
+		panic(fmt.Sprintf("replica %s unexpectedly overlapped by %v", rep, kr))
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1865,7 +1873,7 @@ func (s *Store) removeReplicaImpl(
 	if kr := s.mu.replicasByKey.Delete(rep); kr != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		log.Fatalf(s.Ctx(), "replica %s unexpectedly overlapped by %v", rep, kr)
+		panic(fmt.Sprintf("replica %s unexpectedly overlapped by %v", rep, kr))
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
@@ -2030,7 +2038,7 @@ func (s *Store) Send(
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
-	ctx = s.logContext(ctx)
+	ctx = s.AnnotateCtx(ctx)
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
@@ -2269,6 +2277,8 @@ func (s *Store) Send(
 func (s *Store) maybeUpdateTransaction(
 	txn *roachpb.Transaction, now hlc.Timestamp,
 ) (*roachpb.Transaction, *roachpb.Error) {
+	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "maybe-update-txn")
+	defer span.Finish()
 	// Attempt to push the transaction which created the intent.
 	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.PushTxnRequest{
@@ -2279,7 +2289,7 @@ func (s *Store) maybeUpdateTransaction(
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	if err := s.db.Run(s.Ctx(), b); err != nil {
+	if err := s.db.Run(ctx, b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
 		// which case we would not get the crucial information that we've been
@@ -2340,7 +2350,7 @@ func (s *Store) HandleSnapshot(
 	}
 	capacity = &tmpCap
 
-	ctx := s.logContext(stream.Context())
+	ctx := s.AnnotateCtx(stream.Context())
 
 	if header.CanDecline {
 		// Check the bookie to see if we can apply the snapshot.
@@ -2694,7 +2704,7 @@ func (s *Store) processRaftRequest(
 // HandleRaftResponse handles response messages from the raft transport. It
 // requires that s.mu is not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
-	ctx = s.logContext(ctx)
+	ctx = s.AnnotateCtx(ctx)
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		switch val.GetDetail().(type) {
@@ -2892,7 +2902,8 @@ func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
 				if log.V(1) {
-					log.Info(s.Ctx(), errors.Wrap(err, "error sending error"))
+					ctx := s.AnnotateCtx(context.TODO())
+					log.Info(ctx, errors.Wrap(err, "error sending error"))
 				}
 			}
 		}
@@ -2944,7 +2955,8 @@ func (s *Store) processTick(rangeID roachpb.RangeID) bool {
 	if ok {
 		var err error
 		if exists, err = r.tick(); err != nil {
-			log.Error(s.Ctx(), err)
+			ctx := s.AnnotateCtx(context.TODO())
+			log.Error(ctx, err)
 		}
 		s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}
@@ -3070,13 +3082,15 @@ func (s *Store) tryGetOrCreateReplica(
 		return r, false, nil
 	}
 
+	ctx := s.AnnotateCtx(context.TODO())
+
 	// No replica currently exists, so we'll try to create one. Before creating
 	// the replica, see if there is a tombstone which would indicate that this is
 	// a stale message.
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
 	if ok, err := engine.MVCCGetProto(
-		s.Ctx(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone,
+		ctx, s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone,
 	); err != nil {
 		return nil, false, err
 	} else if ok {
@@ -3165,7 +3179,8 @@ func (s *Store) canApplySnapshotLocked(
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
 		if err != nil {
-			log.Warning(s.Ctx(), errors.Wrapf(
+			ctx := s.AnnotateCtx(context.TODO())
+			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
 		}
 		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
@@ -3218,7 +3233,8 @@ func (s *Store) updateReplicationGauges() error {
 		desc := rep.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
-			log.Error(s.Ctx(), err)
+			ctx := s.AnnotateCtx(context.TODO())
+			log.Error(ctx, err)
 			return true
 		}
 
@@ -3322,7 +3338,8 @@ func (s *Store) ComputeMetrics(tick int) error {
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
 		if tick%100 == 0 {
-			log.Infof(s.Ctx(), "sstables (read amplification = %d):\n%s", readAmp, sstables)
+			ctx := s.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
 		}
 	}
 	return nil
@@ -3364,7 +3381,8 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
 				return true
 			}
-			log.Fatalf(s.Ctx(), "unexpected error: %s", err)
+			ctx := s.AnnotateCtx(context.TODO())
+			log.Fatalf(ctx, "unexpected error: %s", err)
 		}
 		r.mu.Lock()
 		if r.mu.state.IsFrozen() == collectFrozen {

@@ -112,17 +112,16 @@ func createTestStoreWithEngine(
 	storeCfg storage.StoreConfig,
 	stopper *stop.Stopper,
 ) *storage.Store {
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
+	tracer := tracing.NewTracer()
+	ac := log.AmbientContext{Tracer: tracer}
+
+	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
-	storeCfg.Gossip = gossip.New(
-		log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry(),
-	)
+	storeCfg.Gossip = gossip.New(ac, rpcContext, server, nil, stopper, metric.NewRegistry())
 	storeCfg.Gossip.SetNodeID(nodeDesc.NodeID)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	tracer := tracing.NewTracer()
-	storeCfg.Ctx = tracing.WithTracer(context.Background(), tracer)
-	stores := storage.NewStores(context.TODO(), clock)
+	stores := storage.NewStores(ac, clock)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -136,7 +135,8 @@ func createTestStoreWithEngine(
 		RPCRetryOptions:  &retryOpts,
 	}, storeCfg.Gossip)
 
-	sender := kv.NewTxnCoordSender(storeCfg.Ctx, distSender, clock, false, stopper,
+	ctx := tracing.WithTracer(context.TODO(), tracer)
+	sender := kv.NewTxnCoordSender(ctx, distSender, clock, false, stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval))
 	storeCfg.Clock = clock
 	storeCfg.DB = client.NewDB(sender)
@@ -713,7 +713,7 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
 
-	stores := storage.NewStores(context.TODO(), clock)
+	stores := storage.NewStores(log.AmbientContext{}, clock)
 	stores.AddStore(store)
 	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
 	storage.RegisterConsistencyServer(grpcServer, storesServer)
@@ -725,7 +725,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.mu.Lock()
 	m.stores[idx] = store
 	m.stoppers[idx] = stopper
-	sender := storage.NewStores(context.TODO(), clock)
+	sender := storage.NewStores(log.AmbientContext{}, clock)
 	sender.AddStore(store)
 	m.senders[idx] = sender
 	// Save the store identities for later so we can use them in

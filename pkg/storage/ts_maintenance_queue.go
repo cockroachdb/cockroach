@@ -86,7 +86,7 @@ func newTimeSeriesMaintenanceQueue(
 		db:     db,
 	}
 	tsmq.baseQueue = newBaseQueue(
-		store.Ctx(), "timeSeriesMaintenance", tsmq, store, g,
+		"timeSeriesMaintenance", tsmq, store, g,
 		queueConfig{
 			maxSize:              timeSeriesMaintenanceQueueMaxSize,
 			needsLease:           true,
@@ -102,7 +102,7 @@ func newTimeSeriesMaintenanceQueue(
 }
 
 func (tsmq *timeSeriesMaintenanceQueue) shouldQueue(
-	_ hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	_ context.Context, _ hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	return tsmq.tsData.ContainsTimeSeries(desc.StartKey, desc.EndKey), 0

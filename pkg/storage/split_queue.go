@@ -50,7 +50,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 		db: db,
 	}
 	sq.baseQueue = newBaseQueue(
-		store.Ctx(), "split", sq, store, gossip,
+		"split", sq, store, gossip,
 		queueConfig{
 			maxSize:              splitQueueMaxSize,
 			needsLease:           true,
@@ -68,7 +68,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(
-	now hlc.Timestamp, rng *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, rng *Replica, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc := rng.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
@@ -81,7 +81,7 @@ func (sq *splitQueue) shouldQueue(
 	// size for the zone it's in.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Error(sq.ctx, err)
+		log.Error(ctx, err)
 		return
 	}
 
