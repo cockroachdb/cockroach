@@ -43,15 +43,6 @@ fi
 
 gopath0="${GOPATH%%:*}"
 
-if [ "${CIRCLECI-}" = "true" ]; then
-  # HACK: Removal of docker containers fails on circleci with the
-  # error: "Driver btrfs failed to remove root filesystem". So if
-  # we're running on circleci, just leave the containers around.
-  rm=""
-else
-  rm="--rm"
-fi
-
 if [ -t 0 ]; then
   tty="--tty"
 fi
@@ -134,7 +125,7 @@ if test -e "${alternates_file}"; then
   vols="${vols} --volume=${alternates_path}:${alternates_path}"
 fi
 
-docker run -i ${tty-} ${rm} \
+docker run -i ${tty-} --rm \
   -u "${uid_gid}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
