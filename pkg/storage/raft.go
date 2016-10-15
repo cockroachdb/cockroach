@@ -23,8 +23,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -184,7 +184,7 @@ func raftEntryFormatter(data []byte) string {
 		// large snapshot entries.
 		return fmt.Sprintf("[%x] [%d]", commandID, len(data))
 	}
-	var cmd roachpb.RaftCommand
+	var cmd storagebase.RaftCommand
 	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
 	}
