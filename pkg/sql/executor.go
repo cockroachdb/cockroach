@@ -193,7 +193,7 @@ type Executor struct {
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
-	Context      context.Context
+	AmbientCtx   log.AmbientContext
 	DB           *client.DB
 	Gossip       *gossip.Gossip
 	LeaseManager *LeaseManager
@@ -248,9 +248,6 @@ type ExecutorTestingKnobs struct {
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
-	if tracing.TracerFromCtx(cfg.Context) == nil {
-		panic("ExecutorConfig.Ctx must have a tracer in it")
-	}
 	exec := &Executor{
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
@@ -284,9 +281,10 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		}
 	})
 
-	startupSession := NewSession(cfg.Context, SessionArgs{}, exec, nil)
+	ctx := log.WithLogTag(context.Background(), "startup", nil)
+	startupSession := NewSession(ctx, SessionArgs{}, exec, nil)
 	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
-		panic(err)
+		log.Fatal(ctx, err)
 	}
 	startupSession.Finish()
 
@@ -295,13 +293,16 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 
 // NewDummyExecutor creates an empty Executor that is used for certain tests.
 func NewDummyExecutor() *Executor {
-	return &Executor{cfg: ExecutorConfig{
-		Context: tracing.WithTracer(context.Background(), tracing.NewTracer())}}
+	return &Executor{
+		cfg: ExecutorConfig{
+			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		},
+	}
 }
 
-// Ctx returns the Context associated with this Executor.
-func (e *Executor) Ctx() context.Context {
-	return e.cfg.Context
+// AnnotateCtx is a convenience wrapper; see AmbientContext.
+func (e *Executor) AnnotateCtx(ctx context.Context) context.Context {
+	return e.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
 // SetNodeID sets the node ID for the SQL server. This method must be called

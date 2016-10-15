@@ -237,7 +237,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		Context:               ctx,
+		AmbientCtx:            s.cfg.AmbientCtx,
 		DB:                    s.db,
 		Gossip:                s.gossip,
 		LeaseManager:          s.leaseMgr,
