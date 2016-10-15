@@ -971,7 +971,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
-	log.VEventf(2, opts.ctx, "sending RPC for batch: %s", args)
+	log.VEventf(2, opts.ctx, "sending RPC for batch: %s", args.Summary())
 	transport.SendNext(done)
 
 	// Wait for completions. This loop will retry operations that fail
