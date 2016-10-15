@@ -18,6 +18,7 @@ package rsg
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 
@@ -140,10 +141,27 @@ func (r *RSG) Int63() int64 {
 	return v
 }
 
-// Float64 returns a random float.
+// Float64 returns a random float. It is sometimes +/-Inf, NaN, and attempts to
+// be distributed among very small, large, and normal scale numbers.
 func (r *RSG) Float64() float64 {
 	r.lock.Lock()
-	v := r.src.NormFloat64()
+	v := r.src.Float64()*2 - 1
+	switch r.src.Intn(10) {
+	case 0:
+		v = 0
+	case 1:
+		v = math.Inf(1)
+	case 2:
+		v = math.Inf(-1)
+	case 3:
+		v = math.NaN()
+	case 4, 5:
+		i := r.src.Intn(50)
+		v *= math.Pow10(i)
+	case 6, 7:
+		i := r.src.Intn(50)
+		v *= math.Pow10(-i)
+	}
 	r.lock.Unlock()
 	return v
 }
