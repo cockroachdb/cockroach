@@ -488,8 +488,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
 
+	r.ctx = store.AnnotateCtx(context.TODO())
 	// Add replica log tag - the value is rangeStr.String().
-	r.ctx = log.WithLogTag(store.Ctx(), "r", &r.rangeStr)
+	r.ctx = log.WithLogTag(r.ctx, "r", &r.rangeStr)
 
 	raftMuLogger := syncutil.ThresholdLogger(
 		r.ctx,
