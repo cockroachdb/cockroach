@@ -638,7 +638,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(*pendingCmd) error {
+	rng.mu.proposeRaftCommandFn = func(*ProposalData) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -1625,8 +1625,8 @@ func TestLeaseConcurrent(t *testing.T) {
 
 			var seen int32
 			tc.rng.mu.Lock()
-			tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
-				ll, ok := cmd.raftCmd.Cmd.Requests[0].
+			tc.rng.mu.proposeRaftCommandFn = func(cmd *ProposalData) error {
+				ll, ok := cmd.RaftCommand.Cmd.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
 					return defaultProposeRaftCommandLocked(tc.rng, cmd)
@@ -1645,7 +1645,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// When we complete the command, we have to remove it from the map;
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
-						delete(tc.rng.mu.pendingCmds, cmd.idKey)
+						delete(tc.rng.mu.proposals, cmd.idKey)
 						cmd.done <- roachpb.ResponseWithError{
 							Err: roachpb.NewErrorf(origMsg),
 						}
@@ -5014,7 +5014,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock proposeRaftCommand to return an roachpb.RaftGroupDeletedError.
-	proposeRaftCommandFn := func(*pendingCmd) error {
+	proposeRaftCommandFn := func(*ProposalData) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 
@@ -5564,7 +5564,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if cancelEarly {
 				cancel()
 				tc.rng.mu.Lock()
-				tc.rng.mu.proposeRaftCommandFn = func(*pendingCmd) error {
+				tc.rng.mu.proposeRaftCommandFn = func(*ProposalData) error {
 					return nil
 				}
 				tc.rng.mu.Unlock()
@@ -5791,7 +5791,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 
 	// Stop the command from being proposed to the raft group and being removed.
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error { return nil }
+	rng.mu.proposeRaftCommandFn = func(p *ProposalData) error { return nil }
 	rng.mu.Unlock()
 
 	// Add a command to the pending list.
@@ -5813,8 +5813,8 @@ func TestReplicaIDChangePending(t *testing.T) {
 	commandProposed := make(chan struct{}, 1)
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
-	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error {
-		if p.raftCmd.Cmd.Timestamp.Equal(magicTS) {
+	rng.mu.proposeRaftCommandFn = func(p *ProposalData) error {
+		if p.RaftCommand.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
@@ -5852,7 +5852,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 	var c int32 // updated atomically
 
 	tc.rng.mu.Lock()
-	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
+	tc.rng.mu.proposeRaftCommandFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			curAttempt := atomic.AddInt32(&c, 1)
 			if (repropose || curAttempt == 2) && withErr {
@@ -5906,12 +5906,12 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		cmd := tc.rng.prepareRaftCommandLocked(
 			context.WithValue(context.Background(), magicKey{}, "foo"),
 			makeIDKey(), repDesc, ba)
-		cmd.raftCmd.MaxLeaseIndex = preAssigned
+		cmd.RaftCommand.MaxLeaseIndex = preAssigned
 		tc.rng.mu.lastAssignedLeaseIndex = preAssigned
 		if err != nil {
 			fatalf("%s", err)
 		}
-		cmd.raftCmd.MaxLeaseIndex = wrongIndex
+		cmd.RaftCommand.MaxLeaseIndex = wrongIndex
 		tc.rng.insertRaftCommandLocked(cmd)
 		if repropose {
 			if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
@@ -6011,7 +6011,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
-				delete(rng.mu.pendingCmds, cmd.idKey)
+				delete(rng.mu.proposals, cmd.idKey)
 			} else if err := rng.proposePendingCmdLocked(cmd); err != nil {
 				t.Fatal(err)
 			} else {
@@ -6049,9 +6049,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	var seenCmds []int
 	tc.rng.mu.Lock()
-	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
+	tc.rng.mu.proposeRaftCommandFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
-			seenCmds = append(seenCmds, int(cmd.raftCmd.MaxLeaseIndex))
+			seenCmds = append(seenCmds, int(cmd.RaftCommand.MaxLeaseIndex))
 		}
 		return defaultProposeRaftCommandLocked(tc.rng, cmd)
 	}
@@ -6080,9 +6080,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			chs = append(chs, cmd.done)
 		}
 
-		for _, p := range tc.rng.mu.pendingCmds {
+		for _, p := range tc.rng.mu.proposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
-				origIndexes = append(origIndexes, int(p.raftCmd.MaxLeaseIndex))
+				origIndexes = append(origIndexes, int(p.RaftCommand.MaxLeaseIndex))
 			}
 		}
 
@@ -6110,7 +6110,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		tc.rng.mu.Lock()
 		defer tc.rng.mu.Unlock()
-		nonePending := len(tc.rng.mu.pendingCmds) == 0
+		nonePending := len(tc.rng.mu.proposals) == 0
 		c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.state.LeaseAppliedIndex)
 		if nonePending && c > 0 {
 			return fmt.Errorf("no pending cmds, but have required index offset %d", c)
@@ -6175,7 +6175,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		}
 		// Build a map from command key to proposed-at-ticks.
 		m := map[storagebase.CmdIDKey]int{}
-		for id, p := range r.mu.pendingCmds {
+		for id, p := range r.mu.proposals {
 			m[id] = p.proposedAtTicks
 		}
 		r.mu.Unlock()
@@ -6187,8 +6187,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		// Gather up the reproposed commands.
 		r.mu.Lock()
-		var reproposed []*pendingCmd
-		for id, p := range r.mu.pendingCmds {
+		var reproposed []*ProposalData
+		for id, p := range r.mu.proposals {
 			if m[id] != p.proposedAtTicks {
 				reproposed = append(reproposed, p)
 			}

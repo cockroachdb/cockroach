@@ -151,21 +151,6 @@ func updatesTimestampCache(r roachpb.Request) bool {
 	return updatesTimestampCacheMethods[m]
 }
 
-// A pendingCmd holds a done channel for a command sent to Raft. Once
-// committed to the Raft log, the command is executed and the result returned
-// via the done channel.
-type pendingCmd struct {
-	ctx context.Context
-	// TODO(andreimatei): idKey is legacy at this point: We could easily key
-	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
-	// the-world migration. However, various test facilities depend on the
-	// command ID for e.g. replay protection.
-	idKey           storagebase.CmdIDKey
-	proposedAtTicks int
-	raftCmd         storagebase.RaftCommand
-	done            chan roachpb.ResponseWithError // Used to signal waiting RPC handler
-}
-
 type replicaChecksum struct {
 	// started is true if the checksum computation has started.
 	started bool
@@ -290,13 +275,13 @@ type Replica struct {
 		pendingLeaseRequest pendingLeaseRequest
 		// Max bytes before split.
 		maxBytes int64
-		// pendingCmds stores the Raft in-flight commands which
+		// proposals stores the Raft in-flight commands which
 		// originated at this Replica, i.e. all commands for which
 		// proposeRaftCommand has been called, but which have not yet
 		// applied.
 		//
 		// TODO(tschottdorf): evaluate whether this should be a list/slice.
-		pendingCmds       map[storagebase.CmdIDKey]*pendingCmd
+		proposals         map[storagebase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. May be 0 if the replica has
 		// been created from a preemptive snapshot (i.e. before being added to the
@@ -351,7 +336,7 @@ type Replica struct {
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
 		// proposeRaftCommandFn can be set to mock out the propose operation.
-		proposeRaftCommandFn func(*pendingCmd) error
+		proposeRaftCommandFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
 
@@ -571,7 +556,7 @@ func (r *Replica) initLocked(
 
 	r.mu.cmdQ = NewCommandQueue()
 	r.mu.tsCache = newTimestampCache(clock)
-	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
+	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -1022,7 +1007,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
-	ri.NumPending = uint64(len(r.mu.pendingCmds))
+	ri.NumPending = uint64(len(r.mu.proposals))
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 
@@ -1611,7 +1596,7 @@ func (r *Replica) prepareRaftCommandLocked(
 	idKey storagebase.CmdIDKey,
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-) *pendingCmd {
+) *ProposalData {
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
@@ -1622,25 +1607,25 @@ func (r *Replica) prepareRaftCommandLocked(
 		log.Infof(ctx, "prepared command %x: maxLeaseIndex=%d leaseAppliedIndex=%d",
 			idKey, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
 	}
-	return &pendingCmd{
-		ctx:   ctx,
-		idKey: idKey,
-		done:  make(chan roachpb.ResponseWithError, 1),
-		raftCmd: storagebase.RaftCommand{
-			RangeID:       r.RangeID,
-			OriginReplica: replica,
-			Cmd:           ba,
-			MaxLeaseIndex: r.mu.lastAssignedLeaseIndex,
-		},
+	var pd ProposalData
+	pd.RaftCommand = &storagebase.RaftCommand{
+		RangeID:       r.RangeID,
+		OriginReplica: replica,
+		Cmd:           ba,
+		MaxLeaseIndex: r.mu.lastAssignedLeaseIndex,
 	}
+	pd.ctx = ctx
+	pd.idKey = idKey
+	pd.done = make(chan roachpb.ResponseWithError, 1)
+	return &pd
 }
 
-func (r *Replica) insertRaftCommandLocked(pCmd *pendingCmd) {
+func (r *Replica) insertRaftCommandLocked(pCmd *ProposalData) {
 	idKey := pCmd.idKey
-	if _, ok := r.mu.pendingCmds[idKey]; ok {
+	if _, ok := r.mu.proposals[idKey]; ok {
 		log.Fatalf(r.ctx, "pending command already exists for %s", idKey)
 	}
-	r.mu.pendingCmds[idKey] = pCmd
+	r.mu.proposals[idKey] = pCmd
 }
 
 func makeIDKey() storagebase.CmdIDKey {
@@ -1687,22 +1672,22 @@ func (r *Replica) proposeRaftCommand(
 	r.insertRaftCommandLocked(pCmd)
 
 	if err := r.proposePendingCmdLocked(pCmd); err != nil {
-		delete(r.mu.pendingCmds, pCmd.idKey)
+		delete(r.mu.proposals, pCmd.idKey)
 		return nil, nil, err
 	}
 	tryAbandon := func() bool {
 		r.mu.Lock()
-		_, ok := r.mu.pendingCmds[pCmd.idKey]
-		delete(r.mu.pendingCmds, pCmd.idKey)
+		_, ok := r.mu.proposals[pCmd.idKey]
+		delete(r.mu.proposals, pCmd.idKey)
 		r.mu.Unlock()
 		return ok
 	}
 	return pCmd.done, tryAbandon, nil
 }
 
-// proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
+// proposePendingCmdLocked proposes or re-proposes a command in r.mu.proposals.
 // The replica lock must be held.
-func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
+func (r *Replica) proposePendingCmdLocked(p *ProposalData) error {
 	p.proposedAtTicks = r.mu.ticks
 	if r.mu.proposeRaftCommandFn != nil {
 		return r.mu.proposeRaftCommandFn(p)
@@ -1715,25 +1700,25 @@ func (r *Replica) isSoloReplicaLocked() bool {
 		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
 }
 
-func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
-	if p.raftCmd.Cmd.Timestamp == hlc.ZeroTimestamp {
+func defaultProposeRaftCommandLocked(r *Replica, p *ProposalData) error {
+	if p.RaftCommand.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
 	}
 
-	data, err := protoutil.Marshal(&p.raftCmd)
+	data, err := protoutil.Marshal(p.RaftCommand)
 	if err != nil {
 		return err
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
-	if union, ok := p.raftCmd.Cmd.GetArg(roachpb.EndTransaction); ok {
+	if union, ok := p.RaftCommand.Cmd.GetArg(roachpb.EndTransaction); ok {
 		ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
 		if crt := ict.GetChangeReplicasTrigger(); crt != nil {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special
 			// because raft needs to understand it; it cannot simply be an
 			// opaque command.
 			log.Infof(r.ctx, "proposing %s %+v for range %d: %+v",
-				crt.ChangeType, crt.Replica, p.raftCmd.RangeID, crt.UpdatedReplicas)
+				crt.ChangeType, crt.Replica, p.RaftCommand.RangeID, crt.UpdatedReplicas)
 
 			ctx := ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -2170,9 +2155,9 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	if !enableQuiescence {
 		return false
 	}
-	if len(r.mu.pendingCmds) != 0 {
+	if len(r.mu.proposals) != 0 {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: %d pending commands", len(r.mu.pendingCmds))
+			log.Infof(r.ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
 		}
 		return false
 	}
@@ -2278,12 +2263,12 @@ func (r *Replica) maybeQuiesceLocked() bool {
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
-type pendingCmdSlice []*pendingCmd
+type pendingCmdSlice []*ProposalData
 
 func (s pendingCmdSlice) Len() int      { return len(s) }
 func (s pendingCmdSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s pendingCmdSlice) Less(i, j int) bool {
-	return s[i].raftCmd.MaxLeaseIndex < s[j].raftCmd.MaxLeaseIndex
+	return s[i].RaftCommand.MaxLeaseIndex < s[j].RaftCommand.MaxLeaseIndex
 }
 
 //go:generate stringer -type refreshRaftReason
@@ -2299,7 +2284,7 @@ const (
 )
 
 func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDelta int) error {
-	if len(r.mu.pendingCmds) == 0 {
+	if len(r.mu.proposals) == 0 {
 		return nil
 	}
 
@@ -2311,18 +2296,18 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 	refreshAtTicks := r.mu.ticks - refreshAtDelta
 	refurbished := 0
 	var reproposals pendingCmdSlice
-	for idKey, p := range r.mu.pendingCmds {
+	for idKey, p := range r.mu.proposals {
 		if p.proposedAtTicks > refreshAtTicks {
 			// The command was proposed too recently, don't bother reproprosing or
 			// refurbishing it yet. Note that if refreshAtDelta is 0, refreshAtTicks
 			// will be r.mu.ticks making the above condition impossible.
 			continue
 		}
-		if p.raftCmd.MaxLeaseIndex > maxWillRefurbish {
+		if p.RaftCommand.MaxLeaseIndex > maxWillRefurbish {
 			reproposals = append(reproposals, p)
 			continue
 		}
-		delete(r.mu.pendingCmds, idKey)
+		delete(r.mu.proposals, idKey)
 		// The command can be refurbished.
 		log.Eventf(p.ctx, "refurbishing command %x; %s", p.idKey, reason)
 		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
@@ -2496,16 +2481,16 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 // (this can happen when the range lease held by a raft follower, who must
 // forward MsgProp messages to the raft leader without guaranteed ordering).
 // It inserts and proposes a new command, returning an error if that fails.
-// The passed command must have been deleted from r.mu.pendingCmds.
-func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
+// The passed command must have been deleted from r.mu.proposals.
+func (r *Replica) refurbishPendingCmdLocked(cmd *ProposalData) *roachpb.Error {
 	// Note that the new command has the same idKey (which matters since we
 	// leaked that to the pending client).
 	newPCmd := r.prepareRaftCommandLocked(cmd.ctx, cmd.idKey,
-		cmd.raftCmd.OriginReplica, cmd.raftCmd.Cmd)
+		cmd.RaftCommand.OriginReplica, cmd.RaftCommand.Cmd)
 	newPCmd.done = cmd.done
 	r.insertRaftCommandLocked(newPCmd)
 	if err := r.proposePendingCmdLocked(newPCmd); err != nil {
-		delete(r.mu.pendingCmds, newPCmd.idKey)
+		delete(r.mu.proposals, newPCmd.idKey)
 		return roachpb.NewError(err)
 	}
 	return nil
@@ -2530,7 +2515,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	r.mu.Lock()
-	cmd, cmdProposedLocally := r.mu.pendingCmds[idKey]
+	cmd, cmdProposedLocally := r.mu.proposals[idKey]
 
 	isLeaseError := func() bool {
 		l, ba, origin := r.mu.state.Lease, raftCmd.Cmd, raftCmd.OriginReplica
@@ -2561,7 +2546,7 @@ func (r *Replica) processRaftCommand(
 	if cmdProposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
-		delete(r.mu.pendingCmds, idKey)
+		delete(r.mu.proposals, idKey)
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 	sendToClient := cmdProposedLocally
@@ -2615,7 +2600,7 @@ func (r *Replica) processRaftCommand(
 			// so that the future incarnation can apply and notify the it.
 			// Note that we keep the context to avoid hiding these internal
 			// cycles from traces.
-			if localMaxLeaseIndex := cmd.raftCmd.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
+			if localMaxLeaseIndex := cmd.RaftCommand.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
 				log.VEventf(
 					1, ctx, "refurbishing command %x; <= %d observed at %d", cmd.idKey,
 					raftCmd.MaxLeaseIndex, leaseIndex,
@@ -2631,7 +2616,7 @@ func (r *Replica) processRaftCommand(
 				}
 			} else {
 				// The refurbishment is already in flight, so we better get cmd back
-				// into pendingCmds (the alternative, not deleting it in this case
+				// into proposals (the alternative, not deleting it in this case
 				// in the first place, leads to less legible code here). This code
 				// path is rare.
 				r.insertRaftCommandLocked(cmd)
@@ -2702,7 +2687,7 @@ func (r *Replica) processRaftCommand(
 		cmd.done <- response
 		close(cmd.done)
 	} else if response.Err != nil {
-		log.VEventf(1, ctx, "error executing raft command: %s", response.Err)
+		log.VEventf(1, ctx, "error executing raft command %s: %s", raftCmd.Cmd, response.Err)
 	}
 
 	return response.Err
