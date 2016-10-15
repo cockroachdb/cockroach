@@ -152,7 +152,7 @@ func createTestStoreWithoutStart(
 		}
 	}()
 
-	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	cfg.Gossip.SetNodeID(1)

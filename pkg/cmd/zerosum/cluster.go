@@ -84,7 +84,7 @@ func (c *cluster) start(db string, numWorkers int, args []string) {
 		User:     security.NodeUser,
 		Insecure: true,
 	}
-	c.rpcCtx = rpc.NewContext(context.TODO(), baseCtx, nil, c.stopper)
+	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx, nil, c.stopper)
 
 	for i := range c.nodes {
 		c.nodes[i] = c.makeNode(i, args)

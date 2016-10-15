@@ -67,7 +67,7 @@ func createTestNode(
 
 	stopper := stop.NewStopper()
 	cfg.Clock = hlc.NewClock(hlc.UnixNano)
-	nodeRPCContext := rpc.NewContext(context.TODO(), nodeTestBaseContext, cfg.Clock, stopper)
+	nodeRPCContext := rpc.NewContext(log.AmbientContext{}, nodeTestBaseContext, cfg.Clock, stopper)
 	cfg.ScanInterval = 10 * time.Hour
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)

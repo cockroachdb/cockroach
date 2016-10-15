@@ -66,7 +66,7 @@ func createTestStorePool(
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
@@ -464,7 +464,7 @@ func (f fakeReservationServer) Reserve(
 // node server RPCs, an rpc context used for the server and the fake server's
 // address.
 func newFakeNodeServer(stopper *stop.Stopper) (*fakeReservationServer, *rpc.Context, string, error) {
-	ctx := rpc.NewContext(context.TODO(), testutils.NewNodeTestBaseContext(), nil, stopper)
+	ctx := rpc.NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), nil, stopper)
 	s := rpc.NewServer(ctx)
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {

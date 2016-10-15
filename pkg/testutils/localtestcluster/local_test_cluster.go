@@ -92,7 +92,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(clusterCtx, baseCtx, ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	ltc.Gossip = gossip.New(
 		log.AmbientContext{}, rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
