@@ -131,6 +131,7 @@ type v3Conn struct {
 func makeV3Conn(
 	conn net.Conn, executor *sql.Executor, metrics ServerMetrics, sessionArgs sql.SessionArgs,
 ) v3Conn {
+	ctx := log.WithLogTagStr(context.Background(), "client", conn.RemoteAddr().String())
 	return v3Conn{
 		conn:     conn,
 		rd:       bufio.NewReader(conn),
@@ -138,7 +139,7 @@ func makeV3Conn(
 		executor: executor,
 		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
 		metrics:  metrics,
-		session:  sql.NewSession(executor.Ctx(), sessionArgs, executor, conn.RemoteAddr()),
+		session:  sql.NewSession(ctx, sessionArgs, executor, conn.RemoteAddr()),
 	}
 }
 
