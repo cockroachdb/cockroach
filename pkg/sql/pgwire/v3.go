@@ -138,7 +138,7 @@ func makeV3Conn(
 		executor: executor,
 		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
 		metrics:  metrics,
-		session:  sql.NewSession(executor.Ctx(), sessionArgs, executor, conn.RemoteAddr()),
+		session:  sql.NewSession(context.TODO(), sessionArgs, executor, conn.RemoteAddr()),
 	}
 }
 
