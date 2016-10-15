@@ -112,4 +112,8 @@ message ReplicatedProposalData {
   // TODO(tschottdorf): trim this down; we shouldn't need the whole request.
   optional roachpb.ComputeChecksumRequest compute_checksum = 5;
   // TODO(tschottdorf): add the WriteBatch.
+
+  // Deprecated once proposer-evaluated-kv is in place: the Raft command which
+  // executes on all Replicas.
+  optional RaftCommand raft_command = 999;
 }
