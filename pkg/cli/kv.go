@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -46,7 +47,10 @@ func makeDBClient() (*client.DB, *stop.Stopper, error) {
 		Insecure:   baseCfg.Insecure,
 	}
 
-	sender, err := client.NewSender(rpc.NewContext(context.TODO(), cfg, nil, stopper), baseCfg.Addr)
+	sender, err := client.NewSender(
+		rpc.NewContext(log.AmbientContext{}, cfg, nil, stopper),
+		baseCfg.Addr,
+	)
 	if err != nil {
 		stopper.Stop()
 		return nil, nil, errors.Wrap(err, "failed to initialize KV client")

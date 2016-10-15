@@ -77,9 +77,8 @@ func createCluster(
 	script Script,
 	rand *rand.Rand,
 ) *Cluster {
-	ctx := context.TODO()
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(ctx, &base.Config{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext)
 	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip

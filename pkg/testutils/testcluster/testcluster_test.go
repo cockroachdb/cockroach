@@ -209,8 +209,8 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpcContext := rpc.NewContext(context.TODO(),
-		tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{}, tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
 	)
 	conn, err := rpcContext.GRPCDial(server1.ServingAddr())
 	if err != nil {
