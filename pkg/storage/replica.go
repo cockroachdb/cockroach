@@ -162,7 +162,7 @@ type pendingCmd struct {
 	// command ID for e.g. replay protection.
 	idKey           storagebase.CmdIDKey
 	proposedAtTicks int
-	raftCmd         roachpb.RaftCommand
+	raftCmd         storagebase.RaftCommand
 	done            chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
@@ -1626,7 +1626,7 @@ func (r *Replica) prepareRaftCommandLocked(
 		ctx:   ctx,
 		idKey: idKey,
 		done:  make(chan roachpb.ResponseWithError, 1),
-		raftCmd: roachpb.RaftCommand{
+		raftCmd: storagebase.RaftCommand{
 			RangeID:       r.RangeID,
 			OriginReplica: replica,
 			Cmd:           ba,
@@ -1974,7 +1974,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		case raftpb.EntryNormal:
 
 			var commandID storagebase.CmdIDKey
-			var command roachpb.RaftCommand
+			var command storagebase.RaftCommand
 
 			// Process committed entries. etcd raft occasionally adds a nil entry
 			// (our own commands are never empty). This happens in two situations:
@@ -2012,7 +2012,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 			if err := ctx.Unmarshal(cc.Context); err != nil {
 				return err
 			}
-			var command roachpb.RaftCommand
+			var command storagebase.RaftCommand
 			if err := command.Unmarshal(ctx.Payload); err != nil {
 				return err
 			}
@@ -2519,7 +2519,7 @@ func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 // which will apply as a no-op (without accessing raftCmd, via an error),
 // updating only the applied index.
 func (r *Replica) processRaftCommand(
-	idKey storagebase.CmdIDKey, index uint64, raftCmd roachpb.RaftCommand,
+	idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
 ) (pErr *roachpb.Error) {
 	if index == 0 {
 		log.Fatalf(r.ctx, "processRaftCommand requires a non-zero index")
@@ -2658,8 +2658,9 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 	}
-	br, pd, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
-		raftCmd.OriginReplica, raftCmd.Cmd, forcedErr)
+	br, pd, pErr := r.applyRaftCommand(
+		idKey, ctx, index, leaseIndex, raftCmd.Cmd, forcedErr,
+	)
 	pErr = r.maybeSetCorrupt(ctx, pErr)
 
 	// Handle the ProposalData, executing any side effects of the last
@@ -2777,7 +2778,6 @@ func (r *Replica) applyRaftCommand(
 	idKey storagebase.CmdIDKey,
 	ctx context.Context,
 	index, leaseIndex uint64,
-	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
 	forcedError *roachpb.Error,
 ) (*roachpb.BatchResponse, ProposalData, *roachpb.Error) {
@@ -2817,7 +2817,7 @@ func (r *Replica) applyRaftCommand(
 		br, rErr = nil, forcedError
 	} else {
 		batch, br, pd, rErr =
-			r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba)
+			r.applyRaftCommandInBatch(ctx, idKey, ba)
 	}
 	// TODO(tschottdorf): remove when #7224 is cleared.
 	if ba.Txn != nil && ba.Txn.Name == replicaChangeTxnName && log.V(1) {
@@ -2899,10 +2899,7 @@ func (r *Replica) applyRaftCommand(
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Replica) applyRaftCommandInBatch(
-	ctx context.Context,
-	idKey storagebase.CmdIDKey,
-	originReplica roachpb.ReplicaDescriptor,
-	ba roachpb.BatchRequest,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
 ) (engine.Batch, *roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
