@@ -1161,7 +1161,7 @@ func Example_rebalancing() {
 
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
-	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo

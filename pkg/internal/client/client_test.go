@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -126,7 +127,7 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 func createTestClientForUser(
 	t *testing.T, stopper *stop.Stopper, addr, user string, dbCtx client.DBContext,
 ) *client.DB {
-	rpcContext := rpc.NewContext(context.TODO(), &base.Config{
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
 		User:       user,
 		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
