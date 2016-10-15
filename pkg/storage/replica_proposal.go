@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,6 +41,8 @@ import (
 // holding on to the proposer's constructed engine.Batch in this struct, which
 // could give a performance gain.
 type LocalProposalData struct {
+	roachpb.ResponseWithError
+	engine.Batch
 	// The stats delta that the application of the Raft command would cause.
 	// On a split, contains only the contributions to the left-hand side.
 	delta enginepb.MVCCStats
