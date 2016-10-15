@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -226,9 +227,12 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
+	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
+
 	// Test databases endpoint.
 	const testdb = "test"
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
@@ -376,7 +380,10 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	escDBName := parser.Name(dbName).String()
 	escTblName := parser.Name(tblName).String()
 
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
+
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
@@ -553,7 +560,11 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 			showCreateTableQuery = "SHOW CREATE TABLE information_schema.schemata"
 			createTableCol       = "CreateTable"
 		)
-		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+
+		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+		defer span.Finish()
+
 		session := sql.NewSession(
 			ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 		defer session.Finish()
@@ -586,7 +597,9 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
@@ -694,7 +707,9 @@ func TestAdminAPIUsers(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create sample users.
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
@@ -736,7 +751,9 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
