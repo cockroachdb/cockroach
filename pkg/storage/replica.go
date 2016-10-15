@@ -277,7 +277,7 @@ type Replica struct {
 		maxBytes int64
 		// proposals stores the Raft in-flight commands which
 		// originated at this Replica, i.e. all commands for which
-		// proposeRaftCommand has been called, but which have not yet
+		// propose has been called, but which have not yet
 		// applied.
 		//
 		// TODO(tschottdorf): evaluate whether this should be a list/slice.
@@ -335,8 +335,8 @@ type Replica struct {
 
 		// Most recent timestamps for keys / key ranges.
 		tsCache *timestampCache
-		// proposeRaftCommandFn can be set to mock out the propose operation.
-		proposeRaftCommandFn func(*ProposalData) error
+		// submitProposalFn can be set to mock out the propose operation.
+		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
 
@@ -1546,7 +1546,7 @@ func (r *Replica) addWriteCmd(
 
 	log.Event(ctx, "raft")
 
-	ch, tryAbandon, err := r.proposeRaftCommand(ctx, ba)
+	ch, tryAbandon, err := r.propose(ctx, ba)
 
 	if err == nil {
 		// If the command was accepted by raft, wait for the range to apply it.
@@ -1591,7 +1591,9 @@ func (r *Replica) addWriteCmd(
 	return br, pErr
 }
 
-func (r *Replica) prepareRaftCommandLocked(
+// TODO(tschottdorf): for proposer-evaluated Raft, need to refactor so that
+// this does not happen under Replica.mu.
+func (r *Replica) evaluateProposalLocked(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	replica roachpb.ReplicaDescriptor,
@@ -1620,7 +1622,7 @@ func (r *Replica) prepareRaftCommandLocked(
 	return &pd
 }
 
-func (r *Replica) insertRaftCommandLocked(pCmd *ProposalData) {
+func (r *Replica) insertProposalLocked(pCmd *ProposalData) {
 	idKey := pCmd.idKey
 	if _, ok := r.mu.proposals[idKey]; ok {
 		log.Fatalf(r.ctx, "pending command already exists for %s", idKey)
@@ -1634,7 +1636,7 @@ func makeIDKey() storagebase.CmdIDKey {
 	return storagebase.CmdIDKey(idKeyBuf)
 }
 
-// proposeRaftCommand prepares necessary pending command struct and
+// propose prepares necessary pending command struct and
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns
 // - a channel which receives a response or error upon application
@@ -1645,10 +1647,10 @@ func makeIDKey() storagebase.CmdIDKey {
 //   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
-func (r *Replica) proposeRaftCommand(
+func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (chan roachpb.ResponseWithError, func() bool, error) {
-	// proposePendingCmdLocked calls withRaftGroupLocked which requires that
+	// submitProposalLocked calls withRaftGroupLocked which requires that
 	// raftMu is held. In order to maintain our lock ordering we need to lock
 	// Replica.raftMu here before locking Replica.mu.
 	//
@@ -1668,10 +1670,10 @@ func (r *Replica) proposeRaftCommand(
 	if err != nil {
 		return nil, nil, err
 	}
-	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
-	r.insertRaftCommandLocked(pCmd)
+	pCmd := r.evaluateProposalLocked(ctx, makeIDKey(), repDesc, ba)
+	r.insertProposalLocked(pCmd)
 
-	if err := r.proposePendingCmdLocked(pCmd); err != nil {
+	if err := r.submitProposalLocked(pCmd); err != nil {
 		delete(r.mu.proposals, pCmd.idKey)
 		return nil, nil, err
 	}
@@ -1685,14 +1687,14 @@ func (r *Replica) proposeRaftCommand(
 	return pCmd.done, tryAbandon, nil
 }
 
-// proposePendingCmdLocked proposes or re-proposes a command in r.mu.proposals.
+// submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
 // The replica lock must be held.
-func (r *Replica) proposePendingCmdLocked(p *ProposalData) error {
+func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	p.proposedAtTicks = r.mu.ticks
-	if r.mu.proposeRaftCommandFn != nil {
-		return r.mu.proposeRaftCommandFn(p)
+	if r.mu.submitProposalFn != nil {
+		return r.mu.submitProposalFn(p)
 	}
-	return defaultProposeRaftCommandLocked(r, p)
+	return defaultSubmitProposalLocked(r, p)
 }
 
 func (r *Replica) isSoloReplicaLocked() bool {
@@ -1700,7 +1702,7 @@ func (r *Replica) isSoloReplicaLocked() bool {
 		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
 }
 
-func defaultProposeRaftCommandLocked(r *Replica, p *ProposalData) error {
+func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	if p.RaftCommand.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
 	}
@@ -2330,7 +2332,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "reproposing command %x; %s", p.idKey, reason)
-		if err := r.proposePendingCmdLocked(p); err != nil {
+		if err := r.submitProposalLocked(p); err != nil {
 			return err
 		}
 	}
@@ -2485,11 +2487,11 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 func (r *Replica) refurbishPendingCmdLocked(cmd *ProposalData) *roachpb.Error {
 	// Note that the new command has the same idKey (which matters since we
 	// leaked that to the pending client).
-	newPCmd := r.prepareRaftCommandLocked(cmd.ctx, cmd.idKey,
+	newPCmd := r.evaluateProposalLocked(cmd.ctx, cmd.idKey,
 		cmd.RaftCommand.OriginReplica, cmd.RaftCommand.Cmd)
 	newPCmd.done = cmd.done
-	r.insertRaftCommandLocked(newPCmd)
-	if err := r.proposePendingCmdLocked(newPCmd); err != nil {
+	r.insertProposalLocked(newPCmd)
+	if err := r.submitProposalLocked(newPCmd); err != nil {
 		delete(r.mu.proposals, newPCmd.idKey)
 		return roachpb.NewError(err)
 	}
@@ -2619,7 +2621,7 @@ func (r *Replica) processRaftCommand(
 				// into proposals (the alternative, not deleting it in this case
 				// in the first place, leads to less legible code here). This code
 				// path is rare.
-				r.insertRaftCommandLocked(cmd)
+				r.insertProposalLocked(cmd)
 				// The client should get the actual execution, not this one. We
 				// keep the context (which is fine since the client will only
 				// finish it when the "real" incarnation applies).
