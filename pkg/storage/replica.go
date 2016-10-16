@@ -670,10 +670,8 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// If there was a previous replica, repropose its pending commands under
 	// this new incarnation.
 	if previousReplicaID != 0 {
-		// propose pending commands under new replicaID
-		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged, 0); err != nil {
-			return err
-		}
+		// repropose all pending commands under new replicaID.
+		r.queueRefreshAllPendingCmds(reasonReplicaIDChanged)
 	}
 
 	return nil
@@ -1591,30 +1589,47 @@ func (r *Replica) addWriteCmd(
 	return br, pErr
 }
 
-// TODO(tschottdorf): for proposer-evaluated Raft, need to refactor so that
-// this does not happen under Replica.mu.
-func (r *Replica) evaluateProposalLocked(
+// evaluateProposal generate ProposalData from the given request by evaluating
+// it, returning both state which is held only on the proposer and that which
+// is to be replicated through Raft. The return value is ready to be inserted
+// into Replica's proposal map and subsequently passed to submitProposalLocked.
+//
+// Replica.mu must not be held.
+//
+// TODO(tschottdorf): with proposer-evaluated KV, a WriteBatch will be prepared
+// in this method.
+func (r *Replica) evaluateProposal(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
 ) *ProposalData {
+	isLeaseReq := ba.IsLeaseRequest()
+	// TODO(tschottdorf): could coalesce this critical section with those of
+	// the call sites (i.e. pass in the required information).
+	r.mu.Lock()
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
-	if !ba.IsLeaseRequest() {
+	if !isLeaseReq {
 		r.mu.lastAssignedLeaseIndex++
 	}
+	lastAssignedLeaseIndex := r.mu.lastAssignedLeaseIndex
+	r.mu.Unlock()
+
 	if log.V(4) {
-		log.Infof(ctx, "prepared command %x: maxLeaseIndex=%d leaseAppliedIndex=%d",
-			idKey, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
+		log.Infof(ctx, "prepared command %x: maxLeaseIndex=%d",
+			idKey, lastAssignedLeaseIndex)
 	}
+	// Note that we don't hold any locks at this point. This is important
+	// since evaluating a proposal is expensive (at least under proposer-
+	// evaluated KV).
 	var pd ProposalData
 	pd.RaftCommand = &storagebase.RaftCommand{
 		RangeID:       r.RangeID,
 		OriginReplica: replica,
 		Cmd:           ba,
-		MaxLeaseIndex: r.mu.lastAssignedLeaseIndex,
+		MaxLeaseIndex: lastAssignedLeaseIndex,
 	}
 	pd.ctx = ctx
 	pd.idKey = idKey
@@ -1661,16 +1676,22 @@ func (r *Replica) propose(
 	// has a tiny (~1%) performance hit for single-node block_writer testing.
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
+
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.mu.destroyed != nil {
 		return nil, nil, r.mu.destroyed
 	}
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
+		r.mu.Unlock()
 		return nil, nil, err
 	}
-	pCmd := r.evaluateProposalLocked(ctx, makeIDKey(), repDesc, ba)
+	r.mu.Unlock()
+
+	pCmd := r.evaluateProposal(ctx, makeIDKey(), repDesc, ba)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.insertProposalLocked(pCmd)
 
 	if err := r.submitProposalLocked(pCmd); err != nil {
@@ -2019,12 +2040,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		}
 	}
 	if refreshReason != noReason {
-		r.mu.Lock()
-		err := r.refreshPendingCmdsLocked(refreshReason, 0)
-		r.mu.Unlock()
-		if err != nil {
-			return err
-		}
+		r.queueRefreshAllPendingCmds(refreshReason)
 	}
 
 	// TODO(bdarnell): need to check replica id and not Advance if it
@@ -2086,14 +2102,9 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		r.mu.ticks%r.store.cfg.RaftElectionTimeoutTicks == 0 {
 		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
 		// should wait before deciding that our previous proposal didn't go
-		// through. Note that the combination of the above condition and passing
-		// RaftElectionTimeoutTicks to refreshPendingCmdsLocked means that commands
-		// will be refreshed when they have been pending for 1 to 2 election
-		// cycles.
-		if err := r.refreshPendingCmdsLocked(
-			reasonTicks, r.store.cfg.RaftElectionTimeoutTicks); err != nil {
-			return true, err
-		}
+		// through. In effect, proposals will will be refreshed when they have
+		// been pending for 1 to 2 election cycles.
+		r.queueRefreshStalePendingCmds(reasonTicks)
 	}
 	return true, nil
 }
@@ -2285,19 +2296,37 @@ const (
 	reasonTicks
 )
 
-func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDelta int) error {
-	if len(r.mu.proposals) == 0 {
-		return nil
-	}
+// queueRefreshStalePendingCmds causes a future asynchronous call to
+// refreshPendingCmds with the ElectionTimeoutTicks as parameter.
+func (r *Replica) queueRefreshStalePendingCmds(reason refreshRaftReason) {
+	log.Warningf(r.ctx, "queueing refresh of stale pending commands: %s", reason)
+	r.store.scheduler.EnqueueRaftRefreshStale(r.RangeID)
+}
 
-	// Note that we can't use the commit index here (which is typically a
-	// little ahead), because a pending command is removed only as it applies.
-	// Thus we'd risk reproposing a command that has been committed but not yet
-	// applied.
-	maxWillRefurbish := r.mu.state.LeaseAppliedIndex // indexes <= will be refurbished
+// queueRefreshAllPendingCmds causes a future asynchronous call to
+// refreshPendingCmds which refreshes all pending proposals.
+func (r *Replica) queueRefreshAllPendingCmds(reason refreshRaftReason) {
+	log.Warningf(r.ctx, "queueing refresh of all pending commands: %s", reason)
+	r.store.scheduler.EnqueueRaftRefreshAll(r.RangeID)
+}
+
+// refreshPendingCmds goes through the pending proposals, refurbishing what
+// it can and reproposing the rest. refreshAtDelta specifies how old (in ticks)
+// a command must be for it to be inspected; usually this is called with zero (affect everything) or the number of ticks of an election timeout (affect only
+// proposals that have had ample time to apply but didn't).
+func (r *Replica) refreshPendingCmds(refreshAtDelta int) {
+	var refurbish []*ProposalData
+	var repropose pendingCmdSlice
+
+	r.mu.Lock()
+	// indexes <= maxWillRefurbish will be refurbished. Note that we can't use
+	// the commit index here (which is typically a little ahead of
+	// LeaseAppliedIndex) because a pending command is removed only as it
+	// applies. Thus we'd risk reproposing a command that has been committed
+	// but not yet applied.
+	maxWillRefurbish := r.mu.state.LeaseAppliedIndex
 	refreshAtTicks := r.mu.ticks - refreshAtDelta
-	refurbished := 0
-	var reproposals pendingCmdSlice
+	numPending := len(r.mu.proposals)
 	for idKey, p := range r.mu.proposals {
 		if p.proposedAtTicks > refreshAtTicks {
 			// The command was proposed too recently, don't bother reproprosing or
@@ -2306,22 +2335,17 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 			continue
 		}
 		if p.RaftCommand.MaxLeaseIndex > maxWillRefurbish {
-			reproposals = append(reproposals, p)
+			repropose = append(repropose, p)
 			continue
 		}
+		// The command can be refurbished. Delete it from the map; hold on to
+		// it to repropose it once we've unlocked the Replica.
 		delete(r.mu.proposals, idKey)
-		// The command can be refurbished.
-		log.Eventf(p.ctx, "refurbishing command %x; %s", p.idKey, reason)
-		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
-			p.done <- roachpb.ResponseWithError{Err: pErr}
-		}
-		refurbished++
-	}
-	if log.V(1) && (refurbished > 0 || len(reproposals) > 0) {
-		log.Infof(r.ctx,
-			"pending commands: refurbished %d, reproposing %d (at %d.%d); %s",
-			refurbished, len(reproposals), r.mu.state.RaftAppliedIndex,
-			r.mu.state.LeaseAppliedIndex, reason)
+		log.Eventf(
+			p.ctx, "refurbishing command %x (%d ticks old)",
+			p.idKey, r.mu.ticks-p.proposedAtTicks,
+		)
+		refurbish = append(refurbish, p)
 	}
 
 	// Reproposals are those commands which we weren't able to refurbish (since
@@ -2329,14 +2353,32 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 	// index).
 	// For reproposals, it's generally pretty unlikely that they can make it in
 	// the right place. Reproposing in order is definitely required, however.
-	sort.Sort(reproposals)
-	for _, p := range reproposals {
-		log.Eventf(p.ctx, "reproposing command %x; %s", p.idKey, reason)
+	sort.Sort(repropose)
+	for _, p := range repropose {
+		log.Eventf(p.ctx, "reproposing command %x", p.idKey)
 		if err := r.submitProposalLocked(p); err != nil {
-			return err
+			log.Warning(p.ctx, err)
+			// TODO(tschottdorf): should notify the client and remove from
+			// proposal map.
 		}
 	}
-	return nil
+
+	raftAppliedIndex := r.mu.state.RaftAppliedIndex
+	leaseAppliedIndex := r.mu.state.LeaseAppliedIndex
+	r.mu.Unlock()
+
+	for _, p := range refurbish {
+		if pErr := r.refurbishPendingCmd(p); pErr != nil {
+			p.done <- roachpb.ResponseWithError{Err: pErr}
+			close(p.done)
+		}
+	}
+
+	if log.V(1) && (len(refurbish) > 0 || len(repropose) > 0) {
+		log.Infof(r.ctx,
+			"pending commands: refurbished %d, reproposing %d (of %d at %d.%d)",
+			len(refurbish), len(repropose), numPending, raftAppliedIndex, leaseAppliedIndex)
+	}
 }
 
 func (r *Replica) getReplicaDescriptorByIDLocked(
@@ -2478,17 +2520,31 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	}
 }
 
-// refurbishPendingCmdLocked takes a pendingCmd which was discovered to apply
-// at a log position other than the one at which it was originally proposed
-// (this can happen when the range lease held by a raft follower, who must
-// forward MsgProp messages to the raft leader without guaranteed ordering).
-// It inserts and proposes a new command, returning an error if that fails.
-// The passed command must have been deleted from r.mu.proposals.
-func (r *Replica) refurbishPendingCmdLocked(cmd *ProposalData) *roachpb.Error {
+// refurbishPendingCmd takes a pendingCmd which was discovered to apply at
+// a log position other than the one at which it was originally proposed (this
+// can happen when the range lease held by a raft follower, who must forward
+// MsgProp messages to the raft leader without guaranteed ordering). It inserts
+// and proposes a new command, returning an error if that fails.
+//
+// The passed command must have been deleted from r.mu.proposals prior to the
+// call to this method, and it must have been checked that the command is
+// eligible for refurbishment (i.e. commands have applied at a lease index
+// greater or equal to that of this command).
+//
+// TODO(tschottdorf): now that this isn't under a continuous lock with the
+// removal and reinsertion any more, make sure that we can't end up in
+// situations in which a command is refurbished and applies multiple times.
+// I *think* that is ok since we always remove the command from the proposal
+// map and we *only* do so if we can refurbish (meaning that all potential
+// refurbishers serialize through the proposals map).
+func (r *Replica) refurbishPendingCmd(cmd *ProposalData) *roachpb.Error {
 	// Note that the new command has the same idKey (which matters since we
 	// leaked that to the pending client).
-	newPCmd := r.evaluateProposalLocked(cmd.ctx, cmd.idKey,
+	newPCmd := r.evaluateProposal(cmd.ctx, cmd.idKey,
 		cmd.RaftCommand.OriginReplica, cmd.RaftCommand.Cmd)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	newPCmd.done = cmd.done
 	r.insertProposalLocked(newPCmd)
 	if err := r.submitProposalLocked(newPCmd); err != nil {
@@ -2599,23 +2655,39 @@ func (r *Replica) processRaftCommand(
 			// already gone through the trouble of doing so (which would have
 			// changed our local copy of the pending command). We want to error
 			// out, but keep the pending command (i.e. not tell the client)
-			// so that the future incarnation can apply and notify the it.
-			// Note that we keep the context to avoid hiding these internal
-			// cycles from traces.
+			// so that the future incarnation can apply and notify the client.
+			// Note that we keep the context to expose these internal cycles
+			// in the request trace.
 			if localMaxLeaseIndex := cmd.RaftCommand.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
 				log.VEventf(
 					1, ctx, "refurbishing command %x; <= %d observed at %d", cmd.idKey,
 					raftCmd.MaxLeaseIndex, leaseIndex,
 				)
 
-				if pErr := r.refurbishPendingCmdLocked(cmd); pErr == nil {
-					cmd.done = make(chan roachpb.ResponseWithError, 1)
-				} else {
-					// We could try to send the error to the client instead,
-					// but to avoid even the appearance of Replica divergence,
-					// let's not.
-					log.Warningf(ctx, "unable to refurbish: %s", pErr)
-				}
+				// Once we're done processing this command (which is going to
+				// error out, with the error redirected away from the client),
+				// refurbish the command. We do this asynchronously because
+				// it's expensive and shouldn't block this goroutine.
+				cmdCopy := *cmd // take copy so we can bend the done channel below
+				cmd.done = make(chan roachpb.ResponseWithError, 1)
+				forcedErrCopy := protoutil.Clone(forcedErr).(*roachpb.Error)
+				defer func() {
+					if pErr := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
+						if pErr := r.refurbishPendingCmd(&cmdCopy); pErr != nil {
+							log.Warning(ctx, errors.Wrap(pErr.GoError(), "while trying to refurbish"))
+							// Send the forced error back to avoid even the
+							// impression of replica divergence.
+							//
+							// Note that we took a copy; this is mostly to follow
+							// protocol (as we know there's no client on the
+							// channel receiving the original).
+							cmdCopy.done <- roachpb.ResponseWithError{Err: forcedErrCopy}
+							close(cmdCopy.done)
+						}
+					}); pErr != nil {
+						log.Info(r.ctx, pErr)
+					}
+				}()
 			} else {
 				// The refurbishment is already in flight, so we better get cmd back
 				// into proposals (the alternative, not deleting it in this case
