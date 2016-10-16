@@ -301,7 +301,15 @@ func TestReplicateRange(t *testing.T) {
 // persisted to disk and restored when a node is stopped and restarted.
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+
+	sc := storage.TestStoreConfig()
+	// Disable periodic gossip activities. The periodic gossiping of the first
+	// range can cause spurious lease transfers which cause this test to fail.
+	sc.TestingKnobs.DisablePeriodicGossips = true
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+	}
+	mtc.Start(t, 2)
 	defer mtc.Stop()
 
 	firstRng, err := mtc.stores[0].GetReplica(1)
