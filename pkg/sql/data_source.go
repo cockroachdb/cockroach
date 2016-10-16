@@ -210,7 +210,7 @@ func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bo
 		}
 		return planDataSource{
 			info: newSourceInfoForSingleTable(sourceName, columns),
-			plan: &delayedValuesNode{
+			plan: &delayedNode{
 				p:           p,
 				name:        sourceName.String(),
 				columns:     columns,
