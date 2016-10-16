@@ -425,6 +425,11 @@ SERIALIZABLE
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
 
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+SNAPSHOT
+
 # Without the isolation level specified, BEGIN should use the default
 
 statement ok

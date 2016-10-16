@@ -1036,6 +1036,9 @@ explainable_stmt:
 | insert_stmt
 | update_stmt
 | delete_stmt
+| show_stmt
+| help_stmt
+| split_stmt
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
