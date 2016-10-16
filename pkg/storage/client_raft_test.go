@@ -301,7 +301,13 @@ func TestReplicateRange(t *testing.T) {
 // persisted to disk and restored when a node is stopped and restarted.
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+
+	sc := storage.TestStoreConfig()
+	// Disable periodic gossip activities. The periodic gossiping of the first
+	// range can cause spurious lease transfers which cause this test to fail.
+	sc.TestingKnobs.DisablePeriodicGossips = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 2)
 	defer mtc.Stop()
 
 	firstRng, err := mtc.stores[0].GetReplica(1)
@@ -404,9 +410,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		}
 		return nil
 	}
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-	}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
@@ -1197,9 +1201,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-	}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
@@ -1285,7 +1287,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// replica GC queue does its work, so we disable the replica gc queue here
 	// and run it manually when we're ready.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 4)
 	defer mtc.Stop()
 
@@ -1823,9 +1825,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 		AllowRebalance: true,
 		Deterministic:  true,
 	}
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-	}
+	mtc := &multiTestContext{storeConfig: &sc}
 
 	mtc.Start(t, 6)
 	defer mtc.Stop()
@@ -2146,7 +2146,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 
 	sc := storage.TestStoreConfig()
 	sc.TestingKnobs.DisableScanner = true
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 4)
 	defer mtc.Stop()
 
@@ -2206,7 +2206,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	sc.RaftTickInterval = time.Millisecond // safe because there is only a single node
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 
@@ -2315,7 +2315,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	sc := storage.TestStoreConfig()
 	sc.TestingKnobs.DisableScanner = true
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	const rangeID roachpb.RangeID = 1
@@ -2406,7 +2406,7 @@ func TestCheckInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig()
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	// Store 0 will report a diff with inconsistent key "e".
 	diffKey := []byte("e")
 	var diffTimestamp hlc.Timestamp
@@ -2496,9 +2496,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and cause leadership to change hands in ways this test doesn't
 	// expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-	}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, numStores)
 	defer mtc.Stop()
 	store0 := mtc.Store(0)
@@ -2594,7 +2592,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 
 	sc := storage.TestStoreConfig()
 	sc.TestingKnobs.DisableScanner = true
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
@@ -2650,7 +2648,7 @@ func TestRangeQuiescence(t *testing.T) {
 	sc := storage.TestStoreConfig()
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
-	mtc := multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
