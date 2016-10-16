@@ -40,6 +40,15 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 statement ok
 INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
+query ITT
+EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
+----
+0 split (SELECT 42)
+1 empty -
+
+statement ok
+ALTER TABLE abc SPLIT AT ((SELECT 1))
+
 query error subquery must return 2 columns
 SELECT (1, 2) IN (SELECT * FROM abc)
 
@@ -262,7 +271,7 @@ EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS
 ----
 0 sort   +foo1
 1 sort   +moo2
-2 values 3 columns
+2 values 3 columns, 3 rows
 
 query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
