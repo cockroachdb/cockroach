@@ -270,7 +270,7 @@ type Replica struct {
 	// RWMutex.
 	readOnlyCmdMu syncutil.RWMutex
 
-	// rangeStr is a string representation of a RangeDescriptor that cam be
+	// rangeStr is a string representation of a RangeDescriptor that can be
 	// atomically read and updated without needing to acquire the replica.mu lock.
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
@@ -279,7 +279,7 @@ type Replica struct {
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
 	//
-	// TODO(peter): evaluate runtime overhead the timed mutex.
+	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu syncutil.TimedMutex
 
 	cmdQMu struct {
@@ -297,7 +297,7 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		//
-		// TODO(peter): evaluate runtime overhead the timed mutex.
+		// TODO(peter): evaluate runtime overhead of the timed mutex.
 		syncutil.TimedMutex
 		// Has the replica been destroyed.
 		destroyed error

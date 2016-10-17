@@ -31,7 +31,7 @@ This was motivated mainly by endless amounts of test failures around leaked
 goroutines or deadlocking operations and has served us reasonably well, keeping
 our moving parts in check.
 
-However, not that we're looking at clusters and their maintenance, this simple
+However, now that we're looking at clusters and their maintenance, this simple
 "drop-all" approach isn't enough. See, for example #6198, #6197 or #5279. This
 small RFC outlines proposed changes to accommodate use cases such as
 
