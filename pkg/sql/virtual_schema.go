@@ -94,13 +94,11 @@ type virtualTableEntry struct {
 	desc     *sqlbase.TableDescriptor
 }
 
-type valuesNodeConstructor func(p *planner) (*valuesNode, error)
-
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo() (ResultColumns, valuesNodeConstructor) {
+func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
 	var columns ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, ResultColumn{
@@ -109,7 +107,7 @@ func (e virtualTableEntry) getPlanInfo() (ResultColumns, valuesNodeConstructor) 
 		})
 	}
 
-	constructor := func(p *planner) (*valuesNode, error) {
+	constructor := func(p *planner) (planNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
 		err := e.tableDef.populate(p, func(datums ...parser.Datum) error {

@@ -294,8 +294,16 @@ func (n *valuesNode) InitMinHeap() {
 
 func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	name = "values"
-	description = fmt.Sprintf("%d column%s",
-		len(n.columns), util.Pluralize(int64(len(n.columns))))
+	suffix := "not yet populated"
+	if n.rows != nil {
+		suffix = fmt.Sprintf("%d row%s",
+			n.rows.Len(), util.Pluralize(int64(n.rows.Len())))
+	} else if n.tuples != nil {
+		suffix = fmt.Sprintf("%d row%s",
+			len(n.tuples), util.Pluralize(int64(len(n.tuples))))
+	}
+	description = fmt.Sprintf("%d column%s, %s",
+		len(n.columns), util.Pluralize(int64(len(n.columns))), suffix)
 
 	var subplans []planNode
 	for _, tuple := range n.tuples {
@@ -318,53 +326,3 @@ func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*valuesNode) SetLimitHint(_ int64, _ bool) {}
-
-// delayedValuesNode wraps a valuesNode in cases where the valuesNode
-// must be populated during query execution (as opposed to planNode
-// construction) for resource tracking purposes.
-type delayedValuesNode struct {
-	p           *planner
-	name        string
-	columns     ResultColumns
-	constructor valuesNodeConstructor
-	plan        *valuesNode
-}
-
-func (d *delayedValuesNode) SetLimitHint(_ int64, _ bool) {}
-func (d *delayedValuesNode) expandPlan() error {
-	v, err := d.constructor(d.p)
-	if err != nil {
-		return err
-	}
-	if err := v.expandPlan(); err != nil {
-		v.Close()
-		return err
-	}
-	d.plan = v
-	return nil
-}
-
-func (d *delayedValuesNode) Close() {
-	if d.plan != nil {
-		d.plan.Close()
-		d.plan = nil
-	}
-}
-
-func (d *delayedValuesNode) ExplainPlan(
-	verbose bool,
-) (name, description string, children []planNode) {
-	if d.plan != nil {
-		children = []planNode{d.plan}
-	}
-	return "virtual table", d.name, children
-}
-
-func (d *delayedValuesNode) ExplainTypes(rt func(string, string)) {}
-func (d *delayedValuesNode) Columns() ResultColumns               { return d.columns }
-func (d *delayedValuesNode) Ordering() orderingInfo               { return orderingInfo{} }
-func (d *delayedValuesNode) MarkDebug(_ explainMode)              {}
-func (d *delayedValuesNode) Start() error                         { return d.plan.Start() }
-func (d *delayedValuesNode) Next() (bool, error)                  { return d.plan.Next() }
-func (d *delayedValuesNode) Values() parser.DTuple                { return d.plan.Values() }
-func (d *delayedValuesNode) DebugValues() debugValues             { return d.plan.DebugValues() }

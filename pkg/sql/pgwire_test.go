@@ -415,8 +415,14 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW TABLES FROM system": {
 			baseTest.Results("descriptor").Others(7),
 		},
+		"SHOW CONSTRAINTS FROM system.users": {
+			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),
+		},
 		"SHOW TIME ZONE": {
 			baseTest.Results("UTC"),
+		},
+		"HELP LEAST": {
+			baseTest.Results("least", "<T>... -> <T>", "Comparison", ""),
 		},
 		"SELECT (SELECT 1+$1)": {
 			baseTest.SetArgs(1).Results(2),
