@@ -560,6 +560,7 @@ func TestStyle(t *testing.T) {
 			filter,
 			stream.Sort(),
 			stream.Uniq(),
+			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.Grep(` (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context)$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
