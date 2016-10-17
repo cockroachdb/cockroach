@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -423,7 +424,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	if ent.Type == raftpb.EntryNormal {
 		if len(ent.Data) > 0 {
 			_, cmdData := storage.DecodeRaftCommand(ent.Data)
-			var cmd roachpb.RaftCommand
+			var cmd storagebase.RaftCommand
 			if err := cmd.Unmarshal(cmdData); err != nil {
 				return "", err
 			}
@@ -440,7 +441,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if err := ctx.Unmarshal(cc.Context); err != nil {
 			return "", err
 		}
-		var cmd roachpb.RaftCommand
+		var cmd storagebase.RaftCommand
 		if err := cmd.Unmarshal(ctx.Payload); err != nil {
 			return "", err
 		}

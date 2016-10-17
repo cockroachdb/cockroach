@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,6 +41,19 @@ import (
 // holding on to the proposer's constructed engine.Batch in this struct, which
 // could give a performance gain.
 type LocalProposalData struct {
+	// TODO(andreimatei): idKey is legacy at this point: We could easily key
+	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
+	// the-world migration. However, various test facilities depend on the
+	// command ID for e.g. replay protection.
+	idKey           storagebase.CmdIDKey
+	proposedAtTicks int
+	ctx             context.Context
+
+	Err   *roachpb.Error
+	Reply *roachpb.BatchResponse
+	done  chan roachpb.ResponseWithError // Used to signal waiting RPC handler
+
+	Batch engine.Batch
 	// The stats delta that the application of the Raft command would cause.
 	// On a split, contains only the contributions to the left-hand side.
 	delta enginepb.MVCCStats
@@ -85,8 +99,8 @@ type LocalProposalData struct {
 // c) data which isn't sent to the followers but the proposer needs for tasks
 //    it must run when the command has applied (such as resolving intents).
 type ProposalData struct {
-	storagebase.ReplicatedProposalData
 	LocalProposalData
+	storagebase.ReplicatedProposalData
 }
 
 func coalesceBool(lhs *bool, rhs bool) {
