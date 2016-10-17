@@ -2905,7 +2905,21 @@ func (s *Store) processRaft() {
 	if s.cfg.TestingKnobs.DisableProcessRaft {
 		return
 	}
+
 	s.scheduler.Start(s.stopper)
+	s.stopper.RunWorker(func() {
+		// Wait for the scheduler worker goroutines to finish. Necessary because a
+		// worker might be generating a snapshot.
+		s.scheduler.Wait()
+
+		// Abandon any unsent snapshots (releasing the associated RocksDB
+		// resources).
+		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+			r.maybeAbandonSnapshot(r.ctx)
+			return true
+		})
+	})
+
 	s.raftTickLoop()
 }
 
