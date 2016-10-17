@@ -21,6 +21,7 @@
 package encoding
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/big"
@@ -385,13 +386,8 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *inf.Dec {
 
 // findDecimalTerminator finds the decimalTerminator in the given slice.
 func findDecimalTerminator(buf []byte) (int, error) {
-	// TODO(nvanbenschoten): bytes.IndexByte is inefficient for small slices. This is
-	// apparently fixed in go1.7. For now, we manually search for the terminator.
-	// idx := bytes.IndexByte(r, decimalTerminator)
-	for i, b := range buf {
-		if b == decimalTerminator {
-			return i, nil
-		}
+	if idx := bytes.IndexByte(buf, decimalTerminator); idx != -1 {
+		return idx, nil
 	}
 	return -1, errors.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
 }
