@@ -20,8 +20,8 @@ SHA="${CIRCLE_SHA1-$(git rev-parse HEAD)}"
 
 # Linux binaries: cockroach + tests.
 ./push-one-binary.sh ${SHA} cockroach cockroach
-./push-one-binary.sh ${SHA} sql/sql.test
-./push-one-binary.sh ${SHA} acceptance/acceptance.test
+./push-one-binary.sh ${SHA} pkg/sql/sql.test
+./push-one-binary.sh ${SHA} pkg/acceptance/acceptance.test
 ./push-one-binary.sh ${SHA} static-tests.tar.gz
 
 # TODO(marc): use these instead of the above "Linux binaries", this requires
