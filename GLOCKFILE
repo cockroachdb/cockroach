@@ -13,7 +13,6 @@ cmd github.com/mattn/goveralls
 cmd github.com/mdempsky/unconvert
 cmd github.com/mibk/dupl
 cmd github.com/tamird/glock
-cmd github.com/tebeka/go2xunit
 cmd github.com/wadey/gocovmerge
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/goyacc
@@ -96,7 +95,6 @@ github.com/satori/go.uuid b061729afc07e77a8aa4fad0a2fd840958f1942a
 github.com/spf13/cobra 9c28e4bbd74e5c3ed7aacbc552b2cab7cfdfe744
 github.com/spf13/pflag c7e63cf4530bcd3ba943729cee0efeff2ebea63f
 github.com/tamird/glock f2bc8b6bb53a3fb0be0f81aff6bb0969bca74ce2
-github.com/tebeka/go2xunit cb8eb3dedfac9cf4cb1f2d8988f3390f2d0cf2e7
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
 golang.org/x/crypto 484eb34681af59703e639b971bc307019182c41f
