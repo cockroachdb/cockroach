@@ -699,7 +699,7 @@ func (ds *DistSender) sendChunk(
 				}
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
-				log.VEventf(1, ctx,
+				log.VEventf(ctx, 1,
 					"addressing error: %s not appropriate for remaining range %s",
 					desc, rs)
 				continue
@@ -729,7 +729,7 @@ func (ds *DistSender) sendChunk(
 				break
 			}
 
-			log.VEventf(1, ctx, "reply error %s: %s", ba, pErr)
+			log.VEventf(ctx, 1, "reply error %s: %s", ba, pErr)
 
 			// Error handling: If the error indicates that our range
 			// descriptor is out of date, evict it from the cache and try
@@ -971,7 +971,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
-	log.VEventf(2, opts.ctx, "sending RPC for batch: %s", args.Summary())
+	log.VEventf(opts.ctx, 2, "sending RPC for batch: %s", args.Summary())
 	transport.SendNext(done)
 
 	// Wait for completions. This loop will retry operations that fail
@@ -986,7 +986,7 @@ func (ds *DistSender) sendToReplicas(
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.VEventf(2, opts.ctx, "timeout, trying next peer")
+				log.VEventf(opts.ctx, 2, "timeout, trying next peer")
 				pending++
 				transport.SendNext(done)
 			}
@@ -1019,12 +1019,12 @@ func (ds *DistSender) sendToReplicas(
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.VEventf(2, opts.ctx, "error, trying next peer: %s", err)
+				log.VEventf(opts.ctx, 2, "error, trying next peer: %s", err)
 				pending++
 				transport.SendNext(done)
 			}
 			if pending == 0 {
-				log.VEventf(2, opts.ctx,
+				log.VEventf(opts.ctx, 2,
 					"sending to all %d replicas failed; last error: %s",
 					len(replicas), err)
 				return nil, roachpb.NewSendError(

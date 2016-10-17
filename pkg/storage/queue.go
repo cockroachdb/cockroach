@@ -315,14 +315,14 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	}
 
 	if !cfgOk {
-		log.VEvent(1, bq.ctx, "no system config available. skipping")
+		log.VEvent(bq.ctx, 1, "no system config available. skipping")
 		return
 	}
 
 	if requiresSplit {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		log.VEventf(1, bq.ctx, "%s: split needed; not adding", repl)
+		log.VEventf(bq.ctx, 1, "%s: split needed; not adding", repl)
 		return
 	}
 
@@ -389,7 +389,7 @@ func (bq *baseQueue) addInternal(
 		return false, nil
 	}
 
-	log.VEventf(3, bq.ctx, "%s: adding: priority=%0.3f", desc, priority)
+	log.VEventf(bq.ctx, 3, "%s: adding: priority=%0.3f", desc, priority)
 	item = &replicaItem{value: desc.RangeID, priority: priority}
 	bq.add(item)
 
@@ -417,7 +417,7 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	}
 
 	if item, ok := bq.mu.replicas[rangeID]; ok {
-		log.VEventf(3, bq.ctx, "%s: removing", item.value)
+		log.VEventf(bq.ctx, 3, "%s: removing", item.value)
 		bq.remove(item)
 	}
 }
@@ -492,14 +492,14 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {
-		log.VEventf(1, bq.ctx, "no system config available, skipping")
+		log.VEventf(bq.ctx, 1, "no system config available, skipping")
 		return nil
 	}
 
 	if bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		log.VEventf(3, bq.ctx, "%s: split needed; skipping", repl)
+		log.VEventf(bq.ctx, 3, "%s: split needed; skipping", repl)
 		return nil
 	}
 
@@ -520,7 +520,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
 			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
-				log.VEventf(3, bq.ctx, "not holding lease; skipping")
+				log.VEventf(bq.ctx, 3, "not holding lease; skipping")
 				return nil
 			}
 			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
@@ -528,7 +528,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		log.Event(ctx, "got range lease")
 	}
 
-	log.VEventf(3, bq.ctx, "processing")
+	log.VEventf(bq.ctx, 3, "processing")
 	start := timeutil.Now()
 	err := bq.impl.process(ctx, clock.Now(), repl, cfg)
 	duration := timeutil.Since(start)
@@ -536,7 +536,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	if err != nil {
 		return err
 	}
-	log.VEventf(2, bq.ctx, "done: %s", duration)
+	log.VEventf(bq.ctx, 2, "done: %s", duration)
 	log.Event(ctx, "done")
 	bq.successes.Inc(1)
 	return nil
