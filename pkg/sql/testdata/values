@@ -29,5 +29,5 @@ VALUES ((SELECT 1)), ((SELECT 2))
 query ITT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
-0 values 1 column
+0 values 1 column, 2 rows
 1 empty  -

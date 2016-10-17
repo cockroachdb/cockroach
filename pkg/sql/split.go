@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -183,14 +185,27 @@ func (*splitNode) Columns() ResultColumns {
 	}
 }
 
-func (*splitNode) Close()                              {}
-func (*splitNode) Ordering() orderingInfo              { return orderingInfo{} }
-func (*splitNode) ExplainTypes(_ func(string, string)) {}
-func (*splitNode) SetLimitHint(_ int64, _ bool)        {}
-func (*splitNode) MarkDebug(_ explainMode)             {}
+func (*splitNode) Close()                       {}
+func (*splitNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (*splitNode) SetLimitHint(_ int64, _ bool) {}
+func (*splitNode) MarkDebug(_ explainMode)      {}
 
-func (*splitNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	return "empty", "-", nil
+func (n *splitNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
+	var buf bytes.Buffer
+	for i, e := range n.exprs {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		e.Format(&buf, parser.FmtSimple)
+		children = n.p.collectSubqueryPlans(e, children)
+	}
+	return "split", buf.String(), children
+}
+
+func (n *splitNode) ExplainTypes(regTypes func(string, string)) {
+	for i, expr := range n.exprs {
+		regTypes(fmt.Sprintf("expr %d", i), parser.AsStringWithFlags(expr, parser.FmtShowTypes))
+	}
 }
 
 func (n *splitNode) DebugValues() debugValues {

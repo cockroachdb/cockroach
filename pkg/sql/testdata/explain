@@ -113,6 +113,84 @@ EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 0 alter table
 
 query ITT
+EXPLAIN ALTER TABLE foo SPLIT AT (42)
+----
+0 split 42
+
+query ITT
 EXPLAIN DROP TABLE foo
 ----
 0 drop table
+
+query ITT
+EXPLAIN SHOW DATABASES
+----
+0 virtual table SHOW DATABASES
+1 values 1 column, 5 rows
+
+query ITT
+EXPLAIN SHOW TABLES
+----
+0 virtual table SHOW TABLES FROM test
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW DATABASE
+----
+0 virtual table SHOW DATABASE
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW TIME ZONE
+----
+0 virtual table SHOW TIME ZONE
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW SYNTAX
+----
+0 virtual table SHOW SYNTAX
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+0 virtual table SHOW DEFAULT_TRANSACTION_ISOLATION
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
+----
+0 virtual table SHOW TRANSACTION ISOLATION LEVEL
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW TRANSACTION PRIORITY
+----
+0 virtual table SHOW TRANSACTION PRIORITY
+1 values 1 column, 1 row
+
+query ITT
+EXPLAIN SHOW COLUMNS FROM foo
+----
+0 virtual table SHOW COLUMNS FROM foo
+1 values 4 columns, 2 rows
+
+query ITT
+EXPLAIN SHOW GRANTS ON foo
+----
+0 virtual table SHOW GRANTS
+1 values 3 columns, 1 row
+
+query ITT
+EXPLAIN SHOW INDEX FROM foo
+----
+0 virtual table SHOW INDEX FROM foo
+1 values 7 columns, 2 rows
+
+query ITT
+EXPLAIN SHOW CONSTRAINTS FROM foo
+----
+0 virtual table SHOW CONSTRAINTS FROM foo
+1 sort          +"Table",+Name
+2 values        5 columns, 1 row
