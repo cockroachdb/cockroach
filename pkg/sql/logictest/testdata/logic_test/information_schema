@@ -216,6 +216,7 @@ leases
 node_build_info
 node_statement_statistics
 schema_changes
+session_trace
 tables
 columns
 key_column_usage
@@ -279,6 +280,7 @@ table_privileges
 table_constraints
 statistics
 settings
+session_trace
 schemata
 schema_privileges
 schema_changes
@@ -320,6 +322,7 @@ def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
+def            crdb_internal       session_trace              SYSTEM VIEW  1
 def            crdb_internal       tables                     SYSTEM VIEW  1
 def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
