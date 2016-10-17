@@ -39,6 +39,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalSchemaChangesTable,
 		crdbInternalStmtStatsTable,
 		crdbInternalJobsTable,
+		crdbInternalSessionTraceTable,
 	},
 }
 
@@ -448,6 +449,38 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalSessionTraceTable exposes the latest trace collected on this
+// session (via SET TRACE={ON/OFF})
+var crdbInternalSessionTraceTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.session_trace(
+  TXN_IDX INT NOT NULL,            -- The transaction's 0-based index, among all 
+																   -- transaction that have been traced.
+																   -- Only filled for the first log message in a
+																   -- transaction's top-level span.
+  SPAN_IDX INT NOT NULL,           -- The span's index.
+  MESSAGE_IDX INT NOT NULL,        -- The message's index within its span.
+  TIMESTAMP TIMESTAMPTZ NOT NULL,   -- The message's timestamp.
+  DURATION INTERVAL,               -- The span's duration. Set only on the first
+																   -- (dummy) message on a span.
+																   -- NULL if the span was not finished at the time
+																   -- the trace has been collected.
+  OPERATION STRING NULL,           -- The span's operation. Set only on
+                                   -- the first (dummy) message in a span.
+  MESSAGE STRING NOT NULL          -- The logged message.
+);
+`,
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		rows := p.session.Tracing.GenerateSessionTraceVTable()
+		for _, r := range rows {
+			if err := addRow(r[:]...); err != nil {
+				return err
 			}
 		}
 		return nil
