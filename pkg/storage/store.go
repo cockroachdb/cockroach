@@ -1835,17 +1835,17 @@ func (s *Store) removeReplicaImpl(
 
 	rep.mu.Lock()
 	// Clear the pending command queue.
-	if len(rep.mu.pendingCmds) > 0 {
+	if len(rep.mu.proposals) > 0 {
 		resp := roachpb.ResponseWithError{
 			Reply: &roachpb.BatchResponse{},
 			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
 		}
-		for _, p := range rep.mu.pendingCmds {
+		for _, p := range rep.mu.proposals {
 			p.done <- resp
 		}
 	}
 	// Clear the map.
-	rep.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
+	rep.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()

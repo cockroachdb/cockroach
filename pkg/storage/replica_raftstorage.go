@@ -708,8 +708,8 @@ const (
 	raftCommandNoSplitMask = raftCommandNoSplitBit - 1
 )
 
-// encode a command ID, an encoded roachpb.RaftCommand, and whether the command
-// contains a split.
+// encode a command ID, an encoded storagebase.RaftCommand, and whether the
+// command contains a split.
 func encodeRaftCommand(commandID storagebase.CmdIDKey, command []byte) []byte {
 	if len(commandID) != raftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen))
