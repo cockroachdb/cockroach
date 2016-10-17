@@ -249,7 +249,7 @@ func (c *cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 		MaxRanges: 1,
 	}
 	sender := c.clients[nodeIdx].GetSender()
-	resp, pErr := client.SendWrapped(sender, nil, req)
+	resp, pErr := client.SendWrapped(context.Background(), sender, req)
 	if pErr != nil {
 		return nil, errors.Errorf("%s: lookup range: %s", key, pErr)
 	}

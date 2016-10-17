@@ -2563,7 +2563,7 @@ func (r *Replica) processRaftCommand(
 		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
 	} else if isLeaseError() {
 		log.VEventf(
-			1, ctx, "command proposed from replica %+v (lease at %v): %s",
+			ctx, 1, "command proposed from replica %+v (lease at %v): %s",
 			raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd,
 		)
 		forcedErr = roachpb.NewError(newNotLeaseHolderError(
@@ -2604,7 +2604,7 @@ func (r *Replica) processRaftCommand(
 			// cycles from traces.
 			if localMaxLeaseIndex := cmd.RaftCommand.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
 				log.VEventf(
-					1, ctx, "refurbishing command %x; <= %d observed at %d", cmd.idKey,
+					ctx, 1, "refurbishing command %x; <= %d observed at %d", cmd.idKey,
 					raftCmd.MaxLeaseIndex, leaseIndex,
 				)
 
@@ -2641,14 +2641,13 @@ func (r *Replica) processRaftCommand(
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
 	if forcedErr != nil {
-		log.VEventf(1, ctx, "applying command with forced error: %s", forcedErr)
+		log.VEventf(ctx, 1, "applying command with forced error: %s", forcedErr)
 	} else {
 		log.Event(ctx, "applying command")
 	}
 	var response roachpb.ResponseWithError
 	{
-		pd := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
-			raftCmd.Cmd, forcedErr)
+		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
 
 		// TODO(tschottdorf): this field should be zeroed earlier.
@@ -2689,7 +2688,7 @@ func (r *Replica) processRaftCommand(
 		cmd.done <- response
 		close(cmd.done)
 	} else if response.Err != nil {
-		log.VEventf(1, ctx, "error executing raft command %s: %s", raftCmd.Cmd, response.Err)
+		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.Cmd, response.Err)
 	}
 
 	return response.Err
@@ -2772,8 +2771,8 @@ func (r *Replica) acquireMergeLock(merge *roachpb.MergeTrigger) func(pErr *roach
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
 func (r *Replica) applyRaftCommand(
-	idKey storagebase.CmdIDKey,
 	ctx context.Context,
+	idKey storagebase.CmdIDKey,
 	index, leaseIndex uint64,
 	ba roachpb.BatchRequest,
 	forcedError *roachpb.Error,
@@ -3496,7 +3495,7 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 		return
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	log.VEventf(1, r.ctx, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
+	log.VEventf(r.ctx, 1, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
 		var liveness, exLiveness Liveness
 		if err := kv.Value.GetProto(&liveness); err != nil {

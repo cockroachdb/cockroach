@@ -365,7 +365,7 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
+		if _, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 			RangeID:         rangeID, // Not used in this test, but why not.
 			ReadConsistency: consistency,
 		}, args); err != nil {
@@ -432,7 +432,7 @@ func TestOwnNodeCertain(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
+	if _, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 		// MaxTimestamp is set very high so that all uncertainty updates have
 		// effect.
 		Txn: &roachpb.Transaction{OrigTimestamp: expTS, MaxTimestamp: hlc.MaxTimestamp},
@@ -477,7 +477,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	txn.UpdateObservedTimestamp(1, hlc.MaxTimestamp)
 
 	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
-	if _, pErr := client.SendWrappedWith(ds, context.Background(), roachpb.Header{
+	if _, pErr := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 		Txn: txn,
 	}, put); pErr != nil {
 		t.Fatal(pErr)
@@ -521,7 +521,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, err := client.SendWrapped(ds, nil, put); err != nil {
+	if _, err := client.SendWrapped(context.Background(), ds, put); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
 	if first {
@@ -572,7 +572,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	// Error on descriptor lookup, second attempt successful.
-	if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
 		t.Errorf("unexpected error: %s", pErr)
 	}
 	if len(pErrs) != 0 {
@@ -741,7 +741,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, errString) {
+		if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil && !testutils.IsPError(pErr, errString) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if _, ok := ds.leaseHolderCache.Lookup(1); ok != !tc.shouldClearLeaseHolder {
@@ -825,7 +825,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
-	if _, err := client.SendWrapped(ds, nil, scan); err != nil {
+	if _, err := client.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -900,7 +900,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
-	if _, err := client.SendWrapped(ds, nil, scan); err != nil {
+	if _, err := client.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
 }
@@ -1000,7 +1000,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
-	sr, err := client.SendWrappedWith(ds, nil, roachpb.Header{MaxSpanRequestKeys: 1}, scan)
+	sr, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1113,7 +1113,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	// Set the Txn info to avoid an OpRequiresTxnError.
-	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
+	reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 		MaxSpanRequestKeys: 10,
 		Txn:                &roachpb.Transaction{},
 	}, scan)
@@ -1156,7 +1156,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	rScan := &roachpb.ReverseScanRequest{
 		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
-	if _, err := client.SendWrapped(ds, nil, rScan); err != nil {
+	if _, err := client.SendWrapped(context.Background(), ds, rScan); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1180,7 +1180,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	doCheck := func(sender client.Sender, fakeTime hlc.Timestamp) {
 		ds.transportFactory = SenderTransportFactory(tracing.NewTracer(), sender)
-		_, err := client.SendWrapped(ds, nil, put)
+		_, err := client.SendWrapped(context.Background(), ds, put)
 		if err != nil && err != expectedErr {
 			t.Fatal(err)
 		}

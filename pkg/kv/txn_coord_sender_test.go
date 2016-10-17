@@ -363,7 +363,7 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (*roachpb.Transacti
 			Key: txn.Key,
 		},
 	}
-	reply, pErr := client.SendWrappedWith(coord, nil, roachpb.Header{
+	reply, pErr := client.SendWrappedWith(context.Background(), coord, roachpb.Header{
 		Txn: txn,
 	}, hb)
 	if pErr != nil {
@@ -890,7 +890,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
 			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
 		txn.Writing = tc.writing
-		reply, pErr := client.SendWrappedWith(sender, nil, roachpb.Header{
+		reply, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
 			Txn: txn,
 		}, tc.args)
 		if pErr == nil != tc.ok {
@@ -912,7 +912,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 		// Abort for clean shutdown.
-		if _, pErr := client.SendWrappedWith(sender, nil, roachpb.Header{
+		if _, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
 			Txn: txn,
 		}, &roachpb.EndTransactionRequest{
 			Commit: false,
