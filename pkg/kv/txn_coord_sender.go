@@ -173,11 +173,8 @@ func NewTxnCoordSender(
 	stopper *stop.Stopper,
 	txnMetrics TxnMetrics,
 ) *TxnCoordSender {
-	if ctx == nil || tracing.TracerFromCtx(ctx) == nil {
-		panic("ctx with tracer must be supplied")
-	}
 	if ctx.Done() != nil {
-		panic("context with cancel or deadline")
+		log.Fatalf(ctx, "expected non-cancelable context")
 	}
 	tc := &TxnCoordSender{
 		ctx:               ctx,
@@ -418,7 +415,7 @@ func (tc *TxnCoordSender) Send(
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
-		if pErr = tc.updateState(startNS, ctx, ba, br, pErr); pErr != nil {
+		if pErr = tc.updateState(ctx, startNS, ba, br, pErr); pErr != nil {
 			log.Eventf(ctx, "error: %s", pErr)
 			return nil, pErr
 		}
@@ -478,7 +475,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	// continue.
 	switch {
 	case !ok:
-		log.VEventf(2, ctx, "rejecting unknown txn: %s", txn.ID)
+		log.VEventf(ctx, 2, "rejecting unknown txn: %s", txn.ID)
 		// TODO(spencerkimball): Could add coordinator node ID to the
 		// transaction session so that we can definitively return the right
 		// error between these possible errors. Or update the code to make an
@@ -649,7 +646,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 			// Transaction finished normally.
 			return
 		case <-ctx.Done():
-			// Note that if ctx is not cancellable, then ctx.Done() returns a nil
+			// Note that if ctx is not cancelable, then ctx.Done() returns a nil
 			// channel, which blocks forever. In this case, the heartbeat loop is
 			// responsible for timing out transactions. If ctx.Done() is not nil, then
 			// then heartbeat loop ignores the timeout check and this case is
@@ -722,7 +719,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 
 	// Before we send a heartbeat, determine whether this transaction should be
 	// considered abandoned. If so, exit heartbeat. If ctx.Done() is not nil, then
-	// it is a cancellable Context and we skip this check and use the ctx lifetime
+	// it is a cancelable Context and we skip this check and use the ctx lifetime
 	// instead of a timeout.
 	if ctx.Done() == nil && hasAbandoned {
 		if log.V(1) {
@@ -775,8 +772,8 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(
-	startNS int64,
 	ctx context.Context,
+	startNS int64,
 	ba roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,

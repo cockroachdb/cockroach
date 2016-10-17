@@ -70,7 +70,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
+	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -117,7 +117,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// First do a write. The first write will advance the clock by MaxOffset
 	// because of the read cache's low water mark.
 	getArgs := putArgs([]byte("b"), []byte("b"))
-	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &getArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &getArgs); err != nil {
 		t.Fatal(err)
 	}
 	if now := clock.Now(); now.WallTime != int64(maxOffset) {
@@ -134,7 +134,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	for i := int64(0); i < 3; i++ {
 		incArgs := incrementArgs([]byte("a"), 5)
 		ts := hlc.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
-		if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
+		if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -145,7 +145,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	incArgs := incrementArgs([]byte("a"), 11)
 	ts := hlc.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
-	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{Timestamp: ts}, &incArgs); err == nil {
+	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err == nil {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
@@ -295,7 +295,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
@@ -313,7 +313,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
@@ -343,7 +343,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, split := range splits {
-		_, pErr := client.SendWrapped(rg1(store), nil, &split)
+		_, pErr := client.SendWrapped(context.Background(), rg1(store), &split)
 		if pErr != nil {
 			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, pErr)
 		}
@@ -357,7 +357,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	util.SucceedsSoon(t, func() error {
-		_, pErr := client.SendWrapped(rg1(store), nil, &scanArgs)
+		_, pErr := client.SendWrapped(context.Background(), rg1(store), &scanArgs)
 		return pErr.GoError()
 	})
 
@@ -433,7 +433,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for testIdx, test := range testCases {
-		resp, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		resp, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, test.request)
 		if pErr != nil {
@@ -494,7 +494,7 @@ func TestRangeTransferLease(t *testing.T) {
 	// First, do a write; we'll use it to determine when the dust has settled.
 	leftKey := roachpb.Key("a")
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -513,7 +513,11 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 	// Check that replica0 can serve reads OK.
 	if _, pErr := client.SendWrappedWith(
-		mtc.senders[0], nil, roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
+		context.Background(),
+		mtc.senders[0],
+		roachpb.Header{Replica: replica0Desc},
+		&gArgs,
+	); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -556,7 +560,11 @@ func TestRangeTransferLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, pErr := client.SendWrappedWith(
-		mtc.senders[0], nil, roachpb.Header{Replica: replica0Desc}, &gArgs)
+		context.Background(),
+		mtc.senders[0],
+		roachpb.Header{Replica: replica0Desc},
+		&gArgs,
+	)
 	nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
@@ -569,7 +577,11 @@ func TestRangeTransferLease(t *testing.T) {
 	// Check that replica1 now has the lease (or gets it soon).
 	util.SucceedsSoon(t, func() error {
 		if _, pErr := client.SendWrappedWith(
-			mtc.senders[1], nil, roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
+			context.Background(),
+			mtc.senders[1],
+			roachpb.Header{Replica: replica0Desc},
+			&gArgs,
+		); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -618,8 +630,11 @@ func TestRangeTransferLease(t *testing.T) {
 		shouldRenewTS := replica1Lease.StartStasis.Add(-1, 0)
 		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
 		if _, pErr := client.SendWrappedWith(
-			mtc.senders[1], nil,
-			roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
+			context.Background(),
+			mtc.senders[1],
+			roachpb.Header{Replica: replica0Desc},
+			&gArgs,
+		); pErr != nil {
 			panic(pErr)
 		}
 	}()
@@ -642,8 +657,11 @@ func TestRangeTransferLease(t *testing.T) {
 	// Check that the transfer to replica1 eventually happens.
 	util.SucceedsSoon(t, func() error {
 		if _, pErr := client.SendWrappedWith(
-			mtc.senders[0], nil,
-			roachpb.Header{Replica: replica0Desc}, &gArgs); pErr != nil {
+			context.Background(),
+			mtc.senders[0],
+			roachpb.Header{Replica: replica0Desc},
+			&gArgs,
+		); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -693,7 +711,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := client.SendWrappedWith(s.DistSender(), nil,
+		if _, pErr := client.SendWrappedWith(context.Background(), s.DistSender(),
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -724,7 +742,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Replica:     repDesc,
 			},
 		}
-		if _, pErr := client.SendWrapped(s.DistSender(), nil, &leaseReq); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), s.DistSender(), &leaseReq); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Unblock the read.
@@ -744,7 +762,7 @@ func LeaseInfo(
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
-	reply, pErr := client.SendWrappedWith(db.GetSender(), nil, roachpb.Header{
+	reply, pErr := client.SendWrappedWith(context.Background(), db.GetSender(), roachpb.Header{
 		ReadConsistency: readConsistency,
 	}, leaseInfoReq)
 	if pErr != nil {
@@ -875,7 +893,11 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		},
 	}
 	_, pErr := client.SendWrappedWith(
-		s.DistSender(), nil, roachpb.Header{UserPriority: 42}, &leaseReq)
+		context.Background(),
+		s.DistSender(),
+		roachpb.Header{UserPriority: 42},
+		&leaseReq,
+	)
 	if !testutils.IsPError(pErr, "injected error") {
 		t.Fatalf("expected error %q, got: %s", "injected error", pErr)
 	}

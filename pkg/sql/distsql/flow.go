@@ -293,7 +293,7 @@ func (f *Flow) getInboundStream(sid StreamID) (RowReceiver, error) {
 // Start starts the flow (each processor runs in their own goroutine).
 func (f *Flow) Start() {
 	log.VEventf(
-		1, f.Context, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
+		f.Context, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
 	)
 	f.status = FlowRunning
 	f.flowRegistry.RegisterFlow(f.id, f)

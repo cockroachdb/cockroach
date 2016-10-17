@@ -44,11 +44,8 @@ func (f SenderFunc) Send(
 // response or an error. It's valid to pass a `nil` context; an empty one is
 // used in that case.
 func SendWrappedWith(
-	sender Sender, ctx context.Context, h roachpb.Header, args roachpb.Request,
+	ctx context.Context, sender Sender, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
-	if ctx == nil {
-		ctx = context.TODO()
-	}
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
 	ba.Add(args)
@@ -68,9 +65,9 @@ func SendWrappedWith(
 // TODO(tschottdorf): should move this to testutils and merge with
 // other helpers which are used, for example, in `storage`.
 func SendWrapped(
-	sender Sender, ctx context.Context, args roachpb.Request,
+	ctx context.Context, sender Sender, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
-	return SendWrappedWith(sender, ctx, roachpb.Header{}, args)
+	return SendWrappedWith(ctx, sender, roachpb.Header{}, args)
 }
 
 // Wrap returns a Sender which applies the given function before delegating to

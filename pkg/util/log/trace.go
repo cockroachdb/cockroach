@@ -109,7 +109,7 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
 		var buf msgBuf
 		if withTags {
-			withTags = formatTags(&buf, ctx)
+			withTags = formatTags(ctx, &buf)
 		}
 
 		var msg string
@@ -181,7 +181,7 @@ func ErrEventf(ctx context.Context, format string, args ...interface{}) {
 // VEvent either logs a message to the log files (which also outputs to the
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
-func VEvent(level level, ctx context.Context, msg string) {
+func VEvent(ctx context.Context, level level, msg string) {
 	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, Severity_INFO, "", []interface{}{msg})
@@ -193,7 +193,7 @@ func VEvent(level level, ctx context.Context, msg string) {
 // VEventf either logs a message to the log files (which also outputs to the
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
-func VEventf(level level, ctx context.Context, format string, args ...interface{}) {
+func VEventf(ctx context.Context, level level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, Severity_INFO, format, args)

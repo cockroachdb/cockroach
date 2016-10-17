@@ -41,7 +41,7 @@ func fillTestRange(t testing.TB, rep *Replica, size int64) {
 		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
 		val := randutil.RandBytes(src, valSize)
 		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(rep, nil, roachpb.Header{
+		if _, pErr := client.SendWrappedWith(context.Background(), rep, roachpb.Header{
 			RangeID: rangeID,
 		}, &pArgs); pErr != nil {
 			t.Fatal(pErr)

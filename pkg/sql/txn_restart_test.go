@@ -328,7 +328,7 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql
 	if ok {
 		ri.execCount++
 		if ri.abortCount == 0 {
-			log.VEventf(1, ctx, "TxnAborter sees satisfied statement %q", stmt)
+			log.VEventf(ctx, 1, "TxnAborter sees satisfied statement %q", stmt)
 			ri.satisfied = true
 		}
 		if ri.abortCount > 0 && res.Err == nil {

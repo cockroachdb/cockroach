@@ -101,7 +101,7 @@ func (jr *joinReader) mainLoop() error {
 	ctx, span := tracing.ChildSpan(jr.ctx, "join reader")
 	defer tracing.FinishSpan(span)
 
-	log.VEventf(1, ctx, "starting (filter: %s)", &jr.filter)
+	log.VEventf(ctx, 1, "starting (filter: %s)", &jr.filter)
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}
@@ -156,7 +156,7 @@ func (jr *joinReader) mainLoop() error {
 			// Push the row to the output RowReceiver; stop if they don't need more
 			// rows.
 			if !jr.output.PushRow(outRow) {
-				log.VEventf(1, ctx, "no more rows required")
+				log.VEventf(ctx, 1, "no more rows required")
 				return nil
 			}
 		}

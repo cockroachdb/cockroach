@@ -34,7 +34,7 @@ func ProcessInboundStream(
 	finish := func(err error) error {
 		dst.Close(err)
 		if err != nil {
-			log.VEventf(1, ctx, "inbound stream error: %s", err)
+			log.VEventf(ctx, 1, "inbound stream error: %s", err)
 			// TODO(radu): populate response and send error instead
 			return err
 		}

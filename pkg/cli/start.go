@@ -534,7 +534,7 @@ completed, the server exits.
 
 // doShutdown attempts to trigger a server shutdown. When given an empty
 // onModes slice, it's a hard shutdown.
-func doShutdown(c serverpb.AdminClient, ctx context.Context, onModes []int32) error {
+func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) error {
 	// This is kind of hairy, but should work well in practice. We want to
 	// distinguish between the case in which we can't even connect to the
 	// server (in which case we don't want our caller to try to come back with
@@ -608,7 +608,7 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 
 	ctx := stopperContext(stopper)
 
-	if err := doShutdown(c, ctx, onModes); err != nil {
+	if err := doShutdown(ctx, c, onModes); err != nil {
 		if _, ok := err.(*errTryHardShutdown); ok {
 			fmt.Fprintf(
 				os.Stderr, "graceful shutdown failed: %s\nproceeding with hard shutdown\n", err,
@@ -621,7 +621,7 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	}
 	// Not passing drain modes tells the server to not bother and go
 	// straight to shutdown.
-	return errors.Wrap(doShutdown(c, ctx, nil), "hard shutdown failed")
+	return errors.Wrap(doShutdown(ctx, c, nil), "hard shutdown failed")
 }
 
 // freezeClusterCmd command issues a cluster-wide freeze.
