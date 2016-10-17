@@ -127,9 +127,11 @@ func TestRangeIDQueue(t *testing.T) {
 type testProcessor struct {
 	mu struct {
 		syncutil.Mutex
-		raftReady   map[roachpb.RangeID]int
-		raftRequest map[roachpb.RangeID]int
-		raftTick    map[roachpb.RangeID]int
+		raftReady        map[roachpb.RangeID]int
+		raftRequest      map[roachpb.RangeID]int
+		raftTick         map[roachpb.RangeID]int
+		raftRefreshAll   map[roachpb.RangeID]int
+		raftRefreshStale map[roachpb.RangeID]int
 	}
 }
 
@@ -138,6 +140,8 @@ func newTestProcessor() *testProcessor {
 	p.mu.raftReady = make(map[roachpb.RangeID]int)
 	p.mu.raftRequest = make(map[roachpb.RangeID]int)
 	p.mu.raftTick = make(map[roachpb.RangeID]int)
+	p.mu.raftRefreshStale = make(map[roachpb.RangeID]int)
+	p.mu.raftRefreshAll = make(map[roachpb.RangeID]int)
 	return p
 }
 
@@ -150,6 +154,18 @@ func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 func (p *testProcessor) processRequestQueue(rangeID roachpb.RangeID) {
 	p.mu.Lock()
 	p.mu.raftRequest[rangeID]++
+	p.mu.Unlock()
+}
+
+func (p *testProcessor) processRefreshAll(rangeID roachpb.RangeID) {
+	p.mu.Lock()
+	p.mu.raftRefreshAll[rangeID]++
+	p.mu.Unlock()
+}
+
+func (p *testProcessor) processRefreshStale(rangeID roachpb.RangeID) {
+	p.mu.Lock()
+	p.mu.raftRefreshStale[rangeID]++
 	p.mu.Unlock()
 }
 
@@ -190,6 +206,8 @@ func (p *testProcessor) String() string {
 // Verify that enqueuing more ranges than the number of workers correctly
 // processes all of the ranges. This exercises a code path that was buggy
 // during development.
+//
+// TODO(tschottdorf): test raftRefreshAll, raftRefreshStale.
 func TestSchedulerLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
