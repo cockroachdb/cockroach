@@ -105,7 +105,7 @@ VALUES(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
-	rows, err := s.cfg.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)
+	rows, err := s.cfg.SQLExecutor.ExecuteStatementInTransaction("log-range-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}

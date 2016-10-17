@@ -26,5 +26,5 @@ type InternalExecutor interface {
 	// ExecuteStatementInTransaction executes the supplied SQL statement as part of
 	// the supplied transaction. Statements are currently executed as the root user.
 	ExecuteStatementInTransaction(
-		txn *client.Txn, statement string, params ...interface{}) (int, error)
+		ctxName string, txn *client.Txn, statement string, params ...interface{}) (int, error)
 }
