@@ -129,7 +129,7 @@ func (r *traceResult) String() string {
 	if r.count < 0 {
 		return r.tag
 	}
-	return fmt.Sprintf("%s %d", r.tag, r.count)
+	return fmt.Sprintf("%s (%d results)", r.tag, r.count)
 }
 
 // ResultList represents a list of results for a list of SQL statements.
@@ -589,10 +589,11 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 					}()
 				}
 			}
-			txnState.resetForNewSQLTxn(e, session)
+			txnState.resetForNewSQLTxn(e, session, execOpt.AutoCommit /* implicitTxn */)
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
-			if execOpt.AutoCommit {
+			txnState.implicitTxn = execOpt.AutoCommit
+			if txnState.implicitTxn {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
 				txnState.txn.SetDebugName(sqlTxnName, 0)
@@ -1027,7 +1028,6 @@ func (e *Executor) execStmtInOpenTxn(
 	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
 	session := planMaker.session
-	log.Eventf(session.context, "%s", stmt)
 
 	// Do not double count automatically retried transactions.
 	if !isAutomaticRetry {
@@ -1155,7 +1155,7 @@ func (e *Executor) execStmtInOpenTxn(
 	if traceSQL {
 		log.Eventf(txnState.txn.Context, "%s done", tResult)
 	}
-	log.Eventf(session.context, "%s done", tResult)
+	log.Eventf(session.Ctx(), "%s done", tResult)
 	return result, nil
 }
 

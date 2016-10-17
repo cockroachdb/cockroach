@@ -17,6 +17,7 @@ Database
 a
 information_schema
 pg_catalog
+session_info
 system
 test
 
@@ -68,6 +69,7 @@ CREATE DATABASE c
 query T
 SHOW DATABASES
 ----
+session_info
 a
 b
 b2
@@ -120,6 +122,7 @@ a
 c
 information_schema
 pg_catalog
+session_info
 system
 test
 

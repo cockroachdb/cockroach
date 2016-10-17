@@ -114,6 +114,38 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
 		}
+	case `TRACE`:
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		switch parser.Name(s).Normalize() {
+		case parser.ReNormalizeName("on"):
+			if p.session.TxnState.State != Open || !p.session.TxnState.implicitTxn {
+				// It'd be nice in principle to be able to start a trace while in a
+				// transaction, but things get hairy: would we automatically stop the
+				// trace when the transaction is done? Given the current implementation,
+				// we'd need to decide if we hijack the transaction's context or the
+				// session's context. If we'd hijack the transaction's ctx, then we'd
+				// need to finish the trace automatically, otherwise we'd lose the
+				// opportunity to ever stop it. If we'd hijack the session's ctx, but
+				// use a ctx derived from the txn's, then we'd potentially have
+				// statements outside of the txn executing in the wrong context.
+				return nil, fmt.Errorf("cannot start tracing while inside a transaction")
+			}
+			if err := p.session.Tracing.StartTracing(); err != nil {
+				return nil, err
+			}
+		case parser.ReNormalizeName("off"):
+			if p.session.TxnState.State != Open || !p.session.TxnState.implicitTxn {
+				return nil, fmt.Errorf("cannot stop tracing while inside a transaction")
+			}
+			if err := p.session.Tracing.StopTracing(); err != nil {
+				return nil, fmt.Errorf("Error stopping tracing: %s", err)
+			}
+		default:
+			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
+		}
 
 	// These settings are sent by various client drivers. We don't support
 	// changing them, so we either silently ignore them or throw an error given

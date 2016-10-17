@@ -3,6 +3,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
+session_info
 system
 test
 

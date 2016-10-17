@@ -3,6 +3,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
+session_info
 system
 test
 
@@ -43,6 +44,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
+session_info
 system
 u
 
@@ -91,6 +93,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
+session_info
 t
 
 user root

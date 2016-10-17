@@ -126,7 +126,7 @@ EXPLAIN SHOW DATABASES
 1  virtual table
 1                 source  information_schema.schemata
 2  values
-2                 size    4 columns, 5 rows
+2                 size    4 columns, 6 rows
 
 query ITTT
 EXPLAIN SHOW TABLES

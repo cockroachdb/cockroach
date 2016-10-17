@@ -461,6 +461,7 @@ func StartSnowballTrace(
 	// There's no active trace so no need for a TeeTracer.
 	tracer, recorder := NewRecordingTracer()
 	rootSp := tracer.StartSpan(opName)
+
 	// We definitely want to sample a Snowball trace.
 	// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
 	otext.SamplingPriority.Set(rootSp, 1)

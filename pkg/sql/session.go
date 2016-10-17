@@ -107,6 +107,8 @@ type Session struct {
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
 
+	Tracing SessionTracing
+
 	noCopy util.NoCopy
 }
 
@@ -141,6 +143,8 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 
+	s.Tracing.session = s
+
 	if opentracing.SpanFromContext(ctx) == nil {
 		remoteStr := "<admin>"
 		if remote != nil {
@@ -157,6 +161,8 @@ func NewSession(
 
 // Finish releases resources held by the Session.
 func (s *Session) Finish(e *Executor) {
+	log.VEvent(s.context, 2, "finishing session")
+
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State.kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(
@@ -177,6 +183,12 @@ func (s *Session) Finish(e *Executor) {
 
 	if s.finishEventLog {
 		log.FinishEventLog(s.context)
+	}
+
+	if s.Tracing.tracing {
+		if err := s.Tracing.StopTracing(); err != nil {
+			log.Infof(s.context, "error stopping tracing: %s", err)
+		}
 	}
 
 	// This will stop the heartbeating of the of the txn record.
@@ -236,6 +248,10 @@ type txnState struct {
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
 
+	// implicitTxn if set if the transaction was automatically created for a
+	// single statement.
+	implicitTxn bool
+
 	// retrying is used to work around the non-idempotence of SAVEPOINT
 	// queries.
 	//
@@ -278,7 +294,7 @@ type txnState struct {
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
 // It creates a new client.Txn and initializes it using the session defaults.
 // txnState.State will be set to Open.
-func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
+func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session, implicitTxn bool) {
 	if ts.sp != nil {
 		panic(fmt.Sprintf("txnState.reset() called on ts with active span. How come "+
 			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
@@ -312,14 +328,20 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			log.Fatalf(ctx, "couldn't create a tracer for debugging #7881: %s", err)
 		}
 	} else {
+		var opName string
+		if implicitTxn {
+			opName = sqlImplicitTxnName
+		} else {
+			opName = sqlTxnName
+		}
 		if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
 			// Create a child span for this SQL txn.
 			tracer := parentSp.Tracer()
-			sp = tracer.StartSpan("sql txn", opentracing.ChildOf(parentSp.Context()))
+			sp = tracer.StartSpan(opName, opentracing.ChildOf(parentSp.Context()))
 		} else {
 			// Create a root span for this SQL txn.
 			tracer := e.cfg.AmbientCtx.Tracer
-			sp = tracer.StartSpan("sql txn")
+			sp = tracer.StartSpan(opName)
 		}
 	}
 	// Put the new span in the context.
@@ -509,4 +531,58 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+}
+
+// SessionTracing holds the state used by SET TRACE {ON,OFF} statements in the
+// context of one SQL session.
+// It holds the current trace being collected (or the last trace collected, if
+// tracing is not currently ongoing).
+type SessionTracing struct {
+	session        *Session
+	tracing        bool
+	origSessionCtx context.Context
+	trace          *tracing.RecordedTrace
+}
+
+// StartTracing hijacks the parent session's context and sets it to one that has
+// a snowball trace in it. StopTracing() needs to be called to finish this
+// trace.
+func (st *SessionTracing) StartTracing() error {
+	if st.tracing {
+		return errors.Errorf("already tracing")
+	}
+	if st.session.TxnState.State != Open || !st.session.TxnState.implicitTxn {
+		return errors.Errorf("cannot start tracing while inside a transaction")
+	}
+	tracingCtx, trace, err := tracing.StartSnowballTrace(
+		st.session.context, "sql session trace")
+	if err != nil {
+		return err
+	}
+	st.trace = trace
+	st.tracing = true
+
+	st.origSessionCtx = st.session.context
+	st.session.context = tracingCtx
+	return nil
+}
+
+// StopTracing stops the trace that was started with StartTracing().
+// The parent session's context is restored to the original.
+func (st *SessionTracing) StopTracing() error {
+	if !st.tracing {
+		return errors.Errorf("not tracing")
+	}
+	if st.session.TxnState.State != Open || !st.session.TxnState.implicitTxn {
+		return errors.Errorf("cannot stop tracing while inside a transaction")
+	}
+	st.tracing = false
+	tracingSpan := opentracing.SpanFromContext(st.session.context)
+	if tracingSpan == nil {
+		return errors.Errorf("tracing was active but no span in the context")
+	}
+	tracingSpan.Finish()
+	// Restore the original context.
+	st.session.context = st.origSessionCtx
+	return nil
 }

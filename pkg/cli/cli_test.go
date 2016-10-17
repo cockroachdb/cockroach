@@ -714,10 +714,11 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// 4 rows
+	// 5 rows
 	// Database
 	// information_schema
 	// pg_catalog
+	// session_info
 	// system
 	// t
 	// sql -e explain select 3

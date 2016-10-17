@@ -98,6 +98,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
+session_info
 system
 test
 
@@ -162,6 +163,7 @@ SELECT * FROM information_schema.schemata
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
 def           information_schema  NULL                        NULL
 def           pg_catalog          NULL                        NULL
+def           session_info        NULL                        NULL
 def           system              NULL                        NULL
 def           test                NULL                        NULL
 
@@ -171,6 +173,7 @@ SELECT * FROM INFormaTION_SCHEMa.schemata
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
 def           information_schema  NULL                        NULL
 def           pg_catalog          NULL                        NULL
+def           session_info        NULL                        NULL
 def           system              NULL                        NULL
 def           test                NULL                        NULL
 
@@ -184,6 +187,7 @@ CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
 def           information_schema  NULL                        NULL
 def           other_db            NULL                        NULL
 def           pg_catalog          NULL                        NULL
+def           session_info        NULL                        NULL
 def           system              NULL                        NULL
 def           test                NULL                        NULL
 
@@ -235,6 +239,7 @@ pg_settings
 pg_tables
 pg_type
 pg_views
+latest_trace
 descriptor
 eventlog
 lease
@@ -316,6 +321,7 @@ def            pg_catalog          pg_settings        SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
 def            pg_catalog          pg_views           SYSTEM VIEW  1
+def            session_info        latest_trace       SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   2
 def            system              lease              BASE TABLE   1
@@ -370,6 +376,7 @@ def            pg_catalog          pg_settings        SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
 def            pg_catalog          pg_views           SYSTEM VIEW  1
+def            session_info        latest_trace       SYSTEM VIEW  1
 
 user root
 
@@ -415,6 +422,7 @@ def            pg_catalog          pg_settings        SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
 def            pg_catalog          pg_views           SYSTEM VIEW  1
+def            session_info        latest_trace       SYSTEM VIEW  1
 
 user root
 
