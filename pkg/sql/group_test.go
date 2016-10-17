@@ -46,7 +46,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		{`(COUNT(a), MIN(a))`, nil},
 		{`(MIN(a+1))`, nil},
 	}
-	p := makePlanner()
+	p := makePlanner("test")
 	for _, d := range testData {
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, d.expr, sel)
