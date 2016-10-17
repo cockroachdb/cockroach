@@ -2656,8 +2656,8 @@ func (r *Replica) processRaftCommand(
 
 		// Save the response and zero out the field so that handleProposalData
 		// knows it wasn't forgotten.
-		response = pd.ResponseWithError
-		pd.ResponseWithError = roachpb.ResponseWithError{}
+		response = roachpb.ResponseWithError{Err: pd.Err, Reply: pd.Reply}
+		pd.Err, pd.Reply = nil, nil
 
 		// Handle the ProposalData, executing any side effects of the last
 		// state machine transition.
