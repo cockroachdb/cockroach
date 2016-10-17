@@ -138,6 +138,8 @@ type raftScheduler struct {
 		state   map[roachpb.RangeID]raftScheduleState
 		stopped bool
 	}
+
+	done sync.WaitGroup
 }
 
 func newRaftScheduler(
@@ -175,6 +177,7 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 		s.mu.cond.Broadcast()
 	})
 
+	s.done.Add(s.numWorkers)
 	for i := 0; i < s.numWorkers; i++ {
 		stopper.RunWorker(func() {
 			s.worker(stopper)
@@ -182,7 +185,13 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 	}
 }
 
+func (s *raftScheduler) Wait() {
+	s.done.Wait()
+}
+
 func (s *raftScheduler) worker(stopper *stop.Stopper) {
+	defer s.done.Done()
+
 	// We use a sync.Cond for worker notification instead of a buffered
 	// channel. Buffered channels have internal overhead for maintaining the
 	// buffer even when the elements are empty. And the buffer isn't necessary as
