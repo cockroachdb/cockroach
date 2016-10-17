@@ -18,10 +18,59 @@ option go_package = "storagebase";
 
 import "cockroach/pkg/roachpb/api.proto";
 import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 
 import "gogoproto/gogo.proto";
+
+// A RaftCommand is a command which can be serialized and sent via
+// raft.
+message RaftCommand {
+  // TODO(tschottdorf): should have casttype roachpb.RangeID, but the
+  // generated protos don't have that import available and there is no
+  // obvious way to do so.
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID"];
+  optional roachpb.ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.BatchRequest cmd = 3 [(gogoproto.nullable) = false];
+  // When the command is applied, its result is an error if the lease log
+  // counter has already reached (or exceeded) max_lease_index.
+  //
+  // The lease index is a replay protection mechanism. Similar to the Raft
+  // applied index, it is strictly increasing, but may have gaps. A command
+  // will only apply successfully if its max_lease_index has not been surpassed
+  // by the Range's applied lease index (in which case the command may need to
+  // be 'refurbished', that is, regenerated with a higher max_lease_index).
+  // When the command applies, the new lease index will increase to
+  // max_lease_index (so a potential later replay will fail).
+  //
+  // Refurbishment is conditional on whether there is a difference between the
+  // local pending and the applying version of the command - if the local copy
+  // has a different max_lease_index, an earlier incarnation of the command has
+  // already been refurbished, and no repeated refurbishment takes place.
+  //
+  // This mechanism was introduced as a simpler alternative to using the Raft
+  // applied index, which is fraught with complexity due to the need to predict
+  // exactly the log position at which a command will apply, even when the Raft
+  // leader is not colocated with the lease holder (which usually proposes all
+  // commands).
+  //
+  // Pinning the lease-index to the assigned slot (as opposed to allowing gaps
+  // as we do now) is an interesting venue to explore from the standpoint of
+  // parallelization: One could hope to enforce command ordering in that way
+  // (without recourse to a higher-level locking primitive such as the command
+  // queue). This is a hard problem: First of all, managing the pending
+  // commands gets more involved; a command must not be removed if others have
+  // been added after it, and on removal, the assignment counters must be
+  // updated accordingly. Even worse though, refurbishments must be avoided at
+  // all costs (since a refurbished command is likely to order after one that
+  // it originally preceded (and which may well commit successfully without
+  // a refurbishment).
+  optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
+}
+
+
 
 // Split is emitted when a Replica commits a split trigger. It signals that the
 // Replica has prepared the on-disk state for both the left and right hand
