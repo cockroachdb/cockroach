@@ -209,6 +209,8 @@ func (n *distinctNode) Next() (bool, error) {
 	}
 }
 
+// TODO(irfansharif): This can be refactored away to use
+// sqlbase.EncodeDTuple([]byte, parser.DTuple)
 func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte, error) {
 	var prefix, suffix []byte
 	var err error
