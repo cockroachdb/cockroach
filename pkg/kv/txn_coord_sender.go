@@ -153,7 +153,7 @@ type TxnCoordSender struct {
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
-	syncutil.Mutex                               // protects txns and txnStats
+	syncutil.Mutex                               // protects txns
 	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
 	linearizable      bool                       // enables linearizable behaviour
 	stopper           *stop.Stopper

@@ -19,7 +19,7 @@ package sql
 import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // delayedNode wraps a planNode in cases where the planNode
-// constructor must be dealyed during query execution (as opposed to
+// constructor must be delayed during query execution (as opposed to
 // SQL prepare) for resource tracking purposes.
 type delayedNode struct {
 	p           *planner
