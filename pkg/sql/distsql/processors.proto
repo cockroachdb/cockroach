@@ -128,6 +128,14 @@ message EvaluatorSpec {
   repeated Expression exprs = 2 [(gogoproto.nullable) = false];
 }
 
+message DistinctSpec {
+  repeated uint32 cols = 1;
+
+  // TODO(irfansharif): Ordered columns, the columns the input is already sorted
+  // by, can be optionally specified for possible optimizations taking advantage
+  // of the partial orderings.
+}
+
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
@@ -136,6 +144,7 @@ message ProcessorCoreUnion {
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
   optional EvaluatorSpec evaluator = 5;
+  optional DistinctSpec distinct = 7;
   // TODO(radu): other "processor core" types will go here.
   // TODO(irfansharif): add aggregation, join, set operations, etc. from #7587
 }
