@@ -33,6 +33,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/namesgenerator"
 	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 
@@ -201,7 +202,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 			name += "-"
 		}
 
-		name += getRandomName()
+		name += namesgenerator.GetRandomName(0)
 
 		// Rudimentary collision control.
 		for i := 0; ; i++ {
