@@ -1794,6 +1794,27 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	}
 }
 
+func (r *Replica) maybeAbandonSnapshot(ctx context.Context) {
+	r.mu.Lock()
+	doneChan := r.mu.outSnapDone
+	claimed := r.mu.outSnap.claimed
+	snapUUID := r.mu.outSnap.SnapUUID
+	r.mu.Unlock()
+
+	if !claimed {
+		select {
+		// We can read from this without the replica lock because we're holding the
+		// raft lock, which protects modification of the snapshot data.
+		case <-doneChan:
+		default:
+			// If we're blocking on outSnapDone but not sending a snapshot, we
+			// have a leaked/abandoned snapshot and need to clean it up.
+			log.Warningf(ctx, "abandoning unsent snapshot %s", snapUUID)
+			r.CloseOutSnap()
+		}
+	}
+}
+
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
 // peers. It takes a non-empty IncomingSnapshot to indicate that it is
@@ -1938,22 +1959,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		}
 		r.sendRaftMessage(msg)
 	}
-
-	r.mu.Lock()
-	doneChan := r.mu.outSnapDone
-	claimed := r.mu.outSnap.claimed
-	r.mu.Unlock()
-	if !sendingSnapshot && !claimed {
-		select {
-		// We can read from this without the replica lock because we're holding the
-		// raft lock, which protects modification of the snapshot data.
-		case <-doneChan:
-		default:
-			// If we're blocking on outSnapDone but not sending a snapshot, we
-			// have a leaked/abandoned snapshot and need to clean it up.
-			log.Warningf(ctx, "Abandoning unsent snapshot %s", r.mu.outSnap.SnapUUID)
-			r.CloseOutSnap()
-		}
+	if !sendingSnapshot {
+		r.maybeAbandonSnapshot(ctx)
 	}
 
 	for _, e := range rd.CommittedEntries {
@@ -2410,14 +2417,14 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 						RangeSize:  0,
 						CanDecline: false,
 					}, snap, r.store.Engine().NewBatch); err != nil {
-					log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
+					log.Warningf(r.ctx, "failed to send snapshot: %s", err)
 				}
 				// Report the snapshot status to Raft, which expects us to do this once
 				// we finish attempting to send the snapshot.
 				r.reportSnapshotStatus(msg.To, err)
 			})
 		}); err != nil {
-			log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
+			log.Warningf(r.ctx, "failed to send snapshot: %s", err)
 		}
 		return
 	}
