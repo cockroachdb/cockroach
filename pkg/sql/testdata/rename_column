@@ -1,10 +1,10 @@
 statement ok
 CREATE TABLE users (
-  id    INT PRIMARY KEY,
+  uid    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
   INDEX foo (name),
-  UNIQUE INDEX bar (id, name)
+  UNIQUE INDEX bar (uid, name)
 )
 
 statement ok
@@ -13,7 +13,7 @@ INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 query ITT colnames
 SELECT * FROM users
 ----
-id name  title
+uid name  title
 1  tom   cat
 2  jerry rat
 
@@ -31,6 +31,9 @@ ALTER TABLE uses RENAME COLUMN title TO species
 
 statement ok
 ALTER TABLE IF EXISTS uses RENAME COLUMN title TO species
+
+statement ok
+ALTER TABLE users RENAME COLUMN uid TO id
 
 statement ok
 ALTER TABLE users RENAME COLUMN title TO species
