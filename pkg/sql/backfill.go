@@ -523,7 +523,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// many transactions is fine because the schema change is in the
 		// correct state to handle intermediate OLTP commands which delete
 		// and add values during the scan.
-		planner := makePlanner()
+		planner := makePlanner("backfill")
 		planner.setTxn(txn)
 		scan := planner.Scan()
 		scan.desc = *tableDesc

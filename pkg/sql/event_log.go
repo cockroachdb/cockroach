@@ -116,7 +116,7 @@ VALUES(
 		args[4] = string(infoBytes)
 	}
 
-	rows, err := ev.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)
+	rows, err := ev.ExecuteStatementInTransaction("log-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}

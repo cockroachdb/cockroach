@@ -39,9 +39,9 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
 func (ie InternalExecutor) ExecuteStatementInTransaction(
-	txn *client.Txn, statement string, qargs ...interface{},
+	opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
-	p := makeInternalPlanner(txn, security.RootUser)
+	p := makeInternalPlanner(opName, txn, security.RootUser)
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, qargs...)
 }
@@ -51,7 +51,7 @@ func (ie InternalExecutor) GetTableSpan(
 	user string, txn *client.Txn, dbName, tableName string,
 ) (roachpb.Span, error) {
 	// Lookup the table ID.
-	p := makeInternalPlanner(txn, user)
+	p := makeInternalPlanner("get-table-span", txn, user)
 	p.leaseMgr = ie.LeaseManager
 
 	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
