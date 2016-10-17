@@ -412,6 +412,11 @@ func (expr *DTuple) Walk(_ Visitor) Expr { return expr }
 func (expr *DPlaceholder) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
+//
+// NOTE: Beware that WalkExpr does not necessarily traverse all parts of an
+// expression by itself. For example, it will not walk into Subquery nodes
+// within a FROM clause or into a JoinCond. Walk's logic is pretty
+// interdependent with the logic for constructing a query plan.
 func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
 	recurse, newExpr := v.VisitPre(expr)
 
@@ -791,6 +796,11 @@ var _ WalkableStmt = &ValuesClause{}
 // WalkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned
 // by WalkExpr.
+//
+// NOTE: Beware that WalkStmt does not necessarily traverse all parts of a
+// statement by itself. For example, it will not walk into Subquery nodes
+// within a FROM clause or into a JoinCond. Walk's logic is pretty
+// interdependent with the logic for constructing a query plan.
 func WalkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
 	walkable, ok := stmt.(WalkableStmt)
 	if !ok {
