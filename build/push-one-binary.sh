@@ -10,7 +10,7 @@ LATEST_SUFFIX=".LATEST"
 REPO_NAME="cockroach"
 
 # $0 takes the path to the binary inside the repo.
-# eg: $0 sql/sql.test sql/sql-foo.test
+# eg: $0 pkg/sql/sql.test sql/sql-foo.test
 # The file will be pushed to: s3://BUCKET_NAME/REPO_NAME/sql-foo.test.SHA
 # The binary's sha will be stored in s3://BUCKET_NAME/REPO_NAME/sql-foo.test.LATEST
 # The .LATEST file will also redirect to the latest binary when fetching through
