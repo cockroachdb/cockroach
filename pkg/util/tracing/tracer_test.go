@@ -155,7 +155,7 @@ func TestTracerRecording(t *testing.T) {
 	noop3.Finish()
 
 	s1.LogKV("x", 1)
-	StartRecording(s1)
+	StartRecording(s1, SingleNodeRecording)
 	s1.LogKV("x", 2)
 	s2 := tr.StartSpan("b", opentracing.ChildOf(s1.Context()))
 	if IsNoopSpan(s2) {
@@ -256,8 +256,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// remote side.
 
 	s1 := tr.StartSpan("a", Recordable)
-	StartRecording(s1)
-	s1.SetBaggageItem(Snowball, "1")
+	StartRecording(s1, SnowballRecording)
 
 	carrier = make(opentracing.HTTPHeadersCarrier)
 	if err := tr.Inject(s1.Context(), opentracing.HTTPHeaders, carrier); err != nil {
@@ -282,12 +281,13 @@ func TestTracerInjectExtract(t *testing.T) {
 	rec := GetRecording(s2)
 	checkRawSpans(t, rec, `
 	  span remote op:
+		  tags: sb=1
 	    x: 1
 	`)
 
 	checkRawSpans(t, GetRecording(s1), `
 	  span a:
-		  tags: sb=1
+	    tags: sb=1
 	`)
 
 	// Encode spans as if we are sending them over the wire.
@@ -309,6 +309,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	  span a:
 		  tags: sb=1
 		span remote op:
+		  tags: sb=1
 			x: 1
 	`)
 }

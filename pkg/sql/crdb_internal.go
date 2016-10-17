@@ -39,6 +39,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalSchemaChangesTable,
 		crdbInternalStmtStatsTable,
 		crdbInternalJobsTable,
+		crdbInternalSessionTraceTable,
 	},
 }
 
@@ -448,6 +449,32 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalSessionTraceTable exposes the latest trace collected on this
+// session (via SET TRACE={ON/OFF})
+var crdbInternalSessionTraceTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.session_trace(
+  TOP_LEVEL BOOL NOT NULL,       -- set to TRUE for the first message
+                                 -- in a transaction's top level span
+  SPAN_IDX INT NOT NULL,         -- the span's index
+  MESSAGE_IDX INT NOT NULL,      -- the message's index within its span
+  TIMESTAMP TIMESTAMP NOT NULL,  -- the message's timestamp
+  OPERATION STRING NULL,         -- the span's operation. Set only on
+                                 -- the first message in a span.
+  LOG STRING NOT NULL            -- the logged message
+);
+`,
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		rows := p.session.Tracing.GenerateSessionTraceVTable()
+		for _, r := range rows {
+			if err := addRow(r[:]...); err != nil {
+				return err
 			}
 		}
 		return nil

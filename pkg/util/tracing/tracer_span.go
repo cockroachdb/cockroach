@@ -48,6 +48,7 @@ type spanContext struct {
 
 	// If set, all spans derived from this context are being recorded as a group.
 	recordingGroup *spanGroup
+	recordingType  RecordingType
 
 	// The span's associated baggage.
 	Baggage map[string]string
@@ -63,6 +64,17 @@ func (sc *spanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 		}
 	}
 }
+
+// RecordingType is the type of recording that a span might be performing.
+type RecordingType bool
+
+const (
+	// SnowballRecording means that remote child spans (generally opened through
+	// RPCs) are also recorded.
+	SnowballRecording RecordingType = true
+	// SingleNodeRecording means that only spans on the current node are recorded.
+	SingleNodeRecording RecordingType = false
+)
 
 type span struct {
 	spanMeta
@@ -88,6 +100,7 @@ type span struct {
 		duration time.Duration
 
 		recordingGroup *spanGroup
+		recordingType  RecordingType
 		recordedLogs   []opentracing.LogRecord
 		// tags are only set when recording.
 		// TODO(radu): perhaps we want a recording to capture all the tags (even
@@ -105,13 +118,17 @@ func (s *span) isRecording() bool {
 	return atomic.LoadInt32(&s.recording) != 0
 }
 
-func (s *span) enableRecording(group *spanGroup) {
+func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 	if group == nil {
 		panic("no spanGroup")
 	}
 	s.mu.Lock()
 	atomic.StoreInt32(&s.recording, 1)
 	s.mu.recordingGroup = group
+	s.mu.recordingType = recType
+	if recType == SnowballRecording {
+		s.setBaggageItemLocked(Snowball, "1")
+	}
 	// Clear any previously recorded logs.
 	s.mu.recordedLogs = nil
 	s.mu.Unlock()
@@ -139,18 +156,11 @@ func GetSpanTag(os opentracing.Span, key string) interface{} {
 //
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
-func StartRecording(os opentracing.Span) {
+func StartRecording(os opentracing.Span, recType RecordingType) {
 	if IsNoopSpan(os) {
 		panic("StartRecording called on NoopSpan; use the Force option for StartSpan")
 	}
-	os.(*span).enableRecording(new(spanGroup))
-}
-
-func (s *span) disableRecording() {
-	s.mu.Lock()
-	atomic.StoreInt32(&s.recording, 0)
-	s.mu.recordingGroup = nil
-	s.mu.Unlock()
+	os.(*span).enableRecording(new(spanGroup), recType)
 }
 
 // StopRecording disables recording on this span. Child spans that were created
@@ -160,6 +170,28 @@ func (s *span) disableRecording() {
 // when all the spans finish.
 func StopRecording(os opentracing.Span) {
 	os.(*span).disableRecording()
+}
+
+func (s *span) disableRecording() {
+	s.mu.Lock()
+	atomic.StoreInt32(&s.recording, 0)
+	s.mu.recordingGroup = nil
+	if s.mu.recordingType == SnowballRecording {
+		// Clear the Snowball baggage item, assuming that it was set by
+		// enableRecording().
+		s.setBaggageItemLocked(Snowball, "")
+	}
+	s.mu.Unlock()
+}
+
+// IsRecordable returns true if {Start,Stop}Recording() can be called on this
+// span.
+//
+// In other words, this tests if the span is our custom type, and not a noopSpan
+// or anything else.
+func IsRecordable(os opentracing.Span) bool {
+	_, isCockroachSpan := os.(*span)
+	return isCockroachSpan
 }
 
 // GetRecording retrieves the current recording, if the span has
@@ -268,6 +300,7 @@ func (s *span) Context() opentracing.SpanContext {
 
 	if s.isRecording() {
 		sc.recordingGroup = s.mu.recordingGroup
+		sc.recordingType = s.mu.recordingType
 	}
 	return sc
 }
@@ -283,6 +316,10 @@ func (s *span) SetOperationName(operationName string) opentracing.Span {
 
 // SetTag is part of the opentracing.Span interface.
 func (s *span) SetTag(key string, value interface{}) opentracing.Span {
+	return s.setTagInner(key, value, false /* locked */)
+}
+
+func (s *span) setTagInner(key string, value interface{}, locked bool) opentracing.Span {
 	if s.lightstep != nil {
 		s.lightstep.SetTag(key, value)
 	}
@@ -290,12 +327,16 @@ func (s *span) SetTag(key string, value interface{}) opentracing.Span {
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
 	if s.isRecording() {
-		s.mu.Lock()
+		if !locked {
+			s.mu.Lock()
+		}
 		if s.mu.tags == nil {
 			s.mu.tags = make(opentracing.Tags)
 		}
 		s.mu.tags[key] = value
-		s.mu.Unlock()
+		if !locked {
+			s.mu.Unlock()
+		}
 	}
 	return s
 }
@@ -348,17 +389,21 @@ func (s *span) LogKV(alternatingKeyValues ...interface{}) {
 // SetBaggageItem is part of the opentracing.Span interface.
 func (s *span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.setBaggageItemLocked(restrictedKey, value)
+}
+
+func (s *span) setBaggageItemLocked(restrictedKey, value string) opentracing.Span {
 	if s.mu.Baggage == nil {
 		s.mu.Baggage = make(map[string]string)
 	}
 	s.mu.Baggage[restrictedKey] = value
-	s.mu.Unlock()
 
 	if s.lightstep != nil {
 		s.lightstep.SetBaggageItem(restrictedKey, value)
 	}
 	// Also set a tag so it shows up in the Lightstep UI or x/net/trace.
-	s.SetTag(restrictedKey, value)
+	s.setTagInner(restrictedKey, value, true /* locked */)
 	return s
 }
 

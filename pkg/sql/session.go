@@ -20,9 +20,11 @@ package sql
 import (
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
+	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -65,9 +67,8 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	"sql.trace.session_eventlog.enabled",
 	"set to true to enable session tracing", false)
 
-// debugTrace7881Enabled causes all SQL transactions to be traced using their
-// own tracer and log, in the hope that we'll catch #7881 and dump the
-// current trace for debugging.
+// debugTrace7881Enabled causes all SQL transactions to be traced, in the hope
+// that we'll catch #7881 and dump the current trace for debugging.
 var debugTrace7881Enabled = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
 
 // logStatementsExecuteEnabled causes the Executor to log executed
@@ -240,6 +241,8 @@ type Session struct {
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
 
+	Tracing SessionTracing
+
 	leases LeaseCollection
 
 	// If set, contains the in progress COPY FROM columns.
@@ -325,6 +328,7 @@ func NewSession(
 	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
+	s.Tracing.session = s
 
 	if traceSessionEventLogEnabled.Get() {
 		remoteStr := "<admin>"
@@ -344,6 +348,8 @@ func NewSession(
 // operating in the background in the case of parallelized statements, which
 // is why we make sure to drain background statements.
 func (s *Session) Finish(e *Executor) {
+	log.VEvent(s.context, 2, "finishing session")
+
 	if s.mon == (mon.MemoryMonitor{}) {
 		// This check won't catch the cases where Finish is never called, but it's
 		// proven to be easier to remember to call Finish than it is to call
@@ -372,7 +378,7 @@ func (s *Session) Finish(e *Executor) {
 			errors.Errorf("session closing"), e)
 	}
 	if s.TxnState.State != NoTxn {
-		s.TxnState.finishSQLTxn(s.context)
+		s.TxnState.finishSQLTxn(s.context, s)
 	}
 
 	// Cleanup leases. We might have unreleased leases if we're finishing the
@@ -387,6 +393,12 @@ func (s *Session) Finish(e *Executor) {
 	if s.eventLog != nil {
 		s.eventLog.Finish()
 		s.eventLog = nil
+	}
+
+	if s.Tracing.tracing {
+		if err := s.Tracing.StopTracing(); err != nil {
+			log.Infof(s.context, "error stopping tracing: %s", err)
+		}
 	}
 
 	// This will stop the heartbeating of the of the txn record.
@@ -511,7 +523,11 @@ type TxnStateEnum int
 
 //go:generate stringer -type=TxnStateEnum
 const (
-	// No txn is in scope. Either there never was one, or it got committed/rolled back.
+	// No txn is in scope. Either there never was one, or it got committed/rolled
+	// back. Note that this state will not be experienced outside of the Session
+	// and Executor (i.e. it will not be observed by a running query) because the
+	// Executor opens implicit transactions before executing non-transactional
+	// queries.
 	NoTxn TxnStateEnum = iota
 	// A txn is in scope.
 	Open
@@ -541,6 +557,10 @@ type txnState struct {
 
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
+
+	// implicitTxn if set if the transaction was automatically created for a
+	// single statement.
+	implicitTxn bool
 
 	// If set, the user declared the intention to retry the txn in case of retriable
 	// errors. The txn will enter a RestartWait state in case of such errors.
@@ -575,7 +595,7 @@ type txnState struct {
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
 // It creates a new client.Txn and initializes it using the session defaults.
 // txnState.State will be set to Open.
-func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
+func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session, implicitTxn bool) {
 	if ts.sp != nil {
 		panic(fmt.Sprintf("txnState.reset() called on ts with active span. How come "+
 			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
@@ -595,29 +615,45 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	ctx := s.context
 	tracer := e.cfg.AmbientCtx.Tracer
 	var sp opentracing.Span
-	if traceTxnThreshold.Get() > 0 {
-		var err error
-		ctx, sp, err = tracing.StartSnowballTrace(ctx, tracer, "traceSQL")
-		if err != nil {
-			log.Fatalf(ctx, "unable to create snowball tracer: %s", err)
-		}
+	var opName string
+	if implicitTxn {
+		opName = sqlImplicitTxnName
 	} else {
-		if debugTrace7881Enabled {
-			sp = tracer.StartSpan("root-for-7881", tracing.Recordable)
-			tracing.StartRecording(sp)
-		} else if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
-			// Create a child span for this SQL txn.
-			sp = parentSp.Tracer().StartSpan("sql txn", opentracing.ChildOf(parentSp.Context()))
-		} else {
-			// Create a root span for this SQL txn.
-			sp = tracer.StartSpan("sql txn")
-		}
-		// Put the new span in the context.
-		ctx = opentracing.ContextWithSpan(ctx, sp)
+		opName = sqlTxnName
+	}
+
+	if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
+		// Create a child span for this SQL txn.
+		sp = parentSp.Tracer().StartSpan(
+			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+	} else {
+		// Create a root span for this SQL txn.
+		sp = tracer.StartSpan(opName, tracing.Recordable)
+	}
+
+	// Start recording for the traceTxnThreshold and debugTrace7881Enabled
+	// cases.
+	//
+	// TODO(andrei): we now only do this when !s.Tracing.TracingActive() because
+	// when session tracing is active, that's going to do its own StartRecording()
+	// and the two calls trample each other. We should figure out how to get
+	// traceTxnThreshold and debugTrace7881Enabled to integrate more nicely with
+	// session tracing.
+	if !s.Tracing.TracingActive() && traceTxnThreshold.Get() > 0 && debugTrace7881Enabled {
+		tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	}
+
+	// Put the new span in the context.
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+
+	if !tracing.IsRecordable(sp) {
+		log.Fatalf(ctx, "non-recordable transaction span of type: %T", sp)
 	}
 
 	ts.sp = sp
 	ts.Ctx = ctx
+	ts.State = Open
+	s.Tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
@@ -625,7 +661,6 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	if err := ts.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
 		panic(err)
 	}
-	ts.State = Open
 
 	// Discard the old schemaChangers, if any.
 	ts.schemaChangers = schemaChangerCollection{}
@@ -656,13 +691,16 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // This needs to be called before resetForNewSQLTransaction() is called for
 // starting another SQL txn.
 // The session context is just used for logging the SQL trace.
-func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
+func (ts *txnState) finishSQLTxn(sessionCtx context.Context, s *Session) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
+	if err := s.Tracing.onFinishSQLTxn(ts.sp); err != nil {
+		log.Errorf(sessionCtx, "error finishing trace: %s", err)
+	}
 	if r := tracing.GetRecording(ts.sp); r != nil {
 		durThreshold := traceTxnThreshold.Get()
 		if sampledFor7881 || (durThreshold > 0 && timeutil.Since(ts.sqlTimestamp) >= durThreshold) {
@@ -796,4 +834,222 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+}
+
+// SessionTracing holds the state used by SET TRACE {ON,OFF,LOCAL} statements in
+// the context of one SQL session.
+// It holds the current trace being collected (or the last trace collected, if
+// tracing is not currently ongoing).
+//
+// SessionTracing and its interactions with the Session are thread-safe; tracing
+// can be turned on at any time.
+type SessionTracing struct {
+	session *Session
+	// tracing is set at times when "session tracing" is active - i.e. when
+	// transactions are being recorded.
+	tracing bool
+	// If tracing==true, recordingType indicates the type of type of the current
+	// recording.
+	recordingType tracing.RecordingType
+
+	// txnRecording accumulates the recorded spans. Each []RawSpan represents the
+	// trace of a SQL transaction. The first element corresponds to the
+	// partially-recorded transaction in which SET TRACE ON was run (or its
+	// implicit txn, if there wasn't a SQL transaction already running). The last
+	// one will contain the partial-recording of the transaction in which SET
+	// TRACE OFF has been run.
+	txnRecordings [][]basictracer.RawSpan
+}
+
+// StartTracing starts "session tracing". After calling this, all SQL
+// transactions running on this session will be traced. The current transaction,
+// if any, will also be traced (except that children spans of the current txn
+// span that have already been created will not be traced).
+//
+// StopTracing() needs to be called to finish this trace.
+func (st *SessionTracing) StartTracing(recType tracing.RecordingType) error {
+	if st.tracing {
+		return errors.Errorf("already tracing")
+	}
+	sp := opentracing.SpanFromContext(st.session.Ctx())
+	if sp == nil {
+		return errors.Errorf("no span for SessionTracing")
+	}
+
+	// Reset the previous recording, if any.
+	st.txnRecordings = nil
+
+	tracing.StartRecording(sp, recType)
+	st.tracing = true
+	st.recordingType = recType
+	return nil
+}
+
+// StopTracing stops the trace that was started with StartTracing().
+//
+// An error is returned if tracing was not active.
+func (st *SessionTracing) StopTracing() error {
+	if !st.tracing {
+		return errors.Errorf("not tracing")
+	}
+	st.tracing = false
+	// Stop recording the current transaction.
+	sp := opentracing.SpanFromContext(st.session.Ctx())
+	if sp == nil {
+		return errors.Errorf("no span for SessionTracing")
+	}
+	spans := tracing.GetRecording(sp)
+	tracing.StopRecording(sp)
+	if spans == nil {
+		return errors.Errorf("nil recording")
+	}
+	// Append the partially-recorded current transaction to the list of
+	// transactions.
+	st.txnRecordings = append(st.txnRecordings, spans)
+	return nil
+}
+
+// onFinishSQLTxn is called when a SQL transaction is about to be finished (i.e.
+// just before the span corresponding to the txn is Finish()ed). It saves that
+// span's recording in the SessionTracing.
+//
+// sp is the transaction's span.
+func (st *SessionTracing) onFinishSQLTxn(sp opentracing.Span) error {
+	if !st.TracingActive() {
+		return nil
+	}
+
+	if sp == nil {
+		return errors.Errorf("no span for SessionTracing")
+	}
+	spans := tracing.GetRecording(sp)
+	if spans == nil {
+		return errors.Errorf("nil recording")
+	}
+	st.txnRecordings = append(st.txnRecordings, spans)
+	// tracing.StopRecording() is not necessary. The span is about to be closed
+	// anyway.
+	return nil
+}
+
+// onNewSQLTxn is called when a new SQL txn is started (i.e. soon after the span
+// corresponding to that transaction has been created). It starts recording on
+// that new span. The recording will be retrieved when the transaction finishes
+// (in onFinishSQLTxn).
+//
+// sp is the span corresponding to the new SQL transaction.
+func (st *SessionTracing) onNewSQLTxn(sp opentracing.Span) {
+	if !st.TracingActive() {
+		return
+	}
+	if sp == nil {
+		panic("no span for SessionTracing")
+	}
+	tracing.StartRecording(sp, st.recordingType)
+}
+
+// TracingActive checks whether session tracing is currently enabled.
+func (st *SessionTracing) TracingActive() bool {
+	return st.tracing
+}
+
+// GenerateSessionTraceVTable generates the rows of said table by using the log
+// messages from the session's trace (i.e. the ongoing trace, if any, or the
+// last one recorded). Note that, if there's an ongoing trace, the current
+// transaction is not part of it yet.
+func (st *SessionTracing) GenerateSessionTraceVTable() [][6]parser.Datum {
+	var res [][6]parser.Datum
+
+	spanIdx := 0
+	// Iterate through the recording for each transaction.
+	var allLogs []logRecordRow
+	for _, spans := range st.txnRecordings {
+		logs := make([]logRecordRow, 0)
+		// Iterate through the spans grab and sort all the log messages. We rely on
+		// transactions not overlapping in time, as we don't sort messages in
+		// between transactions.
+		for i := range spans {
+			spanWithIndex := spanWithIndex{
+				RawSpan:  &spans[i],
+				index:    spanIdx,
+				topLevel: i == 0,
+			}
+			spanIdx++
+			for j, entry := range spans[i].Logs {
+				lrr := logRecordRow{
+					LogRecord: entry,
+					span:      spanWithIndex,
+					index:     j,
+				}
+				logs = append(logs, lrr)
+			}
+		}
+		sort.Sort(byTimestamp(logs))
+		allLogs = append(allLogs, logs...)
+	}
+
+	for _, lrr := range allLogs {
+		// TODO(andrei): should we add a dummy log message at the beginning (and
+		// also end?) of each span, to a) show empty spans and b) show the span's
+		// start timestamp?
+
+		// Extract the message of the event, which is either in an "event" or
+		// "error" field.
+		var msg string
+		for _, f := range lrr.Fields {
+			key := f.Key()
+			if key == "event" {
+				msg = fmt.Sprint(f.Value())
+				break
+			}
+			if key == "error" {
+				msg = fmt.Sprint("error:", f.Value())
+				break
+			}
+		}
+		// The "operation" column is only set for the first row in span.
+		var operation parser.Datum
+		if lrr.index == 0 {
+			operation = parser.NewDString(lrr.span.Operation)
+		} else {
+			operation = parser.DNull
+		}
+		row := [6]parser.Datum{
+			parser.MakeDBool(
+				parser.DBool(lrr.span.topLevel && lrr.index == 0)), // top_level
+			parser.NewDInt(parser.DInt(lrr.span.index)),           // span_idx
+			parser.NewDInt(parser.DInt(lrr.index)),                // message_idx
+			parser.MakeDTimestamp(lrr.Timestamp, time.Nanosecond), // timestamp
+			operation,              // operation
+			parser.NewDString(msg), // log
+		}
+		res = append(res, row)
+	}
+	return res
+}
+
+type logRecordRow struct {
+	opentracing.LogRecord
+	span  spanWithIndex
+	index int
+}
+
+type spanWithIndex struct {
+	*basictracer.RawSpan
+	index    int
+	topLevel bool
+}
+
+type byTimestamp []logRecordRow
+
+func (a byTimestamp) Less(i, j int) bool {
+	return a[i].Timestamp.Before(a[j].Timestamp)
+}
+
+func (a byTimestamp) Len() int {
+	return len(a)
+}
+
+func (a byTimestamp) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
 }

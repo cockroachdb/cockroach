@@ -185,6 +185,7 @@ func (t *Tracer) StartSpan(
 	var parentType opentracing.SpanReferenceType
 	var parentCtx *spanContext
 	var recordingGroup *spanGroup
+	var recordingType RecordingType
 
 	for _, r := range sso.References {
 		if r.Type != opentracing.ChildOfRef && r.Type != opentracing.FollowsFromRef {
@@ -201,9 +202,11 @@ func (t *Tracer) StartSpan(
 		parentCtx = r.ReferencedContext.(*spanContext)
 		if parentCtx.recordingGroup != nil {
 			recordingGroup = parentCtx.recordingGroup
+			recordingType = parentCtx.recordingType
 		} else if parentCtx.Baggage[Snowball] != "" {
 			// Automatically enable recording if we have the Snowball baggage item.
 			recordingGroup = new(spanGroup)
+			recordingType = SnowballRecording
 		}
 		// TODO(radu): can we do something for multiple references?
 		break
@@ -277,7 +280,7 @@ func (t *Tracer) StartSpan(
 
 	// Start recording if necessary.
 	if recordingGroup != nil {
-		s.enableRecording(recordingGroup)
+		s.enableRecording(recordingGroup, recordingType)
 	}
 
 	if t.netTrace {
@@ -588,6 +591,8 @@ func DecodeRawSpan(enc []byte, dest *basictracer.RawSpan) error {
 // "snowball span" in it. The caller takes ownership of this span from the
 // returned context and is in charge of Finish()ing it. The span has recording
 // enabled.
+//
+// TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
 func StartSnowballTrace(
 	ctx context.Context, tracer opentracing.Tracer, opName string,
 ) (context.Context, opentracing.Span, error) {
@@ -599,8 +604,7 @@ func StartSnowballTrace(
 	} else {
 		span = tracer.StartSpan(opName, Recordable)
 	}
-	StartRecording(span)
-	span.SetBaggageItem(Snowball, "1")
+	StartRecording(span, SnowballRecording)
 	return opentracing.ContextWithSpan(ctx, span), span, nil
 }
 

@@ -127,7 +127,7 @@ func (r *traceResult) String() string {
 	if r.count < 0 {
 		return r.tag
 	}
-	return fmt.Sprintf("%s %d", r.tag, r.count)
+	return fmt.Sprintf("%s (%d results)", r.tag, r.count)
 }
 
 // ResultList represents a list of results for a list of SQL statements.
@@ -703,10 +703,11 @@ func (e *Executor) execParsed(
 					avoidCachedDescriptors = true
 				}
 			}
-			txnState.resetForNewSQLTxn(e, session)
+			txnState.resetForNewSQLTxn(e, session, execOpt.AutoCommit /* implicitTxn */)
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
-			if execOpt.AutoCommit {
+			txnState.implicitTxn = execOpt.AutoCommit
+			if txnState.implicitTxn {
 				txnState.txn.SetDebugName(sqlImplicitTxnName)
 			} else {
 				txnState.txn.SetDebugName(sqlTxnName)
@@ -834,7 +835,7 @@ func (e *Executor) execParsed(
 
 		// If we're no longer in a transaction, finish the trace.
 		if txnState.State == NoTxn {
-			txnState.finishSQLTxn(session.context)
+			txnState.finishSQLTxn(session.context, session)
 		}
 
 		// Verify that the metadata callback fails, if one was set. This is
