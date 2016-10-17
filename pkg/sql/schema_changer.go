@@ -195,8 +195,7 @@ func isSchemaChangeRetryError(err error) bool {
 	}
 }
 
-// Execute the entire schema change in steps. startBackfillNotification is
-// called before the backfill starts; it can be nil.
+// Execute the entire schema change in steps.
 func (sc SchemaChanger) exec() error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
@@ -487,12 +486,6 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 		return err
 	}
 
-	if sc.testingKnobs.StartBackfillNotification != nil {
-		if err := sc.testingKnobs.StartBackfillNotification(); err != nil {
-			return err
-		}
-	}
-
 	// Run backfill.
 	if err := sc.runBackfill(lease); err != nil {
 		return err
@@ -520,6 +513,7 @@ func (sc *SchemaChanger) reverseMutations(causingError error) error {
 				// mutation ID we're looking for.
 				break
 			}
+			desc.Mutations[i].ResumeSpan = roachpb.Span{}
 			log.Warningf(context.TODO(), "reverse schema change mutation: %+v", mutation)
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
@@ -654,10 +648,11 @@ type SchemaChangerTestingKnobs struct {
 	// AsyncExecNotification.
 	SyncFilter SyncSchemaChangersFilter
 
-	// StartBackfillNotification is called before applying the backfill for a
-	// schema change operation. It returns error to stop the backfill and
-	// return an error to the caller of the SchemaChanger.exec().
-	StartBackfillNotification func() error
+	// RunBeforeBackfillChunk is called before executing each chunk of a
+	// backfill during a schema change operation. It is called with the
+	// current span and returns an error which eventually is returned to the
+	// caller of SchemaChanger.exec().
+	RunBeforeBackfillChunk func(sp roachpb.Span) error
 
 	// RenameOldNameNotInUseNotification is called during a rename schema
 	// change, after all leases on the version of the descriptor with the old
@@ -672,6 +667,10 @@ type SchemaChangerTestingKnobs struct {
 
 	// AsyncExecQuickly executes queued schema changes as soon as possible.
 	AsyncExecQuickly bool
+
+	// WriteCheckpointInterval is the interval after which a checkpoint is
+	// written.
+	WriteCheckpointInterval time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
