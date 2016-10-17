@@ -1232,6 +1232,7 @@ func (desc *TableDescriptor) RenameColumnNormalized(colID ColumnID, newColName s
 			}
 		}
 	}
+	renameColumnInIndex(&desc.PrimaryIndex)
 	for i := range desc.Indexes {
 		renameColumnInIndex(&desc.Indexes[i])
 	}
