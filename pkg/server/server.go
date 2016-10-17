@@ -596,7 +596,7 @@ func (s *Server) Start(ctx context.Context) error {
 	var uiFileSystem http.FileSystem
 	uiDebug := envutil.EnvOrDefaultBool("COCKROACH_DEBUG_UI", false)
 	if uiDebug {
-		uiFileSystem = http.Dir("ui")
+		uiFileSystem = http.Dir("pkg/ui")
 	} else {
 		uiFileSystem = &assetfs.AssetFS{
 			Asset:     ui.Asset,
