@@ -36,7 +36,7 @@ import (
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := makePlanner()
+	p := makePlanner("test")
 	p.session.mon.StartMonitor()
 	defer p.session.mon.StopMonitor(context.Background())
 

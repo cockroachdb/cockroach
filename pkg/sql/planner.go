@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -74,10 +75,18 @@ type planner struct {
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
 // Only use this internally where a Session cannot be created.
-func makePlanner() *planner {
+func makePlanner(opName string) *planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
-	return &planner{session: &Session{Location: time.UTC, context: context.TODO()}}
+	ctx := log.WithLogTagStr(context.Background(), opName, "")
+	p := &planner{
+		session: &Session{
+			Location: time.UTC,
+			context:  ctx,
+		},
+	}
+	p.session.TxnState.Ctx = ctx
+	return p
 }
 
 // queryRunner abstracts the services provided by a planner object
@@ -186,8 +195,8 @@ func (p *planner) resetContexts() {
 	}
 }
 
-func makeInternalPlanner(txn *client.Txn, user string) *planner {
-	p := makePlanner()
+func makeInternalPlanner(opName string, txn *client.Txn, user string) *planner {
+	p := makePlanner(opName)
 	p.setTxn(txn)
 	p.resetContexts()
 	p.session.User = user
