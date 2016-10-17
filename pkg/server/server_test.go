@@ -220,17 +220,17 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		Span: roachpb.Span{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(tds, nil, get); err == nil {
+	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(tds, nil, put); err != nil {
+		if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err := client.SendWrapped(tds, nil, scan)
+		reply, err := client.SendWrapped(context.Background(), tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +252,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(tds, nil, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(context.Background(), tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	txn := &roachpb.Transaction{Name: "MyTxn"}
-	reply, err = client.SendWrappedWith(tds, nil, roachpb.Header{Txn: txn}, scan)
+	reply, err = client.SendWrappedWith(context.Background(), tds, roachpb.Header{Txn: txn}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 		for _, k := range tc.keys {
 			put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-			if _, err := client.SendWrapped(tds, nil, put); err != nil {
+			if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -328,7 +328,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
 				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
 				reply, err := client.SendWrappedWith(
-					tds, nil, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
+					context.Background(), tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
 				)
 				if err != nil {
 					t.Fatal(err)

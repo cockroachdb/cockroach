@@ -144,7 +144,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(store.testSender(), nil, &args); err != nil {
+		if _, err := client.SendWrapped(context.Background(), store.testSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -244,7 +244,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	for i := 0; i < 2*RaftLogQueueStaleThreshold; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := client.SendWrapped(store.testSender(), nil, &args); err != nil {
+		if _, err := client.SendWrapped(context.Background(), store.testSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}

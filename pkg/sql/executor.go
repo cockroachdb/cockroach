@@ -342,7 +342,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (ResultColumns, error) {
-	log.VEventf(2, session.Ctx(), "preparing: %s", query)
+	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
 	var p parser.Parser
 	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -479,7 +479,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	var stmts parser.StatementList
 	var err error
 
-	log.VEventf(2, session.Ctx(), "execRequest: %s", sql)
+	log.VEventf(session.Ctx(), 2, "execRequest: %s", sql)
 
 	if session.planner.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
@@ -767,7 +767,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 	for i, stmt := range stmts {
 		ctx := planMaker.session.Ctx()
-		log.VEventf(2, ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
