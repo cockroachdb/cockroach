@@ -49,6 +49,9 @@ func (l traceLogs) Swap(i, j int) {
 // FormatRecordedSpans formats the given spans for human consumption, showing the
 // relationship using nesting and times as both relative to the previous event
 // and cumulative.
+//
+// TODO(andrei): this should be unified with
+// SessionTracing.GenerateSessionTraceVTable.
 func FormatRecordedSpans(spans []RecordedSpan) string {
 	m := make(map[uint64]*RecordedSpan)
 	for i, sp := range spans {
