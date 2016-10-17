@@ -112,38 +112,38 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		case parser.ArgTypes:
 			for _, typ := range ft {
 				var v interface{}
-				switch typ.(type) {
-				case *parser.DInt:
+				switch typ {
+				case parser.TypeInt:
 					i := r.Int63()
 					i -= r.Int63()
 					v = i
-				case *parser.DFloat, *parser.DDecimal:
+				case parser.TypeFloat, parser.TypeDecimal:
 					v = r.Float64()
-				case *parser.DString:
+				case parser.TypeString:
 					v = `'string'`
-				case *parser.DBytes:
+				case parser.TypeBytes:
 					v = `b'bytes'`
-				case *parser.DTimestamp, *parser.DTimestampTZ:
+				case parser.TypeTimestamp, parser.TypeTimestampTZ:
 					t := time.Unix(0, r.Int63())
 					v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-				case *parser.DBool:
+				case parser.TypeBool:
 					if r.Intn(2) == 0 {
 						v = "false"
 					} else {
 						v = "true"
 					}
-				case *parser.DDate:
+				case parser.TypeDate:
 					i := r.Int63()
 					i -= r.Int63()
 					d := parser.NewDDate(parser.DDate(i))
 					v = fmt.Sprintf(`'%s'`, d)
-				case *parser.DInterval:
+				case parser.TypeInterval:
 					d := duration.Duration{Nanos: r.Int63()}
 					v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-				case *parser.DTuple:
+				case parser.TypeTuple:
 					v = "NULL"
 				default:
-					panic(fmt.Errorf("unknown arg type: %T", typ))
+					panic(fmt.Errorf("unknown arg type: %s", typ))
 				}
 				args = append(args, fmt.Sprint(v))
 			}

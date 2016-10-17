@@ -59,7 +59,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 		buf.wrapped.Reset()
 
 		d := datumConstructor(test.In)
-		oid := datumToOid[reflect.TypeOf(d)]
+		oid := datumToOid[reflect.TypeOf(d.ResolvedType())]
 		func() {
 			defer func() {
 				if r := recover(); r != nil {

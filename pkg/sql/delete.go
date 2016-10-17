@@ -47,7 +47,7 @@ type deleteNode struct {
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
-	n *parser.Delete, desiredTypes []parser.Datum, autoCommit bool,
+	n *parser.Delete, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {

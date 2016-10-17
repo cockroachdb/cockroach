@@ -105,9 +105,9 @@ func (ed *EncDatum) SetDatum(typ ColumnType_Kind, d parser.Datum) {
 	if d == nil {
 		panic("nil datum given")
 	}
-	if d != parser.DNull && !typ.ToDatumType().TypeEqual(d) {
+	if d != parser.DNull && !typ.ToDatumType().Equal(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
-			d.Type(), typ.ToDatumType().Type()))
+			d.ResolvedType(), typ.ToDatumType()))
 	}
 	ed.Type = typ
 	ed.encoded = nil
@@ -227,10 +227,10 @@ func (r EncDatumRow) String() string {
 
 // DatumToEncDatum converts a parser.Datum to an EncDatum.
 func DatumToEncDatum(datum parser.Datum) (EncDatum, error) {
-	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.Type())]
+	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
 	if !ok {
 		return EncDatum{}, errors.Errorf(
-			"Unknown type %s, could not convert to EncDatum", datum.Type())
+			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
 	}
 	return EncDatum{
 		Type:  (ColumnType_Kind)(dType),

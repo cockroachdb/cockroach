@@ -1332,7 +1332,7 @@ func (oic orIndexConstraints) exactPrefix() int {
 		// Compare the exact values of this constraint, keep the matching
 		// prefix.
 		for i, d := range datums {
-			if !(d.TypeEqual(iDatums[i]) && d.Compare(iDatums[i]) == 0) {
+			if !(d.ResolvedType().Equal(iDatums[i].ResolvedType()) && d.Compare(iDatums[i]) == 0) {
 				datums = datums[:i]
 				break
 			}
