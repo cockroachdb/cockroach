@@ -47,11 +47,13 @@ type LocalProposalData struct {
 	// command ID for e.g. replay protection.
 	idKey           storagebase.CmdIDKey
 	proposedAtTicks int
-	done            chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 	ctx             context.Context
 
-	roachpb.ResponseWithError
-	engine.Batch
+	Err   *roachpb.Error
+	Reply *roachpb.BatchResponse
+	done  chan roachpb.ResponseWithError // Used to signal waiting RPC handler
+
+	Batch engine.Batch
 	// The stats delta that the application of the Raft command would cause.
 	// On a split, contains only the contributions to the left-hand side.
 	delta enginepb.MVCCStats
