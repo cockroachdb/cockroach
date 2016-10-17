@@ -218,6 +218,7 @@ var newTracer = func() opentracing.Tracer {
 		lsTr := lightstep.NewTracer(lightstep.Options{
 			AccessToken:    lightstepToken,
 			MaxLogsPerSpan: maxLogsPerSpan,
+			UseGRPC:        true,
 		})
 		if lightstepOnly {
 			return lsTr
