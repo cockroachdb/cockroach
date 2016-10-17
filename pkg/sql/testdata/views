@@ -78,20 +78,69 @@ SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x;
 2 98 2 98
 3 97 3 97
 
+statement ok
+CREATE DATABASE test2;
+
+statement ok
+SET DATABASE = test2;
+
+query II colnames
+SELECT * FROM test.v1;
+----
+a b
+1 99
+2 98
+3 97
+
+query II colnames
+SELECT * FROM test.v2;
+----
+x y
+1 99
+2 98
+3 97
+
+query II colnames
+SELECT * FROM test.v6;
+----
+x y
+1 99
+2 98
+3 97
+
+statement ok
+CREATE VIEW v1 AS SELECT * FROM test.v2;
+
+statement ok
+SET DATABASE = test;
+
+query II colnames
+SELECT * FROM test2.v1
+----
+x y
+1 99
+2 98
+3 97
+
 query TT
 SHOW CREATE VIEW v1;
 ----
-v1 CREATE VIEW v1 AS SELECT * FROM t
+v1 CREATE VIEW v1 AS SELECT * FROM test.t
 
 query TT
 SHOW CREATE VIEW v2;
 ----
-v2 CREATE VIEW v2 (x, y) AS SELECT * FROM t
+v2 CREATE VIEW v2 (x, y) AS SELECT * FROM test.t
 
 query TT
 SHOW CREATE VIEW v6;
 ----
-v6 CREATE VIEW v6 (x, y) AS SELECT * FROM v1
+v6 CREATE VIEW v6 (x, y) AS SELECT * FROM test.v1
+
+query TT
+SHOW CREATE VIEW test2.v1;
+----
+test2.v1 CREATE VIEW "test2.v1" AS SELECT * FROM test.v2
 
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1;
@@ -101,6 +150,13 @@ DROP VIEW t;
 
 statement error view "v6" depends on view "v1"
 DROP VIEW v1;
+
+# TODO(a-robinson): Need to improve this error message once #9988 is in.
+statement error view "v1" depends on view "v2"
+DROP VIEW v2;
+
+statement ok
+DROP VIEW test2.v1;
 
 statement ok
 DROP VIEW v6;
