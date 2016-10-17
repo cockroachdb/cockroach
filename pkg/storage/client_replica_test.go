@@ -60,9 +60,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano))
 		clocks[i].SetMaxOffset(100 * time.Millisecond)
 	}
-	mtc := multiTestContext{
-		clocks: clocks,
-	}
+	mtc := &multiTestContext{clocks: clocks}
 	mtc.Start(t, numNodes)
 	defer mtc.Stop()
 	mtc.replicateRange(1, 1, 2)
@@ -112,9 +110,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxOffset)
-	mtc := multiTestContext{
-		clock: clock,
-	}
+	mtc := &multiTestContext{clock: clock}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 
