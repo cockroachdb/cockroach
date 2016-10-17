@@ -86,7 +86,7 @@ SELECT * FROM abc WHERE a = 7
 ----
 7 8 9
 
-statement error value type tuple doesn't match type INT of column "a"
+statement error value type tuple{int, int, int} doesn't match type INT of column "a"
 INSERT INTO abc VALUES ((SELECT (10, 11, 12)))
 
 statement error subquery must return only one column, found 3
@@ -119,7 +119,7 @@ SELECT * FROM xyz
 7 8 10
 10 11 12
 
-statement error value type tuple doesn't match type INT of column "z"
+statement error value type tuple{int, int} doesn't match type INT of column "z"
 UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
 
 statement error subquery must return 2 columns, found 1

@@ -25,7 +25,7 @@ import (
 // String for IndexedVars.
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
-	IndexedVarReturnType(idx int) Datum
+	IndexedVarResolvedType(idx int) Type
 	IndexedVarFormat(buf *bytes.Buffer, f FmtFlags, idx int)
 }
 
@@ -49,7 +49,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
+func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
 	return v, nil
 }
 
@@ -58,9 +58,9 @@ func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 	return v.container.IndexedVarEval(v.Idx, ctx)
 }
 
-// ReturnType is part of the TypedExpr interface.
-func (v *IndexedVar) ReturnType() Datum {
-	return v.container.IndexedVarReturnType(v.Idx)
+// ResolvedType is part of the TypedExpr interface.
+func (v *IndexedVar) ResolvedType() Type {
+	return v.container.IndexedVarResolvedType(v.Idx)
 }
 
 // Format implements the NodeFormatter interface.

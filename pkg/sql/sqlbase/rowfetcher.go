@@ -75,9 +75,9 @@ type RowFetcher struct {
 	// -- Fields updated during a scan --
 
 	kvFetcher        kvFetcher
-	keyValTypes      []parser.Datum // the index key value types for the current row
+	keyValTypes      []parser.Type  // the index key value types for the current row
 	keyVals          []parser.Datum // the index key values for the current row
-	implicitValTypes []parser.Datum // the implicit value types for unique indexes
+	implicitValTypes []parser.Type  // the implicit value types for unique indexes
 	implicitVals     []parser.Datum // the implicit values for unique indexes
 	indexKey         []byte         // the index key of the current row
 	row              parser.DTuple

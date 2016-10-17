@@ -195,7 +195,7 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 		}
 		if printTypes {
 			buf.WriteByte(' ')
-			buf.WriteString(rCol.Typ.Type())
+			buf.WriteString(rCol.Typ.String())
 		}
 	}
 	buf.WriteByte(')')

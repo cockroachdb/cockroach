@@ -51,7 +51,7 @@ type insertNode struct {
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
+	n *parser.Insert, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
@@ -130,7 +130,7 @@ func (p *planner) Insert(
 	}
 
 	// Analyze the expressions for column information and typing.
-	desiredTypesFromSelect := make([]parser.Datum, len(cols))
+	desiredTypesFromSelect := make([]parser.Type, len(cols))
 	for i, col := range cols {
 		desiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}

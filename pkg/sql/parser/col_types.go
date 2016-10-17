@@ -257,26 +257,26 @@ func (node *BytesColType) String() string       { return AsString(node) }
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
 // normalization.
-func DatumTypeToColumnType(d Datum) (ColumnType, error) {
-	switch d.(type) {
-	case *DInt:
+func DatumTypeToColumnType(t Type) (ColumnType, error) {
+	switch t {
+	case TypeInt:
 		return intColTypeInt, nil
-	case *DFloat:
+	case TypeFloat:
 		return floatColTypeFloat, nil
-	case *DDecimal:
+	case TypeDecimal:
 		return decimalColTypeDecimal, nil
-	case *DTimestamp:
+	case TypeTimestamp:
 		return timestampColTypeTimestamp, nil
-	case *DTimestampTZ:
+	case TypeTimestampTZ:
 		return timestampTzColTypeTimestampWithTZ, nil
-	case *DInterval:
+	case TypeInterval:
 		return intervalColTypeInterval, nil
-	case *DDate:
+	case TypeDate:
 		return dateColTypeDate, nil
-	case *DString:
+	case TypeString:
 		return stringColTypeString, nil
-	case *DBytes:
+	case TypeBytes:
 		return bytesColTypeBytes, nil
 	}
-	return nil, errors.Errorf("internal error: unknown Datum type %T", d)
+	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
 }

@@ -5838,7 +5838,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1329
 		{
-			sqlVAL.union.val = Placeholder{Name: sqlDollar[1].str}
+			sqlVAL.union.val = NewPlaceholder(sqlDollar[1].str)
 		}
 	case 156:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -8662,7 +8662,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3652
 		{
-			sqlVAL.union.val = Placeholder{Name: sqlDollar[1].str}
+			sqlVAL.union.val = NewPlaceholder(sqlDollar[1].str)
 		}
 	case 634:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]

@@ -79,43 +79,32 @@ type pgNumeric struct {
 	sign                    pgNumericSign
 }
 
-func typeForDatum(d parser.Datum) pgType {
-	if d == parser.DNull {
+func pgTypeForParserType(t parser.Type) pgType {
+	switch t {
+	case parser.TypeNull:
 		return pgType{oid: oid.T_unknown}
-	}
-	switch d.(type) {
-	case *parser.DBool:
+	case parser.TypeBool:
 		return pgType{oid.T_bool, 1}
-
-	case *parser.DBytes:
+	case parser.TypeBytes:
 		return pgType{oid.T_bytea, -1}
-
-	case *parser.DInt:
+	case parser.TypeInt:
 		return pgType{oid.T_int8, 8}
-
-	case *parser.DFloat:
+	case parser.TypeFloat:
 		return pgType{oid.T_float8, 8}
-
-	case *parser.DDecimal:
+	case parser.TypeDecimal:
 		return pgType{oid.T_numeric, -1}
-
-	case *parser.DString:
+	case parser.TypeString:
 		return pgType{oid.T_text, -1}
-
-	case *parser.DDate:
+	case parser.TypeDate:
 		return pgType{oid.T_date, 8}
-
-	case *parser.DTimestamp:
+	case parser.TypeTimestamp:
 		return pgType{oid.T_timestamp, 8}
-
-	case *parser.DTimestampTZ:
+	case parser.TypeTimestampTZ:
 		return pgType{oid.T_timestamptz, 8}
-
-	case *parser.DInterval:
+	case parser.TypeInterval:
 		return pgType{oid.T_interval, 8}
-
 	default:
-		panic(fmt.Sprintf("unsupported type %T", d))
+		panic(fmt.Sprintf("unsupported type %s", t))
 	}
 }
 
@@ -397,7 +386,7 @@ func pgBinaryToDate(i int32) *parser.DDate {
 }
 
 var (
-	oidToDatum = map[oid.Oid]parser.Datum{
+	oidToDatum = map[oid.Oid]parser.Type{
 		oid.T_bool:        parser.TypeBool,
 		oid.T_bytea:       parser.TypeBytes,
 		oid.T_date:        parser.TypeDate,
