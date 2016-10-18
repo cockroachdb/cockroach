@@ -21,8 +21,6 @@ import (
 	"reflect"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -30,12 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(context.TODO(), hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	ls.AddStore(&store)
 	if !ls.HasStore(store.Ident.StoreID) {
@@ -48,7 +47,7 @@ func TestStoresAddStore(t *testing.T) {
 
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(context.TODO(), hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
 
 	storeID := roachpb.StoreID(89)
 
@@ -63,7 +62,7 @@ func TestStoresRemoveStore(t *testing.T) {
 
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(context.TODO(), hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
@@ -79,7 +78,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(context.TODO(), hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
 		ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
@@ -107,7 +106,7 @@ func TestStoresVisitStores(t *testing.T) {
 
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(context.TODO(), hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, pErr := ls.GetStore(replica.StoreID)
@@ -134,7 +133,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	cfg := TestStoreConfig()
 	manualClock := hlc.NewManualClock(0)
 	cfg.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewStores(context.TODO(), cfg.Clock)
+	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
@@ -233,7 +232,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	cfg := TestStoreConfig()
 	manualClock := hlc.NewManualClock(0)
 	cfg.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewStores(context.TODO(), cfg.Clock)
+	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
 	// Create two stores with ranges we care about.
 	stores := []*Store{}
@@ -287,7 +286,7 @@ func TestStoresGossipStorage(t *testing.T) {
 	ls.AddStore(stores[1])
 
 	// Create a new stores object to verify read.
-	ls2 := NewStores(context.TODO(), ls.clock)
+	ls2 := NewStores(log.AmbientContext{}, ls.clock)
 	ls2.AddStore(stores[1])
 	var verifyBI gossip.BootstrapInfo
 	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
@@ -330,7 +329,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	// Create a new stores object to freshly read. Should get latest
 	// version from store 1.
 	manual.Increment(1)
-	ls2 := NewStores(context.TODO(), ls.clock)
+	ls2 := NewStores(log.AmbientContext{}, ls.clock)
 	ls2.AddStore(stores[0])
 	ls2.AddStore(stores[1])
 	var verifyBI gossip.BootstrapInfo
@@ -343,7 +342,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 
 	// Verify that stores[0], which had old info, was updated with
 	// latest bootstrap info during the read.
-	ls3 := NewStores(context.TODO(), ls.clock)
+	ls3 := NewStores(log.AmbientContext{}, ls.clock)
 	ls3.AddStore(stores[0])
 	verifyBI.Reset()
 	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
