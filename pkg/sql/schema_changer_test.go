@@ -521,6 +521,9 @@ func runSchemaChangeWithOperations(
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := keyMultiple * (maxValue + numInserts + 1); len(kvs) != e {
+		for _, kv := range kvs {
+			t.Errorf("key %s, value %s", kv.Key, kv.Value)
+		}
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
