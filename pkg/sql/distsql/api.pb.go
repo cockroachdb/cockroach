@@ -30,6 +30,8 @@
 		JoinReaderSpec
 		SorterSpec
 		EvaluatorSpec
+		MergeJoinerSpec
+		HashJoinerSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec

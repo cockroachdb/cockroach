@@ -19,6 +19,46 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+type JoinType int32
+
+const (
+	JoinType_INNER       JoinType = 0
+	JoinType_LEFT_OUTER  JoinType = 1
+	JoinType_RIGHT_OUTER JoinType = 2
+	JoinType_FULL_OUTER  JoinType = 3
+)
+
+var JoinType_name = map[int32]string{
+	0: "INNER",
+	1: "LEFT_OUTER",
+	2: "RIGHT_OUTER",
+	3: "FULL_OUTER",
+}
+var JoinType_value = map[string]int32{
+	"INNER":       0,
+	"LEFT_OUTER":  1,
+	"RIGHT_OUTER": 2,
+	"FULL_OUTER":  3,
+}
+
+func (x JoinType) Enum() *JoinType {
+	p := new(JoinType)
+	*p = x
+	return p
+}
+func (x JoinType) String() string {
+	return proto.EnumName(JoinType_name, int32(x))
+}
+func (x *JoinType) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(JoinType_value, data, "JoinType")
+	if err != nil {
+		return err
+	}
+	*x = JoinType(value)
+	return nil
+}
+func (JoinType) EnumDescriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{0} }
+
 // NoopCoreSpec indicates a "no-op" processor core. This is used when only a
 // synchronizer is required, e.g. at the final endpoint.
 type NoopCoreSpec struct {
@@ -135,18 +175,89 @@ func (m *EvaluatorSpec) String() string            { return proto.CompactTextStr
 func (*EvaluatorSpec) ProtoMessage()               {}
 func (*EvaluatorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{5} }
 
+// MergeJoinerSpec is the specification for a merge join processor. The processor
+// has two inputs and one output. The inputs must have the same ordering on the
+// columns that have equality constraints. For example:
+//   SELECT * FROM T1 INNER JOIN T2 ON T1.C1 = T2.C5 AND T1.C2 = T2.C4
+//
+// To perform a merge join, the streams corresponding to T1 and T2 must have the
+// same ordering on columns C1, C2 and C5, C4 respectively. For example: C1+,C2-
+// and C5+,C4-.
+//
+// It is guaranteed that the results preserve this ordering.
+type MergeJoinerSpec struct {
+	// The streams must be ordered according to the columns that have equality
+	// constraints. The first column of the left ordering is constrained to be
+	// equal to the first column in the right ordering and so on. The ordering
+	// lengths and directions must match.
+	// In the example above, left_ordering describes C1+,C2- and right_ordering
+	// describes C5+,C4-.
+	LeftOrdering  Ordering `protobuf:"bytes,1,opt,name=left_ordering,json=leftOrdering" json:"left_ordering"`
+	RightOrdering Ordering `protobuf:"bytes,2,opt,name=right_ordering,json=rightOrdering" json:"right_ordering"`
+	// "ON" expression (in addition to the equality constraints captured by the
+	// orderings). Assuming that the left stream has N columns and the right
+	// stream has M columns, in this expression variables $0 to $(N-1) refer to
+	// columns of the left stream and variables $N to $(N+M-1) refer to columns in
+	// the right stream.
+	Expr Expression `protobuf:"bytes,3,opt,name=expr" json:"expr"`
+	Type JoinType   `protobuf:"varint,4,opt,name=type,enum=cockroach.sql.distsql.JoinType" json:"type"`
+	// Columns for the output stream. Assuming that the left stream has N columns
+	// and the right stream has M columns, column indices 0 to (N-1) refer to left
+	// stream columns and indices N to (N+M-1) refer to right stream columns.
+	OutputColumns []uint32 `protobuf:"varint,5,rep,packed,name=output_columns,json=outputColumns" json:"output_columns,omitempty"`
+}
+
+func (m *MergeJoinerSpec) Reset()                    { *m = MergeJoinerSpec{} }
+func (m *MergeJoinerSpec) String() string            { return proto.CompactTextString(m) }
+func (*MergeJoinerSpec) ProtoMessage()               {}
+func (*MergeJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{6} }
+
+// HashJoinerSpec is the specification for a hash join processor. The processor
+// has two inputs and one output.
+//
+// The processor works by reading the entire left input and putting it in a hash
+// table. Thus, there is no guarantee on the ordering of results that stem only
+// from the left input (in the case of LEFT_OUTER, FULL_OUTER). However, it is
+// guaranteed that results that involve the right stream preserve the ordering;
+// i.e. all results that stem from right row (i) precede results that stem from
+// right row (i+1).
+type HashJoinerSpec struct {
+	// The join constraints certain columns from the left stream to equal
+	// corresponding columns on the right stream. These must have the same length.
+	LeftEqColumns  []uint32 `protobuf:"varint,1,rep,packed,name=left_eq_columns,json=leftEqColumns" json:"left_eq_columns,omitempty"`
+	RightEqColumns []uint32 `protobuf:"varint,2,rep,packed,name=right_eq_columns,json=rightEqColumns" json:"right_eq_columns,omitempty"`
+	// "ON" expression (in addition to the equality constraints captured by the
+	// orderings). Assuming that the left stream has N columns and the right
+	// stream has M columns, in this expression variables $0 to $(N-1) refer to
+	// columns of the left stream and variables $N to $(N+M-1) refer to columns in
+	// the right stream.
+	Expr Expression `protobuf:"bytes,3,opt,name=expr" json:"expr"`
+	Type JoinType   `protobuf:"varint,4,opt,name=type,enum=cockroach.sql.distsql.JoinType" json:"type"`
+	// Columns for the output stream. Assuming that the left stream has N columns
+	// and the right stream has M columns, column indices 0 to (N-1) refer to left
+	// stream columns and indices N to (N+M-1) refer to right stream columns.
+	OutputColumns []uint32 `protobuf:"varint,5,rep,packed,name=output_columns,json=outputColumns" json:"output_columns,omitempty"`
+}
+
+func (m *HashJoinerSpec) Reset()                    { *m = HashJoinerSpec{} }
+func (m *HashJoinerSpec) String() string            { return proto.CompactTextString(m) }
+func (*HashJoinerSpec) ProtoMessage()               {}
+func (*HashJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{7} }
+
 type ProcessorCoreUnion struct {
 	Noop        *NoopCoreSpec    `protobuf:"bytes,1,opt,name=noop" json:"noop,omitempty"`
 	TableReader *TableReaderSpec `protobuf:"bytes,2,opt,name=tableReader" json:"tableReader,omitempty"`
 	JoinReader  *JoinReaderSpec  `protobuf:"bytes,3,opt,name=joinReader" json:"joinReader,omitempty"`
 	Sorter      *SorterSpec      `protobuf:"bytes,4,opt,name=sorter" json:"sorter,omitempty"`
 	Evaluator   *EvaluatorSpec   `protobuf:"bytes,5,opt,name=evaluator" json:"evaluator,omitempty"`
+	MergeJoiner *MergeJoinerSpec `protobuf:"bytes,6,opt,name=mergeJoiner" json:"mergeJoiner,omitempty"`
+	HashJoiner  *HashJoinerSpec  `protobuf:"bytes,7,opt,name=hashJoiner" json:"hashJoiner,omitempty"`
 }
 
 func (m *ProcessorCoreUnion) Reset()                    { *m = ProcessorCoreUnion{} }
 func (m *ProcessorCoreUnion) String() string            { return proto.CompactTextString(m) }
 func (*ProcessorCoreUnion) ProtoMessage()               {}
-func (*ProcessorCoreUnion) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{6} }
+func (*ProcessorCoreUnion) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{8} }
 
 type ProcessorSpec struct {
 	// In most cases, there is one input.
@@ -159,7 +270,7 @@ type ProcessorSpec struct {
 func (m *ProcessorSpec) Reset()                    { *m = ProcessorSpec{} }
 func (m *ProcessorSpec) String() string            { return proto.CompactTextString(m) }
 func (*ProcessorSpec) ProtoMessage()               {}
-func (*ProcessorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{7} }
+func (*ProcessorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{9} }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
 // computation consisting of processors and streams.
@@ -171,7 +282,7 @@ type FlowSpec struct {
 func (m *FlowSpec) Reset()                    { *m = FlowSpec{} }
 func (m *FlowSpec) String() string            { return proto.CompactTextString(m) }
 func (*FlowSpec) ProtoMessage()               {}
-func (*FlowSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{8} }
+func (*FlowSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{10} }
 
 func init() {
 	proto.RegisterType((*NoopCoreSpec)(nil), "cockroach.sql.distsql.NoopCoreSpec")
@@ -180,9 +291,12 @@ func init() {
 	proto.RegisterType((*JoinReaderSpec)(nil), "cockroach.sql.distsql.JoinReaderSpec")
 	proto.RegisterType((*SorterSpec)(nil), "cockroach.sql.distsql.SorterSpec")
 	proto.RegisterType((*EvaluatorSpec)(nil), "cockroach.sql.distsql.EvaluatorSpec")
+	proto.RegisterType((*MergeJoinerSpec)(nil), "cockroach.sql.distsql.MergeJoinerSpec")
+	proto.RegisterType((*HashJoinerSpec)(nil), "cockroach.sql.distsql.HashJoinerSpec")
 	proto.RegisterType((*ProcessorCoreUnion)(nil), "cockroach.sql.distsql.ProcessorCoreUnion")
 	proto.RegisterType((*ProcessorSpec)(nil), "cockroach.sql.distsql.ProcessorSpec")
 	proto.RegisterType((*FlowSpec)(nil), "cockroach.sql.distsql.FlowSpec")
+	proto.RegisterEnum("cockroach.sql.distsql.JoinType", JoinType_name, JoinType_value)
 }
 func (m *NoopCoreSpec) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -431,6 +545,148 @@ func (m *EvaluatorSpec) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *MergeJoinerSpec) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MergeJoinerSpec) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintProcessors(data, i, uint64(m.LeftOrdering.Size()))
+	n11, err := m.LeftOrdering.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
+	data[i] = 0x12
+	i++
+	i = encodeVarintProcessors(data, i, uint64(m.RightOrdering.Size()))
+	n12, err := m.RightOrdering.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n12
+	data[i] = 0x1a
+	i++
+	i = encodeVarintProcessors(data, i, uint64(m.Expr.Size()))
+	n13, err := m.Expr.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	data[i] = 0x20
+	i++
+	i = encodeVarintProcessors(data, i, uint64(m.Type))
+	if len(m.OutputColumns) > 0 {
+		data15 := make([]byte, len(m.OutputColumns)*10)
+		var j14 int
+		for _, num := range m.OutputColumns {
+			for num >= 1<<7 {
+				data15[j14] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j14++
+			}
+			data15[j14] = uint8(num)
+			j14++
+		}
+		data[i] = 0x2a
+		i++
+		i = encodeVarintProcessors(data, i, uint64(j14))
+		i += copy(data[i:], data15[:j14])
+	}
+	return i, nil
+}
+
+func (m *HashJoinerSpec) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *HashJoinerSpec) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.LeftEqColumns) > 0 {
+		data17 := make([]byte, len(m.LeftEqColumns)*10)
+		var j16 int
+		for _, num := range m.LeftEqColumns {
+			for num >= 1<<7 {
+				data17[j16] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j16++
+			}
+			data17[j16] = uint8(num)
+			j16++
+		}
+		data[i] = 0xa
+		i++
+		i = encodeVarintProcessors(data, i, uint64(j16))
+		i += copy(data[i:], data17[:j16])
+	}
+	if len(m.RightEqColumns) > 0 {
+		data19 := make([]byte, len(m.RightEqColumns)*10)
+		var j18 int
+		for _, num := range m.RightEqColumns {
+			for num >= 1<<7 {
+				data19[j18] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j18++
+			}
+			data19[j18] = uint8(num)
+			j18++
+		}
+		data[i] = 0x12
+		i++
+		i = encodeVarintProcessors(data, i, uint64(j18))
+		i += copy(data[i:], data19[:j18])
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintProcessors(data, i, uint64(m.Expr.Size()))
+	n20, err := m.Expr.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n20
+	data[i] = 0x20
+	i++
+	i = encodeVarintProcessors(data, i, uint64(m.Type))
+	if len(m.OutputColumns) > 0 {
+		data22 := make([]byte, len(m.OutputColumns)*10)
+		var j21 int
+		for _, num := range m.OutputColumns {
+			for num >= 1<<7 {
+				data22[j21] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j21++
+			}
+			data22[j21] = uint8(num)
+			j21++
+		}
+		data[i] = 0x2a
+		i++
+		i = encodeVarintProcessors(data, i, uint64(j21))
+		i += copy(data[i:], data22[:j21])
+	}
+	return i, nil
+}
+
 func (m *ProcessorCoreUnion) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -450,51 +706,71 @@ func (m *ProcessorCoreUnion) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintProcessors(data, i, uint64(m.Noop.Size()))
-		n11, err := m.Noop.MarshalTo(data[i:])
+		n23, err := m.Noop.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n11
+		i += n23
 	}
 	if m.TableReader != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintProcessors(data, i, uint64(m.TableReader.Size()))
-		n12, err := m.TableReader.MarshalTo(data[i:])
+		n24, err := m.TableReader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n24
 	}
 	if m.JoinReader != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintProcessors(data, i, uint64(m.JoinReader.Size()))
-		n13, err := m.JoinReader.MarshalTo(data[i:])
+		n25, err := m.JoinReader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n13
+		i += n25
 	}
 	if m.Sorter != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintProcessors(data, i, uint64(m.Sorter.Size()))
-		n14, err := m.Sorter.MarshalTo(data[i:])
+		n26, err := m.Sorter.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n26
 	}
 	if m.Evaluator != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintProcessors(data, i, uint64(m.Evaluator.Size()))
-		n15, err := m.Evaluator.MarshalTo(data[i:])
+		n27, err := m.Evaluator.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n27
+	}
+	if m.MergeJoiner != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintProcessors(data, i, uint64(m.MergeJoiner.Size()))
+		n28, err := m.MergeJoiner.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n28
+	}
+	if m.HashJoiner != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintProcessors(data, i, uint64(m.HashJoiner.Size()))
+		n29, err := m.HashJoiner.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n29
 	}
 	return i, nil
 }
@@ -529,11 +805,11 @@ func (m *ProcessorSpec) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintProcessors(data, i, uint64(m.Core.Size()))
-	n16, err := m.Core.MarshalTo(data[i:])
+	n30, err := m.Core.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n16
+	i += n30
 	if len(m.Output) > 0 {
 		for _, msg := range m.Output {
 			data[i] = 0x1a
@@ -567,11 +843,11 @@ func (m *FlowSpec) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintProcessors(data, i, uint64(m.FlowID.Size()))
-	n17, err := m.FlowID.MarshalTo(data[i:])
+	n31, err := m.FlowID.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n31
 	if len(m.Processors) > 0 {
 		for _, msg := range m.Processors {
 			data[i] = 0x12
@@ -700,6 +976,56 @@ func (m *EvaluatorSpec) Size() (n int) {
 	return n
 }
 
+func (m *MergeJoinerSpec) Size() (n int) {
+	var l int
+	_ = l
+	l = m.LeftOrdering.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	l = m.RightOrdering.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	l = m.Expr.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	n += 1 + sovProcessors(uint64(m.Type))
+	if len(m.OutputColumns) > 0 {
+		l = 0
+		for _, e := range m.OutputColumns {
+			l += sovProcessors(uint64(e))
+		}
+		n += 1 + sovProcessors(uint64(l)) + l
+	}
+	return n
+}
+
+func (m *HashJoinerSpec) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.LeftEqColumns) > 0 {
+		l = 0
+		for _, e := range m.LeftEqColumns {
+			l += sovProcessors(uint64(e))
+		}
+		n += 1 + sovProcessors(uint64(l)) + l
+	}
+	if len(m.RightEqColumns) > 0 {
+		l = 0
+		for _, e := range m.RightEqColumns {
+			l += sovProcessors(uint64(e))
+		}
+		n += 1 + sovProcessors(uint64(l)) + l
+	}
+	l = m.Expr.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	n += 1 + sovProcessors(uint64(m.Type))
+	if len(m.OutputColumns) > 0 {
+		l = 0
+		for _, e := range m.OutputColumns {
+			l += sovProcessors(uint64(e))
+		}
+		n += 1 + sovProcessors(uint64(l)) + l
+	}
+	return n
+}
+
 func (m *ProcessorCoreUnion) Size() (n int) {
 	var l int
 	_ = l
@@ -721,6 +1047,14 @@ func (m *ProcessorCoreUnion) Size() (n int) {
 	}
 	if m.Evaluator != nil {
 		l = m.Evaluator.Size()
+		n += 1 + l + sovProcessors(uint64(l))
+	}
+	if m.MergeJoiner != nil {
+		l = m.MergeJoiner.Size()
+		n += 1 + l + sovProcessors(uint64(l))
+	}
+	if m.HashJoiner != nil {
+		l = m.HashJoiner.Size()
 		n += 1 + l + sovProcessors(uint64(l))
 	}
 	return n
@@ -789,6 +1123,12 @@ func (this *ProcessorCoreUnion) GetValue() interface{} {
 	if this.Evaluator != nil {
 		return this.Evaluator
 	}
+	if this.MergeJoiner != nil {
+		return this.MergeJoiner
+	}
+	if this.HashJoiner != nil {
+		return this.HashJoiner
+	}
 	return nil
 }
 
@@ -804,6 +1144,10 @@ func (this *ProcessorCoreUnion) SetValue(value interface{}) bool {
 		this.Sorter = vt
 	case *EvaluatorSpec:
 		this.Evaluator = vt
+	case *MergeJoinerSpec:
+		this.MergeJoiner = vt
+	case *HashJoinerSpec:
+		this.HashJoiner = vt
 	default:
 		return false
 	}
@@ -1629,6 +1973,512 @@ func (m *EvaluatorSpec) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *MergeJoinerSpec) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProcessors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MergeJoinerSpec: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MergeJoinerSpec: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeftOrdering", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LeftOrdering.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RightOrdering", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.RightOrdering.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Expr", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Expr.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Type |= (JoinType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthProcessors
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowProcessors
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (uint32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.OutputColumns = append(m.OutputColumns, v)
+				}
+			} else if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (uint32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.OutputColumns = append(m.OutputColumns, v)
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field OutputColumns", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProcessors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HashJoinerSpec) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProcessors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HashJoinerSpec: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HashJoinerSpec: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthProcessors
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowProcessors
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (uint32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.LeftEqColumns = append(m.LeftEqColumns, v)
+				}
+			} else if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (uint32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.LeftEqColumns = append(m.LeftEqColumns, v)
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeftEqColumns", wireType)
+			}
+		case 2:
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthProcessors
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowProcessors
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (uint32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.RightEqColumns = append(m.RightEqColumns, v)
+				}
+			} else if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (uint32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.RightEqColumns = append(m.RightEqColumns, v)
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field RightEqColumns", wireType)
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Expr", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Expr.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Type |= (JoinType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthProcessors
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowProcessors
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (uint32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.OutputColumns = append(m.OutputColumns, v)
+				}
+			} else if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowProcessors
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (uint32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.OutputColumns = append(m.OutputColumns, v)
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field OutputColumns", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProcessors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *ProcessorCoreUnion) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -1820,6 +2670,72 @@ func (m *ProcessorCoreUnion) Unmarshal(data []byte) error {
 				m.Evaluator = &EvaluatorSpec{}
 			}
 			if err := m.Evaluator.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MergeJoiner", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MergeJoiner == nil {
+				m.MergeJoiner = &MergeJoinerSpec{}
+			}
+			if err := m.MergeJoiner.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HashJoiner", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.HashJoiner == nil {
+				m.HashJoiner = &HashJoinerSpec{}
+			}
+			if err := m.HashJoiner.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2207,57 +3123,70 @@ func init() {
 }
 
 var fileDescriptorProcessors = []byte{
-	// 830 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xbc, 0x55, 0x41, 0x8f, 0xdb, 0x44,
-	0x14, 0xde, 0x59, 0x3b, 0xd9, 0xdd, 0xd7, 0x26, 0xad, 0x46, 0x20, 0xac, 0x1c, 0x12, 0xaf, 0xbb,
-	0x40, 0x8a, 0x84, 0xa3, 0xf6, 0x82, 0x40, 0x20, 0x50, 0x76, 0x83, 0x48, 0x29, 0x05, 0x39, 0xe5,
-	0xc2, 0x25, 0xf2, 0xda, 0xb3, 0x59, 0x53, 0xc7, 0x33, 0x3b, 0x33, 0x6e, 0xb3, 0x3f, 0x01, 0x89,
-	0x03, 0xe2, 0x17, 0xf0, 0x03, 0xf8, 0x21, 0x39, 0x72, 0x44, 0x48, 0x54, 0x90, 0xfd, 0x23, 0x68,
-	0xc6, 0xe3, 0xc4, 0x29, 0x6b, 0xd8, 0x03, 0xe2, 0x94, 0xd1, 0x9b, 0xef, 0xfb, 0xf2, 0xde, 0xf7,
-	0xde, 0x1b, 0xc3, 0x3b, 0x11, 0x8d, 0x9e, 0x71, 0x1a, 0x46, 0xe7, 0x03, 0xf6, 0x6c, 0x36, 0x10,
-	0x17, 0xe9, 0x20, 0x4e, 0x84, 0x54, 0xbf, 0x8c, 0xd3, 0x88, 0x08, 0x41, 0xb9, 0xf0, 0x19, 0xa7,
-	0x92, 0xe2, 0xd7, 0xd7, 0x58, 0x5f, 0x5c, 0xa4, 0xbe, 0xc1, 0x75, 0xdc, 0x6d, 0x09, 0x7d, 0x62,
-	0xa7, 0x83, 0x38, 0x94, 0x61, 0x41, 0xec, 0x78, 0xd7, 0x23, 0x08, 0xe7, 0x6b, 0xf1, 0xce, 0x35,
-	0x89, 0x88, 0x8b, 0xf4, 0x34, 0x14, 0x64, 0x20, 0x24, 0xcf, 0x23, 0x99, 0x73, 0x12, 0x1b, 0xec,
-	0xbb, 0xf5, 0x58, 0x92, 0x45, 0x34, 0x26, 0xf1, 0x34, 0x0e, 0x65, 0x3e, 0x37, 0xf0, 0xa3, 0xfa,
-	0x1a, 0x2b, 0x49, 0xbe, 0x36, 0xa3, 0x33, 0xaa, 0x8f, 0x03, 0x75, 0x2a, 0xa2, 0x5e, 0x1b, 0x6e,
-	0x3f, 0xa1, 0x94, 0x1d, 0x53, 0x4e, 0x26, 0x8c, 0x44, 0xde, 0x09, 0xdc, 0x79, 0x1a, 0x9e, 0xa6,
-	0x24, 0x20, 0x61, 0x4c, 0xf8, 0x84, 0x85, 0x19, 0x7e, 0x00, 0xb6, 0x60, 0x61, 0xe6, 0x20, 0x17,
-	0xf5, 0x6f, 0x3d, 0x7c, 0xc3, 0xdf, 0xb8, 0x64, 0x0a, 0xf5, 0x15, 0x6c, 0x68, 0x2f, 0x5f, 0xf6,
-	0x76, 0x02, 0x0d, 0xf5, 0x7e, 0xb4, 0x5e, 0x91, 0x21, 0x11, 0x1e, 0x42, 0x43, 0xaa, 0x90, 0xd1,
-	0x79, 0xcb, 0xdf, 0x76, 0xdb, 0x14, 0xe8, 0x6b, 0xda, 0x09, 0x11, 0x11, 0x4f, 0x98, 0xa4, 0xdc,
-	0xc8, 0x16, 0x54, 0x7c, 0x08, 0x07, 0x49, 0x16, 0x93, 0xc5, 0x34, 0x89, 0x17, 0xce, 0xae, 0x8b,
-	0xfa, 0x2d, 0x73, 0xbf, 0xaf, 0xc3, 0xe3, 0x78, 0x81, 0xbb, 0xb0, 0xc7, 0xc9, 0x73, 0xc2, 0x05,
-	0x71, 0x2c, 0x17, 0xf5, 0xf7, 0x0d, 0xa0, 0x0c, 0xaa, 0x34, 0x54, 0x8a, 0xc2, 0xb1, 0x5d, 0xeb,
-	0x9a, 0x34, 0x8c, 0x71, 0xfe, 0x2b, 0x26, 0x94, 0x69, 0x68, 0x2a, 0xfe, 0x18, 0x9a, 0x67, 0x49,
-	0x2a, 0x09, 0x77, 0x1a, 0xba, 0x96, 0xc3, 0x1a, 0x91, 0xd1, 0x82, 0x71, 0x22, 0x44, 0x42, 0x4b,
-	0xbe, 0xa1, 0xe1, 0xfb, 0xd0, 0xa6, 0xb9, 0x64, 0xb9, 0x9c, 0x46, 0x34, 0xcd, 0xe7, 0x99, 0x70,
-	0x9a, 0xae, 0xd5, 0x6f, 0x0d, 0x77, 0xef, 0xa2, 0xa0, 0x55, 0xdc, 0x1c, 0x17, 0x17, 0xf8, 0x1e,
-	0x80, 0xa0, 0x67, 0x72, 0x9a, 0x26, 0xf3, 0x44, 0x3a, 0x7b, 0x2e, 0xea, 0x5b, 0x46, 0xec, 0x40,
-	0xc5, 0x1f, 0xab, 0xb0, 0x02, 0x9d, 0x87, 0x3c, 0x36, 0xa0, 0xfd, 0x2a, 0x48, 0xc5, 0x35, 0xc8,
-	0xbb, 0x42, 0xd0, 0x7e, 0x44, 0x93, 0xec, 0xff, 0xef, 0xc9, 0xc6, 0x2f, 0xeb, 0xbf, 0xf2, 0xcb,
-	0xae, 0xf1, 0xcb, 0xfb, 0x19, 0x01, 0x4c, 0x28, 0x97, 0xa6, 0xc2, 0x27, 0x70, 0xc7, 0x30, 0x29,
-	0x8f, 0x09, 0x4f, 0xb2, 0x99, 0xa9, 0xb5, 0x57, 0x93, 0xc3, 0x97, 0x06, 0x66, 0x32, 0x30, 0xff,
-	0x5b, 0x46, 0xf1, 0x43, 0xc0, 0xa5, 0xd0, 0x74, 0x1e, 0xca, 0xe8, 0x7c, 0x9a, 0x92, 0x6c, 0xab,
-	0xec, 0xbb, 0xe5, 0xfd, 0x17, 0xea, 0xfa, 0x31, 0xc9, 0x70, 0x07, 0x1a, 0x45, 0x63, 0xac, 0x4a,
-	0x63, 0x8a, 0x90, 0xf7, 0x3d, 0x82, 0xd6, 0xe8, 0x79, 0x98, 0xe6, 0xa1, 0xa4, 0x45, 0xc6, 0x1f,
-	0x42, 0x43, 0x5e, 0x32, 0x22, 0x1c, 0xe4, 0x5a, 0xfd, 0x76, 0x6d, 0x4f, 0x8a, 0x7a, 0x9f, 0x5e,
-	0x32, 0xe2, 0x7f, 0x9e, 0x64, 0x71, 0x50, 0x90, 0xf0, 0x47, 0xd0, 0x20, 0x0b, 0xc6, 0x85, 0xb3,
-	0xab, 0xc7, 0xfb, 0xc6, 0x4e, 0x17, 0x2c, 0xef, 0x6a, 0x17, 0xf0, 0x57, 0xe5, 0xbb, 0xa8, 0x1e,
-	0x85, 0xaf, 0xb3, 0x84, 0x66, 0xf8, 0x3d, 0xb0, 0x33, 0x4a, 0x99, 0xb1, 0xee, 0x5e, 0x8d, 0x68,
-	0xf5, 0x21, 0x09, 0x34, 0x01, 0x7f, 0x06, 0xb7, 0xe4, 0x66, 0x93, 0xb4, 0x4f, 0x37, 0xdc, 0x39,
-	0x12, 0x05, 0x55, 0x2a, 0x1e, 0x01, 0x7c, 0xbb, 0x1e, 0x5e, 0x33, 0x47, 0x6f, 0xd6, 0x08, 0x6d,
-	0x4f, 0x79, 0x50, 0x21, 0xe2, 0xf7, 0xa1, 0x29, 0xf4, 0x74, 0x38, 0xf6, 0x3f, 0x8e, 0xe2, 0x66,
-	0x84, 0x02, 0x43, 0xc0, 0x43, 0x38, 0x20, 0x65, 0xa7, 0xcc, 0xe2, 0x1f, 0xd5, 0xd9, 0x5b, 0xed,
-	0x68, 0xb0, 0xa1, 0x7d, 0x60, 0x2f, 0x7f, 0xea, 0x21, 0xef, 0x77, 0x04, 0xad, 0xb5, 0xcb, 0xba,
-	0xe9, 0x9f, 0x40, 0x23, 0xc9, 0x58, 0x2e, 0x75, 0xd3, 0xeb, 0x75, 0xc7, 0x0a, 0x33, 0xb9, 0xcc,
-	0x22, 0x45, 0x2a, 0x3b, 0xa7, 0x89, 0xf8, 0x18, 0xec, 0x88, 0x72, 0x62, 0x2c, 0xbe, 0x5f, 0x23,
-	0xf0, 0xf7, 0xde, 0x96, 0xef, 0xb6, 0x22, 0xe3, 0x11, 0x34, 0x8b, 0x79, 0x77, 0x2c, 0x9d, 0xc7,
-	0xdb, 0x75, 0x4b, 0xa2, 0x41, 0x01, 0xcd, 0x8d, 0x47, 0xe5, 0xba, 0x16, 0x64, 0xef, 0x3b, 0x04,
-	0xfb, 0x9f, 0xa6, 0xf4, 0x85, 0x2e, 0xed, 0x01, 0xec, 0x9d, 0xa5, 0xf4, 0xc5, 0x34, 0x89, 0xf5,
-	0xf8, 0xdc, 0x1e, 0x3a, 0x0a, 0xfb, 0xdb, 0xcb, 0x5e, 0x53, 0x41, 0xc6, 0x27, 0xab, 0xf5, 0x29,
-	0x68, 0x2a, 0xe0, 0x38, 0xc6, 0x8f, 0x00, 0x36, 0x1f, 0x67, 0x33, 0xc9, 0x47, 0xff, 0x56, 0x51,
-	0x25, 0x8f, 0x0a, 0x7b, 0x78, 0xb8, 0xfc, 0xb3, 0xbb, 0xb3, 0x5c, 0x75, 0xd1, 0x2f, 0xab, 0x2e,
-	0xfa, 0x75, 0xd5, 0x45, 0x7f, 0xac, 0xba, 0xe8, 0x87, 0xab, 0xee, 0xce, 0x37, 0x7b, 0x46, 0xe2,
-	0xaf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x16, 0xdc, 0x3d, 0xf7, 0x24, 0x08, 0x00, 0x00,
+	// 1030 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xd4, 0x56, 0xdd, 0x6e, 0xe3, 0x44,
+	0x14, 0xee, 0xc4, 0x4e, 0x9a, 0x9e, 0x36, 0x3f, 0x1a, 0x81, 0xb0, 0x7a, 0x91, 0xa6, 0xde, 0x02,
+	0xd9, 0x0a, 0x12, 0xed, 0xde, 0xa0, 0xe5, 0x47, 0xa0, 0xb4, 0x29, 0x4d, 0xc9, 0x76, 0x91, 0xdb,
+	0xde, 0x70, 0x13, 0xb9, 0xf6, 0x34, 0x31, 0xeb, 0x78, 0x9c, 0x19, 0x67, 0x37, 0x7d, 0x04, 0x24,
+	0x90, 0x10, 0x4f, 0xc0, 0x03, 0xf0, 0x20, 0xbd, 0x42, 0x5c, 0x22, 0x24, 0x56, 0x90, 0x7d, 0x05,
+	0x1e, 0x00, 0xcd, 0x78, 0xec, 0xb8, 0xa5, 0x5e, 0x76, 0x11, 0x42, 0xe2, 0xaa, 0xd3, 0x33, 0xdf,
+	0x77, 0x7c, 0xce, 0x77, 0xce, 0x9c, 0x13, 0xd8, 0x75, 0xa8, 0xf3, 0x98, 0x51, 0xdb, 0x19, 0x77,
+	0xc2, 0xc7, 0xa3, 0x0e, 0x9f, 0xfa, 0x1d, 0xd7, 0xe3, 0x91, 0xf8, 0x1b, 0x32, 0xea, 0x10, 0xce,
+	0x29, 0xe3, 0xed, 0x90, 0xd1, 0x88, 0xe2, 0xd7, 0x53, 0x6c, 0x9b, 0x4f, 0xfd, 0xb6, 0xc2, 0x6d,
+	0x36, 0xaf, 0xbb, 0x90, 0xa7, 0xf0, 0xbc, 0xe3, 0xda, 0x91, 0x1d, 0x13, 0x37, 0xcd, 0xdb, 0x11,
+	0x84, 0xb1, 0xd4, 0xf9, 0xe6, 0x2d, 0x81, 0xf0, 0xa9, 0x7f, 0x6e, 0x73, 0xd2, 0xe1, 0x11, 0x9b,
+	0x39, 0xd1, 0x8c, 0x11, 0x57, 0x61, 0xdf, 0xcd, 0xc7, 0x92, 0xc0, 0xa1, 0x2e, 0x71, 0x87, 0xae,
+	0x1d, 0xcd, 0x26, 0x0a, 0xbe, 0x93, 0x9f, 0x63, 0x26, 0xc8, 0xd7, 0x46, 0x74, 0x44, 0xe5, 0xb1,
+	0x23, 0x4e, 0xb1, 0xd5, 0xac, 0xc2, 0xc6, 0x31, 0xa5, 0xe1, 0x1e, 0x65, 0xe4, 0x24, 0x24, 0x8e,
+	0xb9, 0x0f, 0xb5, 0x53, 0xfb, 0xdc, 0x27, 0x16, 0xb1, 0x5d, 0xc2, 0x4e, 0x42, 0x3b, 0xc0, 0xf7,
+	0x40, 0xe7, 0xa1, 0x1d, 0x18, 0xa8, 0x89, 0x5a, 0xeb, 0xf7, 0xdf, 0x68, 0x2f, 0x55, 0x52, 0x89,
+	0xb6, 0x05, 0xac, 0xab, 0x5f, 0x3d, 0xdb, 0x5a, 0xb1, 0x24, 0xd4, 0xfc, 0x4e, 0xbb, 0xe1, 0x86,
+	0x38, 0xb8, 0x0b, 0xc5, 0x48, 0x98, 0x94, 0x9f, 0xb7, 0xda, 0xd7, 0xd5, 0x56, 0x09, 0xb6, 0x25,
+	0x6d, 0x9f, 0x70, 0x87, 0x79, 0x61, 0x44, 0x99, 0x72, 0x1b, 0x53, 0xf1, 0x36, 0xac, 0x79, 0x81,
+	0x4b, 0xe6, 0x43, 0xcf, 0x9d, 0x1b, 0x85, 0x26, 0x6a, 0x55, 0xd4, 0x7d, 0x59, 0x9a, 0xfb, 0xee,
+	0x1c, 0x37, 0x60, 0x95, 0x91, 0x27, 0x84, 0x71, 0x62, 0x68, 0x4d, 0xd4, 0x2a, 0x2b, 0x40, 0x62,
+	0x14, 0x61, 0x88, 0x10, 0xb9, 0xa1, 0x37, 0xb5, 0x5b, 0xc2, 0x50, 0xc2, 0xb5, 0x6f, 0x88, 0x90,
+	0x84, 0x21, 0xa9, 0xf8, 0x63, 0x28, 0x5d, 0x78, 0x7e, 0x44, 0x98, 0x51, 0x94, 0xb9, 0x6c, 0xe7,
+	0x38, 0xe9, 0xcd, 0x43, 0x46, 0x38, 0xf7, 0x68, 0xc2, 0x57, 0x34, 0x7c, 0x17, 0xaa, 0x74, 0x16,
+	0x85, 0xb3, 0x68, 0xe8, 0x50, 0x7f, 0x36, 0x09, 0xb8, 0x51, 0x6a, 0x6a, 0xad, 0x4a, 0xb7, 0x50,
+	0x47, 0x56, 0x25, 0xbe, 0xd9, 0x8b, 0x2f, 0xf0, 0x1d, 0x00, 0x4e, 0x2f, 0xa2, 0xa1, 0xef, 0x4d,
+	0xbc, 0xc8, 0x58, 0x6d, 0xa2, 0x96, 0xa6, 0x9c, 0xad, 0x09, 0xfb, 0x40, 0x98, 0x05, 0x68, 0x6c,
+	0x33, 0x57, 0x81, 0xca, 0x59, 0x90, 0xb0, 0x4b, 0x90, 0xf9, 0x1c, 0x41, 0xf5, 0x88, 0x7a, 0xc1,
+	0x7f, 0x5f, 0x93, 0xa5, 0x5e, 0xda, 0xbf, 0xa5, 0x97, 0x9e, 0xa3, 0x97, 0xf9, 0x03, 0x02, 0x38,
+	0xa1, 0x2c, 0x52, 0x19, 0x1e, 0x43, 0x4d, 0x31, 0x29, 0x73, 0x09, 0xf3, 0x82, 0x91, 0xca, 0x75,
+	0x2b, 0x27, 0x86, 0x47, 0x0a, 0xa6, 0x22, 0x50, 0xdf, 0x4d, 0xac, 0xf8, 0x3e, 0xe0, 0xc4, 0xd1,
+	0x70, 0x62, 0x47, 0xce, 0x78, 0xe8, 0x93, 0xe0, 0x5a, 0xda, 0xf5, 0xe4, 0xfe, 0xa1, 0xb8, 0x1e,
+	0x90, 0x00, 0x6f, 0x42, 0x31, 0x2e, 0x8c, 0x96, 0x29, 0x4c, 0x6c, 0x32, 0xbf, 0x46, 0x50, 0xe9,
+	0x3d, 0xb1, 0xfd, 0x99, 0x1d, 0xd1, 0x38, 0xe2, 0x0f, 0xa1, 0x18, 0x5d, 0x86, 0x84, 0x1b, 0xa8,
+	0xa9, 0xb5, 0xaa, 0xb9, 0x35, 0x89, 0xf3, 0x3d, 0xbd, 0x0c, 0x49, 0xfb, 0x33, 0x2f, 0x70, 0xad,
+	0x98, 0x84, 0x3f, 0x82, 0x22, 0x99, 0x87, 0x8c, 0x1b, 0x05, 0xd9, 0xde, 0x2f, 0xad, 0x74, 0xcc,
+	0x32, 0x7f, 0x2c, 0x40, 0xed, 0x21, 0x61, 0x23, 0x22, 0x1a, 0x45, 0x49, 0x78, 0x04, 0x15, 0x9f,
+	0x5c, 0xfc, 0x53, 0x01, 0x37, 0x04, 0x37, 0x95, 0x6f, 0x00, 0x55, 0xe6, 0x8d, 0xc6, 0x19, 0x67,
+	0x85, 0x57, 0x71, 0x56, 0x91, 0xe4, 0xd4, 0xdb, 0x07, 0xa0, 0x8b, 0xb0, 0x5f, 0xb5, 0xab, 0x24,
+	0x09, 0x3f, 0x00, 0x5d, 0x48, 0x66, 0xe8, 0x4d, 0xd4, 0xaa, 0xe6, 0x06, 0x20, 0x74, 0x10, 0x22,
+	0x27, 0x54, 0x41, 0xb9, 0xa5, 0x1d, 0x8b, 0x79, 0xed, 0xf8, 0x4d, 0x01, 0xaa, 0x87, 0x36, 0x1f,
+	0x67, 0xf4, 0xdc, 0x85, 0x9a, 0xd4, 0x93, 0x4c, 0x53, 0x3a, 0x5a, 0xd2, 0xc5, 0x55, 0x6f, 0x9a,
+	0xbc, 0xfe, 0x77, 0xa0, 0x1e, 0xeb, 0x95, 0x01, 0x17, 0x52, 0x70, 0xac, 0xe5, 0x12, 0xfd, 0x3f,
+	0xd0, 0xe3, 0x0f, 0x0d, 0xf0, 0xe7, 0xc9, 0xe2, 0x15, 0x5b, 0xe7, 0x2c, 0xf0, 0x68, 0x80, 0xdf,
+	0x03, 0x3d, 0xa0, 0x34, 0x54, 0xad, 0x75, 0x27, 0xe7, 0xe3, 0xd9, 0x4d, 0x65, 0x49, 0x02, 0x3e,
+	0x84, 0xf5, 0x68, 0x39, 0xaa, 0x55, 0x37, 0xbd, 0xd4, 0x50, 0x27, 0x8e, 0x95, 0xa5, 0xe2, 0x1e,
+	0xc0, 0x97, 0xe9, 0x74, 0x54, 0x12, 0xbe, 0xf9, 0x02, 0x15, 0x32, 0x7e, 0x32, 0x44, 0xfc, 0x00,
+	0x4a, 0x5c, 0x8e, 0x1f, 0x29, 0x64, 0x7e, 0x15, 0x96, 0x33, 0xca, 0x52, 0x04, 0xdc, 0x85, 0x35,
+	0x92, 0x8c, 0x02, 0xb5, 0x59, 0x76, 0xf2, 0x6a, 0x98, 0x1d, 0x19, 0xd6, 0x92, 0x26, 0xf4, 0x98,
+	0x2c, 0xdf, 0xaf, 0x51, 0x7a, 0xa1, 0x1e, 0x37, 0x5e, 0xba, 0x95, 0xa5, 0x0a, 0x3d, 0xc6, 0x69,
+	0xe3, 0xca, 0xc5, 0x93, 0xaf, 0xc7, 0xf5, 0x0e, 0xb7, 0x32, 0xc4, 0xf7, 0xf5, 0xab, 0xef, 0xb7,
+	0x90, 0xf9, 0x2b, 0x82, 0x4a, 0x5a, 0x76, 0xf9, 0x0a, 0x3e, 0x81, 0xa2, 0x17, 0x84, 0xb3, 0x48,
+	0xf6, 0x7e, 0x7e, 0xa2, 0x7d, 0x81, 0x39, 0xb9, 0x0c, 0x1c, 0x41, 0x4a, 0x66, 0x95, 0x24, 0xe2,
+	0x3d, 0xd0, 0x1d, 0xca, 0x88, 0xaa, 0xf9, 0xdd, 0x1c, 0x07, 0x7f, 0x6d, 0xb6, 0xa4, 0x75, 0x05,
+	0x19, 0xf7, 0xa0, 0x14, 0x37, 0xa8, 0xa1, 0xc9, 0x38, 0xde, 0xce, 0x1b, 0x44, 0x12, 0x64, 0xd1,
+	0x99, 0x2a, 0x5a, 0xb2, 0xa0, 0x62, 0xb2, 0xf9, 0x15, 0x82, 0xf2, 0x81, 0x4f, 0x9f, 0xca, 0xd4,
+	0xee, 0xc1, 0xea, 0x85, 0x4f, 0x9f, 0x0e, 0x3d, 0x57, 0xf6, 0xf3, 0x46, 0xd7, 0x10, 0xd8, 0x5f,
+	0x9e, 0x6d, 0x95, 0x04, 0xa4, 0xbf, 0xbf, 0x48, 0x4f, 0x56, 0x49, 0x00, 0xfb, 0x2e, 0x3e, 0x02,
+	0x58, 0xfe, 0x1c, 0x55, 0xb3, 0x7b, 0xe7, 0xef, 0x32, 0xca, 0xc4, 0x91, 0x61, 0xef, 0x1e, 0x40,
+	0x39, 0x79, 0xa5, 0x78, 0x0d, 0x8a, 0xfd, 0xe3, 0xe3, 0x9e, 0x55, 0x5f, 0xc1, 0x55, 0x80, 0x41,
+	0xef, 0xe0, 0x74, 0xf8, 0xe8, 0xec, 0xb4, 0x67, 0xd5, 0x11, 0xae, 0xc1, 0xba, 0xd5, 0xff, 0xf4,
+	0x30, 0x31, 0x14, 0x04, 0xe0, 0xe0, 0x6c, 0x30, 0x50, 0xff, 0x6b, 0xdd, 0xed, 0xab, 0xdf, 0x1b,
+	0x2b, 0x57, 0x8b, 0x06, 0xfa, 0x69, 0xd1, 0x40, 0x3f, 0x2f, 0x1a, 0xe8, 0xb7, 0x45, 0x03, 0x7d,
+	0xfb, 0xbc, 0xb1, 0xf2, 0xc5, 0xaa, 0x0a, 0xe5, 0xcf, 0x00, 0x00, 0x00, 0xff, 0xff, 0xec, 0xc4,
+	0xf4, 0x67, 0x5e, 0x0b, 0x00, 0x00,
 }
