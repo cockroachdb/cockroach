@@ -401,7 +401,8 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
-// Test that we fail to lease a table that was marked for deletion.
+// Test that we fail to lease a table that was marked for deletion. This also
+// tests that SHOW TABLES marks a deleted table with the " (deleted)" suffix.
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
@@ -453,6 +454,23 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
 	if !testutils.IsError(err, "table is being deleted") {
 		t.Fatalf("got a different error than expected: %v", err)
+	}
+
+	// Check that SHOW TABLES marks a deleted table with the " (deleted)"
+	// suffix.
+	rows, err := t.db.Query(`SHOW TABLES FROM test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		t.Fatal("table invisible through SHOW TABLES")
+	}
+	var val []byte
+	if err := rows.Scan(&val); err != nil {
+		t.Errorf("row scan failed: %s", err)
+	}
+	if string(val) != "t (deleted)" {
+		t.Fatalf("table = %s", val)
 	}
 }
 
