@@ -101,8 +101,8 @@ let clusterID = (state: AdminUIState): string => state.cachedData.cluster.data &
 
 // TODO(maxlang): change the way uiData stores data so we don't need an added check to see if the value was fetched
 // TODO(maxlang): determine whether they dismissed a node version mismatch or an upstream version check
-let versionCheckDismissedFetched = (state: AdminUIState): boolean => state.uiData.data && _.has(state.uiData.data, VERSION_DISMISSED_KEY);
-let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismissedFetched(state) ? state.uiData.data[VERSION_DISMISSED_KEY] : undefined;
+let versionCheckDismissedFetched = (state: AdminUIState): boolean => _.has(state.uiData, VERSION_DISMISSED_KEY);
+let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismissedFetched(state) ? state.uiData[VERSION_DISMISSED_KEY].data : undefined;
 
 let versions = createSelector(
   nodeStatuses,
