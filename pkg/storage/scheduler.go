@@ -115,6 +115,12 @@ type raftProcessor interface {
 	// Process a raft tick for the specified range. Return true if the range
 	// should be queued for ready processing.
 	processTick(rangeID roachpb.RangeID) bool
+	// Inspect the pending proposals, refurbishing and reproposing as
+	// necessary (for instance, after a Raft election event).
+	processRefreshAll(rangeID roachpb.RangeID)
+	// Like processRefreshAll, but inspecting only proposals which have been
+	// pending for long enough to assume that they have been lost.
+	processRefreshStale(rangeID roachpb.RangeID)
 }
 
 type raftScheduleState int
@@ -124,6 +130,8 @@ const (
 	stateRaftReady
 	stateRaftRequest
 	stateRaftTick
+	stateRaftRefreshStale
+	stateRaftRefreshAll
 )
 
 type raftScheduler struct {
@@ -220,6 +228,12 @@ func (s *raftScheduler) worker(stopper *stop.Stopper) {
 		state := s.mu.state[id]
 		s.mu.state[id] = stateQueued
 		s.mu.Unlock()
+
+		if state&stateRaftRefreshAll != 0 {
+			s.processor.processRefreshAll(id)
+		} else if state&stateRaftRefreshStale != 0 {
+			s.processor.processRefreshStale(id)
+		}
 
 		if state&stateRaftTick != 0 {
 			// processRaftTick returns true if the range should perform ready
@@ -318,4 +332,12 @@ func (s *raftScheduler) EnqueueRaftRequest(id roachpb.RangeID) {
 
 func (s *raftScheduler) EnqueueRaftTick(ids ...roachpb.RangeID) {
 	s.signal(s.enqueueN(stateRaftTick, ids...))
+}
+
+func (s *raftScheduler) EnqueueRaftRefreshStale(id roachpb.RangeID) {
+	s.signal(s.enqueue1(stateRaftRefreshStale, id))
+}
+
+func (s *raftScheduler) EnqueueRaftRefreshAll(id roachpb.RangeID) {
+	s.signal(s.enqueue1(stateRaftRefreshAll, id))
 }

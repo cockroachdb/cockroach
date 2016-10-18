@@ -2901,6 +2901,24 @@ func (s *Store) processTick(rangeID roachpb.RangeID) bool {
 	return exists // ready
 }
 
+func (s *Store) processRefreshStale(rangeID roachpb.RangeID) {
+	s.mu.Lock()
+	r, ok := s.mu.replicas[rangeID]
+	s.mu.Unlock()
+	if ok {
+		r.refreshPendingCmds(s.cfg.RaftElectionTimeoutTicks)
+	}
+}
+
+func (s *Store) processRefreshAll(rangeID roachpb.RangeID) {
+	s.mu.Lock()
+	r, ok := s.mu.replicas[rangeID]
+	s.mu.Unlock()
+	if ok {
+		r.refreshPendingCmds(0)
+	}
+}
+
 func (s *Store) processRaft() {
 	if s.cfg.TestingKnobs.DisableProcessRaft {
 		return
