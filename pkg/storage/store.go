@@ -2324,28 +2324,55 @@ func (s *Store) HandleSnapshot(
 ) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
+	var capacity *roachpb.StoreCapacity
+
 	sendSnapError := func(err error) error {
 		return stream.Send(&SnapshotResponse{
-			Status:  SnapshotResponse_ERROR,
-			Message: err.Error(),
+			Status:        SnapshotResponse_ERROR,
+			Message:       err.Error(),
+			StoreCapacity: capacity,
 		})
 	}
 
+	tmpCap, err := s.Capacity()
+	if err != nil {
+		return sendSnapError(err)
+	}
+	capacity = &tmpCap
+
 	ctx := s.logContext(stream.Context())
+
+	if header.CanDecline {
+		// Check the bookie to see if we can apply the snapshot.
+		resp := s.Reserve(ctx, ReservationRequest{
+			StoreRequestHeader: StoreRequestHeader{
+				NodeID:  s.nodeDesc.NodeID,
+				StoreID: s.StoreID(),
+			},
+			RangeSize: header.RangeSize,
+			RangeID:   header.RangeDescriptor.RangeID,
+		})
+		if !resp.Reserved {
+			return stream.Send(&SnapshotResponse{
+				Status:        SnapshotResponse_DECLINED,
+				StoreCapacity: capacity,
+			})
+		}
+	}
 
 	// Check to see if the snapshot can be applied but don't attempt to add
 	// a placeholder here, because we're not holding the replica's raftMu.
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	_, err := s.canApplySnapshot(&header.RangeDescriptor)
+	_, err = s.canApplySnapshot(&header.RangeDescriptor)
 	if err != nil {
 		return sendSnapError(
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.RangeDescriptor.RangeID),
 		)
 	}
 
-	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
+	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED, StoreCapacity: capacity}); err != nil {
 		return err
 	}
 
@@ -2382,7 +2409,7 @@ func (s *Store) HandleSnapshot(
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
-			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
+			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED, StoreCapacity: capacity})
 		}
 	}
 }
@@ -2694,36 +2721,59 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 	}
 }
 
+// OutgoingSnapshotStream is the minimal interface on a GRPC stream required
+// to send a snapshot over the network.
+type OutgoingSnapshotStream interface {
+	Send(*SnapshotRequest) error
+	Recv() (*SnapshotResponse, error)
+}
+
+// SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
+type SnapshotStorePool interface {
+	throttle(reason throttleReason, toStoreID roachpb.StoreID)
+	updateRemoteCapacityEstimate(toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity)
+}
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
-	stream MultiRaft_RaftSnapshotClient,
+	stream OutgoingSnapshotStream,
+	storePool SnapshotStorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
 ) error {
+	storeID := header.RaftMessageRequest.ToReplica.StoreID
 	if err := stream.Send(&SnapshotRequest{Header: &header}); err != nil {
 		return err
 	}
 	// Wait until we get a response from the server.
 	resp, err := stream.Recv()
 	if err != nil {
+		storePool.throttle(throttleFailed, storeID)
 		return err
+	}
+	if resp.StoreCapacity != nil {
+		storePool.updateRemoteCapacityEstimate(storeID, *resp.StoreCapacity)
 	}
 	switch resp.Status {
 	case SnapshotResponse_DECLINED:
 		if header.CanDecline {
+			storePool.throttle(throttleDeclined, storeID)
 			return errors.Errorf("range=%s: remote declined snapshot: %s",
 				header.RangeDescriptor.RangeID, resp.Message)
 		}
+		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
 			header.RangeDescriptor.RangeID, resp.Message)
 	case SnapshotResponse_ERROR:
+		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: remote couldn't accept snapshot with error: %s",
 			header.RangeDescriptor.RangeID, resp.Message)
 	case SnapshotResponse_ACCEPTED:
-		// This is the response we're expecting. Continue with snapshot sending.
+	// This is the response we're expecting. Continue with snapshot sending.
 	default:
+		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: server sent an invalid status during negotiation: %s",
 			header.RangeDescriptor.RangeID, resp.Status)
 	}
@@ -2816,7 +2866,7 @@ func sendSnapshot(
 	}
 }
 
-func sendBatch(stream MultiRaft_RaftSnapshotClient, batch engine.Batch) error {
+func sendBatch(stream OutgoingSnapshotStream, batch engine.Batch) error {
 	repr := batch.Repr()
 	batch.Close()
 	return stream.Send(&SnapshotRequest{KVBatch: repr})

@@ -52,7 +52,6 @@ const (
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
-	defaultReservationsEnabled      = true
 	defaultEventLogEnabled          = true
 
 	minimumNetworkFileDescriptors     = 256
@@ -148,10 +147,6 @@ type Config struct {
 	// information about a store, it is considered dead.
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
 	TimeUntilStoreDead time.Duration
-
-	// ReservationsEnabled is a switch used to enable the add replica
-	// reservation system.
-	ReservationsEnabled bool
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
@@ -337,7 +332,6 @@ func MakeConfig() Config {
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
-		ReservationsEnabled:      defaultReservationsEnabled,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{{Path: defaultStorePath}},
@@ -445,9 +439,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 	cfg.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", cfg.TimeUntilStoreDead)
 	cfg.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", cfg.ConsistencyCheckInterval)
-	// TODO(bram): remove ReservationsEnabled once we've completed testing the
-	// feature.
-	cfg.ReservationsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RESERVATIONS_ENABLED", cfg.ReservationsEnabled)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.

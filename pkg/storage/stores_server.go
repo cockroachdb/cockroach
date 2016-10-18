@@ -26,19 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// StoresServer handles store-addressed RPCs.
-type StoresServer interface {
-	FreezeServer
-	ReservationServer
-}
-
-var _ StoresServer = Server{}
-
-// Server implements StoresServer.
+// Server implements FreezeServer and ConsistencyServer.
 type Server struct {
 	descriptor *roachpb.NodeDescriptor
 	stores     *Stores
 }
+
+var _ FreezeServer = Server{}
+var _ ConsistencyServer = Server{}
 
 // MakeServer returns a new instance of Server.
 func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
@@ -57,7 +52,7 @@ func (is Server) execStoreCommand(h StoreRequestHeader, f func(*Store) error) er
 	return f(store)
 }
 
-// PollFrozen implements the StoresServer interface.
+// PollFrozen implements the FreezeServer interface.
 func (is Server) PollFrozen(
 	ctx context.Context, args *PollFrozenRequest,
 ) (*PollFrozenResponse, error) {
@@ -69,22 +64,6 @@ func (is Server) PollFrozen(
 		})
 	return resp, err
 }
-
-// Reserve implements the StoresServer interface.
-func (is Server) Reserve(
-	ctx context.Context, req *ReservationRequest,
-) (*ReservationResponse, error) {
-	resp := &ReservationResponse{}
-	err := is.execStoreCommand(req.StoreRequestHeader,
-		func(s *Store) error {
-			*resp = s.Reserve(ctx, *req)
-			return nil
-		})
-	return resp, err
-}
-
-// Server implements ConsistencyServer.
-var _ ConsistencyServer = Server{}
 
 // CollectChecksum implements ConsistencyServer.
 func (is Server) CollectChecksum(
