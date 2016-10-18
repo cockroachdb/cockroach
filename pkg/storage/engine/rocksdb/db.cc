@@ -1395,6 +1395,10 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // Increasing block_size decreases memory usage at the cost of
   // increased read amplification.
   table_options.block_size = db_opts.block_size;
+  // Disable whole_key_filtering which adds a bloom filter entry for
+  // the "whole key", doubling the size of our bloom filters. This is
+  // used to speed up Get operations which we don't use.
+  table_options.whole_key_filtering = false;
 
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
