@@ -31,6 +31,8 @@
 		SorterSpec
 		EvaluatorSpec
 		DistinctSpec
+		MergeJoinerSpec
+		HashJoinerSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec
