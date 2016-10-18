@@ -1493,10 +1493,6 @@ show_stmt:
   {
     $$.val = &Show{Name: "TRANSACTION PRIORITY"}
   }
-| SHOW ALL
-  {
-    $$.val = Statement(nil)
-  }
 | SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
@@ -1505,6 +1501,7 @@ show_stmt:
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
   }
+| SHOW ALL { return unimplemented(sqllex) }
 
 help_stmt:
   HELP unrestricted_name
@@ -2004,14 +2001,8 @@ rename_stmt:
   {
     $$.val = &RenameColumn{Table: $5.normalizableTableName(), Name: Name($8), NewName: Name($10), IfExists: true}
   }
-| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
-  {
-    $$.val = Statement(nil)
-  }
-| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
-  {
-    $$.val = Statement(nil)
-  }
+| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex) }
+| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex) }
 
 opt_column:
   COLUMN
