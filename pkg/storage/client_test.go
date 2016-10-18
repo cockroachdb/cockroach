@@ -145,7 +145,6 @@ func createTestStoreWithEngine(
 		storeCfg.Gossip,
 		clock,
 		rpcContext,
-		/* reservationsEnabled */ true,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
 	)
@@ -176,8 +175,6 @@ type multiTestContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
-	// This enables the reservation system which by default is disabled.
-	reservationsEnabled bool
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
@@ -239,7 +236,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		mCopy.clocks = nil
 		mCopy.clock = nil
 		mCopy.timeUntilStoreDead = 0
-		mCopy.reservationsEnabled = false
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -615,7 +611,6 @@ func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
 		m.gossips[idx],
 		m.clock,
 		m.rpcContext,
-		m.reservationsEnabled,
 		m.timeUntilStoreDead,
 		stopper,
 	)
@@ -723,7 +718,6 @@ func (m *multiTestContext) addStore(idx int) {
 	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
 	storage.RegisterConsistencyServer(grpcServer, storesServer)
 	storage.RegisterFreezeServer(grpcServer, storesServer)
-	storage.RegisterReservationServer(grpcServer, storesServer)
 
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
