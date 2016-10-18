@@ -685,16 +685,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
 	}
 
-	ctx := s.AnnotateCtx(context.Background())
-
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
-	// TODO(radu): should pass ambient
-	s.scheduler = newRaftScheduler(ctx, s.metrics, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
 	storeMuLogger := syncutil.ThresholdLogger(
-		ctx,
+		s.AnnotateCtx(context.Background()),
 		defaultStoreMutexWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "storeMu: "+msg, args...)

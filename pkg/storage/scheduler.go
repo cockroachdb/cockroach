@@ -127,7 +127,6 @@ const (
 )
 
 type raftScheduler struct {
-	ctx        context.Context
 	processor  raftProcessor
 	numWorkers int
 
@@ -143,15 +142,14 @@ type raftScheduler struct {
 }
 
 func newRaftScheduler(
-	ctx context.Context, metrics *StoreMetrics, processor raftProcessor, numWorkers int,
+	ambient log.AmbientContext, metrics *StoreMetrics, processor raftProcessor, numWorkers int,
 ) *raftScheduler {
 	s := &raftScheduler{
-		ctx:        ctx,
 		processor:  processor,
 		numWorkers: numWorkers,
 	}
 	muLogger := syncutil.ThresholdLogger(
-		s.ctx,
+		ambient.AnnotateCtx(context.Background()),
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "raftScheduler.mu: "+msg, args...)
