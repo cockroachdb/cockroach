@@ -35,7 +35,8 @@ import (
 // An idAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
 type idAllocator struct {
-	ctx       context.Context
+	log.AmbientContext
+
 	idKey     atomic.Value
 	db        *client.DB
 	minID     uint32      // Minimum ID to return
@@ -50,7 +51,7 @@ type idAllocator struct {
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
 func newIDAllocator(
-	ctx context.Context,
+	ambient log.AmbientContext,
 	idKey roachpb.Key,
 	db *client.DB,
 	minID uint32,
@@ -66,12 +67,12 @@ func newIDAllocator(
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &idAllocator{
-		ctx:       ctx,
-		db:        db,
-		minID:     minID,
-		blockSize: blockSize,
-		ids:       make(chan uint32, blockSize/2+1),
-		stopper:   stopper,
+		AmbientContext: ambient,
+		db:             db,
+		minID:          minID,
+		blockSize:      blockSize,
+		ids:            make(chan uint32, blockSize/2+1),
+		stopper:        stopper,
 	}
 	ia.idKey.Store(idKey)
 
@@ -92,6 +93,7 @@ func (ia *idAllocator) Allocate() (uint32, error) {
 
 func (ia *idAllocator) start() {
 	ia.stopper.RunWorker(func() {
+		ctx := ia.AnnotateCtx(context.Background())
 		defer close(ia.ids)
 
 		for {
@@ -102,9 +104,9 @@ func (ia *idAllocator) start() {
 				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
 					if err := ia.stopper.RunTask(func() {
-						res, err = ia.db.Inc(ia.ctx, idKey, int64(ia.blockSize))
+						res, err = ia.db.Inc(ctx, idKey, int64(ia.blockSize))
 					}); err != nil {
-						log.Warning(ia.ctx, err)
+						log.Warning(ctx, err)
 						return
 					}
 					if err == nil {
@@ -112,7 +114,7 @@ func (ia *idAllocator) start() {
 						break
 					}
 
-					log.Warningf(ia.ctx, "unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+					log.Warningf(ctx, "unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
 				}
 				if err != nil {
 					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))

@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -163,7 +165,8 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	if !ok {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
-	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), repl, cfg)
+	ctx := s.AnnotateCtx(context.TODO())
+	return s.gcQueue.process(ctx, s.Clock().Now(), repl, cfg)
 }
 
 func (r *Replica) RaftLock() {

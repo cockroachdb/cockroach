@@ -115,6 +115,11 @@ func copyTagChain(ctx context.Context, bottomTag *logTag) context.Context {
 		return context.WithValue(ctx, contextTagKeyType{}, bottomTag)
 	}
 
+	if bottomTag == existingChain {
+		// Special case when both contexts already have the same tags.
+		return ctx
+	}
+
 	var chainTop, chainBottom *logTag
 
 	// Make a copy of the logTag chain, skipping tags that already exist in the
