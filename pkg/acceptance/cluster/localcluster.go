@@ -129,6 +129,61 @@ type testNode struct {
 	stores  []testStore
 }
 
+// Get node's status.
+func (t *testNode) status() (string, error) {
+	s, err := t.Container.cluster.client.ContainerInspect(context.Background(), t.Container.id)
+	if err != nil && !strings.Contains(err.Error(), "is not running") {
+		return "", err
+	}
+	return s.State.Status, nil
+}
+
+// Send SIGTERM to container process.
+func (t *testNode) quit() error {
+	_ = t.Container.Unpause()
+	if err := t.Container.cluster.client.ContainerKill(context.Background(),
+		t.Container.id, "SIGTERM"); err != nil && !strings.Contains(err.Error(), "is not running") {
+		return err
+	}
+	return nil
+}
+
+// Node quit. First, we'll send SIGTERM to quit the node, sleep about eight seconds,
+// Then we check the node's status. Repeat this at most two times, after this,
+// If the node's status is still not "exited", we should send SIGKILL to kill the node.
+func (t *testNode) kill() error {
+	// First time quit.
+	if err := t.quit(); err != nil {
+		return err
+	}
+	time.Sleep(8 * time.Second)
+	s, err := t.status()
+	if err != nil {
+		return err
+	}
+	if s == "exited" {
+		return nil
+	}
+	// Do the same thing again.
+	if err := t.quit(); err != nil {
+		return err
+	}
+	// Now we sleep little time.
+	time.Sleep(2 * time.Second)
+	s, err = t.status()
+	if s == "exited" {
+		return nil
+	}
+	// Send SIGKILL to container.
+	if err := t.Container.cluster.client.ContainerKill(context.Background(),
+		t.Container.id, "SIGKILL"); err != nil && !strings.Contains(err.Error(), "is not running") {
+		return err
+	}
+	// Now we check the if the Node has quit now.
+	t.Container.cluster.expectEvent(t.Container, eventDie)
+	return nil
+}
+
 // LocalCluster manages a local cockroach cluster running on docker. The
 // cluster is composed of a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
@@ -723,7 +778,7 @@ func (l *LocalCluster) stop() {
 		}
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
-		maybePanic(n.Kill())
+		maybePanic(n.kill())
 		if crashed && outputLogDir == "" {
 			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
 		}
