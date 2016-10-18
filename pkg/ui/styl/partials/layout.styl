@@ -479,7 +479,7 @@ a.toggle
   display inline
   font-family Lato-Medium
   color $secondary-gray-2
-  transition opacity .5s ease-in
+  transition opacity 2s ease-in
   opacity 0
   &.no-animate
     transition opacity 0s
@@ -683,8 +683,11 @@ div.raft-filters
 .table-stats
   margin-bottom 50px
 
-.create-table
+.create-table, pre.sql
   font-family Inconsolata-Regular
   background-color $secondary-gray-3
   padding 20px
   display inline-block
+
+pre.sql
+  margin-top 10px

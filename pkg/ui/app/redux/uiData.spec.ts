@@ -15,16 +15,28 @@ describe("UIData reducer", function() {
       assert.equal(uidata.setUIDataKey("string", null).type, uidata.SET);
     });
 
-    it("errorUIData() creates the correct action type.", function() {
-      assert.equal(uidata.errorUIData(null).type, uidata.ERROR);
+    it("beginSaveUIData() creates the correct action type.", function() {
+      assert.equal(uidata.beginSaveUIData([]).type, uidata.SAVE);
     });
 
-    it("fetchUIData() creates the correct action type.", function() {
-      assert.equal(uidata.fetchUIData().type, uidata.FETCH);
+    it("completeSaveUIData() creates the correct action type.", function() {
+      assert.equal(uidata.completeSaveUIData([]).type, uidata.SAVE_COMPLETE);
     });
 
-    it("fetchCompleteUIData() creates the correct action type.", function() {
-      assert.equal(uidata.fetchCompleteUIData().type, uidata.FETCH_COMPLETE);
+    it("saveErrorUIData() creates the correct action type.", function() {
+      assert.equal(uidata.saveErrorUIData(null, null).type, uidata.SAVE_ERROR);
+    });
+
+    it("beginLoadUIData() creates the correct action type.", function() {
+      assert.equal(uidata.beginLoadUIData([]).type, uidata.LOAD);
+    });
+
+    it("completeSaveUIData() creates the correct action type.", function() {
+      assert.equal(uidata.completeLoadUIData([]).type, uidata.LOAD_COMPLETE);
+    });
+
+    it("loadErrorUIData() creates the correct action type.", function() {
+      assert.equal(uidata.loadErrorUIData(null, null).type, uidata.LOAD_ERROR);
     });
   });
 
@@ -40,10 +52,7 @@ describe("UIData reducer", function() {
     };
 
     it("should have the correct default value.", function() {
-      let expected = {
-        inFlight: 0,
-        data: {},
-      };
+      let expected = {};
       assert.deepEqual(state, expected);
     });
 
@@ -60,35 +69,64 @@ describe("UIData reducer", function() {
       dispatch(uidata.setUIDataKey(boolKey, bool));
       dispatch(uidata.setUIDataKey(numKey, num));
 
-      assert.isDefined(state.data);
-      assert.lengthOf(_.keys(state.data), 3);
-      assert.equal(state.data[objKey], obj);
-      assert.equal(state.data[boolKey], bool);
-      assert.equal(state.data[numKey], num);
+      assert.lengthOf(_.keys(state), 3);
+      assert.equal(state[objKey].data, obj);
+      assert.equal(state[boolKey].data, bool);
+      assert.equal(state[numKey].data, num);
 
       // validate overwrite.
       let obj2 = { value: 2 };
       dispatch(uidata.setUIDataKey(objKey, obj2));
-      assert.lengthOf(_.keys(state.data), 3);
-      assert.equal(state.data[objKey], obj2);
+      assert.lengthOf(_.keys(state), 3);
+      assert.equal(state[objKey].data, obj2);
     });
 
-    it("should correctly dispatch errorUIData.", function() {
+    it("should correctly dispatch loadErrorUIData.", function () {
+      let key1 = "key1";
+      let key2 = "key2";
       let err = new Error("an error.");
-      dispatch(uidata.errorUIData(err));
-      assert.equal(state.error, err);
+      dispatch(uidata.loadErrorUIData(key1, err));
+      assert.equal(state[key1].lastLoadError, err);
 
-      dispatch(uidata.setUIDataKey("num", 4));
-      assert.isNull(state.error);
+      dispatch(uidata.setUIDataKey(key2, 4));
+      assert.isNull(state[key2].lastLoadError);
     });
 
-    it("should correctly dispatch fetchMetrics and fetchMetricsComplete", function() {
-      dispatch(uidata.fetchUIData());
-      assert.equal(state.inFlight, 1);
-      dispatch(uidata.fetchUIData());
-      assert.equal(state.inFlight, 2);
-      dispatch(uidata.fetchCompleteUIData());
-      assert.equal(state.inFlight, 1);
+    it("should correctly dispatch saveErrorUIData.", function () {
+      let key1 = "key1";
+      let key2 = "key2";
+      let err = new Error("an error.");
+      dispatch(uidata.saveErrorUIData(key1, err));
+      assert.equal(state[key1].lastSaveError, err);
+
+      dispatch(uidata.setUIDataKey(key2, 4));
+      assert.isNull(state[key2].lastSaveError);
+    });
+
+    it("should correctly dispatch beginSaveUIData and completeSaveUIData", function () {
+      let key1 = "key1";
+      let key2 = "key2";
+      let keys = [key1, key2];
+      dispatch(uidata.beginSaveUIData(keys));
+      assert.lengthOf(_.keys(state), 2);
+      assert(state[key1].saving);
+      assert(state[key2].saving);
+      dispatch(uidata.completeSaveUIData(keys));
+      assert.isFalse(state[key1].saving);
+      assert.isFalse(state[key2].saving);
+    });
+
+    it("should correctly dispatch beginLoadUIData and completeLoadUIData", function () {
+      let key1 = "key1";
+      let key2 = "key2";
+      let keys = [key1, key2];
+      dispatch(uidata.beginLoadUIData(keys));
+      assert.lengthOf(_.keys(state), 2);
+      assert(state[key1].loading);
+      assert(state[key2].loading);
+      dispatch(uidata.completeLoadUIData(keys));
+      assert.isFalse(state[key1].loading);
+      assert.isFalse(state[key2].loading);
     });
   });
 
@@ -109,11 +147,11 @@ describe("UIData reducer", function() {
     let uiObj2 = 1234;
 
     let saveUIData = function(...values: uidata.KeyValue[]): Promise<void> {
-      return uidata.saveUIData.apply(this, values)(dispatch);
+      return uidata.saveUIData.apply(this, values)(dispatch, () => { return { uiData: state }; });
     };
 
     let loadUIData = function(...keys: string[]): Promise<void> {
-      return uidata.loadUIData.apply(this, keys)(dispatch);
+      return uidata.loadUIData.apply(this, keys)(dispatch, () => { return { uiData: state }; });
     };
 
     beforeEach(function () {
@@ -127,7 +165,8 @@ describe("UIData reducer", function() {
         matcher: "/_admin/v1/uidata",
         method: "POST",
         response: (url: string, requestObj: RequestInit) => {
-          assert.equal(state.inFlight, 1);
+          assert(state[uiKey1].saving);
+          assert(state[uiKey2].saving);
 
           let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(requestObj.body as ArrayBuffer).getKeyValues();
 
@@ -151,13 +190,25 @@ describe("UIData reducer", function() {
         {key: uiKey2, value: uiObj2}
       );
 
-      return p.then(() => {
+      // Second save should be ignored.
+      let p2 = saveUIData(
+        {key: uiKey1, value: uiObj1},
+        {key: uiKey2, value: uiObj2}
+      );
+
+      return Promise.all([p, p2]).then(() => {
         assert.lengthOf(fetchMock.calls("/_admin/v1/uidata"), 1);
-        assert.lengthOf(_.keys(state.data), 2);
-        assert.equal(state.data[uiKey1], uiObj1);
-        assert.equal(state.data[uiKey2], uiObj2);
-        assert.isNull(state.error);
-        assert.equal(state.inFlight, 0);
+        assert.lengthOf(_.keys(state), 2);
+        assert.equal(state[uiKey1].data, uiObj1);
+        assert.equal(state[uiKey2].data, uiObj2);
+        assert.isNull(state[uiKey1].lastSaveError);
+        assert.isNull(state[uiKey1].lastLoadError);
+        assert.isNull(state[uiKey2].lastSaveError);
+        assert.isNull(state[uiKey2].lastLoadError);
+        assert.isFalse(state[uiKey1].saving);
+        assert.isFalse(state[uiKey1].loading);
+        assert.isFalse(state[uiKey2].saving);
+        assert.isFalse(state[uiKey2].loading);
       });
     });
 
@@ -166,7 +217,7 @@ describe("UIData reducer", function() {
         matcher: "/_admin/v1/uidata",
         method: "POST",
         response: () => {
-          return { throws: new Error() };
+          return { throws: new Error(), status: 500};
         },
       });
 
@@ -177,9 +228,17 @@ describe("UIData reducer", function() {
 
       return p.then(() => {
         assert.lengthOf(fetchMock.calls("/_admin/v1/uidata"), 1);
-        assert.lengthOf(_.keys(state.data), 0);
-        assert.isNotNull(state.error);
-        assert.equal(state.inFlight, 0);
+        assert.lengthOf(_.keys(state), 2);
+        assert.isFalse(state[uiKey1].saving);
+        assert.isFalse(state[uiKey2].saving);
+        assert.isUndefined(state[uiKey1].data);
+        assert.isUndefined(state[uiKey2].data);
+        assert.notProperty(state[uiKey1], "data");
+        assert.notProperty(state[uiKey2], "data");
+        assert.instanceOf(state[uiKey1].lastSaveError, Error);
+        assert.isUndefined(state[uiKey1].lastLoadError);
+        assert.instanceOf(state[uiKey2].lastSaveError, Error);
+        assert.isUndefined(state[uiKey2].lastLoadError);
       });
     });
 
@@ -192,7 +251,8 @@ describe("UIData reducer", function() {
         response: () => {
           // FetchMock URL must match the above string exactly, requesting both
           // keys.
-          assert.equal(state.inFlight, 1);
+          assert(state[uiKey1].loading);
+          assert(state[uiKey2].loading);
 
           let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
           let setValue = function(key: string, obj: Object) {
@@ -210,14 +270,21 @@ describe("UIData reducer", function() {
       });
 
       let p = loadUIData(uiKey1, uiKey2);
+      let p2 = loadUIData(uiKey1, uiKey2); // Second load should be ignored.
 
-      return p.then(() => {
+      return Promise.all([p, p2]).then(() => {
         assert.lengthOf(fetchMock.calls(expectedURL), 1);
-        assert.lengthOf(_.keys(state.data), 2);
-        assert.deepEqual(state.data[uiKey1], uiObj1);
-        assert.deepEqual(state.data[uiKey2], uiObj2);
-        assert.isNull(state.error);
-        assert.equal(state.inFlight, 0);
+        assert.lengthOf(_.keys(state), 2);
+        assert.deepEqual(state[uiKey1].data, uiObj1);
+        assert.deepEqual(state[uiKey2].data, uiObj2);
+        assert.isNull(state[uiKey1].lastSaveError);
+        assert.isNull(state[uiKey1].lastLoadError);
+        assert.isNull(state[uiKey2].lastSaveError);
+        assert.isNull(state[uiKey2].lastLoadError);
+        assert.isFalse(state[uiKey1].saving);
+        assert.isFalse(state[uiKey1].loading);
+        assert.isFalse(state[uiKey2].saving);
+        assert.isFalse(state[uiKey2].loading);
       });
     });
 
@@ -233,9 +300,17 @@ describe("UIData reducer", function() {
 
       return p.then(() => {
         assert.lengthOf(fetchMock.calls("^/_admin/v1/uidata"), 1);
-        assert.lengthOf(_.keys(state.data), 0);
-        assert.isNotNull(state.error);
-        assert.equal(state.inFlight, 0);
+        assert.lengthOf(_.keys(state), 2);
+        assert.isFalse(state[uiKey1].loading);
+        assert.isFalse(state[uiKey2].loading);
+        assert.isUndefined(state[uiKey1].data);
+        assert.isUndefined(state[uiKey2].data);
+        assert.notProperty(state[uiKey1], "data");
+        assert.notProperty(state[uiKey2], "data");
+        assert.instanceOf(state[uiKey1].lastLoadError, Error);
+        assert.isUndefined(state[uiKey1].lastSaveError);
+        assert.instanceOf(state[uiKey2].lastLoadError, Error);
+        assert.isUndefined(state[uiKey2].lastSaveError);
       });
     });
 
@@ -247,7 +322,7 @@ describe("UIData reducer", function() {
       fetchMock.mock({
         matcher: expectedURL,
         response: () => {
-          assert.equal(state.inFlight, 1);
+          assert(state[missingKey].loading);
 
           let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
 
@@ -261,10 +336,13 @@ describe("UIData reducer", function() {
 
       return p.then(() => {
         assert.lengthOf(fetchMock.calls(expectedURL), 1);
-        assert.lengthOf(_.keys(state.data), 1);
-        assert.deepEqual(state.data[missingKey], undefined);
-        assert.isNull(state.error);
-        assert.equal(state.inFlight, 0);
+        assert.lengthOf(_.keys(state), 1);
+        assert.equal(state[missingKey].data, undefined);
+        assert.property(state[missingKey], "data");
+        assert.isNull(state[missingKey].lastLoadError);
+        assert.isNull(state[missingKey].lastSaveError);
+        assert.isFalse(state[missingKey].saving);
+        assert.isFalse(state[missingKey].loading);
       });
     });
   });
