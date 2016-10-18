@@ -30,6 +30,7 @@
 		JoinReaderSpec
 		SorterSpec
 		EvaluatorSpec
+		DistinctSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec

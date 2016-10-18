@@ -214,6 +214,12 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 		}
 		return newEvaluator(&f.FlowCtx, ps.Core.Evaluator, inputs[0], outputs[0])
 	}
+	if ps.Core.Distinct != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newDistinct(&f.FlowCtx, ps.Core.Distinct, inputs[0], outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor %s", ps)
 }
 
