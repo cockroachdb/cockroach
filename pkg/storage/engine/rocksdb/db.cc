@@ -1395,6 +1395,8 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // Increasing block_size decreases memory usage at the cost of
   // increased read amplification.
   table_options.block_size = db_opts.block_size;
+  table_options.cache_index_and_filter_blocks = true;
+  table_options.pin_l0_filter_and_index_blocks_in_cache = true;
 
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
