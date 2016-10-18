@@ -164,12 +164,12 @@ func (c *Container) Remove() error {
 	})
 }
 
-// Kill stops a running container, without removing it.
-func (c *Container) Kill() error {
+// Kill send the signal to the specified container.
+func (c *Container) Kill(signal string) error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
 	_ = c.Unpause()
-	if err := c.cluster.client.ContainerKill(context.Background(), c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
+	if err := c.cluster.client.ContainerKill(context.Background(), c.id, signal); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
 	c.cluster.expectEvent(c, eventDie)

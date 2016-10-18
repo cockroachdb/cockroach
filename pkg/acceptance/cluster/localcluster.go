@@ -129,6 +129,39 @@ type testNode struct {
 	stores  []testStore
 }
 
+// Node quit. First, we'll send SIGTERM to quit the node, sleep about eight seconds,
+// Then we check the node's status. Repeat this at most two times, after this,
+// If the node's status is still not "exited", we should send SIGKILL to kill the node.
+func (t *testNode) kill() error {
+	// First time quit.
+	if err := t.Kill("SIGTERM"); err != nil {
+		return err
+	}
+	time.Sleep(8 * time.Second)
+	s, err := t.Inspect()
+	if err != nil {
+		return err
+	}
+	if s.State.Status == "exited" {
+		return nil
+	}
+	// Do the same thing again.
+	if err := t.Kill("SIGTERM"); err != nil {
+		return err
+	}
+	// Now we sleep little time.
+	time.Sleep(2 * time.Second)
+	s, err = t.Inspect()
+	if s.State.Status == "exited" {
+		return nil
+	}
+	// Send SIGKILL to container.
+	if err := t.Kill("SIGKILL"); err != nil {
+		return err
+	}
+	return nil
+}
+
 // LocalCluster manages a local cockroach cluster running on docker. The
 // cluster is composed of a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
@@ -708,7 +741,7 @@ func (l *LocalCluster) stop() {
 	}
 
 	if l.vols != nil {
-		maybePanic(l.vols.Kill())
+		maybePanic(l.vols.Kill("SIGKILL"))
 		maybePanic(l.vols.Remove())
 		l.vols = nil
 	}
@@ -723,7 +756,7 @@ func (l *LocalCluster) stop() {
 		}
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
-		maybePanic(n.Kill())
+		maybePanic(n.kill())
 		if crashed && outputLogDir == "" {
 			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
 		}
@@ -806,7 +839,7 @@ func (l *LocalCluster) NumNodes() int {
 
 // Kill kills the i-th node.
 func (l *LocalCluster) Kill(i int) error {
-	return l.Nodes[i].Kill()
+	return l.Nodes[i].Kill("SIGKILL")
 }
 
 // Restart restarts the given node. If the node isn't running, this starts it.
