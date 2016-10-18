@@ -74,6 +74,9 @@ lint: yarn.installed typings.installed
 test: yarn.installed typings.installed jspm.installed
 	karma start
 
+test-debug: yarn.installed typings.installed jspm.installed
+	karma start --browsers Chrome --no-single-run --reporters mocha
+
 GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png release.html
 
 $(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
