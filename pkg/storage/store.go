@@ -715,9 +715,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
-		// TODO(radu): should pass ambient
 		s.scanner = newReplicaScanner(
-			ctx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
+			s.cfg.AmbientCtx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
@@ -729,9 +728,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
-		// TODO(radu): should pass ambient
 		s.consistencyScanner = newReplicaScanner(
-			ctx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
+			s.cfg.AmbientCtx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
 		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
