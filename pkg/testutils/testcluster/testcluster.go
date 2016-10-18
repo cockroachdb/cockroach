@@ -255,7 +255,7 @@ func (tc *TestCluster) SplitRange(
 		},
 		SplitKey: splitKey,
 	}
-	_, pErr := client.SendWrapped(tc.Servers[0].DistSender(), nil, &splitReq)
+	_, pErr := client.SendWrapped(context.Background(), tc.Servers[0].DistSender(), &splitReq)
 	if pErr != nil {
 		return nil, nil, errors.Errorf(
 			"%q: split unexpected error: %s", splitReq.SplitKey, pErr)
@@ -438,7 +438,8 @@ func (tc *TestCluster) FindRangeLease(
 		},
 	}
 	leaseResp, pErr := client.SendWrappedWith(
-		hintServer.DB().GetSender(), nil,
+		context.TODO(),
+		hintServer.DB().GetSender(),
 		roachpb.Header{
 			// INCONSISTENT read, since we want to make sure that the node used to
 			// send this is the one that processes the command, for the hint to

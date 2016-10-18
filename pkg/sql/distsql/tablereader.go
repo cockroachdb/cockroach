@@ -102,7 +102,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	ctx, span := tracing.ChildSpan(tr.ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
-	log.VEventf(1, ctx, "starting (filter: %s)", &tr.filter)
+	log.VEventf(ctx, 1, "starting (filter: %s)", &tr.filter)
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}
@@ -127,7 +127,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
 		if !tr.output.PushRow(outRow) {
-			log.VEventf(1, ctx, "no more rows required")
+			log.VEventf(ctx, 1, "no more rows required")
 			tr.output.Close(nil)
 			return
 		}
