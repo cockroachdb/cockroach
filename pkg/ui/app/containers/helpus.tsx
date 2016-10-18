@@ -3,58 +3,108 @@ import _ from "lodash";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "../redux/state";
-import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData } from "../redux/uiData";
+import * as uiData from "../redux/uiData";
 import { setUISetting } from "../redux/ui";
 import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
 
 export interface HelpUsProps {
-  optInAttributes: OptInAttributes;
-  loadUIData: typeof loadUIData;
-  saveUIData: typeof saveUIData;
+  optInAttributes: uiData.OptInAttributes;
+  valid: boolean;
+  saving: boolean;
+  loading: boolean;
+  saveError: Error;
+  loadError: Error;
+  helpusDismissed: boolean;
+  loadUIData: typeof uiData.loadUIData;
+  saveUIData: typeof uiData.saveUIData;
   setUISetting: typeof setUISetting;
+}
+
+class HelpUsState {
+  optInAttributes = new uiData.OptInAttributes();
+  initialized?= false;
+  lastSaveFailed?: boolean;
 }
 
 /**
  * Renders the main content of the help us page.
  */
-export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
-  state = new OptInAttributes();
+export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
+  state = new HelpUsState();
 
   static title() {
     return <h2>Help Cockroach Labs</h2>;
   }
 
   componentWillMount() {
-    this.props.loadUIData(KEY_HELPUS);
-    this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+    this.setState({ initialized: false } as any);
+    this.props.loadUIData(uiData.KEY_HELPUS);
+    if (!this.props.helpusDismissed) {
+      this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+    }
   }
 
   componentWillReceiveProps(props: HelpUsProps) {
-    this.setState(props.optInAttributes);
+    if (props.valid && !this.state.initialized) {
+      this.setState({ optInAttributes: props.optInAttributes || new uiData.OptInAttributes(), initialized: true });
+    }
+    if (props.saveError) {
+      this.setState({ lastSaveFailed: true } as any);
+    } else if (props.saving) {
+      this.setState({ lastSaveFailed: false } as any);
+    }
   }
 
-  makeOnChange = (f: (o: OptInAttributes, newVal: any) => void) => {
+  makeOnChange = (f: (o: uiData.OptInAttributes, newVal: any) => void) => {
     return (e: React.FormEvent) => {
       let target = e.target as HTMLInputElement;
       let value = target.type === "checkbox" ? target.checked : target.value;
-      let newState = _.clone(this.state);
-      f(newState, value);
-      this.setState(newState);
+      let newAttributes = _.clone(this.state.optInAttributes);
+      f(newAttributes, value);
+      this.setState({optInAttributes: newAttributes});
     };
   }
 
   submit = (e: React.FormEvent) => {
     e.preventDefault();
     let target = e.target as HTMLFormElement;
-    // TODO: add "saving..." text and show/hide the required text
     if (target.checkValidity()) {
-      this.props.saveUIData({ key: KEY_HELPUS, value: this.state });
+      this.props.saveUIData(
+        { key: uiData.KEY_HELPUS, value: this.state.optInAttributes },
+        { key: uiData.KEY_OPTIN, value: this.state.optInAttributes.optin },
+        // Save an additional key to track that this data is not synchronized to
+        // the Cockroach Labs server.
+        { key: uiData.KEY_REGISTRATION_SYNCHRONIZED, value: false },
+      );
     }
     return false;
   }
 
   render() {
-    let attributes: OptInAttributes = this.state;
+    let attributes: uiData.OptInAttributes = this.state.optInAttributes;
+    let saving = this.props.saving;
+    let {saveError, loadError } = this.props;
+    let message = "Saved.";
+    if (saving) {
+      message = "Saving...";
+    } else if (this.state.lastSaveFailed) {
+      message = "Save failed";
+    }
+
+    let showMessage = saving || saveError || this.state.lastSaveFailed;
+
+    if (!this.state.initialized) {
+      return <div className="section">
+        <div className="header">Usage Reporting</div>
+          <div className="form">
+            {loadError ? "There was an error retrieving data from CockroachDB." : "Loading optin data."} To manually
+            delete your opt-in settings, please run the following in the
+            CockroachDB sql terminal:
+          <pre className="sql">DELETE FROM system.ui WHERE key IN ('helpus', 'registration_synchronized', 'server.optin-reporting');</pre>
+          </div>
+        </div>;
+    }
+
     return <div className="section">
       <div className="header">Usage Reporting</div>
       <div className="form">
@@ -63,13 +113,13 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
         </div>
         <hr />
         <form onSubmit={this.submit}>
-          <input name="firstname" placeholder="First Name" value={attributes.firstname} onChange={this.makeOnChange((o, v) => o.firstname = v)} />
+          <input name="firstname" placeholder="First Name" value={attributes.firstname || ""} onChange={this.makeOnChange((o, v) => o.firstname = v)} />
           <span className="status"></span>
-          <input name="lastname" placeholder="Last Name" value={attributes.lastname} onChange={this.makeOnChange((o, v) => o.lastname = v)} />
+          <input name="lastname" placeholder="Last Name" value={attributes.lastname || ""} onChange={this.makeOnChange((o, v) => o.lastname = v)} />
           <span className="status"></span>
-          <input name="email" type="email" required={true} placeholder="Email*" value={attributes.email} onChange={this.makeOnChange((o, v) => o.email = v)} />
+          <input name="email" type="email" required={true} placeholder="Email*" value={attributes.email || ""} onChange={this.makeOnChange((o, v) => o.email = v)} />
           <span className="status"></span>
-          <input name="company" placeholder="Company" value={attributes.company} onChange={this.makeOnChange((o, v) => o.company = v)} />
+          <input name="company" placeholder="Company" value={attributes.company || ""} onChange={this.makeOnChange((o, v) => o.company = v)} />
           <span className="status"></span>
           <div>
             <input type="checkbox" name="optin" id="optin" checked={attributes.optin} onChange={this.makeOnChange((o, v) => o.optin = v)} />
@@ -85,30 +135,49 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
             </div>
           </div>
           <div>
-            <div>
-              <input type="checkbox" name="updates" id="updates" checked={attributes.updates} onChange={this.makeOnChange((o, v) => o.updates = v)} />
-              <label htmlFor="updates">Send me product and feature updates</label>
-            </div>
+            {(attributes.updates && (this.props.optInAttributes.updates === this.state.optInAttributes.updates)) ? null :
+              <div>
+                <input type="checkbox" name="updates" id="updates" checked={attributes.updates || false} onChange={this.makeOnChange((o, v) => o.updates = v)} />
+                <label htmlFor="updates">Send me product and feature updates.</label>
+                <div className="optin-text">
+                  You will not be able to deselect this option from the Admin UI.
+                </div>
+              </div>
+            }
           </div>
-          <button className="right">Submit</button>
+          <button disabled={saving} className="left">Submit</button>
+          <div className={classNames("saving", saving ? "no-animate" : null)} style={showMessage ? { opacity: 1.0 } : null}>{message}</div>
         </form>
       </div>
     </div>;
   }
 }
 
-let optinAttributes = (state: AdminUIState): OptInAttributes => state && state.uiData && state.uiData.data && state.uiData.data[KEY_HELPUS];
+// Get the current data even if it isn't valid.
+let optinAttributes = (state: AdminUIState): uiData.OptInAttributes => state.uiData[uiData.KEY_HELPUS].data;
+let valid = (state: AdminUIState): boolean => uiData.isValid(state, uiData.KEY_HELPUS);
+let saving = (state: AdminUIState): boolean => uiData.isSaving(state, uiData.KEY_HELPUS);
+let loading = (state: AdminUIState): boolean => uiData.isLoading(state, uiData.KEY_HELPUS);
+let saveError = (state: AdminUIState): Error => uiData.getSaveError(state, uiData.KEY_HELPUS);
+let loadError = (state: AdminUIState): Error => uiData.getLoadError(state, uiData.KEY_HELPUS);
+let helpusDismissed = (state: AdminUIState): boolean => uiData.getData(state, HELPUS_BANNER_DISMISSED_KEY);
 
 // Connect the HelpUs class with our redux store.
 let helpusConnected = connect(
   (state: AdminUIState) => {
     return {
       optInAttributes: optinAttributes(state),
+      valid: valid(state),
+      saving: saving(state),
+      loading: loading(state),
+      saveError: saveError(state),
+      loadError: loadError(state),
+      helpusDismissed: helpusDismissed(state),
     };
   },
   {
-    loadUIData,
-    saveUIData,
+    loadUIData: uiData.loadUIData,
+    saveUIData: uiData.saveUIData,
     setUISetting,
   }
 )(HelpUs);
