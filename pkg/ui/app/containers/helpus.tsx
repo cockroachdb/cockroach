@@ -1,6 +1,7 @@
 import * as React from "react";
 import _ from "lodash";
 import { connect } from "react-redux";
+import classNames from "classnames";
 
 import { AdminUIState } from "../redux/state";
 import { KEY_HELPUS, KEY_REGISTRATION_SYNCHRONIZED, OptInAttributes, loadUIData, saveUIData } from "../redux/uiData";
@@ -9,6 +10,9 @@ import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
 
 export interface HelpUsProps {
   optInAttributes: OptInAttributes;
+  saving: boolean;
+  saveError: Error;
+  helpusDismissed: boolean;
   loadUIData: typeof loadUIData;
   saveUIData: typeof saveUIData;
   setUISetting: typeof setUISetting;
@@ -26,7 +30,9 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
 
   componentWillMount() {
     this.props.loadUIData(KEY_HELPUS);
-    this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+    if (!this.props.helpusDismissed) {
+      this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+    }
   }
 
   componentWillReceiveProps(props: HelpUsProps) {
@@ -60,6 +66,8 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
 
   render() {
     let attributes: OptInAttributes = this.state;
+    let saving = this.props.saving;
+    let saveFailed = this.props.saveError;
     return <div className="section">
       <div className="header">Usage Reporting</div>
       <div className="form">
@@ -77,7 +85,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
           <input name="company" placeholder="Company" value={attributes.company} onChange={this.makeOnChange((o, v) => o.company = v)} />
           <span className="status"></span>
           <div>
-            <input type="checkbox" name="optin" id="optin" checked={attributes.optin} onChange={this.makeOnChange((o, v) => o.optin = v)} />
+            <input type="checkbox" name="optin" id="optin" checked={attributes.optin || false} onChange={this.makeOnChange((o, v) => o.optin = v)} />
             <label htmlFor="optin">Share data with Cockroach Labs</label>
             <div className="optin-text">
                   By enabling this feature, you are agreeing to send us anonymous,
@@ -90,25 +98,37 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
             </div>
           </div>
           <div>
-            <div>
-              <input type="checkbox" name="updates" id="updates" checked={attributes.updates} onChange={this.makeOnChange((o, v) => o.updates = v)} />
-              <label htmlFor="updates">Send me product and feature updates</label>
-            </div>
+            {(attributes.updates && _.isEqual(this.props.optInAttributes, this.state)) ? null :
+              <div>
+                <input type="checkbox" name="updates" id="updates" checked={attributes.updates || false} onChange={this.makeOnChange((o, v) => o.updates = v)} />
+                <label htmlFor="updates">Send me product and feature updates.</label>
+                <div className="optin-text">
+                  You will not be able to deselect this option from the Admin UI.
+                </div>
+              </div>
+            }
           </div>
-          <button className="right">Submit</button>
+          <button disabled={saving} className="left">Submit</button>
+          <div className={classNames("saving", saving ? "no-animate" : null)} style={(saving || saveFailed) ? { opacity: 1.0 } : null}>{saving ? "Saving..." : (saveFailed ? "Save failed." : "Saved.")}</div>
         </form>
       </div>
     </div>;
   }
 }
 
-let optinAttributes = (state: AdminUIState): OptInAttributes => state && state.uiData && state.uiData.data && state.uiData.data[KEY_HELPUS];
+let optinAttributes = (state: AdminUIState): OptInAttributes => state.uiData[KEY_HELPUS] && state.uiData[KEY_HELPUS].data || {};
+let saving = (state: AdminUIState): boolean => state.uiData[KEY_HELPUS] && state.uiData[KEY_HELPUS].saving;
+let saveError = (state: AdminUIState): Error => state.uiData[KEY_HELPUS] && state.uiData[KEY_HELPUS].lastError;
+let helpusDismissed = (state: AdminUIState): boolean => state.uiData[HELPUS_BANNER_DISMISSED_KEY] && state.uiData[HELPUS_BANNER_DISMISSED_KEY].data;
 
 // Connect the HelpUs class with our redux store.
 let helpusConnected = connect(
   (state: AdminUIState) => {
     return {
       optInAttributes: optinAttributes(state),
+      saving: saving(state),
+      saveError: saveError(state),
+      helpusDismissed: helpusDismissed(state),
     };
   },
   {

@@ -5,11 +5,14 @@ import ByteBuffer from "bytebuffer";
 import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";
 import { getUIData, setUIData } from "../util/api";
+import { AdminUIState } from "./state";
 
 export const SET = "cockroachui/uidata/SET_OPTIN";
 export const ERROR = "cockroachui/uidata/ERROR";
-export const FETCH = "cockroachui/uidata/FETCH";
-export const FETCH_COMPLETE = "cockroachui/uidata/FETCH_COMPLETE";
+export const LOAD = "cockroachui/uidata/LOAD";
+export const LOAD_COMPLETE = "cockroachui/uidata/LOAD_COMPLETE";
+export const SAVE = "cockroachui/uidata/SAVE";
+export const SAVE_COMPLETE = "cockroachui/uidata/SAVE_COMPLETE";
 
 // Opt In Attribute Keys
 export const KEY_HELPUS: string = "helpus";
@@ -36,40 +39,72 @@ export class OptInAttributes {
 // VERSION_DISMISSED_KEY is the uiData key on the server that tracks when the outdated banner was last dismissed.
 export const VERSION_DISMISSED_KEY = "version_dismissed";
 
+export class UIData {
+  loading = false;
+  saving = false;
+  lastError: Error;
+  data: any;
+}
+
 /**
  * UIDataSet maintains the current values of fields that are persisted to the
  * server as UIData. Fields are maintained in this collection as untyped
  * objects.
  */
 export class UIDataSet {
-  inFlight = 0;
-  error: Error;
-  data: {[key: string]: any} = {};
+  [key: string]: UIData;
 }
 
 /**
  * Reducer which modifies a UIDataSet.
  */
-export default function(state = new UIDataSet(), action: Action): UIDataSet {
+export default function (state = new UIDataSet(), action: Action): UIDataSet {
+  let keys: string[];
   switch (action.type) {
     case SET:
       let {key, value} = (action as PayloadAction<KeyValue>).payload;
       state = _.clone(state);
-      state.data[key] = value;
-      state.error = null;
+      state[key] = _.clone(state[key]) || new UIData();
+      state[key].data = value;
+      state[key].lastError = null;
       return state;
     case ERROR:
-      let { payload } = action as PayloadAction<Error>;
+      let { key: errorKey, error } = (action as PayloadAction<KeyedError>).payload;
       state = _.clone(state);
-      state.error = payload;
+      state[errorKey] = _.clone(state[errorKey]) || new UIData();
+      state[errorKey].lastError = error;
       return state;
-    case FETCH:
+    case SAVE:
+      keys = (action as PayloadAction<string[]>).payload;
       state = _.clone(state);
-      state.inFlight++;
+      _.each(keys, (k) => {
+        state[k] = _.clone(state[k]) || new UIData();
+        state[k].saving = true;
+      });
       return state;
-    case FETCH_COMPLETE:
+    case SAVE_COMPLETE:
+      keys = (action as PayloadAction<string[]>).payload;
       state = _.clone(state);
-      state.inFlight--;
+      _.each(keys, (k) => {
+        state[k] = _.clone(state[k]) || new UIData();
+        state[k].saving = false;
+      });
+      return state;
+    case LOAD:
+      keys = (action as PayloadAction<string[]>).payload;
+      state = _.clone(state);
+      _.each(keys, (k) => {
+        state[k] = _.clone(state[k]) || new UIData();
+        state[k].loading = true;
+      });
+      return state;
+    case LOAD_COMPLETE:
+      keys = (action as PayloadAction<string[]>).payload;
+      state = _.clone(state);
+      _.each(keys, (k) => {
+        state[k] = _.clone(state[k]) || new UIData();
+        state[k].loading = false;
+      });
       return state;
     default:
       return state;
@@ -90,28 +125,50 @@ export function setUIDataKey(key: string, value: Object): PayloadAction<KeyValue
  * errorUIData occurs when an asynchronous function related to UIData encounters
  * an error.
  */
-export function errorUIData(err: Error): PayloadAction<Error> {
+export function errorUIData(key: string, error: Error): PayloadAction<KeyedError> {
   return {
     type: ERROR,
-    payload: err,
+    payload: { key, error },
   };
 }
 
 /**
- * fetchUIData occurs when an asynchronous request for UIData begins.
+ * loadUIData occurs when an asynchronous request to load UIData begins.
  */
-export function fetchUIData(): Action {
+export function beginLoadUIData(keys: string[]): PayloadAction<string[]> {
   return {
-    type: FETCH,
+    type: LOAD,
+    payload: keys,
   };
 }
 
 /**
- * fetchCompleteUIData occurs when an asynchronous request for UIData completes.
+ * loadCompleteUIData occurs when an asynchronous request to load UIData completes.
  */
-export function fetchCompleteUIData(): Action {
+export function completeLoadUIData(keys: string[]): PayloadAction<string[]> {
   return {
-    type: FETCH_COMPLETE,
+    type: LOAD_COMPLETE,
+    payload: keys,
+  };
+}
+
+/**
+ * saveUIData occurs when an asynchronous request for UIData begins.
+ */
+export function beginSaveUIData(keys: string[]): PayloadAction<string[]> {
+  return {
+    type: SAVE,
+    payload: keys,
+  };
+}
+
+/**
+ * saveCompleteUIData occurs when an asynchronous request for UIData completes.
+ */
+export function completeSaveUIData(keys: string[]): PayloadAction<string[]> {
+  return {
+    type: SAVE_COMPLETE,
+    payload: keys,
   };
 }
 
@@ -124,13 +181,26 @@ export interface KeyValue {
 }
 
 /**
+ * KeyedError associates an error with a key to use as an action payload.
+ */
+export interface KeyedError {
+  key: string;
+  error: Error;
+}
+
+/**
  * saveUIData saves the value one (or more) UIData objects to the server. After
  * the values have been successfully persisted to the server, they are updated
  * in the local UIDataSet store.
  */
-export function saveUIData<S>(...values: KeyValue[]) {
-  return (dispatch: Dispatch<S>, getState: () => S): Promise<void> => {
-    dispatch(fetchUIData());
+export function saveUIData(...values: KeyValue[]) {
+  return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
+    let uiData = getState().uiData;
+    values = _.filter(values, (kv) => !uiData[kv.key] || (!uiData[kv.key].saving && !uiData[kv.key].loading));
+    if (values.length === 0) {
+      return;
+    }
+    dispatch(beginSaveUIData(_.map(values, (kv) => kv.key)));
 
     // Encode data for each UIData key. Each object is stringified and written
     // to a ByteBuffer.
@@ -144,10 +214,10 @@ export function saveUIData<S>(...values: KeyValue[]) {
       // SetUIDataResponse is empty. A positive return indicates success.
       _.each(values, (kv) => dispatch(setUIDataKey(kv.key, kv.value)));
     }).catch((error) => {
-      dispatch(errorUIData(error));
+      _.each(values, (kv) => dispatch(errorUIData(kv.key, error)));
     }).then(() => {
       // Runs in all cases.
-      dispatch(fetchCompleteUIData());
+      dispatch(completeSaveUIData(_.map(values, (kv) => kv.key)));
     });
   };
 }
@@ -155,9 +225,14 @@ export function saveUIData<S>(...values: KeyValue[]) {
 /**
  * loadUIData loads the values of the give UIData keys from the server.
  */
-export function loadUIData<S>(...keys: string[]) {
-  return (dispatch: Dispatch<S>, getState: () => S): Promise<void> => {
-    dispatch(fetchUIData());
+export function loadUIData(...keys: string[]) {
+  return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
+    let uiData = getState().uiData;
+    keys = _.filter(keys, (k) => !uiData[k] || (!uiData[k].saving && !uiData[k].loading));
+    if (keys.length === 0) {
+      return;
+    }
+    dispatch(beginLoadUIData(keys));
 
     return getUIData(new protos.cockroach.server.serverpb.GetUIDataRequest({ keys })).then((response) => {
       let keyValues = response.getKeyValues();
@@ -174,10 +249,10 @@ export function loadUIData<S>(...keys: string[]) {
         }
       });
     }).catch((error) => {
-      dispatch(errorUIData(error));
+      _.each(keys, (key) => dispatch(errorUIData(key, error)));
     }).then(() => {
       // Runs in all cases.
-      dispatch(fetchCompleteUIData());
+      dispatch(completeLoadUIData(keys));
     });
   };
 }

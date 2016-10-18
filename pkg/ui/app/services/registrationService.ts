@@ -17,7 +17,7 @@ let errors = 0;
  *  This function, when passed in a redux store, generates a service which keeps
  *  the user's registration data synchronized with the Cockroach Labs servers.
  */
-export default function(store: Store<AdminUIState>) {
+export default function (store: Store<AdminUIState>) {
   return () => {
     let dispatch: (a: any) => any = store.dispatch;
     let state: AdminUIState = store.getState();
@@ -26,7 +26,9 @@ export default function(store: Store<AdminUIState>) {
     // Cockroach Labs server is already being contacted, or if the number of
     // errors seen from trying to contact the Cockroach Labs server is at the
     // limit.
-    if (state.uiData.inFlight > 0 || saving || errors >= ERROR_LIMIT) {
+    if (state.uiData[KEY_HELPUS] && (state.uiData[KEY_HELPUS].saving || state.uiData[KEY_HELPUS].loading) ||
+      state.uiData[KEY_REGISTRATION_SYNCHRONIZED] && (state.uiData[KEY_REGISTRATION_SYNCHRONIZED].saving || state.uiData[KEY_REGISTRATION_SYNCHRONIZED].loading) ||
+      saving || errors >= ERROR_LIMIT) {
         return;
     }
 
@@ -34,40 +36,40 @@ export default function(store: Store<AdminUIState>) {
     let requesting = false;
 
     // Ensure all necessary uiData keys have been retrieved from the backend.
-    if (_.some(neededKeys, (key) => !_.has(state.uiData.data, key))) {
-        dispatch(loadUIData.apply(null, neededKeys));
-        requesting = true;
+    if (_.some(neededKeys, (key) => !_.has(state.uiData[key], "data"))) {
+      dispatch(loadUIData.apply(null, neededKeys));
+      requesting = true;
     }
 
     // If registration is synchronized, don't continue.
-    if (state.uiData.data[KEY_REGISTRATION_SYNCHRONIZED]) {
-        return;
+    if (state.uiData[KEY_REGISTRATION_SYNCHRONIZED] && state.uiData[KEY_REGISTRATION_SYNCHRONIZED].data) {
+      return;
     }
 
     // Ensure clusterID has been retreived.
     if (!state.cachedData.cluster.valid || !state.cachedData.cluster.data || !state.cachedData.cluster.data.cluster_id) {
-        dispatch(refreshCluster());
-        requesting = true;
+      dispatch(refreshCluster());
+      requesting = true;
     }
 
     // We don't have all the data loaded. We need to wait until the state is
     // updated with all the data we need.
     if (requesting) {
-        return;
+      return;
     }
 
     // Registration isn't synchronized, so attempt to persist it to the Cockroach
     // Labs server.
-    const helpusData: OptInAttributes = state.uiData.data[KEY_HELPUS];
+    const helpusData: OptInAttributes = state.uiData[KEY_HELPUS].data;
     const registrationCallback = () => {
-        // Reset the error count.
-        errors = 0;
-        // Refresh the state to ensure the data we saved is the same as the latest
-        // data in the UI.
-        state = store.getState();
-        if (_.isEqual(state.uiData.data[KEY_HELPUS], helpusData)) {
-            dispatch(saveUIData({ key: KEY_REGISTRATION_SYNCHRONIZED, value: true }));
-        }
+      // Reset the error count.
+      errors = 0;
+      // Refresh the state to ensure the data we saved is the same as the latest
+      // data in the UI.
+      state = store.getState();
+      if (_.isEqual(state.uiData[KEY_HELPUS].data, helpusData)) {
+        dispatch(saveUIData({ key: KEY_REGISTRATION_SYNCHRONIZED, value: true }));
+      }
     };
 
     saving = true;
@@ -75,23 +77,23 @@ export default function(store: Store<AdminUIState>) {
     let cockroachServerRequest: Promise<void>;
     // Register the cluster if the user opted in. Deregister it if they opted out.
     if (helpusData && helpusData.optin) {
-        cockroachServerRequest = registerCluster({
-            first_name: helpusData.firstname,
-            last_name: helpusData.lastname,
-            company: helpusData.company,
-            email: helpusData.email,
-            clusterID: state.cachedData.cluster.data.cluster_id,
-            product_updates: helpusData.updates,
-        });
+      cockroachServerRequest = registerCluster({
+        first_name: helpusData.firstname,
+        last_name: helpusData.lastname,
+        company: helpusData.company,
+        email: helpusData.email,
+        clusterID: state.cachedData.cluster.data.cluster_id,
+        product_updates: helpusData.updates,
+      });
     } else {
-        cockroachServerRequest = unregisterCluster({
-            clusterID: state.cachedData.cluster.data.cluster_id,
-        });
+      cockroachServerRequest = unregisterCluster({
+        clusterID: state.cachedData.cluster.data.cluster_id,
+      });
     }
 
     cockroachServerRequest
-        .then(registrationCallback)
-        .catch(() => errors++)
-        .then(() => saving = false);
+      .then(registrationCallback)
+      .catch(() => errors++)
+      .then(() => saving = false);
   };
 }

@@ -5,7 +5,7 @@ import { Store } from "redux";
 import registrationSyncListener from "./registrationService";
 import * as protos from "../js/protos";
 import { AdminUIState, createAdminUIStore } from "../redux/state";
-import { setUIDataKey, KEY_REGISTRATION_SYNCHRONIZED, KEY_HELPUS, fetchUIData, fetchCompleteUIData } from "../redux/uiData";
+import { setUIDataKey, KEY_REGISTRATION_SYNCHRONIZED, KEY_HELPUS, beginLoadUIData, completeLoadUIData } from "../redux/uiData";
 import { COCKROACHLABS_ADDR } from "../util/cockroachlabsAPI";
 import fetchMock from "../util/fetch-mock";
 
@@ -19,6 +19,8 @@ const registrationFetchURL = `${COCKROACHLABS_ADDR}/api/clusters/register?uuid=$
 
 let listener: SinonSpy;
 let store: Store<AdminUIState>;
+
+let keys = [KEY_REGISTRATION_SYNCHRONIZED, KEY_HELPUS];
 
 describe("registration sync", function() {
   beforeEach(function () {
@@ -36,10 +38,10 @@ describe("registration sync", function() {
       matcher: uiDataFetchURL,
       response: () => {
         setTimeout(() => {
-          store.dispatch(fetchUIData());
+          store.dispatch(beginLoadUIData(keys));
           store.dispatch(setUIDataKey(KEY_REGISTRATION_SYNCHRONIZED, true));
           store.dispatch(setUIDataKey(KEY_HELPUS, undefined));
-          store.dispatch(fetchCompleteUIData());
+          store.dispatch(completeLoadUIData(keys));
         });
 
         // HACK: Return an error so that the values don't get set by the uiData
@@ -77,7 +79,8 @@ describe("registration sync", function() {
       clearTimeout(timeout);
       if (state.cachedData.cluster.data &&
         state.cachedData.cluster.data.cluster_id &&
-        state.uiData.data[KEY_REGISTRATION_SYNCHRONIZED]
+        state.uiData[KEY_REGISTRATION_SYNCHRONIZED] &&
+        state.uiData[KEY_REGISTRATION_SYNCHRONIZED].data
       ) {
         assert.lengthOf(fetchMock.calls(uiDataFetchURL), 1);
         assert.lengthOf(fetchMock.calls(clusterFetchURL), 1);
@@ -94,10 +97,10 @@ describe("registration sync", function() {
       matcher: uiDataFetchURL,
       response: () => {
         setTimeout(() => {
-          store.dispatch(fetchUIData());
+          store.dispatch(beginLoadUIData(keys));
           store.dispatch(setUIDataKey(KEY_REGISTRATION_SYNCHRONIZED, false));
           store.dispatch(setUIDataKey(KEY_HELPUS, undefined));
-          store.dispatch(fetchCompleteUIData());
+          store.dispatch(completeLoadUIData(keys));
         });
 
         // This dispatch will trigger the listener, but it shouldn't trigger any
@@ -153,7 +156,8 @@ describe("registration sync", function() {
       clearTimeout(timeout);
       if (state.cachedData.cluster.data &&
         state.cachedData.cluster.data.cluster_id &&
-        state.uiData.data[KEY_REGISTRATION_SYNCHRONIZED]
+        state.uiData[KEY_REGISTRATION_SYNCHRONIZED] &&
+        state.uiData[KEY_REGISTRATION_SYNCHRONIZED].data
       ) {
         // Ensure every relevant url is called exactly once.
         assert.lengthOf(fetchMock.calls(uiDataFetchURL), 1);
@@ -173,10 +177,10 @@ describe("registration sync", function() {
       matcher: uiDataFetchURL,
       response: () => {
         setTimeout(() => {
-          store.dispatch(fetchUIData());
+          store.dispatch(beginLoadUIData(keys));
           store.dispatch(setUIDataKey(KEY_REGISTRATION_SYNCHRONIZED, false));
           store.dispatch(setUIDataKey(KEY_HELPUS, {optin: true}));
-          store.dispatch(fetchCompleteUIData());
+          store.dispatch(completeLoadUIData(keys));
         });
 
         // This dispatch will trigger the listener, but it shouldn't trigger any
@@ -232,7 +236,8 @@ describe("registration sync", function() {
       clearTimeout(timeout);
       if (state.cachedData.cluster.data &&
         state.cachedData.cluster.data.cluster_id &&
-        state.uiData.data[KEY_REGISTRATION_SYNCHRONIZED]
+        state.uiData[KEY_REGISTRATION_SYNCHRONIZED] &&
+        state.uiData[KEY_REGISTRATION_SYNCHRONIZED].data
       ) {
         // Ensure every relevant url is called exactly once.
         assert.lengthOf(fetchMock.calls(uiDataFetchURL), 1);
