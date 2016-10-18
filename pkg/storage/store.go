@@ -1843,7 +1843,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	// Clear the pending command queue.
 	if len(rep.mu.proposals) > 0 {
-		resp := roachpb.ResponseWithError{
+		resp := storagebase.ResponseWithError{
 			Reply: &roachpb.BatchResponse{},
 			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
 		}

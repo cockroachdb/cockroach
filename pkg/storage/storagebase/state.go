@@ -14,6 +14,17 @@
 
 package storagebase
 
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
+
+// ResponseWithError is a tuple of a BatchResponse and an error. It is used to
+// pass around a BatchResponse with its associated error where that
+// entanglement is necessary (e.g. channels, methods that need to return
+// another error in addition to this one).
+type ResponseWithError struct {
+	Reply *roachpb.BatchResponse
+	Err   *roachpb.Error
+}
+
 // IsFrozen returns true if the underlying ReplicaState indicates that the
 // Replica is frozen.
 func (s ReplicaState) IsFrozen() bool {

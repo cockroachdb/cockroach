@@ -1612,7 +1612,7 @@ func (r *Replica) evaluateProposalLocked(
 	}
 	pd.ctx = ctx
 	pd.idKey = idKey
-	pd.done = make(chan roachpb.ResponseWithError, 1)
+	pd.done = make(chan storagebase.ResponseWithError, 1)
 	return &pd
 }
 
@@ -1644,7 +1644,7 @@ func makeIDKey() storagebase.CmdIDKey {
 //   which case the other returned values are zero.
 func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (chan roachpb.ResponseWithError, func() bool, error) {
+) (chan storagebase.ResponseWithError, func() bool, error) {
 	// submitProposalLocked calls withRaftGroupLocked which requires that
 	// raftMu is held. In order to maintain our lock ordering we need to lock
 	// Replica.raftMu here before locking Replica.mu.
@@ -2323,7 +2323,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 		// The command can be refurbished.
 		log.Eventf(p.ctx, "refurbishing command %x; %s", p.idKey, reason)
 		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
-			p.done <- roachpb.ResponseWithError{Err: pErr}
+			p.done <- storagebase.ResponseWithError{Err: pErr}
 		}
 		refurbished++
 	}
@@ -2620,7 +2620,7 @@ func (r *Replica) processRaftCommand(
 				)
 
 				if pErr := r.refurbishPendingCmdLocked(cmd); pErr == nil {
-					cmd.done = make(chan roachpb.ResponseWithError, 1)
+					cmd.done = make(chan storagebase.ResponseWithError, 1)
 				} else {
 					// We could try to send the error to the client instead,
 					// but to avoid even the appearance of Replica divergence,
@@ -2656,7 +2656,7 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 	}
-	var response roachpb.ResponseWithError
+	var response storagebase.ResponseWithError
 	{
 		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
@@ -2666,7 +2666,7 @@ func (r *Replica) processRaftCommand(
 
 		// Save the response and zero out the field so that handleProposalData
 		// knows it wasn't forgotten.
-		response = roachpb.ResponseWithError{Err: pd.Err, Reply: pd.Reply}
+		response = storagebase.ResponseWithError{Err: pd.Err, Reply: pd.Reply}
 		pd.Err, pd.Reply = nil, nil
 
 		// Handle the ProposalData, executing any side effects of the last
