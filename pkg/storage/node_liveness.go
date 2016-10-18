@@ -127,7 +127,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 // last heartbeat in the node liveness table.
 func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stopper) {
 	ctx, span := tracing.ForkCtxSpan(ctx, "node liveness heartbeat")
-	log.VEventf(1, ctx, "starting liveness heartbeat")
+	log.VEventf(ctx, 1, "starting liveness heartbeat")
 
 	stopper.RunWorker(func() {
 		defer tracing.FinishSpan(span)
@@ -190,7 +190,7 @@ func (nl *NodeLiveness) heartbeat(ctx context.Context) error {
 		}
 	}
 
-	log.VEventf(1, ctx, "heartbeat node %d liveness with expiration %s", nodeID, newLiveness.Expiration)
+	log.VEventf(ctx, 1, "heartbeat node %d liveness with expiration %s", nodeID, newLiveness.Expiration)
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
 	nl.mu.self = newLiveness
@@ -250,7 +250,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, nodeID roachpb.NodeI
 		return err
 	}
 
-	log.VEventf(1, ctx, "incremented node %d liveness epoch to %d", nodeID, newLiveness.Epoch)
+	log.VEventf(ctx, 1, "incremented node %d liveness epoch to %d", nodeID, newLiveness.Epoch)
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
 	nl.mu.nodes[nodeID] = newLiveness

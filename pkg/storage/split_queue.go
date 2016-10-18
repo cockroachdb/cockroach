@@ -118,7 +118,7 @@ func (sq *splitQueue) process(
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
-		if _, pErr := client.SendWrappedWith(r, ctx, roachpb.Header{
+		if _, pErr := client.SendWrappedWith(ctx, r, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{
 			Span: roachpb.Span{Key: desc.StartKey.AsRawKey()},

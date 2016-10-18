@@ -101,7 +101,7 @@ func (b *msgBuf) EmitLazyLogger(value otlog.LazyLogger) {
 
 // formatTags appends the tags to a bytes.Buffer. If there are no tags,
 // returns false.
-func formatTags(buf *msgBuf, ctx context.Context) bool {
+func formatTags(ctx context.Context, buf *msgBuf) bool {
 	tags := contextLogTags(ctx)
 	if len(tags) > 0 {
 		buf.WriteString("[")
@@ -120,7 +120,7 @@ func formatTags(buf *msgBuf, ctx context.Context) bool {
 // makeMessage creates a structured log entry.
 func makeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf msgBuf
-	formatTags(&buf, ctx)
+	formatTags(ctx, &buf)
 	if len(format) == 0 {
 		fmt.Fprint(&buf, args...)
 	} else {
@@ -132,9 +132,6 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 // addStructured creates a structured log entry to be written to the
 // specified facility of the logger.
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
-	if ctx == nil {
-		panic("nil context")
-	}
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(ctx, format, args)
 	// makeMessage already added the tags when forming msg, we don't want

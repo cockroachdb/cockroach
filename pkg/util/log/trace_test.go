@@ -98,7 +98,7 @@ func TestTrace(t *testing.T) {
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	ErrEvent(ctxWithSpan, "testerr")
-	VEvent(logging.verbosity.get()+1, ctxWithSpan, "test2")
+	VEvent(ctxWithSpan, logging.verbosity.get()+1, "test2")
 	Info(ctxWithSpan, "log")
 
 	// Events to parent context should still be no-ops.
@@ -123,7 +123,7 @@ func TestTraceWithTags(t *testing.T) {
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	ErrEvent(ctxWithSpan, "testerr")
-	VEvent(logging.verbosity.get()+1, ctxWithSpan, "test2")
+	VEvent(ctxWithSpan, logging.verbosity.get()+1, "test2")
 	Info(ctxWithSpan, "log")
 
 	sp.Finish()
@@ -167,7 +167,7 @@ func TestEventLog(t *testing.T) {
 
 	Eventf(ctxWithEventLog, "test%d", 1)
 	ErrEvent(ctxWithEventLog, "testerr")
-	VEventf(logging.verbosity.get()+1, ctxWithEventLog, "test%d", 2)
+	VEventf(ctxWithEventLog, logging.verbosity.get()+1, "test%d", 2)
 	Info(ctxWithEventLog, "log")
 	Errorf(ctxWithEventLog, "errlog%d", 1)
 

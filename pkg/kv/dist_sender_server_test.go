@@ -766,7 +766,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		clock := hlc.NewClock(manual.UnixNano)
 		ds := kv.NewDistSender(&kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()}, s.(*server.TestServer).Gossip())
 
-		reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
+		reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, request)
 		if err != nil {
@@ -1294,7 +1294,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	// two replicas, each attempt only had a 50% chance of triggering
 	// the panic.
 	for i := 0; i < 5; i++ {
-		_, pErr := client.SendWrappedWith(sender, context.Background(), hdr, req)
+		_, pErr := client.SendWrappedWith(context.Background(), sender, hdr, req)
 		// Each attempt fails with "store 2 not found" because that is the
 		// non-retryable error.
 		if !testutils.IsPError(pErr, "store 2 not found") {

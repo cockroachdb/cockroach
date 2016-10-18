@@ -31,6 +31,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -181,7 +182,7 @@ func LookupRange(ds *kv.DistSender, key roachpb.Key) (roachpb.RangeDescriptor, e
 		},
 		MaxRanges: 1,
 	}
-	resp, pErr := client.SendWrapped(ds, nil, &rangeLookupReq)
+	resp, pErr := client.SendWrapped(context.Background(), ds, &rangeLookupReq)
 	if pErr != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
 			"%q: lookup range unexpected error: %s", key, pErr)

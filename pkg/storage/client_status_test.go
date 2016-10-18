@@ -42,7 +42,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 		header := roachpb.Header{
 			RangeID: repl.RangeID,
 		}
-		if _, err := client.SendWrappedWith(mtc.stores[0], nil, header, &args); err != nil {
+		if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0], header, &args); err != nil {
 			t.Fatal(err)
 		}
 	}

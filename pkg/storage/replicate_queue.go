@@ -163,7 +163,7 @@ func (rq *replicateQueue) process(
 			StoreID: newStore.StoreID,
 		}
 
-		log.VEventf(1, ctx, "adding replica to %+v due to under-replication", newReplica)
+		log.VEventf(ctx, 1, "adding replica to %+v due to under-replication", newReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
@@ -175,7 +175,7 @@ func (rq *replicateQueue) process(
 		if err != nil {
 			return err
 		}
-		log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
+		log.VEventf(ctx, 1, "removing replica %+v due to over-replication", removeReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
@@ -192,7 +192,7 @@ func (rq *replicateQueue) process(
 			break
 		}
 		deadReplica := deadReplicas[0]
-		log.VEventf(1, ctx, "removing dead replica %+v from store", deadReplica)
+		log.VEventf(ctx, 1, "removing dead replica %+v from store", deadReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func (rq *replicateQueue) process(
 		rebalanceStore := rq.allocator.RebalanceTarget(
 			zone.Constraints, desc.Replicas, repl.store.StoreID())
 		if rebalanceStore == nil {
-			log.VEventf(1, ctx, "no suitable rebalance target")
+			log.VEventf(ctx, 1, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
 			return nil
@@ -215,7 +215,7 @@ func (rq *replicateQueue) process(
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}
-		log.VEventf(1, ctx, "rebalancing to %+v", rebalanceReplica)
+		log.VEventf(ctx, 1, "rebalancing to %+v", rebalanceReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
