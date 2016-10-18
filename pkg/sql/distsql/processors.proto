@@ -128,6 +128,79 @@ message EvaluatorSpec {
   repeated Expression exprs = 2 [(gogoproto.nullable) = false];
 }
 
+enum JoinType {
+  INNER = 0;
+  LEFT_OUTER = 1;
+  RIGHT_OUTER = 2;
+  FULL_OUTER = 3;
+}
+
+// MergeJoinerSpec is the specification for a merge join processor. The processor
+// has two inputs and one output. The inputs have the same ordering on the
+// columns that have equality constraints. For example:
+//   SELECT FROM T1 INNER JOIN T2 ON T1.C1 = T2.C5 AND T1.C2 = T2.C4
+//
+// To perform a merge join, the streams corresponding to T1 and T2 must have the
+// same ordering on coluns C1, C2 and C5, C4 respectively. For example: C1+,C2-
+// and C5+,C4-.
+//
+// It is guaranteed that the results preserve this ordering.
+message MergeJoinerSpec {
+  // The streams must be ordered according to the columns that have equality
+  // constraints. The first column of the left ordering is constrained to be
+  // equal to the first column in the right ordering and so on. The ordering
+  // lengths and directions must match.
+  // In the example above, left_ordering describes C1+,C2- and right_ordering
+  // describes C5+,C4-.
+  optional Ordering left_ordering = 1 [(gogoproto.nullable) = false];
+  optional Ordering right_ordering = 2 [(gogoproto.nullable) = false];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). If the left stream has N columns and the right stream has M
+  // columns, in this expression variables $0 to $(N-1) refer to columns of the
+  // left stream and variables $N to $(N+M-1) refer to columns in the right
+  // stream.
+  optional Expression expr = 3 [(gogoproto.nullable) = false];
+
+  optional JoinType type = 4 [(gogoproto.nullable) = false];
+
+  // Columns for the output stream. If the left stream has N columns and the
+  // right stream has M columns, column indices 0 to (N-1) refer to left stream
+  // columns and indices N to (N+M-1) refer to right stream columns.
+  repeated uint32 output_columns = 5 [packed = true];
+}
+
+// HashJoinerSpec is the specification for a merge join processor. The processor
+// has two inputs and one output.
+//
+// The processor works by reading the entire left input and putting it in a hash
+// table. Thus, there is no guarantee on the ordering of results that stem only
+// from the left input (in the case of LEFT_OUTER, FULL_OUTER). However, it is
+// guaranteed that results that involve the right stream preserve the ordering;
+// i.e. all results that stem from right row (i) precede results that stem from
+// right row (i+1).
+message HashJoinerSpec {
+  // The join constraints certain columns from the left stream to equal
+  // corresponding columns on the right stream. These must have the same length.
+  repeated uint32 left_eq_columns = 1 [packed = true];
+  repeated uint32 right_eq_columns = 2 [packed = true];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). If the left stream has N columns and the right stream has M
+  // columns, in this expression variables $0 to $(N-1) refer to columns of the
+  // left stream and variables $N to $(N+M-1) refer to columns in the right
+  // stream.
+  optional Expression expr = 3 [(gogoproto.nullable) = false];
+
+  optional JoinType type = 4 [(gogoproto.nullable) = false];
+
+  // Columns for the output stream. If the left stream has N columns and the
+  // right stream has M columns, column indices 0 to (N-1) refer to left stream
+  // columns and indices N to (N+M-1) refer to right stream columns.
+  repeated uint32 output_columns = 5 [packed = true];
+}
+
+
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
@@ -136,6 +209,8 @@ message ProcessorCoreUnion {
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
   optional EvaluatorSpec evaluator = 5;
+  optional MergeJoinerSpec mergeJoiner = 6;
+  optional HashJoinerSpec hashJoiner = 7;
   // TODO(radu): other "processor core" types will go here.
   // TODO(irfansharif): add aggregation, join, set operations, etc. from #7587
 }
