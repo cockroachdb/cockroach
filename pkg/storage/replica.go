@@ -204,9 +204,7 @@ func (d *atomicDescString) String() string {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	// ctx is a context appropriate for logging, which contains the appropriate
-	// node, store, replica log tags.
-	ctx context.Context
+	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Should only be set by the constructor.
@@ -397,13 +395,15 @@ func (r *Replica) withRaftGroupLocked(
 		shouldCampaign = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
 	}
 
+	ctx := r.AnnotateCtx(context.TODO())
+
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage(r),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,
-			&raftLogger{ctx: r.ctx},
+			&raftLogger{ctx: ctx},
 		), nil)
 		if err != nil {
 			return err
@@ -442,7 +442,7 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		if shouldCampaign {
 			if log.V(3) {
-				log.Infof(r.ctx, "campaigning")
+				log.Infof(ctx, "campaigning")
 			}
 			if err := raftGroup.Campaign(); err != nil {
 				return err
@@ -480,20 +480,19 @@ var initialOutSnapDone = func() chan struct{} {
 
 func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
-		RangeID:    rangeID,
-		store:      store,
-		abortCache: NewAbortCache(rangeID),
+		AmbientContext: store.cfg.AmbientCtx,
+		RangeID:        rangeID,
+		store:          store,
+		abortCache:     NewAbortCache(rangeID),
 	}
 
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
-
-	r.ctx = store.AnnotateCtx(context.TODO())
 	// Add replica log tag - the value is rangeStr.String().
-	r.ctx = log.WithLogTag(r.ctx, "r", &r.rangeStr)
+	r.AmbientContext.AddLogTag("r", &r.rangeStr)
 
 	raftMuLogger := syncutil.ThresholdLogger(
-		r.ctx,
+		r.AnnotateCtx(context.Background()),
 		defaultReplicaRaftMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "raftMu: "+msg, args...)
@@ -505,7 +504,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r.raftMu = syncutil.MakeTimedMutex(raftMuLogger)
 
 	replicaMuLogger := syncutil.ThresholdLogger(
-		r.ctx,
+		r.AnnotateCtx(context.Background()),
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "replicaMu: "+msg, args...)
@@ -548,8 +547,9 @@ func (r *Replica) init(
 func (r *Replica) initLocked(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
+	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.isInitializedLocked() {
-		log.Fatalf(r.ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
+		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	}
 	if desc.IsInitialized() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
@@ -566,17 +566,17 @@ func (r *Replica) initLocked(
 
 	var err error
 
-	if r.mu.state, err = loadState(r.ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = loadState(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = loadLastIndex(r.ctx, r.store.Engine(), r.RangeID)
+	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
 
-	pErr, err := loadReplicaDestroyedError(r.ctx, r.store.Engine(), r.RangeID)
+	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
@@ -599,14 +599,6 @@ func (r *Replica) initLocked(
 	}
 	r.assertStateLocked(r.store.Engine())
 	return nil
-}
-
-// logContext adds the node, store and replica log tags to a context. Used to
-// personalize an operation context with this Replica's identity.
-func (r *Replica) logContext(ctx context.Context) context.Context {
-	// Copy the log tags from the base context. This allows us to opaquely set the
-	// log tags that were passed by the upper layers.
-	return log.WithLogTagsFromCtx(ctx, r.ctx)
 }
 
 // String returns the string representation of the replica using an
@@ -635,7 +627,8 @@ func (r *Replica) destroyDataRaftMuLocked() error {
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: desc.NextReplicaID,
 	}
-	if err := engine.MVCCPutProto(r.ctx, batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
+	ctx := r.AnnotateCtx(context.TODO())
+	if err := engine.MVCCPutProto(ctx, batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
 		return err
 	}
 
@@ -883,12 +876,14 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 	defer r.mu.Unlock()
 
 	if desc.RangeID != r.RangeID {
-		log.Fatalf(r.ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		log.Fatalf(r.ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
 	}
 
@@ -970,19 +965,19 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 //
 // TODO(tschottdorf): we may want to phase this out in favor of using
 // gcThreshold.
-func (r *Replica) getLastReplicaGCTimestamp() (hlc.Timestamp, error) {
+func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	timestamp := hlc.Timestamp{}
-	_, err := engine.MVCCGetProto(r.ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return hlc.ZeroTimestamp, err
 	}
 	return timestamp, nil
 }
 
-func (r *Replica) setLastReplicaGCTimestamp(timestamp hlc.Timestamp) error {
+func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
@@ -1027,16 +1022,13 @@ func (r *Replica) assertState(reader engine.Reader) {
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(reader engine.Reader) {
-	diskState, err := loadState(r.ctx, reader, r.mu.state.Desc)
+	ctx := r.AnnotateCtx(context.TODO())
+	diskState, err := loadState(ctx, reader, r.mu.state.Desc)
 	if err != nil {
-		log.Fatal(r.ctx, err)
+		log.Fatal(ctx, err)
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
-		log.Fatalf(
-			r.ctx,
-			"on-disk and in-memory state diverged:\n%s",
-			pretty.Diff(diskState, r.mu.state),
-		)
+		log.Fatalf(ctx, "on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state))
 	}
 }
 
@@ -1057,8 +1049,8 @@ func (r *Replica) Send(
 		return nil, roachpb.NewError(err)
 	}
 	// Add the range log tag.
-	ctx = log.WithLogTag(ctx, "r", &r.rangeStr)
-	ctx, cleanup := tracing.EnsureContext(ctx, r.store.Tracer())
+	ctx = r.AnnotateCtx(ctx)
+	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer)
 	defer cleanup()
 
 	// Differentiate between admin, read-only and write.
@@ -1485,7 +1477,8 @@ func (r *Replica) addReadOnlyCmd(
 // a nonempty but incomplete Txn (i.e. &Transaction{})
 func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 	if ba.Txn != nil && ba.Txn.ID == nil {
-		log.Fatalf(r.ctx, "nontrivial transaction with empty ID: %s\n%s",
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "nontrivial transaction with empty ID: %s\n%s",
 			ba.Txn, pretty.Sprint(ba))
 	}
 }
@@ -1626,7 +1619,8 @@ func (r *Replica) evaluateProposalLocked(
 func (r *Replica) insertProposalLocked(pCmd *ProposalData) {
 	idKey := pCmd.idKey
 	if _, ok := r.mu.proposals[idKey]; ok {
-		log.Fatalf(r.ctx, "pending command already exists for %s", idKey)
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "pending command already exists for %s", idKey)
 	}
 	r.mu.proposals[idKey] = pCmd
 }
@@ -1708,6 +1702,8 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
 	}
 
+	ctx := r.AnnotateCtx(context.TODO())
+
 	data, err := protoutil.Marshal(p.RaftCommand)
 	if err != nil {
 		return err
@@ -1720,15 +1716,15 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special
 			// because raft needs to understand it; it cannot simply be an
 			// opaque command.
-			log.Infof(r.ctx, "proposing %s %+v for range %d: %+v",
+			log.Infof(ctx, "proposing %s %+v for range %d: %+v",
 				crt.ChangeType, crt.Replica, p.RaftCommand.RangeID, crt.UpdatedReplicas)
 
-			ctx := ConfChangeContext{
+			confChangeCtx := ConfChangeContext{
 				CommandID: string(p.idKey),
 				Payload:   data,
 				Replica:   crt.Replica,
 			}
-			encodedCtx, err := protoutil.Marshal(&ctx)
+			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
 				return err
 			}
@@ -1749,7 +1745,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 
 	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if log.V(4) {
-			log.Infof(r.ctx, "proposing command %x", p.idKey)
+			log.Infof(ctx, "proposing command %x", p.idKey)
 		}
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
@@ -1767,7 +1763,8 @@ func (r *Replica) quiesce() {
 func (r *Replica) quiesceLocked() {
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(r.ctx, "quiescing")
+			ctx := r.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "quiescing")
 		}
 		r.mu.quiescent = true
 	}
@@ -1776,7 +1773,8 @@ func (r *Replica) quiesceLocked() {
 func (r *Replica) unquiesceLocked() {
 	if r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(r.ctx, "unquiescing")
+			ctx := r.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
 	}
@@ -1785,7 +1783,8 @@ func (r *Replica) unquiesceLocked() {
 func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	if r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(r.ctx, "unquiescing: waking leader")
+			ctx := r.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "unquiescing: waking leader")
 		}
 		r.mu.quiescent = false
 		// Send an empty proposal which will wake the leader. Empty proposals also
@@ -1829,7 +1828,7 @@ func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) error {
 // handleRaftReadyLocked is the same as handleRaftReady but requires that the
 // replica be locked for raft processing via r.raftLock.
 func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
-	ctx := r.ctx
+	ctx := r.AnnotateCtx(context.TODO())
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
@@ -1958,7 +1957,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		if !raft.IsEmptySnap(msg.Snapshot) {
 			sendingSnapshot = true
 		}
-		r.sendRaftMessage(msg)
+		r.sendRaftMessage(ctx, msg)
 	}
 	if !sendingSnapshot {
 		r.maybeAbandonSnapshot(ctx)
@@ -1996,22 +1995,24 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 
 			// Discard errors from processRaftCommand. The error has been sent
 			// to the client that originated it, where it will be handled.
-			_ = r.processRaftCommand(commandID, e.Index, command)
+			_ = r.processRaftCommand(ctx, commandID, e.Index, command)
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			if err := cc.Unmarshal(e.Data); err != nil {
 				return err
 			}
-			var ctx ConfChangeContext
-			if err := ctx.Unmarshal(cc.Context); err != nil {
+			var ccCtx ConfChangeContext
+			if err := ccCtx.Unmarshal(cc.Context); err != nil {
 				return err
 			}
 			var command storagebase.RaftCommand
-			if err := command.Unmarshal(ctx.Payload); err != nil {
+			if err := command.Unmarshal(ccCtx.Payload); err != nil {
 				return err
 			}
-			if pErr := r.processRaftCommand(storagebase.CmdIDKey(ctx.CommandID), e.Index, command); pErr != nil {
+			if pErr := r.processRaftCommand(
+				ctx, storagebase.CmdIDKey(ccCtx.CommandID), e.Index, command,
+			); pErr != nil {
 				// If processRaftCommand failed, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
 			}
@@ -2165,16 +2166,17 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	if !enableQuiescence {
 		return false
 	}
+	ctx := r.AnnotateCtx(context.TODO())
 	if len(r.mu.proposals) != 0 {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+			log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
 		}
 		return false
 	}
 	status := r.mu.internalRaftGroup.Status()
 	if status.SoftState.RaftState != raft.StateLeader {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: not leader")
+			log.Infof(ctx, "not quiescing: not leader")
 		}
 		return false
 	}
@@ -2182,14 +2184,14 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	// equal in order to quiesce.
 	if status.Applied != status.Commit {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: applied (%d) != commit (%d)",
+			log.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",
 				status.Applied, status.Commit)
 		}
 		return false
 	}
 	if status.Commit != r.mu.lastIndex {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: commit (%d) != last-index (%d)",
+			log.Infof(ctx, "not quiescing: commit (%d) != last-index (%d)",
 				status.Commit, r.mu.lastIndex)
 		}
 		return false
@@ -2201,7 +2203,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		}
 		if progress.Match != status.Applied {
 			if log.V(4) {
-				log.Infof(r.ctx, "not quiescing: replica %d match (%d) != applied (%d)",
+				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d)",
 					id, progress.Match, status.Applied)
 			}
 			return false
@@ -2209,21 +2211,21 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	}
 	if !foundSelf {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: %d not found in progress: %+v",
+			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
 				r.mu.replicaID, status.Progress)
 		}
 		return false
 	}
 	if r.mu.internalRaftGroup.HasReady() {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: raft ready")
+			log.Infof(ctx, "not quiescing: raft ready")
 		}
 		return false
 	}
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(r.mu.replicaID, r.mu.lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
+			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
 		}
 		return false
 	}
@@ -2231,7 +2233,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	case <-r.mu.outSnapDone:
 	default:
 		if log.V(4) {
-			log.Infof(r.ctx, "not quiescing: replica %d has an in-progress snapshot", r.mu.replicaID)
+			log.Infof(ctx, "not quiescing: replica %d has an in-progress snapshot", r.mu.replicaID)
 		}
 		return false
 	}
@@ -2245,7 +2247,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 			roachpb.ReplicaID(id), r.mu.lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
-				log.Infof(r.ctx, "failed to quiesce: cannot find to replica (%d)", id)
+				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
 			r.unquiesceLocked()
 			return false
@@ -2326,7 +2328,8 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 		refurbished++
 	}
 	if log.V(1) && (refurbished > 0 || len(reproposals) > 0) {
-		log.Infof(r.ctx,
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Infof(ctx,
 			"pending commands: refurbished %d, reproposing %d (at %d.%d); %s",
 			refurbished, len(reproposals), r.mu.state.RaftAppliedIndex,
 			r.mu.state.LeaseAppliedIndex, reason)
@@ -2360,7 +2363,7 @@ func (r *Replica) getReplicaDescriptorByIDLocked(
 		errors.Errorf("replica %d not present in %v, %v", replicaID, fallback, r.mu.state.Desc.Replicas)
 }
 
-func (r *Replica) sendRaftMessage(msg raftpb.Message) {
+func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
@@ -2380,12 +2383,12 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	}
 
 	if fromErr != nil {
-		log.Warningf(r.ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
+		log.Warningf(ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
 			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
 	if toErr != nil {
-		log.Warningf(r.ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
+		log.Warningf(ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
 			msg.To, r.RangeID, msg.Type, toErr)
 		return
 	}
@@ -2393,10 +2396,10 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	if hasSnapshot {
 		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
 		if err != nil {
-			log.Fatalf(r.ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
+			log.Fatalf(ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
 		}
 		if *msgUUID != snap.SnapUUID {
-			log.Fatalf(r.ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
+			log.Fatalf(ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
 				msgUUID.Short(), snap.SnapUUID.Short())
 		}
 		// Asynchronously stream the snapshot to the recipient.
@@ -2405,7 +2408,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			r.store.Stopper().RunWorker(func() {
 				defer r.CloseOutSnap()
 				if err := r.store.cfg.Transport.SendSnapshot(
-					r.ctx,
+					ctx,
 					r.store.allocator.storePool,
 					SnapshotRequest_Header{
 						RangeDescriptor: *r.Desc(),
@@ -2418,14 +2421,14 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 						RangeSize:  r.GetMVCCStats().Total(),
 						CanDecline: false,
 					}, snap, r.store.Engine().NewBatch); err != nil {
-					log.Warningf(r.ctx, "failed to send snapshot: %s", err)
+					log.Warningf(ctx, "failed to send snapshot: %s", err)
 				}
 				// Report the snapshot status to Raft, which expects us to do this once
 				// we finish attempting to send the snapshot.
 				r.reportSnapshotStatus(msg.To, err)
 			})
 		}); err != nil {
-			log.Warningf(r.ctx, "failed to send snapshot: %s", err)
+			log.Warningf(ctx, "failed to send snapshot: %s", err)
 		}
 		return
 	}
@@ -2449,7 +2452,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
 		}); err != nil {
-			log.Fatal(r.ctx, err)
+			log.Fatal(ctx, err)
 		}
 	}
 }
@@ -2482,7 +2485,8 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		raftGroup.ReportSnapshot(to, snapStatus)
 		return true, nil
 	}); err != nil {
-		log.Fatal(r.ctx, err)
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatal(ctx, err)
 	}
 }
 
@@ -2514,14 +2518,14 @@ func (r *Replica) refurbishPendingCmdLocked(cmd *ProposalData) *roachpb.Error {
 // which will apply as a no-op (without accessing raftCmd, via an error),
 // updating only the applied index.
 func (r *Replica) processRaftCommand(
-	idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
+	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
 ) (pErr *roachpb.Error) {
 	if index == 0 {
-		log.Fatalf(r.ctx, "processRaftCommand requires a non-zero index")
+		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
 	}
 
 	if log.V(4) {
-		log.Infof(r.ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
+		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
 	}
 
 	r.mu.Lock()
@@ -2552,7 +2556,6 @@ func (r *Replica) processRaftCommand(
 	}
 
 	// TODO(tschottdorf): consider the Trace situation here.
-	ctx := r.ctx
 	if cmdProposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
@@ -2763,7 +2766,8 @@ func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roach
 func (r *Replica) acquireMergeLock(merge *roachpb.MergeTrigger) func(pErr *roachpb.Error) {
 	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
 	if err != nil {
-		log.Fatalf(r.ctx, "unable to find merge RHS replica: %s", err)
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "unable to find merge RHS replica: %s", err)
 	}
 
 	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
@@ -3357,7 +3361,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
 // if this is the first range and a range lease can be obtained. The Store
 // calls this periodically on first range replicas.
-func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
+func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}
@@ -3368,7 +3372,8 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
 		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
 			if *gossipClusterID != r.store.ClusterID() {
-				log.Fatalf(r.ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
+				log.Fatalf(
+					ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 			}
 		}
@@ -3377,20 +3382,22 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
 	if log.V(1) {
-		log.Infof(r.ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
+		log.Infof(ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
-		log.Errorf(r.ctx, "failed to gossip cluster ID: %s", err)
+	if err := r.store.Gossip().AddInfo(
+		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
+	); err != nil {
+		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
 	}
 
-	hasLease, pErr := r.getLeaseForGossip(r.ctx)
+	hasLease, pErr := r.getLeaseForGossip(ctx)
 	if pErr != nil {
 		return pErr
 	} else if !hasLease {
 		return nil
 	}
-	r.gossipFirstRange(r.ctx)
+	r.gossipFirstRange(ctx)
 	return nil
 }
 
@@ -3438,6 +3445,8 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
+	ctx := r.AnnotateCtx(context.TODO())
+
 	if lease, _ := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
 		// Do not gossip when a range lease is not held.
 		return
@@ -3446,7 +3455,7 @@ func (r *Replica) maybeGossipSystemConfig() {
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	kvs, hash, err := r.loadSystemConfigSpan()
 	if err != nil {
-		log.Errorf(r.ctx, "could not load SystemConfig span: %s", err)
+		log.Errorf(ctx, "could not load SystemConfig span: %s", err)
 		return
 	}
 	if bytes.Equal(r.systemDBHash, hash) {
@@ -3454,13 +3463,13 @@ func (r *Replica) maybeGossipSystemConfig() {
 	}
 
 	if log.V(2) {
-		log.Infof(r.ctx, "gossiping system config from store %d, range %d, hash %x",
+		log.Infof(ctx, "gossiping system config from store %d, range %d, hash %x",
 			r.store.StoreID(), r.RangeID, hash)
 	}
 
 	cfg := &config.SystemConfig{Values: kvs}
 	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
-		log.Errorf(r.ctx, "failed to gossip system config: %s", err)
+		log.Errorf(ctx, "failed to gossip system config: %s", err)
 		return
 	}
 
@@ -3488,26 +3497,28 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 		return
 	}
 
+	ctx := r.AnnotateCtx(context.TODO())
+
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
 	br, pd, pErr :=
-		r.executeBatch(r.ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+		r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
-		log.Errorf(r.ctx, "couldn't scan node liveness records in span %s: %s", span, pErr.GoError())
+		log.Errorf(ctx, "couldn't scan node liveness records in span %s: %s", span, pErr.GoError())
 		return
 	}
 	if pd.intents != nil && len(*pd.intents) > 0 {
-		log.Errorf(r.ctx, "unexpected intents on node liveness span %s: %+v", span, *pd.intents)
+		log.Errorf(ctx, "unexpected intents on node liveness span %s: %+v", span, *pd.intents)
 		return
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	log.VEventf(r.ctx, 1, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
+	log.VEventf(ctx, 1, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
 		var liveness, exLiveness Liveness
 		if err := kv.Value.GetProto(&liveness); err != nil {
-			log.Errorf(r.ctx, "failed to unmarshal liveness value %s: %s", kv.Key, err)
+			log.Errorf(ctx, "failed to unmarshal liveness value %s: %s", kv.Key, err)
 			continue
 		}
 		key := gossip.MakeNodeLivenessKey(liveness.NodeID)
@@ -3518,7 +3529,7 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 			}
 		}
 		if err := r.store.Gossip().AddInfoProto(key, &liveness, 0); err != nil {
-			log.Errorf(r.ctx, "failed to gossip node liveness (%+v): %s", liveness, err)
+			log.Errorf(ctx, "failed to gossip node liveness (%+v): %s", liveness, err)
 			continue
 		}
 	}
@@ -3570,13 +3581,14 @@ var errSystemConfigIntent = errors.New("must retry later due to intent on System
 // list of key/value pairs along with the sha1 checksum of the contents (key
 // and value).
 func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
+	ctx := r.AnnotateCtx(context.TODO())
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
 	br, pd, pErr := r.executeBatch(
-		r.ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba,
+		ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba,
 	)
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
