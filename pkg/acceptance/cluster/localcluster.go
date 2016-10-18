@@ -129,6 +129,18 @@ type testNode struct {
 	stores  []testStore
 }
 
+// Node quit.
+func (t *testNode) kill() error {
+	// Paused containers cannot be killed. Attempt to unpause it first
+	// (which might fail) before killing.
+	_ = t.Container.Unpause()
+	if err := t.Container.cluster.client.ContainerKill(context.Background(), t.Container.id, "4"); err != nil && !strings.Contains(err.Error(), "is not running") {
+		return err
+	}
+	t.Container.cluster.expectEvent(t.Container, eventDie)
+	return nil
+}
+
 // LocalCluster manages a local cockroach cluster running on docker. The
 // cluster is composed of a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
@@ -723,7 +735,7 @@ func (l *LocalCluster) stop() {
 		}
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
-		maybePanic(n.Kill())
+		maybePanic(n.kill())
 		if crashed && outputLogDir == "" {
 			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
 		}
