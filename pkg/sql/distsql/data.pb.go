@@ -141,8 +141,8 @@ func (OutputRouterSpec_Type) EnumDescriptor() ([]byte, []int) { return fileDescr
 type Expression struct {
 	// TODO(radu): TBD how this will be used
 	Version string `protobuf:"bytes,1,opt,name=version" json:"version"`
-	// SQL expressions are passed as a string, with Placeholders ($1, $2 ..) used for
-	// "input" variables.
+	// SQL expressions are passed as a string, with Placeholders ($0, $1, $2 ..)
+	// used for "input" variables.
 	Expr string `protobuf:"bytes,2,opt,name=expr" json:"expr"`
 }
 
