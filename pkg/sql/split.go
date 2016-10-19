@@ -152,7 +152,7 @@ func (n *splitNode) Values() parser.DTuple {
 	n.key = nil
 	return parser.DTuple{
 		parser.NewDBytes(parser.DBytes(k)),
-		parser.NewDString(keys.PrettyPrint(k)),
+		parser.NewDString(keys.PrettyPrintKeyOnly(k)),
 	}
 }
 

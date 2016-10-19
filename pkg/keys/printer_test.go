@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func TestPrettyPrint(t *testing.T) {
+func TestPrettyPrintKeyOnly(t *testing.T) {
 
 	tm, _ := time.Parse(time.RFC3339Nano, "2016-03-30T13:40:35.053725008Z")
 	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
@@ -154,7 +154,7 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x02})), "/Table/42/<unknown escape sequence: 0x0 0x2>"},
 	}
 	for i, test := range testCases {
-		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)
+		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrintKeyOnly(test.key), nil)
 		exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
 		if exp != keyInfo {
 			t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)

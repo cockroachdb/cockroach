@@ -57,6 +57,9 @@ var (
 	// PrettyPrintKey is a function to print key with human readable format
 	// it's implement at package git.com/cockroachdb/cockroach/keys to avoid package circle import
 	PrettyPrintKey func(key Key) string
+
+	// PrettyPrintKeyValue is a function to print key and value with human readable format.
+	PrettyPrintKeyValue func(key Key, value []byte) (string, string)
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
