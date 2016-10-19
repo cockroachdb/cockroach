@@ -17,24 +17,26 @@
 package distsql
 
 import (
+	"bytes"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
 // TODO(irfansharif): Optimizations taking advantage of partial orderings
 // possible if part of the output.
 type distinct struct {
-	input  RowSource
-	output RowReceiver
-	ctx    context.Context
-	cols   []uint32
-	seen   map[string]struct{}
+	input        RowSource
+	output       RowReceiver
+	ctx          context.Context
+	seen         map[string]struct{}
+	lastPrefix   []byte
+	orderedCols  columns
+	distinctCols columns
 
 	// Buffer to store intermediate results when extracting decoded datum values
 	// to avoid reallocation.
@@ -47,16 +49,17 @@ func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
-		input:  input,
-		output: output,
-		ctx:    log.WithLogTag(flowCtx.Context, "Evaluator", nil),
-
-		cols:  make([]uint32, len(spec.Cols)),
-		seen:  make(map[string]struct{}),
-		tuple: make(parser.DTuple, len(spec.Cols)),
+		input:        input,
+		output:       output,
+		ctx:          log.WithLogTag(flowCtx.Context, "Evaluator", nil),
+		seen:         make(map[string]struct{}),
+		tuple:        make(parser.DTuple, len(spec.Cols)),
+		orderedCols:  make(columns, len(spec.OrderedCols)),
+		distinctCols: make(columns, len(spec.Cols)),
 	}
 
-	copy(d.cols, spec.Cols)
+	copy(d.distinctCols, spec.Cols)
+	copy(d.orderedCols, spec.OrderedCols)
 	return d, nil
 }
 
@@ -74,7 +77,7 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting distinct")
 	}
 
-	var scratch []byte
+	var scratch [2][]byte
 	for {
 		row, err := d.input.NextRow()
 		if err != nil || row == nil {
@@ -82,18 +85,28 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 			return
 		}
 
-		encoded, err := d.encode(scratch, row)
+		prefix, suffix, err := d.encode(scratch[0], scratch[1], row)
 		if err != nil {
 			d.output.Close(err)
 			return
 		}
+		if !bytes.Equal(prefix, d.lastPrefix) {
+			// The prefix of the row which is ordered differs from the last row;
+			// reset our seen set.
+			if len(d.seen) > 0 {
+				d.seen = make(map[string]struct{})
+			}
 
-		key := string(encoded)
+			d.lastPrefix = append(d.lastPrefix[:0], prefix...)
+			d.lastPrefix = d.lastPrefix[:len(prefix)]
+		}
+
+		key := string(suffix)
 		if _, ok := d.seen[key]; !ok {
 			d.seen[key] = struct{}{}
-			outRow := d.rowAlloc.AllocRow(len(d.cols))
-			for i, col := range d.cols {
-				outRow[i] = row[col]
+			outRow := d.rowAlloc.AllocRow(len(d.distinctCols))
+			for i, colIdx := range d.distinctCols {
+				outRow[i] = row[colIdx]
 			}
 
 			if log.V(3) {
@@ -107,21 +120,35 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 				return
 			}
 		}
-		scratch = encoded[:0]
+		scratch[0] = prefix[:0]
+		scratch[1] = suffix[:0]
 	}
 }
 
-func (d *distinct) encode(b []byte, row sqlbase.EncDatumRow) ([]byte, error) {
-	for _, col := range d.cols {
-		enc, ok := row[col].Encoding()
-		if !ok {
-			return nil, errors.Errorf("encoding not available for %s", row[col])
-		}
-		var err error
-		b, err = row[col].Encode(&d.datumAlloc, enc, b)
+func (d *distinct) encode(prefix, encoding []byte, row sqlbase.EncDatumRow) ([]byte, []byte, error) {
+	var err error
+	// TODO(irfansharif): There's a subtle optimization possible here. If we are
+	// processing DISTINCT(x, y) and the input stream is ordered by x, we are
+	// using x as our group key (our 'seen' set at any given time is the set of
+	// all rows with the same group key). This alleviates the need to use x in
+	// our encoding when computing the key into our set.
+	for _, colIdx := range d.orderedCols {
+		prefix, err = row[colIdx].Encode(&d.datumAlloc, sqlbase.DatumEncoding_VALUE, prefix)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return b, nil
+	for _, colIdx := range d.distinctCols {
+		// TODO(irfansharif): Different rows may come with different encodings,
+		// e.g. if they come from different streams that were merged, in which
+		// case the encodings don't match (despite having the same underlying
+		// datums). We instead opt to always choose sqlbase.DatumEncoding_VALUE
+		// but we may want to check the first row for what encodings are already
+		// available.
+		encoding, err = row[colIdx].Encode(&d.datumAlloc, sqlbase.DatumEncoding_VALUE, encoding)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return prefix, encoding, nil
 }
