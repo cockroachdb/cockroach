@@ -248,6 +248,15 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
+	if n.Index.SearchTable {
+		realTableName, err := p.findTableContainingIndex(tn.DatabaseName, tn.TableName)
+		if err != nil {
+			return nil, err
+		}
+		n.Index.Index = tn.TableName
+		tn = realTableName
+	}
+
 	tableDesc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err

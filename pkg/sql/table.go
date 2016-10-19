@@ -541,3 +541,39 @@ func (p *planner) getQualifiedTableName(desc *sqlbase.TableDescriptor) (string, 
 	}
 	return tbName.String(), nil
 }
+
+func (p *planner) findTableContainingIndex(
+	dbName parser.Name, idxName parser.Name,
+) (result *parser.TableName, err error) {
+	dbDesc, err := p.mustGetDatabaseDesc(sqlbase.NormalizeName(dbName))
+	if err != nil {
+		return nil, err
+	}
+
+	tns, err := p.getTableNames(dbDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	normName := sqlbase.NormalizeName(idxName)
+	result = nil
+	for i := range tns {
+		tn := &tns[i]
+		tableDesc, err := p.mustGetTableDesc(tn)
+		if err != nil {
+			return nil, err
+		}
+		status, _, _ := tableDesc.FindIndexByNormalizedName(normName)
+		if status != sqlbase.DescriptorAbsent {
+			if result != nil {
+				return nil, fmt.Errorf("index name %q is ambiguous (found in %s and %s)",
+					normName, tn.String(), result.String())
+			}
+			result = tn
+		}
+	}
+	if result == nil {
+		return nil, fmt.Errorf("index %q does not exist", normName)
+	}
+	return result, nil
+}

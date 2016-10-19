@@ -224,8 +224,14 @@ func (n *dropDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 type dropIndexNode struct {
-	p *planner
-	n *parser.DropIndex
+	p        *planner
+	n        *parser.DropIndex
+	idxNames []fullIndexName
+}
+
+type fullIndexName struct {
+	tn      *parser.TableName
+	idxName parser.Name
 }
 
 // DropIndex drops an index.
@@ -233,10 +239,20 @@ type dropIndexNode struct {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
-	for _, index := range n.IndexList {
+	idxNames := make([]fullIndexName, len(n.IndexList))
+	for i, index := range n.IndexList {
 		tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
 		if err != nil {
 			return nil, err
+		}
+
+		if index.SearchTable {
+			realTableName, err := p.findTableContainingIndex(tn.DatabaseName, tn.TableName)
+			if err != nil {
+				return nil, err
+			}
+			index.Index = tn.TableName
+			tn = realTableName
 		}
 
 		tableDesc, err := p.mustGetTableDesc(tn)
@@ -247,8 +263,11 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 			return nil, err
 		}
+
+		idxNames[i].tn = tn
+		idxNames[i].idxName = index.Index
 	}
-	return &dropIndexNode{n: n, p: p}, nil
+	return &dropIndexNode{n: n, p: p, idxNames: idxNames}, nil
 }
 
 func (n *dropIndexNode) expandPlan() error {
@@ -256,20 +275,19 @@ func (n *dropIndexNode) expandPlan() error {
 }
 
 func (n *dropIndexNode) Start() error {
-	for _, index := range n.n.IndexList {
+	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := n.p.getTableDesc(index.Table.TableName())
+		tableDesc, err := n.p.getTableDesc(index.tn)
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we
 			// must have it here too.
-			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.Table))
+			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.tn))
 		}
-		idxName := index.Index
-		status, i, err := tableDesc.FindIndexByName(idxName)
+		status, i, err := tableDesc.FindIndexByName(index.idxName)
 		if err != nil {
 			if n.n.IfExists {
 				// Noop.
@@ -340,7 +358,7 @@ func (n *dropIndexNode) Start() error {
 		case sqlbase.DescriptorIncomplete:
 			switch tableDesc.Mutations[i].Direction {
 			case sqlbase.DescriptorMutation_ADD:
-				return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+				return fmt.Errorf("index %q in the middle of being added, try again later", index.idxName)
 
 			case sqlbase.DescriptorMutation_DROP:
 				continue
@@ -370,7 +388,7 @@ func (n *dropIndexNode) Start() error {
 				User                string
 				MutationID          uint32
 				CascadeDroppedViews []string
-			}{tableDesc.Name, string(idxName), n.n.String(), n.p.session.User, uint32(mutationID),
+			}{tableDesc.Name, string(index.idxName), n.n.String(), n.p.session.User, uint32(mutationID),
 				droppedViews},
 		); err != nil {
 			return err

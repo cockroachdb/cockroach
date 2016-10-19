@@ -49,6 +49,16 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if n.Index != nil && n.Index.SearchTable {
+		realTableName, err := p.findTableContainingIndex(tn.DatabaseName, tn.TableName)
+		if err != nil {
+			return nil, err
+		}
+		n.Index.Index = tn.TableName
+		tn = realTableName
+	}
+
 	tableDesc, err := p.getTableDesc(tn)
 	if err != nil {
 		return nil, err
