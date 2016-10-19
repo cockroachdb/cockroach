@@ -376,7 +376,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // finishSQLTxn closes the root span for the current SQL txn.
 // This needs to be called before resetForNewSQLTransaction() is called for
 // starting another SQL txn.
-func (ts *txnState) finishSQLTxn(ctx context.Context) {
+func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	span := opentracing.SpanFromContext(ts.Ctx)
 	if span == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
@@ -387,7 +387,7 @@ func (ts *txnState) finishSQLTxn(ctx context.Context) {
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.CollectedSpans)
 		if len(dump) > 0 {
-			log.Infof(ctx, "SQL trace:\n%s", dump)
+			log.Infof(sessionCtx, "SQL trace:\n%s", dump)
 		}
 	}
 }
