@@ -194,3 +194,9 @@ EXPLAIN SHOW CONSTRAINTS FROM foo
 0 virtual table SHOW CONSTRAINTS FROM foo
 1 sort          +"Table",+Name
 2 values        5 columns, 1 row
+
+query ITT
+EXPLAIN SHOW USERS
+----
+0 virtual table SHOW USERS
+1 values 1 column, 0 rows 

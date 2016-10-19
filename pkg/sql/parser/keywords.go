@@ -243,6 +243,7 @@ var keywords = map[string]int{
 	"UPDATE":            UPDATE,
 	"UPSERT":            UPSERT,
 	"USER":              USER,
+	"USERS":             USERS,
 	"USING":             USING,
 	"VALID":             VALID,
 	"VALIDATE":          VALIDATE,

@@ -136,6 +136,15 @@ func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.View)
 }
 
+// ShowUsers represents a SHOW USERS statement.
+type ShowUsers struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowUsers) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW USERS")
+}
+
 // Help represents a HELP statement.
 type Help struct {
 	Name Name

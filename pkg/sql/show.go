@@ -653,6 +653,46 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	}, nil
 }
 
+// ShowUsers returns all the users.
+// Privileges: SELECT on system.users.
+func (p *planner) ShowUsers(n *parser.ShowUsers) (planNode, error) {
+	columns := ResultColumns{{Name: "Username", Typ: parser.TypeString}}
+	return &delayedNode{
+		p:       p,
+		name:    "SHOW USERS",
+		columns: columns,
+		constructor: func(p *planner) (planNode, error) {
+			resultsNode, err := p.query("SELECT username FROM system.users")
+			if err != nil {
+				return nil, err
+			}
+			defer resultsNode.Close()
+
+			if err := resultsNode.Start(); err != nil {
+				return nil, err
+			}
+
+			v := p.newContainerValuesNode(columns, 0)
+			for {
+				if next, err := resultsNode.Next(); err != nil {
+					return nil, err
+				} else if !next {
+					break
+				}
+				// The resultsNode.Values DTuple needs to be copied on each
+				// iteration.
+				row := make(parser.DTuple, 1)
+				copy(row, resultsNode.Values())
+				if err := v.rows.AddRow(row); err != nil {
+					v.Close()
+					return nil, err
+				}
+			}
+			return v, nil
+		},
+	}, nil
+}
+
 // Help returns usage information for the builtin functions
 // Privileges: None
 func (p *planner) Help(n *parser.Help) (planNode, error) {

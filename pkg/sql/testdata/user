@@ -1,0 +1,23 @@
+query T colnames
+SHOW USERS
+----
+Username
+
+statement ok
+INSERT INTO system.users VALUES ('a','a')
+
+query T colnames
+SHOW USERS
+----
+Username
+a
+
+statement ok
+INSERT INTO system.users VALUES ('b','a')
+
+query T colnames
+SHOW USERS
+----
+Username
+a
+b
