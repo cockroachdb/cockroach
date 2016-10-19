@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"reflect"
 	"sort"
 	"sync/atomic"
@@ -1143,15 +1144,104 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest,
-) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
+) (func(*roachpb.BatchResponse, *roachpb.Error, interface{}) *roachpb.Error, error) {
 	var cmd *cmd
+	var spans []roachpb.Span
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		readOnly := ba.IsReadOnly()
-		spans := make([]roachpb.Span, len(ba.Requests))
-		for i, union := range ba.Requests {
-			spans[i] = union.GetInner().Header()
+		spans = make([]roachpb.Span, len(ba.Requests)+1)
+		spans[len(ba.Requests)] = roachpb.Span{
+			Key: keys.RangeFrozenStatusKey(r.RangeID),
 		}
+		// TODO(tschottdorf): with all of these things added to the spans,
+		// the heuristic we are using in the CommandQueue to make a large
+		// span first is going to be horrible as we are always including
+		// range-local and range-global keys, and so that mutant span includes
+		// the whole world.
+		for i, union := range ba.Requests {
+			args := union.GetInner()
+			spans[i] = args.Header()
+			switch t := args.(type) {
+			case *roachpb.PushTxnRequest:
+				spans = append(spans, roachpb.Span{
+					Key: keys.AbortCacheKey(r.RangeID, t.PusheeTxn.ID),
+				}, roachpb.Span{
+					Key: keys.TransactionKey(t.PusheeTxn.Key, t.PusheeTxn.ID),
+				})
+			case *roachpb.ResolveIntentRequest:
+				spans = append(spans, roachpb.Span{
+					Key: keys.AbortCacheKey(r.RangeID, t.IntentTxn.ID),
+				})
+			case *roachpb.ResolveIntentRangeRequest:
+				spans = append(spans, roachpb.Span{
+					Key: keys.AbortCacheKey(r.RangeID, t.IntentTxn.ID),
+				})
+			case *roachpb.GCRequest:
+				for _, key := range t.Keys {
+					fmt.Printf("gc: %v", key)
+					spans = append(spans, roachpb.Span{
+						Key:    key.Key,
+						EndKey: key.Key.Next(),
+					})
+				}
+				spans = append(spans, roachpb.Span{
+					Key: keys.RangeLastGCKey(r.RangeID),
+				}, roachpb.Span{
+					Key: keys.RangeLastGCKey(r.RangeID),
+				}, roachpb.Span{
+					Key: keys.RangeTxnSpanGCThresholdKey(r.RangeID),
+				})
+			case *roachpb.EndTransactionRequest:
+				// The spans may extend beyond this Range, but it's ok for the
+				// purpose of the command queue.
+				spans = append(spans, t.IntentSpans...)
+				trigger := t.InternalCommitTrigger
+				if trigger == nil {
+					break
+				}
+				if trigger.SplitTrigger != nil {
+					spans = append(spans, roachpb.Span{
+						Key:    keys.MakeRangeIDPrefix(trigger.SplitTrigger.RightDesc.RangeID),
+						EndKey: keys.MakeRangeIDPrefix(trigger.SplitTrigger.RightDesc.RangeID + 1),
+					}, roachpb.Span{
+						// Need everything here since we recompute everything
+						// sometimes.
+						Key:    trigger.SplitTrigger.LeftDesc.StartKey.AsRawKey(),
+						EndKey: trigger.SplitTrigger.RightDesc.EndKey.AsRawKey(),
+					}, roachpb.Span{
+						Key:    r.abortCache.min(),
+						EndKey: r.abortCache.max(),
+					})
+				} else if trigger.MergeTrigger != nil {
+					spans = append(spans, roachpb.Span{
+						Key:    keys.MakeRangeIDPrefix(trigger.MergeTrigger.RightDesc.RangeID),
+						EndKey: keys.MakeRangeIDPrefix(trigger.MergeTrigger.RightDesc.RangeID + 1),
+					}, roachpb.Span{
+						Key:    r.abortCache.min(),
+						EndKey: r.abortCache.max(),
+					}, roachpb.Span{
+						// Interesting that we don't see this one pop up always;
+						// this key can certainly not be added to the cmdq in
+						// general as that would make it block everything on
+						// everything else (except reads on reads).
+						Key: keys.RangeStatsKey(r.RangeID),
+					}, roachpb.Span{
+						Key:    trigger.MergeTrigger.RightDesc.StartKey.AsRawKey(),
+						EndKey: trigger.MergeTrigger.RightDesc.EndKey.AsRawKey(),
+					})
+				}
+			}
+		}
+
+		if ba.Txn != nil {
+			spans = append(spans, roachpb.Span{
+				Key: keys.AbortCacheKey(r.RangeID, ba.Txn.ID),
+			}, roachpb.Span{
+				Key: keys.TransactionKey(ba.Txn.Key, ba.Txn.ID),
+			})
+		}
+
 		r.mu.Lock()
 		chans := r.mu.cmdQ.getWait(readOnly, spans...)
 		cmd = r.mu.cmdQ.add(readOnly, spans...)
@@ -1209,7 +1299,40 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+	return func(br *roachpb.BatchResponse, pErr *roachpb.Error, debug interface{}) *roachpb.Error {
+		// TODO(tschottdorf): check that our spans added above cover everything
+		// we touched. In particilar, each individual write must be covered
+		// by one individual span (easier to test for).
+		writes, _ := debug.(map[string]roachpb.Span)
+		if ba.ReadConsistency != roachpb.INCONSISTENT && len(writes) > 0 {
+			for _, span := range spans {
+				for i, write := range writes {
+					if write.Key == nil {
+						continue
+					}
+					if len(write.EndKey) == 0 {
+						write.EndKey = write.Key.Next()
+					}
+					if len(span.EndKey) == 0 {
+						span.EndKey = span.Key.Next()
+					}
+					if bytes.Compare(span.Key, write.EndKey) >= 0 {
+						continue
+					}
+					if bytes.Compare(write.Key, span.EndKey) >= 0 {
+						continue
+					}
+					delete(writes, i)
+				}
+			}
+			if len(writes) > 0 {
+				for s := range writes {
+					log.Error(ctx, s)
+				}
+				log.Errorf(ctx, "untracked writes in command queue for batch %+v\ntxn:%+v", ba, ba.Txn)
+				os.Exit(1)
+			}
+		}
 		return r.endCmds(cmd, ba, br, pErr)
 	}, nil
 }
@@ -1418,7 +1541,7 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error
+	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error, interface{}) *roachpb.Error
 	if !ba.IsNonKV() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
@@ -1430,7 +1553,7 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	} else {
 		endCmdsFunc = func(
-			br *roachpb.BatchResponse, pErr *roachpb.Error,
+			br *roachpb.BatchResponse, pErr *roachpb.Error, _ interface{},
 		) *roachpb.Error {
 			return pErr
 		}
@@ -1445,7 +1568,7 @@ func (r *Replica) addReadOnlyCmd(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		pErr = endCmdsFunc(br, pErr)
+		pErr = endCmdsFunc(br, pErr, nil)
 	}()
 
 	// Execute read-only batch command. It checks for matching key range; note
@@ -1493,6 +1616,7 @@ func (r *Replica) addWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	isNonKV := ba.IsNonKV()
+	var debug interface{}
 	if !isNonKV {
 		// Add the write to the command queue to gate subsequent overlapping
 		// commands until this command completes. Note that this must be
@@ -1508,7 +1632,7 @@ func (r *Replica) addWriteCmd(
 		// Guarantee we remove the commands from the command queue. This is
 		// wrapped to delay pErr evaluation to its value when returning.
 		defer func() {
-			pErr = endCmdsFunc(br, pErr)
+			pErr = endCmdsFunc(br, pErr, debug)
 		}()
 	}
 
@@ -1549,6 +1673,7 @@ func (r *Replica) addWriteCmd(
 			select {
 			case respWithErr := <-ch:
 				br, pErr = respWithErr.Reply, respWithErr.Err
+				debug = respWithErr.Debug
 			case <-ctxDone:
 				// Cancellation is somewhat tricky since we can't prevent the
 				// Raft command from executing at some point in the future.
@@ -1921,6 +2046,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 	}
 
 	batch := r.store.Engine().NewBatch()
+	batch.SetDebug()
 	defer batch.Close()
 
 	// We know that all of the writes from here forward will be to distinct keys.
@@ -2661,13 +2787,14 @@ func (r *Replica) processRaftCommand(
 		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
 
-		// TODO(tschottdorf): this field should be zeroed earlier.
-		pd.Batch = nil
-
 		// Save the response and zero out the field so that handleProposalData
 		// knows it wasn't forgotten.
 		response = storagebase.ResponseWithError{Err: pd.Err, Reply: pd.Reply}
+		response.Debug = pd.Batch.CollectSpans()
+
 		pd.Err, pd.Reply = nil, nil
+		// TODO(tschottdorf): this field should be zeroed earlier.
+		pd.Batch = nil
 
 		// Handle the ProposalData, executing any side effects of the last
 		// state machine transition.
@@ -2818,6 +2945,7 @@ func (r *Replica) applyRaftCommand(
 	var pd ProposalData
 	if forcedError != nil {
 		pd.Batch = r.store.Engine().NewBatch()
+		pd.Batch.SetDebug()
 		pd.Err = forcedError
 	} else {
 		pd = r.applyRaftCommandInBatch(ctx, idKey, ba)
@@ -2911,9 +3039,11 @@ func (r *Replica) applyRaftCommandInBatch(
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
 		r.assert5725(ba)
+		// TODO(tschottdorf): use of engine here could already be wrong
 		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
 			var pd ProposalData
 			pd.Batch = r.store.Engine().NewBatch()
+			pd.Batch.SetDebug()
 			pd.Err = pErr
 			return pd
 		}
@@ -3018,6 +3148,7 @@ func (r *Replica) executeWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	batch := r.store.Engine().NewBatch()
+	batch.SetDebug()
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn
 	// will require restart or retry, execute as normal.
