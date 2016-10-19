@@ -3535,14 +3535,14 @@ func (s *Store) updateCommandQueueGauges() error {
 		combinedCommandReadCount  int64
 	)
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		rep.mu.Lock()
-		writes := rep.mu.cmdQ.localMetrics.writeCommands
-		reads := rep.mu.cmdQ.localMetrics.readCommands
-		treeSize := int64(rep.mu.cmdQ.treeSize())
+		rep.cmdQMu.Lock()
+		writes := rep.cmdQMu.q.localMetrics.writeCommands
+		reads := rep.cmdQMu.q.localMetrics.readCommands
+		treeSize := int64(rep.cmdQMu.q.treeSize())
 
-		maxOverlaps := rep.mu.cmdQ.localMetrics.maxOverlapsSeen
-		rep.mu.cmdQ.localMetrics.maxOverlapsSeen = 0
-		rep.mu.Unlock()
+		maxOverlaps := rep.cmdQMu.q.localMetrics.maxOverlapsSeen
+		rep.cmdQMu.q.localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.Unlock()
 
 		cqSize := writes + reads
 		if cqSize > maxCommandQueueSize {
