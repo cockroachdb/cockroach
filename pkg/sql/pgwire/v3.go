@@ -19,6 +19,7 @@ package pgwire
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"reflect"
@@ -28,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -128,31 +130,25 @@ type v3Conn struct {
 	metrics ServerMetrics
 }
 
-func makeV3Conn(
-	ctx context.Context,
-	conn net.Conn,
-	executor *sql.Executor,
-	metrics ServerMetrics,
-	sessionArgs sql.SessionArgs,
-) v3Conn {
+func makeV3Conn(ctx context.Context, conn net.Conn, metrics ServerMetrics) v3Conn {
 	return v3Conn{
 		conn:     conn,
 		rd:       bufio.NewReader(conn),
 		wr:       bufio.NewWriter(conn),
-		executor: executor,
 		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
 		metrics:  metrics,
-		session:  sql.NewSession(ctx, sessionArgs, executor, conn.RemoteAddr()),
 	}
 }
 
 func (c *v3Conn) finish(ctx context.Context) {
+	if c.session != nil {
+		c.session.Finish(c.executor)
+	}
 	// This is better than always flushing on error.
 	if err := c.wr.Flush(); err != nil {
 		log.Error(ctx, err)
 	}
 	_ = c.conn.Close()
-	c.session.Finish(c.executor)
 }
 
 func parseOptions(data []byte) (sql.SessionArgs, error) {
@@ -197,10 +193,24 @@ var statusReportParams = map[string]string{
 	"server_version": "9.5.0",
 }
 
-func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool) error) error {
-	if authenticationHook != nil {
-		if err := authenticationHook(c.session.User, true /* public */); err != nil {
+// handleAuthentication should discuss with the client to arrange
+// authentication and update sessionArgs with the authenticated user's
+// name, if different from the one given initially. Note: at this
+// point the sql.Session does not exist yet! If need exists to access the
+// database to look up authentication data, use the internal executor.
+func (c *v3Conn) handleAuthentication(
+	ctx context.Context, insecure bool, sessionArgs *sql.SessionArgs,
+) error {
+	if tlsConn, ok := c.conn.(*tls.Conn); ok {
+		tlsState := tlsConn.ConnectionState()
+		authenticationHook, err := security.UserAuthHook(insecure, &tlsState)
+		if err != nil {
 			return c.sendInternalError(err.Error())
+		}
+		if authenticationHook != nil {
+			if err := authenticationHook(sessionArgs.User, true /* public */); err != nil {
+				return c.sendInternalError(err.Error())
+			}
 		}
 	}
 	c.writeBuf.initMsg(serverMsgAuth)
@@ -208,6 +218,12 @@ func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (c *v3Conn) serve(
+	ctx context.Context, executor *sql.Executor, sessionArgs sql.SessionArgs,
+) error {
 	for key, value := range statusReportParams {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		c.writeBuf.writeTerminatedString(key)
@@ -219,6 +235,10 @@ func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
+
+	ctx = log.WithLogTagStr(ctx, "user", sessionArgs.User)
+	c.executor = executor
+	c.session = sql.NewSession(ctx, sessionArgs, executor, c.conn.RemoteAddr())
 
 	for {
 		if !c.doingExtendedQueryMessage {
