@@ -4377,6 +4377,14 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "name": "MsgReadIndexResp",
                             "id": 16
+                        },
+                        {
+                            "name": "MsgPreVote",
+                            "id": 17
+                        },
+                        {
+                            "name": "MsgPreVoteResp",
+                            "id": 18
                         }
                     ]
                 },

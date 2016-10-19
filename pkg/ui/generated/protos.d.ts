@@ -7566,6 +7566,8 @@ declare module Proto2TypeScript.raftpb {
 		MsgTimeoutNow = 14,
 		MsgReadIndex = 15,
 		MsgReadIndexResp = 16,
+		MsgPreVote = 17,
+		MsgPreVoteResp = 18,
 		
 }
 }
