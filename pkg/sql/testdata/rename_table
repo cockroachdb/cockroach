@@ -146,7 +146,7 @@ SELECT * FROM test2.t2
 5 25
 
 statement ok
-CREATE VIEW test2.v1 AS SELECT * FROM test2.t2
+CREATE VIEW test2.v1 AS SELECT c1,c2 FROM test2.t2
 
 statement error pgcode 42809 "test2.v1" is not a table
 ALTER TABLE test2.v1 RENAME TO test2.v2

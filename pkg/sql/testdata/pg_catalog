@@ -119,7 +119,7 @@ CREATE TABLE constraint_db.t3 (
 )
 
 statement ok
-CREATE VIEW constraint_db.v1 AS SELECT * FROM constraint_db.t1;
+CREATE VIEW constraint_db.v1 AS SELECT p,a,b,c FROM constraint_db.t1;
 
 ## pg_catalog.pg_namespace
 

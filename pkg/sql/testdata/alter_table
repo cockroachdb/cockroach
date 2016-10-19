@@ -508,7 +508,7 @@ ALTER INDEX nonexistent@noindex SPLIT AT (42)
 user root
 
 statement ok
-CREATE VIEW privsview AS SELECT * FROM privs
+CREATE VIEW privsview AS SELECT a,b,c FROM privs
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview ADD d INT
