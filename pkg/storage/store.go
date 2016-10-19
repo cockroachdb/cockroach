@@ -150,7 +150,7 @@ func newRaftConfig(
 		HeartbeatTick: storeCfg.RaftHeartbeatIntervalTicks,
 		Storage:       strg,
 		Logger:        logger,
-		CheckQuorum:   true,
+		PreVote:       true,
 		// TODO(bdarnell): make these configurable; evaluate defaults.
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
