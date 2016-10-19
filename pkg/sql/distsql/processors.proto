@@ -129,11 +129,9 @@ message EvaluatorSpec {
 }
 
 message DistinctSpec {
-  repeated uint32 cols = 1;
-
-  // TODO(irfansharif): Ordered columns, the columns the input is already sorted
-  // by, can be optionally specified for possible optimizations taking advantage
-  // of the partial orderings.
+  // The ordering of the input stream can be optionally specified for
+  // possible optimizations.
+  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
 }
 
 enum JoinType {

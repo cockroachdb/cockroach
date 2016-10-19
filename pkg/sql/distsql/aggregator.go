@@ -26,8 +26,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-type column uint32
-type columns []column
+type columns []uint32
 
 // aggregator is the processor core type that does "aggregation" in the SQL
 // sense. It groups rows and computes an aggregate for each group. The group is
@@ -62,21 +61,20 @@ func newAggregator(
 	ctx *FlowCtx, spec *AggregatorSpec, input RowSource, output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
-		input:  input,
-		output: output,
-		ctx:    log.WithLogTag(ctx.Context, "Agg", nil),
-		rows:   &RowBuffer{},
+		input:     input,
+		output:    output,
+		ctx:       log.WithLogTag(ctx.Context, "Agg", nil),
+		rows:      &RowBuffer{},
+		buckets:   make(map[string]struct{}),
+		inputCols: make(columns, len(spec.Exprs)),
+		groupCols: make(columns, len(spec.GroupCols)),
 	}
 
 	ag.inputCols = make(columns, len(spec.Exprs))
 	for i, expr := range spec.Exprs {
-		ag.inputCols[i] = column(expr.ColIdx)
+		ag.inputCols[i] = expr.ColIdx
 	}
-
-	ag.groupCols = make(columns, len(spec.GroupCols))
-	for i, colIdx := range spec.GroupCols {
-		ag.groupCols[i] = column(colIdx)
-	}
+	copy(ag.groupCols, spec.GroupCols)
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
@@ -93,7 +91,6 @@ func newAggregator(
 		ag.funcs = append(ag.funcs, fn)
 	}
 
-	ag.buckets = make(map[string]struct{})
 	return ag, nil
 }
 
