@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,6 +151,14 @@ func runTests(m *testing.M) {
 //   '(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)', invalid
 var prefixRE = regexp.MustCompile("^(?:[a-z](?:[-a-z0-9]{0,45}[a-z0-9])?)$")
 
+// getRandomName generates a random, human-readable name to ease identification
+// of different test resources.
+func getRandomName() string {
+	// Remove characters that aren't allowed in hostnames for machines allocated
+	// by Terraform.
+	return strings.Replace(namesgenerator.GetRandomName(0), "_", "", -1)
+}
+
 func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	SkipUnlessRemote(t)
 
@@ -202,7 +211,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 			name += "-"
 		}
 
-		name += namesgenerator.GetRandomName(0)
+		name += getRandomName()
 
 		// Rudimentary collision control.
 		for i := 0; ; i++ {
