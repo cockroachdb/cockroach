@@ -106,7 +106,7 @@ SHOW GRANTS ON t FOR readwrite, "test-user"
 # The same as above, but on a view
 
 statement ok
-CREATE VIEW v as SELECT * FROM t
+CREATE VIEW v as SELECT id FROM t
 
 query TTT colnames
 SHOW GRANTS ON v

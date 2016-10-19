@@ -45,7 +45,7 @@ statement error compound types not supported yet: "k\.v"
 UPDATE kv SET k.v = 9
 
 statement ok
-CREATE VIEW kview as SELECT * from kv
+CREATE VIEW kview as SELECT k,v from kv
 
 query II
 SELECT * FROM kview

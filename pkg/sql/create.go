@@ -923,6 +923,11 @@ func (n *createViewNode) makeViewTableDesc(
 		desc.AddColumn(*col)
 	}
 
+	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
+	if planContainsStar(n.sourcePlan) {
+		return desc, errors.New("views do not currently support * expressions")
+	}
+
 	n.resolveViewDependencies(&desc, affected)
 
 	var buf bytes.Buffer
@@ -1381,4 +1386,20 @@ func populateViewBackrefFromViewDesc(
 	}
 	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
+}
+
+func planContainsStar(plan planNode) bool {
+	if sel, ok := plan.(*selectNode); ok {
+		if sel.isStar {
+			return true
+		}
+	}
+
+	_, _, children := plan.ExplainPlan(true)
+	for _, child := range children {
+		if containsStar := planContainsStar(child); containsStar {
+			return true
+		}
+	}
+	return false
 }

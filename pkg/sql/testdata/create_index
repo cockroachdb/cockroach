@@ -97,7 +97,7 @@ statement error pgcode 42P01 table "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
 
 statement ok
-CREATE VIEW v AS SELECT * FROM t
+CREATE VIEW v AS SELECT a,b FROM t
 
 statement error pgcode 42809 "v" is not a table
 CREATE INDEX failview ON v (b DESC)
