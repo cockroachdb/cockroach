@@ -32,7 +32,7 @@ message Expression {
   // TODO(radu): TBD how this will be used
   optional string version = 1 [(gogoproto.nullable) = false];
 
-  // SQL expressions are passed as a string, with Placeholders ($0, $1, $2 ..)
+  // SQL expressions are passed as a string, with placeholders ($0, $1, $2 ..)
   // used for "input" variables.
   optional string expr = 2 [(gogoproto.nullable) = false];
 }

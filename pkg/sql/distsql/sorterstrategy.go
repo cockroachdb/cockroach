@@ -28,8 +28,8 @@ type sorterStrategy interface {
 	// Execute runs the main execution loop of the strategy on a given sorter.
 	Execute(*sorter) error
 
-	// Push adds a single element to the strategy.
-	Push(sqlbase.EncDatumRow)
+	// Add adds a single element to the strategy.
+	Add(sqlbase.EncDatumRow)
 
 	// Process sorts all the values that have been currently added to the
 	// strategy. It suffices to call this only once unless you need to sort
@@ -44,12 +44,12 @@ type sorterStrategy interface {
 	// the last call to Sort.
 	Peek() sqlbase.EncDatumRow
 
-	// Pop retrieves the next row whilst removing it from the strategy.
+	// Next retrieves the next row whilst removing it from the strategy.
 	// Returns a nil row if there are no more rows.
 	//
 	// Illegal to call if new elements have been added to the strategy since
 	// the last call to Sort.
-	Pop() sqlbase.EncDatumRow
+	Next() sqlbase.EncDatumRow
 }
 
 // All rows for each sorting strategy are added to the wrapped sorterValues.
@@ -57,7 +57,7 @@ type sortStrategyBase struct {
 	sValues *sorterValues
 }
 
-func (ss *sortStrategyBase) Push(row sqlbase.EncDatumRow) {
+func (ss *sortStrategyBase) Add(row sqlbase.EncDatumRow) {
 	ss.sValues.PushRow(row)
 }
 
@@ -66,11 +66,15 @@ func (ss *sortStrategyBase) Process() error {
 }
 
 func (ss *sortStrategyBase) Peek() sqlbase.EncDatumRow {
-	return ss.sValues.Peek()
+	if len(ss.sValues.rows) == 0 {
+		return nil
+	}
+
+	return ss.sValues.rows[0]
 }
 
-func (ss *sortStrategyBase) Pop() sqlbase.EncDatumRow {
-	return ss.sValues.PopRow()
+func (ss *sortStrategyBase) Next() sqlbase.EncDatumRow {
+	return ss.sValues.NextRow()
 }
 
 // sortAllStrategy reads in all values into the wrapped sValues and
@@ -104,7 +108,7 @@ func (ss *sortAllStrategy) Execute(s *sorter) error {
 		if row == nil {
 			break
 		}
-		ss.Push(row)
+		ss.Add(row)
 	}
 
 	err := ss.Process()
@@ -113,7 +117,7 @@ func (ss *sortAllStrategy) Execute(s *sorter) error {
 	}
 
 	for {
-		row := ss.Pop()
+		row := ss.Next()
 		if row == nil {
 			break
 		}
@@ -182,7 +186,7 @@ func (ss *sortTopKStrategy) Execute(s *sorter) error {
 		if row == nil {
 			break
 		}
-		ss.Push(row)
+		ss.Add(row)
 	}
 
 	err := ss.Process()
@@ -191,7 +195,7 @@ func (ss *sortTopKStrategy) Execute(s *sorter) error {
 	}
 
 	for {
-		row := ss.Pop()
+		row := ss.Next()
 		if row == nil {
 			break
 		}
@@ -212,7 +216,7 @@ func (ss *sortTopKStrategy) Execute(s *sorter) error {
 	return nil
 }
 
-func (ss *sortTopKStrategy) Push(row sqlbase.EncDatumRow) {
+func (ss *sortTopKStrategy) Add(row sqlbase.EncDatumRow) {
 	switch {
 	case int64(ss.sValues.Len()) < ss.k:
 		// The first k values all go into the max-heap.
@@ -270,7 +274,7 @@ func (ss *sortChunksStrategy) Execute(s *sorter) error {
 			if log.V(3) {
 				log.Infof(s.ctx, "pushing row %s\n", nextRow)
 			}
-			ss.Push(nextRow)
+			ss.Add(nextRow)
 
 			nextRow, err = s.input.NextRow()
 			if err != nil {
@@ -305,7 +309,7 @@ func (ss *sortChunksStrategy) Execute(s *sorter) error {
 
 		// Stream out sorted rows in order to row receiver.
 		for {
-			res := ss.Pop()
+			res := ss.Next()
 			if res == nil {
 				break
 			}
