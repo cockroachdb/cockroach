@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -36,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 const (
@@ -152,6 +155,169 @@ func (k MVCCKey) String() string {
 type MVCCKeyValue struct {
 	Key   MVCCKey
 	Value []byte
+}
+
+func (m *MVCCKeyValue) PrettyPrintValue() string {
+	prettys := []func() (string, error){
+		m.prettyPrintRaftLogEntry,
+		m.prettyPrintRangeDescriptor,
+		m.prettyPrintMeta,
+		m.prettyPrintTxn,
+		m.prettyPrintRangeID,
+	}
+	for _, pretty := range prettys {
+		out, err := pretty()
+		if err != nil {
+			continue
+		}
+		return out
+	}
+	return string(m.Value)
+}
+
+func getProtoValue(data []byte, msg proto.Message) error {
+	value := roachpb.Value{
+		RawBytes: data,
+	}
+	return value.GetProto(msg)
+}
+
+func maybeUnmarshalInline(v []byte, dest proto.Message) error {
+	var meta enginepb.MVCCMetadata
+	if err := meta.Unmarshal(v); err != nil {
+		return err
+	}
+	return getProtoValue(meta.RawBytes, dest)
+}
+
+func (m *MVCCKeyValue) prettyPrintRaftLogEntry() (string, error) {
+	var ent raftpb.Entry
+	if err := maybeUnmarshalInline(m.Value, &ent); err != nil {
+		return "", err
+	}
+	return ent.String(), nil
+}
+
+func checkRangeDescriptorKey(key MVCCKey) error {
+	_, suffix, _, err := keys.DecodeRangeKey(key.Key)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
+		return fmt.Errorf("wrong suffix: %s", suffix)
+	}
+	return nil
+}
+
+func printRangeDescriptor(data []byte, desc roachpb.RangeDescriptor) (string, error) {
+	if err := getProtoValue(data, &desc); err != nil {
+		return "", err
+	}
+	return desc.String(), nil
+}
+
+func (m *MVCCKeyValue) prettyPrintRangeDescriptor() (string, error) {
+	if err := checkRangeDescriptorKey(m.Key); err != nil {
+		return "", err
+	}
+	var desc roachpb.RangeDescriptor
+	return printRangeDescriptor(m.Value, desc)
+}
+
+func (m *MVCCKeyValue) prettyPrintMeta() (string, error) {
+	if !bytes.HasPrefix(m.Key.Key, keys.Meta1Prefix) && !bytes.HasPrefix(m.Key.Key, keys.Meta2Prefix) {
+		return "", errors.New("not a meta key")
+	}
+	var desc roachpb.RangeDescriptor
+	return printRangeDescriptor(m.Value, desc)
+}
+
+func (m *MVCCKeyValue) prettyPrintTxn() (string, error) {
+	var txn roachpb.Transaction
+	if err := maybeUnmarshalInline(m.Value, &txn); err != nil {
+		return "", err
+	}
+	return txn.String() + "\n", nil
+}
+
+func (m *MVCCKeyValue) prettyPrintRangeID() (string, error) {
+	if m.Key.Timestamp != hlc.ZeroTimestamp {
+		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", m.Key)
+	}
+	_, _, suffix, _, err := keys.DecodeRangeIDKey(m.Key.Key)
+	if err != nil {
+		return "", err
+	}
+
+	// All range ID keys are stored inline on the metadata.
+	var meta enginepb.MVCCMetadata
+	if err := meta.Unmarshal(m.Value); err != nil {
+		return "", err
+	}
+	value := roachpb.Value{RawBytes: meta.RawBytes}
+
+	// Values encoded as protobufs set msg and continue outside the
+	// switch. Other types are handled inside the switch and return.
+	var msg proto.Message
+	switch {
+	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexSuffix):
+		fallthrough
+	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(i, 10), nil
+
+	case bytes.Equal(suffix, keys.LocalRangeFrozenStatusSuffix):
+		b, err := value.GetBool()
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatBool(b), nil
+
+	case bytes.Equal(suffix, keys.LocalAbortCacheSuffix):
+		msg = &roachpb.AbortCacheEntry{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLastGCSuffix):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, keys.LocalRaftTombstoneSuffix):
+		msg = &roachpb.RaftTombstone{}
+
+	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
+		msg = &roachpb.RaftTruncatedState{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
+		msg = &roachpb.Lease{}
+
+	case bytes.Equal(suffix, keys.LocalRangeStatsSuffix):
+		msg = &enginepb.MVCCStats{}
+
+	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
+		msg = &raftpb.HardState{}
+
+	case bytes.Equal(suffix, keys.LocalRaftLastIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(i, 10), nil
+
+	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffixDeprecated):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
+		msg = &hlc.Timestamp{}
+
+	default:
+		return "", fmt.Errorf("unknown raft id key %s", suffix)
+	}
+
+	if err := value.GetProto(msg); err != nil {
+		return "", err
+	}
+	return msg.String(), nil
 }
 
 // isSysLocal returns whether the whether the key is system-local.
