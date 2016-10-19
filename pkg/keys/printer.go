@@ -24,9 +24,14 @@ import (
 
 	"github.com/pkg/errors"
 
+	//"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // PrettyPrintTimeseriesKey is a hook for pretty printing a timeseries key. The
@@ -37,7 +42,7 @@ type dictEntry struct {
 	name   string
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
-	ppFunc func(key roachpb.Key) string
+	ppFunc func(key roachpb.Key, valueBytes []byte) (string, string)
 	// Parses the relevant prefix of the input into a roachpb.Key, returning
 	// the remainder and the key corresponding to the consumed prefix of
 	// 'input'. Allowed to panic on errors.
@@ -74,7 +79,7 @@ var (
 				psFunc: parseUnsupported},
 		}},
 		{name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, entries: []dictEntry{
-			{name: "", prefix: Meta1Prefix, ppFunc: print,
+			{name: "", prefix: Meta1Prefix, ppFunc: printKeyValue,
 				psFunc: func(input string) (string, roachpb.Key) {
 					input = mustShiftSlash(input)
 					unq, err := strconv.Unquote(input)
@@ -90,7 +95,7 @@ var (
 			}},
 		},
 		{name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, entries: []dictEntry{
-			{name: "", prefix: Meta2Prefix, ppFunc: print,
+			{name: "", prefix: Meta2Prefix, ppFunc: printKeyValue,
 				psFunc: func(input string) (string, roachpb.Key) {
 					input = mustShiftSlash(input)
 					unq, err := strconv.Unquote(input)
@@ -106,24 +111,24 @@ var (
 		},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
 			{name: "/NodeLiveness", prefix: NodeLivenessPrefix,
-				ppFunc: decodeKeyPrint,
+				ppFunc: decodeKeyValuePrint,
 				psFunc: parseUnsupported,
 			},
 			{name: "/NodeLivenessMax", prefix: NodeLivenessKeyMax,
-				ppFunc: decodeKeyPrint,
+				ppFunc: decodeKeyValuePrint,
 				psFunc: parseUnsupported,
 			},
 			{name: "/StatusNode", prefix: StatusNodePrefix,
-				ppFunc: decodeKeyPrint,
+				ppFunc: decodeKeyValuePrint,
 				psFunc: parseUnsupported,
 			},
 			{name: "/tsd", prefix: TimeseriesPrefix,
-				ppFunc: decodeTimeseriesKey,
+				ppFunc: decodeTimeseriesKeyValue,
 				psFunc: parseUnsupported,
 			},
 		}},
 		{name: "/Table", start: TableDataMin, end: TableDataMax, entries: []dictEntry{
-			{name: "", prefix: nil, ppFunc: decodeKeyPrint,
+			{name: "", prefix: nil, ppFunc: decodeKeyValuePrint,
 				psFunc: parseUnsupported},
 		}},
 	}
@@ -144,13 +149,12 @@ var (
 		ppFunc func(key roachpb.Key) string
 		psFunc func(rangeID roachpb.RangeID, input string) (string, roachpb.Key)
 	}{
-		{name: "AbortCache", suffix: LocalAbortCacheSuffix, ppFunc: abortCacheKeyPrint, psFunc: abortCacheKeyParse},
+		{name: "AbortCache", suffix: LocalAbortCacheSuffix, psFunc: abortCacheKeyParse},
 		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexSuffix},
 		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexSuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,
-			ppFunc: raftLogKeyPrint,
 			psFunc: raftLogKeyParse,
 		},
 		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateSuffix},
@@ -182,14 +186,15 @@ var constSubKeyDict = []struct {
 	{"/gossipBootstrap", localStoreGossipSuffix},
 }
 
-func localStoreKeyPrint(key roachpb.Key) string {
+func localStoreKeyPrint(key roachpb.Key, valueBytes []byte) (string, string) {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
-			return v.name
+			msg := localStoreValuePrint(v.key, valueBytes)
+			return v.name, msg
 		}
 	}
 
-	return fmt.Sprintf("%q", []byte(key))
+	return fmt.Sprintf("%q", []byte(key)), fmt.Sprintf("%q", valueBytes)
 }
 
 func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
@@ -309,16 +314,17 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	panic(&errUglifyUnsupported{errors.New("unhandled general range key")})
 }
 
-func localRangeIDKeyPrint(key roachpb.Key) string {
+func localRangeIDKeyPrint(key roachpb.Key, valueBytes []byte) (string, string) {
 	var buf bytes.Buffer
+	msg := fmt.Sprintf("%q", valueBytes)
 	if encoding.PeekType(key) != encoding.Int {
-		return fmt.Sprintf("/err<%q>", []byte(key))
+		return fmt.Sprintf("/err<%q>", []byte(key)), msg
 	}
 
 	// Get the rangeID.
 	key, i, err := encoding.DecodeVarintAscending(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
+		return fmt.Sprintf("/err<%v:%q>", err, []byte(key)), msg
 	}
 
 	fmt.Fprintf(&buf, "/%d", i)
@@ -333,11 +339,12 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	hasSuffix := false
 	for _, s := range rangeIDSuffixDict {
 		if bytes.HasPrefix(key, s.suffix) {
+			msg = localRangeIDValuePrint(s.suffix, valueBytes)
 			fmt.Fprintf(&buf, "/%s", s.name)
 			key = key[len(s.suffix):]
 			if s.ppFunc != nil && len(key) != 0 {
 				fmt.Fprintf(&buf, "%s", s.ppFunc(key))
-				return buf.String()
+				return buf.String(), msg
 			}
 			hasSuffix = true
 			break
@@ -351,18 +358,19 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		fmt.Fprintf(&buf, "%q", []byte(key))
 	}
 
-	return buf.String()
+	return buf.String(), msg
 }
 
-func localRangeKeyPrint(key roachpb.Key) string {
+func localRangeKeyPrint(key roachpb.Key, valueBytes []byte) (string, string) {
 	var buf bytes.Buffer
-
+	msg := fmt.Sprintf("%q", valueBytes)
 	for _, s := range rangeSuffixDict {
+		msg = localRangeValuePrint(s.suffix, valueBytes)
 		if s.atEnd {
 			if bytes.HasSuffix(key, s.suffix) {
 				key = key[:len(key)-len(s.suffix)]
 				fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(key), s.name)
-				return buf.String()
+				return buf.String(), msg
 			}
 		} else {
 			begin := bytes.Index(key, s.suffix)
@@ -370,16 +378,16 @@ func localRangeKeyPrint(key roachpb.Key) string {
 				addrKey := key[:begin]
 				txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
 				if err != nil {
-					return fmt.Sprintf("/%q/err:%v", key, err)
+					return fmt.Sprintf("/%q/err:%v", key, err), msg
 				}
 				fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, txnID)
-				return buf.String()
+				return buf.String(), msg
 			}
 		}
 	}
 	fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 
-	return buf.String()
+	return buf.String(), msg
 }
 
 type errUglifyUnsupported struct {
@@ -422,33 +430,48 @@ func print(key roachpb.Key) string {
 	return fmt.Sprintf("/%q", []byte(key))
 }
 
+func printKeyValue(key roachpb.Key, valueBytes []byte) (string, string) {
+	return print(key), fmt.Sprintf("%q", valueBytes)
+}
+
 func decodeKeyPrint(key roachpb.Key) string {
 	return encoding.PrettyPrintValue(key, "/")
+}
+
+func decodeKeyValuePrint(key roachpb.Key, valueBytes []byte) (string, string) {
+	return decodeKeyPrint(key), fmt.Sprintf("%q", valueBytes)
 }
 
 func decodeTimeseriesKey(key roachpb.Key) string {
 	return PrettyPrintTimeseriesKey(key)
 }
 
+func decodeTimeseriesKeyValue(key roachpb.Key, valueBytes []byte) (string, string) {
+	return decodeTimeseriesKey(key), fmt.Sprintf("%q", valueBytes)
+}
+
 // prettyPrintInternal parse key with prefix in keyDict,
 // if the key don't march any prefix in keyDict, return its byte value with quotation and false,
 // or else return its human readable value and true.
-func prettyPrintInternal(key roachpb.Key) (string, bool) {
+func prettyPrintInternal(key roachpb.Key, valueBytes []byte) (bool, string, string) {
 	var buf bytes.Buffer
+	msg := fmt.Sprintf("%q", valueBytes)
 	for _, k := range keyDict {
 		if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
 			buf.WriteString(k.name)
 			if k.end != nil && k.end.Compare(key) == 0 {
 				buf.WriteString("/Max")
-				return buf.String(), true
+				return true, buf.String(), msg
 			}
 
 			hasPrefix := false
+			var str string
 			for _, e := range k.entries {
 				if bytes.HasPrefix(key, e.prefix) {
 					hasPrefix = true
 					key = key[len(e.prefix):]
-					fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
+					str, msg = e.ppFunc(key, valueBytes)
+					fmt.Fprintf(&buf, "%s%s", e.name, str)
 					break
 				}
 			}
@@ -457,11 +480,11 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 				fmt.Fprintf(&buf, "/%q", []byte(key))
 			}
 
-			return buf.String(), true
+			return true, buf.String(), msg
 		}
 	}
 
-	return fmt.Sprintf("%q", []byte(key)), false
+	return false, fmt.Sprintf("%q", []byte(key)), msg
 }
 
 // PrettyPrint prints the key in a human readable format:
@@ -497,25 +520,25 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 //
 // /Min                                           ""
 // /Max                                           "\xff\xff"
-func PrettyPrint(key roachpb.Key) string {
+func PrettyPrint(key roachpb.Key, valueBytes []byte) (string, string) {
 	for _, k := range constKeyDict {
 		if key.Equal(k.value) {
-			return k.name
+			return k.name, fmt.Sprintf("%q", valueBytes)
 		}
 	}
 
 	for _, k := range keyOfKeyDict {
 		if bytes.HasPrefix(key, k.prefix) {
 			key = key[len(k.prefix):]
-			str, formatted := prettyPrintInternal(key)
+			formatted, str, msg := prettyPrintInternal(key, valueBytes)
 			if formatted {
-				return k.name + str
+				return k.name + str, msg
 			}
-			return k.name + "/" + str
+			return k.name + "/" + str, msg
 		}
 	}
-	str, _ := prettyPrintInternal(key)
-	return str
+	_, str, msg := prettyPrintInternal(key, valueBytes)
+	return str, msg
 }
 
 var errIllegalInput = errors.New("illegal input")
@@ -582,14 +605,14 @@ outer:
 		}
 		return mkErr(errors.New("can't handle key"))
 	}
-	if out := PrettyPrint(output); out != origInput {
+	if out, _ := PrettyPrint(output, []byte{}); out != origInput {
 		return nil, errors.Errorf("constructed key deviates from original: %s vs %s", out, origInput)
 	}
 	return output, nil
 }
 
 func init() {
-	roachpb.PrettyPrintKey = PrettyPrint
+	roachpb.PrettyPrintKeyValue = PrettyPrint
 }
 
 // MassagePrettyPrintedSpanForTest does some transformations on pretty-printed spans and keys:
@@ -652,8 +675,8 @@ func PrettyPrintRange(b *bytes.Buffer, start, end roachpb.Key, maxChars int) {
 	if maxChars < 8 {
 		maxChars = 8
 	}
-	prettyStart := PrettyPrint(start)
-	prettyEnd := PrettyPrint(end)
+	prettyStart, _ := PrettyPrint(start, []byte{})
+	prettyEnd, _ := PrettyPrint(end, []byte{})
 	i := 0
 	// Find the common prefix.
 	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {
@@ -685,4 +708,133 @@ func PrettyPrintRange(b *bytes.Buffer, start, end roachpb.Key, maxChars int) {
 	b.WriteByte('-')
 	printTrunc(b, prettyEnd[i:], remaining)
 	b.WriteByte('}')
+}
+
+func unmarshalInline(value []byte) roachpb.Value {
+	var meta enginepb.MVCCMetadata
+	if err := meta.Unmarshal(value); err != nil {
+		return roachpb.Value{}
+	}
+	return roachpb.Value{RawBytes: meta.RawBytes}
+}
+
+func metaPrint(valueBytes []byte) string {
+	if len(valueBytes) == 0 {
+		return ""
+	}
+	value := unmarshalInline(valueBytes)
+	msg := &roachpb.RangeDescriptor{}
+	if err := value.GetProto(msg); err != nil {
+		return ""
+	}
+	return msg.String()
+}
+
+func localStoreValuePrint(suffix, valueBytes []byte) string {
+	if len(valueBytes) == 0 {
+		return ""
+	}
+	value := unmarshalInline(valueBytes)
+	var msg proto.Message
+	switch {
+	case bytes.Equal(suffix, localStoreIdentSuffix):
+		msg = &roachpb.StoreIdent{}
+	default:
+		return ""
+	}
+	if err := value.GetProto(msg); err != nil {
+		return ""
+	}
+	return msg.String()
+}
+
+func localRangeValuePrint(suffix, valueBytes []byte) string {
+	if len(valueBytes) == 0 {
+		return ""
+	}
+	value := unmarshalInline(valueBytes)
+	var msg proto.Message
+	switch {
+	case bytes.Equal(suffix, localTransactionSuffix):
+		msg = &roachpb.Transaction{}
+	case bytes.Equal(suffix, LocalRangeDescriptorSuffix):
+		msg = &roachpb.RangeDescriptor{}
+	default:
+		return ""
+	}
+	if err := value.GetProto(msg); err != nil {
+		return ""
+	}
+	return msg.String()
+}
+
+func localRangeIDValuePrint(suffix, valueBytes []byte) string {
+	if len(valueBytes) == 0 {
+		return ""
+	}
+	value := unmarshalInline(valueBytes)
+	// Values encoded as protobufs set msg and continue outside the
+	// switch. Other types are handled inside the switch and return.
+	var msg proto.Message
+	switch {
+	case bytes.Equal(suffix, LocalLeaseAppliedIndexSuffix):
+		fallthrough
+	case bytes.Equal(suffix, LocalRaftAppliedIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return ""
+		}
+		return strconv.FormatInt(i, 10)
+
+	case bytes.Equal(suffix, LocalRangeFrozenStatusSuffix):
+		b, err := value.GetBool()
+		if err != nil {
+			return ""
+		}
+		return strconv.FormatBool(b)
+
+	case bytes.Equal(suffix, LocalAbortCacheSuffix):
+		msg = &roachpb.AbortCacheEntry{}
+
+	case bytes.Equal(suffix, LocalRangeLastGCSuffix):
+		msg = &hlc.Timestamp{}
+	case bytes.Equal(suffix, LocalRaftLogSuffix):
+		msg = &raftpb.Entry{}
+
+	case bytes.Equal(suffix, LocalRaftTombstoneSuffix):
+		msg = &roachpb.RaftTombstone{}
+
+	case bytes.Equal(suffix, LocalRaftTruncatedStateSuffix):
+		msg = &roachpb.RaftTruncatedState{}
+
+	case bytes.Equal(suffix, LocalRangeLeaseSuffix):
+		msg = &roachpb.Lease{}
+
+	case bytes.Equal(suffix, LocalRangeStatsSuffix):
+		msg = &enginepb.MVCCStats{}
+
+	case bytes.Equal(suffix, LocalRaftHardStateSuffix):
+		msg = &raftpb.HardState{}
+
+	case bytes.Equal(suffix, LocalRaftLastIndexSuffix):
+		i, err := value.GetInt()
+		if err != nil {
+			return ""
+		}
+		return strconv.FormatInt(i, 10)
+
+	case bytes.Equal(suffix, LocalRangeLastVerificationTimestampSuffixDeprecated):
+		msg = &hlc.Timestamp{}
+
+	case bytes.Equal(suffix, LocalRangeLastReplicaGCTimestampSuffix):
+		msg = &hlc.Timestamp{}
+
+	default:
+		return ""
+	}
+
+	if err := value.GetProto(msg); err != nil {
+		return ""
+	}
+	return msg.String()
 }

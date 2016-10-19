@@ -2174,11 +2174,12 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 		} else {
 			prettyTime = d.Timestamp.GoTime().UTC().String()
 		}
+		_, prettyValue := keys.PrettyPrint(d.Key, d.Value)
 		num, err := fmt.Fprintf(w, format,
 			prefix, ts.WallTime/1E9, ts.WallTime%1E9, ts.Logical, d.Key,
 			prefix, prettyTime,
-			prefix, d.Value,
-			prefix, d.Key, d.Value)
+			prefix, prettyValue,
+			prefix, d.Key, prettyValue)
 		if err != nil {
 			return 0, err
 		}

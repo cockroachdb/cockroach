@@ -166,9 +166,10 @@ func (n *splitNode) Next() (bool, error) {
 func (n *splitNode) Values() parser.DTuple {
 	k := n.key
 	n.key = nil
+	str, _ := keys.PrettyPrint(k, []byte{})
 	return parser.DTuple{
 		parser.NewDBytes(parser.DBytes(k)),
-		parser.NewDString(keys.PrettyPrint(k)),
+		parser.NewDString(str),
 	}
 }
 
