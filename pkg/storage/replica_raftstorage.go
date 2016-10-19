@@ -23,7 +23,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -55,7 +54,8 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState implements the raft.Storage interface.
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	hs, err := loadHardState(r.ctx, r.store.Engine(), r.RangeID)
+	ctx := r.AnnotateCtx(context.TODO())
+	hs, err := loadHardState(ctx, r.store.Engine(), r.RangeID)
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -75,7 +75,8 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return entries(r.ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
+	ctx := r.AnnotateCtx(context.TODO())
+	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
 }
 
 func entries(
@@ -196,7 +197,8 @@ func iterateEntries(
 func (r *Replica) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return term(r.ctx, snap, r.RangeID, r.store.raftEntryCache, i)
+	ctx := r.AnnotateCtx(context.TODO())
+	return term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
 }
 
 func term(
@@ -248,7 +250,8 @@ func (r *Replica) raftTruncatedStateLocked(ctx context.Context) (roachpb.RaftTru
 // FirstIndex implements the raft.Storage interface.
 // FirstIndex requires that the replica lock is held.
 func (r *Replica) FirstIndex() (uint64, error) {
-	ts, err := r.raftTruncatedStateLocked(r.ctx)
+	ctx := r.AnnotateCtx(context.TODO())
+	ts, err := r.raftTruncatedStateLocked(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -266,7 +269,8 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
-	snap, err := r.SnapshotWithContext(r.ctx)
+	ctx := r.AnnotateCtx(context.TODO())
+	snap, err := r.SnapshotWithContext(ctx)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -301,22 +305,20 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, e
 	}
 
 	startKey := r.mu.state.Desc.StartKey
-
-	sp := r.store.Tracer().StartSpan("snapshot")
-	ctxInner := opentracing.ContextWithSpan(r.ctx, sp)
+	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
 	snap := r.store.NewSnapshot()
-	log.Eventf(ctxInner, "new engine snapshot for replica %s", r)
+	log.Eventf(ctx, "new engine snapshot for replica %s", r)
 
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	snapData, err := snapshot(r.ctx, snap, rangeID, r.store.raftEntryCache, startKey)
+	snapData, err := snapshot(ctx, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
-		log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
+		log.Errorf(ctx, "%s: error generating snapshot: %s", r, err)
 		return nil, err
 	}
-	log.Event(ctxInner, "snapshot generated")
+	log.Event(ctx, "snapshot generated")
 	r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	r.mu.outSnap = snapData
 	r.mu.outSnapDone = make(chan struct{})
@@ -525,7 +527,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	if !ok {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
-		log.Warningf(r.ctx, "%s: no system config available, cannot determine range MaxBytes", r)
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Warningf(ctx, "%s: no system config available, cannot determine range MaxBytes", r)
 		return nil
 	}
 

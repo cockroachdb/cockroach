@@ -98,7 +98,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 func (q *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, rng *Replica, _ config.SystemConfig,
 ) (bool, float64) {
-	lastCheck, err := rng.getLastReplicaGCTimestamp()
+	lastCheck, err := rng.getLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		log.Errorf(ctx, "could not read last replica GC timestamp: %s", err)
 		return false, 0
@@ -210,7 +210,7 @@ func (q *replicaGCQueue) process(
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
 		log.Event(ctx, "not gc'able")
-		if err := rng.setLastReplicaGCTimestamp(now); err != nil {
+		if err := rng.setLastReplicaGCTimestamp(ctx, now); err != nil {
 			return err
 		}
 	}

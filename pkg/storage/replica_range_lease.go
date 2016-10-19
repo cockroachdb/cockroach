@@ -119,7 +119,8 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Lease: reqLease,
 		}
 	}
-	if replica.store.Stopper().RunAsyncTask(replica.ctx, func(ctx context.Context) {
+	if replica.store.Stopper().RunAsyncTask(context.TODO(), func(ctx context.Context) {
+		ctx = replica.AnnotateCtx(ctx)
 		// Propose a RequestLease command and wait for it to apply.
 		ba := roachpb.BatchRequest{}
 		ba.Timestamp = replica.store.Clock().Now()

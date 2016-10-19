@@ -401,7 +401,7 @@ func (r *Replica) handleProposalData(
 		}
 
 		splitPostApply(
-			r.ctx,
+			r.AnnotateCtx(context.TODO()),
 			pd.Split.RHSDelta,
 			&pd.Split.SplitTrigger,
 			r,
