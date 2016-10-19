@@ -86,3 +86,10 @@ func TestFiveNodesAndWriters(t *testing.T) {
 		}
 	}
 }
+
+func TestRandomNameMeetsTerraformRules(t *testing.T) {
+	prefix := "testprefix-" + getRandomName()
+	if !prefixRE.MatchString(prefix) {
+		t.Fatalf("generated prefix '%s' doesn't match Terraform-enforced regex %s", prefix, prefixRE)
+	}
+}
