@@ -82,6 +82,26 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
 
+	case `DEFAULT_TRANSACTION_ISOLATION`:
+		// It's unfortunate that clients want us to support both SET
+		// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the
+		// isolation level as keywords/identifiers (e.g. JDBC), and SET
+		// DEFAULT_TRANSACTION_ISOLATION TO '...', which takes an
+		// expression (e.g. psycopg2). But that's how it is.  Just ensure
+		// this code keeps in sync with SetDefaultIsolation() below.
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		switch strings.ToUpper(s) {
+		case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`:
+			p.session.DefaultIsolationLevel = enginepb.SNAPSHOT
+		case `REPEATABLE READ`, `SERIALIZABLE`:
+			p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
+		default:
+			return nil, fmt.Errorf("%s: unknown isolation level: %q", name, s)
+		}
+
 	case `DIST_SQL`:
 		s, err := p.getStringVal(name, typedValues)
 		if err != nil {
@@ -119,6 +139,8 @@ func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, 
 }
 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
+	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... ' above.
+	// Ensure both versions stay in sync.
 	switch n.Isolation {
 	case parser.SerializableIsolation:
 		p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
