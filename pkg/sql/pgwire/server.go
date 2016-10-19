@@ -26,7 +26,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -222,7 +221,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		// We make a connection regardless of argsErr. If there was an error parsing
 		// the args, the connection will only be used to send a report of that
 		// error.
-		v3conn := makeV3Conn(ctx, conn, s.executor, s.metrics, sessionArgs)
+		v3conn := makeV3Conn(ctx, conn, s.metrics)
 		defer v3conn.finish(ctx)
 		if argsErr != nil {
 			return v3conn.sendInternalError(argsErr.Error())
@@ -236,15 +235,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrDraining)
 		}
 
-		if tlsConn, ok := conn.(*tls.Conn); ok {
-			tlsState := tlsConn.ConnectionState()
-			authenticationHook, err := security.UserAuthHook(s.cfg.Insecure, &tlsState)
-			if err != nil {
-				return v3conn.sendInternalError(err.Error())
-			}
-			return v3conn.serve(ctx, authenticationHook)
+		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure, &sessionArgs); err != nil {
+			return v3conn.sendInternalError(err.Error())
 		}
-		return v3conn.serve(ctx, nil)
+		return v3conn.serve(ctx, s.executor, sessionArgs)
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)
