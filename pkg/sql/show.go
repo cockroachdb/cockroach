@@ -28,6 +28,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var selectUsersStmt parser.Statement
+
+func init() {
+	selectUsersStmt, _ = parser.ParseOneTraditional("SELECT username FROM system.users")
+}
+
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
 	name := strings.ToUpper(n.Name)
@@ -651,6 +657,12 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 			return v, nil
 		},
 	}, nil
+}
+
+// ShowUsers returns all the users.
+// Privileges: SELECT on system.users.
+func (p *planner) ShowUsers(n *parser.ShowUsers) (planNode, error) {
+	return p.newPlan(selectUsersStmt, nil, true)
 }
 
 // Help returns usage information for the builtin functions

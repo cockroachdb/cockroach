@@ -1,0 +1,28 @@
+query T colnames
+SHOW USERS
+----
+username
+
+statement ok
+INSERT INTO system.users VALUES ('a', 'a')
+
+query T colnames
+SHOW USERS
+----
+username
+a
+
+statement ok
+INSERT INTO system.users VALUES ('b', 'a')
+
+query T colnames
+SHOW USERS
+----
+username
+a
+b
+
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on table users
+SHOW USERS

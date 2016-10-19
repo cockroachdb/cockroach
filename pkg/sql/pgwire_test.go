@@ -421,6 +421,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW TIME ZONE": {
 			baseTest.Results("UTC"),
 		},
+		"SHOW USERS": {
+			baseTest,
+		},
 		"HELP LEAST": {
 			baseTest.Results("least", "<T>... -> <T>", "Comparison", ""),
 		},
