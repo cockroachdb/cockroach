@@ -32,7 +32,10 @@ statement ok
 ALTER INDEX IF EXISTS users@ffo RENAME TO ufo
 
 statement ok
-ALTER INDEX users@foo RENAME TO ufo
+ALTER INDEX users@foo RENAME TO ufoo
+
+statement ok
+ALTER INDEX ufoo RENAME TO ufo
 
 query TTBITTB colnames
 SHOW INDEXES FROM users

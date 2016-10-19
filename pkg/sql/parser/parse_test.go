@@ -166,6 +166,8 @@ func TestParse(t *testing.T) {
 		{`DROP TABLE a, b CASCADE`},
 		{`DROP TABLE IF EXISTS a CASCADE`},
 		{`DROP INDEX a.b@c`},
+		{`DROP INDEX a`},
+		{`DROP INDEX a.b`},
 		{`DROP INDEX IF EXISTS a.b@c`},
 		{`DROP INDEX a.b@c, d@f`},
 		{`DROP INDEX IF EXISTS a.b@c, d@f`},
@@ -528,6 +530,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a RENAME TO b`},
 		{`ALTER TABLE IF EXISTS a RENAME TO b`},
 		{`ALTER INDEX a@b RENAME TO b`},
+		{`ALTER INDEX b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER TABLE a RENAME COLUMN c1 TO c2`},
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
@@ -572,6 +575,8 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE d.a SPLIT AT ('b', 2)`},
 		{`ALTER INDEX a@i SPLIT AT (1)`},
 		{`ALTER INDEX d.a@i SPLIT AT (2)`},
+		{`ALTER INDEX i SPLIT AT (1)`},
+		{`ALTER INDEX d.i SPLIT AT (2)`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
@@ -1034,29 +1039,6 @@ SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
 			`syntax error at or near "@"
 INSERT INTO a@b VALUES (1, 2)
              ^
-`,
-		},
-		{
-			`ALTER INDEX a RENAME TO b`,
-			`syntax error at or near "RENAME"
-ALTER INDEX a RENAME TO b
-              ^
-`,
-		},
-		{
-
-			`ALTER INDEX a IF EXISTS RENAME TO b`,
-			`syntax error at or near "IF"
-ALTER INDEX a IF EXISTS RENAME TO b
-              ^
-`,
-		},
-		{
-
-			`DROP INDEX a`,
-			`syntax error at or near "EOF"
-DROP INDEX a
-            ^
 `,
 		},
 		{

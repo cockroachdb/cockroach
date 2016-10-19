@@ -37,18 +37,19 @@ const maxSplitRetries = 4
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(n *parser.Split) (planNode, error) {
-	var tableName parser.NormalizableTableName
+	var tn *parser.TableName
+	var err error
 	if n.Index == nil {
-		tableName = n.Table
+		// Variant: ALTER TABLE ... SPLIT AT ...
+		tn, err = n.Table.NormalizeWithDatabaseName(p.session.Database)
 	} else {
-		tableName = n.Index.Table
+		// Variant: ALTER INDEX ... SPLIT AT ...
+		tn, err = p.expandIndexName(n.Index)
 	}
-
-	// Check that the table exists and that the user has permission.
-	tn, err := tableName.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
 	}
+
 	tableDesc, err := p.getTableDesc(tn)
 	if err != nil {
 		return nil, err
