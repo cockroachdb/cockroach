@@ -224,15 +224,18 @@ func (t TableNameReferences) Format(buf *bytes.Buffer, f FmtFlags) {
 // TableNameWithIndex represents a "table@index", used in statements that
 // specifically refer to an index.
 type TableNameWithIndex struct {
-	Table NormalizableTableName
-	Index Name
+	Table       NormalizableTableName
+	Index       Name
+	SearchTable bool
 }
 
 // Format implements the NodeFormatter interface.
 func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, n.Table)
-	buf.WriteByte('@')
-	FormatNode(buf, f, n.Index)
+	if !n.SearchTable {
+		buf.WriteByte('@')
+		FormatNode(buf, f, n.Index)
+	}
 }
 
 // TableNameWithIndexList is a list of indexes.

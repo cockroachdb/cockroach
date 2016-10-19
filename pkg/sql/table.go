@@ -541,3 +541,64 @@ func (p *planner) getQualifiedTableName(desc *sqlbase.TableDescriptor) (string, 
 	}
 	return tbName.String(), nil
 }
+
+// findTableContainingIndex returns the name of the table containing
+// an index of the given name. An error is returned if the index is
+// not found or if the index name is ambiguous (i.e. exists in
+// multiple tables).
+func (p *planner) findTableContainingIndex(
+	dbName parser.Name, idxName parser.Name,
+) (result *parser.TableName, err error) {
+	dbDesc, err := p.mustGetDatabaseDesc(sqlbase.NormalizeName(dbName))
+	if err != nil {
+		return nil, err
+	}
+
+	tns, err := p.getTableNames(dbDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	normName := sqlbase.NormalizeName(idxName)
+	result = nil
+	for i := range tns {
+		tn := &tns[i]
+		tableDesc, err := p.mustGetTableDesc(tn)
+		if err != nil {
+			return nil, err
+		}
+		status, _, _ := tableDesc.FindIndexByNormalizedName(normName)
+		if status != sqlbase.DescriptorAbsent {
+			if result != nil {
+				return nil, fmt.Errorf("index name %q is ambiguous (found in %s and %s)",
+					normName, tn.String(), result.String())
+			}
+			result = tn
+		}
+	}
+	if result == nil {
+		return nil, fmt.Errorf("index %q does not exist", normName)
+	}
+	return result, nil
+}
+
+// expandIndexName ensures that the index name is qualified with a
+// table name, and searches the table name if not yet specified. It returns
+// the TableName of the underlying table for convenience.
+func (p *planner) expandIndexName(index *parser.TableNameWithIndex) (*parser.TableName, error) {
+	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	if index.SearchTable {
+		realTableName, err := p.findTableContainingIndex(tn.DatabaseName, tn.TableName)
+		if err != nil {
+			return nil, err
+		}
+		index.Index = tn.TableName
+		index.Table.TableNameReference = realTableName
+		tn = realTableName
+	}
+	return tn, nil
+}

@@ -4,8 +4,24 @@ CREATE TABLE users (
   name  VARCHAR NOT NULL,
   title VARCHAR,
   INDEX foo (name),
-  UNIQUE INDEX bar (id, name)
+  UNIQUE INDEX bar (id, name),
+  INDEX baw (name, title)
 )
+
+statement ok
+CREATE TABLE othertable (
+   x INT,
+   INDEX baw (x)
+)
+
+statement error index name "baw" is ambiguous
+DROP INDEX baw
+
+statement ok
+DROP TABLE othertable
+
+statement ok
+DROP INDEX baw
 
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
