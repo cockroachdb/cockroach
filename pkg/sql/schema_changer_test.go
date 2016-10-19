@@ -545,7 +545,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
-			StartBackfillNotification: func() error {
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if backfillNotification != nil {
 					// Close channel to notify that the backfill has started.
 					close(backfillNotification)
@@ -708,28 +708,41 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 }
 
-// Test schema changes are retried and complete properly
+// Test schema changes are retried and complete properly. This also checks
+// that a mutation checkpoint reduces the number of chunks operated on during
+// a retry.
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := createTestServerParams()
 	attempts := 0
+	seenSpan := roachpb.Span{}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
-			StartBackfillNotification: func() error {
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
-				// Return a deadline exceeded error once.
-				if attempts == 1 {
+				// Fail somewhere in the middle.
+				if attempts == 3 {
 					return context.DeadlineExceeded
 				}
+				if seenSpan.Key != nil {
+					// Check that the keys are never reevaluated
+					if seenSpan.Key.Compare(sp.Key) >= 0 {
+						t.Errorf("reprocessing span %s, already seen span %s", sp, seenSpan)
+					}
+					if !seenSpan.EndKey.Equal(sp.EndKey) {
+						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+					}
+				}
+				seenSpan = sp
 				return nil
 			},
 			// Disable asynchronous schema change execution to allow
 			// synchronous path to run schema changes.
-			AsyncExecNotification: asyncSchemaChangerDisabled,
+			AsyncExecNotification:   asyncSchemaChangerDisabled,
+			WriteCheckpointInterval: time.Nanosecond,
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
 	if _, err := sqlDB.Exec(`
@@ -740,7 +753,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	maxValue := 10
+	maxValue := 5000
 	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
 	for i := 1; i <= maxValue; i++ {
 		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
@@ -749,13 +762,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	// Run a schema change.
+	// Add an index and check that it succeeds.
 	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
 		t.Fatal(err)
-	}
-	// The schema change retried once.
-	if e := 2; attempts != e {
-		t.Fatalf("there were %d instead of %d attempts", attempts, e)
 	}
 
 	// The schema change succeeded. Verify that the index foo over v is
@@ -782,6 +791,63 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if eCount := maxValue + 1; eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	numKeysPerRow := 2
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// Add a column and check that it works.
+	attempts = 0
+	seenSpan = roachpb.Span{}
+	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = sqlDB.Query(`SELECT x from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count = 0
+	for ; rows.Next(); count++ {
+		var val float64
+		if err := rows.Scan(&val); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if e := 1.4; e != val {
+			t.Errorf("e = %f, v = %f", e, val)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := maxValue + 1; eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+	numKeysPerRow += 1
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// Delete a column and check that it works.
+	attempts = 0
+	seenSpan = roachpb.Span{}
+	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
+		t.Fatal(err)
+	}
+	numKeysPerRow -= 1
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
 }
 
 // Test schema change purge failure doesn't leave DB in a bad state.
@@ -791,13 +857,18 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	// Disable the async schema changer.
 	var enableAsyncSchemaChanges uint32
 	attempts := 0
+	// attempt 1: write the first chunk of the index.
+	// attempt 2: write the second chunk and hit a unique constraint
+	// violation; purge the schema change.
+	// attempt 3: return an error while purging the schema change.
+	expectedAttempts := 3
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
-			StartBackfillNotification: func() error {
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
-				// Return a deadline exceeded error during the second attempt
+				// Return a deadline exceeded error during the third attempt
 				// which attempts to clean up the schema change.
-				if attempts == 2 {
+				if attempts == expectedAttempts {
 					return context.DeadlineExceeded
 				}
 				return nil
@@ -848,8 +919,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 	// The deadline exceeded error in the schema change purge results in no
 	// retry attempts of the purge.
-	if e := 2; attempts != e {
-		t.Fatalf("%d retries, despite allowing only (schema change + reverse) = %d", attempts, e)
+	if attempts != expectedAttempts {
+		t.Fatalf("%d retries, despite allowing only (schema change + reverse) = %d", attempts, expectedAttempts)
 	}
 
 	// The index doesn't exist
@@ -901,6 +972,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// A new attempt cleans up a chunk of data.
+	if attempts != expectedAttempts+1 {
+		t.Fatalf("%d chunk ops, despite allowing only (schema change + reverse) = %d", attempts, expectedAttempts)
 	}
 }
 
