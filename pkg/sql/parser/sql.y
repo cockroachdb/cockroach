@@ -628,7 +628,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
-%token <str>   UPDATE UPSERT USER USING
+%token <str>   UPDATE UPSERT USER USERS USING
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
@@ -1510,6 +1510,10 @@ show_stmt:
 | SHOW CREATE VIEW var_name
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
+  }
+| SHOW USERS
+  {
+    $$.val = &ShowUsers{}
   }
 
 help_stmt:
@@ -4706,6 +4710,7 @@ unreserved_keyword:
 | UNKNOWN
 | UPDATE
 | UPSERT
+| USERS
 | VALID
 | VALIDATE
 | VALUE

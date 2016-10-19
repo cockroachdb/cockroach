@@ -1,5 +1,18 @@
+query T colnames
+SHOW USERS
+----
+username
+testuser
+
 statement ok
 CREATE USER user1
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user1
 
 statement error user user1 already exists
 CREATE USER user1
@@ -8,13 +21,23 @@ statement error user user1 already exists
 CREATE USER UsEr1
 
 statement ok
-CREATE USER user2 WITH PASSWORD 'cockroach'
+CREATE USER uSEr2 WITH PASSWORD 'cockroach'
 
 statement ok
 CREATE USER user3 WITH PASSWORD '蟑螂'
 
 statement ok
 CREATE USER ☂ WITH PASSWORD '☂umbrella'
+
+query T colnames
+SHOW USERS
+----
+username
+testuser
+user1
+user2
+user3
+☂
 
 statement error no username specified
 CREATE USER ""
@@ -26,3 +49,6 @@ CREATE USER user4
 
 statement error pq: user testuser does not have INSERT privilege on table users
 UPSERT INTO system.users VALUES (user1, 'newpassword')
+
+statement error pq: user testuser does not have SELECT privilege on table users
+SHOW USERS
