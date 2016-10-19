@@ -129,9 +129,12 @@ type v3Conn struct {
 }
 
 func makeV3Conn(
-	conn net.Conn, executor *sql.Executor, metrics ServerMetrics, sessionArgs sql.SessionArgs,
+	ctx context.Context,
+	conn net.Conn,
+	executor *sql.Executor,
+	metrics ServerMetrics,
+	sessionArgs sql.SessionArgs,
 ) v3Conn {
-	ctx := log.WithLogTagStr(context.Background(), "client", conn.RemoteAddr().String())
 	return v3Conn{
 		conn:     conn,
 		rd:       bufio.NewReader(conn),
@@ -143,10 +146,10 @@ func makeV3Conn(
 	}
 }
 
-func (c *v3Conn) finish() {
+func (c *v3Conn) finish(ctx context.Context) {
 	// This is better than always flushing on error.
 	if err := c.wr.Flush(); err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(ctx, err)
 	}
 	_ = c.conn.Close()
 	c.session.Finish()
@@ -194,9 +197,7 @@ var statusReportParams = map[string]string{
 	"server_version": "9.5.0",
 }
 
-func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
-	ctx := c.session.Ctx()
-
+func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool) error) error {
 	if authenticationHook != nil {
 		if err := authenticationHook(c.session.User, true /* public */); err != nil {
 			return c.sendInternalError(err.Error())
@@ -241,7 +242,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			}
 
 			if log.V(2) {
-				log.Infof(context.TODO(), "pgwire: %s: %q", serverMsgReady, txnStatus)
+				log.Infof(ctx, "pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
 			c.writeBuf.writeByte(txnStatus)
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -263,12 +264,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		// any messages until we get a sync.
 		if c.ignoreTillSync && typ != clientMsgSync {
 			if log.V(2) {
-				log.Infof(context.TODO(), "pgwire: ignoring %s till sync", typ)
+				log.Infof(ctx, "pgwire: ignoring %s till sync", typ)
 			}
 			continue
 		}
 		if log.V(2) {
-			log.Infof(context.TODO(), "pgwire: processing %s", typ)
+			log.Infof(ctx, "pgwire: processing %s", typ)
 		}
 		switch typ {
 		case clientMsgSync:
@@ -288,7 +289,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 
 		case clientMsgDescribe:
 			c.doingExtendedQueryMessage = true
-			err = c.handleDescribe(&c.readBuf)
+			err = c.handleDescribe(ctx, &c.readBuf)
 
 		case clientMsgClose:
 			c.doingExtendedQueryMessage = true
@@ -418,7 +419,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) handleDescribe(buf *readBuffer) error {
+func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 	typ, err := buf.getPrepareType()
 	if err != nil {
 		return c.sendInternalError(err.Error())
@@ -444,7 +445,7 @@ func (c *v3Conn) handleDescribe(buf *readBuffer) error {
 			return err
 		}
 
-		return c.sendRowDescription(stmt.Columns, nil)
+		return c.sendRowDescription(ctx, stmt.Columns, nil)
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
@@ -452,7 +453,7 @@ func (c *v3Conn) handleDescribe(buf *readBuffer) error {
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-		return c.sendRowDescription(portal.Stmt.Columns, portalMeta.outFormats)
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats)
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -649,6 +650,8 @@ func (c *v3Conn) executeStatements(
 	limit int,
 ) error {
 	tracing.AnnotateTrace()
+	// Note: sql.Executor gets its Context from c.session.context, which
+	// has been bound by v3Conn.setupSession().
 	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
 	defer results.Close()
 
@@ -658,7 +661,7 @@ func (c *v3Conn) executeStatements(
 		c.writeBuf.initMsg(serverMsgEmptyQuery)
 		return c.writeBuf.finishMsg(c.wr)
 	}
-	return c.sendResponse(results.ResultList, formatCodes, sendDescription, limit)
+	return c.sendResponse(ctx, results.ResultList, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -723,7 +726,11 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToS
 
 // sendResponse sends the results as a query response.
 func (c *v3Conn) sendResponse(
-	results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int,
+	ctx context.Context,
+	results sql.ResultList,
+	formatCodes []formatCode,
+	sendDescription bool,
+	limit int,
 ) error {
 	if len(results) == 0 {
 		return c.sendCommandComplete(nil)
@@ -761,7 +768,7 @@ func (c *v3Conn) sendResponse(
 
 		case parser.Rows:
 			if sendDescription {
-				if err := c.sendRowDescription(result.Columns, formatCodes); err != nil {
+				if err := c.sendRowDescription(ctx, result.Columns, formatCodes); err != nil {
 					return err
 				}
 			}
@@ -816,7 +823,9 @@ func (c *v3Conn) sendResponse(
 	return nil
 }
 
-func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []formatCode) error {
+func (c *v3Conn) sendRowDescription(
+	ctx context.Context, columns []sql.ResultColumn, formatCodes []formatCode,
+) error {
 	if len(columns) == 0 {
 		c.writeBuf.initMsg(serverMsgNoData)
 		return c.writeBuf.finishMsg(c.wr)
@@ -826,7 +835,7 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Infof(context.TODO(), "pgwire writing column %s of type: %T", column.Name, column.Typ)
+			log.Infof(ctx, "pgwire: writing column %s of type: %T", column.Name, column.Typ)
 		}
 		c.writeBuf.writeTerminatedString(column.Name)
 
@@ -872,9 +881,13 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 		var done bool
 		switch typ {
 		case clientMsgCopyData:
+			// Note: sql.Executor gets its Context from c.session.context, which
+			// has been bound by v3Conn.setupSession().
 			sr = c.executor.CopyData(c.session, string(c.readBuf.msg))
 
 		case clientMsgCopyDone:
+			// Note: sql.Executor gets its Context from c.session.context, which
+			// has been bound by v3Conn.setupSession().
 			sr = c.executor.CopyDone(c.session)
 			done = true
 

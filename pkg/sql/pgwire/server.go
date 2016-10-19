@@ -23,10 +23,13 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -63,8 +66,9 @@ var (
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
-	context  *base.Config
-	executor *sql.Executor
+	AmbientCtx log.AmbientContext
+	cfg        *base.Config
+	executor   *sql.Executor
 
 	metrics ServerMetrics
 
@@ -90,11 +94,12 @@ func makeServerMetrics() ServerMetrics {
 }
 
 // MakeServer creates a Server.
-func MakeServer(context *base.Config, executor *sql.Executor) *Server {
+func MakeServer(ambientCtx log.AmbientContext, cfg *base.Config, executor *sql.Executor) *Server {
 	return &Server{
-		context:  context,
-		executor: executor,
-		metrics:  makeServerMetrics(),
+		AmbientCtx: ambientCtx,
+		cfg:        cfg,
+		executor:   executor,
+		metrics:    makeServerMetrics(),
 	}
 }
 
@@ -151,7 +156,7 @@ func (s *Server) SetDraining(drain bool) error {
 
 // ServeConn serves a single connection, driving the handshake process
 // and delegating to the appropriate connection type.
-func (s *Server) ServeConn(conn net.Conn) error {
+func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	var draining bool
 	{
 		s.mu.Lock()
@@ -184,7 +189,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 			return errors.Errorf("unexpected data after SSLRequest: %q", buf.msg)
 		}
 
-		if s.context.Insecure {
+		if s.cfg.Insecure {
 			if _, err := conn.Write(sslUnsupported); err != nil {
 				return err
 			}
@@ -192,7 +197,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 			if _, err := conn.Write(sslSupported); err != nil {
 				return err
 			}
-			tlsConfig, err := s.context.GetServerTLSConfig()
+			tlsConfig, err := s.cfg.GetServerTLSConfig()
 			if err != nil {
 				return err
 			}
@@ -208,7 +213,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		if err != nil {
 			return err
 		}
-	} else if !s.context.Insecure {
+	} else if !s.cfg.Insecure {
 		errSSLRequired = true
 	}
 
@@ -217,8 +222,8 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		// We make a connection regardless of argsErr. If there was an error parsing
 		// the args, the connection will only be used to send a report of that
 		// error.
-		v3conn := makeV3Conn(conn, s.executor, s.metrics, sessionArgs)
-		defer v3conn.finish()
+		v3conn := makeV3Conn(ctx, conn, s.executor, s.metrics, sessionArgs)
+		defer v3conn.finish(ctx)
 		if argsErr != nil {
 			return v3conn.sendInternalError(argsErr.Error())
 		}
@@ -233,13 +238,13 @@ func (s *Server) ServeConn(conn net.Conn) error {
 
 		if tlsConn, ok := conn.(*tls.Conn); ok {
 			tlsState := tlsConn.ConnectionState()
-			authenticationHook, err := security.UserAuthHook(s.context.Insecure, &tlsState)
+			authenticationHook, err := security.UserAuthHook(s.cfg.Insecure, &tlsState)
 			if err != nil {
 				return v3conn.sendInternalError(err.Error())
 			}
-			return v3conn.serve(authenticationHook)
+			return v3conn.serve(ctx, authenticationHook)
 		}
-		return v3conn.serve(nil)
+		return v3conn.serve(ctx, nil)
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)
