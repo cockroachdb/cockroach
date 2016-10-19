@@ -238,6 +238,22 @@ func DatumToEncDatum(datum parser.Datum) (EncDatum, error) {
 	}, nil
 }
 
+// DTupleToEncDatumRow converts a parser.DTuple to an EncDatumRow.
+func DTupleToEncDatumRow(row EncDatumRow, tuple parser.DTuple) error {
+	if len(row) != len(tuple) {
+		return errors.Errorf(
+			"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
+	}
+	for i, datum := range tuple {
+		encDatum, err := DatumToEncDatum(datum)
+		if err != nil {
+			return err
+		}
+		row[i] = encDatum
+	}
+	return nil
+}
+
 // Compare returns the relative ordering of two EncDatumRows according to a
 // ColumnOrdering:
 //   -1 if the receiver comes before the rhs in the ordering,
