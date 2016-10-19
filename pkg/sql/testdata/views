@@ -151,8 +151,7 @@ DROP VIEW t;
 statement error cannot drop view "v1" because it is depended on by view "test.v6"
 DROP VIEW v1;
 
-# TODO(a-robinson): Need to improve this error message once #9988 is in.
-statement error view "v1" depends on view "v2"
+statement error cannot drop view "v2" because it is depended on by view "test2.v1"
 DROP VIEW v2;
 
 statement ok
