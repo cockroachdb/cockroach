@@ -174,16 +174,8 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 
 // Finish releases resources held by the Session.
 func (s *Session) Finish() {
-	// Cleanup leases. We might have unreleased leases if we're finishing the
-	// session abruptly in the middle of a transaction, or, until #7648 is
-	// addressed, there might be leases accumulated by preparing statements.
-	s.planner.releaseLeases()
-	if s.finishEventLog {
-		log.FinishEventLog(s.context)
-	}
-
 	// If we're inside a txn, roll it back.
-	if s.TxnState.State != NoTxn && s.TxnState.State != Aborted {
+	if s.TxnState.State.kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(
 			errors.Errorf("session closing"), s.executor)
 	}
@@ -191,8 +183,17 @@ func (s *Session) Finish() {
 		s.TxnState.finishSQLTxn()
 	}
 
+	// Cleanup leases. We might have unreleased leases if we're finishing the
+	// session abruptly in the middle of a transaction, or, until #7648 is
+	// addressed, there might be leases accumulated by preparing statements.
+	s.planner.releaseLeases()
+
 	s.ClearStatementsAndPortals()
 	s.mon.StopMonitor(s.context)
+
+	if s.finishEventLog {
+		log.FinishEventLog(s.context)
+	}
 
 	// This will stop the heartbeating of the of the txn record.
 	// TODO(andrei): This shouldn't have any effect, since, if there was a
@@ -234,6 +235,11 @@ const (
 	// Statements are rejected until a COMMIT is seen.
 	CommitWait
 )
+
+// Some states mean that a client.Txn is open, others don't.
+func (s TxnStateEnum) kvTxnIsOpen() bool {
+	return s == Open || s == RestartWait
+}
 
 // txnState contains state associated with an ongoing SQL txn.
 // There may or may not be an open KV txn associated with the SQL txn.
