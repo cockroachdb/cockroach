@@ -194,7 +194,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	// We don't want to actually consume entries from the queues during this test.
 	q1.setDisabled(true)
 	q2.setDisabled(true)
-	s := newReplicaScanner(context.TODO(), 1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(log.AmbientContext{}, 1*time.Millisecond, 0, ranges)
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -246,7 +246,7 @@ func TestScannerTiming(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			ranges := newTestRangeSet(count, t)
 			q := &testQueue{}
-			s := newReplicaScanner(context.TODO(), duration, 0, ranges)
+			s := newReplicaScanner(log.AmbientContext{}, duration, 0, ranges)
 			s.AddQueues(q)
 			mc := hlc.NewManualClock(0)
 			clock := hlc.NewClock(mc.UnixNano)
@@ -286,16 +286,16 @@ func TestScannerPaceInterval(t *testing.T) {
 	for _, duration := range durations {
 		startTime := timeutil.Now()
 		ranges := newTestRangeSet(count, t)
-		s := newReplicaScanner(context.TODO(), duration, 0, ranges)
+		s := newReplicaScanner(log.AmbientContext{}, duration, 0, ranges)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
 		// The range set is empty
 		ranges = newTestRangeSet(0, t)
-		s = newReplicaScanner(context.TODO(), duration, 0, ranges)
+		s = newReplicaScanner(log.AmbientContext{}, duration, 0, ranges)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
 		ranges = newTestRangeSet(count, t)
-		s = newReplicaScanner(context.TODO(), duration, 0, ranges)
+		s = newReplicaScanner(log.AmbientContext{}, duration, 0, ranges)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
@@ -309,7 +309,7 @@ func TestScannerDisabled(t *testing.T) {
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
-	s := newReplicaScanner(context.TODO(), 1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(log.AmbientContext{}, 1*time.Millisecond, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -361,7 +361,7 @@ func TestScannerDisabled(t *testing.T) {
 func TestScannerDisabledWithZeroInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(1, t)
-	s := newReplicaScanner(context.TODO(), 0*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(log.AmbientContext{}, 0*time.Millisecond, 0, ranges)
 	if !s.GetDisabled() {
 		t.Errorf("expected scanner to be disabled")
 	}
@@ -372,7 +372,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
-	s := newReplicaScanner(context.TODO(), time.Hour, 0, ranges)
+	s := newReplicaScanner(log.AmbientContext{}, time.Hour, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
