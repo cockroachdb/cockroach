@@ -4376,6 +4376,14 @@
                         {
                             "name": "MsgReadIndexResp",
                             "id": 16
+                        },
+                        {
+                            "name": "MsgPreVote",
+                            "id": 17
+                        },
+                        {
+                            "name": "MsgPreVoteResp",
+                            "id": 18
                         }
                     ]
                 },

@@ -148,6 +148,14 @@ var (
 		Name: "raft.rcvd.voteresp",
 		Help: "Total number of MsgVoteResp messages received by this store",
 	}
+	metaRaftRcvdPreVote = metric.Metadata{
+		Name: "raft.rcvd.prevote",
+		Help: "Total number of MsgPreVote messages received by this store",
+	}
+	metaRaftRcvdPreVoteResp = metric.Metadata{
+		Name: "raft.rcvd.prevoteresp",
+		Help: "Total number of MsgPreVoteResp messages received by this store",
+	}
 	metaRaftRcvdSnap = metric.Metadata{
 		Name: "raft.rcvd.snap",
 		Help: "Total number of MsgSnap messages received by this store",
@@ -377,6 +385,8 @@ type StoreMetrics struct {
 	RaftRcvdMsgAppResp        *metric.Counter
 	RaftRcvdMsgVote           *metric.Counter
 	RaftRcvdMsgVoteResp       *metric.Counter
+	RaftRcvdMsgPreVote        *metric.Counter
+	RaftRcvdMsgPreVoteResp    *metric.Counter
 	RaftRcvdMsgSnap           *metric.Counter
 	RaftRcvdMsgHeartbeat      *metric.Counter
 	RaftRcvdMsgHeartbeatResp  *metric.Counter
@@ -542,6 +552,8 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RaftRcvdMsgAppResp:        metric.NewCounter(metaRaftRcvdAppResp),
 		RaftRcvdMsgVote:           metric.NewCounter(metaRaftRcvdVote),
 		RaftRcvdMsgVoteResp:       metric.NewCounter(metaRaftRcvdVoteResp),
+		RaftRcvdMsgPreVote:        metric.NewCounter(metaRaftRcvdPreVote),
+		RaftRcvdMsgPreVoteResp:    metric.NewCounter(metaRaftRcvdPreVoteResp),
 		RaftRcvdMsgSnap:           metric.NewCounter(metaRaftRcvdSnap),
 		RaftRcvdMsgHeartbeat:      metric.NewCounter(metaRaftRcvdHeartbeat),
 		RaftRcvdMsgHeartbeatResp:  metric.NewCounter(metaRaftRcvdHeartbeatResp),
@@ -636,6 +648,8 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 	sm.raftRcvdMessages[raftpb.MsgAppResp] = sm.RaftRcvdMsgAppResp
 	sm.raftRcvdMessages[raftpb.MsgVote] = sm.RaftRcvdMsgVote
 	sm.raftRcvdMessages[raftpb.MsgVoteResp] = sm.RaftRcvdMsgVoteResp
+	sm.raftRcvdMessages[raftpb.MsgPreVote] = sm.RaftRcvdMsgPreVote
+	sm.raftRcvdMessages[raftpb.MsgPreVoteResp] = sm.RaftRcvdMsgPreVoteResp
 	sm.raftRcvdMessages[raftpb.MsgSnap] = sm.RaftRcvdMsgSnap
 	sm.raftRcvdMessages[raftpb.MsgHeartbeat] = sm.RaftRcvdMsgHeartbeat
 	sm.raftRcvdMessages[raftpb.MsgHeartbeatResp] = sm.RaftRcvdMsgHeartbeatResp
