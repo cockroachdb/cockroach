@@ -95,10 +95,54 @@ users foo     false  1   name   ASC       false
 users bar     false  1   title  ASC       false
 
 statement ok
-DROP INDEX users@foo, users@bar
+CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
+
+statement error cannot drop index "foo" because it is depended on by view "test.v"
+DROP INDEX users@foo
+
+statement ok
+DROP INDEX users@bar
 
 query TTBITTB colnames
 SHOW INDEXES FROM users
 ----
 Table Name    Unique Seq Column Direction Storing
 users primary true   1   id     ASC       false
+users foo     false  1   name   ASC       false
+
+statement ok
+CREATE VIEW v2 AS SELECT * FROM v
+
+query T
+SHOW TABLES
+----
+users
+v
+v2
+
+statement ok
+GRANT ALL ON users to testuser
+
+statement ok
+GRANT ALL ON v to testuser
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view v2
+DROP INDEX users@foo CASCADE
+
+user root
+
+statement ok
+DROP INDEX users@foo CASCADE
+
+query TTBITTB colnames
+SHOW INDEXES FROM users
+----
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     ASC       false
+
+query T
+SHOW TABLES
+----
+users
