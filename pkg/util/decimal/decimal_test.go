@@ -115,12 +115,30 @@ func testDecimalDoubleArgFunc(
 ) {
 	for i, tc := range tests {
 		x, y, exp := new(inf.Dec), new(inf.Dec), new(inf.Dec)
-		x.SetString(tc.input1)
-		y.SetString(tc.input2)
-		exp.SetString(tc.expected)
+		if _, ok := x.SetString(tc.input1); !ok {
+			t.Errorf("could not set decimal: %s", tc.input1)
+			continue
+		}
+		if _, ok := y.SetString(tc.input2); !ok {
+			t.Errorf("could not set decimal: %s", tc.input2)
+			continue
+		}
 
 		// Test allocated return value.
 		z := f(nil, x, y, s)
+		if z == nil {
+			if tc.expected != "nil" {
+				t.Errorf("%d: expected %s, got nil", i, tc.expected)
+			}
+			continue
+		} else if tc.expected == "nil" {
+			t.Errorf("%d: expected nil, got %s", i, z)
+			continue
+		}
+		if _, ok := exp.SetString(tc.expected); !ok {
+			t.Errorf("could not set decimal: %s", tc.expected)
+			continue
+		}
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
@@ -463,8 +481,20 @@ func TestDecimalPow(t *testing.T) {
 		{"-9223372036854775807123.1", "2", "85070591730234615849667701979706147052698553.61"},
 		{"9223372036854775807123.1", "3", "784637716923335095255678472236230098075796571287653754351907705219.391"},
 		{"-9223372036854775807123.1", "3", "-784637716923335095255678472236230098075796571287653754351907705219.391"},
+		{"0", "-1", "nil"},
+		{"0", "0", "1"},
+		{"0", "2", "0"},
+		{"-1", "-.1", "nil"},
 	}
-	testDecimalDoubleArgFunc(t, Pow, 16, tests)
+	testDecimalDoubleArgFunc(t, powTest, 16, tests)
+}
+
+func powTest(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	r, err := Pow(z, x, y, s)
+	if err != nil {
+		return nil
+	}
+	return r
 }
 
 func TestDecimalPowDoubleScale(t *testing.T) {
@@ -483,7 +513,7 @@ func TestDecimalPowDoubleScale(t *testing.T) {
 		{"9223372036854775807123.1", "3", "784637716923335095255678472236230098075796571287653754351907705219.391"},
 		{"-9223372036854775807123.1", "3", "-784637716923335095255678472236230098075796571287653754351907705219.391"},
 	}
-	testDecimalDoubleArgFunc(t, Pow, 32, tests)
+	testDecimalDoubleArgFunc(t, powTest, 32, tests)
 }
 
 func BenchmarkDecimalPow(b *testing.B) {
