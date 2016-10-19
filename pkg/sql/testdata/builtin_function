@@ -600,6 +600,12 @@ SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
 ----
 9.8696044010893571
 
+statement error zero raised to a negative power is undefined
+SELECT power(0::decimal, -1)
+
+statement error a negative number raised to a non-integer power yields a complex result
+SELECT power(-1, -.1)
+
 query RR
 SELECT radians(-45.0), radians(45.0)
 ----

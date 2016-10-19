@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
 	"gopkg.in/inf.v0"
 )
 
@@ -410,10 +411,16 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 	return smallExp(ex, y, s-2)
 }
 
-// Pow computes (x^y) as e^(y ln x) to the specified scale and stores
-// the result in z, which is also the return value. If y is not an
-// integer and x is negative nil is returned.
-func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+var (
+	errPowZeroNegative  = errors.New("zero raised to a negative power is undefined")
+	errPowNegNonInteger = errors.New("a negative number raised to a non-integer power yields a complex result")
+)
+
+// Pow computes (x^y) as e^(y ln x) to the specified scale and stores the
+// result in z, which is also the return value. If y is not an integer and
+// x is negative an error is returned. If x is zero and y is negative an
+// error is returned.
+func Pow(z, x, y *inf.Dec, s inf.Scale) (*inf.Dec, error) {
 	s = s + 2
 	if z == nil {
 		z = new(inf.Dec)
@@ -424,10 +431,23 @@ func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
 	tmp := new(inf.Dec).Abs(y)
 	isInt := tmp.Cmp(new(inf.Dec).Round(tmp, 0, inf.RoundDown)) == 0
 
-	neg := x.Sign() < 0
+	xs := x.Sign()
+	if xs == 0 {
+		switch y.Sign() {
+		case 0:
+			return z.SetUnscaled(1).SetScale(0), nil
+		case 1:
+			return z.SetUnscaled(0).SetScale(0), nil
+		default: // -1
+			// undefined for y < 0
+			return nil, errPowZeroNegative
+		}
+	}
+
+	neg := xs < 0
 
 	if !isInt && neg {
-		return nil
+		return nil, errPowNegNonInteger
 	}
 
 	// Exponent Precision Explanation (RaduBerinde):
@@ -462,5 +482,5 @@ func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
 	}
 
 	// Round to the desired scale.
-	return z.Round(tmp, s-2, inf.RoundHalfUp)
+	return z.Round(tmp, s-2, inf.RoundHalfUp), nil
 }
