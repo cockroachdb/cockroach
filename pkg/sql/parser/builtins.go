@@ -1227,8 +1227,8 @@ var powImpls = []Builtin{
 	}),
 	decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
 		dd := &DDecimal{}
-		decimal.Pow(&dd.Dec, x, y, decimal.Precision)
-		return dd, nil
+		_, err := decimal.Pow(&dd.Dec, x, y, decimal.Precision)
+		return dd, err
 	}),
 }
 
