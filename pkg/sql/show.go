@@ -653,6 +653,16 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	}, nil
 }
 
+// ShowUsers returns all the users.
+// Privileges: SELECT on system.users.
+func (p *planner) ShowUsers(n *parser.ShowUsers) (planNode, error) {
+	stmt, err := parser.ParseOneTraditional("SELECT username FROM system.users")
+	if err != nil {
+		return nil, err
+	}
+	return p.newPlan(stmt, nil, true)
+}
+
 // Help returns usage information for the builtin functions
 // Privileges: None
 func (p *planner) Help(n *parser.Help) (planNode, error) {
