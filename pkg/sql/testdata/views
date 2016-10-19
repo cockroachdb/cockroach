@@ -148,7 +148,7 @@ DROP TABLE v1;
 statement error pgcode 42809 "t" is not a view
 DROP VIEW t;
 
-statement error view "v6" depends on view "v1"
+statement error cannot drop view "v1" because it is depended on by view "test.v6"
 DROP VIEW v1;
 
 # TODO(a-robinson): Need to improve this error message once #9988 is in.

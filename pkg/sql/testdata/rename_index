@@ -74,3 +74,12 @@ SELECT * FROM users
 ----
 1 tom   cat
 2 jerry rat
+
+statement ok
+CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=ufo}
+
+statement error cannot rename index "ufo" because it is depended on by view "test.v"
+ALTER INDEX users@ufo RENAME TO foo
+
+statement ok
+ALTER INDEX users@rar RENAME TO bar
