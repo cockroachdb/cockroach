@@ -17,6 +17,7 @@
 package pgwire
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"net"
@@ -27,7 +28,9 @@ import (
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
-	return makeV3Conn(c,
+	return makeV3Conn(
+		context.Background(),
+		c,
 		sql.NewDummyExecutor(),
 		makeServerMetrics(),
 		sql.SessionArgs{},
@@ -86,5 +89,5 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	}()
 
 	v3Conn := makeTestV3Conn(r)
-	_ = v3Conn.serve(nil)
+	_ = v3Conn.serve(context.Background(), nil)
 }

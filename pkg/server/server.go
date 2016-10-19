@@ -258,7 +258,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(s.cfg.Config, s.sqlExecutor)
+	s.pgServer = pgwire.MakeServer(s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	s.tsDB = ts.NewDB(s.db)
@@ -468,8 +468,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
-			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
-				log.Error(workersCtx, err)
+			pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+			pgCtx = log.WithLogTagStr(ctx, "client", conn.RemoteAddr().String())
+			if err := s.pgServer.ServeConn(pgCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+				// Report the error on this connection's context, so that we
+				// know which remote client caused the error when looking at
+				// the logs.
+				log.Error(pgCtx, err)
 			}
 		}))
 	})
@@ -490,9 +495,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 		s.stopper.RunWorker(func() {
 			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
-				if err := s.pgServer.ServeConn(conn); err != nil &&
-					!netutil.IsClosedConnection(err) {
-					log.Error(workersCtx, err)
+				pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+				pgCtx = log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				if err := s.pgServer.ServeConn(pgCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+					// Report the error on this connection's context, so that we
+					// know which remote client caused the error when looking at
+					// the logs.
+					log.Error(pgCtx, err)
 				}
 			}))
 		})
