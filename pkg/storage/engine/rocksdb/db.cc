@@ -1422,6 +1422,19 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
 
+  // Do not create bloom filters for the last level (i.e. the largest
+  // level which contains data in the LSM store). Setting this option
+  // reduces the size of the bloom filters by 10x. This is significant
+  // given that bloom filters require 1.25 bytes (10 bits) per key
+  // which can translate into gigabytes of memory given typical key
+  // and value sizes. The downside is that bloom filters will only be
+  // usable on the higher levels, but that seems acceptable. We
+  // typically see read amplification of 5-6x on clusters (i.e. there
+  // are 5-6 levels of sstables) which means we'll achieve 80-90% of
+  // the benefit of having bloom filters on every level for only 10%
+  // of the memory cost.
+  options.optimize_filters_for_hits = true;
+
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files. Note that 8 MB is larger than
   // 4 MB (the target L0 file size), but that reflects the
