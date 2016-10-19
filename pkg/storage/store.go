@@ -1114,7 +1114,7 @@ func (s *Store) WaitForInit() {
 // to gossip accordingly.
 func (s *Store) startGossip() {
 	gossipFns := []struct {
-		fn          func() error
+		fn          func(context.Context) error
 		description string
 		interval    time.Duration
 	}{
@@ -1138,7 +1138,7 @@ func (s *Store) startGossip() {
 		s.stopper.RunWorker(func() {
 			ctx := s.AnnotateCtx(context.Background())
 			// Run the first time without waiting for the Ticker and signal the WaitGroup.
-			if err := gossipFn.fn(); err != nil {
+			if err := gossipFn.fn(ctx); err != nil {
 				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
 			}
 			s.initComplete.Done()
@@ -1147,7 +1147,7 @@ func (s *Store) startGossip() {
 			for {
 				select {
 				case <-ticker.C:
-					if err := gossipFn.fn(); err != nil {
+					if err := gossipFn.fn(ctx); err != nil {
 						log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
 					}
 				case <-s.stopper.ShouldStop():
@@ -1166,13 +1166,13 @@ func (s *Store) startGossip() {
 // timeouts. The retry loop makes sure we try hard to keep asking for
 // the lease instead of waiting for the next sentinelGossipInterval
 // to transpire.
-func (s *Store) maybeGossipFirstRange() error {
+func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = s.stopper.ShouldStop()
 	for loop := retry.Start(retryOptions); loop.Next(); {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {
-			pErr := rng.maybeGossipFirstRange()
+			pErr := rng.maybeGossipFirstRange(ctx)
 			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || nlErr.LeaseHolder != nil {
 				return pErr.GoError()
 			}
@@ -1186,8 +1186,7 @@ func (s *Store) maybeGossipFirstRange() error {
 // maybeGossipSystemData looks for the ranges containing system data
 // and acquires the range lease for them which in turn will trigger
 // Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
-func (s *Store) maybeGossipSystemData() error {
-	ctx := s.AnnotateCtx(context.TODO())
+func (s *Store) maybeGossipSystemData(ctx context.Context) error {
 	for _, span := range keys.GossipedSystemSpans {
 		rng := s.LookupReplica(roachpb.RKey(span.Key), nil)
 		if rng == nil {
@@ -2629,7 +2628,7 @@ func (s *Store) processRaftRequest(
 					// crashing potential for any choice of dummy value below.
 					appliedIndex,
 					r.store.cfg,
-					&raftLogger{ctx: r.ctx},
+					&raftLogger{ctx: ctx},
 				), nil)
 			if err != nil {
 				return roachpb.NewError(err)
@@ -2929,7 +2928,8 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 		// campaigning.
 		var warnDuration = 10 * s.cfg.RaftTickInterval
 		if elapsed >= warnDuration {
-			log.Warningf(r.ctx, "handle raft ready: %.1fs", elapsed.Seconds())
+			ctx := r.AnnotateCtx(context.TODO())
+			log.Warningf(ctx, "handle raft ready: %.1fs", elapsed.Seconds())
 		}
 		if !r.IsInitialized() {
 			// Only an uninitialized replica can have a placeholder since, by
@@ -2977,7 +2977,8 @@ func (s *Store) processRaft() {
 		// Abandon any unsent snapshots (releasing the associated RocksDB
 		// resources).
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-			r.maybeAbandonSnapshot(r.ctx)
+			ctx := r.AnnotateCtx(context.TODO())
+			r.maybeAbandonSnapshot(ctx)
 			return true
 		})
 	})

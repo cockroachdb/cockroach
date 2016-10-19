@@ -506,7 +506,7 @@ func (bq *baseQueue) processReplica(
 	ctx, span := bq.AnnotateCtxWithSpan(queueCtx, bq.name)
 	defer span.Finish()
 	// Also add the Replica annotations to ctx.
-	ctx = repl.logContext(ctx)
+	ctx = repl.AnnotateCtx(ctx)
 	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
 	defer cancel()
 	log.Eventf(ctx, "processing replica")

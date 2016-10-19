@@ -1896,7 +1896,7 @@ func (r *Replica) CheckConsistency(
 		}
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
 	} else {
-		if err := r.store.stopper.RunAsyncTask(r.ctx, func(ctx context.Context) {
+		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 			log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 				inconsistencyCount)
 			// Keep the request from crossing the local->global boundary.
@@ -2626,7 +2626,7 @@ func (r *Replica) splitTrigger(
 	// Copy the last replica GC timestamp. This value is unreplicated,
 	// which is why the MVCC stats are set to nil on calls to
 	// MVCCPutProto.
-	replicaGCTS, err := r.getLastReplicaGCTimestamp()
+	replicaGCTS, err := r.getLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
