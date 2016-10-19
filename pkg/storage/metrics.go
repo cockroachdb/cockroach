@@ -38,6 +38,24 @@ var (
 	metaLeaseHolderCount = metric.Metadata{Name: "replicas.leaseholders"}
 	metaQuiescentCount   = metric.Metadata{Name: "replicas.quiescent"}
 
+	// Replica CommandQueue metrics.
+	metaMaxCommandQueueSize = metric.Metadata{Name: "replicas.commandqueue.maxsize",
+		Help: "Largest number of commands in any CommandQueue"}
+	metaMaxCommandQueueWriteCount = metric.Metadata{Name: "replicas.commandqueue.maxwritecount",
+		Help: "Largest number of read-write commands in any CommandQueue"}
+	metaMaxCommandQueueReadCount = metric.Metadata{Name: "replicas.commandqueue.maxreadcount",
+		Help: "Largest number of read-only commands in any CommandQueue"}
+	metaMaxCommandQueueTreeSize = metric.Metadata{Name: "replicas.commandqueue.maxtreesize",
+		Help: "Largest number of intervals in any CommandQueue's interval tree"}
+	metaMaxCommandQueueOverlaps = metric.Metadata{Name: "replicas.commandqueue.maxoverlaps",
+		Help: "Largest number of overlapping commands seen when adding to any CommandQueue"}
+	metaCombinedCommandQueueSize = metric.Metadata{Name: "replicas.commandqueue.combinedqueuesize",
+		Help: "Number of commands in all CommandQueues combined"}
+	metaCombinedCommandWriteCount = metric.Metadata{Name: "replicas.commandqueue.combinedwritecount",
+		Help: "Number of read-write commands in all CommandQueues combined"}
+	metaCombinedCommandReadCount = metric.Metadata{Name: "replicas.commandqueue.combinedreadcount",
+		Help: "Number of read-only commands in all CommandQueues combined"}
+
 	// Range metrics.
 	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available"}
 
@@ -268,6 +286,16 @@ type StoreMetrics struct {
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
 
+	// Replica CommandQueue metrics.
+	MaxCommandQueueSize       *metric.Gauge
+	MaxCommandQueueWriteCount *metric.Gauge
+	MaxCommandQueueReadCount  *metric.Gauge
+	MaxCommandQueueTreeSize   *metric.Gauge
+	MaxCommandQueueOverlaps   *metric.Gauge
+	CombinedCommandQueueSize  *metric.Gauge
+	CombinedCommandWriteCount *metric.Gauge
+	CombinedCommandReadCount  *metric.Gauge
+
 	// Range metrics.
 	AvailableRangeCount *metric.Gauge
 
@@ -427,6 +455,16 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+
+		// Replica CommandQueue metrics.
+		MaxCommandQueueSize:       metric.NewGauge(metaMaxCommandQueueSize),
+		MaxCommandQueueWriteCount: metric.NewGauge(metaMaxCommandQueueWriteCount),
+		MaxCommandQueueReadCount:  metric.NewGauge(metaMaxCommandQueueReadCount),
+		MaxCommandQueueTreeSize:   metric.NewGauge(metaMaxCommandQueueTreeSize),
+		MaxCommandQueueOverlaps:   metric.NewGauge(metaMaxCommandQueueOverlaps),
+		CombinedCommandQueueSize:  metric.NewGauge(metaCombinedCommandQueueSize),
+		CombinedCommandWriteCount: metric.NewGauge(metaCombinedCommandWriteCount),
+		CombinedCommandReadCount:  metric.NewGauge(metaCombinedCommandReadCount),
 
 		// Range metrics.
 		AvailableRangeCount: metric.NewGauge(metaAvailableRangeCount),
