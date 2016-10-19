@@ -685,16 +685,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
 	}
 
-	ctx := s.AnnotateCtx(context.Background())
-
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
-	// TODO(radu): should pass ambient
-	s.scheduler = newRaftScheduler(ctx, s.metrics, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
 	storeMuLogger := syncutil.ThresholdLogger(
-		ctx,
+		s.AnnotateCtx(context.Background()),
 		defaultStoreMutexWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "storeMu: "+msg, args...)
@@ -715,9 +712,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
-		// TODO(radu): should pass ambient
 		s.scanner = newReplicaScanner(
-			ctx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
+			s.cfg.AmbientCtx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
@@ -729,9 +725,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
-		// TODO(radu): should pass ambient
 		s.consistencyScanner = newReplicaScanner(
-			ctx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
+			s.cfg.AmbientCtx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
 		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
