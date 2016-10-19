@@ -256,6 +256,7 @@ provide the password on standard input.`,
 
 	Key = FlagInfo{
 		Name:        "key",
+		EnvVar:      "COCKROACH_KEY",
 		Description: `Path to the key protecting --cert. Needed in secure mode.`,
 	}
 
