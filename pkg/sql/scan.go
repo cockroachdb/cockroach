@@ -268,8 +268,10 @@ func (n *scanNode) initTable(
 ) error {
 	n.desc = *desc
 
-	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
-		return err
+	if !p.skipSelectPrivilegeChecks {
+		if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
+			return err
+		}
 	}
 
 	if indexHints != nil && indexHints.Index != "" {

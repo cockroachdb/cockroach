@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -382,6 +383,20 @@ func (p *planner) getViewPlan(
 		return planDataSource{},
 			errors.Errorf("failed to parse underlying query from view %q as a select", tn)
 	}
+
+	// When constructing the subquery plan, we don't want to check for the SELECT
+	// privilege on the underlying tables, just on the view itself. Checking on
+	// the underlying tables as well would defeat the purpose of having separate
+	// SELECT privileges on the view, which is intended to allow for exposing
+	// some subset of a restricted table's data to less privileged users.
+	if !p.skipSelectPrivilegeChecks {
+		if err := p.checkPrivilege(desc, privilege.SELECT); err != nil {
+			return planDataSource{}, err
+		}
+		p.skipSelectPrivilegeChecks = true
+		defer func() { p.skipSelectPrivilegeChecks = false }()
+	}
+
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?

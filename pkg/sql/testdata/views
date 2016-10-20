@@ -142,6 +142,72 @@ SHOW CREATE VIEW test2.v1;
 ----
 test2.v1 CREATE VIEW "test2.v1" AS SELECT x, y FROM test.v2
 
+statement ok
+GRANT SELECT ON t TO testuser;
+
+user testuser
+
+query II
+SELECT * FROM t;
+----
+1 99
+2 98
+3 97
+
+query error user testuser does not have SELECT privilege on view v1
+SELECT * FROM v1;
+
+query error user testuser does not have SELECT privilege on view v6
+SELECT * FROM v6;
+
+user root
+
+statement ok
+REVOKE SELECT ON t FROM testuser;
+
+statement ok
+GRANT SELECT ON v1 TO testuser;
+
+user testuser
+
+query error user testuser does not have SELECT privilege on table t
+SELECT * FROM t;
+
+query II
+SELECT * FROM v1;
+----
+1 99
+2 98
+3 97
+
+query error user testuser does not have SELECT privilege on view v6
+SELECT * FROM v6;
+
+user root
+
+statement ok
+REVOKE SELECT ON v1 FROM testuser;
+
+statement ok
+GRANT SELECT ON v6 TO testuser;
+
+user testuser
+
+query error user testuser does not have SELECT privilege on table t
+SELECT * FROM t;
+
+query error user testuser does not have SELECT privilege on view v1
+SELECT * FROM v1;
+
+query II
+SELECT * FROM v6;
+----
+1 99
+2 98
+3 97
+
+user root
+
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1;
 
