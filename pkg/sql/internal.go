@@ -73,7 +73,7 @@ func getTableID(p *planner, tn *parser.TableName) (sqlbase.ID, error) {
 		return 0, err
 	}
 
-	virtual, err := p.virtualSchemas().getVirtualTableDesc(tn)
+	virtual, err := p.session.virtualSchemas.getVirtualTableDesc(tn)
 	if err != nil {
 		return 0, err
 	}

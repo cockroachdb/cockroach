@@ -425,7 +425,7 @@ func forEachDatabaseDesc(p *planner, fn func(*sqlbase.DatabaseDescriptor) error)
 	}
 
 	// Handle virtual schemas.
-	for _, schema := range p.virtualSchemas().entries {
+	for _, schema := range p.session.virtualSchemas.entries {
 		dbDescs = append(dbDescs, schema.desc)
 	}
 
@@ -484,7 +484,7 @@ func forEachTableDesc(
 	}
 
 	// Handle virtual schemas.
-	for dbName, schema := range p.virtualSchemas().entries {
+	for dbName, schema := range p.session.virtualSchemas.entries {
 		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
 		for tableName, entry := range schema.tables {
 			dbTables[tableName] = entry.desc

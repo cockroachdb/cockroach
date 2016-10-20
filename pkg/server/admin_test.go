@@ -235,7 +235,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-	defer session.Finish()
+	defer session.Finish(ts.sqlExecutor)
 	query := "CREATE DATABASE " + testdb
 	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer createRes.Close()
@@ -386,7 +386,7 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-	defer session.Finish()
+	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{
 		fmt.Sprintf("CREATE DATABASE %s", escDBName),
 		fmt.Sprintf(`CREATE TABLE %s.%s (
@@ -567,7 +567,7 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 
 		session := sql.NewSession(
 			ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-		defer session.Finish()
+		defer session.Finish(ts.sqlExecutor)
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
 		defer resSet.Close()
@@ -602,7 +602,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-	defer session.Finish()
+	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		"CREATE TABLE test.tbl (val STRING)",
@@ -712,7 +712,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-	defer session.Finish()
+	defer session.Finish(ts.sqlExecutor)
 	query := `
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
@@ -756,7 +756,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-	defer session.Finish()
+	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
 		"CREATE TABLE api_test.tbl1 (a INT)",
