@@ -207,7 +207,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// liveness expiration and heartbeat interval.
 	active, renewal := storage.RangeLeaseDurations(
 		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
-	s.nodeLiveness = storage.NewNodeLiveness(s.clock, s.db, s.gossip, active, renewal)
+	s.nodeLiveness = storage.NewNodeLiveness(
+		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
+	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
 	s.raftTransport = storage.NewRaftTransport(

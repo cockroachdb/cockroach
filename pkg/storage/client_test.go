@@ -643,6 +643,8 @@ func (m *multiTestContext) addStore(idx int) {
 		context.TODO(), m.getNodeIDAddress, grpcServer, m.rpcContext,
 	)
 
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+
 	stopper := stop.NewStopper()
 
 	// Give this store the first store as a resolver. We don't provide all of the
@@ -662,7 +664,7 @@ func (m *multiTestContext) addStore(idx int) {
 		return []resolver.Resolver{r}
 	}()
 	m.gossips[idx] = gossip.New(
-		log.AmbientContext{}, m.rpcContext, grpcServer,
+		ambient, m.rpcContext, grpcServer,
 		resolvers, m.transportStopper, metric.NewRegistry(),
 	)
 	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
@@ -676,8 +678,10 @@ func (m *multiTestContext) addStore(idx int) {
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
 	cfg.SetDefaults()
-	m.nodeLivenesses[idx] = storage.NewNodeLiveness(m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration)
+	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
+		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
+		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
+	)
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		err := store.Bootstrap(roachpb.StoreIdent{
@@ -714,7 +718,7 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
 
-	stores := storage.NewStores(log.AmbientContext{}, clock)
+	stores := storage.NewStores(ambient, clock)
 	stores.AddStore(store)
 	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
 	storage.RegisterConsistencyServer(grpcServer, storesServer)
@@ -726,7 +730,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.mu.Lock()
 	m.stores[idx] = store
 	m.stoppers[idx] = stopper
-	sender := storage.NewStores(log.AmbientContext{}, clock)
+	sender := storage.NewStores(ambient, clock)
 	sender.AddStore(store)
 	m.senders[idx] = sender
 	// Save the store identities for later so we can use them in
