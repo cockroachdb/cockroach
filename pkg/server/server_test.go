@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/jsonpb"
 )
@@ -70,6 +71,34 @@ func TestHealth(t *testing.T) {
 	var data serverpb.HealthResponse
 	if err := getAdminJSONProto(s, "health", &data); err != nil {
 		t.Error(err)
+	}
+}
+
+// TestServerStartClock sets the MaxOffset for the server and checks that
+// the server hlc clock is not far from the physical clock.
+func TestServerStartClock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params := base.TestServerArgs{
+		MaxOffset: time.Second,
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	// Run a command so that we are sure to touch the timestamp cache. This is
+	// actually not needed because other commands run during server
+	// initialization, but we cannot guarantee that's going to stay that way.
+	if err := s.(*TestServer).node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
+		t.Fatal(err)
+	}
+
+	now := s.Clock().Now()
+	actualNow := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	// The hlc clock is pushed because commands hit a new timestamp cache,
+	// which pushes them into the future, thus updating the hlc.
+	// TODO(andrei): remove this delay in #9504
+	if pushedForward := time.Duration(now.WallTime - actualNow.WallTime); pushedForward < time.Second/2 {
+		t.Fatalf("time: server %s vs actual %s", now, actualNow)
 	}
 }
 
