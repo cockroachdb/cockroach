@@ -65,7 +65,7 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 	if n.Index == nil {
 		index = tableDesc.PrimaryIndex
 	} else {
-		normIdxName := sqlbase.NormalizeName(n.Index.Index)
+		normIdxName := n.Index.Index.Normalize()
 		status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
 		if err != nil {
 			return nil, err
