@@ -638,7 +638,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 		// If we're no longer in a transaction, finish the trace.
 		if txnState.State == NoTxn {
-			txnState.finishSQLTxn()
+			txnState.finishSQLTxn(session.context)
 		}
 
 		// If the txn is in any state but Open, exec the schema changes. They'll
