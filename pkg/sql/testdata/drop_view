@@ -5,10 +5,10 @@ statement ok
 INSERT INTO a VALUES ('a', '1'), ('b', '2'), ('c', '3')
 
 statement ok
-CREATE VIEW b AS SELECT * from a
+CREATE VIEW b AS SELECT k,v from a
 
 statement ok
-CREATE VIEW c AS SELECT * from b
+CREATE VIEW c AS SELECT k,v from b
 
 query T
 SHOW TABLES FROM test
@@ -27,7 +27,7 @@ statement error cannot drop view "b" because it is depended on by view "test.c"
 DROP VIEW b
 
 statement ok
-CREATE VIEW d AS SELECT * FROM a
+CREATE VIEW d AS SELECT k,v FROM a
 
 statement ok
 CREATE VIEW diamond AS SELECT COUNT(*) FROM b AS b JOIN d AS d ON b.k = d.k
@@ -58,13 +58,13 @@ DROP VIEW d
 user root
 
 statement ok
-CREATE VIEW testuser1 AS SELECT * FROM a
+CREATE VIEW testuser1 AS SELECT k,v FROM a
 
 statement ok
-CREATE VIEW testuser2 AS SELECT * FROM testuser1
+CREATE VIEW testuser2 AS SELECT k,v FROM testuser1
 
 statement ok
-CREATE VIEW testuser3 AS SELECT * FROM testuser2
+CREATE VIEW testuser3 AS SELECT k,v FROM testuser2
 
 statement ok
 GRANT ALL ON testuser1 to testuser
@@ -156,7 +156,7 @@ statement ok
 CREATE VIEW x AS VALUES (1, 2), (3, 4)
 
 statement ok
-CREATE VIEW y AS SELECT * FROM x
+CREATE VIEW y AS SELECT column1, column2 FROM x
 
 statement error cannot drop view "x" because it is depended on by view "test.y"
 DROP VIEW x
@@ -168,7 +168,7 @@ statement ok
 CREATE VIEW x AS VALUES (1, 2), (3, 4)
 
 statement ok
-CREATE VIEW y AS SELECT * FROM x
+CREATE VIEW y AS SELECT column1, column2 FROM x
 
 statement error cannot drop view "x" because it is depended on by view "test.y"
 DROP VIEW x

@@ -16,7 +16,7 @@ SELECT * FROM kv
 7 8
 
 statement ok
-CREATE VIEW kview AS SELECT * FROM kv
+CREATE VIEW kview AS SELECT k,v FROM kv
 
 query II
 SELECT * FROM kview

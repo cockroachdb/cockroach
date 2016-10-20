@@ -14,7 +14,7 @@ statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4)
 
 statement ok
-CREATE VIEW v as SELECT * FROM kv;
+CREATE VIEW v as SELECT k,v FROM kv;
 
 query II
 SELECT * FROM v
@@ -77,7 +77,7 @@ statement ok
 INSERT INTO t VALUES (4, 16), (5, 25)
 
 statement ok
-CREATE VIEW v as SELECT * from t
+CREATE VIEW v as SELECT c1,c2 from t
 
 statement error pgcode 42P07 relation "new_v" already exists
 ALTER VIEW v RENAME TO new_v
