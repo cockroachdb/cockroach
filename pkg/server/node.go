@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"runtime/debug"
 	"time"
 
 	"google.golang.org/grpc/credentials"
@@ -818,6 +819,10 @@ func (n *Node) Batch(
 	}
 
 	f := func() {
+		if args.TraceContext != nil {
+			fmt.Printf("Trace: %x  Span: %x\n", args.TraceContext.TraceID, args.TraceContext.SpanID)
+			debug.PrintStack()
+		}
 		sp, err := tracing.JoinOrNew(n.storeCfg.AmbientCtx.Tracer, args.TraceContext, opName)
 		if err != nil {
 			fail(err)
