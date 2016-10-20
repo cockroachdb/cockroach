@@ -61,6 +61,10 @@ type planner struct {
 	// It's used in layers below the executor to modify the behavior of SELECT.
 	avoidCachedDescriptors bool
 
+	// If set, the planner should skip checking for the SELECT privilege when
+	// initializing plans to read from a table. This should be used with care.
+	skipSelectPrivilegeChecks bool
+
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
 
