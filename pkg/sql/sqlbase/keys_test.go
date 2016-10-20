@@ -24,23 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestNormalizeName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testCases := []struct {
-		in, expected string
-	}{
-		{"HELLO", "hello"},                            // Lowercase is the norm
-		{"ıİ", "ii"},                                  // Turkish/Azeri special cases
-		{"no\u0308rmalization", "n\u00f6rmalization"}, // NFD -> NFC.
-	}
-	for _, test := range testCases {
-		s := ReNormalizeName(test.in)
-		if test.expected != s {
-			t.Errorf("%s: expected %s, but found %s", test.in, test.expected, s)
-		}
-	}
-}
-
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
