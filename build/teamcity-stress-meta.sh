@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-teamcity-trigger
+build/builder.sh teamcity-trigger
