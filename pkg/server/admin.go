@@ -172,7 +172,7 @@ func (s *adminServer) Databases(
 ) (*serverpb.DatabasesResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
 	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
@@ -199,7 +199,7 @@ func (s *adminServer) DatabaseDetails(
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
@@ -294,7 +294,7 @@ func (s *adminServer) TableDetails(
 ) (*serverpb.TableDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
@@ -615,7 +615,7 @@ func (s *adminServer) Users(
 ) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 	query := "SELECT username FROM system.users"
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer r.Close()
@@ -641,7 +641,7 @@ func (s *adminServer) Events(
 ) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 
 	// Execute the query.
 	q := makeSQLQuery()
@@ -761,7 +761,7 @@ func (s *adminServer) SetUIData(
 
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
@@ -823,7 +823,7 @@ func (s *adminServer) GetUIData(
 ) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
-	defer session.Finish()
+	defer session.Finish(s.server.sqlExecutor)
 
 	if len(req.Keys) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")

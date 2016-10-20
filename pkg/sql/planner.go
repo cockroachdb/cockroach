@@ -337,8 +337,5 @@ func (p *planner) fillFKTableMap(m tableLookupsByID) error {
 }
 
 func (p *planner) virtualSchemas() *virtualSchemaHolder {
-	if p.session.executor == nil {
-		return nil
-	}
-	return &p.session.executor.virtualSchemas
+	return &p.session.virtualSchemas
 }
