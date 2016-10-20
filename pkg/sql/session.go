@@ -69,11 +69,12 @@ type Session struct {
 	Syntax      int32
 	DistSQLMode distSQLExecMode
 
+	virtualSchemas virtualSchemaHolder
+
 	// Info about the open transaction (if any).
 	TxnState txnState
 
 	planner            planner
-	executor           *Executor
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 
@@ -140,11 +141,11 @@ type SessionArgs struct {
 func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
-		Database:   args.Database,
-		SearchPath: []string{"pg_catalog"},
-		User:       args.User,
-		Location:   time.UTC,
-		executor:   e,
+		Database:       args.Database,
+		SearchPath:     []string{"pg_catalog"},
+		User:           args.User,
+		Location:       time.UTC,
+		virtualSchemas: e.virtualSchemas,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
@@ -173,11 +174,19 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 }
 
 // Finish releases resources held by the Session.
-func (s *Session) Finish() {
+func (s *Session) Finish(e *Executor) {
+	// Cleanup leases. We might have unreleased leases if we're finishing the
+	// session abruptly in the middle of a transaction, or, until #7648 is
+	// addressed, there might be leases accumulated by preparing statements.
+	s.planner.releaseLeases()
+	if s.finishEventLog {
+		log.FinishEventLog(s.context)
+	}
+
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State.kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(
-			errors.Errorf("session closing"), s.executor)
+			errors.Errorf("session closing"), e)
 	}
 	if s.TxnState.State != NoTxn {
 		s.TxnState.finishSQLTxn()

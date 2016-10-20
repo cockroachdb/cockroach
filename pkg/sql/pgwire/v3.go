@@ -149,7 +149,7 @@ func (c *v3Conn) finish() {
 		log.Error(context.TODO(), err)
 	}
 	_ = c.conn.Close()
-	c.session.Finish()
+	c.session.Finish(c.executor)
 }
 
 func parseOptions(data []byte) (sql.SessionArgs, error) {
