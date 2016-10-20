@@ -124,11 +124,15 @@ func RangeLeaseDurations(
 	return
 }
 
+var enableCoalescedHeartbeats = envutil.EnvOrDefaultBool(
+	"COCKROACH_ENABLE_COALESCED_HEARBEATS", true)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig() StoreConfig {
 	return StoreConfig{
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		RaftTickInterval:               100 * time.Millisecond,
+		CoalescedHeartbeatsInterval:    10 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
 		RaftElectionTimeoutTicks:       3,
 		ScanInterval:                   10 * time.Minute,
@@ -328,6 +332,12 @@ type Store struct {
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
+
+	coalescedMu struct {
+		syncutil.Mutex
+		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
+		heartbeatResponses map[roachpb.StoreIdent][]RaftHeartbeat
+	}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
 	started int32
@@ -507,6 +517,12 @@ type StoreConfig struct {
 	// are defined in terms of multiples of this value.
 	RaftTickInterval time.Duration
 
+	// CoalescedHeartbeatsInterval is the interval for which heartbeat messages
+	// are queued and then sent as a single coalesced heartbeat; it is a
+	// fraction of the RaftTickInterval so that heartbeats don't get delayed by
+	// an entire tick.
+	CoalescedHeartbeatsInterval time.Duration
+
 	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
 	RaftHeartbeatIntervalTicks int
 
@@ -644,6 +660,9 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = base.DefaultRaftTickInterval
 	}
+	if sc.CoalescedHeartbeatsInterval == 0 {
+		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 10
+	}
 	if sc.RaftHeartbeatIntervalTicks == 0 {
 		sc.RaftHeartbeatIntervalTicks = defaultHeartbeatIntervalTicks
 	}
@@ -675,7 +694,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	if !cfg.Valid() {
 		panic(fmt.Sprintf("invalid store configuration: %+v", &cfg))
 	}
-
 	s := &Store{
 		cfg:       cfg,
 		db:        cfg.DB, // TODO(tschottdorf) remove redundancy.
@@ -701,6 +719,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		},
 	)
 	s.mu.TimedMutex = syncutil.MakeTimedMutex(storeMuLogger)
+
+	s.coalescedMu.Lock()
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.Unlock()
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
@@ -973,6 +996,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Start Raft processing goroutines.
 	s.cfg.Transport.Listen(s.StoreID(), s)
 	s.processRaft()
+	s.startCoalescedHeartbeatsLoop()
 
 	doneUnfreezing := make(chan struct{})
 	if s.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
@@ -2418,11 +2442,81 @@ func (s *Store) HandleSnapshot(
 	}
 }
 
+func (s *Store) uncoalesceBeats(
+	ctx context.Context,
+	beats []RaftHeartbeat,
+	fromReplica, toReplica roachpb.ReplicaDescriptor,
+	msgT raftpb.MessageType,
+	respStream RaftMessageResponseStream,
+) {
+	if len(beats) == 0 {
+		return
+	}
+	if log.V(4) {
+		log.Infof(ctx, "[s%d] uncoalescing %d beats of type %v: %+v", s.Ident.StoreID, len(beats), msgT, beats)
+	}
+	beatReqs := make([]RaftMessageRequest, len(beats))
+	for i, beat := range beats {
+		msg := raftpb.Message{
+			Type:   msgT,
+			From:   uint64(beat.FromReplicaID),
+			To:     uint64(beat.ToReplicaID),
+			Term:   beat.Term,
+			Commit: beat.Commit,
+		}
+		beatReqs[i] = RaftMessageRequest{
+			RangeID: beat.RangeID,
+			FromReplica: roachpb.ReplicaDescriptor{
+				NodeID:    fromReplica.NodeID,
+				StoreID:   fromReplica.StoreID,
+				ReplicaID: beat.FromReplicaID,
+			},
+			ToReplica: roachpb.ReplicaDescriptor{
+				NodeID:    toReplica.NodeID,
+				StoreID:   toReplica.StoreID,
+				ReplicaID: beat.ToReplicaID,
+			},
+			Message: msg,
+			Quiesce: beat.Quiesce,
+		}
+		if log.V(4) {
+			log.Infof(ctx, "[s%d] uncoalesced beat: %+v", s.Ident.StoreID, beatReqs[i])
+		}
+
+		if err := s.HandleRaftUncoalescedRequest(ctx, &beatReqs[i], respStream); err != nil {
+			log.Errorf(ctx, "[s%d] could not handle uncoalesced heartbeat %s", s.Ident.StoreID, err)
+		}
+	}
+}
+
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.mu is not held.
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
+	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
+		if req.RangeID != 0 {
+			panic("coalesced heartbeats must have rangeID == 0")
+		}
+		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
+		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
+		return nil
+	}
+	return s.HandleRaftUncoalescedRequest(ctx, req, respStream)
+}
+
+// HandleRaftUncoalescedRequest dispatches a raft message to the appropriate
+// Replica. It requires that s.mu is not held.
+func (s *Store) HandleRaftUncoalescedRequest(
+	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
+) *roachpb.Error {
+
+	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
+		log.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
+	}
+	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
+	// not sent over the network if the environment variable is set) so do not
+	// count them.
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
 	if respStream == nil {
@@ -2468,6 +2562,9 @@ func (s *Store) processRaftRequest(
 		if status != nil && status.Term == req.Message.Term && status.Commit == req.Message.Commit {
 			r.quiesce()
 			return
+		}
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: local raft status is %+v, incoming quiesce message is %+v", status, req.Message)
 		}
 	}
 
@@ -3003,7 +3100,6 @@ func (s *Store) raftTickLoop() {
 				s.mu.Unlock()
 
 				s.scheduler.EnqueueRaftTick(rangeIDs...)
-
 				s.metrics.RaftTicks.Inc(1)
 
 			case <-s.stopper.ShouldStop():
@@ -3011,6 +3107,106 @@ func (s *Store) raftTickLoop() {
 			}
 		}
 	})
+}
+
+// Since coalesced heartbeats adds latency to heartbeat messages, it is
+// beneficial to have it run on a faster cycle than once per tick, so that
+// the delay does not impact latency-sensitive features such as quiescence.
+func (s *Store) startCoalescedHeartbeatsLoop() {
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(s.cfg.CoalescedHeartbeatsInterval)
+		defer func() {
+			ticker.Stop()
+		}()
+
+		for {
+			select {
+			case <-ticker.C:
+				s.sendQueuedHeartbeats()
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
+// returns the number of heartbeats that were sent.
+func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roachpb.StoreIdent) int {
+	var msgType raftpb.MessageType
+
+	if len(beats) == 0 && len(resps) == 0 {
+		return 0
+	} else if len(resps) == 0 {
+		msgType = raftpb.MsgHeartbeat
+	} else if len(beats) == 0 {
+		msgType = raftpb.MsgHeartbeatResp
+	} else {
+		panic("cannot coalesce both heartbeats and responses")
+	}
+
+	chReq := &RaftMessageRequest{
+		RangeID: 0,
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    to.NodeID,
+			StoreID:   to.StoreID,
+			ReplicaID: 0,
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:  s.Ident.NodeID,
+			StoreID: s.Ident.StoreID,
+		},
+		Message: raftpb.Message{
+			Type: msgType,
+		},
+		Heartbeats:     beats,
+		HeartbeatResps: resps,
+	}
+
+	if log.V(4) {
+		ctx := s.AnnotateCtx(context.TODO())
+		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
+	}
+
+	if !s.cfg.Transport.SendAsync(chReq) {
+		toReport := make(map[*Replica][]roachpb.ReplicaID)
+
+		s.mu.Lock()
+		for _, beat := range beats {
+			replica := s.mu.replicas[beat.RangeID]
+			toReport[replica] = append(toReport[replica], beat.ToReplicaID)
+		}
+		for _, resp := range resps {
+			replica := s.mu.replicas[resp.RangeID]
+			toReport[replica] = append(toReport[replica], resp.ToReplicaID)
+		}
+		s.mu.Unlock()
+
+		for replica, beats := range toReport {
+			for _, to := range beats {
+				replica.reportUnreachable(to)
+			}
+		}
+		return 0
+	}
+	return len(beats) + len(resps)
+}
+
+func (s *Store) sendQueuedHeartbeats() {
+	s.coalescedMu.Lock()
+	defer s.coalescedMu.Unlock()
+
+	var beatsSent int
+
+	for to, beats := range s.coalescedMu.heartbeats {
+		beatsSent += s.sendQueuedHeartbeatsToNode(beats, nil, to)
+	}
+	for to, resps := range s.coalescedMu.heartbeatResponses {
+		beatsSent += s.sendQueuedHeartbeatsToNode(nil, resps, to)
+	}
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
 
 var errRetry = errors.New("retry: orphaned replica")
