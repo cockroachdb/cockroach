@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -177,6 +178,26 @@ func (n *alterTableNode) Start() error {
 					continue
 				}
 				return err
+			}
+			// You can't drop a column depended on by a view.
+			for _, ref := range n.tableDesc.DependedOnBy {
+				found := false
+				for _, colID := range ref.ColumnIDs {
+					if colID == n.tableDesc.Columns[i].ID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+				viewName, err := n.p.getQualifiedTableNameFromID(ref.ID)
+				if err != nil {
+					log.Warningf(n.p.ctx(), "unable to retrieve name of view %d: %v", ref.ID, err)
+					return fmt.Errorf("cannot drop column %s because a view depends on it", t.Column)
+				}
+				return fmt.Errorf("cannot drop column %s because view %q depends on it",
+					t.Column, viewName)
 			}
 			switch status {
 			case sqlbase.DescriptorActive:
