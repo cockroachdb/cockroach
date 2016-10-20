@@ -180,7 +180,7 @@ func (s *Session) Finish() {
 			errors.Errorf("session closing"), s.executor)
 	}
 	if s.TxnState.State != NoTxn {
-		s.TxnState.finishSQLTxn()
+		s.TxnState.finishSQLTxn(s.context)
 	}
 
 	// Cleanup leases. We might have unreleased leases if we're finishing the
@@ -376,7 +376,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // finishSQLTxn closes the root span for the current SQL txn.
 // This needs to be called before resetForNewSQLTransaction() is called for
 // starting another SQL txn.
-func (ts *txnState) finishSQLTxn() {
+func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	span := opentracing.SpanFromContext(ts.Ctx)
 	if span == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
@@ -387,7 +387,7 @@ func (ts *txnState) finishSQLTxn() {
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.CollectedSpans)
 		if len(dump) > 0 {
-			log.Infof(context.TODO(), "SQL trace:\n%s", dump)
+			log.Infof(sessionCtx, "SQL trace:\n%s", dump)
 		}
 	}
 }
