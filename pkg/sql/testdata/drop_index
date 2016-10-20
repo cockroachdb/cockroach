@@ -111,7 +111,7 @@ users primary true   1   id     ASC       false
 users foo     false  1   name   ASC       false
 
 statement ok
-CREATE VIEW v2 AS SELECT * FROM v
+CREATE VIEW v2 AS SELECT name FROM v
 
 query T
 SHOW TABLES

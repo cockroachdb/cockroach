@@ -61,6 +61,10 @@ type selectNode struct {
 	render  []parser.TypedExpr
 	columns ResultColumns
 
+	// A piece of metadata to indicate whether a star expression was expanded
+	// during rendering.
+	isStar bool
+
 	// The number of initial columns - before adding any internal render
 	// targets for grouping, filtering or ordering. The original columns
 	// are columns[:numOriginalCols], the internally added ones are
@@ -574,6 +578,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Type
 	} else if isStar {
 		s.columns = append(s.columns, cols...)
 		s.render = append(s.render, typedExprs...)
+		s.isStar = true
 		return nil
 	}
 

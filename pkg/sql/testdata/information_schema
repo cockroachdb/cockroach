@@ -329,7 +329,7 @@ statement ok
 CREATE TABLE other_db.xyz (i INT)
 
 statement ok
-CREATE VIEW other_db.abc AS SELECT * from other_db.xyz
+CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 
 query T
 SELECT table_name FROM information_schema.tables
@@ -627,7 +627,7 @@ statement ok
 CREATE TABLE other_db.xyz (i INT)
 
 statement ok
-CREATE VIEW other_db.abc AS SELECT * from other_db.xyz
+CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'

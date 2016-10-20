@@ -57,19 +57,19 @@ statement OK
 CREATE TABLE d2.t1 (k STRING PRIMARY KEY, v STRING)
 
 statement ok
-CREATE VIEW d1.v1 AS SELECT * FROM d1.t1
+CREATE VIEW d1.v1 AS SELECT k,v FROM d1.t1
 
 statement ok
-CREATE VIEW d1.v2 AS SELECT * FROM d1.v1
+CREATE VIEW d1.v2 AS SELECT k,v FROM d1.v1
 
 statement ok
-CREATE VIEW d2.v1 AS SELECT * FROM d2.t1
+CREATE VIEW d2.v1 AS SELECT k,v FROM d2.t1
 
 statement ok
-CREATE VIEW d2.v2 AS SELECT * FROM d1.t1
+CREATE VIEW d2.v2 AS SELECT k,v FROM d1.t1
 
 statement ok
-CREATE VIEW d2.v3 AS SELECT * FROM d1.v2
+CREATE VIEW d2.v3 AS SELECT k,v FROM d1.v2
 
 statement ok
 CREATE VIEW d2.v4 AS SELECT COUNT(*) FROM d1.t1 as x JOIN d2.t1 as y ON x.k = y.k

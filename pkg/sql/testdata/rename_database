@@ -101,7 +101,7 @@ user root
 # both for views in that database and for views in a different database.
 
 statement ok
-CREATE VIEW t.v AS SELECT * FROM u.kv
+CREATE VIEW t.v AS SELECT k,v FROM u.kv
 
 query T
 SHOW TABLES FROM u
@@ -118,7 +118,7 @@ statement ok
 ALTER DATABASE u RENAME TO v
 
 statement ok
-CREATE VIEW v.v AS SELECT * FROM v.kv
+CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
 statement error cannot rename database because table "kv" is depended on by view "v.v"
 ALTER DATABASE v RENAME TO u
