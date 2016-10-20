@@ -512,6 +512,9 @@ func (t *logicTest) processTestFile(path string) error {
 			// Skip comment lines.
 			continue
 		}
+		if len(fields) == 2 && fields[1] == "error" {
+			return fmt.Errorf("%s:%d: no expected error provided", path, s.line)
+		}
 		switch cmd {
 		case "repeat":
 			// A line "repeat X" makes the test repeat the following statement or query X times.
@@ -529,7 +532,7 @@ func (t *logicTest) processTestFile(path string) error {
 
 		case "statement":
 			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", path, s.line)}
-			// Parse "query error <regexp>"
+			// Parse "statement error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
