@@ -51,7 +51,7 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	})
 }
 
-func stopHeartbeats(mtc *multiTestContext) {
+func stopNodeLivenessHeartbeats(mtc *multiTestContext) {
 	for _, nl := range mtc.nodeLivenesses {
 		nl.StopHeartbeat()
 	}
@@ -65,7 +65,7 @@ func TestNodeLiveness(t *testing.T) {
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, mtc)
-	stopHeartbeats(mtc)
+	stopNodeLivenessHeartbeats(mtc)
 
 	// Advance clock past the liveness threshold to verify IsLive becomes false.
 	active, _ := storage.RangeLeaseDurations(
@@ -106,7 +106,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	defer mtc.Stop()
 
 	verifyLiveness(t, mtc)
-	stopHeartbeats(mtc)
+	stopNodeLivenessHeartbeats(mtc)
 
 	// First try to increment the epoch of a known-live node.
 	deadNodeID := mtc.gossips[1].GetNodeID()
@@ -214,7 +214,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	defer mtc.Stop()
 
 	// Verify liveness of all nodes for all nodes.
-	stopHeartbeats(mtc)
+	stopNodeLivenessHeartbeats(mtc)
 	if err := mtc.nodeLivenesses[0].ManualHeartbeat(); err != nil {
 		t.Fatal(err)
 	}
