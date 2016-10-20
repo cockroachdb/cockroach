@@ -335,7 +335,17 @@ func (d *DFloat) Compare(other Datum) int {
 	if *d > *v {
 		return 1
 	}
-	return 0
+	// NaN sorts before non-NaN (#10109).
+	if *d == *v {
+		return 0
+	}
+	if math.IsNaN(float64(*d)) {
+		if math.IsNaN(float64(*v)) {
+			return 0
+		}
+		return -1
+	}
+	return 1
 }
 
 // HasPrev implements the Datum interface.
