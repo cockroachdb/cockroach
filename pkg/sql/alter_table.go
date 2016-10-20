@@ -84,7 +84,7 @@ func (n *alterTableNode) Start() error {
 			if err != nil {
 				return err
 			}
-			normName := sqlbase.ReNormalizeName(col.Name)
+			normName := parser.ReNormalizeName(col.Name)
 			status, i, err := n.tableDesc.FindColumnByNormalizedName(normName)
 			if err == nil {
 				if status == sqlbase.DescriptorIncomplete &&

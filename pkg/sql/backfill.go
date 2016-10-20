@@ -64,7 +64,7 @@ func makeColIDtoRowIndex(
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(columns))
 	for i, column := range columns {
-		s, idx, err := desc.FindColumnByNormalizedName(sqlbase.ReNormalizeName(column.Name))
+		s, idx, err := desc.FindColumnByNormalizedName(parser.ReNormalizeName(column.Name))
 		if err != nil {
 			return nil, err
 		}

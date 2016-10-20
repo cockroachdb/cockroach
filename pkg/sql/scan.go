@@ -273,12 +273,12 @@ func (n *scanNode) initTable(
 	}
 
 	if indexHints != nil && indexHints.Index != "" {
-		indexName := sqlbase.NormalizeName(indexHints.Index)
-		if indexName == sqlbase.ReNormalizeName(n.desc.PrimaryIndex.Name) {
+		indexName := parser.NormalizeForCompare(indexHints.Index)
+		if indexName == parser.ReNormalizeName(n.desc.PrimaryIndex.Name) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if indexName == sqlbase.ReNormalizeName(n.desc.Indexes[i].Name) {
+				if indexName == parser.ReNormalizeName(n.desc.Indexes[i].Name) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}

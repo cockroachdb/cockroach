@@ -140,7 +140,7 @@ func queryDescriptors(conn *sqlConn) (map[sqlbase.ID]*sqlbase.Descriptor, error)
 func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID, error) {
 	rows, err := makeQuery(
 		`SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`,
-		parentID, sqlbase.NormalizeName(parser.Name(name)))(conn)
+		parentID, parser.NormalizeForCompare(parser.Name(name)))(conn)
 	if err != nil {
 		return 0, err
 	}

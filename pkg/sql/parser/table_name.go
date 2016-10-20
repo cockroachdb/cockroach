@@ -19,6 +19,10 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Table names are used in statements like CREATE TABLE,
@@ -95,6 +99,64 @@ type TableNameReference interface {
 	NormalizeTableName() (*TableName, error)
 }
 
+// Special case normalization rules for Turkish/Azeri lowercase dotless-i and
+// uppercase dotted-i. Fold both dotted and dotless 'i' into the ascii i/I, so
+// our case-insensitive comparison functions can be locale-invariant. This
+// mapping implements case-insensitivity for Turkish and other latin-derived
+// languages simultaneously, with the additional quirk that it is also
+// insensitive to the dottedness of the i's
+var normalize = unicode.SpecialCase{
+	unicode.CaseRange{
+		Lo: 0x0130,
+		Hi: 0x0130,
+		Delta: [unicode.MaxCase]rune{
+			0x49 - 0x130, // Upper
+			0x69 - 0x130, // Lower
+			0x49 - 0x130, // Title
+		},
+	},
+	unicode.CaseRange{
+		Lo: 0x0131,
+		Hi: 0x0131,
+		Delta: [unicode.MaxCase]rune{
+			0x49 - 0x131, // Upper
+			0x69 - 0x131, // Lower
+			0x49 - 0x131, // Title
+		},
+	},
+}
+
+func isASCII(s string) bool {
+	for _, c := range s {
+		if c > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
+
+// NormalizeForCompare normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func NormalizeForCompare(name Name) string {
+	lower := strings.Map(normalize.ToLower, string(name))
+	if isASCII(lower) {
+		return lower
+	}
+	return norm.NFC.String(lower)
+}
+
+// ReNormalizeName performs the same work as NormalizeName but when
+// the string originates from the database. We define a different
+// function so as to be able to track usage of this function (cf. #8200).
+func ReNormalizeName(name string) string {
+	return NormalizeForCompare(Name(name))
+}
+
+// EqualName returns true iff the normalizations of a and b are equal.
+func EqualName(a, b Name) bool {
+	return NormalizeForCompare(a) == NormalizeForCompare(b)
+}
+
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement (and possibly other places).
 type TableName struct {
@@ -121,6 +183,15 @@ func (t *TableName) String() string { return AsString(t) }
 
 // NormalizeTableName implements the TableNameReference interface.
 func (t *TableName) NormalizeTableName() (*TableName, error) { return t, nil }
+
+// NormalizedTableName normalize DatabaseName and TableName to lowercase
+// And Unicode Normalization.
+func (t *TableName) NormalizedTableName() TableName {
+	return TableName{
+		DatabaseName: Name(NormalizeForCompare(t.DatabaseName)),
+		TableName:    Name(NormalizeForCompare(t.TableName)),
+	}
+}
 
 // Table retrieves the unqualified table name.
 func (t *TableName) Table() string {

@@ -814,7 +814,7 @@ func (p *planner) addInterleave(
 		if err != nil {
 			return err
 		}
-		if sqlbase.NormalizeName(interleave.Fields[i]) != sqlbase.ReNormalizeName(col.Name) {
+		if parser.NormalizeForCompare(interleave.Fields[i]) != parser.ReNormalizeName(col.Name) {
 			return fmt.Errorf("declared columns must match index being interleaved")
 		}
 		if col.Type != targetCol.Type ||
@@ -1060,7 +1060,7 @@ func (p *planner) makeTableDesc(
 			if d.PrimaryKey {
 				primaryIndexColumnSet = make(map[string]struct{})
 				for _, c := range d.Columns {
-					primaryIndexColumnSet[sqlbase.NormalizeName(c.Column)] = struct{}{}
+					primaryIndexColumnSet[parser.NormalizeForCompare(c.Column)] = struct{}{}
 				}
 			}
 			if d.Interleave != nil {
@@ -1078,7 +1078,7 @@ func (p *planner) makeTableDesc(
 	if primaryIndexColumnSet != nil {
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[sqlbase.ReNormalizeName(desc.Columns[i].Name)]; ok {
+			if _, ok := primaryIndexColumnSet[parser.ReNormalizeName(desc.Columns[i].Name)]; ok {
 				desc.Columns[i].Nullable = false
 			}
 		}

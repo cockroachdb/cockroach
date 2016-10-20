@@ -160,7 +160,7 @@ func fillColumnRange(firstIdx, lastIdx int) columnRange {
 // newSourceInfoForSingleTable creates a simple dataSourceInfo
 // which maps the same tableAlias to all columns.
 func newSourceInfoForSingleTable(tn parser.TableName, columns ResultColumns) *dataSourceInfo {
-	norm := sqlbase.NormalizeTableName(tn)
+	norm := tn.NormalizedTableName()
 	return &dataSourceInfo{
 		sourceColumns: columns,
 		sourceAliases: sourceAliases{norm: fillColumnRange(0, len(columns)-1)},
@@ -272,7 +272,7 @@ func (p *planner) getDataSource(
 		var tableAlias parser.TableName
 		if t.As.Alias != "" {
 			// If an alias was specified, use that.
-			tableAlias.TableName = parser.Name(sqlbase.NormalizeName(t.As.Alias))
+			tableAlias.TableName = parser.Name(parser.NormalizeForCompare(t.As.Alias))
 			src.info.sourceAliases = sourceAliases{
 				tableAlias: fillColumnRange(0, len(src.info.sourceColumns)-1),
 			}
@@ -438,7 +438,7 @@ func (src *dataSourceInfo) expandStar(
 			colSel(i)
 		}
 	} else {
-		norm := sqlbase.NormalizeTableName(tableName)
+		norm := tableName.NormalizedTableName()
 
 		qualifiedTn, err := src.checkDatabaseName(norm)
 		if err != nil {
@@ -469,8 +469,8 @@ func (src *dataSourceInfo) expandStar(
 // considered.  If no column is found, invalidColIdx is returned with
 // no error.
 func (p *planDataSource) findUnaliasedColumn(c *parser.ColumnItem) (colIdx int, err error) {
-	colName := sqlbase.NormalizeName(c.ColumnName)
-	tableName := sqlbase.NormalizeTableName(c.TableName)
+	colName := parser.NormalizeForCompare(c.ColumnName)
+	tableName := c.TableName.NormalizedTableName()
 
 	if tableName.Table() != "" {
 		tn, err := p.info.checkDatabaseName(tableName)
@@ -485,7 +485,7 @@ func (p *planDataSource) findUnaliasedColumn(c *parser.ColumnItem) (colIdx int, 
 
 	selCol := func(colIdx int, idx int) (int, error) {
 		col := planColumns[idx]
-		if sqlbase.ReNormalizeName(col.Name) == colName {
+		if parser.ReNormalizeName(col.Name) == colName {
 			if colIdx != invalidColIdx {
 				return invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
 			}
@@ -606,10 +606,10 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 		return invalidSrcIdx, invalidColIdx, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
 	}
 
-	colName := sqlbase.NormalizeName(c.ColumnName)
+	colName := parser.NormalizeForCompare(c.ColumnName)
 	var tableName parser.TableName
 	if c.TableName.Table() != "" {
-		tableName = sqlbase.NormalizeTableName(c.TableName)
+		tableName = c.TableName.NormalizedTableName()
 
 		tn, err := sources.checkDatabaseName(tableName)
 		if err != nil {
@@ -626,7 +626,7 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 	for iSrc, src := range sources {
 		findColHelper := func(src *dataSourceInfo, iSrc, srcIdx, colIdx int, idx int) (int, int, error) {
 			col := src.sourceColumns[idx]
-			if sqlbase.ReNormalizeName(col.Name) == colName {
+			if parser.ReNormalizeName(col.Name) == colName {
 				if colIdx != invalidColIdx {
 					return invalidSrcIdx, invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
 				}

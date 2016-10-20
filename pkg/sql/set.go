@@ -25,7 +25,6 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -70,10 +69,10 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch sqlbase.NormalizeName(parser.Name(s)) {
-		case sqlbase.ReNormalizeName(parser.Modern.String()):
+		switch parser.NormalizeForCompare(parser.Name(s)) {
+		case parser.ReNormalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
-		case sqlbase.ReNormalizeName(parser.Traditional.String()):
+		case parser.ReNormalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
@@ -107,10 +106,10 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch sqlbase.NormalizeName(parser.Name(s)) {
-		case sqlbase.ReNormalizeName("sync"):
+		switch parser.NormalizeForCompare(parser.Name(s)) {
+		case parser.ReNormalizeName("sync"):
 			p.session.DistSQLMode = distSQLSync
-		case sqlbase.ReNormalizeName("async"):
+		case parser.ReNormalizeName("async"):
 			p.session.DistSQLMode = distSQLAsync
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)

@@ -137,7 +137,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 	// Process each named window specification on the select clause.
 	namedWindowSpecs := make(map[string]*parser.WindowDef, len(sc.Window))
 	for _, windowDef := range sc.Window {
-		name := sqlbase.NormalizeName(windowDef.Name)
+		name := parser.NormalizeForCompare(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
 			return errors.Errorf("window %q is already defined", name)
 		}
@@ -198,12 +198,12 @@ func constructWindowDef(
 	case def.RefName != "":
 		// SELECT rank() OVER (w) FROM t WINDOW w as (...)
 		// We copy the referenced window specification, and modify it if necessary.
-		refName = sqlbase.NormalizeName(def.RefName)
+		refName = parser.NormalizeForCompare(def.RefName)
 		modifyRef = true
 	case def.Name != "":
 		// SELECT rank() OVER w FROM t WINDOW w as (...)
 		// We use the referenced window specification directly, without modification.
-		refName = sqlbase.NormalizeName(def.Name)
+		refName = parser.NormalizeForCompare(def.Name)
 	}
 	if refName == "" {
 		return def, nil

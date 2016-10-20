@@ -275,7 +275,7 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 	// transaction.
 	var lease *LeaseState
 	for _, l := range p.leases {
-		if sqlbase.ReNormalizeName(l.Name) == sqlbase.NormalizeName(tn.TableName) &&
+		if parser.ReNormalizeName(l.Name) == parser.NormalizeForCompare(tn.TableName) &&
 			l.ParentID == dbID {
 			lease = l
 			if log.V(2) {
