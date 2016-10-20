@@ -23,6 +23,7 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 type ResponseWithError struct {
 	Reply *roachpb.BatchResponse
 	Err   *roachpb.Error
+	Debug interface{}
 }
 
 // IsFrozen returns true if the underlying ReplicaState indicates that the
