@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ErrNoLivenessRecord is returned when asking for liveness information
@@ -67,6 +66,7 @@ type LivenessMetrics struct {
 // while making range quiescense decisions, as well as for efficient,
 // node liveness epoch-based range leases.
 type NodeLiveness struct {
+	ambientCtx        log.AmbientContext
 	clock             *hlc.Clock
 	db                *client.DB
 	gossip            *gossip.Gossip
@@ -85,6 +85,7 @@ type NodeLiveness struct {
 // NewNodeLiveness returns a new instance of NodeLiveness configured
 // with the specified gossip instance.
 func NewNodeLiveness(
+	ambient log.AmbientContext,
 	clock *hlc.Clock,
 	db *client.DB,
 	g *gossip.Gossip,
@@ -92,6 +93,7 @@ func NewNodeLiveness(
 	heartbeatInterval time.Duration,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
+		ambientCtx:        ambient,
 		clock:             clock,
 		db:                db,
 		gossip:            g,
@@ -126,17 +128,19 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
 // last heartbeat in the node liveness table.
 func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stopper) {
-	ctx, span := tracing.ForkCtxSpan(ctx, "node liveness heartbeat")
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 
 	stopper.RunWorker(func() {
-		defer tracing.FinishSpan(span)
+		ambient := nl.ambientCtx
+		ambient.AddLogTag("hb", nil)
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
 		for {
+			ctx, sp := ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
 			if err := nl.heartbeat(ctx); err != nil {
 				log.Errorf(ctx, "failed liveness heartbeat: %s", err)
 			}
+			sp.Finish()
 			select {
 			case <-ticker.C:
 			case <-nl.stopHeartbeat:
