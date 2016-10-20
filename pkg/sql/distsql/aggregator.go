@@ -52,7 +52,6 @@ type aggregator struct {
 	funcs      []*aggregateFuncHolder
 	datumAlloc sqlbase.DatumAlloc
 	rowAlloc   sqlbase.EncDatumRowAlloc
-	tuple      parser.DTuple
 
 	groupCols columns
 	inputCols columns
@@ -69,7 +68,6 @@ func newAggregator(
 		rows:   &RowBuffer{},
 	}
 
-	ag.tuple = make(parser.DTuple, len(spec.Exprs)+len(spec.GroupCols))
 	ag.inputCols = make(columns, len(spec.Exprs))
 	for i, expr := range spec.Exprs {
 		ag.inputCols[i] = column(expr.ColIdx)
@@ -151,26 +149,20 @@ func (ag *aggregator) accumulateRows() error {
 			return nil
 		}
 
-		// By retrieving the values corresponding to the group key we
-		// determine which bucket the values accumulated by evaluating the
-		// SELECT expressions are added to.
-		aggregatedValues, groupedValues, err := ag.extract(row)
-		if err != nil {
-			return err
-		}
-
-		// TODO(irfansharif): EncDatum types have an Encode method we should be
-		// using instead of decoding, extracting tuples then decoding.
-		encoded, err := sqlbase.EncodeDTuple(scratch, groupedValues)
+		// The encoding computed here determines which bucket the non-grouping
+		// datums are accumulated to.
+		encoded, err := ag.encode(scratch, row)
 		if err != nil {
 			return err
 		}
 
 		ag.buckets[string(encoded)] = struct{}{}
-		// Feed the aggregateFuncHolders for this bucket the non-grouped
-		// values.
-		for i, value := range aggregatedValues {
-			if err := ag.funcs[i].add(encoded, value); err != nil {
+		// Feed the func holders for this bucket the non-grouping datums.
+		for i, colIdx := range ag.inputCols {
+			if err := row[colIdx].Decode(&ag.datumAlloc); err != nil {
+				return err
+			}
+			if err := ag.funcs[i].add(encoded, row[colIdx].Datum); err != nil {
 				return err
 			}
 		}
@@ -250,24 +242,16 @@ func (a *aggregateFuncHolder) get(bucket string) parser.Datum {
 	return found.Result()
 }
 
-// extract returns a tuple comprised of the indexes specified by inputCols and
-// groupKey.
-func (ag *aggregator) extract(row sqlbase.EncDatumRow) (parser.DTuple, parser.DTuple, error) {
-	for i, colIdx := range ag.inputCols {
-		if err := row[colIdx].Decode(&ag.datumAlloc); err != nil {
-			return nil, nil, err
+// encode returns the encoding for the grouping columns, this is then used as
+// our group key to determine which bucket to add to.
+func (ag *aggregator) encode(appendTo []byte, row sqlbase.EncDatumRow) (encoding []byte, err error) {
+	for _, colIdx := range ag.groupCols {
+		appendTo, err = row[colIdx].Encode(&ag.datumAlloc, sqlbase.DatumEncoding_VALUE, appendTo)
+		if err != nil {
+			return appendTo, err
 		}
-		ag.tuple[i] = row[colIdx].Datum
 	}
-
-	for i, colIdx := range ag.groupCols {
-		if err := row[colIdx].Decode(&ag.datumAlloc); err != nil {
-			return nil, nil, err
-		}
-		ag.tuple[i+len(ag.inputCols)] = row[colIdx].Datum
-	}
-
-	return ag.tuple[:len(ag.inputCols)], ag.tuple[len(ag.inputCols):], nil
+	return appendTo, nil
 }
 
 // extractFunc returns an aggregateFuncHolder for a given SelectExpr specifying
