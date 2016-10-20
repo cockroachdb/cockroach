@@ -278,7 +278,22 @@ statement ok
 DROP INDEX t@t_d_key
 
 statement ok
+CREATE VIEW v AS SELECT x, y FROM t WHERE a > 5
+
+statement error cannot drop column x because view "test.v" depends on it
+ALTER TABLE t DROP COLUMN x
+
+statement error cannot drop column y because view "test.v" depends on it
+ALTER TABLE t DROP COLUMN y
+
+statement error cannot drop column a because view "test.v" depends on it
+ALTER TABLE t DROP COLUMN a
+
+statement ok
 ALTER TABLE t DROP COLUMN d
+
+statement ok
+DROP VIEW v
 
 statement error adding a CHECK constraint via ALTER not supported
 ALTER TABLE t ADD f INT CHECK (f>1)
