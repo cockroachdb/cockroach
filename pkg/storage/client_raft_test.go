@@ -802,10 +802,8 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 // TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
 // will notice corrupted replicas and replace them.
-// TODO(bram): #8664 There's some flakiness in this test when stressed.
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("#8664: flaky")
 
 	const numReplicas = 3
 	const extraStores = 3
@@ -837,7 +835,6 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
 	mtc.initGossipNetwork()
-
 	store0 := mtc.stores[0]
 
 	for i := 0; i < extraStores; i++ {
@@ -879,6 +876,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		if _, err := client.SendWrapped(context.Background(), rg1(store0), &args); err != nil {
 			t.Fatal(err)
 		}
+
 		// Wait until maybeSetCorrupt has been called. This isn't called immediately
 		// since the put command has quorum with the other good node.
 		util.SucceedsSoon(t, func() error {
