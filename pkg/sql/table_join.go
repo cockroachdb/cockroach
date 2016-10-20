@@ -312,7 +312,7 @@ func pickUsingColumn(cols ResultColumns, colName string, context string) (int, p
 		if col.hidden {
 			continue
 		}
-		if sqlbase.ReNormalizeName(col.Name) == colName {
+		if parser.ReNormalizeName(col.Name) == colName {
 			idx = j
 		}
 	}
@@ -343,7 +343,7 @@ func (p *planner) makeUsingPredicate(
 
 	// Find out which columns are involved in the USING clause.
 	for i, unnormalizedColName := range colNames {
-		colName := sqlbase.NormalizeName(unnormalizedColName)
+		colName := unnormalizedColName.Normalize()
 
 		// Check for USING(x,x)
 		if _, ok := seenNames[colName]; ok {
@@ -446,7 +446,7 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 				continue
 			}
 
-			if sqlbase.ReNormalizeName(cLeft.Name) == sqlbase.ReNormalizeName(cRight.Name) {
+			if parser.ReNormalizeName(cLeft.Name) == parser.ReNormalizeName(cRight.Name) {
 				res = append(res, parser.Name(cLeft.Name))
 			}
 		}

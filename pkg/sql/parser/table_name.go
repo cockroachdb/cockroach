@@ -122,6 +122,15 @@ func (t *TableName) String() string { return AsString(t) }
 // NormalizeTableName implements the TableNameReference interface.
 func (t *TableName) NormalizeTableName() (*TableName, error) { return t, nil }
 
+// NormalizedTableName normalize DatabaseName and TableName to lowercase
+// And Unicode Normalization.
+func (t *TableName) NormalizedTableName() TableName {
+	return TableName{
+		DatabaseName: Name(t.DatabaseName.Normalize()),
+		TableName:    Name(t.TableName.Normalize()),
+	}
+}
+
 // Table retrieves the unqualified table name.
 func (t *TableName) Table() string {
 	return string(t.TableName)
