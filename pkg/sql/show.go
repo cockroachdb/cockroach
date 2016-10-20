@@ -371,7 +371,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 				return nil, err
 			}
 			v := p.newContainerValuesNode(columns, 0)
-			for _, db := range p.virtualSchemas().orderedNames {
+			for _, db := range p.session.virtualSchemas.orderedNames {
 				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
 					v.rows.Close()
 					return nil, err
