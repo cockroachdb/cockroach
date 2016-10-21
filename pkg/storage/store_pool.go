@@ -96,14 +96,23 @@ type storeMatch int
 
 // These are the possible values for a storeMatch.
 const (
-	storeMatchDead      storeMatch = iota // The store is not yet available or has been timed out.
-	storeMatchAlive                       // The store is alive, but its attributes didn't match the required ones.
-	storeMatchThrottled                   // The store is alive and its attributes matched, but it is throttled.
-	storeMatchAvailable                   // The store is alive, available and its attributes matched.
+	// The store is not yet available or has been timed out.
+	storeMatchDead storeMatch = iota
+	// The store is alive, but its attributes didn't match the required ones.
+	storeMatchAlive
+	// The store is alive and its attributes matched, but it is throttled.
+	storeMatchThrottled
+	// The store is alive and its attributes matched, but a replica for the
+	// same rangeID was recently discovered to be corrupt.
+	storeMatchReplicaCorrupted
+	// The store is alive, available and its attributes matched.
+	storeMatchAvailable
 )
 
 // match checks the store against the attributes and returns a storeMatch.
-func (sd *storeDetail) match(now time.Time, constraints config.Constraints) storeMatch {
+func (sd *storeDetail) match(
+	now time.Time, constraints config.Constraints, rangeID roachpb.RangeID,
+) storeMatch {
 	// The store must be alive and it must have a descriptor to be considered
 	// alive.
 	if sd.dead || sd.desc == nil {
@@ -125,6 +134,11 @@ func (sd *storeDetail) match(now time.Time, constraints config.Constraints) stor
 	// The store must not have a recent declined reservation to be available.
 	if sd.throttledUntil.After(now) {
 		return storeMatchThrottled
+	}
+
+	// The store must not have a corrupt replica on it.
+	if len(sd.deadReplicas[rangeID]) > 0 {
+		return storeMatchReplicaCorrupted
 	}
 
 	return storeMatchAvailable
@@ -480,7 +494,7 @@ func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
 func (sp *StorePool) getStoreList(
-	constraints config.Constraints, deterministic bool,
+	constraints config.Constraints, rangeID roachpb.RangeID, deterministic bool,
 ) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
@@ -501,9 +515,9 @@ func (sp *StorePool) getStoreList(
 	for _, storeID := range storeIDs {
 		detail := sp.mu.storeDetails[storeID]
 		// TODO(d4l3k): Sort by number of matches.
-		matched := detail.match(now, constraints)
+		matched := detail.match(now, constraints, rangeID)
 		switch matched {
-		case storeMatchAlive:
+		case storeMatchAlive, storeMatchReplicaCorrupted:
 			aliveStoreCount++
 		case storeMatchThrottled:
 			aliveStoreCount++
