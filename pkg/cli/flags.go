@@ -196,41 +196,25 @@ func setFlagFromEnv(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 }
 
 func stringFlag(f *pflag.FlagSet, valPtr *string, flagInfo cliflags.FlagInfo, defaultVal string) {
-	if flagInfo.Shorthand == "" {
-		f.StringVar(valPtr, flagInfo.Name, defaultVal, makeUsageString(flagInfo))
-	} else {
-		f.StringVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
-	}
+	f.StringVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
 
 	setFlagFromEnv(f, flagInfo)
 }
 
 func intFlag(f *pflag.FlagSet, valPtr *int, flagInfo cliflags.FlagInfo, defaultVal int) {
-	if flagInfo.Shorthand == "" {
-		f.IntVar(valPtr, flagInfo.Name, defaultVal, makeUsageString(flagInfo))
-	} else {
-		f.IntVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
-	}
+	f.IntVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
 
 	setFlagFromEnv(f, flagInfo)
 }
 
 func int64Flag(f *pflag.FlagSet, valPtr *int64, flagInfo cliflags.FlagInfo, defaultVal int64) {
-	if flagInfo.Shorthand == "" {
-		f.Int64Var(valPtr, flagInfo.Name, defaultVal, makeUsageString(flagInfo))
-	} else {
-		f.Int64VarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
-	}
+	f.Int64VarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
 
 	setFlagFromEnv(f, flagInfo)
 }
 
 func boolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaultVal bool) {
-	if flagInfo.Shorthand == "" {
-		f.BoolVar(valPtr, flagInfo.Name, defaultVal, makeUsageString(flagInfo))
-	} else {
-		f.BoolVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
-	}
+	f.BoolVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
 
 	setFlagFromEnv(f, flagInfo)
 }
@@ -238,21 +222,13 @@ func boolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaul
 func durationFlag(
 	f *pflag.FlagSet, valPtr *time.Duration, flagInfo cliflags.FlagInfo, defaultVal time.Duration,
 ) {
-	if flagInfo.Shorthand == "" {
-		f.DurationVar(valPtr, flagInfo.Name, defaultVal, makeUsageString(flagInfo))
-	} else {
-		f.DurationVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
-	}
+	f.DurationVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, makeUsageString(flagInfo))
 
 	setFlagFromEnv(f, flagInfo)
 }
 
 func varFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
-	if flagInfo.Shorthand == "" {
-		f.Var(value, flagInfo.Name, makeUsageString(flagInfo))
-	} else {
-		f.VarP(value, flagInfo.Name, flagInfo.Shorthand, makeUsageString(flagInfo))
-	}
+	f.VarP(value, flagInfo.Name, flagInfo.Shorthand, makeUsageString(flagInfo))
 
 	setFlagFromEnv(f, flagInfo)
 }
