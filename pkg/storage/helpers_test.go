@@ -201,9 +201,9 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
 func (sp *StorePool) GetStoreList(
-	constraints config.Constraints, deterministic bool,
+	constraints config.Constraints, rangeID roachpb.RangeID, deterministic bool,
 ) (StoreList, int, int) {
-	return sp.getStoreList(constraints, deterministic)
+	return sp.getStoreList(constraints, rangeID, deterministic)
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.

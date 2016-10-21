@@ -405,6 +405,7 @@ func (m *multiTestContext) initGossipNetwork() {
 		for i := 0; i < len(m.stores); i++ {
 			_, alive, _ := m.storePools[i].GetStoreList(
 				config.Constraints{},
+				roachpb.RangeID(0),
 				/* deterministic */ false,
 			)
 			if alive != len(m.stores) {

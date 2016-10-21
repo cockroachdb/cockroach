@@ -114,7 +114,12 @@ func (r *Range) splitRange(originalRange *Range) {
 // getAllocateTarget queries the allocator for the store that would be the best
 // candidate to take on a new replica.
 func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
-	newStore, err := r.allocator.AllocateTarget(r.zone.Constraints, r.desc.Replicas, true)
+	newStore, err := r.allocator.AllocateTarget(
+		r.zone.Constraints,
+		r.desc.Replicas,
+		r.desc.RangeID,
+		true,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -137,7 +142,12 @@ func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
 // candidate to add a replica for rebalancing. Returns true only if a target is
 // found.
 func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bool) {
-	rebalanceTarget := r.allocator.RebalanceTarget(r.zone.Constraints, r.desc.Replicas, storeID)
+	rebalanceTarget := r.allocator.RebalanceTarget(
+		r.zone.Constraints,
+		r.desc.Replicas,
+		storeID,
+		r.desc.RangeID,
+	)
 	if rebalanceTarget == nil {
 		return 0, false
 	}
