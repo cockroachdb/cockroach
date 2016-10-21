@@ -233,6 +233,9 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 			return false, errors.Errorf("group with having not supported yet")
 		}
 		for _, fholder := range n.funcs {
+			if fholder.filter != nil {
+				return false, errors.Errorf("aggregation with FILTER not supported yet")
+			}
 			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
 				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
 					return false, errors.Errorf("ARRAY_AGG aggregation not supported yet")

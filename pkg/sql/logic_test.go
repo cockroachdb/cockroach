@@ -316,6 +316,10 @@ type logicQuery struct {
 	// expectedValues indicates the number of rows expected when
 	// expectedHash is set.
 	expectedValues int
+
+	// rawOpts are the query options, before parsing. Used to display in error
+	// messages.
+	rawOpts string
 }
 
 // logicTest executes the test cases specified in a file. The file format is
@@ -601,7 +605,8 @@ func (t *logicTest) processTestFile(path string) error {
 				// same output.
 				query.colTypes = fields[1]
 				if len(fields) >= 3 {
-					for _, opt := range strings.Split(fields[2], ",") {
+					query.rawOpts = fields[2]
+					for _, opt := range strings.Split(query.rawOpts, ",") {
 						switch opt {
 						case "nosort":
 							query.sorter = nil
@@ -1013,7 +1018,15 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		for _, expectedResultRaw := range query.expectedResultsRaw {
 			fmt.Fprintf(tw, "    %s\n", expectedResultRaw)
 		}
-		fmt.Fprint(&buf, "but found:\n")
+		sortMsg := ""
+		if query.sorter != nil {
+			// We performed an order-insensitive comparison of "actual" vs "expected"
+			// rows by sorting both, but we'll display the error with the expected
+			// rows in the order in which they were put in the file, and the actual
+			// rows in the order in which the query returned them.
+			sortMsg = " -> ignore the following ordering of rows"
+		}
+		fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
 		for _, resultLine := range resultLines {
 			fmt.Fprint(tw, "    ")
 			for _, value := range resultLine {

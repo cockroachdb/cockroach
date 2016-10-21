@@ -30,5 +30,5 @@ func RunFilter(filter parser.TypedExpr, evalCtx *parser.EvalContext) (bool, erro
 		return false, err
 	}
 
-	return d != parser.DNull && bool(*d.(*parser.DBool)), nil
+	return d == parser.DBoolTrue, nil
 }
