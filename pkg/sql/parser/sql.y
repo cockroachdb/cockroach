@@ -819,7 +819,12 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior
   {
-    $$.val = &AlterTableDropColumn{columnKeyword: $2.bool(), IfExists: true, Column: Name($5)}
+    $$.val = &AlterTableDropColumn{
+      columnKeyword: $2.bool(),
+      IfExists: true,
+      Column: Name($5),
+      DropBehavior: $6.dropBehavior(),
+    }
   }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
 | DROP opt_column name opt_drop_behavior
