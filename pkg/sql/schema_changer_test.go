@@ -524,6 +524,8 @@ func runSchemaChangeWithOperations(
 		for _, kv := range kvs {
 			t.Errorf("key %s, value %s", kv.Key, kv.Value)
 		}
+		t.Errorf("updated keys: %+v", updatedKeys)
+		t.Errorf("delete start key: %d", deleteStartKey)
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
