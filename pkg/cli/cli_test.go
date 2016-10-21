@@ -804,7 +804,7 @@ func Example_user() {
 	c.Run("user ls")
 	c.Run("user ls --pretty")
 	c.Run("user ls --pretty=false")
-	c.Run("user set foo --password=bar")
+	c.Run("user set foo --set-password=bar")
 	// Don't use get, since the output of hashedPassword is random.
 	// c.Run("user get foo")
 	c.Run("user ls --pretty")
@@ -824,7 +824,7 @@ func Example_user() {
 	// user ls --pretty=false
 	// 0 rows
 	// username
-	// user set foo --password=bar
+	// user set foo --set-password=bar
 	// INSERT 1
 	// user ls --pretty
 	// +----------+

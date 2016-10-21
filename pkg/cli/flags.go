@@ -41,7 +41,7 @@ import (
 
 var maxResults int64
 
-var connURL, connUser, connHost, connPort, advertiseHost string
+var connURL, connUser, connPassword, connHost, connPort, advertiseHost string
 var httpHost, httpPort, connDBName, zoneConfig string
 var zoneDisableReplication bool
 var startBackground bool
@@ -336,7 +336,7 @@ func init() {
 		intFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
 	}
 
-	stringFlag(setUserCmd.Flags(), &password, cliflags.Password, "")
+	stringFlag(setUserCmd.Flags(), &setPassword, cliflags.SetPassword, "")
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, quitCmd, freezeClusterCmd, dumpCmd, /* startCmd is covered above */
@@ -393,6 +393,7 @@ func init() {
 		stringFlag(f, &connURL, cliflags.URL, "")
 
 		stringFlag(f, &connUser, cliflags.User, security.RootUser)
+		stringFlag(f, &connPassword, cliflags.Password, "")
 		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
 		stringFlag(f, &connDBName, cliflags.Database, "")
 	}

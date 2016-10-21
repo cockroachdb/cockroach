@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
-var password string
+var setPassword string
 
 // A getUserCmd command displays the config for the specified username.
 var getUserCmd = &cobra.Command{
@@ -122,7 +122,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	}
 	var err error
 	var hashed []byte
-	switch password {
+	switch setPassword {
 	case "":
 		hashed, err = security.PromptForPasswordAndHash()
 		if err != nil {
@@ -153,7 +153,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 
 		panic("empty passwords are not permitted")
 	default:
-		hashed, err = security.HashPassword([]byte(password))
+		hashed, err = security.HashPassword([]byte(setPassword))
 		if err != nil {
 			return err
 		}

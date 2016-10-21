@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -369,7 +370,7 @@ func runStart(_ *cobra.Command, args []string) error {
 
 	initCheckpointing(serverCfg.Engines)
 
-	pgURL, err := serverCfg.PGURL(connUser)
+	pgURL, err := serverCfg.PGURL(url.UserPassword(connUser, connPassword))
 	if err != nil {
 		return err
 	}
