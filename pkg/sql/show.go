@@ -664,9 +664,9 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 			v := p.newContainerValuesNode(columns, len(tableNames))
 			for _, name := range tableNames {
 				tableName := name.Table()
-				// Check to see if the table has been deleted.
+				// Check to see if the table has been dropped.
 				if _, err := p.mustGetTableOrViewDesc(&name); err != nil {
-					if err == errTableDeleted {
+					if err == errTableDropped {
 						tableName += " (dropped)"
 					} else {
 						return nil, err
