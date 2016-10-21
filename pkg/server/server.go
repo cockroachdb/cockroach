@@ -228,10 +228,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL server
 	distSQLCfg := distsql.ServerConfig{
-		Context:    ctx,
-		DB:         s.db,
-		RPCContext: s.rpcContext,
-		Stopper:    s.stopper,
+		AmbientContext: s.cfg.AmbientCtx,
+		DB:             s.db,
+		RPCContext:     s.rpcContext,
+		Stopper:        s.stopper,
 	}
 	s.distSQLServer = distsql.NewServer(distSQLCfg)
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
