@@ -90,9 +90,11 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	}
 
 	group := &groupNode{
-		planner: p,
-		values:  valuesNode{columns: s.columns},
-		render:  s.render,
+		planner:            p,
+		values:             valuesNode{columns: s.columns},
+		render:             s.render,
+		filterToRenderIdxs: make(map[int]int),
+		numGroupBy:         len(groupBy),
 	}
 
 	visitor := extractAggregatesVisitor{
@@ -160,6 +162,18 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		}
 	}
 
+	// Add the filter expressions, so they are available when deciding what rows
+	// to feed to the aggregation functions.
+	for i, f := range group.funcs {
+		if f.filter == nil {
+			continue
+		}
+		if err := s.addRender(parser.SelectExpr{Expr: f.filter}, nil); err != nil {
+			return nil, err
+		}
+		group.filterToRenderIdxs[i] = len(s.render) - 1
+	}
+
 	group.desiredOrdering = desiredAggregateOrdering(group.funcs)
 	return group, nil
 }
@@ -176,6 +190,14 @@ type groupNode struct {
 	having parser.TypedExpr
 
 	funcs []*aggregateFuncHolder
+	// Number of grouping elements (expressions). Note that we don't need to know
+	// the actual grouping expressions, just their numbers. The expressions are
+	// passed at constructor time to the wrapped plan as renders.
+	numGroupBy int
+	// Map of index of aggregation function (from funcs) to the render for the
+	// corresponding filtering expression in the wrapped plan.
+	// The map is only populated for functions that have a filter.
+	filterToRenderIdxs map[int]int
 	// The set of bucket keys.
 	buckets map[string]struct{}
 
@@ -297,24 +319,37 @@ func (n *groupNode) Next() (bool, error) {
 		// Add row to bucket.
 
 		values := n.plan.Values()
-		aggregatedValues, groupedValues := values[:len(n.funcs)], values[len(n.funcs):]
+		valuesToAccumulate := values[:len(n.funcs)]
+		valuesToGroupBy := values[len(n.funcs) : len(n.funcs)+n.numGroupBy]
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
-		encoded, err := sqlbase.EncodeDTuple(scratch, groupedValues)
+		bucket, err := sqlbase.EncodeDTuple(scratch, valuesToGroupBy)
 		if err != nil {
 			return false, err
 		}
 
-		n.buckets[string(encoded)] = struct{}{}
+		n.buckets[string(bucket)] = struct{}{}
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
-		for i, value := range aggregatedValues {
-			if err := n.funcs[i].add(n.planner.session, encoded, value); err != nil {
+		for i, value := range valuesToAccumulate {
+			funcHolder := n.funcs[i]
+			if funcHolder.filter != nil {
+				// See if row passed the filter for this aggregation function.
+				if renderIdx, ok := n.filterToRenderIdxs[i]; !ok {
+					log.Fatalf(n.planner.ctx(), "missing index for filter %d (%s)", i, funcHolder.filter)
+				} else {
+					filterVal := values[renderIdx]
+					if filterVal.Compare(parser.DBoolTrue) != 0 {
+						continue
+					}
+				}
+			}
+			if err := funcHolder.add(n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
 		}
-		scratch = encoded[:0]
+		scratch = bucket[:0]
 
 		n.gotOneRow = true
 
@@ -519,7 +554,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				return false, expr
 			}
 
-			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
+			var filterExpr parser.TypedExpr
+			if t.Filter != nil {
+				filterExpr = t.Filter.(parser.TypedExpr)
+			}
+			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), filterExpr, agg)
 			if t.Type == parser.Distinct {
 				f.seen = make(map[string]struct{})
 			}
@@ -532,7 +571,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				t.String())
 			return true, expr
 		}
-		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
+		f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
 		v.n.funcs = append(v.n.funcs, f)
 		return false, f
 	}
@@ -574,6 +613,7 @@ var _ parser.VariableExpr = &aggregateFuncHolder{}
 type aggregateFuncHolder struct {
 	expr          parser.TypedExpr
 	arg           parser.TypedExpr
+	filter        parser.TypedExpr
 	create        func() parser.AggregateFunc
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
@@ -582,11 +622,12 @@ type aggregateFuncHolder struct {
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr, arg parser.TypedExpr, create func() parser.AggregateFunc,
+	expr, arg, filter parser.TypedExpr, create func() parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:          expr,
 		arg:           arg,
+		filter:        filter,
 		create:        create,
 		group:         n,
 		buckets:       make(map[string]parser.AggregateFunc),
@@ -602,6 +643,8 @@ func (a *aggregateFuncHolder) close(s *Session) {
 	a.bucketsMemAcc.W(s).Close()
 }
 
+// add accumulates one more value for a particular bucket into an aggregation
+// function.
 func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf

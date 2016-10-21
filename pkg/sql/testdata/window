@@ -1431,3 +1431,6 @@ SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 
 statement ok
 DELETE FROM kv WHERE k = 12
+
+query error filter within a window function call is not yet implemented
+SELECT k, rank() FILTER (WHERE k=1) OVER () FROM kv

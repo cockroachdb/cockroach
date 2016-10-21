@@ -999,7 +999,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		for _, expectedResultRaw := range query.expectedResultsRaw {
 			fmt.Fprintf(tw, "    %s\n", expectedResultRaw)
 		}
-		fmt.Fprint(&buf, "but found:\n")
+		// TODO(andrei): Figure out how to present the results instead of
+		// resultLines, since the latter isn't sorted as the query directive asked.
+		fmt.Fprint(&buf, "but found (ignore sorting) :\n")
 		for _, resultLine := range resultLines {
 			fmt.Fprint(tw, "    ")
 			for _, value := range resultLine {

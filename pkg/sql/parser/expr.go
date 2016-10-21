@@ -803,6 +803,7 @@ func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 type FuncExpr struct {
 	Name      NormalizableFunctionName
 	Type      funcType
+	Filter    Expr
 	Exprs     Exprs
 	WindowDef *WindowDef
 

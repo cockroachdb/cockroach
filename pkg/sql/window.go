@@ -720,6 +720,11 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr parser.Expr) (recurse bool, ne
 				}
 			}
 
+			if t.Filter != nil {
+				v.err = fmt.Errorf("filter within a window function call is not yet implemented")
+				return false, expr
+			}
+
 			f := &windowFuncHolder{
 				expr:     t,
 				args:     t.Exprs,

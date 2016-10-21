@@ -765,3 +765,44 @@ EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
 0 /ab/primary/5   NULL BUFFERED
 0 0               (5)  ROW
 
+# #########################
+# Verify that FILTER works.
+# #########################
+
+statement ok
+DROP TABLE kv
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  mark BOOL
+)
+
+statement OK
+INSERT INTO kv VALUES
+(1, 2, false),
+(3, 4, true),
+(5, NULL, true),
+(6, 2, true),
+(7, 2, true),
+(8, 4, true)
+
+
+# FILTER should eliminate some results.
+query II rowsort
+SELECT v, COUNT(*) FILTER (WHERE k > 5) FROM kv GROUP BY v
+----
+2 2
+4 1
+NULL 0
+
+# Test multiple filters
+query IBIII rowsort
+SELECT v, mark, COUNT(*) FILTER (WHERE k > 5), COUNT(*), MAX(k) FILTER (WHERE k < 8) FROM kv GROUP BY v, mark
+----
+2 false 0 1 1
+2 true 2 2 7
+4 true 1 2 3
+NULL true 0 1 5
+
