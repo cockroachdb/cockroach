@@ -84,19 +84,18 @@ $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PRO
 	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
 
-$(REPO_ROOT)/build/npm.installed: $(REPO_ROOT)/build/package.json
-	rm -rf $(REPO_ROOT)/build/node_modules
-	cd $(REPO_ROOT)/build && npm install --no-progress
+$(REPO_ROOT)/build/yarn.installed: $(REPO_ROOT)/build/package.json
+	cd $(REPO_ROOT)/build && yarn install
 	touch $@
 
 PBJS_ARGS = --path $(ORG_ROOT) --path $(GOGOPROTO_ROOT) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
 
-$(PKG_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
+$(PKG_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs -t commonjs $(PBJS_ARGS) >> $@
 
-$(PKG_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
+$(PKG_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS)
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs $(PBJS_ARGS) > $@
 
 $(PKG_ROOT)/ui/generated/protos.d.ts: $(PKG_ROOT)/ui/generated/protos.json
