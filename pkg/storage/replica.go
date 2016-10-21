@@ -151,6 +151,17 @@ func updatesTimestampCache(r roachpb.Request) bool {
 	return updatesTimestampCacheMethods[m]
 }
 
+// proposalResult indicates the result of a proposal with the following semantics:
+// - If ShouldRetry is set, the proposal applied at a Lease index it was not
+//   legal for. The command should be retried.
+// - Otherwise, exactly one of the BatchResponse or the Error are set and
+//   represent the result of the proposal.
+type proposalResult struct {
+	Reply       *roachpb.BatchResponse
+	Err         *roachpb.Error
+	ShouldRetry bool
+}
+
 type replicaChecksum struct {
 	// started is true if the checksum computation has started.
 	started bool
@@ -1645,7 +1656,7 @@ func (r *Replica) evaluateProposalLocked(
 	}
 	pd.ctx = ctx
 	pd.idKey = idKey
-	pd.done = make(chan roachpb.ResponseWithError, 1)
+	pd.done = make(chan proposalResult, 1)
 	return &pd
 }
 
@@ -1677,7 +1688,7 @@ func makeIDKey() storagebase.CmdIDKey {
 //   which case the other returned values are zero.
 func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (chan roachpb.ResponseWithError, func() bool, error) {
+) (chan proposalResult, func() bool, error) {
 	// submitProposalLocked calls withRaftGroupLocked which requires that
 	// raftMu is held. In order to maintain our lock ordering we need to lock
 	// Replica.raftMu here before locking Replica.mu.
@@ -2363,7 +2374,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 		// The command's designated lease index range was filled up, so send it
 		// back to the client for a retry proposal.
 		log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-		p.done <- roachpb.ResponseWithError{ShouldRetry: true}
+		p.done <- proposalResult{ShouldRetry: true}
 		close(p.done)
 		numShouldRetry++
 	}
@@ -2690,9 +2701,9 @@ func (r *Replica) processRaftCommand(
 				"retry proposal %x: applied at lease index %d, required <= %d",
 				cmd.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
-			cmd.done <- roachpb.ResponseWithError{ShouldRetry: true}
+			cmd.done <- proposalResult{ShouldRetry: true}
 			close(cmd.done)
-			cmd.done = make(chan roachpb.ResponseWithError, 1)
+			cmd.done = make(chan proposalResult, 1)
 		}
 	}
 	r.mu.Unlock()
@@ -2711,7 +2722,7 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 	}
-	var response roachpb.ResponseWithError
+	var response proposalResult
 	{
 		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
@@ -2721,7 +2732,7 @@ func (r *Replica) processRaftCommand(
 
 		// Save the response and zero out the field so that handleProposalData
 		// knows it wasn't forgotten.
-		response = roachpb.ResponseWithError{Err: pd.Err, Reply: pd.Reply}
+		response = proposalResult{Err: pd.Err, Reply: pd.Reply}
 		pd.Err, pd.Reply = nil, nil
 
 		// Handle the ProposalData, executing any side effects of the last

@@ -1643,7 +1643,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
 						delete(tc.rng.mu.proposals, cmd.idKey)
-						cmd.done <- roachpb.ResponseWithError{
+						cmd.done <- proposalResult{
 							Err: roachpb.NewErrorf(origMsg),
 						}
 						return
@@ -5927,7 +5927,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 
 	const num = 10
 
-	var chs []chan roachpb.ResponseWithError
+	var chs []chan proposalResult
 
 	func() {
 		rng.mu.Lock()
@@ -5996,10 +5996,10 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 
 	expIndexes := make([]int, 0, num)
-	chs := func() []chan roachpb.ResponseWithError {
+	chs := func() []chan proposalResult {
 		tc.rng.mu.Lock()
 		defer tc.rng.mu.Unlock()
-		chs := make([]chan roachpb.ResponseWithError, 0, num)
+		chs := make([]chan proposalResult, 0, num)
 
 		origIndexes := make([]int, 0, num)
 		for i := 0; i < num; i++ {
