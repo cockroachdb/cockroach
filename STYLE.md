@@ -64,3 +64,17 @@ be nil and which do not already handle nil formatting. Notably, nil errors
 formatted as %s will render as "%!s(<nil>)" while nil errors formatted as %v
 will render as "<nil>". Therefore, prefer %v when formatting errors which are
 not known to be non-nil.
+
+### Distinguishing user errors from internal errors
+
+When creating an error for something that the user did wrong (and thus isn't
+indicative of an unexpected situation in our code), use `fmt.Errorf()` to create
+the error.
+
+When creating an error for an unexpected situation, use methods from the
+[`errors` package that we use](https://github.com/pkg/errors), such as
+`errors.New()`, `errors.Errorf()`, `errors.Wrap()`, or `errors.Wrapf()`.
+
+The reason for this distinction is somewhat historical (#7424), but maintaining
+it will help us immensely if we ever switch to using new error types for the
+different situations.
