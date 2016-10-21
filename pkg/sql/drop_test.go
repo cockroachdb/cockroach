@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -422,7 +423,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// We might still be able to read/write in the table inside this transaction
 	// until the schema changer runs, but we shouldn't be able to ALTER it.
 	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
-		`table "kv" has been deleted`) {
+		`table "kv" is being dropped`) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
@@ -454,5 +455,65 @@ func TestDropAndCreateTable(t *testing.T) {
 		if _, err := db.Exec(`INSERT INTO foo VALUES (1), (2), (3)`); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Test commands while a table is being dropped.
+func TestCommandsWhileTableBeingDropped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	// Block schema changers so that the table we're about to DROP is not
+	// actually dropped; it will be left in the "deleted" state.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+`
+	if _, err := db.Exec(sql); err != nil {
+		t.Fatal(err)
+	}
+
+	// DROP the table
+	if _, err := db.Exec(`DROP TABLE test.t`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that SHOW TABLES marks a dropped table with the " (dropped)"
+	// suffix.
+	rows, err := db.Query(`SHOW TABLES FROM test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatal("table invisible through SHOW TABLES")
+	}
+	var val []byte
+	if err := rows.Scan(&val); err != nil {
+		t.Errorf("row scan failed: %s", err)
+	}
+	if string(val) != "t (dropped)" {
+		t.Fatalf("table = %s", val)
+	}
+
+	// Check that CREATE TABLE with the same name returns a proper error.
+	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `relation "t" already exists`) {
+		t.Fatal(err)
+	}
+
+	// Check that DROP TABLE with the same name returns a proper error.
+	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `table "t" is being dropped`) {
+		t.Fatal(err)
 	}
 }

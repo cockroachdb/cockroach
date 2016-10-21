@@ -1504,7 +1504,7 @@ func (desc *TableDescriptor) SetUpVersion() error {
 		// has been deleted. This will block new mutations from being queued on the
 		// table; it'd be misleading to allow them to be queued, since the
 		// respective schema change will never run.
-		return fmt.Errorf("table %q has been deleted", desc.Name)
+		return fmt.Errorf("table %q is being dropped", desc.Name)
 	}
 	desc.UpVersion = true
 	return nil
