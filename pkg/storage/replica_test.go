@@ -5829,40 +5829,28 @@ func TestReplicaIDChangePending(t *testing.T) {
 	}
 }
 
-// runWrongIndexTest runs a reproposal or refurbishment test, optionally
-// simulating an error during the renewal of the command. If repropose is
-// false, refurbishes instead.
-// If withErr is true, injects an error when the reproposal or refurbishment
-// takes place.
-func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals int32) {
+func TestReplicaRetryRaftProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	var tc testContext
 	tc.Start(t)
 	defer tc.Stop()
 
-	prefix := fmt.Sprintf("repropose=%t withErr=%t: ", repropose, withErr)
-	fatalf := func(msg string, args ...interface{}) {
-		t.Fatal(errors.Errorf(prefix+msg, args...))
-	}
-
 	type magicKey struct{}
 
-	var c int32 // updated atomically
+	var c int32                // updated atomically
+	var wrongLeaseIndex uint64 // populated below
 
 	tc.rng.mu.Lock()
 	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
-			curAttempt := atomic.AddInt32(&c, 1)
-			if (repropose || curAttempt == 2) && withErr {
-				return errors.New("boom")
+			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
+				cmd.RaftCommand.MaxLeaseIndex = wrongLeaseIndex
 			}
 		}
 		return defaultSubmitProposalLocked(tc.rng, cmd)
 	}
 	tc.rng.mu.Unlock()
-
-	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
-		fatalf("%s", pErr)
-	}
 
 	pArg := putArgs(roachpb.Key("a"), []byte("asd"))
 	{
@@ -5882,95 +5870,44 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		t.Fatal("committed a batch, but still at lease index zero")
 	}
 
-	wrongIndex := ai - 1 // will chose this as MaxLeaseIndex
+	wrongLeaseIndex = ai - 1 // used by submitProposalFn above
 
 	log.Infof(context.Background(), "test begins")
 
 	var ba roachpb.BatchRequest
 	ba.Timestamp = tc.clock.Now()
-	ba.Add(&pArg)
-
-	repDesc, err := tc.rng.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ch := func() chan roachpb.ResponseWithError {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
-		// Make a new command, but pretend it didn't increment the assignment
-		// counter. This leaks some implementation, but not too much.
-		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
-		cmd := tc.rng.evaluateProposalLocked(
+	const expInc = 123
+	iArg := incrementArgs(roachpb.Key("b"), expInc)
+	ba.Add(&iArg)
+	{
+		br, pErr, shouldRetry := tc.rng.tryAddWriteCmd(
 			context.WithValue(context.Background(), magicKey{}, "foo"),
-			makeIDKey(), repDesc, ba)
-		cmd.RaftCommand.MaxLeaseIndex = preAssigned
-		tc.rng.mu.lastAssignedLeaseIndex = preAssigned
-		if err != nil {
-			fatalf("%s", err)
+			ba,
+		)
+		if !shouldRetry {
+			t.Fatalf("expected retry, but got (%v, %v)", br, pErr)
 		}
-		cmd.RaftCommand.MaxLeaseIndex = wrongIndex
-		tc.rng.insertProposalLocked(cmd)
-		if repropose {
-			if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
-				fatalf("%s", err)
-			}
-		} else if err := tc.rng.submitProposalLocked(cmd); err != nil {
-			fatalf("%s", err)
+		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
+			t.Fatalf("expected %d proposals, got %d", exp, act)
 		}
-		return cmd.done
-	}()
-
-	var errStr string
-	if repropose {
-		errStr = "boom"
-	} else {
-		errStr = "observed at lease index"
 	}
 
-	if rwe := <-ch; rwe.Err != nil != withErr ||
-		(withErr && !testutils.IsPError(rwe.Err, errStr)) {
-		fatalf("%s", rwe.Err)
+	atomic.StoreInt32(&c, 0)
+	{
+		br, pErr := tc.rng.addWriteCmd(
+			context.WithValue(context.Background(), magicKey{}, "foo"),
+			ba,
+		)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
+			t.Fatalf("expected %d proposals, got %d", exp, act)
+		}
+		if resp, ok := br.Responses[0].GetInner().(*roachpb.IncrementResponse); !ok || resp.NewValue != expInc {
+			t.Fatalf("expected new value %d, got (%t, %+v)", expInc, ok, resp)
+		}
 	}
-	if n := atomic.LoadInt32(&c); n != expProposals {
-		fatalf("expected %d proposals, got %d", expProposals, n)
-	}
-}
-
-// Making the test more fun for human eyes.
-const (
-	propose   = false
-	repropose = true
-	noErr     = false
-	withErr   = true
-)
-
-func TestReplicaRefurbishOnWrongIndex_ReproposeNoError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Set up a command at wrong index, but don't propose it but
-	// immediately call the repropose logic, which should refurbish it.
-	runWrongIndexTest(t, repropose, noErr, 1)
-}
-
-func TestReplicaRefurbishOnWrongIndex_ReproposeError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Like its NoError variant, but the reproposal errors out and is
-	// received by the client.
-	runWrongIndexTest(t, repropose, withErr, 1)
-}
-
-func TestReplicaRefurbishOnWrongIndex_ProposeNoError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Propose a command at a past index and let the application of the command
-	// refurbish it successfully.
-	runWrongIndexTest(t, propose, noErr, 2)
-}
-
-func TestReplicaRefurbishOnWrongIndex_ProposeError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Propose a command at a past index and let the application of the command
-	// refurbish it. Refurbishing fails; asserts that the client receives
-	// the error.
-	runWrongIndexTest(t, propose, withErr, 2)
 }
 
 // TestReplicaCancelRaftCommandProgress creates a number of Raft commands and
@@ -6155,8 +6092,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 
 	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
-	// is special in that it controls how often pending commands are reproposed
-	// or refurbished.
+	// is special in that it controls how often pending commands are reproposed.
 	for i := 0; i < 2*electionTicks; i++ {
 		// Add another pending command on each iteration.
 		r.mu.Lock()
@@ -6203,68 +6139,6 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			if len(reproposed) != 0 {
 				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
-		}
-	}
-}
-
-// TestReplicaDoubleRefurbish exercises a code path in which a command is seen
-// fit for refurbishment, but has already been refurbished earlier (with that
-// command being in-flight). See #7185.
-func TestReplicaDoubleRefurbish(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var tc testContext
-	tc.Start(t)
-	defer tc.Stop()
-
-	var ba roachpb.BatchRequest
-	ba.Timestamp = tc.clock.Now()
-	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key("r")}})
-	repDesc, err := tc.rng.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Make a Raft command; we'll set things up so that it will be considered
-	// for refurbishment multiple times.
-	tc.rng.mu.Lock()
-	cmd := tc.rng.evaluateProposalLocked(context.Background(), makeIDKey(), repDesc, ba)
-	ch := cmd.done // must not use cmd outside of mutex
-	tc.rng.mu.Unlock()
-
-	{
-		// Send some random request to advance the lease applied counter to
-		// make `cmd` refurbish when we put it into Raft.
-		var ba roachpb.BatchRequest
-		ba.Timestamp = tc.clock.Now()
-		pArgs := putArgs(roachpb.Key("foo"), []byte("bar"))
-		ba.Add(&pArgs)
-		if _, pErr := tc.rng.Send(context.Background(), ba); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-
-	const num = 10
-	func() {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
-		// Insert the command and propose it ten times. Before the commit
-		// which introduced this test, the first application would repropose,
-		// and the second would decide to not repropose, but accidentally send
-		// the error to the client, so that the successful refurbishment would
-		// be the second result received by the client.
-		tc.rng.insertProposalLocked(cmd)
-		for i := 0; i < num; i++ {
-			if err := tc.rng.submitProposalLocked(cmd); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}()
-
-	var i int
-	for resp := range ch {
-		i++
-		if i != 1 {
-			t.Fatalf("received more than one response on the done channel: %+v", resp)
 		}
 	}
 }

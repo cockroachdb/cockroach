@@ -54,8 +54,9 @@ var _ error = &RetryableTxnError{}
 // entanglement is necessary (e.g. channels, methods that need to return
 // another error in addition to this one).
 type ResponseWithError struct {
-	Reply *BatchResponse
-	Err   *Error
+	Reply       *BatchResponse
+	Err         *Error
+	ShouldRetry bool
 }
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
