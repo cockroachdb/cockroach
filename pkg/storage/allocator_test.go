@@ -1167,7 +1167,7 @@ func Example_rebalancing() {
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(
-		context.TODO(),
+		log.AmbientContext{},
 		g,
 		hlc.NewClock(hlc.UnixNano),
 		nil,

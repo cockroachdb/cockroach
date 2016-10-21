@@ -159,7 +159,7 @@ func createTestStoreWithoutStart(
 	manual := hlc.NewManualClock(0)
 	cfg.Clock = hlc.NewClock(manual.UnixNano)
 	cfg.StorePool = NewStorePool(
-		context.TODO(),
+		log.AmbientContext{},
 		cfg.Gossip,
 		cfg.Clock,
 		rpcContext,
