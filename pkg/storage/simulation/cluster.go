@@ -24,8 +24,6 @@ import (
 	"sort"
 	"text/tabwriter"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -85,7 +83,7 @@ func createCluster(
 	// instance to prevent conflicts with real NodeIDs.
 	g.SetNodeID(-1)
 	storePool := storage.NewStorePool(
-		context.TODO(),
+		log.AmbientContext{},
 		g,
 		clock,
 		rpcContext,
