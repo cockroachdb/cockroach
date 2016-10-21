@@ -198,11 +198,16 @@ func (a *Allocator) ComputeAction(
 
 // AllocateTarget returns a suitable store for a new allocation with the
 // required attributes. Nodes already accommodating existing replicas are ruled
-// out as targets. If relaxConstraints is true, then the required attributes
-// will be relaxed as necessary, from least specific to most specific, in order
-// to allocate a target.
+// out as targets. The range ID of the replica being allocated for is also
+// passed in to ensure that we don't try to replace an existing dead replica on
+// a store. If relaxConstraints is true, then the required attributes will be
+// relaxed as necessary, from least specific to most specific, in order to
+// allocate a target.
 func (a *Allocator) AllocateTarget(
-	constraints config.Constraints, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	rangeID roachpb.RangeID,
+	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
@@ -215,6 +220,7 @@ func (a *Allocator) AllocateTarget(
 	for attrs := append([]config.Constraint(nil), constraints.Constraints...); ; attrs = attrs[:len(attrs)-1] {
 		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
 			config.Constraints{Constraints: attrs},
+			rangeID,
 			a.options.Deterministic,
 		)
 		if target := a.selectGood(sl, existingNodes); target != nil {
@@ -282,11 +288,13 @@ func (a Allocator) RemoveTarget(
 // cluster.
 //
 // The supplied parameters are the required attributes for the range, a list of
-// the existing replicas of the range and the store ID of the lease-holder
-// replica. The existing replicas modulo the lease-holder replica are
-// candidates for rebalancing. Note that rebalancing is accomplished by first
-// adding a new replica to the range, then removing the most undesirable
-// replica.
+// the existing replicas of the range, the store ID of the lease-holder
+// replica and the range ID of the replica being allocated.
+//
+// The existing replicas modulo the lease-holder replica and any store with
+// dead replicas are candidates for rebalancing. Note that rebalancing is
+// accomplished by first adding a new replica to the range, then removing the
+// most undesirable replica.
 //
 // Simply ignoring a rebalance opportunity in the event that the target chosen
 // by AllocateTarget() doesn't fit balancing criteria is perfectly fine, as
@@ -297,12 +305,17 @@ func (a Allocator) RebalanceTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
 ) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil
 	}
 
-	sl, _, _ := a.storePool.getStoreList(constraints, a.options.Deterministic)
+	sl, _, _ := a.storePool.getStoreList(
+		constraints,
+		rangeID,
+		a.options.Deterministic,
+	)
 	if log.V(3) {
 		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
