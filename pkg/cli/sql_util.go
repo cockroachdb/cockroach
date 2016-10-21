@@ -180,7 +180,7 @@ func makeSQLConn(url string) *sqlConn {
 func makeSQLClient() (*sqlConn, error) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		u, err := sqlCtx.PGURL(connUser)
+		u, err := sqlCtx.PGURL(connUser, connPassword)
 		if err != nil {
 			return nil, err
 		}

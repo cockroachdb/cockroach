@@ -136,7 +136,7 @@ func (cfg *Config) AdminURL() string {
 }
 
 // PGURL returns the URL for the postgres endpoint.
-func (cfg *Config) PGURL(user string) (*url.URL, error) {
+func (cfg *Config) PGURL(user string, password string) (*url.URL, error) {
 	// Try to convert path to an absolute path. Failing to do so return path
 	// unchanged.
 	absPath := func(path string) string {
@@ -174,7 +174,7 @@ func (cfg *Config) PGURL(user string) (*url.URL, error) {
 	}
 	return &url.URL{
 		Scheme:   "postgresql",
-		User:     url.User(user),
+		User:     url.UserPassword(user, password),
 		Host:     cfg.AdvertiseAddr,
 		RawQuery: options.Encode(),
 	}, nil

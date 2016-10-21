@@ -35,7 +35,7 @@ func TestSQLLex(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
 
-	pgurl, err := s.(*server.TestServer).Cfg.PGURL("")
+	pgurl, err := s.(*server.TestServer).Cfg.PGURL("", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -236,6 +236,14 @@ The created user's password. If provided, disables prompting. Pass '-' to
 provide the password on standard input.`,
 	}
 
+	UserPassword = FlagInfo{
+		Name:   "user-password",
+		EnvVar: "COCKROACH_USER_PASSWORD",
+		Description: `
+The user's password which used to connect to CockroachDB. If provided, disables prompting. Pass '-' to
+provide the password on standard input.`,
+	}
+
 	CACert = FlagInfo{
 		Name:        "ca-cert",
 		EnvVar:      "COCKROACH_CA_CERT",

@@ -369,7 +369,7 @@ func runStart(_ *cobra.Command, args []string) error {
 
 	initCheckpointing(serverCfg.Engines)
 
-	pgURL, err := serverCfg.PGURL(connUser)
+	pgURL, err := serverCfg.PGURL(connUser, connPassword)
 	if err != nil {
 		return err
 	}
