@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 	"unicode"
@@ -179,8 +180,9 @@ func makeSQLConn(url string) *sqlConn {
 
 func makeSQLClient() (*sqlConn, error) {
 	sqlURL := connURL
+	user := url.UserPassword(connUser, connPassword)
 	if len(connURL) == 0 {
-		u, err := sqlCtx.PGURL(connUser)
+		u, err := sqlCtx.PGURL(user)
 		if err != nil {
 			return nil, err
 		}

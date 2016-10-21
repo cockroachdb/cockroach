@@ -228,12 +228,17 @@ server to listen on an external address in insecure mode.`,
 		Description: `Define the maximum number of results that will be retrieved.`,
 	}
 
+	SetPassword = FlagInfo{
+		Name: "set-password",
+		Description: `
+The created user's password. If provided, disables prompting.`,
+	}
+
 	Password = FlagInfo{
 		Name:   "password",
 		EnvVar: "COCKROACH_PASSWORD",
 		Description: `
-The created user's password. If provided, disables prompting. Pass '-' to
-provide the password on standard input.`,
+The user's password which is used to connect to CockroachDB. If provided, disables prompting.`,
 	}
 
 	CACert = FlagInfo{
