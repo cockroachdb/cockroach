@@ -401,6 +401,14 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		}
 	}
 
+	if expr.Filter != nil {
+		var err error
+		expr.Filter, err = typeCheckAndRequireBoolean(ctx, expr.Filter, "FILTER expression")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	builtin := fn.(Builtin)
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
@@ -412,12 +420,24 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			return nil, fmt.Errorf("OVER specified, but %s() is neither a window function nor an "+
 				"aggregate function", expr.Func)
 		}
+
+		if expr.Filter != nil {
+			return nil, fmt.Errorf("FILTER within a window function call is not yet supported")
+		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
 		switch builtin.class {
 		case WindowClass:
 			return nil, fmt.Errorf("window function %s() requires an OVER clause", expr.Func)
 		}
+	}
+
+	if expr.Filter != nil {
+		if builtin.class != AggregateClass {
+			// Same error message as Postgres.
+			return nil, fmt.Errorf("FILTER specified but %s() is not an aggregate function", expr.Func)
+		}
+
 	}
 
 	for i, subExpr := range typedSubExprs {

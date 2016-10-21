@@ -104,9 +104,11 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	}
 
 	group := &groupNode{
-		planner: p,
-		values:  valuesNode{columns: s.columns},
-		render:  s.render,
+		planner:            p,
+		values:             valuesNode{columns: s.columns},
+		render:             s.render,
+		filterToRenderIdxs: make(map[int]int),
+		numGroupBy:         len(groupByExprs),
 	}
 
 	aggVisitor := extractAggregatesVisitor{
@@ -198,12 +200,40 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, err
 		}
 		s.isStar = s.isStar || hasStar
-		// Note that it may appear unwise to request the grouping
-		// expressions to be merged in the render list. However this
-		// should be safe here because it's not correct to group by an
-		// aggregate function so the merge loop cannot encounter an
-		// equivalent expression in the aggregation list.
-		_ = s.addOrMergeRenders(cols, exprs, false)
+		// TODO(andrei): reuseExistingRender is false because groupNode.Next() does
+		// the valuesToAccumulate/valuesToGroupBy split based on the former being
+		// the first values generated. We should make the groupNode more flexible
+		// and allow render reuse. Make sure not to break distsql grouping.
+		_ = s.addOrMergeRenders(cols, exprs, false /* reuseExistingRender */)
+	}
+
+	// Add the filter expressions, so they are available when deciding what rows
+	// to feed to the aggregation functions.
+	for i, f := range group.funcs {
+		if f.filter == nil {
+			continue
+		}
+
+		if err := p.parser.AssertNoAggregationOrWindowing(
+			f.filter, "FILTER", p.session.SearchPath,
+		); err != nil {
+			return nil, err
+		}
+
+		cols, exprs, hasStar, err := s.planner.computeRender(
+			parser.SelectExpr{Expr: f.filter}, parser.TypeAny,
+			s.source.info, s.ivarHelper, true)
+		if err != nil {
+			return nil, err
+		}
+		if hasStar {
+			panic("star found in filter; this should not have passed type checking")
+		}
+		colIdxs := s.addOrMergeRenders(cols, exprs, true /* reuseExistingRender */)
+		if len(colIdxs) != 1 {
+			panic("multiple columns rendered for filter")
+		}
+		group.filterToRenderIdxs[i] = colIdxs[0]
 	}
 
 	group.desiredOrdering = desiredAggregateOrdering(group.funcs)
@@ -218,10 +248,23 @@ type groupNode struct {
 	// The "wrapped" node (which returns ungrouped results).
 	plan planNode
 
+	// render contains the expressions that produce the output values. The
+	// aggregate functions in them are going to be replaced by
+	// aggregateFuncHolders, which accumulate the data to be aggregated bucketed
+	// by the group-by values.
 	render []parser.TypedExpr
 	having parser.TypedExpr
 
+	// funcs are the aggregation functions that the render's use.
 	funcs []*aggregateFuncHolder
+	// Number of grouping elements (expressions). Note that we don't need to know
+	// the actual grouping expressions, just their numbers. The expressions are
+	// passed at constructor time to the wrapped plan as renders.
+	numGroupBy int
+	// Map of index of aggregation function (from funcs) to the render for the
+	// corresponding filtering expression in the wrapped plan.
+	// The map is only populated for functions that have a filter.
+	filterToRenderIdxs map[int]int
 	// The set of bucket keys.
 	buckets map[string]struct{}
 
@@ -319,6 +362,9 @@ func (n *groupNode) Start() error {
 
 func (n *groupNode) Next() (bool, error) {
 	var scratch []byte
+	// We're going to consume n.plan until it's exhausted, feed all the rows to
+	// n.funcs, and then call n.computeAggregated to generate all the results.
+	// Subsequent calls to next will skip the first part and just return a result.
 	for !n.populated {
 		next := false
 		if !(n.needOnlyOneRow && n.gotOneRow) {
@@ -343,24 +389,33 @@ func (n *groupNode) Next() (bool, error) {
 		// Add row to bucket.
 
 		values := n.plan.Values()
-		aggregatedValues, groupedValues := values[:len(n.funcs)], values[len(n.funcs):]
+		valuesToAccumulate := values[:len(n.funcs)]
+		valuesToGroupBy := values[len(n.funcs) : len(n.funcs)+n.numGroupBy]
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
-		encoded, err := sqlbase.EncodeDTuple(scratch, groupedValues)
+		bucket, err := sqlbase.EncodeDTuple(scratch, valuesToGroupBy)
 		if err != nil {
 			return false, err
 		}
 
-		n.buckets[string(encoded)] = struct{}{}
+		n.buckets[string(bucket)] = struct{}{}
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
-		for i, value := range aggregatedValues {
-			if err := n.funcs[i].add(n.planner.session, encoded, value); err != nil {
+		for i, value := range valuesToAccumulate {
+			var filterVal parser.Datum = parser.DBoolTrue
+			if renderIdx, ok := n.filterToRenderIdxs[i]; ok {
+				filterVal = values[renderIdx]
+			}
+			if filterVal != parser.DBoolTrue {
+				continue
+			}
+
+			if err := n.funcs[i].add(n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
 		}
-		scratch = encoded[:0]
+		scratch = bucket[:0]
 
 		n.gotOneRow = true
 
@@ -524,7 +579,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			}
 			argExpr := t.Exprs[0]
 
-			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
+			var filterExpr parser.TypedExpr
+			if t.Filter != nil {
+				filterExpr = t.Filter.(parser.TypedExpr)
+			}
+			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), filterExpr, agg)
 			if t.Type == parser.DistinctFuncType {
 				f.seen = make(map[string]struct{})
 			}
@@ -535,7 +594,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		if v.groupedCopy != nil {
 			panic("query checker did not detect column not appearing in GROUP BY clauses or aggregation function")
 		}
-		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
+		f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
 		v.n.funcs = append(v.n.funcs, f)
 		return false, f
 	}
@@ -545,7 +604,9 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		parser.WalkExprConst(&v.subAggVisitor, expr)
 
 		if !v.subAggVisitor.Aggregated {
-			f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
+			// If there's no aggregation function calls in t, then t must by one of
+			// the GROUP BY clauses.
+			f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
 			v.n.funcs = append(v.n.funcs, f)
 			return false, f
 		}
@@ -555,7 +616,8 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-// Extract aggregateFuncHolders from exprs that use aggregation.
+// extract aggregateFuncHolders from exprs that use aggregation and add them to
+// the groupNode.
 func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) parser.TypedExpr {
 	expr, _ := parser.WalkExpr(&v, typedExpr)
 	return expr.(parser.TypedExpr)
@@ -648,6 +710,7 @@ type aggregateFuncHolder struct {
 	// SELECT v+w FROM kvw GROUP BY v+w).
 	expr          parser.TypedExpr
 	arg           parser.TypedExpr
+	filter        parser.TypedExpr
 	create        func() parser.AggregateFunc
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
@@ -656,11 +719,12 @@ type aggregateFuncHolder struct {
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr, arg parser.TypedExpr, create func() parser.AggregateFunc,
+	expr, arg, filter parser.TypedExpr, create func() parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:          expr,
 		arg:           arg,
+		filter:        filter,
 		create:        create,
 		group:         n,
 		buckets:       make(map[string]parser.AggregateFunc),
@@ -676,6 +740,8 @@ func (a *aggregateFuncHolder) close(s *Session) {
 	a.bucketsMemAcc.Wtxn(s).Close()
 }
 
+// add accumulates one more value for a particular bucket into an aggregation
+// function.
 func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
