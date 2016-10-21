@@ -640,7 +640,7 @@ func (m *multiTestContext) addStore(idx int) {
 	grpcServer := rpc.NewServer(m.rpcContext)
 	m.grpcServers[idx] = grpcServer
 	m.transports[idx] = storage.NewRaftTransport(
-		context.TODO(), m.getNodeIDAddress, grpcServer, m.rpcContext,
+		log.AmbientContext{}, m.getNodeIDAddress, grpcServer, m.rpcContext,
 	)
 
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}

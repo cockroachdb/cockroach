@@ -127,7 +127,8 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // outbound message which caused the remote to hang up; all that is known is
 // which remote hung up.
 type RaftTransport struct {
-	ctx        context.Context
+	log.AmbientContext
+
 	resolver   NodeAddressResolver
 	rpcContext *rpc.Context
 
@@ -147,20 +148,20 @@ type RaftTransport struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport() *RaftTransport {
-	return NewRaftTransport(context.Background(), nil, nil, nil)
+	return NewRaftTransport(log.AmbientContext{}, nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
 func NewRaftTransport(
-	ctx context.Context,
+	ambient log.AmbientContext,
 	resolver NodeAddressResolver,
 	grpcServer *grpc.Server,
 	rpcContext *rpc.Context,
 ) *RaftTransport {
 	t := &RaftTransport{
-		ctx:        ctx,
-		resolver:   resolver,
-		rpcContext: rpcContext,
+		AmbientContext: ambient,
+		resolver:       resolver,
+		rpcContext:     rpcContext,
 	}
 	t.mu.queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
 	t.mu.stats = make(map[roachpb.NodeID]*raftTransportStats)
@@ -174,6 +175,7 @@ func NewRaftTransport(
 
 	if t.rpcContext != nil && log.V(1) {
 		t.rpcContext.Stopper.RunWorker(func() {
+			ctx := t.AnnotateCtx(context.Background())
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -393,7 +395,10 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // breaker is used to allow fast failures in SendAsync which will drop
 // incoming raft messages and report unreachable status to the raft group.
 func (t *RaftTransport) connectAndProcess(
-	nodeID roachpb.NodeID, ch chan *RaftMessageRequest, stats *raftTransportStats,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	ch chan *RaftMessageRequest,
+	stats *raftTransportStats,
 ) {
 	breaker := t.GetCircuitBreaker(nodeID)
 	successes := breaker.Successes()
@@ -408,19 +413,19 @@ func (t *RaftTransport) connectAndProcess(
 			return err
 		}
 		client := NewMultiRaftClient(conn)
-		ctx, cancel := context.WithCancel(t.ctx)
+		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		stream, err := client.RaftMessageBatch(ctx)
+		stream, err := client.RaftMessageBatch(batchCtx)
 		if err != nil {
 			return err
 		}
 		if successes == 0 || consecFailures > 0 {
-			log.Infof(t.ctx, "raft transport stream to node %d established", nodeID)
+			log.Infof(ctx, "raft transport stream to node %d established", nodeID)
 		}
 		return t.processQueue(nodeID, ch, stats, stream)
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(t.ctx, "raft transport stream to node %d failed: %s", nodeID, err)
+			log.Warningf(ctx, "raft transport stream to node %d failed: %s", nodeID, err)
 		}
 		return
 	}
@@ -442,6 +447,7 @@ func (t *RaftTransport) processQueue(
 	// Starting workers in a task prevents data races during shutdown.
 	if err := t.rpcContext.Stopper.RunTask(func() {
 		t.rpcContext.Stopper.RunWorker(func() {
+			ctx := t.AnnotateCtx(context.Background())
 			errCh <- func() error {
 				for {
 					resp, err := stream.Recv()
@@ -453,7 +459,7 @@ func (t *RaftTransport) processQueue(
 					handler, ok := t.recvMu.handlers[resp.ToReplica.StoreID]
 					t.recvMu.Unlock()
 					if !ok {
-						log.Warningf(t.ctx, "no handler found for store %s in response %s",
+						log.Warningf(ctx, "no handler found for store %s in response %s",
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
@@ -549,7 +555,8 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		// Starting workers in a task prevents data races during shutdown.
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
-				t.connectAndProcess(toNodeID, ch, stats)
+				ctx := t.AnnotateCtx(context.Background())
+				t.connectAndProcess(ctx, toNodeID, ch, stats)
 				deleteQueue()
 			})
 		}); err != nil {

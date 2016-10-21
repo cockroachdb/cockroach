@@ -213,7 +213,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
 	s.raftTransport = storage.NewRaftTransport(
-		ctx, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
+		s.cfg.AmbientCtx, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+	)
 
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
