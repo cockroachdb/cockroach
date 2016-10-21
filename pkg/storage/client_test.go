@@ -136,9 +136,14 @@ func createTestStoreWithEngine(
 		RPCRetryOptions:  &retryOpts,
 	}, storeCfg.Gossip)
 
-	ctx := tracing.WithTracer(context.TODO(), tracer)
-	sender := kv.NewTxnCoordSender(ctx, distSender, clock, false, stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval))
+	sender := kv.NewTxnCoordSender(
+		ac,
+		distSender,
+		clock,
+		false,
+		stopper,
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
+	)
 	storeCfg.Clock = clock
 	storeCfg.DB = client.NewDB(sender)
 	storeCfg.StorePool = storage.NewStorePool(
@@ -600,9 +605,15 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		TransportFactory:  m.kvTransportFactory,
 		RPCRetryOptions:   &retryOpts,
 	}, m.gossips[idx])
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	sender := kv.NewTxnCoordSender(ctx, m.distSenders[idx], m.clock, false,
-		stopper, kv.MakeTxnMetrics(metric.TestSampleInterval))
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	sender := kv.NewTxnCoordSender(
+		ambient,
+		m.distSenders[idx],
+		m.clock,
+		false,
+		stopper,
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
+	)
 	m.dbs[idx] = client.NewDB(sender)
 }
 

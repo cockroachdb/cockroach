@@ -19,17 +19,15 @@ package kv
 import (
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -80,7 +78,13 @@ func InitSenderForLocalTestCluster(
 		},
 	}, gossip)
 
-	ctx := tracing.WithTracer(context.Background(), tracer)
-	return NewTxnCoordSender(ctx, distSender, clock, false, /* !linearizable */
-		stopper, MakeTxnMetrics(metric.TestSampleInterval))
+	ambient := log.AmbientContext{Tracer: tracer}
+	return NewTxnCoordSender(
+		ambient,
+		distSender,
+		clock,
+		false, /* !linearizable */
+		stopper,
+		MakeTxnMetrics(metric.TestSampleInterval),
+	)
 }
