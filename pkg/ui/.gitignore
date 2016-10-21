@@ -3,7 +3,7 @@
 #
 # NPM
 node_modules
-npm.installed
+yarn.installed
 
 # JSPM
 jspm_packages

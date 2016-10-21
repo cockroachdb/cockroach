@@ -5,8 +5,6 @@
 
 set -euxo pipefail
 
-GOVERSION="${GOVERSION-1.7.1}"
-
 cd "$(dirname "${0}")"
 
 sudo apt-get update -q && sudo apt-get install -q -y --no-install-recommends build-essential git gdb patch bzip2 docker.io
