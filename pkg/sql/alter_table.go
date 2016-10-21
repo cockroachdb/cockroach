@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -70,6 +69,7 @@ func (n *alterTableNode) Start() error {
 	// the list.
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
+	var droppedViews []string
 
 	for _, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
@@ -179,7 +179,8 @@ func (n *alterTableNode) Start() error {
 				}
 				return err
 			}
-			// You can't drop a column depended on by a view.
+			// You can't drop a column depended on by a view unless CASCADE was
+			// specified.
 			for _, ref := range n.tableDesc.DependedOnBy {
 				found := false
 				for _, colID := range ref.ColumnIDs {
@@ -191,20 +192,29 @@ func (n *alterTableNode) Start() error {
 				if !found {
 					continue
 				}
-				viewName, err := n.p.getQualifiedTableNameFromID(ref.ID)
+				err := n.p.canRemoveDependentViewGeneric("column", string(t.Column), ref, t.DropBehavior)
 				if err != nil {
-					log.Warningf(n.p.ctx(), "unable to retrieve name of view %d: %v", ref.ID, err)
-					return fmt.Errorf("cannot drop column %s because a view depends on it", t.Column)
+					return err
 				}
-				return fmt.Errorf("cannot drop column %s because view %q depends on it",
-					t.Column, viewName)
+				viewDesc, err :=
+					n.p.getViewDescForCascade("column", string(t.Column), ref.ID, t.DropBehavior)
+				if err != nil {
+					return err
+				}
+				droppedViews, err = n.p.removeDependentView(n.tableDesc, viewDesc)
+				if err != nil {
+					return err
+				}
 			}
+
 			switch status {
 			case sqlbase.DescriptorActive:
 				col := n.tableDesc.Columns[i]
 				if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
 					return fmt.Errorf("column %q is referenced by the primary key", col.Name)
 				}
+				// TODO(#10122): Should we drop dependent indexes if CASCADE was
+				// specified?
 				for _, idx := range n.tableDesc.AllNonDropIndexes() {
 					if idx.ContainsColumnID(col.ID) {
 						return fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
@@ -367,11 +377,12 @@ func (n *alterTableNode) Start() error {
 		int32(n.tableDesc.ID),
 		int32(n.p.evalCtx.NodeID),
 		struct {
-			TableName  string
-			Statement  string
-			User       string
-			MutationID uint32
-		}{n.tableDesc.Name, n.n.String(), n.p.session.User, uint32(mutationID)},
+			TableName           string
+			Statement           string
+			User                string
+			MutationID          uint32
+			CascadeDroppedViews []string
+		}{n.tableDesc.Name, n.n.String(), n.p.session.User, uint32(mutationID), droppedViews},
 	); err != nil {
 		return err
 	}
