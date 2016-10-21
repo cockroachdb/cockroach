@@ -499,11 +499,11 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if !rows.Next() {
 		t.Fatal("table invisible through SHOW TABLES")
 	}
-	var val []byte
+	var val string
 	if err := rows.Scan(&val); err != nil {
 		t.Errorf("row scan failed: %s", err)
 	}
-	if string(val) != "t (dropped)" {
+	if val != "t (dropped)" {
 		t.Fatalf("table = %s", val)
 	}
 

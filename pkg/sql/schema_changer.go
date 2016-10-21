@@ -222,7 +222,7 @@ func (sc SchemaChanger) exec() error {
 	}
 	table := desc.GetTable()
 
-	if table.Deleted() {
+	if table.Dropped() {
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
 			return err
@@ -781,7 +781,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Deleted() || table.Adding() ||
+						if table.UpVersion || table.Dropped() || table.Adding() ||
 							table.Renamed() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof(context.TODO(), "%s: queue up pending schema change; table: %d, version: %d",
