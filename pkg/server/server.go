@@ -199,7 +199,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
-	s.txnCoordSender = kv.NewTxnCoordSender(ctx, s.distSender, s.clock, cfg.Linearizable,
+	s.txnCoordSender = kv.NewTxnCoordSender(s.cfg.AmbientCtx, s.distSender, s.clock, cfg.Linearizable,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
