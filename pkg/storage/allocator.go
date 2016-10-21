@@ -202,7 +202,10 @@ func (a *Allocator) ComputeAction(
 // will be relaxed as necessary, from least specific to most specific, in order
 // to allocate a target.
 func (a *Allocator) AllocateTarget(
-	constraints config.Constraints, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	rangeID roachpb.RangeID,
+	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
@@ -215,6 +218,7 @@ func (a *Allocator) AllocateTarget(
 	for attrs := append([]config.Constraint(nil), constraints.Constraints...); ; attrs = attrs[:len(attrs)-1] {
 		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
 			config.Constraints{Constraints: attrs},
+			rangeID,
 			a.options.Deterministic,
 		)
 		if target := a.selectGood(sl, existingNodes); target != nil {
@@ -297,12 +301,17 @@ func (a Allocator) RebalanceTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
 ) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil
 	}
 
-	sl, _, _ := a.storePool.getStoreList(constraints, a.options.Deterministic)
+	sl, _, _ := a.storePool.getStoreList(
+		constraints,
+		rangeID,
+		a.options.Deterministic,
+	)
 	if log.V(3) {
 		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}

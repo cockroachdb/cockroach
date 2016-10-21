@@ -212,7 +212,12 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
+	result, err := a.AllocateTarget(
+		simpleZoneConfig.Constraints,
+		[]roachpb.ReplicaDescriptor{},
+		roachpb.RangeID(0),
+		false,
+	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -221,11 +226,44 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	}
 }
 
+// TestAllocatorCorruptReplica ensures that the allocator never attempts to
+// allocate a new replica on top of a dead (corrupt) one.
+func TestAllocatorCorruptReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, sp, a, _ := createTestAllocator()
+	defer stopper.Stop()
+	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
+
+	// Set the Store1 to have a dead store in the store pool.
+	sp.mu.Lock()
+	sp.mu.storeDetails[roachpb.StoreID(1)].deadReplicas[roachpb.RangeID(1)] =
+		[]roachpb.ReplicaDescriptor{{}}
+	sp.mu.Unlock()
+
+	result, err := a.AllocateTarget(
+		simpleZoneConfig.Constraints,
+		[]roachpb.ReplicaDescriptor{},
+		roachpb.RangeID(1),
+		true,
+	)
+	if err != nil {
+		t.Fatalf("Unable to perform allocation: %v", err)
+	}
+	if result.Node.NodeID != 2 || result.StoreID != 2 {
+		t.Errorf("expected NodeID 2 and StoreID 2: %+v", result)
+	}
+}
+
 func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
+	result, err := a.AllocateTarget(
+		simpleZoneConfig.Constraints,
+		[]roachpb.ReplicaDescriptor{},
+		roachpb.RangeID(0),
+		false,
+	)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -239,14 +277,24 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
+	result1, err := a.AllocateTarget(
+		multiDCConfig.Constraints,
+		[]roachpb.ReplicaDescriptor{},
+		roachpb.RangeID(0),
+		false,
+	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{{
-		NodeID:  result1.Node.NodeID,
-		StoreID: result1.StoreID,
-	}}, false)
+	result2, err := a.AllocateTarget(
+		multiDCConfig.Constraints,
+		[]roachpb.ReplicaDescriptor{{
+			NodeID:  result1.Node.NodeID,
+			StoreID: result1.StoreID,
+		}},
+		roachpb.RangeID(0),
+		false,
+	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -256,16 +304,21 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	result3, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{
-		{
-			NodeID:  result1.Node.NodeID,
-			StoreID: result1.StoreID,
+	result3, err := a.AllocateTarget(
+		multiDCConfig.Constraints,
+		[]roachpb.ReplicaDescriptor{
+			{
+				NodeID:  result1.Node.NodeID,
+				StoreID: result1.StoreID,
+			},
+			{
+				NodeID:  result2.Node.NodeID,
+				StoreID: result2.StoreID,
+			},
 		},
-		{
-			NodeID:  result2.Node.NodeID,
-			StoreID: result2.StoreID,
-		},
-	}, false)
+		roachpb.RangeID(0),
+		false,
+	)
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores: %+v", result3)
 	}
@@ -288,7 +341,10 @@ func TestAllocatorExistingReplica(t *testing.T) {
 				NodeID:  2,
 				StoreID: 2,
 			},
-		}, false)
+		},
+		roachpb.RangeID(0),
+		false,
+	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -338,7 +394,12 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 			existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 		}
 		constraints := config.Constraints{Constraints: test.required}
-		result, err := a.AllocateTarget(constraints, existing, test.relaxConstraints)
+		result, err := a.AllocateTarget(
+			constraints,
+			existing,
+			roachpb.RangeID(0),
+			test.relaxConstraints,
+		)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
 		} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
@@ -400,7 +461,12 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 3}}, 0)
+		result := a.RebalanceTarget(
+			config.Constraints{},
+			[]roachpb.ReplicaDescriptor{{StoreID: 3}},
+			roachpb.StoreID(0),
+			roachpb.RangeID(0),
+		)
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -416,7 +482,11 @@ func TestAllocatorRebalance(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
+		sl, _, _ := a.storePool.getStoreList(
+			config.Constraints{},
+			roachpb.RangeID(0),
+			true,
+		)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -523,7 +593,11 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 
 		// Ensure gossiped store descriptor changes have propagated.
 		util.SucceedsSoon(t, func() error {
-			sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
+			sl, _, _ := a.storePool.getStoreList(
+				config.Constraints{},
+				roachpb.RangeID(0),
+				true,
+			)
 			for j, s := range sl.stores {
 				if a, e := s.Capacity.RangeCount, tc[j].rangeCount; a != e {
 					return errors.Errorf("tc %d: range count for %d = %d != expected %d", i, j, a, e)
@@ -531,7 +605,11 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			}
 			return nil
 		})
-		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
+		sl, _, _ := a.storePool.getStoreList(
+			config.Constraints{},
+			roachpb.RangeID(0),
+			true,
+		)
 
 		// Verify shouldRebalance returns the expected value.
 		for j, store := range stores {
@@ -581,7 +659,12 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 1}}, 0)
+		result := a.RebalanceTarget(
+			config.Constraints{},
+			[]roachpb.ReplicaDescriptor{{StoreID: 1}},
+			roachpb.StoreID(0),
+			roachpb.RangeID(0),
+		)
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -594,7 +677,11 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
+		sl, _, _ := a.storePool.getStoreList(
+			config.Constraints{},
+			roachpb.RangeID(0),
+			true,
+		)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -1100,7 +1187,9 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err := a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
-		false)
+		roachpb.RangeID(0),
+		false,
+	)
 	if _, ok := err.(purgatoryError); !ok {
 		t.Fatalf("expected a purgatory error, got: %v", err)
 	}
@@ -1110,7 +1199,9 @@ func TestAllocatorThrottled(t *testing.T) {
 	result, err := a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
-		false)
+		roachpb.RangeID(0),
+		false,
+	)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %v", err)
 	}
@@ -1130,7 +1221,9 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err = a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
-		false)
+		roachpb.RangeID(0),
+		false,
+	)
 	if _, ok := err.(purgatoryError); ok {
 		t.Fatalf("expected a non purgatory error, got: %v", err)
 	}
@@ -1212,7 +1305,9 @@ func Example_rebalancing() {
 			target := alloc.RebalanceTarget(
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
-				-1)
+				roachpb.StoreID(-1),
+				roachpb.RangeID(0),
+			)
 			if target != nil {
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
