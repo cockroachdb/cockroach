@@ -104,9 +104,14 @@ func createTestNode(
 		RPCRetryOptions: &retryOpts,
 	}, g)
 	cfg.AmbientCtx.Tracer = tracing.NewTracer()
-	ctx := tracing.WithTracer(context.Background(), cfg.AmbientCtx.Tracer)
-	sender := kv.NewTxnCoordSender(ctx, distSender, cfg.Clock, false, stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval))
+	sender := kv.NewTxnCoordSender(
+		cfg.AmbientCtx,
+		distSender,
+		cfg.Clock,
+		false,
+		stopper,
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
+	)
 	cfg.DB = client.NewDB(sender)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	cfg.MetricsSampleInterval = metric.TestSampleInterval

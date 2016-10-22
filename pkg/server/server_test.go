@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/jsonpb"
@@ -208,9 +209,15 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RPCContext:      s.RPCContext(),
 		RPCRetryOptions: &retryOpts,
 	}, ts.Gossip())
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Cfg.Linearizable,
-		ts.stopper, kv.MakeTxnMetrics(metric.TestSampleInterval))
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	tds := kv.NewTxnCoordSender(
+		ambient,
+		ds,
+		s.Clock(),
+		ts.Cfg.Linearizable,
+		ts.stopper,
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
+	)
 
 	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
 		t.Fatal(err)
@@ -305,9 +312,15 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			RPCContext:      s.RPCContext(),
 			RPCRetryOptions: &retryOpts,
 		}, ts.Gossip())
-		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-		tds := kv.NewTxnCoordSender(ctx, ds, ts.Clock(), ts.Cfg.Linearizable,
-			ts.stopper, kv.MakeTxnMetrics(metric.TestSampleInterval))
+		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		tds := kv.NewTxnCoordSender(
+			ambient,
+			ds,
+			ts.Clock(),
+			ts.Cfg.Linearizable,
+			ts.stopper,
+			kv.MakeTxnMetrics(metric.TestSampleInterval),
+		)
 
 		for _, sk := range tc.splitKeys {
 			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk); err != nil {

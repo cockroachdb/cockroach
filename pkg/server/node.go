@@ -183,8 +183,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 	cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock)
-	ctx := tracing.WithTracer(context.TODO(), cfg.AmbientCtx.Tracer)
-	sender := kv.NewTxnCoordSender(ctx, stores, cfg.Clock, false, stopper, txnMetrics)
+	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, stores, cfg.Clock, false, stopper, txnMetrics)
 	cfg.DB = client.NewDB(sender)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	for i, eng := range engines {
@@ -222,6 +221,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 
 		stores.AddStore(s)
 
+		ctx := context.TODO()
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
 			if nodeID, err := allocateNodeID(ctx, cfg.DB); nodeID != sIdent.NodeID || err != nil {
