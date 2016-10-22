@@ -30,9 +30,9 @@ proc eexpect {text} {
 # Preserves the invariant that the server's PID is saved
 # in `server_pid`.
 proc start_server {argv} {
-    system "$argv start & echo \$! >server_pid"
+    system "$argv start & echo \$! > server_pid"
     sleep 1
 }
 proc stop_server {argv} {
-    system "set -e; if kill -CONT `cat server_pid`; then $argv quit  || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit || true; fi"
+    system "set -e; if kill -CONT `cat server_pid`; then $argv quit || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit || true; fi"
 }
