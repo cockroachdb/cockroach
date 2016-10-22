@@ -18,7 +18,6 @@ package server
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -323,18 +322,6 @@ func (ts *TestServer) Stores() *storage.Stores {
 // ServingAddr returns the server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
 	return ts.cfg.AdvertiseAddr
-}
-
-// ServingHost returns the host portion of the rpc server's address.
-func (ts *TestServer) ServingHost() (string, error) {
-	h, _, err := net.SplitHostPort(ts.ServingAddr())
-	return h, err
-}
-
-// ServingPort returns the port portion of the rpc server's address.
-func (ts *TestServer) ServingPort() (string, error) {
-	_, p, err := net.SplitHostPort(ts.ServingAddr())
-	return p, err
 }
 
 // WriteSummaries implements TestServerInterface.

@@ -498,7 +498,11 @@ func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{}, serverCfg.Config, hlc.NewClock(hlc.UnixNano), stopper,
 	)
-	conn, err := rpcContext.GRPCDial(serverCfg.AdvertiseAddr)
+	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := rpcContext.GRPCDial(addr)
 	if err != nil {
 		return nil, nil, err
 	}
