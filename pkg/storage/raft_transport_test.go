@@ -136,8 +136,12 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	if err != nil {
 		rttc.t.Fatal(err)
 	}
-	transport := storage.NewRaftTransport(context.TODO(), storage.GossipAddressResolver(rttc.gossip),
-		grpcServer, rttc.nodeRPCContext)
+	transport := storage.NewRaftTransport(
+		log.AmbientContext{},
+		storage.GossipAddressResolver(rttc.gossip),
+		grpcServer,
+		rttc.nodeRPCContext,
+	)
 	rttc.transports[nodeID] = transport
 	return transport, ln.Addr()
 }
