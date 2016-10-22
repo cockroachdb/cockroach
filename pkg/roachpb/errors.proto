@@ -176,6 +176,12 @@ message SendError {
   reserved 2;
 }
 
+// An AmbiguousCommitError is true to indicate that an EndTransaction
+// request may have succeeded or failed, but the response was not
+// received and the final result is ambiguous.
+message AmbiguousCommitError {
+}
+
 // A RaftGroupDeletedError indicates a raft group has been deleted for
 // the replica.
 message RaftGroupDeletedError {
@@ -217,6 +223,7 @@ message ErrorDetail {
   optional NodeUnavailableError node_unavailable = 14;
   optional SendError send = 15;
   optional RangeFrozenError range_frozen = 25;
+  optional AmbiguousCommitError ambiguous_commit = 26;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
