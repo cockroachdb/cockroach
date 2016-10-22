@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -793,7 +794,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		clock := hlc.NewClock(manual.UnixNano)
 		clock.SetMaxOffset(20)
 
-		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 		senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			var reply *roachpb.BatchResponse
 			if test.pErr == nil {
@@ -801,7 +801,15 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			}
 			return reply, test.pErr
 		}
-		ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
+		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ts := NewTxnCoordSender(
+			ambient,
+			senderFn(senderFunc),
+			clock,
+			false,
+			stopper,
+			MakeTxnMetrics(metric.TestSampleInterval),
+		)
 		db := client.NewDB(ts)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
@@ -939,8 +947,10 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		br.Txn.Writing = true
 		return br, nil
 	}
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ts := NewTxnCoordSender(
+		ambient, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
+	)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -991,8 +1001,15 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				pErr.SetTxn(&txn)
 				return nil, pErr
 			}
-			ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-			ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
+			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+			ts := NewTxnCoordSender(
+				ambient,
+				senderFn(senderFunc),
+				clock,
+				false,
+				stopper,
+				MakeTxnMetrics(metric.TestSampleInterval),
+			)
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1062,8 +1079,15 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		br.Txn.Writing = true
 		return br, nil
 	}
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ts := NewTxnCoordSender(
+		ambient,
+		senderFn(senderFunc),
+		clock,
+		false,
+		stopper,
+		MakeTxnMetrics(metric.TestSampleInterval),
+	)
 
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
@@ -1162,8 +1186,8 @@ func checkTxnMetrics(
 func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
 	txnMetrics := MakeTxnMetrics(metric.TestSampleInterval)
-	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	sender := NewTxnCoordSender(ctx, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	sender := NewTxnCoordSender(ambient, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 
 	return s.Manual, sender, func() {
 		teardownHeartbeats(sender)
