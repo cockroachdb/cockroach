@@ -36,7 +36,8 @@ import (
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
-	Context    context.Context
+	log.AmbientContext
+
 	DB         *client.DB
 	RPCContext *rpc.Context
 	Stopper    *stop.Stopper
@@ -57,9 +58,6 @@ var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(cfg ServerConfig) *ServerImpl {
-	if tracing.TracerFromCtx(cfg.Context) == nil {
-		panic("Server Context should have a Tracer")
-	}
 	ds := &ServerImpl{
 		ServerConfig: cfg,
 		evalCtx: parser.EvalContext{
@@ -77,14 +75,10 @@ func (ds *ServerImpl) setupTxn(ctx context.Context, txnProto *roachpb.Transactio
 	return txn
 }
 
-func (ds *ServerImpl) logContext(ctx context.Context) context.Context {
-	return log.WithLogTagsFromCtx(ctx, ds.ServerConfig.Context)
-}
-
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, simpleFlowConsumer RowReceiver,
 ) (*Flow, error) {
-	sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(ctx), req.TraceContext, "flow")
+	sp, err := tracing.JoinOrNew(ds.AmbientContext.Tracer, req.TraceContext, "flow")
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +108,7 @@ func (ds *ServerImpl) setupFlow(
 func (ds *ServerImpl) SetupSimpleFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (*Flow, error) {
-	ctx = ds.logContext(ctx)
-	return ds.setupFlow(ctx, req, output)
+	return ds.setupFlow(ds.AnnotateCtx(ctx), req, output)
 }
 
 // RunSimpleFlow is part of the DistSQLServer interface.
@@ -124,10 +117,11 @@ func (ds *ServerImpl) RunSimpleFlow(
 ) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSimpleFlowStream(stream)
+	ctx := ds.AnnotateCtx(context.TODO())
 
-	f, err := ds.SetupSimpleFlow(ds.Context, req, mbox)
+	f, err := ds.SetupSimpleFlow(ctx, req, mbox)
 	if err != nil {
-		log.Error(ds.Context, err)
+		log.Error(ctx, err)
 		return err
 	}
 	mbox.setFlowCtx(&f.FlowCtx)
@@ -147,7 +141,8 @@ func (ds *ServerImpl) RunSimpleFlow(
 func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*SimpleResponse, error) {
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
-	f, err := ds.setupFlow(ds.Context, req, nil)
+	ctx := ds.AnnotateCtx(context.TODO())
+	f, err := ds.setupFlow(ctx, req, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -187,9 +182,10 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 
 // FlowStream is part of the DistSQLServer interface.
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
+	ctx := ds.AnnotateCtx(context.TODO())
 	err := ds.flowStreamInt(stream)
 	if err != nil {
-		log.Error(ds.Context, err)
+		log.Error(ctx, err)
 	}
 	return err
 }
