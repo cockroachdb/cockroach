@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -69,7 +70,7 @@ func newCLITest() cliTest {
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %v", err)
+		log.Fatalf(context.Background(), "Could not start server: %s", err)
 	}
 
 	tempDir, err := ioutil.TempDir("", "cli-test")
@@ -165,36 +166,48 @@ func captureOutput(f func()) (out string, err error) {
 	return
 }
 
-func (c cliTest) RunWithArgs(a []string) {
+func (c cliTest) RunWithArgs(args []string) {
 	sqlCtx.execStmts = nil
 	zoneConfig = ""
 	zoneDisableReplication = false
 
-	var args []string
-	args = append(args, a[0])
-	h, err := c.ServingHost()
-	if err != nil {
-		fmt.Println(err)
-	}
-	p, err := c.ServingPort()
-	if err != nil {
-		fmt.Println(err)
-	}
-	if err != nil {
-		fmt.Println(err)
-	}
-	args = append(args, fmt.Sprintf("--host=%s", h))
-	args = append(args, fmt.Sprintf("--port=%s", p))
-	// Always run in secure mode and use test certs.
-	args = append(args, "--insecure=false")
-	args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
-	args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedNodeCert)))
-	args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
-	args = append(args, a[1:]...)
+	fmt.Println(strings.Join(args, " "))
 
-	fmt.Fprintf(os.Stderr, "%s\n", args)
-	fmt.Println(strings.Join(a, " "))
-	if err := Run(args); err != nil {
+	if err := func() error {
+		runArgs := append([]string(nil), args[:1]...)
+
+		host, port, err := net.SplitHostPort(c.ServingAddr())
+		if err != nil {
+			return err
+		}
+		{
+			// When testing on Linux, we use a non-localhost loopback address (see
+			// util.IsolatedTestAddr). In that case, we need to pass an explicit host
+			// flag, else the client command won't be able to find the server.
+			ipAddr, err := net.ResolveIPAddr("ip", "localhost")
+			if err != nil {
+				return err
+			}
+			switch host {
+			case "localhost", ipAddr.IP.String():
+			default:
+				runArgs = append(runArgs, fmt.Sprintf("--host=%s", host))
+			}
+		}
+
+		if c.Cfg.Insecure {
+			runArgs = append(runArgs, "--insecure")
+		} else {
+			runArgs = append(runArgs, "--insecure=false")
+			runArgs = append(runArgs, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
+			runArgs = append(runArgs, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedNodeCert)))
+			runArgs = append(runArgs, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
+		}
+		runArgs = append(runArgs, fmt.Sprintf("--port=%s", port))
+		runArgs = append(runArgs, args[1:]...)
+
+		return Run(runArgs)
+	}(); err != nil {
 		fmt.Println(err)
 	}
 }
@@ -359,12 +372,12 @@ func Example_insecure() {
 	defer s.Stopper().Stop()
 	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
 
-	c.Run("debug kv put --insecure a 1 b 2")
-	c.Run("debug kv scan --insecure")
+	c.Run("debug kv put a 1 b 2")
+	c.Run("debug kv scan")
 
 	// Output:
-	// debug kv put --insecure a 1 b 2
-	// debug kv scan --insecure
+	// debug kv put a 1 b 2
+	// debug kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// 2 result(s)
