@@ -151,6 +151,17 @@ func updatesTimestampCache(r roachpb.Request) bool {
 	return updatesTimestampCacheMethods[m]
 }
 
+// proposalResult indicates the result of a proposal with the following semantics:
+// - If ShouldRetry is set, the proposal applied at a Lease index it was not
+//   legal for. The command should be retried.
+// - Otherwise, exactly one of the BatchResponse or the Error are set and
+//   represent the result of the proposal.
+type proposalResult struct {
+	Reply       *roachpb.BatchResponse
+	Err         *roachpb.Error
+	ShouldRetry bool
+}
+
 type replicaChecksum struct {
 	// started is true if the checksum computation has started.
 	started bool
@@ -1483,15 +1494,53 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 	}
 }
 
-// addWriteCmd first adds the keys affected by this command as pending writes
-// to the command queue. Next, the timestamp cache is checked to determine if
-// any newer accesses to this command's affected keys have been made. If so,
-// the command's timestamp is moved forward. Finally, the command is submitted
-// to Raft. Upon completion, the write is removed from the command queue and any
-// error returned.
+// addWriteCmd is the entry point for client requests which may mutate the
+// Range's replicated state. Requests taking this path are ultimately
+// serialized through Raft, but pass through additional machinery whose goal is
+// to allow commands which commute to be proposed in parallel. The naive
+// alternative (submitting requests to Raft one after another, paying massive
+// latency) is only taken for commands whose effects may overlap.
+//
+// Concretely,
+//
+// - the keys affected by the command are added to the command queue (i.e.
+//   tracked as in-flight mutations).
+// - wait until the command queue promises that no overlapping mutations are
+//   in flight.
+// - the timestamp cache is checked to determine if the command's affected keys
+//   were accessed with a timestamp exceeding that of the command; if so, the
+//   command's timestamp is incremented accordingly.
+// - a ProposalData is created and inserted into the Replica's in-flight
+//   proposals map, a lease index is assigned to it, and it is submitted to Raft,
+//   returning a channel.
+// - the result of the Raft proposal is read from the channel and the command
+//   registered with the timestamp cache, removed from the command queue, and its
+//   result (which could be an error) returned to the client.
+//
+// Internally, multiple iterations of the above process are may take place due
+// to the (rare) need to the Raft proposal failing retryably (usually due to
+// proposal reordering).
 func (r *Replica) addWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	for {
+		br, pErr, shouldRetry := r.tryAddWriteCmd(ctx, ba)
+		if !shouldRetry {
+			return br, pErr
+		}
+	}
+}
+
+// tryAddWriteCmd implements the logic outlined in its caller addWriteCmd, who
+// will call this method until the returned boolean is false, in which case
+// a result of the proposal (which is either an error or a successful response)
+// is returned. If the boolean is true, a proposal was submitted to Raft but
+// did not end up in a legal log position; it is guaranteed that the proposal
+// will never apply successfully and so the caller may and should retry the
+// same invocation of tryAddWriteCmd.
+func (r *Replica) tryAddWriteCmd(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
 	isNonKV := ba.IsNonKV()
 	if !isNonKV {
 		// Add the write to the command queue to gate subsequent overlapping
@@ -1502,7 +1551,7 @@ func (r *Replica) addWriteCmd(
 		log.Event(ctx, "command queue")
 		endCmdsFunc, err := r.beginCmds(ctx, &ba)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, roachpb.NewError(err), false
 		}
 
 		// Guarantee we remove the commands from the command queue. This is
@@ -1516,15 +1565,14 @@ func (r *Replica) addWriteCmd(
 		// This replica must have range lease to process a write, except when it's
 		// an attempt to unfreeze the Range. These are a special case in which any
 		// replica will propose it to get back to an active state.
-		if pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+		if pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
-				return nil, pErr
+				return nil, pErr, false
 			}
 			// Only continue if the batch appears freezing-related.
 			if !ba.IsFreeze() {
-				return nil, pErr
+				return nil, pErr, false
 			}
-			pErr = nil
 		}
 	}
 
@@ -1534,55 +1582,52 @@ func (r *Replica) addWriteCmd(
 		// forward. Or, in the case of a transactional write, the txn
 		// timestamp and possible write-too-old bool.
 		if pErr := r.applyTimestampCache(&ba); pErr != nil {
-			return nil, pErr
+			return nil, pErr, false
 		}
 	}
 
 	log.Event(ctx, "raft")
 
 	ch, tryAbandon, err := r.propose(ctx, ba)
+	if err != nil {
+		return nil, roachpb.NewError(err), false
+	}
 
-	if err == nil {
-		// If the command was accepted by raft, wait for the range to apply it.
-		ctxDone := ctx.Done()
-		for br == nil && pErr == nil {
-			select {
-			case respWithErr := <-ch:
-				br, pErr = respWithErr.Reply, respWithErr.Err
-			case <-ctxDone:
-				// Cancellation is somewhat tricky since we can't prevent the
-				// Raft command from executing at some point in the future.
-				// We try to remove the pending command, but if the processRaft
-				// goroutine has already grabbed it (as would typically be the
-				// case right as it executes), it's too late and we're still
-				// going to have to wait until the command returns (which would
-				// typically be right away).
-				// A typical outcome of a bug here would be use-after-free of
-				// the trace of this client request; we finish it when
-				// returning from here, but the Raft execution also uses it.
-				ctxDone = nil
-				if tryAbandon() {
-					// TODO(tschottdorf): the command will still execute at
-					// some process, so maybe this should be a structured error
-					// which can be interpreted appropriately upstream.
-					pErr = roachpb.NewError(ctx.Err())
-				} else {
-					log.Warningf(ctx, "unable to cancel expired Raft command %s", ba)
-				}
-			case <-r.store.stopper.ShouldQuiesce():
-				// If we can't abandon this command, the surrounding loop will
-				// run hot on this path, but not being able to abandon implies
-				// that the request is being processed and should be available
-				// momentarily.
-				if tryAbandon() {
-					pErr = roachpb.NewError(&roachpb.NodeUnavailableError{})
-				}
+	// If the command was accepted by raft, wait for the range to apply it.
+	ctxDone := ctx.Done()
+	for {
+		select {
+		case respWithErr := <-ch:
+			return respWithErr.Reply, respWithErr.Err, respWithErr.ShouldRetry
+		case <-ctxDone:
+			// Cancellation is somewhat tricky since we can't prevent the
+			// Raft command from executing at some point in the future.
+			// We try to remove the pending command, but if the processRaft
+			// goroutine has already grabbed it (as would typically be the
+			// case right as it executes), it's too late and we're still
+			// going to have to wait until the command returns (which would
+			// typically be right away).
+			// A typical outcome of a bug here would be use-after-free of
+			// the trace of this client request; we finish it when
+			// returning from here, but the Raft execution also uses it.
+			ctxDone = nil
+			if tryAbandon() {
+				// TODO(tschottdorf): the command will still execute at
+				// some process, so maybe this should be a structured error
+				// which can be interpreted appropriately upstream.
+				return nil, roachpb.NewError(ctx.Err()), false
+			}
+			log.Warningf(ctx, "unable to cancel expired Raft command %s", ba)
+		case <-r.store.stopper.ShouldQuiesce():
+			// If we can't abandon this command, the surrounding loop will
+			// run hot on this path, but not being able to abandon implies
+			// that the request is being processed and should be available
+			// momentarily.
+			if tryAbandon() {
+				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
 			}
 		}
-	} else {
-		pErr = roachpb.NewError(err)
 	}
-	return br, pErr
 }
 
 // TODO(tschottdorf): for proposer-evaluated Raft, need to refactor so that
@@ -1612,7 +1657,7 @@ func (r *Replica) evaluateProposalLocked(
 	}
 	pd.ctx = ctx
 	pd.idKey = idKey
-	pd.done = make(chan roachpb.ResponseWithError, 1)
+	pd.done = make(chan proposalResult, 1)
 	return &pd
 }
 
@@ -1644,7 +1689,7 @@ func makeIDKey() storagebase.CmdIDKey {
 //   which case the other returned values are zero.
 func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (chan roachpb.ResponseWithError, func() bool, error) {
+) (chan proposalResult, func() bool, error) {
 	// submitProposalLocked calls withRaftGroupLocked which requires that
 	// raftMu is held. In order to maintain our lock ordering we need to lock
 	// Replica.raftMu here before locking Replica.mu.
@@ -2311,42 +2356,42 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
 	// applied.
-	maxWillRefurbish := r.mu.state.LeaseAppliedIndex // indexes <= will be refurbished
+	maxMustRetryCommandIndex := r.mu.state.LeaseAppliedIndex // indexes <= are given up on
 	refreshAtTicks := r.mu.ticks - refreshAtDelta
-	refurbished := 0
+	numShouldRetry := 0
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
-		if p.proposedAtTicks > refreshAtTicks {
-			// The command was proposed too recently, don't bother reproprosing or
-			// refurbishing it yet. Note that if refreshAtDelta is 0, refreshAtTicks
-			// will be r.mu.ticks making the above condition impossible.
-			continue
-		}
-		if p.RaftCommand.MaxLeaseIndex > maxWillRefurbish {
+		if p.RaftCommand.MaxLeaseIndex > maxMustRetryCommandIndex {
+			if p.proposedAtTicks > refreshAtTicks {
+				// The command was proposed too recently, don't bother reproprosing
+				// it yet. Note that if refreshAtDelta is 0, refreshAtTicks will be
+				// r.mu.ticks making the above condition impossible.
+				continue
+			}
 			reproposals = append(reproposals, p)
 			continue
 		}
 		delete(r.mu.proposals, idKey)
-		// The command can be refurbished.
-		log.Eventf(p.ctx, "refurbishing command %x; %s", p.idKey, reason)
-		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
-			p.done <- roachpb.ResponseWithError{Err: pErr}
-		}
-		refurbished++
+		// The command's designated lease index range was filled up, so send it
+		// back to the proposer for a retry.
+		log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
+		p.done <- proposalResult{ShouldRetry: true}
+		close(p.done)
+		numShouldRetry++
 	}
-	if log.V(1) && (refurbished > 0 || len(reproposals) > 0) {
+	if log.V(1) && (numShouldRetry > 0 || len(reproposals) > 0) {
 		ctx := r.AnnotateCtx(context.TODO())
 		log.Infof(ctx,
-			"pending commands: refurbished %d, reproposing %d (at %d.%d); %s",
-			refurbished, len(reproposals), r.mu.state.RaftAppliedIndex,
+			"pending commands: sent %d back to client, reproposing %d (at %d.%d); %s",
+			numShouldRetry, len(reproposals), r.mu.state.RaftAppliedIndex,
 			r.mu.state.LeaseAppliedIndex, reason)
 	}
 
-	// Reproposals are those commands which we weren't able to refurbish (since
-	// we're not sure that another copy of them could apply at the "correct"
-	// index).
-	// For reproposals, it's generally pretty unlikely that they can make it in
-	// the right place. Reproposing in order is definitely required, however.
+	// Reproposals are those commands which we weren't able to send back to the
+	// client (since we're not sure that another copy of them could apply at
+	// the "correct" index). For reproposals, it's generally pretty unlikely
+	// that they can make it in the right place. Reproposing in order is
+	// definitely required, however.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "reproposing command %x; %s", p.idKey, reason)
@@ -2556,26 +2601,6 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	}
 }
 
-// refurbishPendingCmdLocked takes a pendingCmd which was discovered to apply
-// at a log position other than the one at which it was originally proposed
-// (this can happen when the range lease held by a raft follower, who must
-// forward MsgProp messages to the raft leader without guaranteed ordering).
-// It inserts and proposes a new command, returning an error if that fails.
-// The passed command must have been deleted from r.mu.proposals.
-func (r *Replica) refurbishPendingCmdLocked(cmd *ProposalData) *roachpb.Error {
-	// Note that the new command has the same idKey (which matters since we
-	// leaked that to the pending client).
-	newPCmd := r.evaluateProposalLocked(cmd.ctx, cmd.idKey,
-		cmd.RaftCommand.OriginReplica, cmd.RaftCommand.Cmd)
-	newPCmd.done = cmd.done
-	r.insertProposalLocked(newPCmd)
-	if err := r.submitProposalLocked(newPCmd); err != nil {
-		delete(r.mu.proposals, newPCmd.idKey)
-		return roachpb.NewError(err)
-	}
-	return nil
-}
-
 // processRaftCommand processes a raft command by unpacking the command
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
@@ -2658,52 +2683,39 @@ func (r *Replica) processRaftCommand(
 		// were proposed at lower indexes may not. Overall though, this is more
 		// stable and simpler than requiring commands to apply at their exact
 		// lease index: Handling the case in which MaxLeaseIndex > oldIndex+1
-		// is otherwise tricky since a refurbishment is not allowed
+		// is otherwise tricky since we can't tell the client to try again
 		// (reproposals could exist and may apply at the right index, leading
 		// to a replay), and assigning the required index would be tedious
 		// seeing that it would have to rewind sometimes.
 		leaseIndex = raftCmd.MaxLeaseIndex
 	} else {
 		// The command is trying to apply at a past log position. That's
-		// unfortunate and hopefully rare; we will refurbish on the proposer.
-		// Note that in this situation, the leaseIndex does not advance.
+		// unfortunate and hopefully rare; the client on the proposer will try
+		// again. Note that in this situation, the leaseIndex does not advance.
 		forcedErr = roachpb.NewErrorf(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 		)
 
 		if cmdProposedLocally {
-			// Only refurbish when no earlier incarnation of this command has
-			// already gone through the trouble of doing so (which would have
-			// changed our local copy of the pending command). We want to error
-			// out, but keep the pending command (i.e. not tell the client)
-			// so that the future incarnation can apply and notify the it.
-			// Note that we keep the context to avoid hiding these internal
-			// cycles from traces.
-			if localMaxLeaseIndex := cmd.RaftCommand.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
-				log.VEventf(
-					ctx, 1, "refurbishing command %x; <= %d observed at %d", cmd.idKey,
-					raftCmd.MaxLeaseIndex, leaseIndex,
-				)
+			log.VEventf(
+				ctx, 1,
+				"retry proposal %x: applied at lease index %d, required <= %d",
+				cmd.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
+			)
+			// Send to the client only at the end of this invocation. We can't
+			// use the context any more once we signal the client, so we make
+			// sure we signal it at the end of this method, when the context
+			// has been fully used.
+			defer func(ch chan proposalResult) {
+				// Assert against another defer trying to use the context after
+				// the client has been signaled.
+				ctx = nil
+				cmd.ctx = nil
 
-				if pErr := r.refurbishPendingCmdLocked(cmd); pErr == nil {
-					cmd.done = make(chan roachpb.ResponseWithError, 1)
-				} else {
-					// We could try to send the error to the client instead,
-					// but to avoid even the appearance of Replica divergence,
-					// let's not.
-					log.Warningf(ctx, "unable to refurbish: %s", pErr)
-				}
-			} else {
-				// The refurbishment is already in flight, so we better get cmd back
-				// into proposals (the alternative, not deleting it in this case
-				// in the first place, leads to less legible code here). This code
-				// path is rare.
-				r.insertProposalLocked(cmd)
-				// The client should get the actual execution, not this one. We
-				// keep the context (which is fine since the client will only
-				// finish it when the "real" incarnation applies).
-				sendToClient = false
-			}
+				ch <- proposalResult{ShouldRetry: true}
+				close(ch)
+			}(cmd.done)
+			cmd.done = make(chan proposalResult, 1)
 		}
 	}
 	r.mu.Unlock()
@@ -2722,7 +2734,7 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 	}
-	var response roachpb.ResponseWithError
+	var response proposalResult
 	{
 		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
@@ -2732,7 +2744,7 @@ func (r *Replica) processRaftCommand(
 
 		// Save the response and zero out the field so that handleProposalData
 		// knows it wasn't forgotten.
-		response = roachpb.ResponseWithError{Err: pd.Err, Reply: pd.Reply}
+		response = proposalResult{Err: pd.Err, Reply: pd.Reply}
 		pd.Err, pd.Reply = nil, nil
 
 		// Handle the ProposalData, executing any side effects of the last

@@ -51,7 +51,7 @@ type LocalProposalData struct {
 
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
-	done  chan roachpb.ResponseWithError // Used to signal waiting RPC handler
+	done  chan proposalResult // Used to signal waiting RPC handler
 
 	Batch engine.Batch
 	// The stats delta that the application of the Raft command would cause.

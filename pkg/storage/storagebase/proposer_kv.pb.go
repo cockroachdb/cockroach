@@ -54,15 +54,10 @@ type RaftCommand struct {
 	// The lease index is a replay protection mechanism. Similar to the Raft
 	// applied index, it is strictly increasing, but may have gaps. A command
 	// will only apply successfully if its max_lease_index has not been surpassed
-	// by the Range's applied lease index (in which case the command may need to
-	// be 'refurbished', that is, regenerated with a higher max_lease_index).
+	// by the Range's applied lease index (in which case the command may need
+	// to be retried, that is, regenerated with a higher max_lease_index).
 	// When the command applies, the new lease index will increase to
 	// max_lease_index (so a potential later replay will fail).
-	//
-	// Refurbishment is conditional on whether there is a difference between the
-	// local pending and the applying version of the command - if the local copy
-	// has a different max_lease_index, an earlier incarnation of the command has
-	// already been refurbished, and no repeated refurbishment takes place.
 	//
 	// This mechanism was introduced as a simpler alternative to using the Raft
 	// applied index, which is fraught with complexity due to the need to predict
@@ -77,10 +72,8 @@ type RaftCommand struct {
 	// queue). This is a hard problem: First of all, managing the pending
 	// commands gets more involved; a command must not be removed if others have
 	// been added after it, and on removal, the assignment counters must be
-	// updated accordingly. Even worse though, refurbishments must be avoided at
-	// all costs (since a refurbished command is likely to order after one that
-	// it originally preceded (and which may well commit successfully without
-	// a refurbishment).
+	// updated accordingly. Managing retry of proposals becomes trickier as
+	// well as that uproots whatever ordering was originally envisioned.
 	MaxLeaseIndex uint64 `protobuf:"varint,4,opt,name=max_lease_index,json=maxLeaseIndex" json:"max_lease_index"`
 }
 
