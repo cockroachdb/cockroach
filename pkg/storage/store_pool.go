@@ -197,7 +197,8 @@ func (pq *storePoolPQ) dequeue() *storeDetail {
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
-	ctx                         context.Context
+	log.AmbientContext
+
 	clock                       *hlc.Clock
 	timeUntilStoreDead          time.Duration
 	rpcContext                  *rpc.Context
@@ -216,7 +217,7 @@ type StorePool struct {
 // NewStorePool creates a StorePool and registers the store updating callback
 // with gossip.
 func NewStorePool(
-	ctx context.Context,
+	ambient log.AmbientContext,
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	rpcContext *rpc.Context,
@@ -224,7 +225,7 @@ func NewStorePool(
 	stopper *stop.Stopper,
 ) *StorePool {
 	sp := &StorePool{
-		ctx:                ctx,
+		AmbientContext:     ambient,
 		clock:              clock,
 		timeUntilStoreDead: timeUntilStoreDead,
 		rpcContext:         rpcContext,
@@ -279,7 +280,8 @@ func (sp *StorePool) String() string {
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
-		log.Error(sp.ctx, err)
+		ctx := sp.AnnotateCtx(context.TODO())
+		log.Error(ctx, err)
 		return
 	}
 
@@ -295,7 +297,8 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 	var replicas roachpb.StoreDeadReplicas
 	if err := content.GetProto(&replicas); err != nil {
-		log.Error(sp.ctx, err)
+		ctx := sp.AnnotateCtx(context.TODO())
+		log.Error(ctx, err)
 		return
 	}
 
@@ -371,7 +374,8 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 		// network). The first time this occurs, presume the store is
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
-		detail = newStoreDetail(sp.ctx)
+		ctx := sp.AnnotateCtx(context.TODO())
+		detail = newStoreDetail(ctx)
 		sp.mu.storeDetails[storeID] = detail
 		detail.markAlive(sp.clock.Now(), nil)
 		sp.mu.queue.enqueue(detail)
@@ -529,6 +533,7 @@ func (sp *StorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) 
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	detail := sp.getStoreDetailLocked(toStoreID)
+	ctx := sp.AnnotateCtx(context.TODO())
 
 	// If a snapshot is declined, be it due to an error or because it was
 	// rejected, we mark the store detail as having been declined so it won't
@@ -538,13 +543,13 @@ func (sp *StorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) 
 	case throttleDeclined:
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(sp.ctx, "snapshot declined, store:%s will be throttled for %s until %s",
+			log.Infof(ctx, "snapshot declined, store:%s will be throttled for %s until %s",
 				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
 	case throttleFailed:
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(sp.ctx, "snapshot failed, store:%s will be throttled for %s until %s",
+			log.Infof(ctx, "snapshot failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
 	}
