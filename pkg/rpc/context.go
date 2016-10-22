@@ -201,10 +201,16 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	ctx.conns.Unlock()
 
 	meta.Do(func() {
-		dialOpt, err := ctx.GRPCDialOption()
-		if err != nil {
-			meta.err = err
-			return
+		var dialOpt grpc.DialOption
+		if ctx.Insecure {
+			dialOpt = grpc.WithInsecure()
+		} else {
+			tlsConfig, err := ctx.GetClientTLSConfig()
+			if err != nil {
+				meta.err = err
+				return
+			}
+			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 		}
 
 		dialOpts := make([]grpc.DialOption, 0, 1+len(opts))
@@ -236,21 +242,6 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	})
 
 	return meta.conn, meta.err
-}
-
-// GRPCDialOption returns the GRPC dialing option appropriate for the context.
-func (ctx *Context) GRPCDialOption() (grpc.DialOption, error) {
-	var dialOpt grpc.DialOption
-	if ctx.Insecure {
-		dialOpt = grpc.WithInsecure()
-	} else {
-		tlsConfig, err := ctx.GetClientTLSConfig()
-		if err != nil {
-			return dialOpt, err
-		}
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-	}
-	return dialOpt, nil
 }
 
 // NewBreaker creates a new circuit breaker properly configured for RPC
