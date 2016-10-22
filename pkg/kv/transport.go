@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -55,6 +57,7 @@ type batchClient struct {
 	client     roachpb.InternalClient
 	args       roachpb.BatchRequest
 	healthy    bool
+	pending    bool
 }
 
 // BatchCall contains a response and an RPC error (note that the
@@ -92,6 +95,12 @@ type Transport interface {
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
 	SendNext(chan<- BatchCall)
+
+	// MoveToFront locates the specified replica and moves it to the
+	// front of the ordering of replicas to try. If the replica has
+	// already been tried, it will be retried. If the specified replica
+	// can't be found, returns an error.
+	MoveToFront(roachpb.ReplicaDescriptor) error
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
@@ -137,19 +146,24 @@ func grpcTransportFactoryImpl(
 type grpcTransport struct {
 	opts           SendOptions
 	rpcContext     *rpc.Context
+	clientIndex    int
 	orderedClients []batchClient
+	syncutil.Mutex
 }
 
 func (gt *grpcTransport) IsExhausted() bool {
-	return len(gt.orderedClients) == 0
+	return gt.clientIndex == len(gt.orderedClients)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
 func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
-	client := gt.orderedClients[0]
-	gt.orderedClients = gt.orderedClients[1:]
+	gt.Lock()
+	defer gt.Unlock()
+	client := &gt.orderedClients[gt.clientIndex]
+	client.pending = true
+	gt.clientIndex++
 
 	addr := client.remoteAddr
 	if log.V(2) {
@@ -170,6 +184,7 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 		}
 
 		reply, err := localServer.Batch(gt.opts.ctx, &client.args)
+		client.pending = false
 		done <- BatchCall{Reply: reply, Err: err}
 		return
 	}
@@ -191,8 +206,38 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 				}
 			}
 		}
+		gt.Lock()
+		defer gt.Unlock()
+		client.pending = false
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
+}
+
+// MoveToFront locates the specified replica in the slice of transport
+// clients. If found and not currently pending, it is moved to the front,
+// even if it's already been invoked.
+func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) error {
+	gt.Lock()
+	defer gt.Unlock()
+	for i, client := range gt.orderedClients {
+		if client.args.Replica == replica {
+			// If a call to this replica is active, don't move it.
+			if client.pending {
+				return nil
+			}
+			// If we've already processed the replica, decrement the current
+			// index before we swap.
+			if i < gt.clientIndex {
+				gt.clientIndex--
+			}
+			// Swap the client representing this replica to the front.
+			gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
+				gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
+
+			return nil
+		}
+	}
+	return errors.Errorf("replica %+v not part of GRPC transport", replica)
 }
 
 func (*grpcTransport) Close() {
@@ -268,6 +313,10 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 		log.Event(ctx, "error: "+pErr.String())
 	}
 	done <- BatchCall{Reply: br}
+}
+
+func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
 }
 
 func (s *senderTransport) Close() {

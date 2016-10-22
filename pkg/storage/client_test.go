@@ -500,6 +500,10 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	}
 }
 
+func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
+}
+
 func (t *multiTestContextKVTransport) Close() {
 	t.cancel()
 }

@@ -110,6 +110,10 @@ func (l *legacyTransportAdapter) SendNext(done chan<- BatchCall) {
 	}
 }
 
+func (*legacyTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
+}
+
 func (*legacyTransportAdapter) Close() {
 }
 
@@ -1837,6 +1841,10 @@ func (t *slowLeaseHolderTransport) SendNext(done chan<- BatchCall) {
 		// When we've tried all replicas, let the slow request finish.
 		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
 	}
+}
+
+func (t *slowLeaseHolderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
 }
 
 func (t *slowLeaseHolderTransport) Close() {

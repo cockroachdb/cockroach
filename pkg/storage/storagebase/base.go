@@ -46,3 +46,8 @@ func (f *FilterArgs) InRaftCmd() bool {
 // with the returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results each time.
 type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
+
+// ReplicaResponseFilter is used in unittests to modify the outbound
+// response returned to a waiting client after a replica command has
+// been processed. This filter is used only by the command proposer.
+type ReplicaResponseFilter func(roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error

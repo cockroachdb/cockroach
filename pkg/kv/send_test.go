@@ -163,6 +163,10 @@ func (c *channelSaveTransport) SendNext(done chan<- BatchCall) {
 	c.ch <- done
 }
 
+func (*channelSaveTransport) MoveToFront(roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
+}
+
 func (*channelSaveTransport) Close() {
 }
 
@@ -415,6 +419,10 @@ func (f *firstNErrorTransport) SendNext(done chan<- BatchCall) {
 	}
 	f.numSent++
 	done <- call
+}
+
+func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
 }
 
 func (*firstNErrorTransport) Close() {
