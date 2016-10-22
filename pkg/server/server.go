@@ -168,7 +168,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx, s.rpcContext, s.grpc, s.cfg.GossipBootstrapResolvers, s.stopper, s.registry,
 	)
 	s.storePool = storage.NewStorePool(
-		ctx,
+		s.cfg.AmbientCtx,
 		s.gossip,
 		s.clock,
 		s.rpcContext,
