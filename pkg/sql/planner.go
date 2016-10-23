@@ -216,7 +216,7 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.databaseCache = cache
 	p.session.TxnState.schemaChangers.curGroupNum++
 	p.resetContexts()
-	p.evalCtx.NodeID = e.nodeID
+	p.evalCtx.NodeID = e.cfg.NodeID.Get()
 	p.evalCtx.ReCache = e.reCache
 }
 

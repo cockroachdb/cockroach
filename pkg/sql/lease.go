@@ -113,7 +113,7 @@ func (s *LeaseState) incRefcountLocked() {
 type LeaseStore struct {
 	db     client.DB
 	clock  *hlc.Clock
-	nodeID uint32
+	nodeID *base.NodeIDContainer
 
 	testingKnobs LeaseStoreTestingKnobs
 }
@@ -190,10 +190,14 @@ func (s LeaseStore) Acquire(
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
 	err = s.db.Txn(txn.Context, func(txn *client.Txn) error {
+		nodeID := s.nodeID.Get()
+		if nodeID == 0 {
+			panic("zero nodeID")
+		}
 		p := makeInternalPlanner("lease-insert", txn, security.RootUser)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		count, err := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
+		count, err := p.exec(insertLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
 		if err != nil {
 			return err
 		}
@@ -211,10 +215,14 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 		if log.V(2) {
 			log.Infof(txn.Context, "LeaseStore releasing lease %s", lease)
 		}
+		nodeID := s.nodeID.Get()
+		if nodeID == 0 {
+			panic("zero nodeID")
+		}
 		p := makeInternalPlanner("lease-release", txn, security.RootUser)
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
+		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
 		if err != nil {
 			return err
 		}
@@ -942,7 +950,7 @@ type LeaseManager struct {
 //
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
-	nodeID uint32,
+	nodeID *base.NodeIDContainer,
 	db client.DB,
 	clock *hlc.Clock,
 	testingKnobs LeaseManagerTestingKnobs,
