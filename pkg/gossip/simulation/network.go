@@ -103,9 +103,7 @@ func (n *Network) CreateNode() (*Node, error) {
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.New(
-		log.AmbientContext{}, n.rpcContext, server, nil, n.Stopper, node.Registry,
-	)
+	node.Gossip = gossip.NewTest(0, n.rpcContext, server, nil, n.Stopper, node.Registry)
 	n.Stopper.RunWorker(func() {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
@@ -123,9 +121,9 @@ func (n *Network) StartNode(node *Node) error {
 	node.Gossip.Start(node.Addr())
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
-	node.Gossip.SetNodeID(n.nodeIDAllocator)
+	node.Gossip.NodeID.Set(context.TODO(), n.nodeIDAllocator)
 	if err := node.Gossip.SetNodeDescriptor(&roachpb.NodeDescriptor{
-		NodeID:  node.Gossip.GetNodeID(),
+		NodeID:  node.Gossip.NodeID.Get(),
 		Address: util.MakeUnresolvedAddr(node.Addr().Network(), node.Addr().String()),
 	}); err != nil {
 		return err
@@ -144,7 +142,7 @@ func (n *Network) StartNode(node *Node) error {
 // provided node ID, or nil if there is no such node.
 func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 	for _, node := range n.Nodes {
-		if node.Gossip.GetNodeID() == nodeID {
+		if node.Gossip.NodeID.Get() == nodeID {
 			return node, true
 		}
 	}
@@ -240,7 +238,7 @@ func (n *Network) RunUntilFullyConnected() int {
 func (n *Network) isNetworkConnected() bool {
 	for _, leftNode := range n.Nodes {
 		for _, rightNode := range n.Nodes {
-			if _, err := leftNode.Gossip.GetInfo(gossip.MakeNodeIDKey(rightNode.Gossip.GetNodeID())); err != nil {
+			if _, err := leftNode.Gossip.GetInfo(gossip.MakeNodeIDKey(rightNode.Gossip.NodeID.Get())); err != nil {
 				return false
 			}
 		}

@@ -72,13 +72,14 @@ func createTestNode(
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCfg := makeTestConfig()
-	g := gossip.New(
-		log.AmbientContext{},
+	g := gossip.NewTest(
+		0,
 		nodeRPCContext,
 		grpcServer,
 		serverCfg.GossipBootstrapResolvers,
 		stopper,
-		metric.NewRegistry())
+		metric.NewRegistry(),
+	)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)

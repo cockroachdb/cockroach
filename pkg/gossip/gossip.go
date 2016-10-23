@@ -70,6 +70,7 @@ import (
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -196,8 +197,12 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
+// The higher level manages the NodeIDContainer instance (which can be shared by
+// various server components). The ambient context is expected to already
+// contain the node ID.
 func New(
 	ambient log.AmbientContext,
+	nodeID *base.NodeIDContainer,
 	rpcContext *rpc.Context,
 	grpcServer *grpc.Server,
 	resolvers []resolver.Resolver,
@@ -206,7 +211,7 @@ func New(
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
-		server:            newServer(ambient, stopper, registry),
+		server:            newServer(ambient, nodeID, stopper, registry),
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
@@ -245,36 +250,29 @@ func New(
 	return g
 }
 
+// NewTest is a simplified wrapper around New that creates the NodeIDContainer
+// internally. Used for testing.
+func NewTest(
+	nodeID roachpb.NodeID,
+	rpcContext *rpc.Context,
+	grpcServer *grpc.Server,
+	resolvers []resolver.Resolver,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+) *Gossip {
+	n := &base.NodeIDContainer{}
+	var ac log.AmbientContext
+	ac.AddLogTag("n", n)
+	gossip := New(ac, n, rpcContext, grpcServer, resolvers, stopper, registry)
+	if nodeID != 0 {
+		n.Set(context.TODO(), nodeID)
+	}
+	return gossip
+}
+
 // GetNodeMetrics returns the gossip node metrics.
 func (g *Gossip) GetNodeMetrics() *Metrics {
 	return g.server.GetNodeMetrics()
-}
-
-// GetNodeID returns the instance's saved node ID.
-func (g *Gossip) GetNodeID() roachpb.NodeID {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.mu.is.NodeID
-}
-
-// SetNodeID sets the infostore's node ID.
-func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.mu.is.NodeID != 0 && g.mu.is.NodeID != nodeID {
-		panic(fmt.Sprintf("different node IDs were set for the same gossip instance (%d, %d)", g.mu.is.NodeID, nodeID))
-	}
-	g.mu.is.NodeID = nodeID
-	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "NodeID set to %d", nodeID)
-}
-
-// ResetNodeID resets the infostore's node ID.
-// NOTE: use only from unittests.
-func (g *Gossip) ResetNodeID(nodeID roachpb.NodeID) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.mu.is.NodeID = nodeID
 }
 
 // SetNodeDescriptor adds the node descriptor to the gossip network
@@ -906,7 +904,7 @@ func (g *Gossip) bootstrap() {
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
 					if addr := g.getNextBootstrapAddress(); addr != nil {
-						g.startClient(addr, g.mu.is.NodeID)
+						g.startClient(addr, g.NodeID.Get())
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
 						for addr := range g.bootstrapping {
@@ -1027,7 +1025,7 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 		} else {
 			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
-			g.startClient(nodeAddr, g.mu.is.NodeID)
+			g.startClient(nodeAddr, g.NodeID.Get())
 		}
 	}
 }
@@ -1039,7 +1037,7 @@ func (g *Gossip) doDisconnected(c *client) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr, g.mu.is.NodeID)
+		g.startClient(c.forwardAddr, g.NodeID.Get())
 	}
 	g.maybeSignalStatusChangeLocked()
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -65,10 +66,10 @@ type callback struct {
 type infoStore struct {
 	log.AmbientContext
 
+	nodeID  *base.NodeIDContainer
 	stopper *stop.Stopper
 
 	Infos           infoMap                  `json:"infos,omitempty"` // Map from key to info
-	NodeID          roachpb.NodeID           `json:"-"`               // Owning node's ID
 	NodeAddr        util.UnresolvedAddr      `json:"-"`               // Address of node owning this info store: "host:port"
 	highWaterStamps map[roachpb.NodeID]int64 // Per-node information for gossip peers
 	callbacks       []*callback
@@ -128,15 +129,15 @@ func (is *infoStore) String() string {
 // newInfoStore allocates and returns a new infoStore.
 func newInfoStore(
 	ambient log.AmbientContext,
-	nodeID roachpb.NodeID,
+	nodeID *base.NodeIDContainer,
 	nodeAddr util.UnresolvedAddr,
 	stopper *stop.Stopper,
 ) *infoStore {
 	return &infoStore{
 		AmbientContext:  ambient,
+		nodeID:          nodeID,
 		stopper:         stopper,
 		Infos:           make(infoMap),
-		NodeID:          nodeID,
 		NodeAddr:        nodeAddr,
 		highWaterStamps: map[roachpb.NodeID]int64{},
 	}
@@ -145,7 +146,8 @@ func newInfoStore(
 // newInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
 func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
-	if is.NodeID == 0 {
+	nodeID := is.nodeID.Get()
+	if nodeID == 0 {
 		panic("gossip infostore's NodeID is 0")
 	}
 	now := monotonicUnixNano()
@@ -157,7 +159,7 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 	return &Info{
 		Value:    v,
 		TTLStamp: ttlStamp,
-		NodeID:   is.NodeID,
+		NodeID:   nodeID,
 	}
 }
 

@@ -75,8 +75,7 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	// Must align to 8-bytes for atomic int64 updates.
-	nodeLogTagVal log.DynamicIntValue
+	nodeIDContainer base.NodeIDContainer
 
 	cfg            Config
 	mux            *http.ServeMux
@@ -141,8 +140,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// update the value asynchronously. It's not significantly more expensive than
 	// a regular tag since it's just doing an (atomic) load when a log/trace
 	// message is constructed.
-	s.nodeLogTagVal.Set(log.DynamicIntValueUnknown)
-	s.cfg.AmbientCtx.AddLogTag("n", &s.nodeLogTagVal)
+	s.cfg.AmbientCtx.AddLogTag("n", &s.nodeIDContainer)
 
 	ctx := s.AnnotateCtx(context.Background())
 	// TODO(radu): this will go away when we pass AmbientContext into all
@@ -165,7 +163,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.registry = metric.NewRegistry()
 	s.gossip = gossip.New(
-		s.cfg.AmbientCtx, s.rpcContext, s.grpc, s.cfg.GossipBootstrapResolvers, s.stopper, s.registry,
+		s.cfg.AmbientCtx,
+		&s.nodeIDContainer,
+		s.rpcContext,
+		s.grpc,
+		s.cfg.GossipBootstrapResolvers,
+		s.stopper,
+		s.registry,
 	)
 	s.storePool = storage.NewStorePool(
 		s.cfg.AmbientCtx,
@@ -539,10 +543,6 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "started node")
 
 	s.nodeLiveness.StartHeartbeat(ctx, s.stopper)
-
-	// Set the NodeID in the base context (which was inherited by the
-	// various components of the server).
-	s.nodeLogTagVal.Set(int64(s.node.Descriptor.NodeID))
 
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)

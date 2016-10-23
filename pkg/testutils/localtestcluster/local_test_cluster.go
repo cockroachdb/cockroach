@@ -83,22 +83,25 @@ type InitSenderFn func(
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSender InitSenderFn) {
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	nc := &base.NodeIDContainer{}
+	ambient.AddLogTag("n", nc)
+
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
-	tracer := tracing.NewTracer()
+
 	ltc.tester = t
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(log.AmbientContext{}, baseCtx, ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	ltc.Gossip = gossip.New(
-		log.AmbientContext{}, rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
+	ltc.Gossip = gossip.New(ambient, nc, rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
-	ltc.Stores = storage.NewStores(log.AmbientContext{}, ltc.Clock)
+	ltc.Stores = storage.NewStores(ambient, ltc.Clock)
 
-	ltc.Sender = initSender(nodeDesc, tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
+	ltc.Sender = initSender(nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
 		ltc.Gossip)
 	if ltc.DBContext == nil {
 		dbCtx := client.DefaultDBContext()
@@ -110,7 +113,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
-	cfg.AmbientCtx.Tracer = tracer
+	cfg.AmbientCtx = ambient
 	cfg.Clock = ltc.Clock
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
@@ -127,7 +130,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	if err := ltc.Store.Start(context.Background(), ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	ltc.Gossip.SetNodeID(nodeDesc.NodeID)
+	nc.Set(context.TODO(), nodeDesc.NodeID)
 	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatalf("unable to set node descriptor: %s", err)
 	}
