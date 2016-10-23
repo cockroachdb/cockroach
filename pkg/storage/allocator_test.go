@@ -1163,9 +1163,7 @@ func Example_rebalancing() {
 	// randomly adding / removing stores and adding bytes.
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
+	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	sp := NewStorePool(
 		log.AmbientContext{},
 		g,

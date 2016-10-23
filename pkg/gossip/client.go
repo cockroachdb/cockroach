@@ -153,7 +153,7 @@ func (c *client) close() {
 func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	args := &Request{
-		NodeID:          g.mu.is.NodeID,
+		NodeID:          g.NodeID.Get(),
 		Addr:            g.mu.is.NodeAddr,
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 	}
@@ -172,7 +172,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
 		args := Request{
-			NodeID:          g.mu.is.NodeID,
+			NodeID:          g.NodeID.Get(),
 			Addr:            g.mu.is.NodeAddr,
 			Delta:           delta,
 			HighWaterStamps: g.mu.is.getHighWaterStamps(),
@@ -253,9 +253,9 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	// Check whether this outgoing client is duplicating work already
 	// being done by an incoming client, either because an outgoing
 	// matches an incoming or the client is connecting to itself.
-	if g.mu.is.NodeID == c.peerID {
+	if nodeID := g.NodeID.Get(); nodeID == c.peerID {
 		return errors.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
-	} else if g.hasIncomingLocked(c.peerID) && g.mu.is.NodeID > c.peerID {
+	} else if g.hasIncomingLocked(c.peerID) && nodeID > c.peerID {
 		// To avoid mutual shutdown, we only shutdown our client if our
 		// node ID is higher than the peer's.
 		return errors.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)

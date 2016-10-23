@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"sort"
 	"text/tabwriter"
@@ -78,10 +79,9 @@ func createCluster(
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext)
-	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
-	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
-	// instance to prevent conflicts with real NodeIDs.
-	g.SetNodeID(-1)
+	// We set the node ID to MaxInt32 for the cluster Gossip instance to prevent
+	// conflicts with real node IDs.
+	g := gossip.NewTest(math.MaxInt32, rpcContext, server, nil, stopper, metric.NewRegistry())
 	storePool := storage.NewStorePool(
 		log.AmbientContext{},
 		g,

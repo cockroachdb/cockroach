@@ -17,10 +17,6 @@
 package log
 
 import (
-	"math"
-	"strconv"
-	"sync/atomic"
-
 	otlog "github.com/opentracing/opentracing-go/log"
 
 	"golang.org/x/net/context"
@@ -162,26 +158,4 @@ func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
 		return copyTagChain(ctx, bottomTag)
 	}
 	return ctx
-}
-
-// DynamicIntValue is a helper type that allows using a "dynamic" int32 value
-// for a log tag.
-type DynamicIntValue struct {
-	value int64
-}
-
-// DynamicIntValueUnknown can be used with Set; it makes the value "?".
-const DynamicIntValueUnknown = math.MinInt64
-
-func (dv *DynamicIntValue) String() string {
-	val := atomic.LoadInt64(&dv.value)
-	if val == math.MinInt64 {
-		return "?"
-	}
-	return strconv.FormatInt(val, 10)
-}
-
-// Set changes the value returned by String().
-func (dv *DynamicIntValue) Set(newVal int64) {
-	atomic.StoreInt64(&dv.value, newVal)
 }
