@@ -744,7 +744,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					log.Info(context.TODO(), "received a new config")
 				}
 				schemaChanger := SchemaChanger{
-					nodeID:       roachpb.NodeID(s.leaseMgr.nodeID),
+					nodeID:       s.leaseMgr.nodeID.Get(),
 					db:           s.db,
 					leaseMgr:     s.leaseMgr,
 					testingKnobs: s.testingKnobs,
