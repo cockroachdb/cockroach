@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -159,7 +158,6 @@ type ResultColumns []ResultColumn
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
-	nodeID         roachpb.NodeID
 	cfg            ExecutorConfig
 	reCache        *parser.RegexpCache
 	virtualSchemas virtualSchemaHolder
@@ -197,6 +195,7 @@ type Executor struct {
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
 	AmbientCtx   log.AmbientContext
+	NodeID       *base.NodeIDContainer
 	DB           *client.DB
 	Gossip       *gossip.Gossip
 	LeaseManager *LeaseManager
@@ -306,13 +305,6 @@ func NewDummyExecutor() *Executor {
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (e *Executor) AnnotateCtx(ctx context.Context) context.Context {
 	return e.cfg.AmbientCtx.AnnotateCtx(ctx)
-}
-
-// SetNodeID sets the node ID for the SQL server. This method must be called
-// before actually using the Executor.
-func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
-	e.nodeID = nodeID
-	e.cfg.LeaseManager.nodeID = uint32(nodeID)
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
