@@ -1360,12 +1360,16 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return err
 	}
 
-	// If we're bootstrapping the store we can campaign idle replicas
-	// immediately. This primarily affects tests.
+	s.Bootstrapped()
+	return nil
+}
+
+// Bootstrapped tells the store that it was bootstrapped and allows the store
+// to campaign idle replicas immediately. This primarily affects tests.
+func (s *Store) Bootstrapped() {
 	s.idleReplicaElectionTime.Lock()
 	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
 	s.idleReplicaElectionTime.Unlock()
-	return nil
 }
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
