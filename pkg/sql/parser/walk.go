@@ -135,7 +135,7 @@ func (expr *AnnotateTypeExpr) Walk(v Visitor) Expr {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *CoalesceExpr) CopyNode() *CoalesceExpr {
 	exprCopy := *expr
-	exprCopy.Exprs = Exprs(append([]Expr(nil), exprCopy.Exprs...))
+	exprCopy.Exprs = append(Exprs(nil), exprCopy.Exprs...)
 	return &exprCopy
 }
 
@@ -181,9 +181,9 @@ func (expr *ExistsExpr) Walk(v Visitor) Expr {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy := *expr
-	exprCopy.Exprs = Exprs(append([]Expr(nil), exprCopy.Exprs...))
+	exprCopy.Exprs = append(Exprs(nil), exprCopy.Exprs...)
 	if windowDef := exprCopy.WindowDef; windowDef != nil {
-		windowDef.Partitions = Exprs(append([]Expr(nil), windowDef.Partitions...))
+		windowDef.Partitions = append(Exprs(nil), windowDef.Partitions...)
 	}
 	return &exprCopy
 }
@@ -463,7 +463,7 @@ func (stmt *Delete) CopyNode() *Delete {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
-	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
+	stmtCopy.Returning = append(ReturningExprs(nil), stmt.Returning...)
 	return &stmtCopy
 }
 
@@ -509,7 +509,7 @@ func (stmt *Explain) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Insert) CopyNode() *Insert {
 	stmtCopy := *stmt
-	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
+	stmtCopy.Returning = append(ReturningExprs(nil), stmt.Returning...)
 	return &stmtCopy
 }
 
@@ -612,16 +612,16 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *SelectClause) CopyNode() *SelectClause {
 	stmtCopy := *stmt
-	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
+	stmtCopy.Exprs = append(SelectExprs(nil), stmt.Exprs...)
 	stmtCopy.From = &From{
-		Tables: TableExprs(append([]TableExpr(nil), stmt.From.Tables...)),
+		Tables: append(TableExprs(nil), stmt.From.Tables...),
 		AsOf:   stmt.From.AsOf,
 	}
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
-	stmtCopy.GroupBy = GroupBy(append([]Expr(nil), stmt.GroupBy...))
+	stmtCopy.GroupBy = append(GroupBy(nil), stmt.GroupBy...)
 	if stmt.Having != nil {
 		hCopy := *stmt.Having
 		stmtCopy.Having = &hCopy
@@ -709,7 +709,7 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Set) CopyNode() *Set {
 	stmtCopy := *stmt
-	stmtCopy.Values = Exprs(append([]Expr(nil), stmt.Values...))
+	stmtCopy.Values = append(Exprs(nil), stmt.Values...)
 	return &stmtCopy
 }
 
@@ -731,7 +731,7 @@ func (stmt *Set) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Update) CopyNode() *Update {
 	stmtCopy := *stmt
-	stmtCopy.Exprs = UpdateExprs(make([]*UpdateExpr, len(stmt.Exprs)))
+	stmtCopy.Exprs = make(UpdateExprs, len(stmt.Exprs))
 	for i, e := range stmt.Exprs {
 		eCopy := *e
 		stmtCopy.Exprs[i] = &eCopy
@@ -740,7 +740,7 @@ func (stmt *Update) CopyNode() *Update {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
-	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
+	stmtCopy.Returning = append(ReturningExprs(nil), stmt.Returning...)
 	return &stmtCopy
 }
 
