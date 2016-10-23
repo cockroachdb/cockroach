@@ -1171,8 +1171,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
 					now := s.Clock().Now()
-					txn.UpdateObservedTimestamp(
-						s.(*server.TestServer).Gossip().GetNodeID(), now)
+					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
 					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
 				}
 			}
