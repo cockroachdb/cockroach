@@ -145,12 +145,11 @@ type Storage interface {
 // During bootstrapping, the bootstrap list contains candidates for
 // entry to the gossip network.
 type Gossip struct {
-	log.AmbientContext
+	*server // Embedded gossip RPC server
 
 	Connected     chan struct{}       // Closed upon initial connection
 	hasConnected  bool                // Set first time network is connected
 	rpcContext    *rpc.Context        // The context required for RPC
-	*server                           // Embedded gossip RPC server
 	outgoing      nodeSet             // Set of outgoing client node IDs
 	storage       Storage             // Persistent storage interface
 	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
@@ -207,10 +206,9 @@ func New(
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
-		AmbientContext:    ambient,
+		server:            newServer(ambient, stopper, registry),
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
-		server:            newServer(ambient, stopper, registry),
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
 		disconnected:      make(chan *client, 10),
@@ -223,7 +221,7 @@ func New(
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
 	stopper.AddCloser(stop.CloserFn(func() {
-		g.AmbientContext.FinishEventLog()
+		g.server.AmbientContext.FinishEventLog()
 	}))
 
 	registry.AddMetric(g.outgoing.gauge)
@@ -1122,7 +1120,7 @@ func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
 	}
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Eventf(ctx, "starting new client to %s", addr)
-	c := newClient(g.AmbientContext, addr, g.serverMetrics)
+	c := newClient(g.server.AmbientContext, addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID, breaker)
 }
