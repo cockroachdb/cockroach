@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,6 +46,8 @@ type serverInfo struct {
 // newly arrived information on a periodic basis.
 type server struct {
 	log.AmbientContext
+
+	NodeID *base.NodeIDContainer
 
 	stopper *stop.Stopper
 
@@ -70,17 +73,21 @@ type server struct {
 
 // newServer creates and returns a server struct.
 func newServer(
-	ambient log.AmbientContext, stopper *stop.Stopper, registry *metric.Registry,
+	ambient log.AmbientContext,
+	nodeID *base.NodeIDContainer,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
 ) *server {
 	s := &server{
 		AmbientContext: ambient,
+		NodeID:         nodeID,
 		stopper:        stopper,
 		tighten:        make(chan roachpb.NodeID, 1),
 		nodeMetrics:    makeMetrics(),
 		serverMetrics:  makeMetrics(),
 	}
 
-	s.mu.is = newInfoStore(s.AmbientContext, 0, util.UnresolvedAddr{}, stopper)
+	s.mu.is = newInfoStore(s.AmbientContext, nodeID, util.UnresolvedAddr{}, stopper)
 	s.mu.incoming = makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge))
 	s.mu.nodeMap = make(map[util.UnresolvedAddr]serverInfo)
 	s.mu.ready = make(chan struct{})
@@ -166,7 +173,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			}
 
 			*reply = Response{
-				NodeID:          s.mu.is.NodeID,
+				NodeID:          s.NodeID.Get(),
 				HighWaterStamps: s.mu.is.getHighWaterStamps(),
 				Delta:           delta,
 			}
@@ -208,7 +215,7 @@ func (s *server) gossipReceiver(
 		if args.NodeID != 0 {
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
-			if args.NodeID == s.mu.is.NodeID {
+			if args.NodeID == s.NodeID.Get() {
 				// This is an incoming loopback connection which should be closed by
 				// the client.
 				if log.V(2) {
@@ -256,7 +263,7 @@ func (s *server) gossipReceiver(
 					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
-					NodeID:          s.mu.is.NodeID,
+					NodeID:          s.NodeID.Get(),
 					AlternateAddr:   &alternateAddr,
 					AlternateNodeID: alternateNodeID,
 				}
@@ -295,7 +302,7 @@ func (s *server) gossipReceiver(
 		s.maybeTightenLocked()
 
 		*reply = Response{
-			NodeID:          s.mu.is.NodeID,
+			NodeID:          s.NodeID.Get(),
 			HighWaterStamps: s.mu.is.getHighWaterStamps(),
 		}
 
