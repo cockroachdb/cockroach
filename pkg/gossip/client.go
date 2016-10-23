@@ -188,15 +188,9 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 		if log.V(1) {
 			ctx := c.AnnotateCtx(stream.Context())
 			if c.peerID != 0 {
-				log.Infof(
-					ctx, "node %d: sending %s to node %d (%s)",
-					g.mu.is.NodeID, extractKeys(args.Delta), c.peerID, c.addr,
-				)
+				log.Infof(ctx, "sending %s to node %d (%s)", extractKeys(args.Delta), c.peerID, c.addr)
 			} else {
-				log.Infof(
-					ctx, "node %d: sending %s to %s",
-					g.mu.is.NodeID, extractKeys(args.Delta), c.addr,
-				)
+				log.Infof(ctx, "sending %s to %s", extractKeys(args.Delta), c.addr)
 			}
 		}
 
@@ -224,11 +218,11 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	if reply.Delta != nil {
 		freshCount, err := g.mu.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(ctx, "node %d: failed to fully combine delta from node %d: %s", g.mu.is.NodeID, reply.NodeID, err)
+			log.Warningf(ctx, "failed to fully combine delta from node %d: %s", reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(ctx, "node %d: received %s from node %d (%d fresh)", g.mu.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(ctx, "received %s from node %d (%d fresh)", extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTightenLocked()
