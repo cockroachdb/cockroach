@@ -235,7 +235,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if cfg.TestingKnobs.SQLLeaseManager != nil {
 		lmKnobs = *cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
-	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs, s.stopper)
+	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs, s.stopper)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Set up the DistSQL server
@@ -251,6 +251,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
 		AmbientCtx:            s.cfg.AmbientCtx,
+		NodeID:                &s.nodeIDContainer,
 		DB:                    s.db,
 		Gossip:                s.gossip,
 		LeaseManager:          s.leaseMgr,
@@ -558,8 +559,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Begin recording status summaries.
 	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
-
-	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.

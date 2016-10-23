@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	csql "github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -169,8 +170,10 @@ func (t *leaseTest) mustPublish(nodeID uint32, descID sqlbase.ID) {
 func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 	mgr := t.nodes[nodeID]
 	if mgr == nil {
+		nc := &base.NodeIDContainer{}
+		nc.Set(context.TODO(), roachpb.NodeID(nodeID))
 		mgr = csql.NewLeaseManager(
-			nodeID, *t.kvDB,
+			nc, *t.kvDB,
 			t.server.Clock(),
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
