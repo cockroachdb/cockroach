@@ -116,7 +116,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 			t = t.CopyNode()
 			t.Exprs[0] = parser.StarDatumInstance
-			return false, t
+			return true, t
 		}
 		return true, t
 

@@ -315,6 +315,16 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			expr.Name, expr.Name, strings.Join(typeNames, ", "), desStr)
 	}
 
+	if expr.WindowDef != nil {
+		for i, partition := range expr.WindowDef.Partitions {
+			typedPartition, err := partition.TypeCheck(ctx, NoTypePreference)
+			if err != nil {
+				return nil, err
+			}
+			expr.WindowDef.Partitions[i] = typedPartition
+		}
+	}
+
 	builtin := fn.(Builtin)
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
