@@ -1023,11 +1023,9 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 	if g.outgoing.hasSpace() {
 		ctx := g.AnnotateCtx(context.TODO())
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(ctx, "node %d: unable to get address for node %d: %s",
-				g.mu.is.NodeID, distantNodeID, err)
+			log.Errorf(ctx, "unable to get address for node %d: %s", distantNodeID, err)
 		} else {
-			log.Infof(ctx, "node %d: starting client to distant node %d to tighten network graph",
-				g.mu.is.NodeID, distantNodeID)
+			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
 			g.startClient(nodeAddr, g.mu.is.NodeID)
 		}
