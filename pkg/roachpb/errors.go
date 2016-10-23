@@ -49,15 +49,6 @@ func (e *RetryableTxnError) Error() string {
 
 var _ error = &RetryableTxnError{}
 
-// ResponseWithError is a tuple of a BatchResponse and an error. It is used to
-// pass around a BatchResponse with its associated error where that
-// entanglement is necessary (e.g. channels, methods that need to return
-// another error in addition to this one).
-type ResponseWithError struct {
-	Reply *BatchResponse
-	Err   *Error
-}
-
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
 // a roachpb.BatchResponse) unexpectedly has Error set in its response header.
 func ErrorUnexpectedlySet(culprit, response interface{}) string {
