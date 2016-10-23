@@ -161,8 +161,8 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(ctx, "node %d: returning %d info(s) to node %d: %s",
-					s.mu.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
+				log.Infof(ctx, "returning %d info(s) to node %d: %s",
+					infoCount, args.NodeID, extractKeys(delta))
 			}
 
 			*reply = Response{
@@ -212,19 +212,16 @@ func (s *server) gossipReceiver(
 				// This is an incoming loopback connection which should be closed by
 				// the client.
 				if log.V(2) {
-					log.Infof(ctx, "node %d: ignoring gossip from node %d (loopback)",
-						s.mu.is.NodeID, args.NodeID)
+					log.Infof(ctx, "ignoring gossip from node %d (loopback)", args.NodeID)
 				}
 			} else if s.mu.incoming.hasNode(args.NodeID) {
 				// Do nothing.
 				if log.V(2) {
-					log.Infof(ctx, "node %d: gossip received from node %d",
-						s.mu.is.NodeID, args.NodeID)
+					log.Infof(ctx, "gossip received from node %d", args.NodeID)
 				}
 			} else if s.mu.incoming.hasSpace() {
 				if log.V(2) {
-					log.Infof(ctx, "node %d: adding node %d to incoming set",
-						s.mu.is.NodeID, args.NodeID)
+					log.Infof(ctx, "adding node %d to incoming set", args.NodeID)
 				}
 
 				s.mu.incoming.addNode(args.NodeID)
@@ -235,8 +232,7 @@ func (s *server) gossipReceiver(
 
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
 					if log.V(2) {
-						log.Infof(ctx, "node %d: removing node %d from incoming set",
-							s.mu.is.NodeID, args.NodeID)
+						log.Infof(ctx, "removing node %d from incoming set", args.NodeID)
 					}
 
 					s.mu.incoming.removeNode(nodeID)
@@ -256,8 +252,8 @@ func (s *server) gossipReceiver(
 					altIdx--
 				}
 
-				log.Infof(ctx, "node %d: refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-					s.mu.is.NodeID, args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
+				log.Infof(ctx, "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
 					NodeID:          s.mu.is.NodeID,
@@ -279,7 +275,7 @@ func (s *server) gossipReceiver(
 				}
 			}
 		} else {
-			log.Infof(ctx, "node %d: received gossip from unknown node", s.mu.is.NodeID)
+			log.Info(ctx, "received gossip from unknown node")
 		}
 
 		bytesReceived := int64(args.Size())
@@ -291,10 +287,10 @@ func (s *server) gossipReceiver(
 
 		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {
-			log.Warningf(ctx, "node %d: failed to fully combine gossip delta from node %d: %s", s.mu.is.NodeID, args.NodeID, err)
+			log.Warningf(ctx, "failed to fully combine gossip delta from node %d: %s", args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof(ctx, "node %d: received %s from node %d (%d fresh)", s.mu.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Infof(ctx, "received %s from node %d (%d fresh)", extractKeys(args.Delta), args.NodeID, freshCount)
 		}
 		s.maybeTightenLocked()
 
@@ -336,15 +332,14 @@ func (s *server) maybeTightenLocked() {
 	ctx := s.AnnotateCtx(context.TODO())
 	distantNodeID, distantHops := s.mu.is.mostDistant()
 	if log.V(2) {
-		log.Infof(ctx, "node %d: distantHops: %d from %d",
-			s.mu.is.NodeID, distantHops, distantNodeID)
+		log.Infof(ctx, "distantHops: %d from %d", distantHops, distantNodeID)
 	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
 			if log.V(1) {
-				log.Infof(ctx, "node %d: if possible, tightening network to node %d (%d > %d)",
-					s.mu.is.NodeID, distantNodeID, distantHops, MaxHops)
+				log.Infof(ctx, "if possible, tightening network to node %d (%d > %d)",
+					distantNodeID, distantHops, MaxHops)
 			}
 		default:
 			// Do nothing.
