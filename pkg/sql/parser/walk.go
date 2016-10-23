@@ -182,6 +182,9 @@ func (expr *ExistsExpr) Walk(v Visitor) Expr {
 func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy := *expr
 	exprCopy.Exprs = Exprs(append([]Expr(nil), exprCopy.Exprs...))
+	if windowDef := exprCopy.WindowDef; windowDef != nil {
+		windowDef.Partitions = Exprs(append([]Expr(nil), windowDef.Partitions...))
+	}
 	return &exprCopy
 }
 
@@ -195,6 +198,17 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 				ret = expr.CopyNode()
 			}
 			ret.Exprs[i] = e
+		}
+	}
+	if expr.WindowDef != nil {
+		for i := range expr.WindowDef.Partitions {
+			e, changed := WalkExpr(v, expr.WindowDef.Partitions[i])
+			if changed {
+				if ret == expr {
+					ret = expr.CopyNode()
+				}
+				ret.WindowDef.Partitions[i] = e
+			}
 		}
 	}
 	return ret
