@@ -78,7 +78,7 @@ github.com/kr/pretty cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 github.com/kr/text 7cafcd837844e784b526369c9bce262804aebc60
 github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 github.com/lib/pq ae8357db35d721c58dcdc911318b55bef6b1b001
-github.com/lightstep/lightstep-tracer-go 7e238cc7deca88342f9fb7875ffc97cc450e6607
+github.com/lightstep/lightstep-tracer-go 91ae78ce073799b6a40e303d7dec6cc3a4257915
 github.com/mattn/go-isatty 66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8
 github.com/mattn/go-runewidth 737072b4e32b7a5018b4a7125da8d12de90e8045
 github.com/mattn/goveralls edf7508a2bcb40ec1160e94518c983c2fc169f02
