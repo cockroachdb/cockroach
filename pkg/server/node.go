@@ -339,7 +339,7 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(ctx, engines, n.stopper); err != nil {
+	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
 		if err == errNeedsBootstrap {
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
@@ -351,7 +351,7 @@ func (n *Node) start(
 			log.Infof(ctx, "**** cluster %s has been created", clusterID)
 			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", addr)
 			// After bootstrapping, try again to initialize the stores.
-			if err := n.initStores(ctx, engines, n.stopper); err != nil {
+			if err := n.initStores(ctx, engines, n.stopper, true); err != nil {
 				return err
 			}
 		} else {
@@ -402,7 +402,7 @@ func (n *Node) SetDraining(drain bool) error {
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
 func (n *Node) initStores(
-	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper,
+	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper, bootstrapped bool,
 ) error {
 	var bootstraps []*storage.Store
 
@@ -412,6 +412,9 @@ func (n *Node) initStores(
 	for _, e := range engines {
 		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
 		log.Eventf(ctx, "created store for engine: %s", e)
+		if bootstrapped {
+			s.NotifyBootstrapped()
+		}
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(ctx, stopper); err != nil {
