@@ -90,6 +90,7 @@ Type: \q to exit (Ctrl+C/Ctrl+D also supported)
   \| CMD            run an external command and run its output as SQL statements.
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
   \unset NAME       unset a flag.
+  \show             during a multi-line statement or transaction, show the SQL entered so far.
   \? or "help"      print this help.
 
 More documentation about our SQL dialect is available online:
@@ -157,39 +158,47 @@ func handleInputLine(
 			printCliHelp()
 			return cliNextLine, false, true, false
 		}
+	}
 
-		if len(line) > 0 && line[0] == '\\' {
-			// Client-side commands: process locally.
+	if len(line) > 0 && line[0] == '\\' && (isInteractive || len(*stmt) == 0) {
+		// Client-side commands: process locally.
 
-			addHistory(ins, line)
+		addHistory(ins, line)
 
-			cmd := strings.Fields(line)
-			switch cmd[0] {
-			case `\q`:
-				return cliExit, false, true, false
-			case `\!`:
-				return runSyscmd(line), false, true, false
-			case `\|`:
-				status = pipeSyscmd(stmt, line)
-				isEmpty, endsWithSemi, hasSet = isEndOfStatement(syntax, stmt)
-				return status, hasSet, isEmpty, endsWithSemi
-			case `\`, `\?`:
-				printCliHelp()
-			case `\set`:
-				handleSet(cmd[1:])
-			case `\unset`:
-				handleUnset(cmd[1:])
-			default:
-				fmt.Fprintf(osStderr, "Invalid command: %s. Try \\? for help.\n", line)
+		cmd := strings.Fields(line)
+		switch cmd[0] {
+		case `\q`:
+			return cliExit, false, true, false
+		case `\!`:
+			return runSyscmd(line), false, true, false
+		case `\|`:
+			status = pipeSyscmd(stmt, line)
+			isEmpty, endsWithSemi, hasSet = isEndOfStatement(syntax, stmt)
+			return status, hasSet, isEmpty, endsWithSemi
+		case `\`, `\?`:
+			printCliHelp()
+		case `\set`:
+			handleSet(cmd[1:])
+		case `\unset`:
+			handleUnset(cmd[1:])
+		case `\show`:
+			if len(*stmt) == 0 {
+				fmt.Fprintf(osStderr, "No input so far. Did you mean SHOW?\n")
+			} else {
+				for _, s := range *stmt {
+					fmt.Println(s)
+				}
 			}
-
-			if strings.HasPrefix(line, `\d`) {
-				// Unrecognized command for now, but we want to be helpful.
-				fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
-			}
-
-			return cliNextLine, false, true, false
+		default:
+			fmt.Fprintf(osStderr, "Invalid command: %s. Try \\? for help.\n", line)
 		}
+
+		if strings.HasPrefix(line, `\d`) {
+			// Unrecognized command for now, but we want to be helpful.
+			fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
+		}
+
+		return cliNextLine, false, true, false
 	}
 
 	*stmt = append(*stmt, line)
@@ -295,6 +304,22 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 	return fullPrompt, continuePrompt
 }
 
+// checkStatements counts the statements and returns true if its
+// argument ends with an incomplete transaction prefix (BEGIN without
+// ROLLBACK/COMMIT).
+func checkStatements(stmts parser.StatementList) (int, bool) {
+	txnStarted := false
+	for _, stmt := range stmts {
+		switch stmt.(type) {
+		case *parser.BeginTransaction:
+			txnStarted = true
+		case *parser.CommitTransaction, *parser.RollbackTransaction:
+			txnStarted = false
+		}
+	}
+	return len(stmts), txnStarted
+}
+
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachdb_history")
 
 // runInteractive runs the SQL client interactively, presenting
@@ -336,6 +361,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 	var stmt []string
 	syntax := parser.Traditional
+	partialTxnStmtCount := 0
 
 	for isFinished := false; !isFinished; {
 		if isInteractive {
@@ -373,8 +399,11 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		if status == cliExit {
 			break
 		}
-		if isEmpty || (status == cliNextLine && !isFinished) {
-			// Ask for more input unless we reached EOF.
+		if (partialTxnStmtCount == 0 && isEmpty) || (status == cliNextLine && !isFinished) {
+			// If a partial txn was started earlier, we want to catch the empty line
+			// as user command to send the prefix so far to the server, so we handle
+			// the empty line below in that case.
+			// Otherwise, ask for more input unless we reached EOF.
 			continue
 		}
 		if isFinished && len(stmt) == 0 {
@@ -401,30 +430,67 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			return fmt.Errorf("last statement was not executed")
 		}
 
-		// Clear the saved statement.
-		stmt = stmt[:0]
-
-		skipStmt := false
+		continueEntry := false
 		exitIfErr, _ := options["errexit"]
+		historyLine := fullStmt
 
 		// If client-side syntax checking is enabled, parse the statement
 		// before sending it to the server. If it fails to parse, inform
 		// the user then stop processing if the `errexit` option is set.
-		// Otherwise, pretty-print the resulting AST to populate the
-		// history.
-		normalizedStmt := fullStmt
 		if doCheck, _ := options["check_syntax"]; doCheck {
 			var parser parser.Parser
-			stmts, err := parser.Parse(fullStmt, syntax)
+
+			abstractStmts, err := parser.Parse(fullStmt, syntax)
 			if err != nil {
-				fmt.Fprintf(osStderr, "statement not sent to server: %v", err)
+				fmt.Fprintf(osStderr, "invalid syntax, statement ignored: %v", err)
 				exitErr = err
 				if exitIfErr {
 					break
 				}
-				skipStmt = true
-			} else if normalizeHistory, _ := options["normalize_history"]; normalizeHistory {
-				normalizedStmt = stmts.String() + ";"
+				if isInteractive {
+					// Add the last (erroneous) lines as-is to the history.
+					for i := partialTxnStmtCount; i < len(stmt); i++ {
+						addHistory(ins, stmt[i])
+					}
+				}
+				// Remove the erroneous lines from the statement, then try again.
+				stmt = stmt[:partialTxnStmtCount]
+				continue
+			}
+
+			if isInteractive {
+				// Statements so far are all valid. Count them and check the txn state.
+				stmtCount, incompleteTxn := checkStatements(abstractStmts)
+
+				if incompleteTxn /* BEGIN without COMMIT/ROLLBACK */ &&
+					!(len(stmt) > 0 && stmt[len(stmt)-1] == "") /* no empty line at end */ {
+					if partialTxnStmtCount == 0 {
+						fmt.Fprintln(osStderr, "Now adding input for a multi-line SQL transaction client-side.\n"+
+							"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.")
+					}
+					continueEntry = true
+				}
+
+				if normalizeHistory, _ := options["normalize_history"]; normalizeHistory {
+					// Add statements, not lines, to the history. Omit the last one which is added below.
+					for i := partialTxnStmtCount; i < stmtCount-1; i++ {
+						addHistory(ins, abstractStmts[i].String()+";")
+					}
+					historyLine = abstractStmts[stmtCount-1].String() + ";"
+				} else {
+					// Add the last lines received to the history, excluding the last which is added below.
+					for i := partialTxnStmtCount; i < len(stmt)-1; i++ {
+						addHistory(ins, stmt[i])
+					}
+					historyLine = stmt[len(stmt)-1]
+				}
+
+				// Replace the last entered lines by the last entered statements.
+				stmt = stmt[:partialTxnStmtCount]
+				for i := partialTxnStmtCount; i < stmtCount; i++ {
+					stmt = append(stmt, abstractStmts[i].String()+";")
+				}
+				partialTxnStmtCount = len(abstractStmts)
 			}
 		}
 
@@ -432,27 +498,32 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			// We save the history between each statement, This enables
 			// reusing history in another SQL shell without closing the
 			// current shell.
-			addHistory(ins, normalizedStmt)
+			addHistory(ins, historyLine)
 		}
 
-		if skipStmt {
-			// If a syntax error was detected client-side, don't try to go
-			// to the server and simply try again.
+		if continueEntry {
+			// If a syntax error was detected client-side, or we are
+			// in a multi-line txn, don't try to go to the server and
+			// simply go for more input.
 			continue
 		}
 
 		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), cliCtx.prettyFmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
-
 		if exitErr != nil && exitIfErr {
 			break
 		}
 
+		// Clear the saved statement.
+		stmt = stmt[:0]
+
+		partialTxnStmtCount = 0
+
 		if hasSet {
 			newSyntax, err := getSyntax(conn)
 			if err != nil {
-				fmt.Fprintf(osStderr, "could not get session syntax: %s", err)
+				fmt.Fprintf(osStderr, "could not get session syntax: %s\n", err)
 			} else {
 				syntax = newSyntax
 			}
