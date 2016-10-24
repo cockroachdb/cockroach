@@ -248,6 +248,15 @@ type Replica struct {
 	// TODO(peter): evaluate runtime overhead the timed mutex.
 	raftMu syncutil.TimedMutex
 
+	cmdQMu struct {
+		// Protects all fields in the cmdQMu struct.
+		//
+		// Locking notes: Replica.mu < Replica.cmdQMu
+		syncutil.TimedMutex
+		// Enforces at most one command is running per key(s).
+		q *CommandQueue
+	}
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		//
@@ -267,8 +276,6 @@ type Replica struct {
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
-		// Enforces at most one command is running per key(s).
-		cmdQ *CommandQueue
 		// Last index persisted to the raft log (not necessarily committed).
 		lastIndex uint64
 		// The raft log index of a pending preemptive snapshot. Used to prohibit
@@ -526,6 +533,18 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	)
 	r.mu.TimedMutex = syncutil.MakeTimedMutex(replicaMuLogger)
 	r.mu.outSnapDone = initialOutSnapDone
+
+	cmdQMuLogger := syncutil.ThresholdLogger(
+		r.AnnotateCtx(context.Background()),
+		defaultReplicaMuWarnThreshold,
+		func(ctx context.Context, msg string, args ...interface{}) {
+			log.Warningf(ctx, "cmdQMu: "+msg, args...)
+		},
+		func(t time.Duration) {
+			r.store.metrics.MuCommandQueueNanos.RecordValue(t.Nanoseconds())
+		},
+	)
+	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(cmdQMuLogger)
 	return r
 }
 
@@ -566,7 +585,10 @@ func (r *Replica) initLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.mu.cmdQ = NewCommandQueue()
+	r.cmdQMu.Lock()
+	r.cmdQMu.q = NewCommandQueue()
+	r.cmdQMu.Unlock()
+
 	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
@@ -1167,10 +1189,10 @@ func (r *Replica) beginCmds(
 		for i, union := range ba.Requests {
 			spans[i] = union.GetInner().Header()
 		}
-		r.mu.Lock()
-		chans := r.mu.cmdQ.getWait(readOnly, spans...)
-		cmd = r.mu.cmdQ.add(readOnly, spans...)
-		r.mu.Unlock()
+		r.cmdQMu.Lock()
+		chans := r.cmdQMu.q.getWait(readOnly, spans...)
+		cmd = r.cmdQMu.q.add(readOnly, spans...)
+		r.cmdQMu.Unlock()
 
 		beforeWait := timeutil.Now()
 		ctxDone := ctx.Done()
@@ -1194,9 +1216,9 @@ func (r *Replica) beginCmds(
 					for _, ch := range chans {
 						<-ch
 					}
-					r.mu.Lock()
-					r.mu.cmdQ.remove(cmd)
-					r.mu.Unlock()
+					r.cmdQMu.Lock()
+					r.cmdQMu.q.remove(cmd)
+					r.cmdQMu.Unlock()
 				}()
 				return nil, err
 			}
@@ -1235,9 +1257,6 @@ func (r *Replica) beginCmds(
 func (r *Replica) endCmds(
 	cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) (rErr *roachpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -1266,9 +1285,14 @@ func (r *Replica) endCmds(
 			}
 		}
 
+		r.mu.Lock()
 		r.mu.tsCache.AddRequest(cr)
+		r.mu.Unlock()
 	}
-	r.mu.cmdQ.remove(cmd)
+
+	r.cmdQMu.Lock()
+	r.cmdQMu.q.remove(cmd)
+	r.cmdQMu.Unlock()
 	return pErr
 }
 

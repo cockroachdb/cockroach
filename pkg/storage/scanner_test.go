@@ -58,6 +58,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			RangeID: desc.RangeID,
 		}
 		rng.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+		rng.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
 		rng.mu.state.Stats = enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
