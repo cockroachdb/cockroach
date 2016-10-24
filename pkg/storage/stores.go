@@ -81,8 +81,8 @@ func (ls *Stores) HasStore(storeID roachpb.StoreID) bool {
 // if not found.
 func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
 	ls.mu.RLock()
+	defer ls.mu.RUnlock()
 	store, ok := ls.storeMap[storeID]
-	ls.mu.RUnlock()
 	if !ok {
 		return nil, roachpb.NewStoreNotFoundError(storeID)
 	}
