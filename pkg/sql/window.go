@@ -80,14 +80,19 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	if err := window.extractWindowFunctions(s); err != nil {
 		return nil, err
 	}
-	renderCols := len(s.columns)
+	renderCols := s.columns
 
 	if err := window.constructWindowDefinitions(n, s); err != nil {
 		return nil, err
 	}
+	windowDefCols := s.columns[len(renderCols):]
 
-	window.wrappedRenderVals = p.NewRowContainer(s.columns[:renderCols], 0)
-	window.wrappedWindowDefVals = p.NewRowContainer(s.columns[renderCols:], 0)
+	window.replaceIndexedVars(s)
+	indexedVarCols := s.columns[len(renderCols)+len(windowDefCols):]
+
+	window.wrappedRenderVals = p.NewRowContainer(renderCols, 0)
+	window.wrappedWindowDefVals = p.NewRowContainer(windowDefCols, 0)
+	window.wrappedIndexedVarVals = p.NewRowContainer(indexedVarCols, 0)
 	window.windowsAcc = p.session.OpenAccount()
 
 	return window, nil
@@ -243,6 +248,60 @@ func constructWindowDef(
 	return def, nil
 }
 
+// Once the extractWindowFunctions has been run over each render, the remaining
+// expressions will all be "above" the windowing level, with windowFuncHolders standing
+// in as terminal expressions for each window function. This means that we can compute
+// the results of each window function for each row, and then continue evaluating the
+// windowRenders with each window function's respective result for that row.
+//
+// There is one complication here: IndexedVars above the windowing level need to be
+// fixed. Because window function evaluation requires completion of any wrapped plan
+// nodes, if we did nothing here, all IndexedVars would be pointing to their values in
+// the last row of the underlying selectNode. Clearly, we cannot use the selectNode as
+// the IndexedVarContainer for IndexedVars above the windowing level. To work around
+// this, we perform four steps:
+// 1. We add renders for each column referenced by an IndexedVar above the windowing
+//    level.
+// 2. We replace each IndexedVar with a new IndexedVar that uses the windowNode as
+//    an IndexedVarContainer.
+// 3. We buffer all of the column values from the newly added renders while computing
+//    window function results.
+// 4. When evaluating windowRenders for each row that contain these new IndexedVars,
+//    the windowNode provides the buffered column value for that row through its
+//    IndexedVarContainer interface.
+func (n *windowNode) replaceIndexedVars(s *selectNode) {
+	ivarHelper := parser.MakeIndexedVarHelper(n, s.ivarHelper.NumVars())
+	n.ivarIdxMap = make(map[int]int)
+	n.ivarSourceInfo = s.sourceInfo
+
+	varIdx := 0
+	for i, render := range n.windowRender {
+		if render == nil {
+			continue
+		}
+		replaceIdxVars := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
+			iv, ok := expr.(*parser.IndexedVar)
+			if !ok {
+				return true, expr
+			}
+			if _, ok := n.ivarIdxMap[iv.Idx]; !ok {
+				// We add a new render to the wrapped selectNode for each new IndexedVar we
+				// see. We also register this mapping in the ivarIdxMap.
+				s.render = append(s.render, iv)
+				s.columns = append(s.columns, ResultColumn{
+					Name: iv.String(),
+					Typ:  iv.ResolvedType(),
+				})
+
+				n.ivarIdxMap[iv.Idx] = varIdx
+				varIdx++
+			}
+			return true, ivarHelper.IndexedVar(iv.Idx)
+		}
+		n.windowRender[i] = exprConvertVars(render, replaceIdxVars)
+	}
+}
+
 // A windowNode implements the planNode interface and handles windowing logic.
 // It "wraps" a planNode which is used to retrieve the un-windowed results.
 type windowNode struct {
@@ -251,7 +310,7 @@ type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
-	// The values returned by the wrapped nodes will be split into two groups:
+	// The values returned by the wrapped nodes will be split into three groups:
 	// - wrappedRenderVals: these values are either passed directly as rendered values of the
 	//     windowNode if their corresponding expressions were not wrapped in window functions,
 	//     or used as arguments to window functions to eventually create rendered values for
@@ -260,8 +319,14 @@ type windowNode struct {
 	// - wrappedWindowDefVals: these values are used to partition and order window function
 	//     applications, and were added to the wrapped node from window definitions.
 	//     (see constructWindowDefinitions)
-	wrappedRenderVals    *RowContainer
-	wrappedWindowDefVals *RowContainer
+	// - wrappedIndexedVarVals: these values are used to buffer the IndexedVar values
+	//     for each row. Unlike the selectNode, which can stream values for each IndexedVar,
+	//     we need to buffer all values here while we compute window function results. We
+	//     then index into these values in IndexedVarContainer.IndexedVarEval.
+	//     (see replaceIndexedVars)
+	wrappedRenderVals     *RowContainer
+	wrappedWindowDefVals  *RowContainer
+	wrappedIndexedVarVals *RowContainer
 
 	// A sparse array holding renders specific to this windowNode. This will contain
 	// nil entries for renders that do not contain window functions, and which therefore
@@ -277,6 +342,10 @@ type windowNode struct {
 	funcs        []*windowFuncHolder
 	windowValues [][]parser.Datum
 	curRowIdx    int
+
+	// ivarIdxMap maps selectNode ivarIdx values to windowNode ivarIdx values.
+	ivarIdxMap     map[int]int
+	ivarSourceInfo multiSourceInfo
 
 	windowsAcc WrappableMemoryAccount
 
@@ -365,18 +434,24 @@ func (n *windowNode) Next() (bool, error) {
 			return true, nil
 		}
 
-		// Make a copy of the provided values and split into wrappedRenderVals and
-		// wrappedRenderVals.
+		// Make a copy of the provided values and split into wrappedRenderVals,
+		// wrappedRenderVals, and wrappedIndexedVarVals.
 		values := n.plan.Values()
 		valuesCopy := make(parser.DTuple, len(values))
 		copy(valuesCopy, values)
 
-		wrappedRenderVals := valuesCopy[:n.wrappedRenderVals.NumCols()]
-		if err := n.wrappedRenderVals.AddRow(wrappedRenderVals); err != nil {
+		renderEnd := n.wrappedRenderVals.NumCols()
+		windowDefEnd := renderEnd + n.wrappedWindowDefVals.NumCols()
+		renderVals := valuesCopy[:renderEnd]
+		if err := n.wrappedRenderVals.AddRow(renderVals); err != nil {
 			return false, err
 		}
-		wrappedWindowDefVals := valuesCopy[n.wrappedRenderVals.NumCols():]
-		if err := n.wrappedWindowDefVals.AddRow(wrappedWindowDefVals); err != nil {
+		windowDefVals := valuesCopy[renderEnd:windowDefEnd]
+		if err := n.wrappedWindowDefVals.AddRow(windowDefVals); err != nil {
+			return false, err
+		}
+		indexedVarVals := valuesCopy[windowDefEnd:]
+		if err := n.wrappedIndexedVarVals.AddRow(indexedVarVals); err != nil {
 			return false, err
 		}
 
@@ -664,6 +739,8 @@ func (n *windowNode) populateValues() error {
 	// accounts.
 	n.wrappedRenderVals.Close()
 	n.wrappedRenderVals = nil
+	n.wrappedIndexedVarVals.Close()
+	n.wrappedIndexedVarVals = nil
 	n.windowValues = nil
 	acc.Close()
 
@@ -708,6 +785,10 @@ func (n *windowNode) Close() {
 	if n.wrappedWindowDefVals != nil {
 		n.wrappedWindowDefVals.Close()
 		n.wrappedWindowDefVals = nil
+	}
+	if n.wrappedIndexedVarVals != nil {
+		n.wrappedIndexedVarVals.Close()
+		n.wrappedIndexedVarVals = nil
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
@@ -859,4 +940,19 @@ func (w *windowFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 
 func (w *windowFuncHolder) ResolvedType() parser.Type {
 	return w.expr.ResolvedType()
+}
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (n *windowNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	return n.wrappedIndexedVarVals.At(n.curRowIdx)[n.ivarIdxMap[idx]].Eval(ctx)
+}
+
+// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+func (n *windowNode) IndexedVarResolvedType(idx int) parser.Type {
+	return n.ivarSourceInfo[0].sourceColumns[idx].Typ
+}
+
+// IndexedVarString implements the parser.IndexedVarContainer interface.
+func (n *windowNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	n.ivarSourceInfo[0].FormatVar(buf, f, idx)
 }

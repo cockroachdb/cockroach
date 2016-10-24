@@ -344,6 +344,16 @@ SELECT k, min(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 8  3
 
 query IR
+SELECT k, pow(max(d) OVER (PARTITION BY v), k::DECIMAL) FROM kv ORDER BY 1
+----
+1  7.9000000000000000
+3  512.0000000000000000
+5  -3408200705601.0000000000000000
+6  243087.4555210000000000
+7  1920390.8986159000000000
+8  16777216.0000000000000000
+
+query IR
 SELECT k, max(d) OVER (PARTITION BY v) FROM kv ORDER BY 1
 ----
 1  7.9
@@ -541,6 +551,19 @@ SELECT k, v, w, row_number() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 9   2     9  4
 10  4     9  3
 11  NULL  9  2
+
+query IIII
+SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   2     3  3
+3   4     5  3
+5   NULL  5  NULL
+6   2     3  4
+7   2     2  3
+8   4     2  5
+9   2     9  -1
+10  4     9  0
+11  NULL  9  NULL
 
 query II
 SELECT k, rank() OVER () FROM kv ORDER BY 1
