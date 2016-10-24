@@ -1090,6 +1090,10 @@ func (r *Replica) Send(
 	}
 	if pErr != nil {
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
+	} else {
+		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
+			pErr = filter(ba, br)
+		}
 	}
 	return br, pErr
 }
