@@ -35,7 +35,7 @@ github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/cenk/backoff 8edc80b07f38c27352fb186d971c628a6c32552b
 github.com/chzyer/readline 25c2772d5fd908077927228597b084a1f1a0e66d
 github.com/client9/misspell 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
-github.com/cockroachdb/build-utils fe2f1804354cf7449d04cc4abd8de42bd94688b3
+github.com/cockroachdb/build-utils e3e7983f47ba9e36ec408e746b34fa1aaf421432
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 951f3e665896e7ba939fd1f2db9aeaae6ca988f8
 github.com/cockroachdb/c-rocksdb b5ca031b93fde49bfa2ba99aba423136aebf3c06
@@ -111,8 +111,8 @@ golang.org/x/oauth2 3c3a985cb79f52a3190fbc056984415ca6763d01
 golang.org/x/sys 002cbb5f952456d0c50e0d2aff17ea5eca716979
 golang.org/x/text a3ead2188418b52a904ef73f19311038a07ffc3c
 golang.org/x/tools 69f6f5b782e1f090edb33f68be67d96673a8059e
-google.golang.org/grpc 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
 google.golang.org/appengine 926995697fa8241be2dc73eb318666e24f44ed51
+google.golang.org/grpc 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v2 a5b47d31c556af34a302ce5d659e6fea44d90de0
 honnef.co/go/lint a730e73f0085f274d67b586a1d587fd6e42e6708
