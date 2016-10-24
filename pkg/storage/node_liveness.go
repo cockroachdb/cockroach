@@ -162,7 +162,7 @@ func (nl *NodeLiveness) ManualHeartbeat() error {
 // method does a conditional put on the node liveness record, and if
 // successful, stores the updated liveness record in the nodes map.
 func (nl *NodeLiveness) heartbeat(ctx context.Context) error {
-	nodeID := nl.gossip.GetNodeID()
+	nodeID := nl.gossip.NodeID.Get()
 
 	var newLiveness Liveness
 	var oldLiveness *Liveness
@@ -209,7 +209,7 @@ func (nl *NodeLiveness) heartbeat(ctx context.Context) error {
 func (nl *NodeLiveness) Self() (Liveness, error) {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	return nl.getLivenessLocked(nl.gossip.GetNodeID())
+	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
 }
 
 // GetLiveness returns the liveness record for the specified nodeID.

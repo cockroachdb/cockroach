@@ -39,11 +39,11 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	util.SucceedsSoon(t, func() error {
 		for _, nl := range mtc.nodeLivenesses {
 			for _, g := range mtc.gossips {
-				live, err := nl.IsLive(g.GetNodeID())
+				live, err := nl.IsLive(g.NodeID.Get())
 				if err != nil {
 					return err
 				} else if !live {
-					return errors.Errorf("node %d not live", g.GetNodeID())
+					return errors.Errorf("node %d not live", g.NodeID.Get())
 				}
 			}
 		}
@@ -72,7 +72,7 @@ func TestNodeLiveness(t *testing.T) {
 		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0))
 	mtc.manualClock.Increment(active.Nanoseconds() + 1)
 	for idx, nl := range mtc.nodeLivenesses {
-		nodeID := mtc.gossips[idx].GetNodeID()
+		nodeID := mtc.gossips[idx].NodeID.Get()
 		live, err := nl.IsLive(nodeID)
 		if err != nil {
 			t.Error(err)
@@ -109,7 +109,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	stopNodeLivenessHeartbeats(mtc)
 
 	// First try to increment the epoch of a known-live node.
-	deadNodeID := mtc.gossips[1].GetNodeID()
+	deadNodeID := mtc.gossips[1].NodeID.Get()
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
 		context.Background(), deadNodeID); !testutils.IsError(err, "cannot increment epoch on live node") {
 		t.Fatalf("expected error incrementing a live node: %v", err)
@@ -166,7 +166,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	// seeing the liveness record properly gossiped at store startup.
 	var expKeys []string
 	for _, g := range mtc.gossips {
-		key := gossip.MakeNodeLivenessKey(g.GetNodeID())
+		key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 		expKeys = append(expKeys, key)
 		if err := g.AddInfoProto(key, &storage.Liveness{}, 0); err != nil {
 			t.Fatal(err)
@@ -222,7 +222,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Gossip random nonsense for liveness and verify that asking for
 	// the node's own node ID returns the "correct" value.
 	g := mtc.gossips[0]
-	key := gossip.MakeNodeLivenessKey(g.GetNodeID())
+	key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 	var count int32
 	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
 		atomic.AddInt32(&count, 1)
@@ -242,7 +242,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 
 	// Self should not see new epoch.
 	l := mtc.nodeLivenesses[0]
-	lGet, err := l.GetLiveness(g.GetNodeID())
+	lGet, err := l.GetLiveness(g.NodeID.Get())
 	if err != nil {
 		t.Fatal(err)
 	}

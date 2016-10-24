@@ -948,7 +948,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 	// Always set gossip NodeID before gossiping any info.
 	if s.cfg.Gossip != nil {
-		s.cfg.Gossip.SetNodeID(s.Ident.NodeID)
+		s.cfg.Gossip.NodeID.Set(ctx, s.Ident.NodeID)
 	}
 
 	// Set the store ID for logging.

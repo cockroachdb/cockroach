@@ -25,6 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,13 +40,20 @@ import (
 
 var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
 
+func newTestInfoStore() (*infoStore, *stop.Stopper) {
+	stopper := stop.NewStopper()
+	nc := &base.NodeIDContainer{}
+	nc.Set(context.TODO(), 1)
+	is := newInfoStore(log.AmbientContext{}, nc, emptyAddr, stopper)
+	return is, stopper
+}
+
 // TestZeroDuration verifies that specifying a zero duration sets
 // TTLStamp to max int64.
 func TestZeroDuration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	info := is.newInfo(nil, 0)
 	if info.TTLStamp != math.MaxInt64 {
 		t.Errorf("expected zero duration to get max TTLStamp: %d", info.TTLStamp)
@@ -53,9 +63,8 @@ func TestZeroDuration(t *testing.T) {
 // TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
 	if err := is.addInfo("a", info1); err != nil {
@@ -73,9 +82,8 @@ func TestNewInfo(t *testing.T) {
 // via getInfo. Also, verifies a non-existent info can't be fetched.
 func TestInfoStoreGetInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	i := is.newInfo(nil, time.Second)
 	i.NodeID = 1
 	if err := is.addInfo("a", i); err != nil {
@@ -98,9 +106,8 @@ func TestInfoStoreGetInfo(t *testing.T) {
 // Verify TTL is respected on info fetched by key.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	i := is.newInfo(nil, time.Nanosecond)
 	if err := is.addInfo("a", i); err != nil {
 		t.Error(err)
@@ -115,9 +122,8 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	if err := is.addInfo("a", info1); err != nil {
 		t.Error(err)
@@ -140,9 +146,8 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 // Add infos using same key, same timestamp; verify no replacement.
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
 	if err1, err2 := is.addInfo("a", info1), is.addInfo("a", info2); err1 != nil || err2 != nil {
@@ -154,9 +159,8 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 // always chooses the minimum hops.
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	info1.Hops = 1
 	info2 := is.newInfo(nil, time.Second)
@@ -187,9 +191,8 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 
 // Helper method creates an infostore with 10 infos.
 func createTestInfoStore(t *testing.T) *infoStore {
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(nil, time.Second)
@@ -264,9 +267,8 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		roachpb.NodeID(2),
 		roachpb.NodeID(3),
 	}
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	// Add info from each address, with hop count equal to index+1.
 	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(nil, time.Second)
@@ -293,9 +295,8 @@ func TestLeastUseful(t *testing.T) {
 		roachpb.NodeID(1),
 		roachpb.NodeID(2),
 	}
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 
 	set := makeNodeSet(3, metric.NewGauge(metric.Metadata{Name: ""}))
 	if is.leastUseful(set) != 0 {
@@ -364,9 +365,8 @@ func (cr *callbackRecord) Keys() []string {
 
 func TestCallbacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	wg := &sync.WaitGroup{}
 	cb1 := callbackRecord{wg: wg}
 	cb2 := callbackRecord{wg: wg}
@@ -471,9 +471,8 @@ func TestCallbacks(t *testing.T) {
 // infostore.
 func TestRegisterCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
+	is, stopper := newTestInfoStore()
 	defer stopper.Stop()
-	is := newInfoStore(log.AmbientContext{}, 1, emptyAddr, stopper)
 	wg := &sync.WaitGroup{}
 	cb := callbackRecord{wg: wg}
 

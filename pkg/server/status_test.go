@@ -85,7 +85,7 @@ func TestStatusJson(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
-	nodeID := ts.Gossip().GetNodeID()
+	nodeID := ts.Gossip().NodeID.Get()
 	addr, err := ts.Gossip().GetNodeIDAddress(nodeID)
 	if err != nil {
 		t.Fatal(err)
@@ -406,7 +406,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop()
 
-	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().GetNodeID().String()); err != nil {
+	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().NodeID.String()); err != nil {
 		t.Fatal(err)
 	}
 }

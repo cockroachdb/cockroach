@@ -1037,7 +1037,7 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		t.Fatalf("%s", err)
 	}
 
-	nodeID := c.Gossip().GetNodeID()
+	nodeID := c.Gossip().NodeID.Get()
 	nodeIDStr := strconv.FormatInt(int64(nodeID), 10)
 	if a, e := fields[0], nodeIDStr; a != e {
 		t.Errorf("node id (%s) != expected (%s)", a, e)

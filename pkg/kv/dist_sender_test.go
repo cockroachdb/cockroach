@@ -340,7 +340,7 @@ func TestSendRPCOrder(t *testing.T) {
 					Attrs: tc.attrs,
 				},
 			}
-			g.ResetNodeID(nd.NodeID)
+			g.NodeID.Reset(t, nd.NodeID)
 			if err := g.SetNodeDescriptor(nd); err != nil {
 				t.Fatal(err)
 			}
@@ -410,7 +410,7 @@ func TestOwnNodeCertain(t *testing.T) {
 		NodeID:  expNodeID,
 		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
 	}
-	g.ResetNodeID(nd.NodeID)
+	g.NodeID.Reset(t, nd.NodeID)
 	if err := g.SetNodeDescriptor(nd); err != nil {
 		t.Fatal(err)
 	}
@@ -587,9 +587,8 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) *gossip.Gossip {
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext)
 
-	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
 	const nodeID = 1
-	g.SetNodeID(nodeID)
+	g := gossip.NewTest(nodeID, rpcContext, server, nil, stopper, metric.NewRegistry())
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr("tcp", "neverused:9999"),
@@ -1021,7 +1020,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 
 	g := makeGossip(t, stopper)
 	ds := NewDistSender(&DistSenderConfig{}, g)
-	g.ResetNodeID(5)
+	g.NodeID.Reset(t, 5)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 5}); err != nil {
 		t.Fatal(err)
 	}
@@ -1889,7 +1888,7 @@ func TestSlowLeaseHolderRetry(t *testing.T) {
 	}
 
 	for _, node := range n.Nodes {
-		nodeID := node.Gossip.GetNodeID()
+		nodeID := node.Gossip.NodeID.Get()
 
 		metaRangeDescriptor.Replicas = append(metaRangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})
 		rangeDescriptor.Replicas = append(rangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})

@@ -373,11 +373,11 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 // uncertainty, which interferes with the tests. The feature is disabled simply
 // by poisoning the gossip NodeID; this may break other functionality which
 // is usually not relevant in uncertainty tests.
-func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) {
+func disableOwnNodeCertain(t *testing.T, tc *localtestcluster.LocalTestCluster) {
 	distSender := tc.Sender.(*TxnCoordSender).wrapped.(*DistSender)
 	desc := distSender.getNodeDescriptor()
 	desc.NodeID = 999
-	distSender.gossip.ResetNodeID(desc.NodeID)
+	distSender.gossip.NodeID.Reset(t, desc.NodeID)
 	if err := distSender.gossip.SetNodeDescriptor(desc); err != nil {
 		panic(err)
 	}
@@ -389,7 +389,7 @@ func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) {
 func TestUncertaintyRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := createTestDB(t)
-	disableOwnNodeCertain(s)
+	disableOwnNodeCertain(t, s)
 	defer s.Stop()
 	const maxOffset = 250 * time.Millisecond
 	s.Clock.SetMaxOffset(maxOffset)
@@ -439,7 +439,7 @@ func TestUncertaintyRestart(t *testing.T) {
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := createTestDB(t)
-	disableOwnNodeCertain(s)
+	disableOwnNodeCertain(t, s)
 	defer s.Stop()
 	// Large offset so that any value in the future is an uncertain read.
 	// Also makes sure that the values we write in the future below don't

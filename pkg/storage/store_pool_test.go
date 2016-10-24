@@ -63,9 +63,7 @@ func createTestStorePool(
 	clock := hlc.NewClock(mc.UnixNano)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry())
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
+	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	storePool := NewStorePool(
 		log.AmbientContext{},
 		g,

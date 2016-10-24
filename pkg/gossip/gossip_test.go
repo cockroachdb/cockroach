@@ -43,9 +43,7 @@ func TestGossipInfoStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
-	g := New(log.AmbientContext{}, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
@@ -79,8 +77,10 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 3 {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
-	server := rpc.NewServer(rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper))
-	g := New(log.AmbientContext{}, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
+	server := rpc.NewServer(
+		rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper),
+	)
+	g := NewTest(0, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.
@@ -107,7 +107,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 
 	local.mu.Lock()
 	peer := startGossip(2, stopper, t, metric.NewRegistry())
-	local.startClient(&peer.mu.is.NodeAddr, peer.mu.is.NodeID)
+	local.startClient(&peer.mu.is.NodeAddr, peer.NodeID.Get())
 	local.mu.Unlock()
 
 	// Race gossiping against LogStatus.
@@ -204,7 +204,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		for {
 			localAddr := local.GetNodeAddr()
 			c := newClient(log.AmbientContext{}, localAddr, makeMetrics())
-			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.GetNodeID(), peer.rpcContext.NewBreaker())
+			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.NodeID.Get(), peer.rpcContext.NewBreaker())
 
 			disconnectedClient := <-disconnectedCh
 			if disconnectedClient != c {
@@ -212,10 +212,10 @@ func TestGossipNoForwardSelf(t *testing.T) {
 			} else if c.forwardAddr == nil {
 				// Under high load, clients sometimes fail to connect for reasons
 				// unrelated to the test, so we need to permit some.
-				t.Logf("node #%d: got nil forwarding address", peer.GetNodeID())
+				t.Logf("node #%d: got nil forwarding address", peer.NodeID.Get())
 				continue
 			} else if *c.forwardAddr == *localAddr {
-				t.Errorf("node #%d: got local's forwarding address", peer.GetNodeID())
+				t.Errorf("node #%d: got local's forwarding address", peer.NodeID.Get())
 			}
 			break
 		}
@@ -235,7 +235,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Lock()
 	for i := 0; i < minPeers; i++ {
 		peer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
-		local.startClient(peer.GetNodeAddr(), peer.GetNodeID())
+		local.startClient(peer.GetNodeAddr(), peer.NodeID.Get())
 	}
 	local.mu.Unlock()
 
@@ -280,7 +280,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	peerStopper := stop.NewStopper()
 	peer := startGossip(2, peerStopper, t, metric.NewRegistry())
 
-	peerNodeID := peer.GetNodeID()
+	peerNodeID := peer.NodeID.Get()
 	peerAddr := peer.GetNodeAddr()
 	peerAddrStr := peerAddr.String()
 
