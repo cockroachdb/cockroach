@@ -52,6 +52,14 @@ type CommandQueue struct {
 	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait
 	oHeap     overlapHeap         // avoids allocating in GetWait
 	overlaps  []*cmd              // avoids allocating in getOverlaps
+
+	// Used to temporarily store metrics local to a single CommandQueue. These
+	// will periodically be processed by the Store.
+	localMetrics struct {
+		readCommands    int64
+		writeCommands   int64
+		maxOverlapsSeen int64 // will be reset to 0 during metrics processing.
+	}
 }
 
 type cmd struct {
@@ -71,6 +79,19 @@ func (c *cmd) ID() uintptr {
 // Range implements interval.Interface.
 func (c *cmd) Range() interval.Range {
 	return c.key
+}
+
+// cmdCount returns the number of spans in c, taking into account the
+// "covering" optimization (see CommandQueue.add). If a cmd was added to the
+// CommandQueue with only a single span, it will have 0 children, behaving like
+// the optimization does not exist. If a cmd was added to the CommandQueue with
+// multiple spans, each span will be retained as a child command in a covering cmd,
+// even if the covering cmd is expanded. As a result, len(c.children) will never be 1.
+func (c *cmd) cmdCount() int {
+	if len(c.children) == 0 {
+		return 1
+	}
+	return len(c.children)
 }
 
 // NewCommandQueue returns a new command queue.
@@ -144,6 +165,9 @@ func (cq *CommandQueue) getWait(readOnly bool, spans ...roachpb.Span) (chans []<
 		if restart {
 			i--
 			continue
+		}
+		if overlapCount := int64(len(overlaps)); overlapCount > cq.localMetrics.maxOverlapsSeen {
+			cq.localMetrics.maxOverlapsSeen = overlapCount
 		}
 
 		// Sort overlapping commands by command ID and iterate from latest to earliest,
@@ -402,6 +426,12 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 		}
 	}
 
+	if cmd.readOnly {
+		cq.localMetrics.readCommands += int64(cmd.cmdCount())
+	} else {
+		cq.localMetrics.writeCommands += int64(cmd.cmdCount())
+	}
+
 	if err := cq.tree.Insert(cmd, false /* !fast */); err != nil {
 		panic(err)
 	}
@@ -415,6 +445,12 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 func (cq *CommandQueue) remove(cmd *cmd) {
 	if cmd == nil {
 		return
+	}
+
+	if cmd.readOnly {
+		cq.localMetrics.readCommands -= int64(cmd.cmdCount())
+	} else {
+		cq.localMetrics.writeCommands -= int64(cmd.cmdCount())
 	}
 
 	if !cmd.expanded {
@@ -448,4 +484,8 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 func (cq *CommandQueue) nextID() int64 {
 	cq.idAlloc++
 	return cq.idAlloc
+}
+
+func (cq *CommandQueue) treeSize() int {
+	return cq.tree.Len()
 }

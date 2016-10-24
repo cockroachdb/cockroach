@@ -3521,6 +3521,64 @@ func (s *Store) updateReplicationGauges() error {
 	return nil
 }
 
+// updateCommandQueueGauges updates a number of simple statistics for
+// the CommandQueues of each replica in this store.
+func (s *Store) updateCommandQueueGauges() error {
+	var (
+		maxCommandQueueSize       int64
+		maxCommandQueueWriteCount int64
+		maxCommandQueueReadCount  int64
+		maxCommandQueueTreeSize   int64
+		maxCommandQueueOverlaps   int64
+		combinedCommandQueueSize  int64
+		combinedCommandWriteCount int64
+		combinedCommandReadCount  int64
+	)
+	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+		rep.mu.Lock()
+		writes := rep.mu.cmdQ.localMetrics.writeCommands
+		reads := rep.mu.cmdQ.localMetrics.readCommands
+		treeSize := int64(rep.mu.cmdQ.treeSize())
+
+		maxOverlaps := rep.mu.cmdQ.localMetrics.maxOverlapsSeen
+		rep.mu.cmdQ.localMetrics.maxOverlapsSeen = 0
+		rep.mu.Unlock()
+
+		cqSize := writes + reads
+		if cqSize > maxCommandQueueSize {
+			maxCommandQueueSize = cqSize
+		}
+		if writes > maxCommandQueueWriteCount {
+			maxCommandQueueWriteCount = writes
+		}
+		if reads > maxCommandQueueReadCount {
+			maxCommandQueueReadCount = reads
+		}
+		if treeSize > maxCommandQueueTreeSize {
+			maxCommandQueueTreeSize = treeSize
+		}
+		if maxOverlaps > maxCommandQueueOverlaps {
+			maxCommandQueueOverlaps = maxOverlaps
+		}
+
+		combinedCommandQueueSize += cqSize
+		combinedCommandWriteCount += writes
+		combinedCommandReadCount += reads
+		return true // more
+	})
+
+	s.metrics.MaxCommandQueueSize.Update(maxCommandQueueSize)
+	s.metrics.MaxCommandQueueWriteCount.Update(maxCommandQueueWriteCount)
+	s.metrics.MaxCommandQueueReadCount.Update(maxCommandQueueReadCount)
+	s.metrics.MaxCommandQueueTreeSize.Update(maxCommandQueueTreeSize)
+	s.metrics.MaxCommandQueueOverlaps.Update(maxCommandQueueOverlaps)
+	s.metrics.CombinedCommandQueueSize.Update(combinedCommandQueueSize)
+	s.metrics.CombinedCommandWriteCount.Update(combinedCommandWriteCount)
+	s.metrics.CombinedCommandReadCount.Update(combinedCommandReadCount)
+
+	return nil
+}
+
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
@@ -3530,6 +3588,10 @@ func (s *Store) ComputeMetrics(tick int) error {
 	}
 
 	if err := s.updateReplicationGauges(); err != nil {
+		return err
+	}
+
+	if err := s.updateCommandQueueGauges(); err != nil {
 		return err
 	}
 
