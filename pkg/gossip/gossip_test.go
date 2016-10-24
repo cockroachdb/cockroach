@@ -43,7 +43,7 @@ func TestGossipInfoStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
-	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	g, _ := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	server := rpc.NewServer(
 		rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper),
 	)
-	g := NewTest(0, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
+	g, _ := NewTest(0, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.

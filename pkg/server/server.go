@@ -280,6 +280,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
 		AmbientCtx:                     s.cfg.AmbientCtx,
+		NodeID:                         &s.nodeIDContainer,
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,

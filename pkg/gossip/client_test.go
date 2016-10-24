@@ -56,7 +56,7 @@ func startGossipAtAddr(
 ) *Gossip {
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext)
-	g := NewTest(nodeID, rpcContext, server, nil, stopper, registry)
+	g, _ := NewTest(nodeID, rpcContext, server, nil, stopper, registry)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func startFakeServerGossips(
 	lRPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
-	local := NewTest(localNodeID, lRPCContext, lserver, nil, stopper, metric.NewRegistry())
+	local, _ := NewTest(localNodeID, lRPCContext, lserver, nil, stopper, metric.NewRegistry())
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -429,7 +429,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		}
 		resolvers = append(resolvers, resolver)
 		// node ID must be non-zero
-		gnode := NewTest(
+		gnode, _ := NewTest(
 			roachpb.NodeID(i+1), RPCContext, server, resolvers, stopper, metric.NewRegistry(),
 		)
 		g = append(g, gnode)

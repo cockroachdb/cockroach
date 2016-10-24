@@ -207,7 +207,7 @@ func outputDotFile(
 			infoKey := otherNode.Addr().String()
 			// GetInfo returns an error if the info is missing.
 			if info, err := node.GetInfo(infoKey); err != nil {
-				missing = append(missing, otherNode.Gossip.NodeID.Get())
+				missing = append(missing, otherNode.NodeID.Get())
 				quiescent = false
 			} else {
 				_, val, err := encoding.DecodeUint64Ascending(info)

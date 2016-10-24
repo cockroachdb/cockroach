@@ -121,6 +121,7 @@ type testContext struct {
 	store         *Store
 	rng           *Replica
 	rangeID       roachpb.RangeID
+	nodeID        *base.NodeIDContainer
 	gossip        *gossip.Gossip
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
@@ -148,7 +149,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(cfg.AmbientCtx, &base.Config{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.NewTest(1, rpcContext, server, nil, tc.stopper, metric.NewRegistry())
+		tc.gossip, tc.nodeID = gossip.NewTest(1, rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 	}
 	if tc.manualClock == nil {
 		tc.manualClock = hlc.NewManualClock(0)
@@ -165,6 +166,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 
 	if tc.store == nil {
 		cfg.Clock = tc.clock
+		cfg.NodeID = tc.nodeID
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
 		// Create a test sender without setting a store. This is to deal with the

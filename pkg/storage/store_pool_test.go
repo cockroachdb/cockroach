@@ -63,7 +63,7 @@ func createTestStorePool(
 	clock := hlc.NewClock(mc.UnixNano)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
+	g, _ := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	storePool := NewStorePool(
 		log.AmbientContext{},
 		g,

@@ -81,7 +81,7 @@ func createCluster(
 	server := rpc.NewServer(rpcContext)
 	// We set the node ID to MaxInt32 for the cluster Gossip instance to prevent
 	// conflicts with real node IDs.
-	g := gossip.NewTest(math.MaxInt32, rpcContext, server, nil, stopper, metric.NewRegistry())
+	g, _ := gossip.NewTest(math.MaxInt32, rpcContext, server, nil, stopper, metric.NewRegistry())
 	storePool := storage.NewStorePool(
 		log.AmbientContext{},
 		g,

@@ -494,6 +494,7 @@ var _ client.Sender = &Store{}
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 
+	NodeID       *base.NodeIDContainer
 	Clock        *hlc.Clock
 	DB           *client.DB
 	Gossip       *gossip.Gossip
@@ -933,9 +934,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
 		return errors.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
-	// Always set gossip NodeID before gossiping any info.
-	if s.cfg.Gossip != nil {
-		s.cfg.Gossip.NodeID.Set(ctx, s.Ident.NodeID)
+	// Always set NodeID before gossiping any info.
+	if s.cfg.NodeID != nil {
+		s.cfg.NodeID.Set(ctx, s.Ident.NodeID)
+	} else {
+		// Some tests don't care about NodeID; make sure we don't have Gossip set
+		// either.
+		if s.cfg.Gossip != nil {
+			panic("Gossip set but NodeID not set")
+		}
 	}
 
 	// Set the store ID for logging.

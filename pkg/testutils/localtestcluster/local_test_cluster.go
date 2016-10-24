@@ -114,6 +114,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
 	cfg.AmbientCtx = ambient
+	cfg.NodeID = nc
 	cfg.Clock = ltc.Clock
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip

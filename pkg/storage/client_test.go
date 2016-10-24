@@ -119,7 +119,7 @@ func createTestStoreWithEngine(
 	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
-	storeCfg.Gossip = gossip.NewTest(
+	storeCfg.Gossip, storeCfg.NodeID = gossip.NewTest(
 		nodeDesc.NodeID, rpcContext, server, nil, stopper, metric.NewRegistry(),
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
@@ -194,6 +194,7 @@ type multiTestContext struct {
 	transports     []*storage.RaftTransport
 	distSenders    []*kv.DistSender
 	dbs            []*client.DB
+	nodeIDs        []*base.NodeIDContainer
 	gossips        []*gossip.Gossip
 	nodeLivenesses []*storage.NodeLiveness
 	storePools     []*storage.StorePool
@@ -260,6 +261,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.idents = make([]roachpb.StoreIdent, numStores)
 	m.grpcServers = make([]*grpc.Server, numStores)
 	m.transports = make([]*storage.RaftTransport, numStores)
+	m.nodeIDs = make([]*base.NodeIDContainer, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
 	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
 
@@ -589,6 +591,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	cfg.Clock = m.clocks[i]
 	cfg.Transport = m.transports[i]
 	cfg.DB = m.dbs[i]
+	cfg.NodeID = m.nodeIDs[i]
 	cfg.Gossip = m.gossips[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
@@ -675,7 +678,7 @@ func (m *multiTestContext) addStore(idx int) {
 		}
 		return []resolver.Resolver{r}
 	}()
-	m.gossips[idx] = gossip.NewTest(
+	m.gossips[idx], m.nodeIDs[idx] = gossip.NewTest(
 		roachpb.NodeID(idx+1),
 		m.rpcContext,
 		grpcServer,

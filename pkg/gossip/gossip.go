@@ -259,7 +259,7 @@ func NewTest(
 	resolvers []resolver.Resolver,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
-) *Gossip {
+) (*Gossip, *base.NodeIDContainer) {
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
@@ -267,7 +267,7 @@ func NewTest(
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
-	return gossip
+	return gossip, n
 }
 
 // GetNodeMetrics returns the gossip node metrics.

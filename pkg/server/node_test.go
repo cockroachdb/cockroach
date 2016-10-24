@@ -72,7 +72,7 @@ func createTestNode(
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCfg := makeTestConfig()
-	g := gossip.NewTest(
+	g, nodeID := gossip.NewTest(
 		0,
 		nodeRPCContext,
 		grpcServer,
@@ -96,6 +96,7 @@ func createTestNode(
 		g.SetResolvers([]resolver.Resolver{r})
 		g.Start(ln.Addr())
 	}
+	cfg.NodeID = nodeID
 	cfg.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()

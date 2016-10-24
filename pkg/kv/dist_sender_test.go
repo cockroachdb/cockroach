@@ -585,7 +585,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) *gossip.Gossip {
 	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, rpcContext, server, nil, stopper, metric.NewRegistry())
+	g, _ := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr("tcp", "neverused:9999"),
@@ -1882,7 +1882,7 @@ func TestSlowLeaseHolderRetry(t *testing.T) {
 	}
 
 	for _, node := range n.Nodes {
-		nodeID := node.Gossip.NodeID.Get()
+		nodeID := node.NodeID.Get()
 
 		metaRangeDescriptor.Replicas = append(metaRangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})
 		rangeDescriptor.Replicas = append(rangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})

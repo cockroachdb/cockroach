@@ -154,7 +154,7 @@ func createTestStoreWithoutStart(
 
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	cfg.Gossip = gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
+	cfg.Gossip, cfg.NodeID = gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	manual := hlc.NewManualClock(0)
 	cfg.Clock = hlc.NewClock(manual.UnixNano)
 	cfg.StorePool = NewStorePool(
