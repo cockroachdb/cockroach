@@ -261,7 +261,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(context.Background(), "stddev(replica count) = %.2f", stdDev)
+	log.Infof(context.Background(), "stdDev(replica count) = %.2f", stdDev)
 
 	return nil
 }
