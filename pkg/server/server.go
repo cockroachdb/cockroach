@@ -274,8 +274,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.pgServer = pgwire.MakeServer(s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
+	var tsKnobs ts.TimeSeriesTestingKnobs
+	if cfg.TestingKnobs.TimeSeries != nil {
+		tsKnobs = *cfg.TestingKnobs.TimeSeries.(*ts.TimeSeriesTestingKnobs)
+	}
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB)
+	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, tsKnobs, s.stopper)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{

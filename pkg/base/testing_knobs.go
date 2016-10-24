@@ -29,4 +29,5 @@ type TestingKnobs struct {
 	SQLExecutor      ModuleTestingKnobs
 	SQLLeaseManager  ModuleTestingKnobs
 	SQLSchemaChanger ModuleTestingKnobs
+	TimeSeries       ModuleTestingKnobs
 }
