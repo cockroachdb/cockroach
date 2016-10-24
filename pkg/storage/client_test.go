@@ -400,30 +400,38 @@ type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
 	ctx      context.Context
 	cancel   func()
+	idx      int
 	replicas kv.ReplicaSlice
 	args     roachpb.BatchRequest
+	mu       struct {
+		syncutil.Mutex
+		pending map[roachpb.ReplicaID]struct{}
+	}
 }
 
 func (m *multiTestContext) kvTransportFactory(
 	_ kv.SendOptions, _ *rpc.Context, replicas kv.ReplicaSlice, args roachpb.BatchRequest,
 ) (kv.Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &multiTestContextKVTransport{
+	t := &multiTestContextKVTransport{
 		mtc:      m,
 		ctx:      ctx,
 		cancel:   cancel,
 		replicas: replicas,
 		args:     args,
-	}, nil
+	}
+	t.mu.pending = map[roachpb.ReplicaID]struct{}{}
+	return t, nil
 }
 
 func (t *multiTestContextKVTransport) IsExhausted() bool {
-	return len(t.replicas) == 0
+	return t.idx == len(t.replicas)
 }
 
 func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
-	rep := t.replicas[0]
-	t.replicas = t.replicas[1:]
+	rep := t.replicas[t.idx]
+	t.idx++
+	t.setPending(rep.ReplicaID, true)
 
 	// Node IDs are assigned in the order the nodes are created by
 	// the multi test context, so we can derive the index for stoppers
@@ -459,8 +467,8 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 		}
 		br.Error = pErr
 
-		// On certain errors, we must advance our manual clock to ensure
-		// that the next attempt has a chance of succeeding.
+		// On certain errors, we must expire leases to ensure that the
+		// next attempt has a chance of succeeding.
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.NotLeaseHolderError:
 			if leaseHolder := tErr.LeaseHolder; leaseHolder != nil {
@@ -480,12 +488,38 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 			}
 		}
 		done <- kv.BatchCall{Reply: br, Err: nil}
+		t.setPending(rep.ReplicaID, false)
 	}) != nil {
 		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
 	}
 }
 
 func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.mu.pending[replica.ReplicaID]; ok {
+		return
+	}
+	for i := range t.replicas {
+		if t.replicas[i].ReplicaDescriptor == replica {
+			if i < t.idx {
+				t.idx--
+			}
+			// Swap the client representing this replica to the front.
+			t.replicas[i], t.replicas[t.idx] = t.replicas[t.idx], t.replicas[i]
+			return
+		}
+	}
+}
+
+func (t *multiTestContextKVTransport) setPending(repID roachpb.ReplicaID, pending bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if pending {
+		t.mu.pending[repID] = struct{}{}
+	} else {
+		delete(t.mu.pending, repID)
+	}
 }
 
 func (t *multiTestContextKVTransport) Close() {
@@ -989,9 +1023,9 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	for i, eng := range m.engines {
 		val, _, err := engine.MVCCGet(context.Background(), eng, key, m.clock.Now(), true, nil)
 		if err != nil {
-			log.Errorf(context.TODO(), "engine %d: error reading from key %s: %s", i, key, err)
+			log.VEventf(context.TODO(), 1, "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
-			log.Errorf(context.TODO(), "engine %d: missing key %s", i, key)
+			log.VEventf(context.TODO(), 1, "engine %d: missing key %s", i, key)
 		} else {
 			results[i], err = val.GetInt()
 			if err != nil {
@@ -1015,18 +1049,52 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 	})
 }
 
-// expireLeases increments the context's manual clock far enough into the
-// future that current range leases are expired. Useful for tests which modify
-// replica sets.
+// expireLeases increments the context's manual clock far enough into
+// the future that current range leases are expired.  To also expire
+// epoch-based range leases, each node's epoch is incremented and live
+// nodes are heartbeat so they are able to reacquire leases.
+//
+// Useful for tests which modify replica sets.
 func (m *multiTestContext) expireLeases() {
+	m.expireLeasesWithoutIncrementingEpochs()
+
+	// Increment epochs.
+	ctx := context.Background()
+	for idx, nl := range m.nodeLivenesses {
+		l, err := nl.Self()
+		if err != nil {
+			continue
+		}
+		if err = nl.IncrementEpoch(ctx, l); err != nil {
+			log.Error(ctx, err)
+			continue
+		}
+		m.mu.RLock()
+		live := m.stores[idx] != nil && !m.stores[idx].IsDrainingLeases()
+		m.mu.RUnlock()
+		if live {
+			l, err := nl.Self()
+			if err != nil {
+				log.Error(ctx, err)
+				continue
+			}
+			if err := nl.Heartbeat(ctx, l); err != nil {
+				log.Error(ctx, err)
+				continue
+			}
+		}
+	}
+}
+
+func (m *multiTestContext) expireLeasesWithoutIncrementingEpochs() {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	for _, store := range m.stores {
 		if store != nil {
 			m.manualClock.Increment(store.LeaseExpiration(m.clock))
 			break
 		}
 	}
+	m.mu.RUnlock()
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the

@@ -106,6 +106,9 @@ var enablePreVote = envutil.EnvOrDefaultBool(
 
 var enableRuleSolver = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RULE_SOLVER", false)
 
+var enableEpochLeases = envutil.EnvOrDefaultBool(
+	"COCKROACH_ENABLE_EPOCH_LEASES", false)
+
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
 // ticks. If raftElectionTimeoutTicks is 0, uses the value of
@@ -936,9 +939,9 @@ func (s *Store) DrainLeases(drain bool) error {
 			// If we own an active lease or we're trying to obtain a lease
 			// (and that request is fresh enough), wait.
 			switch {
-			case lease.OwnedBy(s.StoreID()) && lease.Covers(now):
+			case lease.OwnedBy(s.StoreID()) && r.IsLeaseValid(lease, now):
 				drainingLease = lease
-			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && nextLease.Covers(now):
+			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(nextLease, now):
 				drainingLease = nextLease
 			default:
 				return true
@@ -1940,13 +1943,14 @@ func (s *Store) maybeMergeTimestampCaches(
 	// Merge support is currently incomplete and incorrect. In particular, the
 	// lease holders must be colocated and the subsumed range appropriately
 	// quiesced. See also #2433.
-	if subsumedLease.Covers(s.Clock().Now()) &&
+	now := s.Clock().Now()
+	if subsumedRep.isLeaseValidLocked(subsumedLease, now) &&
 		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
 		log.Fatalf(ctx, "cannot merge ranges with non-colocated leases. "+
 			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
 	}
 
-	if subsumingLease.Covers(s.Clock().Now()) &&
+	if subsumingRep.isLeaseValidLocked(subsumingLease, now) &&
 		subsumingLease.OwnedBy(s.StoreID()) {
 		subsumedRep.mu.tsCache.MergeInto(subsumingRep.mu.tsCache, false /* clear */)
 	}
@@ -2290,11 +2294,7 @@ func (s *Store) LeaseCount() int {
 
 	var leaseCount int
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		r.mu.Lock()
-		lease := r.mu.state.Lease
-		r.mu.Unlock()
-
-		if lease.OwnedBy(s.Ident.StoreID) && lease.Covers(now) {
+		if r.haveLease(now) {
 			leaseCount++
 		}
 		return true
@@ -3663,8 +3663,8 @@ func (s *Store) canApplySnapshotLocked(
 				}
 				lease, pendingLease := r.getLease()
 				now := s.Clock().Now()
-				return (lease == nil || !lease.Covers(now)) &&
-					(pendingLease == nil || !pendingLease.Covers(now))
+				return (lease == nil || !r.IsLeaseValid(lease, now)) &&
+					(pendingLease == nil || !r.IsLeaseValid(pendingLease, now))
 			}
 
 			// If the existing range shows no signs of recent activity, give it a GC
@@ -3731,15 +3731,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		// tests.
 		rep.mu.Lock()
 		raftStatus := rep.raftStatusLocked()
-		lease := rep.mu.state.Lease
+		leaseOwned := rep.mu.state.Lease.OwnedBy(s.Ident.StoreID)
+		leaseValid := rep.leaseStatus(rep.mu.state.Lease, timestamp, rep.mu.minLeaseProposedTS).state == leaseValid
 		if rep.mu.quiescent || rep.mu.internalRaftGroup == nil {
 			quiescentCount++
 		}
 		desc := rep.mu.state.Desc
 		rep.mu.Unlock()
-
-		leaseCovers := lease.Covers(timestamp)
-		leaseOwned := lease.OwnedBy(s.Ident.StoreID)
 
 		// To avoid double counting, most stats are only counted on the raft
 		// leader. The lease holder count is the exception, which is counted by
@@ -3748,14 +3746,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if isLeader {
 			raftLeaderCount++
 
-			if leaseCovers {
+			if leaseValid {
 				if leaseOwned {
 					leaseHolderCount++
 				} else {
 					raftLeaderNotLeaseHolderCount++
 				}
 			}
-		} else if leaseCovers && leaseOwned {
+		} else if leaseValid && leaseOwned {
 			leaseHolderCount++
 		}
 
