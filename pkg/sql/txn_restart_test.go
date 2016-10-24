@@ -1133,6 +1133,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 // This test triggers the above scenario by making ReadWithinUncertaintyIntervalError advance
 // the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
 func TestReacquireLeaseOnRestart(t *testing.T) {
+	t.Skip("setting max offset > the lease expiration prevents use of lease")
 	defer leaktest.AfterTest(t)()
 
 	advancement := 2 * sql.LeaseDuration

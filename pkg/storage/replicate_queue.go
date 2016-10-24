@@ -116,7 +116,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 	// See if there is a rebalancing opportunity present.
 	leaseStoreID := repl.store.StoreID()
-	if lease, _ := repl.getLease(); lease != nil {
+	if lease, _ := repl.getLease(); !lease.Empty() {
 		leaseStoreID = lease.Replica.StoreID
 	}
 	target := rq.allocator.RebalanceTarget(

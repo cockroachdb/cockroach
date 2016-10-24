@@ -5279,9 +5279,9 @@ static ::std::string* MutableUnknownFieldsForLease(
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Lease::kStartFieldNumber;
-const int Lease::kStartStasisFieldNumber;
 const int Lease::kExpirationFieldNumber;
 const int Lease::kReplicaFieldNumber;
+const int Lease::kEpochFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Lease::Lease()
@@ -5296,12 +5296,6 @@ void Lease::InitAsDefaultInstance() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 #else
   start_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
-#endif
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  start_stasis_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
-      ::cockroach::util::hlc::Timestamp::internal_default_instance());
-#else
-  start_stasis_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
 #endif
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   expiration_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
@@ -5331,9 +5325,9 @@ void Lease::SharedCtor() {
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   start_ = NULL;
-  start_stasis_ = NULL;
   expiration_ = NULL;
   replica_ = NULL;
+  epoch_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -5351,7 +5345,6 @@ void Lease::SharedDtor() {
   if (this != default_instance_) {
   #endif
     delete start_;
-    delete start_stasis_;
     delete expiration_;
     delete replica_;
   }
@@ -5387,15 +5380,13 @@ void Lease::Clear() {
     if (has_start()) {
       if (start_ != NULL) start_->::cockroach::util::hlc::Timestamp::Clear();
     }
-    if (has_start_stasis()) {
-      if (start_stasis_ != NULL) start_stasis_->::cockroach::util::hlc::Timestamp::Clear();
-    }
     if (has_expiration()) {
       if (expiration_ != NULL) expiration_->::cockroach::util::hlc::Timestamp::Clear();
     }
     if (has_replica()) {
       if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
     }
+    epoch_ = GOOGLE_LONGLONG(0);
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   _unknown_fields_.ClearToEmptyNoArena(
@@ -5451,16 +5442,18 @@ bool Lease::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(34)) goto parse_start_stasis;
+        if (input->ExpectTag(40)) goto parse_epoch;
         break;
       }
 
-      // optional .cockroach.util.hlc.Timestamp start_stasis = 4;
-      case 4: {
-        if (tag == 34) {
-         parse_start_stasis:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_start_stasis()));
+      // optional int64 epoch = 5;
+      case 5: {
+        if (tag == 40) {
+         parse_epoch:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &epoch_)));
+          set_has_epoch();
         } else {
           goto handle_unusual;
         }
@@ -5511,10 +5504,9 @@ void Lease::SerializeWithCachedSizes(
       3, *this->replica_, output);
   }
 
-  // optional .cockroach.util.hlc.Timestamp start_stasis = 4;
-  if (has_start_stasis()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      4, *this->start_stasis_, output);
+  // optional int64 epoch = 5;
+  if (has_epoch()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->epoch(), output);
   }
 
   output->WriteRaw(unknown_fields().data(),
@@ -5534,13 +5526,6 @@ int Lease::ByteSize() const {
           *this->start_);
     }
 
-    // optional .cockroach.util.hlc.Timestamp start_stasis = 4;
-    if (has_start_stasis()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->start_stasis_);
-    }
-
     // optional .cockroach.util.hlc.Timestamp expiration = 2;
     if (has_expiration()) {
       total_size += 1 +
@@ -5553,6 +5538,13 @@ int Lease::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->replica_);
+    }
+
+    // optional int64 epoch = 5;
+    if (has_epoch()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->epoch());
     }
 
   }
@@ -5578,14 +5570,14 @@ void Lease::MergeFrom(const Lease& from) {
     if (from.has_start()) {
       mutable_start()->::cockroach::util::hlc::Timestamp::MergeFrom(from.start());
     }
-    if (from.has_start_stasis()) {
-      mutable_start_stasis()->::cockroach::util::hlc::Timestamp::MergeFrom(from.start_stasis());
-    }
     if (from.has_expiration()) {
       mutable_expiration()->::cockroach::util::hlc::Timestamp::MergeFrom(from.expiration());
     }
     if (from.has_replica()) {
       mutable_replica()->::cockroach::roachpb::ReplicaDescriptor::MergeFrom(from.replica());
+    }
+    if (from.has_epoch()) {
+      set_epoch(from.epoch());
     }
   }
   if (!from.unknown_fields().empty()) {
@@ -5611,9 +5603,9 @@ void Lease::Swap(Lease* other) {
 }
 void Lease::InternalSwap(Lease* other) {
   std::swap(start_, other->start_);
-  std::swap(start_stasis_, other->start_stasis_);
   std::swap(expiration_, other->expiration_);
   std::swap(replica_, other->replica_);
+  std::swap(epoch_, other->epoch_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _unknown_fields_.Swap(&other->_unknown_fields_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -5674,63 +5666,15 @@ void Lease::set_allocated_start(::cockroach::util::hlc::Timestamp* start) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
-// optional .cockroach.util.hlc.Timestamp start_stasis = 4;
-bool Lease::has_start_stasis() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-void Lease::set_has_start_stasis() {
-  _has_bits_[0] |= 0x00000002u;
-}
-void Lease::clear_has_start_stasis() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-void Lease::clear_start_stasis() {
-  if (start_stasis_ != NULL) start_stasis_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_start_stasis();
-}
-const ::cockroach::util::hlc::Timestamp& Lease::start_stasis() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.start_stasis)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return start_stasis_ != NULL ? *start_stasis_ : *default_instance().start_stasis_;
-#else
-  return start_stasis_ != NULL ? *start_stasis_ : *default_instance_->start_stasis_;
-#endif
-}
-::cockroach::util::hlc::Timestamp* Lease::mutable_start_stasis() {
-  set_has_start_stasis();
-  if (start_stasis_ == NULL) {
-    start_stasis_ = new ::cockroach::util::hlc::Timestamp;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.start_stasis)
-  return start_stasis_;
-}
-::cockroach::util::hlc::Timestamp* Lease::release_start_stasis() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.start_stasis)
-  clear_has_start_stasis();
-  ::cockroach::util::hlc::Timestamp* temp = start_stasis_;
-  start_stasis_ = NULL;
-  return temp;
-}
-void Lease::set_allocated_start_stasis(::cockroach::util::hlc::Timestamp* start_stasis) {
-  delete start_stasis_;
-  start_stasis_ = start_stasis;
-  if (start_stasis) {
-    set_has_start_stasis();
-  } else {
-    clear_has_start_stasis();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start_stasis)
-}
-
 // optional .cockroach.util.hlc.Timestamp expiration = 2;
 bool Lease::has_expiration() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 void Lease::set_has_expiration() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 void Lease::clear_has_expiration() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 void Lease::clear_expiration() {
   if (expiration_ != NULL) expiration_->::cockroach::util::hlc::Timestamp::Clear();
@@ -5772,13 +5716,13 @@ void Lease::set_allocated_expiration(::cockroach::util::hlc::Timestamp* expirati
 
 // optional .cockroach.roachpb.ReplicaDescriptor replica = 3;
 bool Lease::has_replica() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 void Lease::set_has_replica() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 void Lease::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 void Lease::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
@@ -5816,6 +5760,30 @@ void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* repli
     clear_has_replica();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
+}
+
+// optional int64 epoch = 5;
+bool Lease::has_epoch() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+void Lease::set_has_epoch() {
+  _has_bits_[0] |= 0x00000008u;
+}
+void Lease::clear_has_epoch() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+void Lease::clear_epoch() {
+  epoch_ = GOOGLE_LONGLONG(0);
+  clear_has_epoch();
+}
+ ::google::protobuf::int64 Lease::epoch() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.epoch)
+  return epoch_;
+}
+ void Lease::set_epoch(::google::protobuf::int64 value) {
+  set_has_epoch();
+  epoch_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.epoch)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

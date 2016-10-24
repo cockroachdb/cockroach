@@ -477,8 +477,20 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	if err != nil {
 		return ReplicationTarget{}, err
 	}
-	if lease == nil || !lease.Covers(now) {
+	if lease.Empty() {
 		return ReplicationTarget{}, errors.New("no active lease")
+	}
+	// Find lease replica in order to examine the lease state.
+	store, err := tc.findMemberStore(lease.Replica.StoreID)
+	if err != nil {
+		return ReplicationTarget{}, err
+	}
+	replica, err := store.GetReplica(rangeDesc.RangeID)
+	if err != nil {
+		return ReplicationTarget{}, err
+	}
+	if !replica.IsLeaseValid(lease, now) {
+		return ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica
 	return ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -697,7 +698,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 		{DisableRefreshReasonSnapshotApplied: true, DisableRefreshReasonTicks: true},
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
 	}
-	for _, c := range testCases {
+	for tcIdx, c := range testCases {
 		func() {
 			sc := storage.TestStoreConfig()
 			sc.TestingKnobs = c
@@ -749,14 +750,15 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.stopStore(0)
 			mtc.restartStore(0)
 
-			// Expire existing leases (i.e. move the clock forward). This allows node
-			// 3 to grab the lease later in the test.
-			mtc.expireLeases()
+			// Expire existing leases (i.e. move the clock forward, but don't
+			// increment epochs). This allows node 3 to grab the lease later
+			// in the test.
+			mtc.expireLeasesAndIncrementEpochs(false)
 			// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
 			// leases.
 			for i := 0; i < 2; i++ {
 				if err := mtc.stores[i].DrainLeases(true); err != nil {
-					t.Fatal(err)
+					t.Fatalf("test case %d, store %d: %v", tcIdx, i, err)
 				}
 			}
 
@@ -1001,50 +1003,33 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 3, 4)
 
-	maxTimeout := time.After(10 * time.Second)
-	succeeded := false
-	i := 0
-	for !succeeded {
-		select {
-		case <-maxTimeout:
-			t.Fatalf("Failed to achieve proper replication within 10 seconds")
-		case <-time.After(10 * time.Millisecond):
-			rangeDesc := getRangeMetadata(rightKeyAddr, mtc, t)
-			if count := len(rangeDesc.Replicas); count < 3 {
-				t.Fatalf("Removed too many replicas; expected at least 3 replicas, found %d", count)
-			} else if count == 3 {
-				succeeded = true
-				break
-			}
-
-			// Cycle the lease to the next replica (on the next store) if that
-			// replica still exists. This avoids the condition in which we try
-			// to continuously remove the replica on a store when
-			// down-replicating while it also still holds the lease.
-			for {
-				i++
-				if i >= len(mtc.stores) {
-					i = 0
-				}
-				rep := mtc.stores[i].LookupReplica(rightKeyAddr, nil)
-				if rep != nil {
-					mtc.expireLeases()
-					// Force the read command request a new lease.
-					getArgs := getArgs(rightKey)
-					if _, err := client.SendWrapped(context.Background(), mtc.distSenders[i], &getArgs); err != nil {
-						t.Fatal(err)
-					}
-					mtc.stores[i].ForceReplicationScanAndProcess()
-					break
-				}
-			}
+	// Initialize the gossip network.
+	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
+	for _, s := range mtc.stores {
+		desc, err := s.Descriptor()
+		if err != nil {
+			t.Fatal(err)
 		}
+		storeDescs = append(storeDescs, desc)
+	}
+	for _, g := range mtc.gossips {
+		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
 	}
 
-	// Expire range leases one more time, so that any remaining resolutions can
-	// get a range lease.
-	// TODO(bdarnell): understand why some tests need this.
-	mtc.expireLeases()
+	util.SucceedsSoon(t, func() error {
+		rangeDesc := getRangeMetadata(rightKeyAddr, mtc, t)
+		if count := len(rangeDesc.Replicas); count < 3 {
+			t.Fatalf("Removed too many replicas; expected at least 3 replicas, found %d", count)
+		} else if count == 3 {
+			return nil
+		}
+		// Force scan & replication queue for each store to make sure the
+		// lease holder is given ample opportunity to down-replicate.
+		for i := 0; i < len(mtc.stores); i++ {
+			mtc.stores[i].ForceReplicationScanAndProcess()
+		}
+		return errors.Errorf("range has > 3 replicas: %+v", rangeDesc)
+	})
 }
 
 // TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
@@ -2724,7 +2709,7 @@ func TestRangeQuiescence(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
-	stopNodeLivenessHeartbeats(mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
 
 	// Replica range 1 to all 3 nodes.
 	mtc.replicateRange(1, 1, 2)

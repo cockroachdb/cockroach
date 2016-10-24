@@ -323,8 +323,8 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	if bq.needsLease {
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
-		if lease, _ := repl.getLease(); lease != nil &&
-			lease.Covers(repl.store.Clock().Now()) && !lease.OwnedBy(repl.store.StoreID()) {
+		if lease, _ := repl.getLease(); repl.leaseStatus(&lease, now).state == leaseValid &&
+			!lease.OwnedBy(repl.store.StoreID()) {
 			log.VEventf(ctx, 1, "%s: needs lease; not adding: %+v", repl, lease)
 			return
 		}
@@ -526,7 +526,7 @@ func (bq *baseQueue) processReplica(
 	// and renew or acquire if necessary.
 	if bq.needsLease {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
+		if _, err := repl.redirectOnOrAcquireLease(ctx, repl.store.Clock().Now()); err != nil {
 			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
 				log.VEventf(queueCtx, 3, "not holding lease; skipping")
 				return nil

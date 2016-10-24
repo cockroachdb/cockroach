@@ -711,6 +711,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 		case mode == serverpb.DrainMode_CLIENT:
 			err = s.pgServer.SetDraining(setTo)
 		case mode == serverpb.DrainMode_LEASES:
+			s.nodeLiveness.PauseHeartbeat(setTo)
 			err = s.node.SetDraining(setTo)
 		default:
 			err = errors.Errorf("unknown drain mode: %v (%d)", mode, mode)

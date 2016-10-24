@@ -188,8 +188,13 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 // GetLease exposes replica.getLease for tests.
 // If you just need information about the lease holder, consider issuing a
 // LeaseInfoRequest instead of using this internal method.
-func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return r.getLease()
+}
+
+// LeaseStatus exposes replica.leaseStatus for tests.
+func (r *Replica) LeaseStatus(lease *roachpb.Lease, timestamp hlc.Timestamp) LeaseStatus {
+	return r.leaseStatus(lease, timestamp)
 }
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
@@ -215,9 +220,4 @@ func (r *Replica) IsQuiescent() bool {
 
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
-}
-
-// StopHeartbeat ends the heartbeat loop.
-func (nl *NodeLiveness) StopHeartbeat() {
-	close(nl.stopHeartbeat)
 }
