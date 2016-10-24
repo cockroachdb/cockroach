@@ -23,6 +23,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"time"
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -255,8 +256,7 @@ func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool
 				return err
 			}
 		}
-		typ, n, err := c.readBuf.readTypedMsg(c.rd)
-		c.metrics.BytesInCount.Inc(int64(n))
+		typ, err := c.readTypedMsgOrAbortIdleTxn()
 		if err != nil {
 			return err
 		}
@@ -872,11 +872,11 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 	}
 
 	for {
-		typ, n, err := c.readBuf.readTypedMsg(c.rd)
-		c.metrics.BytesInCount.Inc(int64(n))
+		typ, err := c.readTypedMsgOrAbortIdleTxn()
 		if err != nil {
 			return err
 		}
+
 		var sr sql.StatementResults
 		var done bool
 		switch typ {
@@ -909,5 +909,35 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 		if done {
 			return nil
 		}
+	}
+}
+
+// readTypedMsgAndAbortIdleTxn reads a typed message using the
+// connection.  If the SQL session indicates the SQL session cannot
+// live too long, the read times out after the delay indicated by the
+// SQL session and the SQL txn is aborted preemptively. The read from
+// the client then goes on as usual, so that the aborted txn state is
+// picked up by the next statement sent by the client.
+func (c *v3Conn) readTypedMsgOrAbortIdleTxn() (clientMessageType, error) {
+	for {
+		doKill, timeout := c.session.TransactionKeepAliveInfo()
+		if doKill {
+			if err := c.conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+				return 0, err
+			}
+		}
+		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		c.metrics.BytesInCount.Inc(int64(n))
+		if doKill {
+			if sErr := c.conn.SetReadDeadline(time.Time{}); sErr != nil {
+				return 0, sErr
+			}
+			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
+				c.session.KillSQLTransaction(c.executor)
+				// Try again.
+				continue
+			}
+		}
+		return typ, err
 	}
 }

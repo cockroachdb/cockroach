@@ -89,6 +89,12 @@ type Session struct {
 	// they COMMIT/ROLLBACK.
 	cancel context.CancelFunc
 
+	// txnIdleTimeout is the amount of time that the server can wait for
+	// activity from a client without killing the transaction because it
+	// was idle for too long.  Value 0 indicates to use
+	// defaultTxnIdleTimeout.
+	txnIdleTimeout time.Duration
+
 	// mon tracks memory usage for SQL activity within this session.
 	// Currently we bind an instance of MemoryUsageMonitor to each
 	// session, and the logical timespan for tracking memory usage is
@@ -500,4 +506,34 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+}
+
+var defaultTxnIdleTimeout = envutil.EnvOrDefaultDuration("COCKROACH_SQL_TXN_IDLE_TIMEOUT", 15*time.Second)
+var errTransactionPreemptivelyAborted = errors.New("idle transaction was forcefully aborted")
+
+// KillCurrentSQLTransaction preemptively ensures that any ongoing SQL
+// transaction is aborted irrespective of its current state.
+func (s *Session) KillSQLTransaction(e *Executor) {
+	if s.TxnState.State != Open && s.TxnState.State != RestartWait {
+		// Either no transaction or transaction already aborted or already
+		// committed. Nothing to do.
+		return
+	}
+	e.TxnAbortCount.Inc(1)
+	ts := &s.TxnState
+	ts.txn.CleanupOnError(errTransactionPreemptivelyAborted)
+	ts.resetStateAndTxn(Aborted)
+	if log.V(1) {
+		log.Warningf(s.context, "%v", errTransactionPreemptivelyAborted)
+	}
+}
+
+// TransactionKeepAliveInfo returns whether the session should be
+// killed if the client doesn't send anything, and after how long.
+func (s *Session) TransactionKeepAliveInfo() (doKill bool, timeout time.Duration) {
+	delay := defaultTxnIdleTimeout
+	if s.txnIdleTimeout != time.Duration(0) {
+		delay = s.txnIdleTimeout
+	}
+	return delay > 0 && (s.TxnState.State == Open || s.TxnState.State == RestartWait), delay
 }

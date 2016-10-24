@@ -82,6 +82,29 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
 
+	case `TRANSACTION_IDLE_TIMEOUT`:
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		switch strings.ToUpper(s) {
+		case `DEFAULT`:
+			p.session.txnIdleTimeout = 0
+		default:
+			v, err := time.ParseDuration(s)
+			if err != nil {
+				return nil, err
+			}
+			if v <= 0 {
+				// Zero from the client means disable the timeout. However
+				// internally (in txnIdleTimeout) zero means use the default.
+				// So force a negative value in both cases.
+				p.session.txnIdleTimeout = time.Duration(-1)
+			} else {
+				p.session.txnIdleTimeout = v
+			}
+		}
+
 	case `DEFAULT_TRANSACTION_ISOLATION`:
 		// It's unfortunate that clients want us to support both SET
 		// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the

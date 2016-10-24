@@ -37,6 +37,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		`TIME ZONE`,
 		`SYNTAX`,
 		`DEFAULT_TRANSACTION_ISOLATION`,
+		`TRANSACTION_IDLE_TIMEOUT`,
 		`TRANSACTION ISOLATION LEVEL`,
 		`TRANSACTION PRIORITY`:
 	default:
@@ -51,24 +52,28 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		constructor: func(p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
-			var newRow parser.DTuple
+			var value string
 			switch name {
 			case `DATABASE`:
-				newRow = parser.DTuple{parser.NewDString(p.session.Database)}
+				value = p.session.Database
 			case `TIME ZONE`:
-				newRow = parser.DTuple{parser.NewDString(p.session.Location.String())}
+				value = p.session.Location.String()
 			case `SYNTAX`:
-				newRow = parser.DTuple{parser.NewDString(parser.Syntax(p.session.Syntax).String())}
+				value = parser.Syntax(p.session.Syntax).String()
+			case `TRANSACTION_IDLE_TIMEOUT`:
+				value = defaultTxnIdleTimeout.String()
+				if p.session.txnIdleTimeout != 0 {
+					value = p.session.txnIdleTimeout.String()
+				}
 			case `DEFAULT_TRANSACTION_ISOLATION`:
-				level := p.session.DefaultIsolationLevel.String()
-				newRow = parser.DTuple{parser.NewDString(level)}
+				value = p.session.DefaultIsolationLevel.String()
 			case `TRANSACTION ISOLATION LEVEL`:
-				newRow = parser.DTuple{parser.NewDString(p.txn.Proto.Isolation.String())}
+				value = p.txn.Proto.Isolation.String()
 			case `TRANSACTION PRIORITY`:
-				newRow = parser.DTuple{parser.NewDString(p.txn.UserPriority.String())}
+				value = p.txn.UserPriority.String()
 			}
 
-			if err := v.rows.AddRow(newRow); err != nil {
+			if err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
 				v.rows.Close()
 				return nil, err
 			}
