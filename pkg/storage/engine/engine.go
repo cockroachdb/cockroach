@@ -203,6 +203,8 @@ type Batch interface {
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
+	SetDebug()
+	CollectSpans() map[string]roachpb.Span
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -737,30 +738,36 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 }
 
 func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
+	r.rocksDBBatch.saw(key)
 	return dbGet(r.batch, key)
 }
 
 func (r *distinctBatch) GetProto(
 	key MVCCKey, msg proto.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
+	r.rocksDBBatch.saw(key)
 	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *distinctBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	r.rocksDBBatch.saw(start, end)
 	return dbIterate(r.batch, r, start, end, f)
 }
 
 func (r *distinctBatch) Put(key MVCCKey, value []byte) error {
+	r.rocksDBBatch.saw(key)
 	r.builder.Put(key, value)
 	return nil
 }
 
 func (r *distinctBatch) Merge(key MVCCKey, value []byte) error {
+	r.rocksDBBatch.saw(key)
 	r.builder.Merge(key, value)
 	return nil
 }
 
 func (r *distinctBatch) Clear(key MVCCKey) error {
+	r.rocksDBBatch.saw(key)
 	r.builder.Clear(key)
 	return nil
 }
@@ -871,6 +878,11 @@ type rocksDBBatch struct {
 	distinct           distinctBatch
 	distinctOpen       bool
 	distinctNeedsFlush bool
+
+	debugKeysSeenMu struct {
+		syncutil.Mutex
+		seen map[string]roachpb.Span
+	}
 }
 
 func newRocksDBBatch(parent *RocksDB) *rocksDBBatch {
@@ -880,6 +892,38 @@ func newRocksDBBatch(parent *RocksDB) *rocksDBBatch {
 	}
 	r.distinct.rocksDBBatch = r
 	return r
+}
+
+func (r *rocksDBBatch) CollectSpans() map[string]roachpb.Span {
+	return r.debugKeysSeenMu.seen
+}
+
+func (r *rocksDBBatch) SetDebug() {
+	r.debugKeysSeenMu.Lock()
+	defer r.debugKeysSeenMu.Unlock()
+	r.debugKeysSeenMu.seen = map[string]roachpb.Span{} // enable collection
+}
+
+func (r *rocksDBBatch) saw(span ...MVCCKey) {
+	r.debugKeysSeenMu.Lock()
+	defer r.debugKeysSeenMu.Unlock()
+	if r.debugKeysSeenMu.seen == nil {
+		return
+	}
+
+	var s roachpb.Span
+	if len(span) > 2 {
+		panic(span)
+	}
+	// The copies below are necessary even if we're careful in `unsafeValue`.
+	// Think of `iter.something(iter.unsafeKey())`.
+	if len(span) >= 1 {
+		s.Key = append(roachpb.Key(nil), span[0].Key...)
+	}
+	if len(span) == 2 {
+		s.EndKey = append(roachpb.Key(nil), span[1].Key...)
+	}
+	r.debugKeysSeenMu.seen[fmt.Sprintf("%v", s)] = s
 }
 
 func (r *rocksDBBatch) Close() {
@@ -906,6 +950,7 @@ func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
 	}
 	r.distinctNeedsFlush = true
 	r.builder.Put(key, value)
+	r.saw(key)
 	return nil
 }
 
@@ -915,6 +960,7 @@ func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
 	}
 	r.distinctNeedsFlush = true
 	r.builder.Merge(key, value)
+	r.saw(key)
 	return nil
 }
 
@@ -933,6 +979,7 @@ func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.saw(key)
 	return dbGet(r.batch, key)
 }
 
@@ -943,6 +990,7 @@ func (r *rocksDBBatch) GetProto(
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.saw(key)
 	return dbGetProto(r.batch, key, msg)
 }
 
@@ -951,6 +999,7 @@ func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, e
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.saw(start, end)
 	return dbIterate(r.batch, r, start, end, f)
 }
 
@@ -960,6 +1009,7 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	}
 	r.distinctNeedsFlush = true
 	r.builder.Clear(key)
+	r.saw(key)
 	return nil
 }
 
@@ -1114,8 +1164,15 @@ func (r *rocksDBIterator) Close() {
 	iterPool.Put(r)
 }
 
+func (r *rocksDBIterator) saw(span ...MVCCKey) {
+	if batch, ok := r.engine.(*rocksDBBatch); ok {
+		batch.saw(span...)
+	}
+}
+
 func (r *rocksDBIterator) Seek(key MVCCKey) {
 	r.checkEngineOpen()
+	r.saw(key)
 	if len(key.Key) == 0 {
 		// start=Key("") needs special treatment since we need
 		// to access start[0] in an explicit seek.
@@ -1130,6 +1187,7 @@ func (r *rocksDBIterator) Seek(key MVCCKey) {
 }
 
 func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
+	r.saw(key)
 	r.checkEngineOpen()
 	if len(key.Key) == 0 {
 		r.setState(C.DBIterSeekToLast(r.iter))
@@ -1181,10 +1239,13 @@ func (r *rocksDBIterator) Key() MVCCKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
 	// by the iterator, so it is copied instead of freed.
-	return cToGoKey(r.key)
+	key := cToGoKey(r.key)
+	r.saw(key)
+	return key
 }
 
 func (r *rocksDBIterator) Value() []byte {
+	r.saw(r.Key())
 	return cSliceToGoBytes(r.value)
 }
 
@@ -1200,6 +1261,7 @@ func (r *rocksDBIterator) unsafeKey() MVCCKey {
 }
 
 func (r *rocksDBIterator) unsafeValue() []byte {
+	r.saw(r.Key())
 	return cSliceToUnsafeGoBytes(r.value)
 }
 
@@ -1221,6 +1283,7 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 func (r *rocksDBIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
+	r.saw(start, end)
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	ms := enginepb.MVCCStats{}
 	if err := statusToError(result.status); err != nil {
