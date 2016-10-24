@@ -126,8 +126,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 
 	lastActivity := hlc.ZeroTimestamp.Add(repl.store.startedAt, 0)
 
-	lease, _ := repl.getLease()
-	if lease != nil && lease.ProposedTS != nil {
+	if lease, _ := repl.getLease(); lease != nil && lease.ProposedTS != nil {
 		lastActivity.Forward(*lease.ProposedTS)
 	}
 
@@ -171,7 +170,7 @@ func replicaGCShouldQueueImpl(
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, _ *LeaseStatus, repl *Replica, _ config.SystemConfig,
 ) error {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
@@ -229,7 +228,7 @@ func (rgcq *replicaGCQueue) process(
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
 		log.Event(ctx, "not gc'able")
-		if err := repl.setLastReplicaGCTimestamp(ctx, now); err != nil {
+		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
 	}

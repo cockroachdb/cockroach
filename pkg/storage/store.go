@@ -149,6 +149,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		ConsistencyCheckPanicOnFailure: true,
 		MetricsSampleInterval:          time.Hour,
 		EnableCoalescedHeartbeats:      true,
+		EnableEpochRangeLeases:         true,
 	}
 }
 
@@ -644,6 +645,9 @@ type StoreConfig struct {
 	// EnableCoalescedHeartbeats controls whether heartbeats are coalesced.
 	EnableCoalescedHeartbeats bool
 
+	// EnableEpochRangeLeases controls whether epoch-based range leases are used.
+	EnableEpochRangeLeases bool
+
 	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity values which need be exceeded before the store will
 	// gossip immediately without waiting for the periodic gossip interval.
@@ -815,7 +819,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		nodeDesc:  nodeDesc,
 		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
 	}
-
 	// EnableCoalescedHeartbeats is enabled by TestStoreConfig, so in that case
 	// ignore the environment variable. Otherwise, use whatever the environment
 	// variable says should be used.
@@ -936,9 +939,9 @@ func (s *Store) DrainLeases(drain bool) error {
 			// If we own an active lease or we're trying to obtain a lease
 			// (and that request is fresh enough), wait.
 			switch {
-			case lease.OwnedBy(s.StoreID()) && lease.Covers(now):
+			case lease.OwnedBy(s.StoreID()) && r.IsLeaseValid(lease, now):
 				drainingLease = lease
-			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && nextLease.Covers(now):
+			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(nextLease, now):
 				drainingLease = nextLease
 			default:
 				return true
@@ -1940,13 +1943,14 @@ func (s *Store) maybeMergeTimestampCaches(
 	// Merge support is currently incomplete and incorrect. In particular, the
 	// lease holders must be colocated and the subsumed range appropriately
 	// quiesced. See also #2433.
-	if subsumedLease.Covers(s.Clock().Now()) &&
+	now := s.Clock().Now()
+	if subsumedRep.isLeaseValidLocked(subsumedLease, now) &&
 		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
 		log.Fatalf(ctx, "cannot merge ranges with non-colocated leases. "+
 			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
 	}
 
-	if subsumingLease.Covers(s.Clock().Now()) &&
+	if subsumingRep.isLeaseValidLocked(subsumingLease, now) &&
 		subsumingLease.OwnedBy(s.StoreID()) {
 		subsumedRep.mu.tsCache.MergeInto(subsumingRep.mu.tsCache, false /* clear */)
 	}
@@ -2290,11 +2294,7 @@ func (s *Store) LeaseCount() int {
 
 	var leaseCount int
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		r.mu.Lock()
-		lease := r.mu.state.Lease
-		r.mu.Unlock()
-
-		if lease.OwnedBy(s.Ident.StoreID) && lease.Covers(now) {
+		if r.hasLease(now) {
 			leaseCount++
 		}
 		return true
@@ -3663,8 +3663,8 @@ func (s *Store) canApplySnapshotLocked(
 				}
 				lease, pendingLease := r.getLease()
 				now := s.Clock().Now()
-				return (lease == nil || !lease.Covers(now)) &&
-					(pendingLease == nil || !pendingLease.Covers(now))
+				return (lease == nil || !r.IsLeaseValid(lease, now)) &&
+					(pendingLease == nil || !r.IsLeaseValid(pendingLease, now))
 			}
 
 			// If the existing range shows no signs of recent activity, give it a GC
