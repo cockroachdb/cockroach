@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,6 +86,10 @@ type Config struct {
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
+
+	// TimeSeriesServerConfig contains configuration specific to the time series
+	// server.
+	TimeSeriesServerConfig ts.ServerConfig
 
 	// Parsed values.
 
