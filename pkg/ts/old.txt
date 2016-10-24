@@ -1,0 +1,1 @@
+FAIL	github.com/cockroachdb/cockroach/pkg/ts [build failed]
