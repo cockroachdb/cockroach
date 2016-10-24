@@ -147,7 +147,8 @@ func TestStoresLookupReplica(t *testing.T) {
 		{3, roachpb.RKey("x"), roachpb.RKey("z")},
 	}
 	for i, rng := range ranges {
-		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(e[i])
 		cfg.Transport = NewDummyRaftTransport()
 		s[i] = NewStore(cfg, e[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
@@ -238,7 +239,9 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	stores := []*Store{}
 	for i := 0; i < 2; i++ {
 		cfg.Transport = NewDummyRaftTransport()
-		s := NewStore(cfg, engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper), &roachpb.NodeDescriptor{NodeID: 1})
+		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(eng)
+		s := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident.StoreID = storeIDAlloc
 		stores = append(stores, s)

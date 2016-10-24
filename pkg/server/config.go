@@ -30,15 +30,16 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Context defaults.
@@ -86,9 +87,6 @@ type Config struct {
 	CacheSize int64
 
 	// Parsed values.
-
-	// Engines is the storage instances specified by Stores.
-	Engines []engine.Engine
 
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes roachpb.Attributes
@@ -162,6 +160,8 @@ type Config struct {
 	// to cluster metadata, such as DDL statements and range rebalancing
 	// actions.
 	EventLogEnabled bool
+
+	enginesCreated bool
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
@@ -341,8 +341,35 @@ func MakeConfig() Config {
 	return cfg
 }
 
-// InitStores initializes cfg.Engines based on cfg.Stores.
-func (cfg *Config) InitStores(stopper *stop.Stopper) error {
+// Engines is a container of engines, allowing convenient closing.
+type Engines []engine.Engine
+
+// Close closes all the Engines.
+// This method has a pointer receiver so that the following pattern works:
+//	func f() {
+//		engines := Engines(engineSlice)
+//		defer engines.Close()  // make sure the engines are Closed if this
+//		                       // function returns early.
+//		... do something with engines, pass ownership away...
+//		engines = nil  // neutralize the preceding defer
+//	}
+func (e *Engines) Close() {
+	for _, eng := range *e {
+		eng.Close()
+	}
+	*e = nil
+}
+
+// CreateEngines creates Engines based on the specs in ctx.Stores.
+func (cfg *Config) CreateEngines() (Engines, error) {
+	engines := Engines(nil)
+	defer engines.Close()
+
+	if cfg.enginesCreated {
+		return Engines{}, errors.Errorf("engines already created")
+	}
+	cfg.enginesCreated = true
+
 	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
@@ -354,56 +381,61 @@ func (cfg *Config) InitStores(stopper *stop.Stopper) error {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return err
+		return Engines{}, err
 	}
 
+	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
+		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
 	for _, spec := range cfg.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return fmt.Errorf("could not retrieve system memory")
+					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
-				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
+				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(cfg.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
+			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return err
+					return Engines{}, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
-				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
+				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(
-				cfg.Engines,
-				engine.NewRocksDB(
-					spec.Attributes,
-					spec.Path,
-					cache,
-					sizeInBytes,
-					openFileLimitPerStore,
-					stopper,
-				),
+
+			eng, err := engine.NewRocksDB(
+				spec.Attributes,
+				spec.Path,
+				cache,
+				sizeInBytes,
+				openFileLimitPerStore,
 			)
+			if err != nil {
+				return Engines{}, err
+			}
+			engines = append(engines, eng)
 		}
 	}
 
-	if len(cfg.Engines) == 1 {
+	if len(engines) == 1 {
 		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof(context.TODO(), "%d storage engines initialized", len(cfg.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(engines))
 	}
-	return nil
+	enginesCopy := engines
+	engines = nil
+	return enginesCopy, nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap

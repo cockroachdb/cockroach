@@ -103,6 +103,7 @@ type Server struct {
 	stopper        *stop.Stopper
 	sqlExecutor    *sql.Executor
 	leaseMgr       *sql.LeaseManager
+	engines        Engines
 }
 
 // NewServer creates a Server from a server.Context.
@@ -148,13 +149,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// components.
 	ctx = tracing.WithTracer(ctx, s.cfg.AmbientCtx.Tracer)
 
-	if cfg.Insecure {
+	if s.cfg.Insecure {
 		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 
 	s.clock.SetMaxOffset(cfg.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, cfg.Config, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(ctx, err)
@@ -177,7 +178,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.clock,
 		s.rpcContext,
-		cfg.TimeUntilStoreDead,
+		s.cfg.TimeUntilStoreDead,
 		s.stopper,
 	)
 
@@ -208,7 +209,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx,
 		s.distSender,
 		s.clock,
-		cfg.Linearizable,
+		s.cfg.Linearizable,
 		s.stopper,
 		txnMetrics,
 	)
@@ -217,7 +218,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Use the range lease expiration and renewal durations as the node
 	// liveness expiration and heartbeat interval.
 	active, renewal := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
+		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(
 		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
 	)
@@ -233,7 +234,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if cfg.TestingKnobs.SQLLeaseManager != nil {
-		lmKnobs = *cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
+		lmKnobs = *s.cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
 	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs, s.stopper)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -259,14 +260,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DistSQLSrv:            s.distSQLServer,
 		MetricsSampleInterval: s.cfg.MetricsSampleInterval,
 	}
-	if cfg.TestingKnobs.SQLExecutor != nil {
-		execCfg.TestingKnobs = cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	if s.cfg.TestingKnobs.SQLExecutor != nil {
+		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 	} else {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
-	if cfg.TestingKnobs.SQLSchemaChanger != nil {
+	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
 		execCfg.SchemaChangerTestingKnobs =
-			cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+			s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	} else {
 		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
 	}
@@ -305,8 +306,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeLeaseRenewalDuration: renewal,
 		TimeSeriesDataStore:       s.tsDB,
 	}
-	if cfg.TestingKnobs.Store != nil {
-		storeCfg.TestingKnobs = *cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
+	if s.cfg.TestingKnobs.Store != nil {
+		storeCfg.TestingKnobs = *s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
@@ -532,10 +533,16 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr)
 	log.Event(ctx, "started gossip")
 
+	s.engines, err = s.cfg.CreateEngines()
+	if err != nil {
+		return errors.Wrap(err, "failed to create engines")
+	}
+	s.stopper.AddCloser(&s.engines)
+
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
-		s.cfg.Engines,
+		s.engines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 	)

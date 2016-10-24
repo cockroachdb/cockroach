@@ -160,10 +160,6 @@ type Engine interface {
 	ReadWriter
 	// Attrs returns the engine/store attributes.
 	Attrs() roachpb.Attributes
-	// Checkpoint creates a point-in-time snapshot of the on-disk state of the
-	// key/value store, hard-linking and copying files into the specified
-	// directory.
-	Checkpoint(dir string) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
 	// Flush causes the engine to write all in-memory data to disk
@@ -181,8 +177,6 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
-	// Open initializes the engine.
-	Open() error
 }
 
 // Batch is the interface for batch specific operations.

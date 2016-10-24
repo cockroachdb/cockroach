@@ -61,7 +61,9 @@ func init() {
 func createTestAbortCache(
 	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
 ) (*AbortCache, engine.Engine) {
-	return NewAbortCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+	return NewAbortCache(rangeID), eng
 }
 
 // TestAbortCachePutGetClearData tests basic get & put functionality as well as

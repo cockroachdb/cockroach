@@ -1537,16 +1537,6 @@ DBStatus DBCompact(DBEngine* db) {
   return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), NULL, NULL));
 }
 
-DBStatus DBCheckpoint(DBEngine* db, DBSlice dir) {
-  rocksdb::Checkpoint* cp = nullptr;
-  rocksdb::Status status = rocksdb::Checkpoint::Create(db->rep, &cp);
-  if (!status.ok()) {
-    return ToDBStatus(status);
-  }
-  std::unique_ptr<rocksdb::Checkpoint> cp_deleter(cp);
-  return ToDBStatus(cp->CreateCheckpoint(ToString(dir)));
-}
-
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
   return ToDBStatus(rep->Put(options, EncodeKey(key), ToSlice(value)));
