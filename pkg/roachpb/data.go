@@ -954,23 +954,38 @@ var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
 	start := time.Unix(0, l.Start.WallTime).UTC()
-	expiration := time.Unix(0, l.Expiration.WallTime).UTC()
-	return fmt.Sprintf("replica %s %s %s", l.Replica, start, expiration.Sub(start))
-}
-
-// Covers returns true if the given timestamp can be served by the Lease.
-// This is the case if the timestamp precedes the Lease's stasis period.
-// Note that the fact that a lease covers a timestamp is not enough for the
-// holder of the lease to be able to serve a read with that timestamp;
-// pendingLeaderLeaseRequest.TransferInProgress() should also be consulted to
-// account for possible lease transfers.
-func (l Lease) Covers(timestamp hlc.Timestamp) bool {
-	return timestamp.Less(l.StartStasis)
+	if l.Epoch == 0 {
+		expiration := time.Unix(0, l.Expiration.WallTime).UTC()
+		return fmt.Sprintf("replica %s start=%s duration=%s", l.Replica, start, expiration.Sub(start))
+	}
+	return fmt.Sprintf("replica %s epoch=%d start=%s", l.Replica, l.Epoch, start)
 }
 
 // OwnedBy returns whether the given store is the lease owner.
 func (l Lease) OwnedBy(storeID StoreID) bool {
 	return l.Replica.StoreID == storeID
+}
+
+// Empty returns whether the lease is uninitialized.
+func (l Lease) Empty() bool {
+	return l.Replica.StoreID == 0
+}
+
+// Verify determines whether ol is either the exact same lease,
+// or else is an extension of the same expiration-based lease.
+func (l Lease) Verify(ol Lease) error {
+	if l == ol {
+		return nil
+	}
+	// The one exception is an expiration-based lease which has
+	// been extended.
+	if l.Epoch == 0 && ol.Epoch == 0 && l.Expiration.Less(ol.Expiration) {
+		l.Expiration = ol.Expiration
+		if l == ol {
+			return nil
+		}
+	}
+	return errors.Errorf("leases %+v and %+v do not verify", l, ol)
 }
 
 // AsIntents takes a slice of spans and returns it as a slice of intents for

@@ -51,9 +51,9 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	})
 }
 
-func stopNodeLivenessHeartbeats(mtc *multiTestContext) {
+func pauseNodeLivenessHeartbeats(mtc *multiTestContext, pause bool) {
 	for _, nl := range mtc.nodeLivenesses {
-		nl.StopHeartbeat()
+		nl.PauseHeartbeat(pause)
 	}
 }
 
@@ -65,7 +65,7 @@ func TestNodeLiveness(t *testing.T) {
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, mtc)
-	stopNodeLivenessHeartbeats(mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
 
 	// Advance clock past the liveness threshold to verify IsLive becomes false.
 	active, _ := storage.RangeLeaseDurations(
@@ -82,7 +82,11 @@ func TestNodeLiveness(t *testing.T) {
 	}
 	// Trigger a manual heartbeat and verify liveness is reestablished.
 	for _, nl := range mtc.nodeLivenesses {
-		if err := nl.ManualHeartbeat(); err != nil {
+		l, err := nl.Self()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := nl.Heartbeat(context.Background(), l); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -106,25 +110,34 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	defer mtc.Stop()
 
 	verifyLiveness(t, mtc)
-	stopNodeLivenessHeartbeats(mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
 
 	// First try to increment the epoch of a known-live node.
 	deadNodeID := mtc.gossips[1].NodeID.Get()
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(
-		context.Background(), deadNodeID); !testutils.IsError(err, "cannot increment epoch on live node") {
-		t.Fatalf("expected error incrementing a live node: %v", err)
-	}
-
-	// Advance clock past liveness threshold & increment epoch.
 	oldLiveness, err := mtc.nodeLivenesses[0].GetLiveness(deadNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(
+		context.Background(), oldLiveness); !testutils.IsError(err, "cannot increment epoch on live node") {
+		t.Fatalf("expected error incrementing a live node: %v", err)
+	}
+
+	// Advance clock past liveness threshold & increment epoch.
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = mtc.nodeLivenesses[0].IncrementEpoch(
+		context.Background(), oldLiveness); !testutils.IsError(err, "cannot increment epoch on live node") {
+		t.Fatalf("expected error incrementing a live node")
+	}
+
+	// Advance clock past liveness threshold & increment epoch.
 	active, _ := storage.RangeLeaseDurations(
 		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0))
 	mtc.manualClock.Increment(active.Nanoseconds() + 1)
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), deadNodeID); err != nil {
-		t.Fatalf("unexpected error incrementing a live node: %s", err)
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != nil {
+		t.Fatalf("unexpected error incrementing a non-live node: %s", err)
 	}
 
 	// Verify that the epoch has been advanced.
@@ -148,6 +161,18 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	// Verify epoch increment metric count.
 	if c := mtc.nodeLivenesses[0].Metrics().EpochIncrements.Count(); c != 1 {
 		t.Errorf("expected epoch increment == 1; got %d", c)
+	}
+
+	// Verify noop on incrementing an already-incremented epoch.
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != nil {
+		t.Fatalf("unexpected error incrementing a non-live node: %s", err)
+	}
+
+	// Verify error incrementing with a too-high expectation for liveness epoch.
+	oldLiveness.Epoch = 3
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(
+		context.Background(), oldLiveness); !testutils.IsError(err, "unexpected liveness epoch 2; expected >= 3") {
+		t.Fatalf("expected error incrementing with a too-high expected epoch: %v", err)
 	}
 }
 
@@ -214,14 +239,15 @@ func TestNodeLivenessSelf(t *testing.T) {
 	defer mtc.Stop()
 
 	// Verify liveness of all nodes for all nodes.
-	stopNodeLivenessHeartbeats(mtc)
-	if err := mtc.nodeLivenesses[0].ManualHeartbeat(); err != nil {
+	pauseNodeLivenessHeartbeats(mtc, true)
+	g := mtc.gossips[0]
+	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
+	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
 		t.Fatal(err)
 	}
 
 	// Gossip random nonsense for liveness and verify that asking for
 	// the node's own node ID returns the "correct" value.
-	g := mtc.gossips[0]
 	key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 	var count int32
 	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
@@ -250,7 +276,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lGet != lSelf {
+	if !reflect.DeepEqual(lGet, lSelf) {
 		t.Errorf("expected GetLiveness() to return same value as Self(): %+v != %+v", lGet, lSelf)
 	}
 	if lGet.Epoch == 2 || lSelf.NodeID == 2 {

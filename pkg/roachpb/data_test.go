@@ -573,6 +573,39 @@ func TestMakePriorityLimits(t *testing.T) {
 	}
 }
 
+func TestLeaseVerify(t *testing.T) {
+	r1 := ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
+	r2 := ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
+	ts1 := makeTS(1, 1)
+	ts2 := makeTS(2, 1)
+	ts3 := makeTS(3, 1)
+	epL1 := Lease{Replica: r1, Start: ts1, Epoch: 1}
+	epL1_2 := Lease{Replica: r1, Start: ts1, Epoch: 2}
+	exL1 := Lease{Replica: r1, Start: ts1, Expiration: ts2}
+	exL1_2 := Lease{Replica: r1, Start: ts1, Expiration: ts3}
+	epL2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
+	exL2 := Lease{Replica: r2, Start: ts2, Expiration: ts3}
+
+	testCases := []struct {
+		l, ol      Lease
+		expSuccess bool
+	}{
+		{epL1, epL1, true},    // same epoch lease
+		{exL1, exL1, true},    // same expiration lease
+		{epL1, epL1_2, false}, // different epoch leases
+		{epL1, epL2, false},   // different epoch leases
+		{exL1, exL2, false},   // different expiration leases
+		{exL1, exL1_2, true},  // same expiration lease, extended
+		{exL1_2, exL1, false}, // same expiration lease, extended but backwards
+	}
+
+	for i, tc := range testCases {
+		if err := tc.l.Verify(tc.ol); tc.expSuccess != (err == nil) {
+			t.Errorf("%d: expected success? %t; got %s", i, tc.expSuccess, err)
+		}
+	}
+}
+
 func TestSpanOverlaps(t *testing.T) {
 	sA := Span{Key: []byte("a")}
 	sD := Span{Key: []byte("d")}
@@ -713,53 +746,6 @@ func TestRSpanIntersect(t *testing.T) {
 		desc.EndKey = test.endKey
 		if _, err := rs.Intersect(&desc); err == nil {
 			t.Errorf("%d: unexpected success", i)
-		}
-	}
-}
-
-func TestLeaseCovers(t *testing.T) {
-	mk := func(ds ...int64) (sl []hlc.Timestamp) {
-		for _, d := range ds {
-			sl = append(sl, hlc.ZeroTimestamp.Add(d, 0))
-		}
-		return sl
-	}
-
-	ts10 := mk(10)[0]
-	ts1K := mk(1000)[0]
-
-	for i, test := range []struct {
-		lease   Lease
-		in, out []hlc.Timestamp
-	}{
-		{
-			lease: Lease{
-				StartStasis: mk(1)[0],
-				Expiration:  ts1K,
-			},
-			in:  mk(0),
-			out: mk(1, 100, 500, 999, 1000),
-		},
-		{
-			lease: Lease{
-				Start:       ts10,
-				StartStasis: mk(500)[0],
-				Expiration:  ts1K,
-			},
-			out: mk(500, 999, 1000, 1001, 2000),
-			// Note that the lease covers timestamps before its start timestamp.
-			in: mk(0, 9, 10, 300, 499),
-		},
-	} {
-		for _, ts := range test.in {
-			if !test.lease.Covers(ts) {
-				t.Errorf("%d: should contain %s", i, ts)
-			}
-		}
-		for _, ts := range test.out {
-			if test.lease.Covers(ts) {
-				t.Errorf("%d: must not contain %s", i, ts)
-			}
 		}
 	}
 }

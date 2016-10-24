@@ -1717,15 +1717,6 @@ getStart?() : util.hlc.Timestamp;
 
 
 
-start_stasis?: util.hlc.Timestamp;
-		
-
-getStartStasis?() : util.hlc.Timestamp;
-		setStartStasis?(startStasis : util.hlc.Timestamp): void;
-		
-
-
-
 expiration?: util.hlc.Timestamp;
 		
 
@@ -1740,6 +1731,15 @@ replica?: ReplicaDescriptor;
 
 getReplica?() : ReplicaDescriptor;
 		setReplica?(replica : ReplicaDescriptor): void;
+		
+
+
+
+epoch?: Long;
+		
+
+getEpoch?() : Long;
+		setEpoch?(epoch : Long): void;
 		
 
 

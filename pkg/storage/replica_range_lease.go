@@ -22,6 +22,7 @@ package storage
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,7 +76,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 func (p *pendingLeaseRequest) InitOrJoinRequest(
 	replica *Replica,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
-	timestamp hlc.Timestamp,
+	status LeaseStatus,
 	startKey roachpb.Key,
 	transfer bool,
 ) <-chan *roachpb.Error {
@@ -94,20 +95,27 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	}
 	llChan := make(chan *roachpb.Error, 1)
 	// No request in progress. Let's propose a Lease command asynchronously.
-	// TODO(tschottdorf): get duration from configuration, either as a
-	// config flag or, later, dynamically adjusted.
-	startStasis := timestamp.Add(int64(replica.store.cfg.RangeLeaseActiveDuration), 0)
-	expiration := startStasis.Add(int64(replica.store.Clock().MaxOffset()), 0)
 	reqSpan := roachpb.Span{
 		Key: startKey,
 	}
 	var leaseReq roachpb.Request
 	reqLease := roachpb.Lease{
-		Start:       timestamp,
-		StartStasis: startStasis,
-		Expiration:  expiration,
-		Replica:     nextLeaseHolder,
+		Start:   status.timestamp,
+		Replica: nextLeaseHolder,
 	}
+
+	if replica.expiringLease() {
+		reqLease.Expiration = status.timestamp.Add(int64(replica.store.cfg.RangeLeaseActiveDuration), 0)
+	} else {
+		// Get the liveness for the next lease holder and set the epoch in the lease request.
+		liveness, err := replica.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
+		if err != nil {
+			llChan <- roachpb.NewErrorf("couldn't request lease for %+v: %v", nextLeaseHolder, err)
+			return llChan
+		}
+		reqLease.Epoch = liveness.Epoch
+	}
+
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
 			Span:  reqSpan,
@@ -119,17 +127,38 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Lease: reqLease,
 		}
 	}
+
 	if replica.store.Stopper().RunAsyncTask(context.TODO(), func(ctx context.Context) {
 		ctx = replica.AnnotateCtx(ctx)
-		// Propose a RequestLease command and wait for it to apply.
-		ba := roachpb.BatchRequest{}
-		ba.Timestamp = replica.store.Clock().Now()
-		ba.RangeID = replica.RangeID
-		ba.Add(leaseReq)
-		if log.V(2) {
-			log.Infof(ctx, "sending lease request %v", leaseReq)
+		var pErr *roachpb.Error
+
+		// If epoch-based lease & state is expired, increment epoch or heartbeat.
+		if reqLease.Epoch != 0 && status.liveness != nil && status.state == leaseExpired {
+			var err error
+			// If this replica is previous & next lease holder, manually heartbeat to become live.
+			if status.lease.OwnedBy(nextLeaseHolder.StoreID) &&
+				replica.store.StoreID() == nextLeaseHolder.StoreID {
+				if err = replica.store.cfg.NodeLiveness.Heartbeat(ctx, status.liveness); err != nil {
+					log.Errorf(ctx, "failed heartbeat: %v", err)
+				}
+			} else if status.liveness.Epoch == status.lease.Epoch {
+				// If not owner, increment epoch if necessary to invalidate lease.
+				if err = replica.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.liveness); err != nil {
+					log.Errorf(ctx, "failed increment epoch for previous leaseholder: %v", err)
+				}
+			}
+			// Set error for propagation to all waiters below.
+			pErr = roachpb.NewError(newNotLeaseHolderError(&status.lease, replica.store.StoreID(), replica.Desc()))
 		}
-		_, pErr := replica.Send(ctx, ba)
+
+		// Propose a RequestLease command and wait for it to apply.
+		if pErr == nil {
+			ba := roachpb.BatchRequest{}
+			ba.Timestamp = replica.store.Clock().Now()
+			ba.RangeID = replica.RangeID
+			ba.Add(leaseReq)
+			_, pErr = replica.Send(ctx, ba)
+		}
 
 		// Send result of lease to all waiter channels.
 		replica.mu.Lock()
@@ -193,6 +222,101 @@ func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) (r
 	return roachpb.Lease{}, false
 }
 
+// expiringLease returns whether this range uses an expiration-based
+// lease; false if epoch-based. Ranges located before or at the node
+// liveness table use traditional expiration-based leases.
+//
+// The replica lock must be held.
+func (r *Replica) expiringLease() bool {
+	return r.store.cfg.NodeLiveness == nil ||
+		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+}
+
+type leaseState int
+
+const (
+	leaseValid   leaseState = iota // can be used
+	leaseStasis                    // not expired, but can't be used
+	leaseExpired                   // expired, can't be used
+	leaseError                     // can't be used or acquired
+)
+
+// LeaseStatus holds the least state, the timestamp at which the state
+// is accurate, the lease and optionally the liveness if the lease is
+// epoch-based.
+type LeaseStatus struct {
+	state     leaseState    // state of the lease
+	timestamp hlc.Timestamp // timestamp the lease was evaluated at
+	lease     roachpb.Lease // lease which status describes
+	liveness  *Liveness     // liveness if epoch-based lease
+}
+
+// leaseStatus returns lease status. If the lease is epoch-based,
+// the liveness field will be set to the liveness used to compute
+// its state, unless state == leaseError.
+//
+// - The lease is considered valid if the timestamp is covered by the
+//   supplied lease. This is determined differently depending on the
+//   lease properties. For expiration-based leases, the timestamp is
+//   covered if it's less than the expiration (minus the maximum
+//   clock offset). For epoch-based "node liveness" leases, the lease
+//   epoch must match the owner node's liveness epoch -AND- the
+//   timestamp must be within the node's liveness expiration (also
+//   minus the maximum clock offset).
+// - The lease is considered in stasis if the timestamp is within the
+//   maximum clock offset window of the lease expiration.
+// - The lease is considered expired in all other cases.
+//
+// The maximum clock offset must always be taken into consideration to
+// avoid a failure of linearizability on a single register during
+// lease changes. Without that stasis period, the following could
+// occur:
+//
+// * a range lease gets committed on the new lease holder (but not the old).
+// * client proposes and commits a write on new lease holder (with a
+//   timestamp just greater than the expiration of the old lease).
+// * client tries to read what it wrote, but hits a slow coordinator
+//   (which assigns a timestamp covered by the old lease).
+// * the read is served by the old lease holder (which has not
+//   processed the change in lease holdership).
+// * the client fails to read their own write.
+func (r *Replica) leaseStatus(lease *roachpb.Lease, timestamp hlc.Timestamp) (status LeaseStatus) {
+	status.timestamp = timestamp
+	status.lease = *lease
+	if lease.Empty() {
+		status.state = leaseExpired
+		return
+	}
+	var expiration hlc.Timestamp
+	if lease.Epoch == 0 {
+		expiration = lease.Expiration
+	} else {
+		var err error
+		status.liveness, err = r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
+		if err != nil || status.liveness.Epoch < lease.Epoch {
+			// If lease validity can't be determined (e.g. gossip is down
+			// and liveness info isn't available for owner), we can neither
+			// use the lease nor do we want to attempt to acquire it.
+			status.state = leaseError
+			return
+		}
+		if status.liveness.Epoch > lease.Epoch {
+			status.state = leaseExpired
+			return
+		}
+		expiration = status.liveness.Expiration
+	}
+	stasis := expiration.Add(-int64(r.store.Clock().MaxOffset()), 0)
+	if timestamp.Less(stasis) {
+		status.state = leaseValid
+	} else if timestamp.Less(expiration) {
+		status.state = leaseStasis
+	} else {
+		status.state = leaseExpired
+	}
+	return
+}
+
 // requestLeaseLocked executes a request to obtain or extend a lease
 // asynchronously and returns a channel on which the result will be posted. If
 // there's already a request in progress, we join in waiting for the results of
@@ -200,7 +324,7 @@ func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) (r
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Error {
+func (r *Replica) requestLeaseLocked(status LeaseStatus) <-chan *roachpb.Error {
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
@@ -222,7 +346,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		r, repDesc, timestamp, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		r, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -233,7 +357,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 // timestamp of the new (transferred) lease. More subtly, the replica can't
 // even serve reads or propose commands with timestamps lower than the start of
 // the new lease because it could lead to read your own write violations (see
-// comments on the stasis period in the Lease proto). We could, in principle,
+// comments on the stasis period in IsLeaseValid). We could, in principle,
 // serve reads more than the maximum clock offset in the past.
 //
 // The method waits for any in-progress lease extension to be done, and it also
@@ -243,7 +367,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 //
 // TODO(andrei): figure out how to persist the "not serving" state across node
 // restarts.
-func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
+func (r *Replica) AdminTransferLease(target roachpb.StoreID, status LeaseStatus) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -253,14 +377,13 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
-		lease := r.mu.state.Lease
-		if lease.OwnedBy(target) {
+		if status.lease.OwnedBy(target) {
 			// The target is already the lease holder. Nothing to do.
 			return nil, nil, nil
 		}
 		desc := r.mu.state.Desc
-		if !lease.OwnedBy(r.store.StoreID()) {
-			return nil, nil, newNotLeaseHolderError(lease, r.store.StoreID(), desc)
+		if !status.lease.OwnedBy(r.store.StoreID()) {
+			return nil, nil, newNotLeaseHolderError(&status.lease, r.store.StoreID(), desc)
 		}
 		// Verify the target is a replica of the range.
 		var ok bool
@@ -283,11 +406,9 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 			// same replica we'd like.
 			return nil, nil, newNotLeaseHolderError(&nextLease, r.store.StoreID(), desc)
 		}
-		// No extension in progress; start a transfer.
-		nextLeaseBegin := r.store.Clock().Now()
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			r, nextLeaseHolder, nextLeaseBegin,
-			desc.StartKey.AsRawKey(), true /* transfer */)
+			r, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
+		)
 		return nil, transfer, nil
 	}
 

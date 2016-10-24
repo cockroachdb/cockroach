@@ -429,7 +429,8 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 				return "", err
 			}
 			ent.Data = nil
-			return fmt.Sprintf("%s by %v\n%s\n%s\n", &ent, cmd.OriginReplica, &cmd.Cmd, &cmd), nil
+			return fmt.Sprintf("%s by %v (lease %s)\n%s\n%s\n",
+				&ent, cmd.OriginReplica, cmd.OriginLease, &cmd.Cmd, &cmd), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
