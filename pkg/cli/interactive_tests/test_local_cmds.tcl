@@ -21,13 +21,13 @@ eexpect "root@"
 # Check that \q terminates the client.
 send "\\q\r"
 eexpect eof
-spawn $argv sql
+spawn $argv sql --pretty=false
 eexpect root@
 
 # Check that \| reads statements.
 send "\\| echo 'select '; echo '38 + 4;'\r"
-eexpect 42
 eexpect "1 row"
+eexpect 42
 eexpect root@
 
 # Check that \| does not execute upon encountering an error.
@@ -39,7 +39,7 @@ eexpect "database * does not exist"
 eexpect root@
 
 # Check that a buit-in command in between tokens of a statement is
-# passed-through.
+# processed locally.
 send "select\r"
 eexpect " ->"
 
@@ -47,24 +47,39 @@ send "\\h\r"
 eexpect " ->"
 
 send "1;\r"
-eexpect "syntax error*\\h"
+eexpect "1 row"
 eexpect root@
 
 # Check that a built-in command in the middle of a token (eg a string)
-# is passed-through.
+# is processed locally.
 send "select 'hello\r"
 eexpect " ->"
 send "\\h\r"
 eexpect " ->"
 send "world';\r"
-eexpect "hello"
-eexpect "\\h"
-eexpect "world"
 eexpect "1 row"
+eexpect "hello\\\\nworld"
 eexpect root@
 
 # Finally terminate with Ctrl+C.
 send "\003"
+eexpect eof
+
+spawn /bin/bash
+send "PS1=':''/# '\r"
+eexpect ":/# "
+
+# Now check that non-interactive built-in commands are only accepted
+# at the start of a statement.
+send "(echo '\\set check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\n"
+eexpect "statement ignored"
+eexpect ":/# "
+
+send "(echo '\\unset check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\n"
+eexpect "pq: syntax error"
+eexpect ":/# "
+
+send "exit 0\r"
 eexpect eof
 
 stop_server $argv
