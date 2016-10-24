@@ -1,5 +1,5 @@
 - Feature Name: Non-Materialized Views
-- Status: draft
+- Status: completed
 - Start Date: 2016-09-01
 - Authors: Alex Robinson
 - RFC PR: [#9045](https://github.com/cockroachdb/cockroach/pull/9045)
@@ -127,6 +127,15 @@ definition whenever a referenced table or column is renamed. To get
 around this, we could reject attempts to rename anything in a table that
 is depended on by a view.
 
+Star expansions (e.g. `SELECT * FROM foo.bar`) also cause problems for a
+syntactic encoding - to prevent a star expansion from changing meaning over
+time, we'd have to block users from adding columns to the table that the
+star applies to, which would be far too strong of a restriction. We could
+potentially expand out all the stars in a query and replace them with
+resolved column names, but due to the amount of work involved in doing that,
+we will instead prevent users from including star expansions in their view
+queries to begin with.
+
 ### Semantically
 
 Semantically would mean that we define an encoding for our abstract
@@ -141,6 +150,12 @@ While we think this is something we're likely to do in the future as
 it would help with many features (e.g. default expressions, check
 expressions, prepared statements, stored procedures, etc.), it's a
 very large project, and now might not be the right time to take it on.
+
+Update: Work on an intermediate representation that could be used for
+semantically encoding views has begun in
+[#10055](https://github.com/cockroachdb/cockroach/pull/10055). Once it
+is eventually in place, switching over to it will allow us to remove the
+non-standard restrictions required by our initial syntactic encoding.
 
 ## Tracking view dependencies
 
@@ -186,6 +201,4 @@ in its place.
 
 # Unresolved questions
 
-I imagine some questions will come up as I get a little deeper into the
-system, but none at the moment. I don't expect there to be any major
-obstacles to supporting views.
+None.
