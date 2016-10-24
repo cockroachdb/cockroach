@@ -2839,7 +2839,7 @@ func (r *Replica) AdminMerge(
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
-			log.Event(ctx, "updating left descriptor")
+			log.Event(ctx, "updating LHS descriptor")
 			if err := txn.Run(b); err != nil {
 				return err
 			}
