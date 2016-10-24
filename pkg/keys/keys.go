@@ -339,6 +339,19 @@ func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
 	return MakeRangeKey(rk, localTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
 }
 
+// IsLocal performs a cheap check that returns true iff a range-local key is
+// passed, that is, a key for which `Addr` would return a non-identical RKey
+// (or a decoding error).
+//
+// TODO(tschottdorf): we need a better name for these keys as only some of
+// them are local and it's been identified as an area that is not understood
+// by many of the team's developers. An obvious suggestion is "system" (as
+// opposed to "user") keys, but unfortunately that name has already been
+// claimed by a related (but not identical) concept.
+func IsLocal(k roachpb.Key) bool {
+	return bytes.HasPrefix(k, localPrefix)
+}
+
 // Addr returns the address for the key, used to lookup the range containing
 // the key. In the normal case, this is simply the key's value. However, for
 // local keys, such as transaction records, range-spanning binary tree node
@@ -354,7 +367,7 @@ func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
 // incorporating the Range ID are not (e.g. abort cache entries, and range
 // stats).
 func Addr(k roachpb.Key) (roachpb.RKey, error) {
-	if !bytes.HasPrefix(k, localPrefix) {
+	if !IsLocal(k) {
 		return roachpb.RKey(k), nil
 	}
 
