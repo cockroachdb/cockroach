@@ -1676,15 +1676,6 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::util::hlc::Timestamp* release_start();
   void set_allocated_start(::cockroach::util::hlc::Timestamp* start);
 
-  // optional .cockroach.util.hlc.Timestamp start_stasis = 4;
-  bool has_start_stasis() const;
-  void clear_start_stasis();
-  static const int kStartStasisFieldNumber = 4;
-  const ::cockroach::util::hlc::Timestamp& start_stasis() const;
-  ::cockroach::util::hlc::Timestamp* mutable_start_stasis();
-  ::cockroach::util::hlc::Timestamp* release_start_stasis();
-  void set_allocated_start_stasis(::cockroach::util::hlc::Timestamp* start_stasis);
-
   // optional .cockroach.util.hlc.Timestamp expiration = 2;
   bool has_expiration() const;
   void clear_expiration();
@@ -1703,16 +1694,23 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::roachpb::ReplicaDescriptor* release_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
+  // optional int64 epoch = 5;
+  bool has_epoch() const;
+  void clear_epoch();
+  static const int kEpochFieldNumber = 5;
+  ::google::protobuf::int64 epoch() const;
+  void set_epoch(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Lease)
  private:
   inline void set_has_start();
   inline void clear_has_start();
-  inline void set_has_start_stasis();
-  inline void clear_has_start_stasis();
   inline void set_has_expiration();
   inline void clear_has_expiration();
   inline void set_has_replica();
   inline void clear_has_replica();
+  inline void set_has_epoch();
+  inline void clear_has_epoch();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -1720,9 +1718,9 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::util::hlc::Timestamp* start_;
-  ::cockroach::util::hlc::Timestamp* start_stasis_;
   ::cockroach::util::hlc::Timestamp* expiration_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
+  ::google::protobuf::int64 epoch_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2fdata_2eproto_impl();
   #else
@@ -3475,63 +3473,15 @@ inline void Lease::set_allocated_start(::cockroach::util::hlc::Timestamp* start)
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
-// optional .cockroach.util.hlc.Timestamp start_stasis = 4;
-inline bool Lease::has_start_stasis() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Lease::set_has_start_stasis() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Lease::clear_has_start_stasis() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void Lease::clear_start_stasis() {
-  if (start_stasis_ != NULL) start_stasis_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_start_stasis();
-}
-inline const ::cockroach::util::hlc::Timestamp& Lease::start_stasis() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.start_stasis)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return start_stasis_ != NULL ? *start_stasis_ : *default_instance().start_stasis_;
-#else
-  return start_stasis_ != NULL ? *start_stasis_ : *default_instance_->start_stasis_;
-#endif
-}
-inline ::cockroach::util::hlc::Timestamp* Lease::mutable_start_stasis() {
-  set_has_start_stasis();
-  if (start_stasis_ == NULL) {
-    start_stasis_ = new ::cockroach::util::hlc::Timestamp;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.start_stasis)
-  return start_stasis_;
-}
-inline ::cockroach::util::hlc::Timestamp* Lease::release_start_stasis() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.start_stasis)
-  clear_has_start_stasis();
-  ::cockroach::util::hlc::Timestamp* temp = start_stasis_;
-  start_stasis_ = NULL;
-  return temp;
-}
-inline void Lease::set_allocated_start_stasis(::cockroach::util::hlc::Timestamp* start_stasis) {
-  delete start_stasis_;
-  start_stasis_ = start_stasis;
-  if (start_stasis) {
-    set_has_start_stasis();
-  } else {
-    clear_has_start_stasis();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start_stasis)
-}
-
 // optional .cockroach.util.hlc.Timestamp expiration = 2;
 inline bool Lease::has_expiration() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void Lease::set_has_expiration() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void Lease::clear_has_expiration() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void Lease::clear_expiration() {
   if (expiration_ != NULL) expiration_->::cockroach::util::hlc::Timestamp::Clear();
@@ -3573,13 +3523,13 @@ inline void Lease::set_allocated_expiration(::cockroach::util::hlc::Timestamp* e
 
 // optional .cockroach.roachpb.ReplicaDescriptor replica = 3;
 inline bool Lease::has_replica() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void Lease::set_has_replica() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void Lease::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void Lease::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
@@ -3617,6 +3567,30 @@ inline void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
     clear_has_replica();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
+}
+
+// optional int64 epoch = 5;
+inline bool Lease::has_epoch() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void Lease::set_has_epoch() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void Lease::clear_has_epoch() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void Lease::clear_epoch() {
+  epoch_ = GOOGLE_LONGLONG(0);
+  clear_has_epoch();
+}
+inline ::google::protobuf::int64 Lease::epoch() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.epoch)
+  return epoch_;
+}
+inline void Lease::set_epoch(::google::protobuf::int64 value) {
+  set_has_epoch();
+  epoch_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.epoch)
 }
 
 // -------------------------------------------------------------------

@@ -837,23 +837,24 @@ func (s *Store) DrainLeases(drain bool) error {
 	}
 
 	return util.RetryForDuration(10*s.cfg.RangeLeaseActiveDuration, func() error {
-		var drainingLease *roachpb.Lease
+		var drainingLease roachpb.Lease
 		now := s.Clock().Now()
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			lease, nextLease := r.getLease()
 			// If we own an active lease or we're trying to obtain a lease
 			// (and that request is fresh enough), wait.
 			switch {
-			case lease.OwnedBy(s.StoreID()) && lease.Covers(now):
+			case lease.OwnedBy(s.StoreID()) && r.leaseStatus(&lease, now).state == leaseValid:
 				drainingLease = lease
-			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && nextLease.Covers(now):
+			case !nextLease.Empty() && nextLease.OwnedBy(s.StoreID()) &&
+				r.leaseStatus(&nextLease, now).state == leaseValid:
 				drainingLease = nextLease
 			default:
 				return true
 			}
 			return false // stop
 		})
-		if drainingLease != nil {
+		if !drainingLease.Empty() {
 			return errors.Errorf("lease %s is still active", drainingLease)
 		}
 		return nil
@@ -1573,7 +1574,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{}, &roachpb.Lease{})
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{}, roachpb.Lease{})
 	if err != nil {
 		return err
 	}
@@ -1822,13 +1823,14 @@ func (s *Store) maybeMergeTimestampCaches(
 	// Merge support is currently incomplete and incorrect. In particular, the
 	// lease holders must be colocated and the subsumed range appropriately
 	// quiesced. See also #2433.
-	if subsumedLease.Covers(s.Clock().Now()) &&
+	now := s.Clock().Now()
+	if subsumedRep.leaseStatus(&subsumedLease, now).state == leaseValid &&
 		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
 		log.Fatalf(ctx, "cannot merge ranges with non-colocated leases. "+
 			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
 	}
 
-	if subsumingLease.Covers(s.Clock().Now()) &&
+	if subsumingRep.leaseStatus(&subsumingLease, now).state == leaseValid &&
 		subsumingLease.OwnedBy(s.StoreID()) {
 		subsumedRep.mu.tsCache.MergeInto(subsumingRep.mu.tsCache, false /* clear */)
 	}
@@ -3548,7 +3550,7 @@ func (s *Store) updateReplicationGauges() error {
 		}
 		rep.mu.Unlock()
 
-		leaseCovers := lease.Covers(timestamp)
+		leaseValid := rep.leaseStatus(&lease, timestamp).state == leaseValid
 		leaseOwned := lease.OwnedBy(s.Ident.StoreID)
 
 		// To avoid double counting, most stats are only counted on the raft
@@ -3557,7 +3559,7 @@ func (s *Store) updateReplicationGauges() error {
 		if raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader {
 			raftLeaderCount++
 
-			if leaseCovers {
+			if leaseValid {
 				// If any replica holds the range lease, the range is available.
 				availableRangeCount++
 
@@ -3592,7 +3594,7 @@ func (s *Store) updateReplicationGauges() error {
 			case AllocatorRemoveDead:
 				replicaAllocatorRemoveDeadCount++
 			}
-		} else if leaseCovers && leaseOwned {
+		} else if leaseValid && leaseOwned {
 			leaseHolderCount++
 		}
 		return true // more

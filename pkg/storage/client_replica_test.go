@@ -511,23 +511,23 @@ func TestRangeTransferLease(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	origLease, _ := replica0.GetLease()
+	status := replica0.LeaseStatus(&origLease, mtc.clock.Now())
 	{
 		// Transferring the lease to ourself should be a no-op.
-		origLeasePtr, _ := replica0.GetLease()
-		origLease := *origLeasePtr
-		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica0.AdminTransferLease(replica0Desc.StoreID, status); err != nil {
 			t.Fatal(err)
 		}
-		newLeasePtr, _ := replica0.GetLease()
-		if origLeasePtr != newLeasePtr || origLease != *newLeasePtr {
-			t.Fatalf("expected %+v, but found %+v", origLeasePtr, newLeasePtr)
+		newLease, _ := replica0.GetLease()
+		if origLease != newLease {
+			t.Fatalf("expected %+v, but found %+v", origLease, newLease)
 		}
 	}
 
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
+		if err := replica0.AdminTransferLease(1000, status); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
@@ -540,7 +540,7 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
+	if err := replica0.AdminTransferLease(newHolderDesc.StoreID, status); err != nil {
 		t.Fatal(err)
 	}
 
@@ -617,7 +617,7 @@ func TestRangeTransferLease(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		shouldRenewTS := replica1Lease.StartStasis.Add(-1, 0)
+		shouldRenewTS := replica1Lease.Expiration.Add(-1, 0)
 		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
 		if _, pErr := client.SendWrappedWith(
 			context.Background(),
@@ -630,13 +630,14 @@ func TestRangeTransferLease(t *testing.T) {
 	}()
 
 	<-extensionSem
+	status = replica1.LeaseStatus(&replica1Lease, mtc.clock.Now())
 	waitForTransferBlocked.Store(true)
 	// Initiate a transfer.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if err := replica1.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica1.AdminTransferLease(replica0Desc.StoreID, status); err != nil {
 			panic(err)
 		}
 	}()
@@ -726,10 +727,9 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 			Lease: roachpb.Lease{
-				Start:       s.Clock().Now(),
-				StartStasis: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
-				Expiration:  s.Clock().Now().Add(2*time.Second.Nanoseconds(), 0),
-				Replica:     repDesc,
+				Start:      s.Clock().Now(),
+				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
+				Replica:    repDesc,
 			},
 		}
 		if _, pErr := client.SendWrapped(context.Background(), s.DistSender(), &leaseReq); pErr != nil {
@@ -948,7 +948,7 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos := []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -980,11 +980,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica0.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1005,11 +1005,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 		{
 			Desc:  *lhsReplica0.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1036,11 +1036,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica1.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 		{
 			Desc:  *rhsReplica1.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {

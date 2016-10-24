@@ -107,10 +107,10 @@ func (q *replicaGCQueue) shouldQueue(
 	lastActivity := hlc.ZeroTimestamp.Add(rng.store.startedAt, 0)
 
 	lease, nextLease := rng.getLease()
-	if lease != nil {
+	if !lease.Empty() {
 		lastActivity.Forward(lease.Expiration)
 	}
-	if nextLease != nil {
+	if !nextLease.Empty() {
 		lastActivity.Forward(nextLease.Expiration)
 	}
 

@@ -516,7 +516,7 @@ func (bq *baseQueue) processReplica(
 	// and renew or acquire if necessary.
 	if bq.needsLease {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
+		if _, err := repl.redirectOnOrAcquireLease(ctx, repl.store.Clock().Now()); err != nil {
 			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
 				log.VEventf(queueCtx, 3, "not holding lease; skipping")
 				return nil
