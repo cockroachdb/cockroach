@@ -20,8 +20,12 @@ import (
 	"container/heap"
 	"fmt"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // A CommandQueue maintains an interval tree of keys or key ranges for
@@ -352,9 +356,17 @@ func (o *overlapHeap) PopOverlap() *cmd {
 // key for the command queue and must be re-supplied on subsequent invocation
 // of remove().
 //
+// Either all supplied spans must be range-global or range-local. Failure to
+// obey with this restriction results in a fatal error.
+//
+// Returns a nil `cmd` when no spans are given.
+//
 // add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through getWait().
 func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
+	if len(spans) == 0 {
+		return nil
+	}
 	prepareSpans(spans...)
 
 	// Compute the min and max key that covers all of the spans.
@@ -369,15 +381,21 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 		}
 	}
 
+	if l1, l2 := keys.IsLocal(minKey), keys.IsLocal(maxKey); l1 != l2 {
+		log.Fatalf(
+			context.TODO(),
+			"mixed range-global and range-local keys: %s and %s",
+			minKey, maxKey,
+		)
+	}
+
 	numCmds := 1
 	if len(spans) > 1 {
 		numCmds += len(spans)
 	}
 	cmds := make([]cmd, numCmds)
 
-	// Create the covering entry. Note that this may have an "illegal" key range
-	// spanning from range-local to range-global, but that's acceptable here as
-	// long as we're careful in the future.
+	// Create the covering entry.
 	cmd := &cmds[0]
 	cmd.id = cq.nextID()
 	cmd.key = interval.Range{
@@ -412,6 +430,8 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 // specified key has completed and should be removed. Any pending
 // commands waiting on this command will be signaled if this is the
 // only command upon which they are still waiting.
+//
+// Removing a `nil` cmd is a no-op.
 func (cq *CommandQueue) remove(cmd *cmd) {
 	if cmd == nil {
 		return

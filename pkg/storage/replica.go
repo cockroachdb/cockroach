@@ -256,8 +256,11 @@ type Replica struct {
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
-		// Enforces at most one command is running per key(s).
-		cmdQ *CommandQueue
+		// Enforces at most one command is running per key(s), for user keys.
+		cmdQGlobal *CommandQueue
+		// Enforces at most one command is running per key(s), for non-user
+		// (i.e. range-addressed or internal) keys.
+		cmdQLocal *CommandQueue
 		// Last index persisted to the raft log (not necessarily committed).
 		lastIndex uint64
 		// The raft log index of a pending preemptive snapshot. Used to prohibit
@@ -555,7 +558,8 @@ func (r *Replica) initLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.mu.cmdQ = NewCommandQueue()
+	r.mu.cmdQGlobal = NewCommandQueue()
+	r.mu.cmdQLocal = NewCommandQueue()
 	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
@@ -1144,17 +1148,31 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
-	var cmd *cmd
+	var cmdGlobal *cmd
+	var cmdLocal *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		readOnly := ba.IsReadOnly()
-		spans := make([]roachpb.Span, len(ba.Requests))
-		for i, union := range ba.Requests {
-			spans[i] = union.GetInner().Header()
+		spansGlobal := make([]roachpb.Span, 0, len(ba.Requests))
+		var spansLocal []roachpb.Span
+
+		for _, union := range ba.Requests {
+			header := union.GetInner().Header()
+			if keys.IsLocal(header.Key) {
+				spansLocal = append(spansLocal, header)
+			} else {
+				spansGlobal = append(spansGlobal, header)
+			}
 		}
+
+		// TODO(tschottdorf): need to optimize read-only status, especially for
+		// the local command queue.
+		readOnly := ba.IsReadOnly()
+
 		r.mu.Lock()
-		chans := r.mu.cmdQ.getWait(readOnly, spans...)
-		cmd = r.mu.cmdQ.add(readOnly, spans...)
+		chans := r.mu.cmdQGlobal.getWait(readOnly, spansGlobal...)
+		chans = append(chans, r.mu.cmdQLocal.getWait(readOnly, spansLocal...)...)
+		cmdGlobal = r.mu.cmdQGlobal.add(readOnly, spansGlobal...)
+		cmdLocal = r.mu.cmdQLocal.add(readOnly, spansLocal...)
 		r.mu.Unlock()
 
 		beforeWait := timeutil.Now()
@@ -1180,7 +1198,8 @@ func (r *Replica) beginCmds(
 						<-ch
 					}
 					r.mu.Lock()
-					r.mu.cmdQ.remove(cmd)
+					r.mu.cmdQGlobal.remove(cmdGlobal)
+					r.mu.cmdQLocal.remove(cmdLocal)
 					r.mu.Unlock()
 				}()
 				return nil, err
@@ -1210,7 +1229,7 @@ func (r *Replica) beginCmds(
 	}
 
 	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-		return r.endCmds(cmd, ba, br, pErr)
+		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr)
 	}, nil
 }
 
@@ -1218,7 +1237,11 @@ func (r *Replica) beginCmds(
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
 func (r *Replica) endCmds(
-	cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	cmdGlobal *cmd,
+	cmdLocal *cmd,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
 ) (rErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1253,7 +1276,8 @@ func (r *Replica) endCmds(
 
 		r.mu.tsCache.AddRequest(cr)
 	}
-	r.mu.cmdQ.remove(cmd)
+	r.mu.cmdQGlobal.remove(cmdGlobal)
+	r.mu.cmdQLocal.remove(cmdLocal)
 	return pErr
 }
 
