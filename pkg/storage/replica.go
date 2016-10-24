@@ -1827,14 +1827,20 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	})
 }
 
-func (r *Replica) quiesce() {
+// mark the replica as quiesced. Returns true if the Replica is successfully
+// quiesced and false otherwise.
+func (r *Replica) quiesce() bool {
 	r.mu.Lock()
-	r.quiesceLocked()
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	return r.quiesceLocked()
 }
 
-func (r *Replica) quiesceLocked() {
+func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
+	if len(r.mu.proposals) != 0 {
+		log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+		return false
+	}
 	if !r.mu.quiescent {
 		if log.V(3) {
 			log.Infof(ctx, "quiescing")
@@ -1843,6 +1849,7 @@ func (r *Replica) quiesceLocked() {
 	} else if log.V(4) {
 		log.Infof(ctx, "already quiesced")
 	}
+	return true
 }
 
 func (r *Replica) unquiesceLocked() {
