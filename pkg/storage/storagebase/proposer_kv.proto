@@ -30,7 +30,10 @@ message RaftCommand {
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  optional roachpb.ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor proposer_replica = 2 [(gogoproto.nullable) = false];
+  // proposer_lease is provided to verify at raft command apply-time that
+  // the lease under which the command was proposed remains in effect.
+  optional roachpb.Lease proposer_lease = 5 [(gogoproto.nullable) = false];
   optional roachpb.BatchRequest cmd = 3 [(gogoproto.nullable) = false];
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.

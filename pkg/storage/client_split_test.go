@@ -984,7 +984,6 @@ func runSetupSplitSnapshotRace(
 	// 3 is already stopped.
 	mtc.stopStore(4)
 	mtc.stopStore(5)
-	mtc.expireLeases()
 
 	testFn(mtc, leftKey, rightKey)
 }

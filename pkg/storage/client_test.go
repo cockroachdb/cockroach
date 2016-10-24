@@ -981,9 +981,9 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	for i, eng := range m.engines {
 		val, _, err := engine.MVCCGet(context.Background(), eng, key, m.clock.Now(), true, nil)
 		if err != nil {
-			log.Errorf(context.TODO(), "engine %d: error reading from key %s: %s", i, key, err)
+			log.VEventf(context.TODO(), 1, "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
-			log.Errorf(context.TODO(), "engine %d: missing key %s", i, key)
+			log.VEventf(context.TODO(), 1, "engine %d: missing key %s", i, key)
 		} else {
 			results[i], err = val.GetInt()
 			if err != nil {
@@ -1007,16 +1007,47 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 	})
 }
 
-// expireLeases increments the context's manual clock far enough into the
-// future that current range leases are expired. Useful for tests which modify
-// replica sets.
+// Useful for tests which modify replica sets.
 func (m *multiTestContext) expireLeases() {
+	m.expireLeasesAndIncrementEpochs(true)
+}
+
+// expireLeasesAndIncrementEpochs increments the context's manual
+// clock far enough into the future that current range leases are
+// expired. If incEpochs=true, each node epoch is incremented and live
+// nodes are heartbeat so they can acquire leases.
+func (m *multiTestContext) expireLeasesAndIncrementEpochs(incEpochs bool) {
+	ctx := context.Background()
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	for _, store := range m.stores {
 		if store != nil {
 			m.manualClock.Increment(store.LeaseExpiration(m.clock))
 			break
+		}
+	}
+	m.mu.RUnlock()
+	if !incEpochs {
+		return
+	}
+	for idx, nl := range m.nodeLivenesses {
+		l, err := nl.Self()
+		if err != nil {
+			continue
+		}
+		if err = nl.IncrementEpoch(ctx, l); err != nil {
+			log.Error(ctx, err)
+		}
+		m.mu.RLock()
+		live := m.stores[idx] != nil
+		m.mu.RUnlock()
+		if live {
+			l, err := nl.Self()
+			if err != nil {
+				log.Error(ctx, err)
+			}
+			if err := nl.Heartbeat(ctx, l); err != nil {
+				log.Error(ctx, err)
+			}
 		}
 	}
 }
@@ -1065,11 +1096,11 @@ func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, destStore *sto
 	if err != nil {
 		return err
 	}
-	origLeasePtr, _ := destReplica.GetLease()
-	if origLeasePtr == nil {
+	origLease, _ := destReplica.GetLease()
+	if origLease.Empty() {
 		return errors.Errorf("could not get lease ptr from replica %s", destReplica)
 	}
-	originalStoreID := origLeasePtr.Replica.StoreID
+	originalStoreID := origLease.Replica.StoreID
 
 	// Get the replica that currently holds the lease.
 	var origStore *storage.Store
@@ -1085,7 +1116,8 @@ func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, destStore *sto
 		return err
 	}
 
-	return origRepl.AdminTransferLease(destStore.Ident.StoreID)
+	status := destReplica.LeaseStatus(&origLease, m.clock.Now())
+	return origRepl.AdminTransferLease(destStore.Ident.StoreID, status)
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to

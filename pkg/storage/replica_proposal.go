@@ -127,9 +127,9 @@ func (p *ProposalData) MergeAndDestroy(q ProposalData) error {
 	} else if q.State.Desc != nil {
 		return errors.New("conflicting RangeDescriptor")
 	}
-	if p.State.Lease == nil {
+	if p.State.Lease.Empty() {
 		p.State.Lease = q.State.Lease
-	} else if q.State.Lease != nil {
+	} else if !q.State.Lease.Empty() {
 		return errors.New("conflicting Lease")
 	}
 	if p.State.TruncatedState == nil {
@@ -268,10 +268,7 @@ func (r *Replica) computeChecksumPostApply(
 }
 
 func (r *Replica) leasePostApply(
-	ctx context.Context,
-	newLease *roachpb.Lease,
-	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease,
+	ctx context.Context, newLease roachpb.Lease, replicaID roachpb.ReplicaID, prevLease roachpb.Lease,
 ) {
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
@@ -297,7 +294,8 @@ func (r *Replica) leasePostApply(
 		// Gossip the first range whenever its lease is acquired. We check to
 		// make sure the lease is active so that a trailing replica won't process
 		// an old lease request and attempt to gossip the first range.
-		if r.IsFirstRange() && newLease.Covers(r.store.Clock().Now()) {
+		if r.IsFirstRange() &&
+			r.leaseStatus(&newLease, r.store.Clock().Now()).state == leaseValid {
 			r.gossipFirstRange(ctx)
 		}
 	}
@@ -311,7 +309,8 @@ func (r *Replica) leasePostApply(
 		r.mu.Unlock()
 	}
 
-	if !iAmTheLeaseHolder && newLease.Covers(r.store.Clock().Now()) {
+	if !iAmTheLeaseHolder &&
+		r.leaseStatus(&newLease, r.store.Clock().Now()).state == leaseValid {
 		// If this replica is the raft leader but it is not the new lease holder,
 		// then try to transfer the raft leadership to match the lease. We like it
 		// when leases and raft leadership are collocated because that facilitates
@@ -442,8 +441,8 @@ func (r *Replica) handleProposalData(
 		}
 	}
 
-	if newLease := pd.State.Lease; newLease != nil {
-		pd.State.Lease = nil // for assertion
+	if newLease := pd.State.Lease; !newLease.Empty() {
+		pd.State.Lease = roachpb.Lease{} // for assertion
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
