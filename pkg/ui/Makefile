@@ -15,8 +15,8 @@
 # Author: Tamir Duberstein (tamird@gmail.com)
 
 # Prefer tools from node_modules over those elsewhere on the path.
-# This ensures that we get the versions pinned in npm-shrinkwrap.json.
-export PATH := $(shell npm bin):$(PATH)
+# This ensures that we get the versions pinned in yarn.lck.
+export PATH := $(shell yarn bin):$(PATH)
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
 # not the one we set on the previous line. In order for the above
@@ -66,12 +66,12 @@ app/js/protos.js generated/protos.json generated/protos.d.ts: $(addprefix $(REPO
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 .PHONY: lint
-lint: npm.installed typings.installed
+lint: yarn.installed typings.installed
 	stylint -c .stylintrc $(STYL_ROOT)
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: npm.installed typings.installed jspm.installed
+test: yarn.installed typings.installed jspm.installed
 	karma start
 
 GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png release.html
@@ -97,24 +97,18 @@ watch: $(CSS_TARGET)
 
 $(CSS_TARGET): STYLFLAGS += --include-css
 $(CSS_TARGET): STYLFLAGS += --use nib
-$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed
+$(CSS_TARGET): $(shell find $(STYL_ROOT)) yarn.installed
 	stylus $(STYL_ROOT)/app.styl $(STYLFLAGS) --out $@
 
-npm.installed: package.json npm-shrinkwrap.json
-	rm -rf $(NODE_MODULES)
-	npm install --no-progress
+yarn.installed: package.json yarn.lock
+	yarn install
 	touch $@
 
-typings.installed: generated/protos.d.ts typings.json npm.installed jspm.installed
+typings.installed: generated/protos.d.ts typings.json yarn.installed jspm.installed
 	typings install
 	typings prune
 	touch $@
 
-jspm.installed: npm.installed
+jspm.installed: yarn.installed
 	jspm install
-	# jspm touches package.json, so we need to bump npm.installed's timestamp
-	# here to prevent endless pointless rebuilds. This `touch` will still result
-	# in a spurious `typings install`, but that's extremely fast compared to `npm
-	# install`.
-	touch npm.installed
 	touch $@
