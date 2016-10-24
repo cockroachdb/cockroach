@@ -245,6 +245,46 @@ func TestServerQuery(t *testing.T) {
 	}
 }
 
+// TestServerQueryStarvation tests a very specific scenario, wherein a single
+// query request has more queries than the server's MaxWorkers count.
+func TestServerQueryStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	workerCount := 20
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TimeSeries: &ts.TimeSeriesTestingKnobs{
+				QueryWorkerMax: &workerCount,
+			},
+		},
+	})
+	defer s.Stopper().Stop()
+	tsrv := s.(*server.TestServer)
+
+	seriesCount := workerCount * 2
+	populateSeries(t, seriesCount, 10, tsrv.TsDB())
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	queries := make([]tspb.Query, 0, seriesCount)
+	for i := 0; i < seriesCount; i++ {
+		queries = append(queries, tspb.Query{
+			Name: seriesName(i),
+		})
+	}
+
+	if _, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 0 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func BenchmarkServerQuery(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop()
