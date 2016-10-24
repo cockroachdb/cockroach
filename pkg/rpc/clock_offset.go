@@ -25,18 +25,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"
 )
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
 type RemoteClockMetrics struct {
-	ClusterOffsetLowerBound *metric.Gauge
-	ClusterOffsetUpperBound *metric.Gauge
+	ClockOffsetMeanNanos   *metric.Gauge
+	ClockOffsetStdDevNanos *metric.Gauge
 }
 
 var (
-	metaClusterOffsetLowerBound = metric.Metadata{Name: "clock-offset.lower-bound-nanos"}
-	metaClusterOffsetUpperBound = metric.Metadata{Name: "clock-offset.upper-bound-nanos"}
+	metaClockOffsetMeanNanos   = metric.Metadata{Name: "clock-offset.meannanos"}
+	metaClockOffsetStdDevNanos = metric.Metadata{Name: "clock-offset.stddevnanos"}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
@@ -65,8 +66,8 @@ func newRemoteClockMonitor(
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
 	r.metrics = RemoteClockMetrics{
-		ClusterOffsetLowerBound: metric.NewGauge(metaClusterOffsetLowerBound),
-		ClusterOffsetUpperBound: metric.NewGauge(metaClusterOffsetUpperBound),
+		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
+		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
 	}
 	return &r
 }
@@ -132,17 +133,33 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 		healthyOffsetCount := 0
 
 		r.mu.Lock()
+		// Each measurement is recorded as its minimum and maximum value.
+		offsets := make(stats.Float64Data, 0, 2*len(r.mu.offsets))
 		for addr, offset := range r.mu.offsets {
 			if offset.isStale(r.offsetTTL, now) {
 				delete(r.mu.offsets, addr)
 				continue
 			}
+			offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))
+			offsets = append(offsets, float64(offset.Offset-offset.Uncertainty))
 			if offset.isHealthy(r.ctx, maxOffset) {
 				healthyOffsetCount++
 			}
 		}
 		numClocks := len(r.mu.offsets)
 		r.mu.Unlock()
+
+		mean, err := offsets.Mean()
+		if err != nil && err != stats.EmptyInput {
+			return err
+		}
+		r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
+
+		stdDev, err := offsets.StandardDeviation()
+		if err != nil && err != stats.EmptyInput {
+			return err
+		}
+		r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
 
 		if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
 			return errors.Errorf("fewer than half the known nodes are within the maximum offset of %s (%d of %d)", maxOffset, healthyOffsetCount, numClocks)
