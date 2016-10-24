@@ -129,6 +129,7 @@ type EvalResult struct {
 	Local         LocalEvalResult
 	MaxLeaseIndex uint64
 	OriginReplica roachpb.ReplicaDescriptor
+	OriginLease   *roachpb.Lease
 	Request       *roachpb.BatchRequest
 	Replicated    storagebase.ReplicatedEvalResult
 	WriteBatch    *storagebase.WriteBatch
@@ -353,7 +354,7 @@ func (r *Replica) leasePostApply(
 		// Gossip the first range whenever its lease is acquired. We check to
 		// make sure the lease is active so that a trailing replica won't process
 		// an old lease request and attempt to gossip the first range.
-		if r.IsFirstRange() && newLease.Covers(r.store.Clock().Now()) {
+		if r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
 			r.gossipFirstRange(ctx)
 		}
 	}
@@ -367,7 +368,7 @@ func (r *Replica) leasePostApply(
 		r.mu.Unlock()
 	}
 
-	if !iAmTheLeaseHolder && newLease.Covers(r.store.Clock().Now()) {
+	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
 		// If this replica is the raft leader but it is not the new lease holder,
 		// then try to transfer the raft leadership to match the lease. We like it
 		// when leases and raft leadership are collocated because that facilitates

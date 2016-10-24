@@ -949,24 +949,63 @@ func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
-	start := time.Unix(0, l.Start.WallTime).UTC()
-	expiration := time.Unix(0, l.Expiration.WallTime).UTC()
-	return fmt.Sprintf("replica %s %s %s", l.Replica, start, expiration.Sub(start))
-}
-
-// Covers returns true if the given timestamp can be served by the Lease.
-// This is the case if the timestamp precedes the Lease's stasis period.
-// Note that the fact that a lease covers a timestamp is not enough for the
-// holder of the lease to be able to serve a read with that timestamp;
-// pendingLeaderLeaseRequest.TransferInProgress() should also be consulted to
-// account for possible lease transfers.
-func (l Lease) Covers(timestamp hlc.Timestamp) bool {
-	return timestamp.Less(l.StartStasis)
+	var proposedSuffix string
+	if l.ProposedTS != nil {
+		proposedSuffix = fmt.Sprintf(" pro=%s", l.ProposedTS)
+	}
+	if l.Type() == LeaseExpiration {
+		return fmt.Sprintf("repl=%s start=%s exp=%s%s", l.Replica, l.Start, l.Expiration, proposedSuffix)
+	}
+	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, *l.Epoch, proposedSuffix)
 }
 
 // OwnedBy returns whether the given store is the lease owner.
 func (l Lease) OwnedBy(storeID StoreID) bool {
 	return l.Replica.StoreID == storeID
+}
+
+// LeaseType describes the type of lease.
+type LeaseType int
+
+const (
+	// LeaseExpiration allows range operations while the wall clock is
+	// within the expiration timestamp.
+	LeaseExpiration LeaseType = iota
+	// LeaseEpoch allows range operations while the node liveness epoch
+	// is equal to the lease epoch.
+	LeaseEpoch
+)
+
+// Type returns the lease type.
+func (l Lease) Type() LeaseType {
+	if l.Epoch == nil {
+		return LeaseExpiration
+	}
+	return LeaseEpoch
+}
+
+// Equivalent determines whether ol is considered the same lease
+// for the purposes of matching leases when executing a command.
+// For expiration-based leases, extensions are allowed.
+// Ignore proposed timestamps for lease verification; for epoch-
+// based leases, the start time of the lease is sufficient to
+// avoid using an older lease with same epoch.
+func (l Lease) Equivalent(ol Lease) error {
+	l.ProposedTS, ol.ProposedTS = nil, nil
+	// If both leases are epoch-based, we must dereference the epochs
+	// and then set to nil.
+	if l.Type() == LeaseEpoch && ol.Type() == LeaseEpoch && *l.Epoch == *ol.Epoch {
+		l.Epoch, ol.Epoch = nil, nil
+	}
+	// For expiration-based leases, extensions are considered equivalent.
+	if l.Type() == LeaseExpiration && ol.Type() == LeaseExpiration &&
+		l.Expiration.Less(ol.Expiration) {
+		l.Expiration = ol.Expiration
+	}
+	if l == ol {
+		return nil
+	}
+	return errors.Errorf("leases %+v and %+v are not equivalent", l, ol)
 }
 
 // AsIntents takes a slice of spans and returns it as a slice of intents for

@@ -116,6 +116,13 @@ message RaftCommand {
   // used for lease validation.
   optional roachpb.ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
 
+  // origin_lease is provided to verify at raft command apply-time that
+  // the lease under which the command was proposed remains in effect.
+  // If the command was proposed prior to the introduction of epoch leases,
+  // origin_lease will be nil, but the combination of origin_replica and
+  // the request timestamp are used to verify an expiration-based lease.
+  optional roachpb.Lease origin_lease = 5;
+
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.
   //

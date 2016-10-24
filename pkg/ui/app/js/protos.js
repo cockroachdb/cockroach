@@ -989,15 +989,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 {
                                     "rule": "optional",
                                     "type": "util.hlc.Timestamp",
-                                    "name": "start_stasis",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "util.hlc.Timestamp",
                                     "name": "expiration",
                                     "id": 2,
                                     "options": {
@@ -1016,11 +1007,29 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 {
                                     "rule": "optional",
                                     "type": "util.hlc.Timestamp",
+                                    "name": "deprecated_start_stasis",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
                                     "name": "proposed_ts",
                                     "id": 5,
                                     "options": {
                                         "(gogoproto.nullable)": true,
                                         "(gogoproto.customname)": "ProposedTS"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "epoch",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": true
                                     }
                                 }
                             ]
