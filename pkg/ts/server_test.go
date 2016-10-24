@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -245,6 +246,44 @@ func TestServerQuery(t *testing.T) {
 	}
 }
 
+// TestServerQueryStarvation tests a very specific scenario, wherein a single
+// query request has more queries than the server's MaxWorkers count.
+func TestServerQueryStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	workerCount := 20
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		TimeSeriesQueryWorkerMax: workerCount,
+	})
+	defer s.Stopper().Stop()
+	tsrv := s.(*server.TestServer)
+
+	seriesCount := workerCount * 2
+	if err := populateSeries(seriesCount, 10, tsrv.TsDB()); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	queries := make([]tspb.Query, 0, seriesCount)
+	for i := 0; i < seriesCount; i++ {
+		queries = append(queries, tspb.Query{
+			Name: seriesName(i),
+		})
+	}
+
+	if _, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 0 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func BenchmarkServerQuery(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop()
@@ -313,7 +352,7 @@ func populateSeries(seriesCount, sourceCount int, tsdb *ts.DB) error {
 					},
 				},
 			}); err != nil {
-				return fmt.Errorf(
+				return errors.Errorf(
 					"error storing data for series %d, source %d: %s", series, source, err,
 				)
 			}
