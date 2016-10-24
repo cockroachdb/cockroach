@@ -5,7 +5,9 @@
 1.  Install the following prerequisites, as necessary:
   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
     work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
-  - A Go environment with a 64-bit version of Go 1.7.1
+  - A Go environment with a recent 64-bit version of the toolchain. Note that
+    the Makefile enforces the specific version required, as it is updated
+    frequently.
   - Git 1.8+
   - Bash
 
@@ -32,8 +34,9 @@ We advise to run `go generate` using our embedded Docker setup.
 run `build/builder.sh env SKIP_BOOTSTRAP=0 go generate ./...` from the repository
 root to get the intended result.
 
-If you want to run it outside of Docker, `go generate` requires a collection of
-Node.js modules which are installed via npm.
+If you want to run it outside of Docker, `go generate` requires a collection
+of Node.js modules which will be automatically installed into the project tree
+(not globally).
 
 If you plan on working on the UI, check out [the ui readme](pkg/ui).
 

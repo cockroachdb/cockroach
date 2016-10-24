@@ -70,17 +70,18 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.{jspm,npm} "${gopath0}"/pkg/docker_amd64{,_race} "${gopath0}/bin/docker_amd64"
+mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gopath0}"/pkg/docker_amd64{,_race} "${gopath0}/bin/docker_amd64"
 
-# Since we're mounting both /root and /root/.{jspm,npm} in our container,
-# Docker will create the .jspm and .npm on the host side under the directory
+# Since we're mounting both /root and its subdirectories in our container,
+# Docker will create the subdirectories on the host side under the directory
 # that we're mounting as /root, as the root user. This creates problems for CI
 # processes trying to clean up the working directory, so we create them here
 # as the invoking user to avoid root-owned paths.
+#
 # Note: this only happens on Linux. On Docker for Mac, the directories are
-# still created, but they're owned by the invoking user already.
-# This issue is tracked in docker issue #26051.
-mkdir -p "${host_home}"/.{jspm,npm}
+# still created, but they're owned by the invoking user already. See
+# https://github.com/docker/docker/issues/26051.
+mkdir -p "${host_home}"/.{jspm,yarn-cache}
 
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
@@ -108,7 +109,7 @@ vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.jspm:${container_home}/.jspm"
-vols="${vols} --volume=${HOME}/.npm:${container_home}/.npm"
+vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"

@@ -23,9 +23,9 @@ navigating to the web console.
 ### Visual Studio Code
 
 To get autocomplete and type-checking working in Visual Studio Code, you may
-need to manually configure your typescript version. Typescript 2 is already
-installed by npm, but you'll need to configure your project/workspace to point
-to it. See
+need to manually configure your typescript version. Typescript 2 is included
+in our package.json, but you'll need to configure your project/workspace to
+point to it. See
 https://code.visualstudio.com/docs/languages/typescript#_using-newer-typescript-versions.
 
 ## Modification
@@ -66,10 +66,10 @@ server proxies all requests for web resources (javascript, HTML, CSS) to a local
 CockroachDB server, while proxying all requests for actual data to a remote
 CockroachDB server.
 
-To use this server, navigate to the `ui/proxy` directory and run `npm install`.
-Then run:
-`./proxy.js <existing-instance-ui-url> --local <development-instance-ui-url>`
-and navigate to `http://localhost:3000` to access the UI.
+To use this server, navigate to the `pkg/ui/proxy` directory, install the
+dependencies using `yarn` or `npm`, then run `./proxy.js <existing- instance-
+ui-url> --local <development-instance-ui-url>` and navigate to
+`http://localhost:3000` to access the UI.
 
 Run `./proxy.js --help` for detailed information.
 
@@ -78,18 +78,9 @@ Run `./proxy.js --help` for detailed information.
 Our web console is compiled using a collection of tools that depends on
 [Node.js](https://nodejs.org/), so you'll want to have that installed.
 
-We use [npm](https://www.npmjs.com/) to manage various dependencies; be sure
-that your Node.js installation includes a recent version of npm. If you
-observe problems with npm, try updating it using `npm install -g npm`.
-
-To modify an existing npm dependency, you'll need to edit `package.json` in
-the standard fashion, while to add a new npm dependency, you'll want to run
-`npm install --save <myAwesomeDep>`.
-
-Either way, complete any npm changes by running:
-```
-rm -rf node_modules npm-shrinkwrap.json && npm update --no-progress && $(npm bin)/shonkwrap && $(npm bin)/jspm update
-```
+We use [yarn](https://yarnpkg.com) to manage various dependencies. It is also
+possible to use `npm`, though you may run into problems as `npm` does not
+respect yarn's yarn.lock.
 
 We use [JSPM](http://jspm.io/) to manage frontend dependencies and
 [Typings](https://github.com/typings/typings) to manage typescript definition
@@ -98,11 +89,7 @@ most part, you can be blissfully ignorant of their use. However, if you wish
 to add JSPM/Typings dependencies (and do not have your own opinions on
 binstubs), you'll want to run them from the local install using one of:
 
-- `$(npm bin)/jspm install --save <myAwesomeDep>`
-- `$(npm bin)/typings install --save <myAwesomeDep>`
+- `$(yarn bin)/jspm install --save <myAwesomeDep>`
+- `$(yarn bin)/typings install --save <myAwesomeDep>`
 
 Be sure to commit any changes resulting from your dependency changes.
-
-The `--save` modifiers and `shonkwrap` invocation above are necessary to
-properly lock down dependencies for other developers on the project, so make
-sure you don't elide them!
