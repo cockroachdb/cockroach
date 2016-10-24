@@ -53,7 +53,7 @@ func (tq *testQueueImpl) shouldQueue(
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	_ context.Context, status LeaseStatus, r *Replica, _ config.SystemConfig,
 ) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
@@ -672,7 +672,7 @@ type processTimeoutQueueImpl struct {
 }
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	ctx context.Context, _ LeaseStatus, r *Replica, _ config.SystemConfig,
 ) error {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -725,7 +725,7 @@ type processTimeQueueImpl struct {
 }
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ hlc.Timestamp, _ *Replica, _ config.SystemConfig,
+	_ context.Context, _ LeaseStatus, _ *Replica, _ config.SystemConfig,
 ) error {
 	time.Sleep(5 * time.Millisecond)
 	return nil

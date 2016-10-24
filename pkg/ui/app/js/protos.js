@@ -989,15 +989,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 {
                                     "rule": "optional",
                                     "type": "util.hlc.Timestamp",
-                                    "name": "start_stasis",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "util.hlc.Timestamp",
                                     "name": "expiration",
                                     "id": 2,
                                     "options": {
@@ -1021,6 +1012,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": true,
                                         "(gogoproto.customname)": "ProposedTS"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "epoch",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
                                     }
                                 }
                             ]
@@ -1597,7 +1597,10 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "rule": "optional",
                                             "type": "roachpb.Lease",
                                             "name": "lease",
-                                            "id": 4
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         },
                                         {
                                             "rule": "optional",

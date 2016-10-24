@@ -1726,15 +1726,6 @@ getStart?() : util.hlc.Timestamp;
 
 
 
-start_stasis?: util.hlc.Timestamp;
-		
-
-getStartStasis?() : util.hlc.Timestamp;
-		setStartStasis?(startStasis : util.hlc.Timestamp): void;
-		
-
-
-
 expiration?: util.hlc.Timestamp;
 		
 
@@ -1758,6 +1749,15 @@ proposed_ts?: util.hlc.Timestamp;
 
 getProposedTs?() : util.hlc.Timestamp;
 		setProposedTs?(proposedTs : util.hlc.Timestamp): void;
+		
+
+
+
+epoch?: Long;
+		
+
+getEpoch?() : Long;
+		setEpoch?(epoch : Long): void;
 		
 
 

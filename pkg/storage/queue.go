@@ -141,10 +141,12 @@ type queueImpl interface {
 		context.Context, hlc.Timestamp, *Replica, config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
-	// process accepts current time, a replica, and the system config
+	// process accepts lease status, a replica, and the system config
 	// and executes queue-specific work on it. The Replica is guaranteed
-	// to be initialized.
-	process(context.Context, hlc.Timestamp, *Replica, config.SystemConfig) error
+	// to be initialized. If the queue doesn't require a lease,
+	// LeaseStatus will have state leaseError, though timestamp will be
+	// set to the current time.
+	process(context.Context, LeaseStatus, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -348,8 +350,8 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	if bq.needsLease {
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
-		if lease, _ := repl.getLease(); lease != nil &&
-			lease.Covers(repl.store.Clock().Now()) && !lease.OwnedBy(repl.store.StoreID()) {
+		if lease, _ := repl.getLease(); repl.IsLeaseValid(&lease, now) &&
+			!lease.OwnedBy(repl.store.StoreID()) {
 			log.VEventf(ctx, 1, "needs lease; not adding: %+v", lease)
 			return
 		}
@@ -548,6 +550,7 @@ func (bq *baseQueue) processReplica(
 	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
 	defer cancel()
 	log.Eventf(ctx, "processing replica")
+	now := repl.store.Clock().Now()
 
 	if err := repl.IsDestroyed(); err != nil {
 		log.VEventf(queueCtx, 3, "replica destroyed (%s); skipping", err)
@@ -557,22 +560,27 @@ func (bq *baseQueue) processReplica(
 	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease
 	// and renew or acquire if necessary.
+	var status LeaseStatus
 	if bq.needsLease {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
-			switch v := err.GetDetail().(type) {
+		var pErr *roachpb.Error
+		if status, pErr = repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+			switch v := pErr.GetDetail().(type) {
 			case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
 				log.VEventf(queueCtx, 3, "%s; skipping", v)
 				return nil
 			default:
-				return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
+				return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", repl)
 			}
 		}
 		log.Event(ctx, "got range lease")
+	} else {
+		// Set timestamp in empty lease status.
+		status.timestamp = now
 	}
 
 	log.VEventf(queueCtx, 3, "processing")
-	if err := bq.impl.process(ctx, clock.Now(), repl, cfg); err != nil {
+	if err := bq.impl.process(ctx, status, repl, cfg); err != nil {
 		return err
 	}
 	log.Event(ctx, "done")

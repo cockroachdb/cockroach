@@ -112,9 +112,11 @@ message RaftCommand {
   // top-level instead of being grouped in a sub-message for
   // backwards-compatibility.
 
-  // origin_replica is the replica which proposed this command, to be
-  // used for lease validation.
-  optional roachpb.ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
+  // origin_lease is provided to verify at raft command apply-time that
+  // the lease under which the command was proposed remains in effect.
+  // If the command doesn't require a lease, origin_lease will be empty,
+  // with the exception of the Replica field.
+  optional roachpb.Lease origin_lease = 5 [(gogoproto.nullable) = false];
 
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.
@@ -164,5 +166,5 @@ message RaftCommand {
   // this costs an extra large allocation, we need to do something different.
   optional WriteBatch write_batch = 10014;
 
-  reserved 1, 10001 to 10012;
+  reserved 1, 2, 10001 to 10012;
 }

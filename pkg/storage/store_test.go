@@ -500,6 +500,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	repl1.mu.Lock()
 	expErr := repl1.mu.destroyed
+	lease := repl1.mu.state.Lease
 	repl1.mu.Unlock()
 
 	if expErr == nil {
@@ -507,7 +508,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	if _, _, err := repl1.propose(
-		context.Background(), roachpb.BatchRequest{}, nil,
+		context.Background(), lease, roachpb.BatchRequest{}, nil,
 	); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
@@ -1025,8 +1026,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
 	if _, err := writeInitialState(
-		context.Background(), store.engine, enginepb.MVCCStats{}, *desc,
-		raftpb.HardState{}, &roachpb.Lease{},
+		context.Background(), store.engine, enginepb.MVCCStats{}, *desc, raftpb.HardState{}, roachpb.Lease{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -2400,8 +2400,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	if _, err := writeInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
-		raftpb.HardState{}, &roachpb.Lease{},
+		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(), raftpb.HardState{}, roachpb.Lease{},
 	); err != nil {
 		t.Fatal(err)
 	}

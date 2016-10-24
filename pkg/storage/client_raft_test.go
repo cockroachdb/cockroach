@@ -910,7 +910,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 		{DisableRefreshReasonSnapshotApplied: true, DisableRefreshReasonTicks: true},
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
 	}
-	for _, c := range testCases {
+	for tcIdx, c := range testCases {
 		func() {
 			sc := storage.TestStoreConfig(nil)
 			sc.TestingKnobs = c
@@ -962,14 +962,15 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.stopStore(0)
 			mtc.restartStore(0)
 
-			// Expire existing leases (i.e. move the clock forward). This allows node
-			// 3 to grab the lease later in the test.
-			mtc.expireLeases()
+			// Expire existing leases (i.e. move the clock forward, but don't
+			// increment epochs). This allows node 3 to grab the lease later
+			// in the test.
+			mtc.expireLeasesWithoutIncrementingEpochs()
 			// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
 			// leases.
 			for i := 0; i < 2; i++ {
 				if err := mtc.stores[i].DrainLeases(true); err != nil {
-					t.Fatal(err)
+					t.Fatalf("test case %d, store %d: %v", tcIdx, i, err)
 				}
 			}
 
@@ -2999,7 +3000,7 @@ func TestRangeQuiescence(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
-	stopNodeLivenessHeartbeats(mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
 
 	// Replica range 1 to all 3 nodes.
 	mtc.replicateRange(1, 1, 2)

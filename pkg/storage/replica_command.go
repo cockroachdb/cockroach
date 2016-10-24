@@ -179,7 +179,7 @@ func (r *Replica) executeCmd(
 		header.RangeInfos = []roachpb.RangeInfo{
 			{
 				Desc:  *r.Desc(),
-				Lease: *lease,
+				Lease: lease,
 			},
 		}
 	}
@@ -1629,14 +1629,8 @@ func (r *Replica) RequestLease(
 
 	prevLease := r.mu.state.Lease
 	rErr := &roachpb.LeaseRejectedError{
-		Existing:  *prevLease,
+		Existing:  prevLease,
 		Requested: args.Lease,
-	}
-
-	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
-	// before the StartStasis field was introduced.
-	if args.Lease.StartStasis.Equal(hlc.ZeroTimestamp) {
-		args.Lease.StartStasis = args.Lease.Expiration
 	}
 
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
@@ -1659,7 +1653,7 @@ func (r *Replica) RequestLease(
 	// the absence of replay protection.
 	if prevLease.Replica.StoreID == 0 || isExtension {
 		effectiveStart.Backward(prevLease.Start)
-	} else {
+	} else if prevLease.IsExpiring() {
 		effectiveStart.Backward(prevLease.Expiration.Next())
 	}
 
@@ -1668,8 +1662,10 @@ func (r *Replica) RequestLease(
 			rErr.Message = "extension moved start timestamp backwards"
 			return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
 		}
-		args.Lease.Expiration.Forward(prevLease.Expiration)
-	} else if effectiveStart.Less(prevLease.Expiration) {
+		if args.Lease.IsExpiring() {
+			args.Lease.Expiration.Forward(prevLease.Expiration)
+		}
+	} else if prevLease.IsExpiring() && effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
 	}
@@ -1695,9 +1691,7 @@ func (r *Replica) TransferLease(
 	defer r.mu.Unlock()
 	if log.V(2) {
 		prevLease := r.mu.state.Lease
-		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v "+
-			"old expiration: %s, new start: %s",
-			prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
+		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	}
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, false /* isExtension */)
 }
@@ -1727,17 +1721,16 @@ func (r *Replica) applyNewLeaseLocked(
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
 
-	prevLease := r.mu.state.Lease
-	// Ensure Start < StartStasis <= Expiration.
-	if !lease.Start.Less(lease.StartStasis) ||
-		lease.Expiration.Less(lease.StartStasis) {
+	// Ensure either an Epoch is set or Start < Expiration.
+	if (lease.IsExpiring() && !lease.Start.Less(lease.Expiration)) ||
+		(lease.IsEpoch() && !lease.Expiration.Equal(hlc.ZeroTimestamp)) {
 		// This amounts to a bug.
 		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(),
 			&roachpb.LeaseRejectedError{
-				Existing:  *prevLease,
+				Existing:  r.mu.state.Lease,
 				Requested: lease,
-				Message: fmt.Sprintf("illegal lease interval: [%s, %s, %s]",
-					lease.Start, lease.StartStasis, lease.Expiration),
+				Message: fmt.Sprintf("illegal lease: epoch=%d, interval=[%s, %s)",
+					lease.Epoch, lease.Start, lease.Expiration),
 			}
 	}
 
@@ -1745,15 +1738,18 @@ func (r *Replica) applyNewLeaseLocked(
 	if _, ok := r.mu.state.Desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
 		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(),
 			&roachpb.LeaseRejectedError{
-				Existing:  *prevLease,
+				Existing:  r.mu.state.Lease,
 				Requested: lease,
 				Message:   "replica not found",
 			}
 	}
 
 	var reply roachpb.RequestLeaseResponse
+	if lease.Empty() {
+		return reply, newFailedLeaseTrigger(), errors.New("cannot persist an empty lease")
+	}
 	// Store the lease to disk & in-memory.
-	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
+	if err := setLease(ctx, batch, ms, r.RangeID, lease); err != nil {
 		return reply, newFailedLeaseTrigger(), err
 	}
 
@@ -1768,7 +1764,7 @@ func (r *Replica) applyNewLeaseLocked(
 	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
-	pd.Replicated.State.Lease = &lease
+	pd.Replicated.State.Lease = lease
 	pd.Local.leaseMetricsResult = proto.Bool(true)
 	pd.Local.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
 	// TODO(tschottdorf): having traced the origin of this call back to
@@ -2757,7 +2753,7 @@ func (r *Replica) splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
 		}
-		if (leftLease == roachpb.Lease{}) {
+		if leftLease.Empty() {
 			log.Fatalf(ctx, "LHS of split has no lease")
 		}
 
@@ -2772,7 +2768,7 @@ func (r *Replica) splitTrigger(
 		rightLease.Replica = replica
 
 		rightMS, err = writeInitialState(
-			ctx, batch, rightMS, split.RightDesc, oldHS, &rightLease,
+			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial state")
@@ -3404,12 +3400,12 @@ func (r *Replica) LeaseInfo(
 ) (roachpb.LeaseInfoResponse, error) {
 	var reply roachpb.LeaseInfoResponse
 	lease, nextLease := r.getLease()
-	if nextLease != nil {
+	if !nextLease.Empty() {
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
-		reply.Lease = nextLease
-	} else if lease != nil {
-		reply.Lease = lease
+		reply.Lease = &nextLease
+	} else if !lease.Empty() {
+		reply.Lease = &lease
 	}
 	return reply, nil
 }

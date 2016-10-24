@@ -128,7 +128,7 @@ func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
 type EvalResult struct {
 	Local         LocalEvalResult
 	MaxLeaseIndex uint64
-	OriginReplica roachpb.ReplicaDescriptor
+	OriginLease   roachpb.Lease
 	Request       *roachpb.BatchRequest
 	Replicated    storagebase.ReplicatedEvalResult
 	WriteBatch    *storagebase.WriteBatch
@@ -159,12 +159,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.State.Desc = nil
 
-	if p.Replicated.State.Lease == nil {
+	if p.Replicated.State.Lease.Empty() {
 		p.Replicated.State.Lease = q.Replicated.State.Lease
-	} else if q.Replicated.State.Lease != nil {
+	} else if !q.Replicated.State.Lease.Empty() {
 		return errors.New("conflicting Lease")
 	}
-	q.Replicated.State.Lease = nil
+	q.Replicated.State.Lease = roachpb.Lease{}
 
 	if p.Replicated.State.TruncatedState == nil {
 		p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
@@ -324,10 +324,7 @@ func (r *Replica) computeChecksumPostApply(
 }
 
 func (r *Replica) leasePostApply(
-	ctx context.Context,
-	newLease *roachpb.Lease,
-	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease,
+	ctx context.Context, newLease roachpb.Lease, replicaID roachpb.ReplicaID, prevLease roachpb.Lease,
 ) {
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
@@ -353,7 +350,7 @@ func (r *Replica) leasePostApply(
 		// Gossip the first range whenever its lease is acquired. We check to
 		// make sure the lease is active so that a trailing replica won't process
 		// an old lease request and attempt to gossip the first range.
-		if r.IsFirstRange() && newLease.Covers(r.store.Clock().Now()) {
+		if r.IsFirstRange() && r.IsLeaseValid(&newLease, r.store.Clock().Now()) {
 			r.gossipFirstRange(ctx)
 		}
 	}
@@ -367,7 +364,7 @@ func (r *Replica) leasePostApply(
 		r.mu.Unlock()
 	}
 
-	if !iAmTheLeaseHolder && newLease.Covers(r.store.Clock().Now()) {
+	if !iAmTheLeaseHolder && r.IsLeaseValid(&newLease, r.store.Clock().Now()) {
 		// If this replica is the raft leader but it is not the new lease holder,
 		// then try to transfer the raft leadership to match the lease. We like it
 		// when leases and raft leadership are collocated because that facilitates
@@ -545,8 +542,8 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ChangeReplicas = nil
 	}
 
-	if newLease := rResult.State.Lease; newLease != nil {
-		rResult.State.Lease = nil // for assertion
+	if newLease := rResult.State.Lease; !newLease.Empty() {
+		rResult.State.Lease = roachpb.Lease{} // for assertion
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID

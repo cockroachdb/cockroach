@@ -127,16 +127,16 @@ func (q *timeSeriesMaintenanceQueue) shouldQueue(
 }
 
 func (q *timeSeriesMaintenanceQueue) process(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, status LeaseStatus, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	desc := repl.Desc()
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
-	if err := q.tsData.PruneTimeSeries(ctx, snap, desc.StartKey, desc.EndKey, q.db, now); err != nil {
+	if err := q.tsData.PruneTimeSeries(ctx, snap, desc.StartKey, desc.EndKey, q.db, status.timestamp); err != nil {
 		return err
 	}
 	// Update the last processed time for this queue.
-	if err := repl.setQueueLastProcessed(ctx, q.name, now); err != nil {
+	if err := repl.setQueueLastProcessed(ctx, q.name, status.timestamp); err != nil {
 		log.ErrEventf(ctx, "failed to update last processed time: %v", err)
 	}
 	return nil

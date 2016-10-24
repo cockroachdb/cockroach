@@ -513,28 +513,28 @@ func TestRangeTransferLease(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	origLease, _ := replica0.GetLease()
+	status := replica0.LeaseStatus(&origLease, mtc.clock.Now())
 	{
 		// Transferring the lease to ourself should be a no-op.
-		origLeasePtr, _ := replica0.GetLease()
-		origLease := *origLeasePtr
-		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica0.AdminTransferLease(replica0Desc.StoreID, status); err != nil {
 			t.Fatal(err)
 		}
-		newLeasePtr, _ := replica0.GetLease()
-		if origLeasePtr != newLeasePtr || origLease != *newLeasePtr {
-			t.Fatalf("expected %+v, but found %+v", origLeasePtr, newLeasePtr)
+		newLease, _ := replica0.GetLease()
+		if origLease != newLease {
+			t.Fatalf("expected %+v, but found %+v", origLease, newLease)
 		}
 	}
 
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
+		if err := replica0.AdminTransferLease(1000, status); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
 
-	// Move the lease to store 1.
+	// Move the lease to replica 1.
 	var newHolderDesc roachpb.ReplicaDescriptor
 	util.SucceedsSoon(t, func() error {
 		var err error
@@ -542,7 +542,7 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
+	if err := replica0.AdminTransferLease(newHolderDesc.StoreID, status); err != nil {
 		t.Fatal(err)
 	}
 
@@ -615,32 +615,24 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 	filterMu.Unlock()
 	// Initiate an extension.
-	var wg sync.WaitGroup
-	wg.Add(1)
+	renewalErrCh := make(chan error)
 	go func() {
-		defer wg.Done()
-		shouldRenewTS := replica1Lease.StartStasis.Add(-1, 0)
+		shouldRenewTS := replica1Lease.Expiration.Add(-1, 0)
 		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
-		if _, pErr := client.SendWrappedWith(
-			context.Background(),
-			mtc.senders[1],
-			roachpb.Header{Replica: replica0Desc},
-			&gArgs,
-		); pErr != nil {
-			panic(pErr)
-		}
+		_, pErr := client.SendWrappedWith(
+			context.Background(), mtc.senders[1], roachpb.Header{Replica: replica0Desc}, &gArgs,
+		)
+		renewalErrCh <- pErr.GoError()
 	}()
 
 	<-extensionSem
 	waitForTransferBlocked.Store(true)
 	// Initiate a transfer.
-	wg.Add(1)
+	transferErrCh := make(chan error)
 	go func() {
-		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if err := replica1.AdminTransferLease(replica0Desc.StoreID); err != nil {
-			panic(err)
-		}
+		status = replica1.LeaseStatus(&replica1Lease, mtc.clock.Now())
+		transferErrCh <- replica1.AdminTransferLease(replica0Desc.StoreID, status)
 	}()
 	// Wait for the transfer to be blocked by the extension.
 	<-transferBlocked
@@ -661,7 +653,21 @@ func TestRangeTransferLease(t *testing.T) {
 	filterMu.Lock()
 	filter = nil
 	filterMu.Unlock()
-	wg.Wait()
+
+	// We can sometimes receive an error from our renewal attempt
+	// because the lease transfer ends up causing the renewal to
+	// re-propose and second attempt fails because it's already been
+	// renewed. This used to work before we compared the origin lease
+	// with actual lease because the renewed lease still encompassed the
+	// previous request.
+	if err := <-renewalErrCh; err != nil {
+		if _, ok := err.(*roachpb.NotLeaseHolderError); !ok {
+			t.Errorf("expected not lease holder error due to re-proposal; got %s", err)
+		}
+	}
+	if err := <-transferErrCh; err != nil {
+		t.Errorf("unexpected error from lease transfer: %s", err)
+	}
 }
 
 // Test that leases held before a restart are not used after the restart.
@@ -784,10 +790,9 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 			Lease: roachpb.Lease{
-				Start:       s.Clock().Now(),
-				StartStasis: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
-				Expiration:  s.Clock().Now().Add(2*time.Second.Nanoseconds(), 0),
-				Replica:     repDesc,
+				Start:      s.Clock().Now(),
+				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
+				Replica:    repDesc,
 			},
 		}
 		if _, pErr := client.SendWrapped(context.Background(), s.DistSender(), &leaseReq); pErr != nil {
@@ -1004,7 +1009,7 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos := []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1036,11 +1041,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica0.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1061,11 +1066,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *rhsReplica0.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 		{
 			Desc:  *lhsReplica0.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
@@ -1092,11 +1097,11 @@ func TestRangeInfo(t *testing.T) {
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica1.Desc(),
-			Lease: *lhsLease,
+			Lease: lhsLease,
 		},
 		{
 			Desc:  *rhsReplica1.Desc(),
-			Lease: *rhsLease,
+			Lease: rhsLease,
 		},
 	}
 	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
