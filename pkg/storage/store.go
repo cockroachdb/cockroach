@@ -124,9 +124,6 @@ func RangeLeaseDurations(
 	return
 }
 
-var enableCoalescedHeartbeats = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_COALESCED_HEARBEATS", true)
-
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig() StoreConfig {
 	return StoreConfig{
@@ -139,6 +136,7 @@ func TestStoreConfig() StoreConfig {
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
 		MetricsSampleInterval:          time.Hour,
+		EnableCoalescedHeartbeats:      true,
 	}
 }
 
@@ -593,6 +591,9 @@ type StoreConfig struct {
 
 	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
 	MetricsSampleInterval time.Duration
+
+	// EnableCoalescedHeartbeats controls whether heartbeats are coalesced.
+	EnableCoalescedHeartbeats bool
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -719,6 +720,14 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		allocator: MakeAllocator(cfg.StorePool, cfg.AllocatorOptions),
 		nodeDesc:  nodeDesc,
 		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
+	}
+
+	// EnableCoalescedHeartbeats is enabled by TestStoreConfig, so in that case
+	// ignore the environment variable. Otherwise, use whatever the environment
+	// variable says should be used.
+	if !cfg.EnableCoalescedHeartbeats {
+		s.cfg.EnableCoalescedHeartbeats = envutil.EnvOrDefaultBool(
+			"COCKROACH_ENABLE_COALESCED_HEARTBEATS", false)
 	}
 
 	s.intentResolver = newIntentResolver(s)
