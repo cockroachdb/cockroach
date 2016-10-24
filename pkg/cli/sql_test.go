@@ -177,7 +177,7 @@ func TestIsEndOfStatement(t *testing.T) {
 		if syntax == 0 {
 			syntax = parser.Traditional
 		}
-		isEmpty, isEnd, hasSet := isEndOfStatement(syntax, &[]string{test.in})
+		isEmpty, isEnd, hasSet := isEndOfStatement(test.in, syntax)
 		if isEmpty != test.isEmpty {
 			t.Errorf("%q: isEmpty expected %v, got %v", test.in, test.isEmpty, isEmpty)
 		}
