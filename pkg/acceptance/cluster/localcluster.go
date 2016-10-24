@@ -180,6 +180,12 @@ func CreateLocal(
 
 	clusterID := uuid.MakeV4()
 	clusterIDS := clusterID.Short()
+	// Only pass a nonzero logDir down to LocalCluster when instructed to keep
+	// logs.
+	var uniqueLogDir string
+	if logDir != "" {
+		uniqueLogDir = fmt.Sprintf("%s-%s", logDir, clusterIDS)
+	}
 	return &LocalCluster{
 		clusterID: clusterIDS,
 		client:    retryingClient,
@@ -188,7 +194,7 @@ func CreateLocal(
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
-		logDir:         fmt.Sprintf("%s-%s", logDir, clusterIDS),
+		logDir:         uniqueLogDir,
 		privileged:     privileged,
 	}
 }
