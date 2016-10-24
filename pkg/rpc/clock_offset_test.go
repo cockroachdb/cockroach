@@ -110,9 +110,9 @@ func TestVerifyClockOffset(t *testing.T) {
 	}{
 		// no error if no offsets.
 		{[]RemoteOffset{}, false},
-		// no error when a majority of offsets are under the maximum offset.
-		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 58, Uncertainty: 20}, {Offset: 71, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, false},
-		// error when less than a majority of offsets are under the maximum offset.
+		// no error when a majority of offsets are under the maximum tolerated offset.
+		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 48, Uncertainty: 20}, {Offset: 61, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, false},
+		// error when less than a majority of offsets are under the maximum tolerated offset.
 		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 58, Uncertainty: 20}, {Offset: 85, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, true},
 	} {
 		monitor.mu.offsets = make(map[string]RemoteOffset)

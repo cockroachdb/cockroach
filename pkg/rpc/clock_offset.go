@@ -173,18 +173,21 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 }
 
 func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bool {
+	// Tolerate up to 80% of the maximum offset.
+	toleratedOffset := maxOffset * 4 / 5
+
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
 	if absOffset < 0 {
 		absOffset = -absOffset
 	}
 	switch {
-	case time.Duration(absOffset-r.Uncertainty)*time.Nanosecond > maxOffset:
+	case time.Duration(absOffset-r.Uncertainty)*time.Nanosecond > toleratedOffset:
 		// The minimum possible true offset exceeds the maximum offset; definitely
 		// unhealthy.
 		return false
 
-	case time.Duration(absOffset+r.Uncertainty)*time.Nanosecond < maxOffset:
+	case time.Duration(absOffset+r.Uncertainty)*time.Nanosecond < toleratedOffset:
 		// The maximum possible true offset does not exceed the maximum offset;
 		// definitely healthy.
 		return true
@@ -194,7 +197,7 @@ func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bo
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
 		if log.V(1) {
-			log.Infof(ctx, "uncertain remote offset %s for maximum offset %s, treating as healthy", r, maxOffset)
+			log.Infof(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
 		}
 		return true
 	}
