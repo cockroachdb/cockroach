@@ -30,8 +30,9 @@ import (
 // TODO(knz): this does not currently track the amount of memory used
 // for the outer array of DTuple references.
 type RowContainer struct {
-	p    *planner
-	rows []parser.DTuple
+	p       *planner
+	rows    []parser.DTuple
+	numCols int
 
 	// fixedColsSize is the sum of widths of fixed-width columns in a
 	// single row.
@@ -68,6 +69,7 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 	res := &RowContainer{
 		p:               p,
 		rows:            make([]parser.DTuple, 0, rowCapacity),
+		numCols:         nCols,
 		varSizedColumns: make([]int, 0, nCols),
 		memAcc:          p.session.OpenAccount(),
 	}
@@ -114,6 +116,11 @@ func (c *RowContainer) AddRow(row parser.DTuple) error {
 // Len reports the number of rows currently held in this RowContainer.
 func (c *RowContainer) Len() int {
 	return len(c.rows)
+}
+
+// NumCols reports the number of columns held in this RowContainer.
+func (c *RowContainer) NumCols() int {
+	return c.numCols
 }
 
 // At accesses a row at a specific index.
