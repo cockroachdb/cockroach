@@ -917,7 +917,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
 	}
 	for _, c := range testCases {
-		func() {
+		t.Run("", func(t *testing.T) {
 			sc := storage.TestStoreConfig(nil)
 			sc.TestingKnobs = c
 			// Disable periodic gossip tasks which can move the range 1 lease
@@ -968,14 +968,15 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.stopStore(0)
 			mtc.restartStore(0)
 
-			// Expire existing leases (i.e. move the clock forward). This allows node
-			// 3 to grab the lease later in the test.
-			mtc.expireLeases()
+			// Expire existing leases (i.e. move the clock forward, but don't
+			// increment epochs). This allows node 3 to grab the lease later
+			// in the test.
+			mtc.expireLeasesWithoutIncrementingEpochs()
 			// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
 			// leases.
 			for i := 0; i < 2; i++ {
 				if err := mtc.stores[i].DrainLeases(true); err != nil {
-					t.Fatal(err)
+					t.Fatalf("store %d: %v", i, err)
 				}
 			}
 
@@ -993,7 +994,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			}
 
 			mtc.waitForValues(roachpb.Key("a"), []int64{15, 15, 15})
-		}()
+		})
 	}
 }
 
@@ -2563,6 +2564,12 @@ func TestReplicaLazyLoad(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 1)
 
+	// Create 2 ranges by splitting range 1.
+	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
 	mtc.stopStore(0)
 	mtc.restartStore(0)
 
@@ -2572,9 +2579,9 @@ func TestReplicaLazyLoad(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	replica, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKey("b"), nil)
+	if replica == nil {
+		t.Fatalf("lookup replica at key \"b\" returned nil")
 	}
 	if replica.RaftStatus() != nil {
 		t.Fatalf("expected replica Raft group to be uninitialized")
@@ -3025,7 +3032,7 @@ func TestRangeQuiescence(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
-	stopNodeLivenessHeartbeats(mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
 
 	// Replica range 1 to all 3 nodes.
 	mtc.replicateRange(1, 1, 2)
