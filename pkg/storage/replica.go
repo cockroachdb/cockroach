@@ -2451,7 +2451,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	toReplica, fromReplica roachpb.ReplicaDescriptor,
 	quiesce bool,
 ) bool {
-	if !enableCoalescedHeartbeats {
+	if !r.store.cfg.EnableCoalescedHeartbeats {
 		return false
 	}
 	var hbMap map[roachpb.StoreIdent][]RaftHeartbeat
