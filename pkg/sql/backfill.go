@@ -435,13 +435,13 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		writeBatch := txn.NewBatch()
 		rowLength := 0
 		var lastRowSeen parser.DTuple
-		for i := int64(0); i < chunkSize; i++ {
+		i := int64(0)
+		for ; i < chunkSize; i++ {
 			row, err := rf.NextRow()
 			if err != nil {
 				return err
 			}
 			if row == nil {
-				done = true
 				break
 			}
 			lastRowSeen = row
@@ -465,7 +465,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err := txn.Run(writeBatch); err != nil {
 			return convertBackfillError(tableDesc, writeBatch)
 		}
-		if done {
+		if i < chunkSize {
+			done = true
 			return nil
 		}
 		curIndexKey, _, err := sqlbase.EncodeIndexKey(
@@ -474,9 +475,12 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err != nil {
 			return err
 		}
-		nextKey = roachpb.Key(curIndexKey).PrefixEnd()
-		resume := roachpb.Span{Key: nextKey, EndKey: sp.EndKey}
-		return sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, lastCheckpoint)
+		resume := roachpb.Span{Key: roachpb.Key(curIndexKey).PrefixEnd(), EndKey: sp.EndKey}
+		if err := sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, lastCheckpoint); err != nil {
+			return err
+		}
+		nextKey = resume.Key
+		return nil
 	})
 	return nextKey, done, err
 }
@@ -534,8 +538,11 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
+				if err := sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, &lastCheckpoint); err != nil {
+					return err
+				}
 				done = resume.Key == nil
-				return sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, &lastCheckpoint)
+				return nil
 			}); err != nil {
 				return err
 			}
@@ -675,9 +682,12 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return nil
 		}
 		// Keep track of the next key.
-		nextKey = scan.fetcher.Key()
-		resume := roachpb.Span{Key: nextKey, EndKey: sp.EndKey}
-		return sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, lastCheckpoint)
+		resume := roachpb.Span{Key: scan.fetcher.Key(), EndKey: sp.EndKey}
+		if err := sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, lastCheckpoint); err != nil {
+			return err
+		}
+		nextKey = resume.Key
+		return nil
 	})
 	return nextKey, done, err
 }
