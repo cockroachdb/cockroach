@@ -5781,7 +5781,11 @@ func TestReplicaIDChangePending(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := testContext{}
-	tc.Start(t)
+	cfg := TestStoreConfig()
+	// Disable ticks to avoid automatic reproposals after a timeout, which
+	// would pass this test.
+	cfg.RaftTickInterval = time.Hour
+	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
 	rng := tc.rng
 
@@ -5808,29 +5812,26 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// re-proposed.
 	commandProposed := make(chan struct{}, 1)
 	rng.mu.Lock()
-	defer rng.mu.Unlock()
 	rng.mu.submitProposalFn = func(p *ProposalData) error {
 		if p.RaftCommand.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
 	}
+	rng.mu.Unlock()
 
 	// Set the ReplicaID on the replica.
-	if err := rng.setReplicaIDLocked(2); err != nil {
+	if err := rng.setReplicaID(2); err != nil {
 		t.Fatal(err)
 	}
 
-	select {
-	case <-commandProposed:
-	default:
-		t.Fatal("command was not re-proposed")
-	}
+	<-commandProposed
 }
 
 func TestReplicaRetryRaftProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.TODO()
 	var tc testContext
 	tc.Start(t)
 	defer tc.Stop()
@@ -5856,7 +5857,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Add(&pArg)
 		ba.Timestamp = tc.clock.Now()
-		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -5871,7 +5872,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	wrongLeaseIndex = ai - 1 // used by submitProposalFn above
 
-	log.Infof(context.Background(), "test begins")
+	log.Infof(ctx, "test begins")
 
 	var ba roachpb.BatchRequest
 	ba.Timestamp = tc.clock.Now()
@@ -5880,7 +5881,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	ba.Add(&iArg)
 	{
 		br, pErr, shouldRetry := tc.rng.tryAddWriteCmd(
-			context.WithValue(context.Background(), magicKey{}, "foo"),
+			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
 		if !shouldRetry {
@@ -5894,7 +5895,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	atomic.StoreInt32(&c, 0)
 	{
 		br, pErr := tc.rng.addWriteCmd(
-			context.WithValue(context.Background(), magicKey{}, "foo"),
+			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
 		if pErr != nil {
@@ -5929,14 +5930,13 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	var chs []chan proposalResult
 
 	func() {
-		rng.mu.Lock()
-		defer rng.mu.Unlock()
 		for i := 0; i < num; i++ {
 			var ba roachpb.BatchRequest
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd := rng.evaluateProposalLocked(context.Background(), makeIDKey(), repDesc, ba)
+			cmd := rng.evaluateProposal(context.Background(), makeIDKey(), repDesc, ba)
+			rng.mu.Lock()
 			rng.insertProposalLocked(cmd)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
@@ -5946,11 +5946,12 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 				log.Infof(context.Background(), "abandoning command %d", i)
 				delete(rng.mu.proposals, cmd.idKey)
 			} else if err := rng.submitProposalLocked(cmd); err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			} else {
 
 				chs = append(chs, cmd.done)
 			}
+			rng.mu.Unlock()
 		}
 	}()
 
@@ -6008,16 +6009,21 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.clock.Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd := tc.rng.evaluateProposalLocked(ctx, makeIDKey(), repDesc, ba)
+			cmd := tc.rng.evaluateProposal(ctx, makeIDKey(), repDesc, ba)
+
+			tc.rng.mu.Lock()
 			tc.rng.insertProposalLocked(cmd)
 			chs = append(chs, cmd.done)
+			tc.rng.mu.Unlock()
 		}
 
+		tc.rng.mu.Lock()
 		for _, p := range tc.rng.mu.proposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
 				origIndexes = append(origIndexes, int(p.RaftCommand.MaxLeaseIndex))
 			}
 		}
+		tc.rng.mu.Unlock()
 
 		sort.Ints(origIndexes)
 
@@ -6025,9 +6031,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
 		}
 
-		if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
-			t.Fatal(err)
-		}
+		tc.rng.refreshProposalsLocked(0, reasonTicks)
 		return chs
 	}()
 	for _, ch := range chs {
@@ -6040,33 +6044,30 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		t.Fatalf("expected indexes %v, got %v", expIndexes, seenCmds)
 	}
 
-	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
-		nonePending := len(tc.rng.mu.proposals) == 0
-		c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.state.LeaseAppliedIndex)
-		if nonePending && c > 0 {
-			return fmt.Errorf("no pending cmds, but have required index offset %d", c)
-		}
-		if nonePending {
-			return nil
-		}
-		return errors.New("still pending commands")
-	})
+	tc.rng.mu.Lock()
+	defer tc.rng.mu.Unlock()
+	nonePending := len(tc.rng.mu.proposals) == 0
+	c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.state.LeaseAppliedIndex)
+	if nonePending && c > 0 {
+		t.Errorf("no pending cmds, but have required index offset %d", c)
+	}
+	if !nonePending {
+		t.Fatalf("still pending commands: %+v", tc.rng.mu.proposals)
+	}
 }
 
 func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tc testContext
-	tc.Start(t)
+	cfg := TestStoreConfig()
+	cfg.RaftTickInterval = 24 * time.Hour // disable ticks
+	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
 
 	// Grab Replica.raftMu in order to block normal raft replica processing. This
 	// test is ticking the replica manually and doesn't want the store to be
 	// doing so concurrently.
 	r := tc.rng
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
 
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
@@ -6084,28 +6085,50 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tickRaftMuLocked(); err != nil {
+			if _, err := r.tick(); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 
+	var dropProposals struct {
+		syncutil.Mutex
+		m map[*ProposalData]struct{}
+	}
+	dropProposals.m = make(map[*ProposalData]struct{})
+
+	r.mu.Lock()
+	r.mu.submitProposalFn = func(pd *ProposalData) error {
+		dropProposals.Lock()
+		defer dropProposals.Unlock()
+		if _, ok := dropProposals.m[pd]; !ok {
+			return defaultSubmitProposalLocked(r, pd)
+		}
+		return nil // pretend we proposed though we didn't
+	}
+	r.mu.Unlock()
+
 	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
 	// is special in that it controls how often pending commands are reproposed.
 	for i := 0; i < 2*electionTicks; i++ {
 		// Add another pending command on each iteration.
-		r.mu.Lock()
 		id := fmt.Sprintf("%08d", i)
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.clock.Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
-		cmd := r.evaluateProposalLocked(context.Background(),
+		cmd := r.evaluateProposal(context.Background(),
 			storagebase.CmdIDKey(id), repDesc, ba)
+
+		dropProposals.Lock()
+		dropProposals.m[cmd] = struct{}{} // silently drop proposals
+		dropProposals.Unlock()
+
+		r.mu.Lock()
 		r.insertProposalLocked(cmd)
 		if err := r.submitProposalLocked(cmd); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
-		// Build a map from command key to proposed-at-ticks.
+		// Build the map of expected reproposals at this stage.
 		m := map[storagebase.CmdIDKey]int{}
 		for id, p := range r.mu.proposals {
 			m[id] = p.proposedAtTicks
@@ -6113,26 +6136,30 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tickRaftMuLocked(); err != nil {
+		if _, err := r.tick(); err != nil {
 			t.Fatal(err)
 		}
 
-		// Gather up the reproposed commands.
 		r.mu.Lock()
-		var reproposed []*ProposalData
-		for id, p := range r.mu.proposals {
-			if m[id] != p.proposedAtTicks {
-				reproposed = append(reproposed, p)
-			}
-		}
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 
-		// Reproposals are only performed every electionTicks. We'll need to fix
-		// this test if that changes.
+		var reproposed []*ProposalData
+		r.mu.Lock() // avoid data race - proposals belong to the Replica
+		dropProposals.Lock()
+		for p := range dropProposals.m {
+			if p.proposedAtTicks >= ticks {
+				reproposed = append(reproposed, p)
+			}
+		}
+		dropProposals.Unlock()
+		r.mu.Unlock()
+
+		// Reproposals are only performed every electionTicks. We'll need
+		// to fix this test if that changes.
 		if (ticks % electionTicks) == 0 {
 			if len(reproposed) != i-1 {
-				t.Fatalf("%d: expected %d reproposed commands, but found %+v", i, i-1, reproposed)
+				t.Fatalf("%d: expected %d reproposed commands, but found %d", i, i-1, len(reproposed))
 			}
 		} else {
 			if len(reproposed) != 0 {
