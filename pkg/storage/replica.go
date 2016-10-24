@@ -253,8 +253,11 @@ type Replica struct {
 		//
 		// Locking notes: Replica.mu < Replica.cmdQMu
 		syncutil.TimedMutex
-		// Enforces at most one command is running per key(s).
-		q *CommandQueue
+		// Enforces at most one command is running per key(s). The global
+		// component tracks user writes (i.e. all keys for which keys.Addr is
+		// the identity), the local component the rest (e.g. RangeDescriptor,
+		// transaction record, Lease, ...).
+		global, local *CommandQueue
 	}
 
 	mu struct {
@@ -586,7 +589,8 @@ func (r *Replica) initLocked(
 	}
 
 	r.cmdQMu.Lock()
-	r.cmdQMu.q = NewCommandQueue()
+	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
+	r.cmdQMu.local = NewCommandQueue(false /* !optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
 	r.mu.tsCache = newTimestampCache(clock)
@@ -1181,17 +1185,37 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
-	var cmd *cmd
+	var cmdGlobal *cmd
+	var cmdLocal *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		readOnly := ba.IsReadOnly()
-		spans := make([]roachpb.Span, len(ba.Requests))
-		for i, union := range ba.Requests {
-			spans[i] = union.GetInner().Header()
+		// Currently local spans are the exception, so preallocate for the
+		// common case in which all are global.
+		//
+		// TODO(tschottdorf): revisit as the local portion gets its appropriate
+		// use.
+		spansGlobal := make([]roachpb.Span, 0, len(ba.Requests))
+		var spansLocal []roachpb.Span
+
+		for _, union := range ba.Requests {
+			header := union.GetInner().Header()
+			if keys.IsLocal(header.Key) {
+				spansLocal = append(spansLocal, header)
+			} else {
+				spansGlobal = append(spansGlobal, header)
+			}
 		}
+
+		// TODO(tschottdorf): need to make this less global when the local
+		// command queue is used more heavily. For example, a split will have
+		// a large read-only span but also a write (see #10084).
+		readOnly := ba.IsReadOnly()
+
 		r.cmdQMu.Lock()
-		chans := r.cmdQMu.q.getWait(readOnly, spans...)
-		cmd = r.cmdQMu.q.add(readOnly, spans...)
+		chans := r.cmdQMu.global.getWait(readOnly, spansGlobal...)
+		chans = append(chans, r.cmdQMu.global.getWait(readOnly, spansLocal...)...)
+		cmdGlobal = r.cmdQMu.global.add(readOnly, spansGlobal...)
+		cmdLocal = r.cmdQMu.local.add(readOnly, spansLocal...)
 		r.cmdQMu.Unlock()
 
 		beforeWait := timeutil.Now()
@@ -1217,7 +1241,8 @@ func (r *Replica) beginCmds(
 						<-ch
 					}
 					r.cmdQMu.Lock()
-					r.cmdQMu.q.remove(cmd)
+					r.cmdQMu.global.remove(cmdGlobal)
+					r.cmdQMu.local.remove(cmdLocal)
 					r.cmdQMu.Unlock()
 				}()
 				return nil, err
@@ -1247,7 +1272,7 @@ func (r *Replica) beginCmds(
 	}
 
 	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-		return r.endCmds(cmd, ba, br, pErr)
+		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr)
 	}, nil
 }
 
@@ -1255,7 +1280,11 @@ func (r *Replica) beginCmds(
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
 func (r *Replica) endCmds(
-	cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	cmdGlobal *cmd,
+	cmdLocal *cmd,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
 ) (rErr *roachpb.Error) {
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
@@ -1291,7 +1320,8 @@ func (r *Replica) endCmds(
 	}
 
 	r.cmdQMu.Lock()
-	r.cmdQMu.q.remove(cmd)
+	r.cmdQMu.global.remove(cmdGlobal)
+	r.cmdQMu.local.remove(cmdLocal)
 	r.cmdQMu.Unlock()
 	return pErr
 }
