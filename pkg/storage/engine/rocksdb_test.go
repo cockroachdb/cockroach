@@ -23,7 +23,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strconv"
 	"sync"
@@ -230,95 +229,18 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 		}
 	}
 
-	rocksdb := NewRocksDB(
+	rocksdb, err := NewRocksDB(
 		roachpb.Attributes{},
 		dir,
 		RocksDBCache{},
 		0,
 		DefaultMaxOpenFiles,
-		stopper,
 	)
-	return rocksdb.Open()
-}
-
-func TestCheckpoint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	dir, err := ioutil.TempDir("", "testing")
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	var expectedKeys []string
-	func() {
-		stopper := stop.NewStopper()
-		defer stopper.Stop()
-
-		db := NewRocksDB(
-			roachpb.Attributes{},
-			dir,
-			RocksDBCache{},
-			0,
-			DefaultMaxOpenFiles,
-			stopper,
-		)
-		if err := db.Open(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Add 20 keys, creating a checkpoint after the 10th key is added.
-		for i := 0; i < 20; i++ {
-			if i == 10 {
-				if err := db.Checkpoint("checkpoint"); err != nil {
-					t.Fatal(err)
-				}
-			}
-			s := fmt.Sprintf("%02d", i)
-			if err := db.Put(mvccKey(s), []byte(s)); err != nil {
-				t.Fatal(err)
-			}
-			if i < 10 {
-				expectedKeys = append(expectedKeys, s)
-			}
-		}
-	}()
-
-	func() {
-		stopper := stop.NewStopper()
-		defer stopper.Stop()
-
-		dir = filepath.Join(dir, "checkpoint")
-		db := NewRocksDB(
-			roachpb.Attributes{},
-			dir,
-			RocksDBCache{},
-			0,
-			DefaultMaxOpenFiles,
-			stopper,
-		)
-		if err := db.Open(); err != nil {
-			t.Fatal(err)
-		}
-
-		// The checkpoint should only contain the first 10 keys.
-		var keys []string
-		err := db.Iterate(NilKey, MVCCKeyMax, func(kv MVCCKeyValue) (bool, error) {
-			keys = append(keys, string(kv.Key.Key))
-			return false, nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if !reflect.DeepEqual(expectedKeys, keys) {
-			t.Fatalf("expected %s, but got %s", expectedKeys, keys)
-		}
-	}()
+	stopper.AddCloser(rocksdb)
+	return nil
 }
 
 func TestSSTableInfosString(t *testing.T) {
@@ -434,11 +356,12 @@ func TestConcurrentBatch(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	db := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
-		0, DefaultMaxOpenFiles, stopper)
-	if err := db.Open(); err != nil {
+	db, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
+		0, DefaultMaxOpenFiles)
+	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
+	stopper.AddCloser(db)
 
 	// Prepare 16 4 MB batches containing non-overlapping contents.
 	var batches []Batch

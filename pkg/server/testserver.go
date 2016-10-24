@@ -137,6 +137,30 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.AdvertiseAddr = util.TestAddr.String()
 		cfg.HTTPAddr = util.TestAddr.String()
 	}
+
+	// Ensure we have the correct number of engines. Add in-memory ones where
+	// needed. There must be at least one store/engine.
+	if len(params.StoreSpecs) == 0 {
+		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+	}
+	// Validate the store specs.
+	for _, storeSpec := range params.StoreSpecs {
+		if storeSpec.InMemory {
+			if storeSpec.SizePercent > 0 {
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+			}
+		} else {
+			// TODO(bram): This will require some cleanup of on disk files.
+			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
+		}
+	}
+	// Copy over the store specs.
+	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
+	if cfg.TestingKnobs.Store == nil {
+		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+	}
+	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
+
 	return cfg
 }
 
@@ -233,32 +257,12 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		return err
 	}
 
-	// Ensure we have the correct number of engines. Add in-memory ones where
-	// needed. There must be at least one store/engine.
-	if len(params.StoreSpecs) == 0 {
-		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
-	}
-	for _, storeSpec := range params.StoreSpecs {
-		if storeSpec.InMemory {
-			if storeSpec.SizePercent > 0 {
-				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
-			}
-			ts.Cfg.Engines = append(ts.Cfg.Engines, engine.NewInMem(
-				roachpb.Attributes{},
-				storeSpec.SizeInBytes,
-				params.Stopper,
-			))
-		} else {
-			// TODO(bram): This will require some cleanup of on disk files.
-			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
-		}
-	}
-
 	var err error
 	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
 	}
+
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
 
@@ -318,6 +322,11 @@ func WaitForInitialSplits(db *client.DB) error {
 // Stores returns the collection of stores from this TestServer's node.
 func (ts *TestServer) Stores() *storage.Stores {
 	return ts.node.stores
+}
+
+// Engines returns the TestServer's engines.
+func (ts *TestServer) Engines() []engine.Engine {
+	return ts.engines
 }
 
 // ServingAddr returns the server's address. Should be used by clients.

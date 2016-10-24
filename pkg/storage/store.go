@@ -650,6 +650,9 @@ type StoreTestingKnobs struct {
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
 	NumKeysEvaluatedForRangeIntentResolution *int64
+	// SkipMinSizeCheck, if set, makes the store creation process skip the check
+	// for a minimum size.
+	SkipMinSizeCheck bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -925,13 +928,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		envutil.EnvOrDefaultDuration("COCKROACH_RESERVATION_TIMEOUT", ttlStoreGossip),
 	)
 
+	// Read the store ident if not already initialized. "NodeID != 0" implies
+	// the store has already been initialized.
 	if s.Ident.NodeID == 0 {
-		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
-		// implies the engine has already been opened.
-		if err := s.engine.Open(); err != nil {
-			return err
-		}
-
 		// Read store ident and return a not-bootstrapped error if necessary.
 		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
@@ -1341,9 +1340,6 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error {
 	if s.Ident.NodeID != 0 {
 		return errors.Errorf("engine already bootstrapped")
-	}
-	if err := s.engine.Open(); err != nil {
-		return err
 	}
 	ctx := s.AnnotateCtx(context.Background())
 	s.Ident = ident
