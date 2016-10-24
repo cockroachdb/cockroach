@@ -17,6 +17,7 @@
 package ts_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -241,5 +242,77 @@ func TestServerQuery(t *testing.T) {
 	if !proto.Equal(response, expectedResult) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
+	}
+}
+
+func BenchmarkServerQuery(b *testing.B) {
+	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	tsrv := s.(*server.TestServer)
+
+	// Populate data for large number of time series.
+	seriesCount := 50
+	sourceCount := 10
+	populateSeries(b, seriesCount, sourceCount, tsrv.TsDB())
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	if err != nil {
+		b.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+	b.ResetTimer()
+
+	queries := make([]tspb.Query, 0, seriesCount)
+	for i := 0; i < seriesCount; i++ {
+		queries = append(queries, tspb.Query{
+			Name: fmt.Sprintf("metric.%d", i),
+		})
+	}
+
+	for i := 0; i < b.N; i++ {
+		if _, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 0 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    queries,
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func seriesName(seriesNum int) string {
+	return fmt.Sprintf("metric.%d", seriesNum)
+}
+
+func sourceName(sourceNum int) string {
+	return fmt.Sprintf("source.%d", sourceNum)
+}
+
+func populateSeries(t testing.TB, seriesCount, sourceCount int, tsdb *ts.DB) {
+	for series := 0; series < seriesCount; series++ {
+		for source := 0; source < sourceCount; source++ {
+			if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+				{
+					Name:   seriesName(series),
+					Source: sourceName(source),
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{
+							TimestampNanos: 100 * 1e9,
+							Value:          100.0,
+						},
+						{
+							TimestampNanos: 200 * 1e9,
+							Value:          200.0,
+						},
+						{
+							TimestampNanos: 300 * 1e9,
+							Value:          300.0,
+						},
+					},
+				},
+			}); err != nil {
+				t.Fatalf("error storing data for series %d, source %d: %s", series, source, err)
+			}
+		}
 	}
 }
