@@ -47,6 +47,7 @@ SHOW TABLES FROM pg_catalog
 pg_attrdef
 pg_attribute
 pg_class
+pg_constraint
 pg_indexes
 pg_namespace
 pg_tables
@@ -80,7 +81,6 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
 ----
 Table         Name     Type  Column(s)  Details
-pg_namespace  PRIMARY  KEY   NULL         NULL
 
 query TTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
@@ -239,25 +239,25 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
 attrelid    relname       attname  atttypid    attstattarget  attlen  attnum  attndims  attcacheoff
-2265044713  t1            p        290627148   0              8       1       0         -1
-2265044713  t1            a        739628165   0              8       2       0         -1
-2265044713  t1            b        739628165   0              8       3       0         -1
-2265044713  t1            c        739628165   0              8       4       0         -1
-1759889455  primary       p        290627148   0              8       1       0         -1
-1759889452  t1_a_key      a        739628165   0              8       1       0         -1
-1759889453  index_key     b        739628165   0              8       1       0         -1
-1759889453  index_key     c        739628165   0              8       2       0         -1
-2030599329  t2            t1_ID    739628165   0              8       1       0         -1
-559702612   t2_t1_ID_idx  t1_ID    739628165   0              8       1       0         -1
-2064007441  t3            a        739628165   0              8       1       0         -1
-2064007441  t3            b        739628165   0              8       2       0         -1
-2064007441  t3            c        4126817477  0              -1      3       0         -1
-4171047644  t3_a_b_idx    a        739628165   0              8       1       0         -1
-4171047644  t3_a_b_idx    b        739628165   0              8       2       0         -1
-2332993830  v1            p        290627148   0              8       1       0         -1
-2332993830  v1            a        739628165   0              8       2       0         -1
-2332993830  v1            b        739628165   0              8       3       0         -1
-2332993830  v1            c        739628165   0              8       4       0         -1
+2265044713  t1            p        647854976   0              8       1       0         -1
+2265044713  t1            a        2581589785  0              8       2       0         -1
+2265044713  t1            b        2581589785  0              8       3       0         -1
+2265044713  t1            c        2581589785  0              8       4       0         -1
+1759889455  primary       p        647854976   0              8       1       0         -1
+1759889452  t1_a_key      a        2581589785  0              8       1       0         -1
+1759889453  index_key     b        2581589785  0              8       1       0         -1
+1759889453  index_key     c        2581589785  0              8       2       0         -1
+2030599329  t2            t1_ID    2581589785  0              8       1       0         -1
+559702612   t2_t1_ID_idx  t1_ID    2581589785  0              8       1       0         -1
+2064007441  t3            a        2581589785  0              8       1       0         -1
+2064007441  t3            b        2581589785  0              8       2       0         -1
+2064007441  t3            c        3583390041  0              -1      3       0         -1
+4171047644  t3_a_b_idx    a        2581589785  0              8       1       0         -1
+4171047644  t3_a_b_idx    b        2581589785  0              8       2       0         -1
+2332993830  v1            p        647854976   0              8       1       0         -1
+2332993830  v1            a        2581589785  0              8       2       0         -1
+2332993830  v1            b        2581589785  0              8       3       0         -1
+2332993830  v1            c        2581589785  0              8       4       0         -1
 
 query TTIBTTBB colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef
@@ -357,3 +357,119 @@ t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t2 (rowi
 t2         t2_t1_ID_idx  CREATE INDEX t2_t1_ID_idx ON constraint_db.t2 (t1_ID ASC)
 t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t3 (rowid ASC)
 t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.t3 (a ASC, b DESC) STORING (c)
+
+## pg_catalog.pg_constraint
+##
+## These order of this virtual table is non-deterministic, so all queries must
+## explicitly add an ORDER BY clause.
+
+query ITIT colnames
+SELECT con.oid, conname, connamespace, contype
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+ORDER BY con.oid
+----
+oid         conname    connamespace  contype
+1201123740  index_key  3061586988    u
+1201123741  t1_a_key   3061586988    u
+1226447819  fk         3061586988    f
+1326888659  primary    3061586988    p
+1517731673  check_b    3061586988    c
+1830805222  fk         3061586988    f
+3366881539  primary    3061586988    p
+4143295131  primary    3061586988    p
+
+query TTBBBIII colnames
+SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+ORDER BY con.oid
+----
+conname    contype  condeferrable  condeferred  convalidated  conrelid    contypid  conindid
+index_key  u        false          false        true          2265044713  0         1759889453
+t1_a_key   u        false          false        true          2265044713  0         1759889452
+fk         f        false          false        true          2030599329  0         1759889452
+primary    p        false          false        true          2265044713  0         1759889455
+check_b    c        false          false        true          2064007441  0         0
+fk         f        false          false        true          2064007441  0         1759889453
+primary    p        false          false        true          2064007441  0         4171047647
+primary    p        false          false        true          2030599329  0         559702615
+
+query T
+SELECT conname
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db' AND contype NOT IN ('c', 'f', 'p', 'u')
+ORDER BY con.oid
+----
+
+query TITTT colnames
+SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db' AND contype IN ('c', 'p', 'u')
+ORDER BY con.oid
+----
+conname    confrelid  confupdtype  confdeltype  confmatchtype
+index_key  0          NULL         NULL         NULL
+t1_a_key   0          NULL         NULL         NULL
+primary    0          NULL         NULL         NULL
+check_b    0          NULL         NULL         NULL
+primary    0          NULL         NULL         NULL
+primary    0          NULL         NULL         NULL
+
+query TITTT colnames
+SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db' AND contype = 'f'
+ORDER BY con.oid
+----
+conname  confrelid   confupdtype  confdeltype  confmatchtype
+fk       2265044713  a            a            s
+fk       2265044713  a            a            s
+
+query TBIBT colnames
+SELECT conname, conislocal, coninhcount, connoinherit, conkey
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+ORDER BY con.oid
+----
+conname    conislocal  coninhcount  connoinherit  conkey
+index_key  true        0            true          {3,4}
+t1_a_key   true        0            true          {2}
+fk         true        0            true          {1}
+primary    true        0            true          {1}
+check_b    true        0            true          NULL
+fk         true        0            true          {1,2}
+primary    true        0            true          {4}
+primary    true        0            true          {2}
+
+query TTTTTTTT colnames
+SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db' AND contype IN ('c', 'p', 'u')
+ORDER BY con.oid
+----
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
+index_key  NULL     NULL       NULL       NULL       NULL       NULL    NULL
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL    NULL
+primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
+check_b    NULL     NULL       NULL       NULL       NULL       b > 11  b > 11
+primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
+primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
+
+query TTTTTTTT colnames
+SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'constraint_db' AND contype = 'f'
+ORDER BY con.oid
+----
+conname  confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
+fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
+fk       {3,4}    NULL       NULL       NULL       NULL       NULL    NULL

@@ -1359,7 +1359,7 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	return nil
 }
 
-// ConstraintType is used to itentify the type of a constraint.
+// ConstraintType is used to identify the type of a constraint.
 type ConstraintType string
 
 const (
@@ -1379,11 +1379,38 @@ type ConstraintDetail struct {
 	Columns     []string
 	Details     string
 	Unvalidated bool
+
+	// Only populated for FK, PK, and Unique Constraints.
+	Index *IndexDescriptor
+
+	// Only populated for FK Constraints.
+	FK              *ForeignKeyReference
+	ReferencedTable *TableDescriptor
+	ReferencedIndex *IndexDescriptor
+
+	// Only populated for Check Constraints.
+	CheckConstraint *TableDescriptor_CheckConstraint
 }
+
+type tableLookupFn func(ID) (*TableDescriptor, error)
 
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc TableDescriptor) GetConstraintInfo(txn *client.Txn) (map[string]ConstraintDetail, error) {
-	return desc.collectConstraintInfo(txn)
+	var tableLookup tableLookupFn
+	if txn != nil {
+		tableLookup = func(id ID) (*TableDescriptor, error) {
+			return GetTableDescFromID(txn, id)
+		}
+	}
+	return desc.collectConstraintInfo(tableLookup)
+}
+
+// GetConstraintInfoWithLookup returns a summary of all constraints on the
+// table using the provided function to fetch a TableDescriptor from an ID.
+func (desc TableDescriptor) GetConstraintInfoWithLookup(
+	tableLookup tableLookupFn,
+) (map[string]ConstraintDetail, error) {
+	return desc.collectConstraintInfo(tableLookup)
 }
 
 // CheckUniqueConstraints returns a non-nil error if a descriptor contains two
@@ -1393,22 +1420,25 @@ func (desc TableDescriptor) CheckUniqueConstraints() error {
 	return err
 }
 
-// if `txn` is non-nil, provide a full summary of constraints, otherwise just
+// if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
 // check that constraints have unique names.
 func (desc TableDescriptor) collectConstraintInfo(
-	txn *client.Txn,
+	tableLookup tableLookupFn,
 ) (map[string]ConstraintDetail, error) {
 	info := make(map[string]ConstraintDetail)
 
 	// Indexes provide PK, Unique and FK constraints.
-	for _, index := range desc.AllNonDropIndexes() {
+	indexes := desc.AllNonDropIndexes()
+	for i := range indexes {
+		index := &indexes[i]
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
 				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypePK}
-			if txn != nil {
+			if tableLookup != nil {
 				detail.Columns = index.ColumnNames
+				detail.Index = index
 			}
 			info[index.Name] = detail
 		} else if index.Unique {
@@ -1416,8 +1446,9 @@ func (desc TableDescriptor) collectConstraintInfo(
 				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeUnique}
-			if txn != nil {
+			if tableLookup != nil {
 				detail.Columns = index.ColumnNames
+				detail.Index = index
 			}
 			info[index.Name] = detail
 		}
@@ -1428,9 +1459,10 @@ func (desc TableDescriptor) collectConstraintInfo(
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeFK}
 			detail.Unvalidated = index.ForeignKey.Validity == ConstraintValidity_Unvalidated
-			if txn != nil {
+			if tableLookup != nil {
 				detail.Columns = index.ColumnNames
-				other, err := GetTableDescFromID(txn, index.ForeignKey.Table)
+				detail.Index = index
+				other, err := tableLookup(index.ForeignKey.Table)
 				if err != nil {
 					return nil, errors.Errorf("error resolving table %d referenced in foreign key",
 						index.ForeignKey.Table)
@@ -1441,6 +1473,9 @@ func (desc TableDescriptor) collectConstraintInfo(
 						index.ForeignKey.Index, other.Name)
 				}
 				detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
+				detail.FK = &index.ForeignKey
+				detail.ReferencedTable = other
+				detail.ReferencedIndex = otherIdx
 			}
 			info[index.ForeignKey.Name] = detail
 		}
@@ -1452,8 +1487,9 @@ func (desc TableDescriptor) collectConstraintInfo(
 		}
 		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
 		detail.Unvalidated = c.Validity == ConstraintValidity_Unvalidated
-		if txn != nil {
+		if tableLookup != nil {
 			detail.Details = c.Expr
+			detail.CheckConstraint = c
 		}
 		info[c.Name] = detail
 	}
