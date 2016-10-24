@@ -145,7 +145,7 @@ type LocalCluster struct {
 	CertsDir             string
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
-	logDir               string
+	logDir               string // no logging if empty
 	clusterID            string
 	networkID            string
 	networkName          string
@@ -154,7 +154,8 @@ type LocalCluster struct {
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
-// must be started before being used.
+// must be started before being used and keeps logs in the specified logDir, if
+// supplied.
 func CreateLocal(
 	cfg TestConfig, logDir string, privileged bool, stopper chan struct{},
 ) *LocalCluster {
@@ -180,6 +181,12 @@ func CreateLocal(
 
 	clusterID := uuid.MakeV4()
 	clusterIDS := clusterID.Short()
+	// Only pass a nonzero logDir down to LocalCluster when instructed to keep
+	// logs.
+	var uniqueLogDir string
+	if logDir != "" {
+		uniqueLogDir = fmt.Sprintf("%s-%s", logDir, clusterIDS)
+	}
 	return &LocalCluster{
 		clusterID: clusterIDS,
 		client:    retryingClient,
@@ -188,7 +195,7 @@ func CreateLocal(
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
-		logDir:         fmt.Sprintf("%s-%s", logDir, clusterIDS),
+		logDir:         uniqueLogDir,
 		privileged:     privileged,
 	}
 }
