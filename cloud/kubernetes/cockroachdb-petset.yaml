@@ -24,6 +24,13 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
+    # This is needed to make the peer-finder work properly and to help avoid
+    # edge cases where instance 0 comes up after losing its data and needs to
+    # decide whether it should create a new cluster or try to join an existing
+    # one. If it creates a new cluster when it should have joined an existing
+    # one, we'd end up with two separate clusters listening at the same service
+    # endpoint, which would be very bad.
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
     # Enable automatic monitoring of all instances when Prometheus is running in the cluster.
     prometheus.io/scrape: "true"
     prometheus.io/path: "_status/vars"
@@ -59,6 +66,33 @@ spec:
         app: cockroachdb
       annotations:
         pod.alpha.kubernetes.io/initialized: "true"
+        pod.alpha.kubernetes.io/init-containers: '[
+            {
+                "name": "bootstrap",
+                "image": "cockroachdb/cockroach-k8s-init:0.1",
+                "args": [
+                  "-on-start=/on-start.sh",
+                  "-service=cockroachdb"
+                ],
+                "env": [
+                  {
+                      "name": "POD_NAMESPACE",
+                      "valueFrom": {
+                          "fieldRef": {
+                              "apiVersion": "v1",
+                              "fieldPath": "metadata.namespace"
+                          }
+                      }
+                   }
+                ],
+                "volumeMounts": [
+                    {
+                        "name": "datadir",
+                        "mountPath": "/cockroach/cockroach-data"
+                    }
+                ]
+            }
+        ]'
     spec:
       containers:
       - name: cockroachdb
@@ -94,24 +128,20 @@ spec:
             # The use of qualified `hostname -f` is crucial:
             # Other nodes aren't able to look up the unqualified hostname.
             CRARGS=("start" "--logtostderr" "--insecure" "--host" "$(hostname -f)" "--http-host" "0.0.0.0")
-            # TODO(tschottdorf): really want to use an init container to do
-            # the bootstrapping. The idea is that the container would know
-            # whether it's on the first node and could check whether there's
-            # already a data directory. If not, it would bootstrap the cluster.
-            # We will need some version of `cockroach init` back for this to
-            # work. For now, just do the same in a shell snippet.
-            # Of course this isn't without danger - if node0 loses its data,
-            # upon restarting it will simply bootstrap a new cluster and smack
-            # it into our existing cluster.
-            # There are likely ways out. For example, the init container could
-            # query the kubernetes API and see whether any other nodes are
-            # around, etc. Or, of course, the admin can pre-seed the lost
-            # volume somehow (and in that case we should provide a better way,
-            # for example a marker file).
+            # We only want to initialize a new cluster (by omitting the join flag)
+            # if we're sure that we're the first node (i.e. index 0) and that
+            # there aren't any other nodes running as part of the cluster that
+            # this is supposed to be a part of (which indicates that a cluster
+            # already exists and we should make sure not to create a new one).
+            # It's fine to run without --join on a restart if there aren't any
+            # other nodes.
             if [ ! "$(hostname)" == "cockroachdb-0" ] || \
-               [ -e "/cockroach/cockroach-data/COCKROACHDB_VERSION" ]
+               [ -e "/cockroach/cockroach-data/cluster_exists_marker" ]
             then
-              CRARGS+=("--join" "cockroachdb")
+              # We don't join cockroachdb in order to avoid a node attempting
+              # to join itself, which currently doesn't work
+              # (https://github.com/cockroachdb/cockroach/issues/9625).
+              CRARGS+=("--join" "cockroachdb-public")
             fi
             exec /cockroach/cockroach ${CRARGS[*]}
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
