@@ -314,8 +314,8 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 		if id == 0 {
 			log.Fatal(ctxWithSpan, "new node allocated illegal ID 0")
 		}
-		n.storeCfg.Gossip.SetNodeID(id)
 		span.Finish()
+		n.storeCfg.Gossip.NodeID.Set(ctx, id)
 	} else {
 		log.Infof(ctx, "node ID %d initialized", id)
 	}

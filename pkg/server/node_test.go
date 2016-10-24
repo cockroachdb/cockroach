@@ -72,13 +72,14 @@ func createTestNode(
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCfg := makeTestConfig()
-	g := gossip.New(
-		log.AmbientContext{},
+	cfg.Gossip = gossip.NewTest(
+		0,
 		nodeRPCContext,
 		grpcServer,
 		serverCfg.GossipBootstrapResolvers,
 		stopper,
-		metric.NewRegistry())
+		metric.NewRegistry(),
+	)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -92,17 +93,16 @@ func createTestNode(
 		if err != nil {
 			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
 		}
-		g.SetResolvers([]resolver.Resolver{r})
-		g.Start(ln.Addr())
+		cfg.Gossip.SetResolvers([]resolver.Resolver{r})
+		cfg.Gossip.Start(ln.Addr())
 	}
-	cfg.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
-	}, g)
+	}, cfg.Gossip)
 	cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	sender := kv.NewTxnCoordSender(
 		cfg.AmbientCtx,

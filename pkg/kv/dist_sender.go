@@ -315,7 +315,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 		return nil
 	}
 
-	ownNodeID := ds.gossip.GetNodeID()
+	ownNodeID := ds.gossip.NodeID.Get()
 	if ownNodeID > 0 {
 		// TODO(tschottdorf): Consider instead adding the NodeID of the
 		// coordinator to the header, so we can get this from incoming

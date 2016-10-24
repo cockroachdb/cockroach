@@ -167,8 +167,8 @@ func outputDotFile(
 		node := simNode.Gossip
 		incoming := node.Incoming()
 		for _, iNode := range incoming {
-			e := edge{dest: node.GetNodeID()}
-			key := fmt.Sprintf("%d:%d", iNode, node.GetNodeID())
+			e := edge{dest: node.NodeID.Get()}
+			key := fmt.Sprintf("%d:%d", iNode, node.NodeID.Get())
 			if _, ok := edgeSet[key]; !ok {
 				e.added = true
 				quiescent = false
@@ -207,7 +207,7 @@ func outputDotFile(
 			infoKey := otherNode.Addr().String()
 			// GetInfo returns an error if the info is missing.
 			if info, err := node.GetInfo(infoKey); err != nil {
-				missing = append(missing, otherNode.Gossip.GetNodeID())
+				missing = append(missing, otherNode.Gossip.NodeID.Get())
 				quiescent = false
 			} else {
 				_, val, err := encoding.DecodeUint64Ascending(info)
@@ -217,7 +217,7 @@ func outputDotFile(
 				totalAge += int64(cycle) - int64(val)
 			}
 		}
-		log.Infof(context.TODO(), "node %d: missing infos for nodes %s", node.GetNodeID(), missing)
+		log.Infof(context.TODO(), "node %d: missing infos for nodes %s", node.NodeID.Get(), missing)
 
 		var sentinelAge int64
 		// GetInfo returns an error if the info is missing.
@@ -244,8 +244,8 @@ func outputDotFile(
 				(maxDotFontSize-minDotFontSize))/float64(maxIncoming)))
 		}
 		fmt.Fprintf(f, "\t%s [%sfontsize=%d,label=\"{%s|AA=%s, MH=%d, SA=%d}\"]\n",
-			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), age, node.MaxHops(), sentinelAge)
-		outgoing := outgoingMap[node.GetNodeID()]
+			node.NodeID.Get(), nodeColor, fontSize, node.NodeID.Get(), age, node.MaxHops(), sentinelAge)
+		outgoing := outgoingMap[node.NodeID.Get()]
 		for _, e := range outgoing {
 			destSimNode, ok := network.GetNodeFromID(e.dest)
 			if !ok {
@@ -258,9 +258,9 @@ func outputDotFile(
 			} else if e.deleted {
 				style = " [color=red,style=dotted]"
 			}
-			fmt.Fprintf(f, "\t%s -> %s%s\n", node.GetNodeID(), dest.GetNodeID(), style)
+			fmt.Fprintf(f, "\t%s -> %s%s\n", node.NodeID.Get(), dest.NodeID.Get(), style)
 			if !e.deleted {
-				edgeSet[fmt.Sprintf("%d:%d", node.GetNodeID(), e.dest)] = e
+				edgeSet[fmt.Sprintf("%d:%d", node.NodeID.Get(), e.dest)] = e
 			}
 		}
 	}
