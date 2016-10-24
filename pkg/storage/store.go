@@ -916,6 +916,21 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	}
 }
 
+// ReadStoreIdent reads the StoreIdent from the store.
+// It returns *NotBootstrappedError if the ident is missing (meaning that the
+// store needs to be bootstrapped).
+func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent, error) {
+	var ident roachpb.StoreIdent
+	ok, err := engine.MVCCGetProto(
+		ctx, eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &ident)
+	if err != nil {
+		return roachpb.StoreIdent{}, err
+	} else if !ok {
+		return roachpb.StoreIdent{}, &NotBootstrappedError{}
+	}
+	return ident, err
+}
+
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
@@ -932,12 +947,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// the store has already been initialized.
 	if s.Ident.NodeID == 0 {
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
+		ident, err := ReadStoreIdent(ctx, s.engine)
 		if err != nil {
 			return err
-		} else if !ok {
-			return &NotBootstrappedError{}
 		}
+		s.Ident = ident
 	}
 	log.Event(ctx, "read store identity")
 
@@ -1350,18 +1364,18 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return errors.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		if ok, err := engine.MVCCGetProto(
-			ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident,
-		); err != nil {
-			return errors.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
-		} else if ok {
-			return errors.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
+		ident, err := ReadStoreIdent(ctx, s.engine)
+		if err != nil {
+			return errors.Wrapf(err, "unable to read ident of non-empty store %s "+
+				"during bootstrap:", s.engine)
 		}
+		s.Ident = ident
 		keyVals := []string{}
 		for _, kv := range kvs {
 			keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
 		}
-		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
+		return errors.Errorf("can't bootstap non-empty store %s (clusterID: %d, first %d key/values: %s)",
+			s.engine, s.Ident.ClusterID, len(keyVals), keyVals)
 	}
 	err = engine.MVCCPutProto(ctx, s.engine, nil,
 		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
@@ -1630,6 +1644,8 @@ func splitPostApply(
 	// Copy the timestamp cache into the RHS range.
 	r.mu.Lock()
 	rightRng.mu.Lock()
+	// TODO(andrei): We should truncate the entries in both LHS and RHS' timestamp
+	// caches to the respective spans of these new ranges.
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -1727,7 +1743,10 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // store.
 // The subsumed range's raftMu is assumed held.
 func (s *Store) MergeRange(
-	subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID,
+	ctx context.Context,
+	subsumingRng *Replica,
+	updatedEndKey roachpb.RKey,
+	subsumedRangeID roachpb.RangeID,
 ) error {
 	subsumingDesc := subsumingRng.Desc()
 
@@ -1747,6 +1766,10 @@ func (s *Store) MergeRange(
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
+	if err := s.maybeMergeTimestampCaches(ctx, subsumingRng, subsumedRng); err != nil {
+		return err
+	}
+
 	// Remove and destroy the subsumed range. Note that we were called
 	// (indirectly) from raft processing so we must call removeReplicaImpl
 	// directly to avoid deadlocking on Replica.raftMu.
@@ -1758,6 +1781,36 @@ func (s *Store) MergeRange(
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
 	return subsumingRng.setDesc(&copy)
+}
+
+// If the subsuming replica has the range lease, we update its timestamp cache
+// with the entries from the subsumed. Otherwise, then the timestamp cache
+// doesn't matter (in fact it should be empty, to save memory).
+func (s *Store) maybeMergeTimestampCaches(
+	ctx context.Context, subsumingRep *Replica, subsumedRep *Replica,
+) error {
+	subsumingRep.mu.Lock()
+	defer subsumingRep.mu.Unlock()
+	subsumingLease := subsumingRep.mu.state.Lease
+
+	subsumedRep.mu.Lock()
+	defer subsumedRep.mu.Unlock()
+	subsumedLease := subsumedRep.mu.state.Lease
+
+	// Merge support is currently incomplete and incorrect. In particular, the
+	// lease holders must be colocated and the subsumed range appropriately
+	// quiesced. See also #2433.
+	if subsumedLease.Covers(s.Clock().Now()) &&
+		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
+		log.Fatalf(ctx, "cannot merge ranges with non-colocated leases. "+
+			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
+	}
+
+	if subsumingLease.Covers(s.Clock().Now()) &&
+		subsumingLease.OwnedBy(s.StoreID()) {
+		subsumedRep.mu.tsCache.MergeInto(subsumingRep.mu.tsCache, false /* clear */)
+	}
+	return nil
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
