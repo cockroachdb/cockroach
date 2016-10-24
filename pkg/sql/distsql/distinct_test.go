@@ -30,14 +30,8 @@ func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [15]sqlbase.EncDatum{}
-	a := &sqlbase.DatumAlloc{}
 	for i := range v {
 		v[i].SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
-		enc, err := v[i].Encode(a, sqlbase.DatumEncoding_ASCENDING_KEY, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		v[i].SetEncoded(sqlbase.ColumnType_INT, sqlbase.DatumEncoding_ASCENDING_KEY, enc)
 	}
 
 	testCases := []struct {
@@ -46,17 +40,15 @@ func TestDistinct(t *testing.T) {
 		expected sqlbase.EncDatumRows
 	}{
 		{
-			spec: DistinctSpec{
-				Cols: []uint32{1, 2},
-			},
+			spec: DistinctSpec{},
 			input: sqlbase.EncDatumRows{
-				{v[1], v[2], v[3]},
-				{v[2], v[5], v[6]},
-				{v[3], v[2], v[3]},
-				{v[4], v[5], v[6]},
-				{v[5], v[2], v[6]},
-				{v[6], v[3], v[5]},
-				{v[7], v[2], v[9]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[3]},
@@ -64,6 +56,32 @@ func TestDistinct(t *testing.T) {
 				{v[2], v[6]},
 				{v[3], v[5]},
 				{v[2], v[9]},
+			},
+		}, {
+			spec: DistinctSpec{
+				Ordering: Ordering{
+					[]Ordering_Column{
+						{
+							ColIdx: 0,
+						},
+					},
+				},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[2], v[9]},
+				{v[3], v[5]},
+				{v[5], v[6]},
+				{v[5], v[6]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[2], v[9]},
+				{v[3], v[5]},
+				{v[5], v[6]},
 			},
 		},
 	}
