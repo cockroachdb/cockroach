@@ -71,7 +71,7 @@ func checkCmdFinishes(t *testing.T, chans []<-chan struct{}) bool {
 
 func TestCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 
 	// Try a command with no overlapping already-running commands.
 	waitCmdDone(getWait(cq, roachpb.Key("a"), nil, false))
@@ -95,7 +95,7 @@ func TestCommandQueue(t *testing.T) {
 // would wind up waiting only for one of the two readers under it.
 func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 	key := roachpb.Key("a")
 	// Add a read-only command.
 	wk1 := add(cq, key, nil, true)
@@ -130,7 +130,7 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 
 func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 	// Add a read-only command.
 	chans1, wk := getWaitAndAdd(cq, roachpb.Key("a"), nil, true)
 	// Verify no wait on another read-only command.
@@ -148,7 +148,7 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 
 func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 
 	// Add multiple commands and add a command which overlaps them all.
 	wk1 := add(cq, roachpb.Key("a"), nil, false)
@@ -171,7 +171,7 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 
 func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 
 	// Add a command which will overlap all commands.
 	wk0 := add(cq, roachpb.Key("a"), roachpb.Key("d"), false)
@@ -203,7 +203,7 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 
 func TestCommandQueueRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 
 	// Add multiple commands and commands which access each.
 	wk1 := add(cq, roachpb.Key("a"), nil, false)
@@ -222,13 +222,50 @@ func TestCommandQueueRemove(t *testing.T) {
 	}
 }
 
+func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cq := NewCommandQueue(false /* !coveringOptimization */)
+	{
+		cmd := cq.add(false, roachpb.Span{
+			Key: roachpb.Key("a"),
+		}, roachpb.Span{
+			Key: roachpb.Key("b"),
+		})
+
+		if !cmd.expanded {
+			t.Fatalf("expected non-expanded command, not %+v", cmd)
+		}
+		if len(cmd.children) != 2 {
+			t.Fatalf("expected one child in command %+v", cmd)
+		}
+		if act, exp := cq.tree.Len(), 2; act != exp {
+			t.Fatalf("expected %d spans in tree, got %d", exp, act)
+		}
+		cq.remove(cmd)
+	}
+
+	{
+		cmd := cq.add(false, roachpb.Span{Key: roachpb.Key("a")})
+		if cmd.expanded {
+			t.Fatalf("expected unexpanded command, not %+v", cmd)
+		}
+		if len(cmd.children) != 0 {
+			t.Fatalf("expected no children in command %+v", cmd)
+		}
+		if act, exp := cq.tree.Len(), 1; act != exp {
+			t.Fatalf("expected %d spans in tree, got %d", exp, act)
+		}
+		cq.remove(cmd)
+	}
+}
+
 // TestCommandQueueExclusiveEnd verifies that an end key is treated as
 // an exclusive end when GetWait calculates overlapping commands. Test
 // it by calling GetWait with a command whose start key is equal to
 // the end key of a previous command.
 func TestCommandQueueExclusiveEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 	add(cq, roachpb.Key("a"), roachpb.Key("b"), false)
 
 	// Verify no wait on the second writer command on "b" since
@@ -242,7 +279,7 @@ func TestCommandQueueExclusiveEnd(t *testing.T) {
 // in deadlock.
 func TestCommandQueueSelfOverlap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 	a := roachpb.Key("a")
 	k := add(cq, a, roachpb.Key("b"), false)
 	chans := cq.getWait(false, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
@@ -252,7 +289,7 @@ func TestCommandQueueSelfOverlap(t *testing.T) {
 
 func TestCommandQueueCovering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 
 	a := roachpb.Span{Key: roachpb.Key("a")}
 	b := roachpb.Span{Key: roachpb.Key("b")}
@@ -278,7 +315,7 @@ func TestCommandQueueCovering(t *testing.T) {
 // https://github.com/cockroachdb/cockroach/issues/6495 for details.
 func TestCommandQueueIssue6495(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue()
+	cq := NewCommandQueue(true)
 	cq.idAlloc = 1997
 
 	mkSpan := func(start, end string) roachpb.Span {
