@@ -373,6 +373,7 @@ func TestReplicaContains(t *testing.T) {
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
 	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
 	r.mu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
@@ -2020,9 +2021,9 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 
 	// Wait until both commands are in the command queue.
 	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
-		chans := tc.rng.mu.cmdQ.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
-		tc.rng.mu.Unlock()
+		tc.rng.cmdQMu.Lock()
+		chans := tc.rng.cmdQMu.q.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
+		tc.rng.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
 		}

@@ -676,6 +676,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		abortCache: NewAbortCache(desc.RangeID),
 	}
 	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}
