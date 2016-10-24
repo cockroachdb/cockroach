@@ -3536,12 +3536,22 @@ func (s *Store) updateCommandQueueGauges() error {
 	)
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		rep.mu.Lock()
-		writes := rep.mu.cmdQ.localMetrics.writeCommands
-		reads := rep.mu.cmdQ.localMetrics.readCommands
-		treeSize := int64(rep.mu.cmdQ.treeSize())
 
-		maxOverlaps := rep.mu.cmdQ.localMetrics.maxOverlapsSeen
-		rep.mu.cmdQ.localMetrics.maxOverlapsSeen = 0
+		writes := rep.mu.cmdQGlobal.localMetrics.writeCommands
+		writes += rep.mu.cmdQLocal.localMetrics.writeCommands
+
+		reads := rep.mu.cmdQGlobal.localMetrics.readCommands
+		reads += rep.mu.cmdQLocal.localMetrics.readCommands
+
+		treeSize := int64(rep.mu.cmdQGlobal.treeSize())
+		treeSize += int64(rep.mu.cmdQLocal.treeSize())
+
+		maxOverlaps := rep.mu.cmdQGlobal.localMetrics.maxOverlapsSeen
+		if locMax := rep.mu.cmdQLocal.localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
+			maxOverlaps = locMax
+		}
+		rep.mu.cmdQGlobal.localMetrics.maxOverlapsSeen = 0
+		rep.mu.cmdQLocal.localMetrics.maxOverlapsSeen = 0
 		rep.mu.Unlock()
 
 		cqSize := writes + reads
