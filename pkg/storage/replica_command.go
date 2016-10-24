@@ -783,6 +783,7 @@ func updateTxnWithExternalIntents(
 // which begins range-local but ends non-local results in a panic.
 // TODO(tschottdorf) move to proto, make more gen-purpose - kv.truncate does
 // some similar things.
+// TODO(tschottdorf): comment lies about what happens when EndKey==nil.
 func intersectSpan(
 	span roachpb.Span, desc roachpb.RangeDescriptor,
 ) (middle *roachpb.Span, outside []roachpb.Span) {
