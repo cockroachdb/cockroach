@@ -59,7 +59,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	}
 
 	if p.session.User != security.RootUser {
-		return nil, errors.Errorf("only %s is allowed to create databases", security.RootUser)
+		return nil, fmt.Errorf("only %s is allowed to create databases", security.RootUser)
 	}
 
 	return &createDatabaseNode{p: p, n: n}, nil
@@ -663,7 +663,7 @@ func (p *planner) resolveFK(
 	}
 
 	if len(targetCols) != len(srcCols) {
-		return errors.Errorf("%d columns must reference exactly %d columns in referenced table (found %d)",
+		return fmt.Errorf("%d columns must reference exactly %d columns in referenced table (found %d)",
 			len(srcCols), len(srcCols), len(targetCols))
 	}
 
@@ -925,7 +925,7 @@ func (n *createViewNode) makeViewTableDesc(
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
 	if planContainsStar(n.sourcePlan) {
-		return desc, errors.New("views do not currently support * expressions")
+		return desc, fmt.Errorf("views do not currently support * expressions")
 	}
 
 	n.resolveViewDependencies(&desc, affected)
@@ -1148,7 +1148,8 @@ func (p *planner) makeTableDesc(
 		if idx.ForeignKey.IsSet() {
 			for i := range idx.ColumnIDs {
 				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
-					return desc, errors.Errorf("column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
+					return desc, fmt.Errorf(
+						"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
 				}
 				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
 			}
