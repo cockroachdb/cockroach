@@ -78,7 +78,7 @@ SELECT * FROM users
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=ufo}
 
-statement error cannot rename index "ufo" because it is depended on by view "test.v"
+statement error cannot rename index "ufo" because view "v" depends on it
 ALTER INDEX users@ufo RENAME TO foo
 
 statement ok

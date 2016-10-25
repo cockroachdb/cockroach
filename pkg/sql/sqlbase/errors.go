@@ -60,6 +60,7 @@ var _ ErrorWithPGCode = &ErrDatabaseAlreadyExists{}
 var _ ErrorWithPGCode = &ErrRelationAlreadyExists{}
 var _ ErrorWithPGCode = &ErrWrongObjectType{}
 var _ ErrorWithPGCode = &ErrSyntax{}
+var _ ErrorWithPGCode = &ErrDependentObject{}
 
 const (
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
@@ -375,6 +376,31 @@ func (*ErrSyntax) Code() string {
 
 // SrcContext implements the ErrorWithPGCode interface.
 func (e *ErrSyntax) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+// NewDependentObjectError creates a new ErrDependentObject.
+func NewDependentObjectError(msg string) error {
+	return &ErrDependentObject{ctx: MakeSrcCtx(1), msg: msg}
+}
+
+// ErrDependentObject represents a dependent object error.
+type ErrDependentObject struct {
+	ctx SrcCtx
+	msg string
+}
+
+func (e *ErrDependentObject) Error() string {
+	return e.msg
+}
+
+// Code implements the ErrorWithPGCode interface.
+func (*ErrDependentObject) Code() string {
+	return pgerror.CodeDependentObjectsStillExistError
+}
+
+// SrcContext implements the ErrorWithPGCode interface.
+func (e *ErrDependentObject) SrcContext() SrcCtx {
 	return e.ctx
 }
 
