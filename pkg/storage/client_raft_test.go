@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -804,10 +805,10 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 // TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
 // will notice corrupted replicas and replace them.
-// TODO(bram): #8664 There's some flakiness in this test when stressed.
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("#8664: flaky")
+	t.Skip("completely broken, see the issue below")
+	flaky.Register(t, 8664)
 
 	const numReplicas = 3
 	const extraStores = 3
@@ -2083,7 +2084,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// The change to error reporting means that we can no longer trap
 	// transport errors separately from error messages and send them to
 	// errChan.
-	t.Skip("TODO(bdarnell): flaky (#8308), and needs update for change to raft transport error reporting")
+	t.Skip("needs update for change to raft transport error reporting")
+	// It's also flaky.
+	flaky.Register(t, 8303)
 
 	mtc := startMultiTestContext(t, 4)
 	defer mtc.Stop()

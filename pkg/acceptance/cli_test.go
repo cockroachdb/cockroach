@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -35,7 +36,7 @@ var cmdBase = []string{
 
 func TestDockerCLI(t *testing.T) {
 	if err := testDockerOneShot(t, "cli_test", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
-		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+		flaky.Register(t, 6086, "no binary in one-shot container", err.Error())
 	}
 
 	paths, err := filepath.Glob(testGlob)

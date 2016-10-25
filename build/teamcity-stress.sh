@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+export COCKROACH_SKIP_FLAKY_TESTS=true
+
 mkdir artifacts
 
 exit_status=0

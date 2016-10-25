@@ -20,13 +20,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // RepairTest kills and starts new nodes systematically to ensure we do
 // indeed repair the cluster.
 func TestRepair(t *testing.T) {
-	t.Skip("TODO(bram): skip this test until failures are investigated - #6798, #6700, #6277, #6209, #5672")
+	flaky.Register(t, 6798)
+	flaky.Register(t, 6700)
+	flaky.Register(t, 6277)
+	flaky.Register(t, 6209)
+	flaky.Register(t, 5672)
 	runTestOnConfigs(t, testRepairInner)
 }
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euxo pipefail
+
+export COCKROACH_SKIP_FLAKY_TESTS=true
+
 build/builder.sh make build
 build/builder.sh make install
 build/builder.sh go test -v -c -tags acceptance ./pkg/acceptance

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -589,7 +590,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 // to use a table descriptor with an expired lease.
 func TestTxnObeysLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(vivek): #7031")
+	flaky.Register(t, 7031)
 	// Set the lease duration such that it expires quickly.
 	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
 	defer func() {

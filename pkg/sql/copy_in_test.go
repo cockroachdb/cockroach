@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/lib/pq"
 )
@@ -291,7 +292,8 @@ func TestCopyError(t *testing.T) {
 func TestCopyOne(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/lib/pq/issues/494")
+	t.Skip("since it was marked as flaky due to race detector warnings, this test has completely rotted and now times out")
+	flaky.Register(t, 0, "https://github.com/lib/pq/issues/494")
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -325,7 +327,8 @@ func TestCopyOne(t *testing.T) {
 func TestCopyInProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/lib/pq/issues/494")
+	t.Skip("since it was marked as flaky due to race detector warnings, this test has completely rotted and now times out")
+	flaky.Register(t, 0, "https://github.com/lib/pq/issues/494")
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)

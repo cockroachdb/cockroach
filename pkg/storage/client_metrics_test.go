@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/pkg/errors"
@@ -148,8 +149,8 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		{m.RdbBlockCacheMisses, 0},
 		{m.RdbBlockCacheUsage, 0},
 		{m.RdbBlockCachePinnedUsage, 0},
-		{m.RdbBloomFilterPrefixChecked, 20},
-		{m.RdbBloomFilterPrefixUseful, 20},
+		{m.RdbBloomFilterPrefixChecked, 0}, // see #10085
+		{m.RdbBloomFilterPrefixUseful, 0},  // see #10085
 		{m.RdbMemtableHits, 0},
 		{m.RdbMemtableMisses, 0},
 		{m.RdbMemtableTotalSize, 5000},
@@ -166,7 +167,7 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(mrtracy): #9204")
+	flaky.Register(t, 9204)
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
