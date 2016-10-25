@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -44,8 +43,8 @@ const testCacheSize = 1 << 30 // 1 GB
 func TestBatchIterReadOwnWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	db, stopper := setupMVCCInMemRocksDB(t, "iter_read_own_write")
-	defer stopper.Stop()
+	db := setupMVCCInMemRocksDB(t, "iter_read_own_write")
+	defer db.Close()
 
 	b := db.NewBatch()
 	defer b.Close()
@@ -112,8 +111,8 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 func TestBatchPrefixIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	db, stopper := setupMVCCInMemRocksDB(t, "iter_read_own_write")
-	defer stopper.Stop()
+	db := setupMVCCInMemRocksDB(t, "iter_read_own_write")
+	defer db.Close()
 
 	b := db.NewBatch()
 	defer b.Close()
@@ -144,10 +143,8 @@ func makeKey(i int) MVCCKey {
 }
 
 func benchmarkIterOnBatch(b *testing.B, writes int) {
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	engine := createTestEngine(stopper)
+	engine := createTestEngine()
+	defer engine.Close()
 
 	for i := 0; i < writes; i++ {
 		if err := engine.Put(makeKey(i), []byte(strconv.Itoa(i))); err != nil {
@@ -206,9 +203,6 @@ func TestRocksDBOpenWithVersions(t *testing.T) {
 // openRocksDBWithVersion attempts to open a rocks db instance, optionally with
 // the supplied Version struct.
 func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
 	dir, err := ioutil.TempDir("", "testing")
 	if err != nil {
 		t.Fatal(err)
@@ -236,11 +230,10 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 		0,
 		DefaultMaxOpenFiles,
 	)
-	if err != nil {
-		return err
+	if err == nil {
+		rocksdb.Close()
 	}
-	stopper.AddCloser(rocksdb)
-	return nil
+	return err
 }
 
 func TestSSTableInfosString(t *testing.T) {
@@ -353,15 +346,12 @@ func TestConcurrentBatch(t *testing.T) {
 		}
 	}()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
 	db, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
 		0, DefaultMaxOpenFiles)
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
-	stopper.AddCloser(db)
+	defer db.Close()
 
 	// Prepare 16 4 MB batches containing non-overlapping contents.
 	var batches []Batch
@@ -550,13 +540,11 @@ func TestRocksDBTimeBound(t *testing.T) {
 	dir, dirCleanup := testutils.TempDir(t, 0)
 	defer dirCleanup()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
 	rocksdb, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles)
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
-	stopper.AddCloser(rocksdb)
+	defer rocksdb.Close()
 
 	var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
 	var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
