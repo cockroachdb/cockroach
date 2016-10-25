@@ -108,6 +108,7 @@ columns
 key_column_usage
 schema_privileges
 schemata
+statistics
 table_constraints
 table_privileges
 tables
@@ -337,6 +338,7 @@ columns
 key_column_usage
 schema_privileges
 schemata
+statistics
 table_constraints
 table_privileges
 tables
@@ -369,6 +371,7 @@ ui
 tables
 table_privileges
 table_constraints
+statistics
 schemata
 schema_privileges
 rangelog
@@ -390,6 +393,7 @@ def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
@@ -431,6 +435,7 @@ def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
@@ -458,6 +463,7 @@ def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
@@ -660,6 +666,19 @@ NULL     testuser  def            other_db      abc         SELECT          NULL
 NULL     root      def            other_db      xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
 NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
+
+## information_schema.statistics
+statement ok
+CREATE TABLE other_db.teststatis(id INT PRIMARY KEY, c INT, d INT, e STRING, INDEX idx_c(c), UNIQUE INDEX idx_cd(c,d))
+
+query TTTBTTITIITB colnames
+SELECT * FROM information_schema.statistics WHERE table_schema='other_db' AND table_name='teststatis' ORDER BY INDEX_SCHEMA,INDEX_NAME,SEQ_IN_INDEX
+----
+TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME  NON_UNIQUE  INDEX_SCHEMA  INDEX_NAME  SEQ_IN_INDEX  COLUMN_NAME  COLLATION  CARDINALITY  DIRECTION  STORING
+def            other_db      teststatis  false       other_db      idx_c       1             c            NULL       NULL         ASC        false
+def            other_db      teststatis  true        other_db      idx_cd      1             c            NULL       NULL         ASC        false
+def            other_db      teststatis  true        other_db      idx_cd      2             d            NULL       NULL         ASC        false
+def            other_db      teststatis  true        other_db      primary     1             id           NULL       NULL         ASC        false
 
 statement ok
 DROP DATABASE other_db
