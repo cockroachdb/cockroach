@@ -26,8 +26,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-type columns []uint32
-
 // aggregator is the processor core type that does "aggregation" in the SQL
 // sense. It groups rows and computes an aggregate for each group. The group is
 // configured using the group key and the aggregator can be configured with one

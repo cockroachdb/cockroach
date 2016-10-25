@@ -31,7 +31,6 @@ type evaluator struct {
 	output RowReceiver
 	ctx    context.Context
 	exprs  []exprHelper
-	render []parser.TypedExpr
 
 	// Buffer to store intermediate results when evaluating expressions per row
 	// to avoid reallocation.
@@ -47,7 +46,6 @@ func newEvaluator(
 		output: output,
 		ctx:    log.WithLogTag(flowCtx.Context, "Evaluator", nil),
 		exprs:  make([]exprHelper, len(spec.Exprs)),
-		render: make([]parser.TypedExpr, len(spec.Exprs)),
 		tuple:  make(parser.DTuple, len(spec.Exprs)),
 	}
 
@@ -56,17 +54,6 @@ func newEvaluator(
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	// Loop over the expressions in our expression set and extract out fully
-	// typed expressions, this will later be evaluated for each input row to
-	// construct our output row.
-	for i := range ev.exprs {
-		typedExpr, err := (&ev.exprs[i]).expr.TypeCheck(nil, parser.NoTypePreference)
-		if err != nil {
-			return nil, err
-		}
-		ev.render[i] = typedExpr
 	}
 
 	return ev, nil
