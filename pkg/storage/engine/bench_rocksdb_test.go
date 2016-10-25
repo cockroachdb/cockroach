@@ -22,11 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-func setupMVCCRocksDB(b testing.TB, loc string) (Engine, *stop.Stopper) {
-	stopper := stop.NewStopper()
+func setupMVCCRocksDB(b testing.TB, loc string) Engine {
 	rocksdb, err := NewRocksDB(
 		roachpb.Attributes{},
 		loc,
@@ -37,15 +35,11 @@ func setupMVCCRocksDB(b testing.TB, loc string) (Engine, *stop.Stopper) {
 	if err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
-	stopper.AddCloser(rocksdb)
-	return rocksdb, stopper
+	return rocksdb
 }
 
-func setupMVCCInMemRocksDB(_ testing.TB, loc string) (Engine, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	eng := NewInMem(roachpb.Attributes{}, testCacheSize)
-	stopper.AddCloser(eng)
-	return eng, stopper
+func setupMVCCInMemRocksDB(_ testing.TB, loc string) Engine {
+	return NewInMem(roachpb.Attributes{}, testCacheSize)
 }
 
 // Read benchmarks. All of them run with on-disk data.
