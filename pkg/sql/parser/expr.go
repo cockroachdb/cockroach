@@ -1063,6 +1063,7 @@ func (node *DString) String() string          { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
+func (node *DArray) String() string           { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
