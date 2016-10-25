@@ -10,7 +10,6 @@
 		cockroach/pkg/storage/storagebase/state.proto
 
 	It has these top-level messages:
-		RaftCommand
 		Split
 		Merge
 		ReplicatedProposalData
@@ -42,12 +41,49 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// A RaftCommand is a command which can be serialized and sent via
-// raft.
-type RaftCommand struct {
+// Split is emitted when a Replica commits a split trigger. It signals that the
+// Replica has prepared the on-disk state for both the left and right hand
+// sides of the split, and that the left hand side Replica should be updated as
+// well as the right hand side created.
+type Split struct {
+	cockroach_roachpb1.SplitTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	// RHSDelta holds the statistics for what was written to what is now the
+	// right-hand side of the split during the batch which executed it.
+	// The on-disk state of the right-hand side is already correct, but the
+	// Store must learn about this delta to update its counters appropriately.
+	RHSDelta cockroach_storage_engine_enginepb.MVCCStats `protobuf:"bytes,2,opt,name=rhs_delta,json=rhsDelta" json:"rhs_delta"`
+}
+
+func (m *Split) Reset()                    { *m = Split{} }
+func (m *Split) String() string            { return proto.CompactTextString(m) }
+func (*Split) ProtoMessage()               {}
+func (*Split) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{0} }
+
+// Merge is emitted by a Replica which commits a transaction with
+// a MergeTrigger (i.e. absorbs its right neighbor).
+type Merge struct {
+	cockroach_roachpb1.MergeTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+}
+
+func (m *Merge) Reset()                    { *m = Merge{} }
+func (m *Merge) String() string            { return proto.CompactTextString(m) }
+func (*Merge) ProtoMessage()               {}
+func (*Merge) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{1} }
+
+// ReplicaProposalData is the structured information which together with
+// a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
+// KV. For the majority of proposals, we expect ReplicatedProposalData to be
+// trivial; only changes to the metadata state (splits, merges, rebalances,
+// leases, log truncation, ...) of the Replica or certain special commands must
+// sideline information here based on which all Replicas must take action.
+//
+// TODO(tschottdorf): We may need to add a lease identifier to allow the
+// followers to reliably produce errors for proposals which apply after a
+// lease change.
+type ReplicatedProposalData struct {
 	RangeID       github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id"`
 	OriginReplica cockroach_roachpb.ReplicaDescriptor                  `protobuf:"bytes,2,opt,name=origin_replica,json=originReplica" json:"origin_replica"`
-	Cmd           cockroach_roachpb3.BatchRequest                      `protobuf:"bytes,3,opt,name=cmd" json:"cmd"`
+	Cmd           *cockroach_roachpb3.BatchRequest                     `protobuf:"bytes,3,opt,name=cmd" json:"cmd,omitempty"`
 	// When the command is applied, its result is an error if the lease log
 	// counter has already reached (or exceeded) max_lease_index.
 	//
@@ -75,120 +111,29 @@ type RaftCommand struct {
 	// updated accordingly. Managing retry of proposals becomes trickier as
 	// well as that uproots whatever ordering was originally envisioned.
 	MaxLeaseIndex uint64 `protobuf:"varint,4,opt,name=max_lease_index,json=maxLeaseIndex" json:"max_lease_index"`
-}
-
-func (m *RaftCommand) Reset()                    { *m = RaftCommand{} }
-func (m *RaftCommand) String() string            { return proto.CompactTextString(m) }
-func (*RaftCommand) ProtoMessage()               {}
-func (*RaftCommand) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{0} }
-
-// Split is emitted when a Replica commits a split trigger. It signals that the
-// Replica has prepared the on-disk state for both the left and right hand
-// sides of the split, and that the left hand side Replica should be updated as
-// well as the right hand side created.
-type Split struct {
-	cockroach_roachpb1.SplitTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
-	// RHSDelta holds the statistics for what was written to what is now the
-	// right-hand side of the split during the batch which executed it.
-	// The on-disk state of the right-hand side is already correct, but the
-	// Store must learn about this delta to update its counters appropriately.
-	RHSDelta cockroach_storage_engine_enginepb.MVCCStats `protobuf:"bytes,2,opt,name=rhs_delta,json=rhsDelta" json:"rhs_delta"`
-}
-
-func (m *Split) Reset()                    { *m = Split{} }
-func (m *Split) String() string            { return proto.CompactTextString(m) }
-func (*Split) ProtoMessage()               {}
-func (*Split) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{1} }
-
-// Merge is emitted by a Replica which commits a transaction with
-// a MergeTrigger (i.e. absorbs its right neighbor).
-type Merge struct {
-	cockroach_roachpb1.MergeTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
-}
-
-func (m *Merge) Reset()                    { *m = Merge{} }
-func (m *Merge) String() string            { return proto.CompactTextString(m) }
-func (*Merge) ProtoMessage()               {}
-func (*Merge) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{2} }
-
-// ReplicaProposalData is the structured information which together with
-// a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
-// KV. For the majority of proposals, we expect ReplicatedProposalData to be
-// trivial; only changes to the metadata state (splits, merges, rebalances,
-// leases, log truncation, ...) of the Replica or certain special commands must
-// sideline information here based on which all Replicas must take action.
-//
-// TODO(tschottdorf): We may need to add a lease identifier to allow the
-// followers to reliably produce errors for proposals which apply after a
-// lease change.
-type ReplicatedProposalData struct {
 	// Whether to block concurrent readers while processing the proposal data.
-	BlockReads bool `protobuf:"varint,1,opt,name=block_reads,json=blockReads" json:"block_reads"`
+	BlockReads bool `protobuf:"varint,5,opt,name=block_reads,json=blockReads" json:"block_reads"`
 	// Updates to the Replica's ReplicaState. By convention and as outlined on
 	// the comment on the ReplicaState message, this field is sparsely populated
 	// and any field set overwrites the corresponding field in the state, perhaps
 	// which additional side effects (for instance on a descriptor update).
-	State ReplicaState `protobuf:"bytes,2,opt,name=state" json:"state"`
-	Split *Split       `protobuf:"bytes,3,opt,name=split" json:"split,omitempty"`
-	Merge *Merge       `protobuf:"bytes,4,opt,name=merge" json:"merge,omitempty"`
+	State ReplicaState `protobuf:"bytes,6,opt,name=state" json:"state"`
+	Split *Split       `protobuf:"bytes,7,opt,name=split" json:"split,omitempty"`
+	Merge *Merge       `protobuf:"bytes,8,opt,name=merge" json:"merge,omitempty"`
 	// TODO(tschottdorf): trim this down; we shouldn't need the whole request.
-	ComputeChecksum *cockroach_roachpb3.ComputeChecksumRequest `protobuf:"bytes,5,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
-	// Deprecated once proposer-evaluated-kv is in place: the Raft command which
-	// executes on all Replicas.
-	RaftCommand *RaftCommand `protobuf:"bytes,999,opt,name=raft_command,json=raftCommand" json:"raft_command,omitempty"`
+	ComputeChecksum *cockroach_roachpb3.ComputeChecksumRequest `protobuf:"bytes,9,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
 }
 
 func (m *ReplicatedProposalData) Reset()                    { *m = ReplicatedProposalData{} }
 func (m *ReplicatedProposalData) String() string            { return proto.CompactTextString(m) }
 func (*ReplicatedProposalData) ProtoMessage()               {}
-func (*ReplicatedProposalData) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{3} }
+func (*ReplicatedProposalData) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []int{2} }
 
 func init() {
-	proto.RegisterType((*RaftCommand)(nil), "cockroach.storage.storagebase.RaftCommand")
 	proto.RegisterType((*Split)(nil), "cockroach.storage.storagebase.Split")
 	proto.RegisterType((*Merge)(nil), "cockroach.storage.storagebase.Merge")
 	proto.RegisterType((*ReplicatedProposalData)(nil), "cockroach.storage.storagebase.ReplicatedProposalData")
 }
-func (m *RaftCommand) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RaftCommand) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.RangeID))
-	data[i] = 0x12
-	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.OriginReplica.Size()))
-	n1, err := m.OriginReplica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.Cmd.Size()))
-	n2, err := m.Cmd.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	data[i] = 0x20
-	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.MaxLeaseIndex))
-	return i, nil
-}
-
 func (m *Split) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -207,19 +152,19 @@ func (m *Split) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintProposerKv(data, i, uint64(m.SplitTrigger.Size()))
-	n3, err := m.SplitTrigger.MarshalTo(data[i:])
+	n1, err := m.SplitTrigger.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n1
 	data[i] = 0x12
 	i++
 	i = encodeVarintProposerKv(data, i, uint64(m.RHSDelta.Size()))
-	n4, err := m.RHSDelta.MarshalTo(data[i:])
+	n2, err := m.RHSDelta.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n2
 	return i, nil
 }
 
@@ -241,11 +186,11 @@ func (m *Merge) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintProposerKv(data, i, uint64(m.MergeTrigger.Size()))
-	n5, err := m.MergeTrigger.MarshalTo(data[i:])
+	n3, err := m.MergeTrigger.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n3
 	return i, nil
 }
 
@@ -266,13 +211,37 @@ func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0x8
 	i++
+	i = encodeVarintProposerKv(data, i, uint64(m.RangeID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintProposerKv(data, i, uint64(m.OriginReplica.Size()))
+	n4, err := m.OriginReplica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	if m.Cmd != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintProposerKv(data, i, uint64(m.Cmd.Size()))
+		n5, err := m.Cmd.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	data[i] = 0x20
+	i++
+	i = encodeVarintProposerKv(data, i, uint64(m.MaxLeaseIndex))
+	data[i] = 0x28
+	i++
 	if m.BlockReads {
 		data[i] = 1
 	} else {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x12
+	data[i] = 0x32
 	i++
 	i = encodeVarintProposerKv(data, i, uint64(m.State.Size()))
 	n6, err := m.State.MarshalTo(data[i:])
@@ -281,7 +250,7 @@ func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
 	}
 	i += n6
 	if m.Split != nil {
-		data[i] = 0x1a
+		data[i] = 0x3a
 		i++
 		i = encodeVarintProposerKv(data, i, uint64(m.Split.Size()))
 		n7, err := m.Split.MarshalTo(data[i:])
@@ -291,7 +260,7 @@ func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
 		i += n7
 	}
 	if m.Merge != nil {
-		data[i] = 0x22
+		data[i] = 0x42
 		i++
 		i = encodeVarintProposerKv(data, i, uint64(m.Merge.Size()))
 		n8, err := m.Merge.MarshalTo(data[i:])
@@ -301,7 +270,7 @@ func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
 		i += n8
 	}
 	if m.ComputeChecksum != nil {
-		data[i] = 0x2a
+		data[i] = 0x4a
 		i++
 		i = encodeVarintProposerKv(data, i, uint64(m.ComputeChecksum.Size()))
 		n9, err := m.ComputeChecksum.MarshalTo(data[i:])
@@ -309,18 +278,6 @@ func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
 			return 0, err
 		}
 		i += n9
-	}
-	if m.RaftCommand != nil {
-		data[i] = 0xba
-		i++
-		data[i] = 0x3e
-		i++
-		i = encodeVarintProposerKv(data, i, uint64(m.RaftCommand.Size()))
-		n10, err := m.RaftCommand.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n10
 	}
 	return i, nil
 }
@@ -352,18 +309,6 @@ func encodeVarintProposerKv(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *RaftCommand) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovProposerKv(uint64(m.RangeID))
-	l = m.OriginReplica.Size()
-	n += 1 + l + sovProposerKv(uint64(l))
-	l = m.Cmd.Size()
-	n += 1 + l + sovProposerKv(uint64(l))
-	n += 1 + sovProposerKv(uint64(m.MaxLeaseIndex))
-	return n
-}
-
 func (m *Split) Size() (n int) {
 	var l int
 	_ = l
@@ -385,6 +330,14 @@ func (m *Merge) Size() (n int) {
 func (m *ReplicatedProposalData) Size() (n int) {
 	var l int
 	_ = l
+	n += 1 + sovProposerKv(uint64(m.RangeID))
+	l = m.OriginReplica.Size()
+	n += 1 + l + sovProposerKv(uint64(l))
+	if m.Cmd != nil {
+		l = m.Cmd.Size()
+		n += 1 + l + sovProposerKv(uint64(l))
+	}
+	n += 1 + sovProposerKv(uint64(m.MaxLeaseIndex))
 	n += 2
 	l = m.State.Size()
 	n += 1 + l + sovProposerKv(uint64(l))
@@ -399,10 +352,6 @@ func (m *ReplicatedProposalData) Size() (n int) {
 	if m.ComputeChecksum != nil {
 		l = m.ComputeChecksum.Size()
 		n += 1 + l + sovProposerKv(uint64(l))
-	}
-	if m.RaftCommand != nil {
-		l = m.RaftCommand.Size()
-		n += 2 + l + sovProposerKv(uint64(l))
 	}
 	return n
 }
@@ -419,154 +368,6 @@ func sovProposerKv(x uint64) (n int) {
 }
 func sozProposerKv(x uint64) (n int) {
 	return sovProposerKv(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *RaftCommand) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowProposerKv
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: RaftCommand: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RaftCommand: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
-			}
-			m.RangeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProposerKv
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field OriginReplica", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProposerKv
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProposerKv
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.OriginReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Cmd", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProposerKv
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProposerKv
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Cmd.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxLeaseIndex", wireType)
-			}
-			m.MaxLeaseIndex = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProposerKv
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.MaxLeaseIndex |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipProposerKv(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthProposerKv
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }
 func (m *Split) Unmarshal(data []byte) error {
 	l := len(data)
@@ -789,6 +590,107 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProposerKv
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginReplica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProposerKv
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProposerKv
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.OriginReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Cmd", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProposerKv
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProposerKv
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Cmd == nil {
+				m.Cmd = &cockroach_roachpb3.BatchRequest{}
+			}
+			if err := m.Cmd.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxLeaseIndex", wireType)
+			}
+			m.MaxLeaseIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProposerKv
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.MaxLeaseIndex |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BlockReads", wireType)
 			}
 			var v int
@@ -807,7 +709,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				}
 			}
 			m.BlockReads = bool(v != 0)
-		case 2:
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
 			}
@@ -837,7 +739,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 3:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Split", wireType)
 			}
@@ -870,7 +772,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Merge", wireType)
 			}
@@ -903,7 +805,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 5:
+		case 9:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ComputeChecksum", wireType)
 			}
@@ -933,39 +835,6 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				m.ComputeChecksum = &cockroach_roachpb3.ComputeChecksumRequest{}
 			}
 			if err := m.ComputeChecksum.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 999:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RaftCommand", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProposerKv
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProposerKv
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.RaftCommand == nil {
-				m.RaftCommand = &RaftCommand{}
-			}
-			if err := m.RaftCommand.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1100,44 +969,42 @@ func init() {
 }
 
 var fileDescriptorProposerKv = []byte{
-	// 620 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x8c, 0x53, 0x41, 0x6b, 0xd4, 0x40,
-	0x14, 0x6e, 0xba, 0x5d, 0x76, 0x9d, 0x55, 0x5b, 0x06, 0x91, 0xa5, 0xe0, 0x66, 0x59, 0x5a, 0xa8,
-	0x5a, 0x13, 0x51, 0x41, 0xf0, 0x98, 0x2c, 0xd4, 0x42, 0x2b, 0x3a, 0x2d, 0x1e, 0xf4, 0x10, 0x26,
-	0x93, 0x69, 0x12, 0x36, 0xc9, 0xc4, 0x99, 0xd9, 0xd2, 0x9f, 0xe1, 0xaf, 0x10, 0xc4, 0x3f, 0xd2,
-	0x63, 0x8f, 0x9e, 0x16, 0x5d, 0x0f, 0xfe, 0x07, 0x4f, 0x32, 0x93, 0x49, 0xbb, 0xc5, 0xe8, 0x7a,
-	0xca, 0x64, 0xde, 0xf7, 0x7d, 0xf3, 0xde, 0xf7, 0xde, 0x03, 0x4f, 0x09, 0x23, 0x13, 0xce, 0x30,
-	0x49, 0xdc, 0x72, 0x12, 0xbb, 0x42, 0x32, 0x8e, 0x63, 0x5a, 0x7f, 0x43, 0x2c, 0xa8, 0x5b, 0x72,
-	0x56, 0x32, 0x41, 0x79, 0x30, 0x39, 0x75, 0x4a, 0xce, 0x24, 0x83, 0xf7, 0x2e, 0x49, 0x8e, 0x01,
-	0x3a, 0x0b, 0x84, 0x4d, 0xfb, 0xba, 0xa6, 0x3e, 0x95, 0xa1, 0x8b, 0xcb, 0xb4, 0xe2, 0x6f, 0x0e,
-	0x9b, 0x01, 0x11, 0x96, 0xd8, 0x20, 0xb6, 0x9a, 0x11, 0x39, 0x95, 0x78, 0x01, 0xf5, 0xb8, 0x39,
-	0x79, 0x5a, 0xc4, 0x69, 0x51, 0x7f, 0x14, 0xeb, 0x94, 0x10, 0xc3, 0x78, 0xb4, 0xbc, 0x5c, 0x21,
-	0xb1, 0xa4, 0x06, 0x7e, 0x27, 0x66, 0x31, 0xd3, 0x47, 0x57, 0x9d, 0xaa, 0xdb, 0xd1, 0x97, 0x55,
-	0xd0, 0x43, 0xf8, 0x44, 0xfa, 0x2c, 0xcf, 0x71, 0x11, 0xc1, 0x10, 0x74, 0x39, 0x2e, 0x62, 0x1a,
-	0xa4, 0x51, 0xdf, 0x1a, 0x5a, 0x3b, 0x2d, 0x6f, 0xef, 0x7c, 0x66, 0xaf, 0xcc, 0x67, 0x76, 0x07,
-	0xa9, 0xfb, 0xfd, 0xf1, 0xaf, 0x99, 0xfd, 0x2c, 0x4e, 0x65, 0x32, 0x0d, 0x1d, 0xc2, 0x72, 0xf7,
-	0x32, 0x89, 0x28, 0x74, 0x1b, 0x0b, 0x75, 0x0c, 0x0f, 0x75, 0xb4, 0xf0, 0x7e, 0x04, 0xdf, 0x80,
-	0xdb, 0x8c, 0xa7, 0x71, 0x5a, 0x04, 0x9c, 0x96, 0x59, 0x4a, 0x70, 0x7f, 0x75, 0x68, 0xed, 0xf4,
-	0x9e, 0x6c, 0x39, 0x57, 0xbd, 0xb8, 0x24, 0x57, 0x88, 0x31, 0x15, 0x84, 0xa7, 0xa5, 0x64, 0xdc,
-	0x5b, 0x53, 0xf9, 0xa0, 0x5b, 0x95, 0x82, 0x09, 0xc3, 0xe7, 0xa0, 0x45, 0xf2, 0xa8, 0xdf, 0xd2,
-	0x3a, 0x76, 0x83, 0x8e, 0x87, 0x25, 0x49, 0x10, 0xfd, 0x30, 0xa5, 0x42, 0x1a, 0x09, 0xc5, 0x80,
-	0xbb, 0x60, 0x3d, 0xc7, 0x67, 0x41, 0x46, 0xb1, 0xa0, 0x41, 0x5a, 0x44, 0xf4, 0xac, 0xbf, 0x36,
-	0xb4, 0x76, 0xd6, 0xea, 0x67, 0x72, 0x7c, 0x76, 0xa0, 0x62, 0xfb, 0x2a, 0x34, 0xfa, 0x6c, 0x81,
-	0xf6, 0x51, 0x99, 0xa5, 0x12, 0xfa, 0xa0, 0x23, 0x79, 0x1a, 0xc7, 0x94, 0x6b, 0x9b, 0x9a, 0x1f,
-	0xd5, 0xd0, 0xe3, 0x0a, 0xe6, 0x75, 0x95, 0xe0, 0xc5, 0xcc, 0xb6, 0x50, 0xcd, 0x84, 0xef, 0xc1,
-	0x0d, 0x9e, 0x88, 0x20, 0xa2, 0x99, 0xac, 0x3d, 0xd8, 0x75, 0xfe, 0x9c, 0xc7, 0xaa, 0xf9, 0x4e,
-	0x3d, 0x03, 0xce, 0xe1, 0x5b, 0xdf, 0x3f, 0x92, 0x58, 0x0a, 0x6f, 0xc3, 0xf4, 0xa6, 0x8b, 0x5e,
-	0x1e, 0x8d, 0x95, 0x0a, 0xea, 0xf2, 0x44, 0xe8, 0xd3, 0xe8, 0x00, 0xb4, 0x0f, 0x29, 0x8f, 0xe9,
-	0xff, 0xa5, 0xaa, 0xa1, 0x7f, 0x4f, 0x75, 0xf4, 0xa9, 0x05, 0xee, 0x1a, 0xb3, 0x25, 0x8d, 0x5e,
-	0xeb, 0x35, 0xc2, 0xd9, 0x18, 0x4b, 0x0c, 0xb7, 0x41, 0x2f, 0xcc, 0x18, 0x99, 0x04, 0x9c, 0xe2,
-	0x48, 0xe8, 0x37, 0xba, 0xc6, 0x3e, 0xa0, 0x03, 0x48, 0xdd, 0xc3, 0x3d, 0xd0, 0xd6, 0xe3, 0x68,
-	0x0a, 0x7d, 0xe8, 0xfc, 0x73, 0xf1, 0xea, 0xc6, 0xab, 0x3a, 0xa9, 0x51, 0xab, 0xf8, 0xf0, 0x05,
-	0x68, 0x0b, 0x65, 0xac, 0xe9, 0xf6, 0xd6, 0x12, 0x21, 0xdd, 0x04, 0x54, 0x51, 0x14, 0x37, 0x57,
-	0x95, 0xea, 0x26, 0x2f, 0xe7, 0x6a, 0x57, 0x50, 0x45, 0x81, 0xc7, 0x60, 0x83, 0xb0, 0xbc, 0x9c,
-	0x4a, 0x1a, 0x90, 0x84, 0x92, 0x89, 0x98, 0xe6, 0xfd, 0xb6, 0x96, 0xb9, 0xdf, 0x60, 0xa8, 0x5f,
-	0x41, 0x7d, 0x83, 0x34, 0xa3, 0x87, 0xd6, 0xc9, 0xf5, 0x7b, 0xf8, 0x0a, 0xdc, 0xe4, 0xf8, 0x44,
-	0x06, 0xa4, 0x5a, 0xc0, 0xfe, 0xcf, 0x8e, 0x96, 0x7c, 0xb0, 0xcc, 0x9e, 0xab, 0x9d, 0x45, 0x3d,
-	0x7e, 0xf5, 0xe3, 0x6d, 0x9f, 0x7f, 0x1f, 0xac, 0x9c, 0xcf, 0x07, 0xd6, 0xc5, 0x7c, 0x60, 0x7d,
-	0x9d, 0x0f, 0xac, 0x6f, 0xf3, 0x81, 0xf5, 0xf1, 0xc7, 0x60, 0xe5, 0x5d, 0x6f, 0x81, 0xff, 0x3b,
-	0x00, 0x00, 0xff, 0xff, 0x79, 0xd3, 0x7f, 0x4f, 0x2c, 0x05, 0x00, 0x00,
+	// 584 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x8c, 0x53, 0xcd, 0x6e, 0xd3, 0x4c,
+	0x14, 0xad, 0xbf, 0x24, 0x5f, 0xdc, 0x89, 0xa0, 0x95, 0x85, 0x90, 0x55, 0x09, 0x3b, 0x8a, 0x5a,
+	0x29, 0x88, 0x62, 0xf3, 0xb7, 0x62, 0xe9, 0x44, 0x2a, 0x91, 0x5a, 0x09, 0x26, 0x15, 0x0b, 0x58,
+	0x58, 0xe3, 0xf1, 0xc8, 0xb6, 0x62, 0x67, 0xcc, 0xcc, 0xa4, 0xca, 0x63, 0xf0, 0x1a, 0xbc, 0x49,
+	0x96, 0x5d, 0xb2, 0x8a, 0x20, 0xec, 0x79, 0x00, 0x56, 0x68, 0xc6, 0xe3, 0x92, 0xaa, 0x2e, 0x74,
+	0xe5, 0xd1, 0xbd, 0xe7, 0x9c, 0x39, 0xf7, 0xcc, 0x35, 0x78, 0x89, 0x29, 0x9e, 0x31, 0x8a, 0x70,
+	0xea, 0x97, 0xb3, 0xc4, 0xe7, 0x82, 0x32, 0x94, 0x90, 0xfa, 0x1b, 0x21, 0x4e, 0xfc, 0x92, 0xd1,
+	0x92, 0x72, 0xc2, 0xc2, 0xd9, 0x85, 0x57, 0x32, 0x2a, 0xa8, 0xf5, 0xe8, 0x8a, 0xe4, 0x69, 0xa0,
+	0xb7, 0x45, 0x38, 0x70, 0xaf, 0x6b, 0xaa, 0x53, 0x19, 0xf9, 0xa8, 0xcc, 0x2a, 0xfe, 0x41, 0xbf,
+	0x19, 0x10, 0x23, 0x81, 0x34, 0xe2, 0xb0, 0x19, 0x51, 0x10, 0x81, 0xb6, 0x50, 0xcf, 0x9a, 0xcd,
+	0x93, 0x79, 0x92, 0xcd, 0xeb, 0x8f, 0x64, 0x5d, 0x60, 0xac, 0x19, 0x4f, 0xff, 0x3d, 0x2e, 0x17,
+	0x48, 0x10, 0x0d, 0x7f, 0x90, 0xd0, 0x84, 0xaa, 0xa3, 0x2f, 0x4f, 0x55, 0x75, 0xf0, 0xc5, 0x00,
+	0x9d, 0x69, 0x99, 0x67, 0xc2, 0x1a, 0x81, 0xae, 0x60, 0x59, 0x92, 0x10, 0x66, 0x1b, 0x7d, 0x63,
+	0xd8, 0x7b, 0xe1, 0x7a, 0x7f, 0xa2, 0xd1, 0xa6, 0x3d, 0x05, 0x3d, 0xaf, 0x60, 0x81, 0xb9, 0x5a,
+	0xbb, 0x3b, 0x97, 0x6b, 0xd7, 0x80, 0x35, 0xd3, 0xfa, 0x08, 0x76, 0x59, 0xca, 0xc3, 0x98, 0xe4,
+	0x02, 0xd9, 0xff, 0x29, 0x99, 0x63, 0xef, 0x66, 0xc2, 0xd5, 0x38, 0x5e, 0x3d, 0x95, 0x77, 0xf6,
+	0x7e, 0x34, 0x9a, 0x0a, 0x24, 0x78, 0xb0, 0x2f, 0x35, 0x37, 0x6b, 0xd7, 0x84, 0x6f, 0xa6, 0x63,
+	0xa9, 0x02, 0x4d, 0x96, 0x72, 0x75, 0x1a, 0x9c, 0x82, 0xce, 0x19, 0x61, 0x09, 0xb9, 0x9b, 0x55,
+	0x05, 0xbd, 0xdd, 0xea, 0xe0, 0x67, 0x1b, 0x3c, 0x84, 0xa4, 0xcc, 0x33, 0x8c, 0x04, 0x89, 0xdf,
+	0xaa, 0xc5, 0x40, 0xf9, 0x18, 0x09, 0x64, 0x45, 0xc0, 0x64, 0x68, 0x9e, 0x90, 0x30, 0x8b, 0xd5,
+	0x05, 0xad, 0xe0, 0x44, 0xdb, 0xea, 0x42, 0x59, 0x9f, 0x8c, 0x7f, 0xad, 0xdd, 0x57, 0x49, 0x26,
+	0xd2, 0x45, 0xe4, 0x61, 0x5a, 0xf8, 0x57, 0xb7, 0xc7, 0x91, 0xdf, 0xf8, 0xda, 0x9e, 0xe6, 0xc1,
+	0xae, 0x12, 0x9e, 0xc4, 0xd6, 0x3b, 0x70, 0x9f, 0xb2, 0x2c, 0xc9, 0xe6, 0x21, 0xab, 0x4c, 0xe8,
+	0xb8, 0x0e, 0x1b, 0x46, 0xd1, 0x36, 0xc7, 0x84, 0x63, 0x96, 0x95, 0x82, 0xb2, 0xa0, 0x2d, 0xfd,
+	0xc0, 0x7b, 0x95, 0x82, 0x6e, 0x5b, 0xcf, 0x41, 0x0b, 0x17, 0xb1, 0xdd, 0xba, 0x35, 0x92, 0x00,
+	0x09, 0x9c, 0x42, 0xf2, 0x69, 0x41, 0xb8, 0x80, 0x12, 0x6b, 0x1d, 0x83, 0xbd, 0x02, 0x2d, 0xc3,
+	0x9c, 0x20, 0x4e, 0xc2, 0x6c, 0x1e, 0x93, 0xa5, 0xdd, 0xee, 0x1b, 0xc3, 0x76, 0x7d, 0x41, 0x81,
+	0x96, 0xa7, 0xb2, 0x37, 0x91, 0x2d, 0xeb, 0x08, 0xf4, 0xa2, 0x9c, 0xe2, 0x59, 0xc8, 0x08, 0x8a,
+	0xb9, 0xdd, 0xe9, 0x1b, 0x43, 0x53, 0x23, 0x81, 0x6a, 0x40, 0x59, 0xb7, 0x4e, 0x40, 0x47, 0x2d,
+	0x9e, 0xfd, 0xbf, 0x72, 0xf2, 0xc4, 0xfb, 0xeb, 0x2f, 0x56, 0x4f, 0x27, 0xdf, 0x9f, 0x68, 0xb5,
+	0x8a, 0x6f, 0xbd, 0x06, 0x1d, 0x2e, 0x17, 0xce, 0xee, 0xde, 0x88, 0xa6, 0x49, 0x48, 0x2d, 0x27,
+	0xac, 0x28, 0x92, 0x5b, 0xc8, 0x0d, 0xb0, 0xcd, 0x3b, 0x71, 0xd5, 0xb6, 0xc0, 0x8a, 0x62, 0x9d,
+	0x83, 0x7d, 0x4c, 0x8b, 0x72, 0x21, 0x48, 0x88, 0x53, 0x82, 0x67, 0x7c, 0x51, 0xd8, 0xbb, 0x4a,
+	0xe6, 0x71, 0x43, 0xaa, 0xa3, 0x0a, 0x3a, 0xd2, 0xc8, 0x3a, 0xdf, 0x3d, 0x7c, 0xbd, 0x1e, 0x1c,
+	0xad, 0xbe, 0x3b, 0x3b, 0xab, 0x8d, 0x63, 0x5c, 0x6e, 0x1c, 0xe3, 0xeb, 0xc6, 0x31, 0xbe, 0x6d,
+	0x1c, 0xe3, 0xf3, 0x0f, 0x67, 0xe7, 0x43, 0x6f, 0xcb, 0xc9, 0xef, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0xbc, 0xfe, 0x8b, 0x90, 0xc6, 0x04, 0x00, 0x00,
 }

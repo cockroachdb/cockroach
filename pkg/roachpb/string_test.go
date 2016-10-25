@@ -62,7 +62,7 @@ func TestTransactionString(t *testing.T) {
 	var txnEmpty roachpb.Transaction
 	_ = txnEmpty.String() // prevent regression of NPE
 
-	var cmd storagebase.RaftCommand
+	var cmd storagebase.ReplicatedProposalData
 	cmd.Cmd.Txn = &txn
 	if actStr, idStr := fmt.Sprintf("%s", &cmd), txn.ID.String(); !strings.Contains(actStr, idStr) {
 		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
