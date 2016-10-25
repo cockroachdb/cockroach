@@ -484,9 +484,11 @@ func (p *planner) makeJoin(
 		if _, ok := left.info.sourceAliases[alias]; ok {
 			t := alias.Table()
 			if t == "" {
-				return planDataSource{}, errors.New("cannot join columns from multiple anonymous sources (missing AS clause)")
+				return planDataSource{}, errors.New(
+					"cannot join columns from multiple anonymous sources (missing AS clause)")
 			}
-			return planDataSource{}, fmt.Errorf("cannot join columns from the same source name %q (missing AS clause)", t)
+			return planDataSource{}, fmt.Errorf(
+				"cannot join columns from the same source name %q (missing AS clause)", t)
 		}
 	}
 
