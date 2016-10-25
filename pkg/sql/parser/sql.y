@@ -1442,6 +1442,10 @@ show_stmt:
   {
     $$.val = &Show{Name: $2}
   }
+| SHOW ALL
+  {
+    $$.val = &Show{Name: $2}
+  }
 | SHOW DATABASE
   {
     $$.val = &Show{Name: $2}
@@ -1506,7 +1510,6 @@ show_stmt:
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
   }
-| SHOW ALL { return unimplemented(sqllex) }
 
 help_stmt:
   HELP unrestricted_name

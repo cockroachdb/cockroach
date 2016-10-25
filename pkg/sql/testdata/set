@@ -97,3 +97,13 @@ Modern
 
 statement error invalid statement
 SET ROW (1, TRUE, NULL)
+
+query TT
+SHOW ALL
+----
+DATABASE                       foo
+DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE
+SYNTAX                         Modern
+TIME ZONE                      UTC
+TRANSACTION ISOLATION LEVEL    SERIALIZABLE
+TRANSACTION PRIORITY           NORMAL
