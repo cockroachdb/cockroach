@@ -79,6 +79,8 @@ var (
 	TypePlaceholder Type = TPlaceholder{}
 	// TypeArray is the type family of a DArray. Can be compared with ==.
 	TypeArray Type = tArray{TypeString}
+	// TypeAny can be any type. Can be compared with ==.
+	TypeAny Type = tAny{}
 )
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
@@ -255,3 +257,10 @@ func (tArray) FamilyEqual(other Type) bool {
 func (tArray) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DString("")), variableSize
 }
+
+type tAny struct{}
+
+func (tAny) String() string              { return "anyelement" }
+func (tAny) Equal(other Type) bool       { return other == TypeAny }
+func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
+func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
