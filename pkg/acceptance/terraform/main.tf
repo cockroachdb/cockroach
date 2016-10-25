@@ -1,6 +1,5 @@
 provider "google" {
   region = "${var.gce_region}"
-  credentials = ""
 }
 
 resource "google_compute_instance" "cockroach" {
