@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,22 +29,43 @@ import (
 	"github.com/pkg/errors"
 )
 
+var varGen = map[string]func(p *planner) string{
+	`DATABASE`:                      func(p *planner) string { return p.session.Database },
+	`DEFAULT_TRANSACTION_ISOLATION`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
+	`SYNTAX`:                        func(p *planner) string { return parser.Syntax(p.session.Syntax).String() },
+	`TIME ZONE`:                     func(p *planner) string { return p.session.Location.String() },
+	`TRANSACTION ISOLATION LEVEL`:   func(p *planner) string { return p.txn.Proto.Isolation.String() },
+	`TRANSACTION PRIORITY`:          func(p *planner) string { return p.txn.UserPriority.String() },
+}
+var varNames []string
+
+func init() {
+	varNames = make([]string, 0, len(varGen))
+	for vName := range varGen {
+		varNames = append(varNames, vName)
+	}
+	sort.Strings(varNames)
+}
+
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
 	name := strings.ToUpper(n.Name)
 
+	var columns ResultColumns
+
 	switch name {
-	case `DATABASE`,
-		`TIME ZONE`,
-		`SYNTAX`,
-		`DEFAULT_TRANSACTION_ISOLATION`,
-		`TRANSACTION ISOLATION LEVEL`,
-		`TRANSACTION PRIORITY`:
+	case `ALL`:
+		columns = ResultColumns{
+			{Name: "Variable", Typ: parser.TypeString},
+			{Name: "Value", Typ: parser.TypeString},
+		}
 	default:
-		return nil, fmt.Errorf("unknown variable: %q", name)
+		if _, ok := varGen[name]; !ok {
+			return nil, fmt.Errorf("unknown variable: %q", name)
+		}
+		columns = ResultColumns{{Name: name, Typ: parser.TypeString}}
 	}
 
-	columns := ResultColumns{{Name: name, Typ: parser.TypeString}}
 	return &delayedNode{
 		p:       p,
 		name:    "SHOW " + name,
@@ -51,26 +73,24 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		constructor: func(p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
-			var newRow parser.DTuple
 			switch name {
-			case `DATABASE`:
-				newRow = parser.DTuple{parser.NewDString(p.session.Database)}
-			case `TIME ZONE`:
-				newRow = parser.DTuple{parser.NewDString(p.session.Location.String())}
-			case `SYNTAX`:
-				newRow = parser.DTuple{parser.NewDString(parser.Syntax(p.session.Syntax).String())}
-			case `DEFAULT_TRANSACTION_ISOLATION`:
-				level := p.session.DefaultIsolationLevel.String()
-				newRow = parser.DTuple{parser.NewDString(level)}
-			case `TRANSACTION ISOLATION LEVEL`:
-				newRow = parser.DTuple{parser.NewDString(p.txn.Proto.Isolation.String())}
-			case `TRANSACTION PRIORITY`:
-				newRow = parser.DTuple{parser.NewDString(p.txn.UserPriority.String())}
-			}
-
-			if err := v.rows.AddRow(newRow); err != nil {
-				v.rows.Close()
-				return nil, err
+			case `ALL`:
+				for _, vName := range varNames {
+					gen := varGen[vName]
+					value := gen(p)
+					if err := v.rows.AddRow(parser.DTuple{parser.NewDString(vName),
+						parser.NewDString(value)}); err != nil {
+						v.rows.Close()
+						return nil, err
+					}
+				}
+			default:
+				gen := varGen[name]
+				value := gen(p)
+				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
+					v.rows.Close()
+					return nil, err
+				}
 			}
 
 			return v, nil
