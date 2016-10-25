@@ -154,5 +154,5 @@ ALTER TABLE test2.v1 RENAME TO test2.v2
 statement error pgcode 42809 "test2.v1" is not a table
 ALTER TABLE test2.v1 RENAME TO test2.v1
 
-statement error cannot rename table "test2.t2" because it is depended on by view "test2.v1"
+statement error cannot rename table "test2.t2" because view "v1" depends on it
 ALTER TABLE test2.t2 RENAME TO test2.t3
