@@ -19,6 +19,7 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+func addrWithDefaultHost(addr string) (string, error) {
+	host, port, err := net.SplitHostPort(baseCfg.Addr)
+	if err != nil {
+		return "", err
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
 func makeDBClient() (*client.DB, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	cfg := &base.Config{
@@ -46,10 +58,13 @@ func makeDBClient() (*client.DB, *stop.Stopper, error) {
 		SSLCertKey: baseCfg.SSLCertKey,
 		Insecure:   baseCfg.Insecure,
 	}
-
+	addr, err := addrWithDefaultHost(baseCfg.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
 	sender, err := client.NewSender(
 		rpc.NewContext(log.AmbientContext{}, cfg, nil, stopper),
-		baseCfg.Addr,
+		addr,
 	)
 	if err != nil {
 		stopper.Stop()
