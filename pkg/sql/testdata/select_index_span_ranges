@@ -46,6 +46,12 @@ ALTER TABLE t SPLIT AT (5)
 statement ok
 ALTER TABLE t SPLIT AT (8)
 
+statement ok
+ALTER INDEX t@c SPLIT AT (90)
+
+statement ok
+ALTER INDEX c SPLIT AT (10)
+
 query ITT
 EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
 ----
