@@ -110,6 +110,9 @@ func (l *legacyTransportAdapter) SendNext(done chan<- BatchCall) {
 	}
 }
 
+func (*legacyTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
+}
+
 func (*legacyTransportAdapter) Close() {
 }
 
@@ -1836,6 +1839,9 @@ func (t *slowLeaseHolderTransport) SendNext(done chan<- BatchCall) {
 		// When we've tried all replicas, let the slow request finish.
 		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
 	}
+}
+
+func (t *slowLeaseHolderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 }
 
 func (t *slowLeaseHolderTransport) Close() {
