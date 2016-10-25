@@ -120,7 +120,11 @@ func (rq *replicateQueue) shouldQueue(
 		leaseStoreID = lease.Replica.StoreID
 	}
 	target := rq.allocator.RebalanceTarget(
-		zone.Constraints, desc.Replicas, leaseStoreID)
+		zone.Constraints,
+		desc.Replicas,
+		leaseStoreID,
+		desc.RangeID,
+	)
 	if log.V(2) {
 		if target != nil {
 			log.Infof(ctx, "%s rebalance target found, enqueuing", repl)
@@ -144,7 +148,7 @@ func (rq *replicateQueue) process(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas := rq.allocator.storePool.deadReplicas(repl.RangeID, desc.Replicas)
+	deadReplicas := rq.allocator.storePool.deadReplicas(desc.RangeID, desc.Replicas)
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {
@@ -154,7 +158,12 @@ func (rq *replicateQueue) process(
 	switch action {
 	case AllocatorAdd:
 		log.Event(ctx, "adding a new replica")
-		newStore, err := rq.allocator.AllocateTarget(zone.Constraints, desc.Replicas, true)
+		newStore, err := rq.allocator.AllocateTarget(
+			zone.Constraints,
+			desc.Replicas,
+			desc.RangeID,
+			true,
+		)
 		if err != nil {
 			return err
 		}
@@ -204,7 +213,11 @@ func (rq *replicateQueue) process(
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
 		rebalanceStore := rq.allocator.RebalanceTarget(
-			zone.Constraints, desc.Replicas, repl.store.StoreID())
+			zone.Constraints,
+			desc.Replicas,
+			repl.store.StoreID(),
+			desc.RangeID,
+		)
 		if rebalanceStore == nil {
 			log.VEventf(ctx, 1, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
