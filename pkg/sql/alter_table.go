@@ -245,13 +245,13 @@ func (n *alterTableNode) Start() error {
 				if t.IfExists {
 					continue
 				}
-				return errors.Errorf("constraint %q does not exist", t.Constraint)
+				return fmt.Errorf("constraint %q does not exist", t.Constraint)
 			}
 			switch details.Kind {
 			case sqlbase.ConstraintTypePK:
-				return errors.Errorf("cannot drop primary key")
+				return fmt.Errorf("cannot drop primary key")
 			case sqlbase.ConstraintTypeUnique:
-				return errors.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX if you really want to drop it", t.Constraint)
+				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
@@ -283,7 +283,7 @@ func (n *alterTableNode) Start() error {
 			name := string(t.Constraint)
 			constraint, ok := info[name]
 			if !ok {
-				return errors.Errorf("constraint %q does not exist", t.Constraint)
+				return fmt.Errorf("constraint %q does not exist", t.Constraint)
 			}
 			if !constraint.Unvalidated {
 				continue
