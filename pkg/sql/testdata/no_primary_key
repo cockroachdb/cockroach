@@ -62,7 +62,6 @@ SHOW COLUMNS FROM t
 ----
 a INT true NULL
 b INT true NULL
-rowid INT false unique_rowid()
 c STRING true NULL
 
 statement ok

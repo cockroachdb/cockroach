@@ -404,10 +404,14 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}),
 		},
 		"SHOW DATABASES": {
-			baseTest.Results("information_schema").Results("pg_catalog").Results("d").Results("system"),
+			baseTest.Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
-			baseTest.Results("users", security.RootUser, "DELETE,GRANT,INSERT,SELECT,UPDATE"),
+			baseTest.Results("users", security.RootUser, "DELETE").
+				Results("users", security.RootUser, "GRANT").
+				Results("users", security.RootUser, "INSERT").
+				Results("users", security.RootUser, "SELECT").
+				Results("users", security.RootUser, "UPDATE"),
 		},
 		"SHOW INDEXES FROM system.users": {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false),

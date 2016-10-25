@@ -11,17 +11,28 @@ Database User      Privileges
 a        readwrite ALL
 a        root      ALL
 
-statement error table "a.t" does not exist
+query TTT colnames
 SHOW GRANTS ON a.t
+----
+Table  User  Privileges
 
-statement error table "test.t" does not exist
+query TTT colnames
 SHOW GRANTS ON t
+----
+Table  User  Privileges
+
+query TTT colnames
+SHOW GRANTS ON a.t
+----
+Table  User  Privileges
 
 statement ok
 SET DATABASE = a
 
-statement error table "a.t" does not exist
+query TTT colnames
 SHOW GRANTS ON t
+----
+Table  User  Privileges
 
 statement error table "a.t" does not exist
 GRANT ALL ON a.t TO readwrite
@@ -65,15 +76,31 @@ REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-t     root      ALL
-t     test-user CREATE,DROP,GRANT,SELECT,UPDATE
+t  readwrite  CREATE
+t  readwrite  DROP
+t  readwrite  GRANT
+t  readwrite  SELECT
+t  readwrite  UPDATE
+t  root       ALL
+t  test-user  CREATE
+t  test-user  DROP
+t  test-user  GRANT
+t  test-user  SELECT
+t  test-user  UPDATE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-t     test-user CREATE,DROP,GRANT,SELECT,UPDATE
+t  readwrite  CREATE
+t  readwrite  DROP
+t  readwrite  GRANT
+t  readwrite  SELECT
+t  readwrite  UPDATE
+t  test-user  CREATE
+t  test-user  DROP
+t  test-user  GRANT
+t  test-user  SELECT
+t  test-user  UPDATE
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
@@ -81,15 +108,29 @@ REVOKE SELECT ON t FROM "test-user"
 query TTT
 SHOW GRANTS ON t
 ----
-t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-t     root      ALL
-t     test-user CREATE,DROP,GRANT,UPDATE
+t  readwrite  CREATE
+t  readwrite  DROP
+t  readwrite  GRANT
+t  readwrite  SELECT
+t  readwrite  UPDATE
+t  root       ALL
+t  test-user  CREATE
+t  test-user  DROP
+t  test-user  GRANT
+t  test-user  UPDATE
 
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-t     test-user CREATE,DROP,GRANT,UPDATE
+t  readwrite  CREATE
+t  readwrite  DROP
+t  readwrite  GRANT
+t  readwrite  SELECT
+t  readwrite  UPDATE
+t  test-user  CREATE
+t  test-user  DROP
+t  test-user  GRANT
+t  test-user  UPDATE
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
@@ -144,15 +185,31 @@ REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON v
 ----
-v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-v     root      ALL
-v     test-user CREATE,DROP,GRANT,SELECT,UPDATE
+v  readwrite  CREATE
+v  readwrite  DROP
+v  readwrite  GRANT
+v  readwrite  SELECT
+v  readwrite  UPDATE
+v  root       ALL
+v  test-user  CREATE
+v  test-user  DROP
+v  test-user  GRANT
+v  test-user  SELECT
+v  test-user  UPDATE
 
 query TTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-v     test-user CREATE,DROP,GRANT,SELECT,UPDATE
+v  readwrite  CREATE
+v  readwrite  DROP
+v  readwrite  GRANT
+v  readwrite  SELECT
+v  readwrite  UPDATE
+v  test-user  CREATE
+v  test-user  DROP
+v  test-user  GRANT
+v  test-user  SELECT
+v  test-user  UPDATE
 
 statement ok
 REVOKE SELECT ON v FROM "test-user"
@@ -160,15 +217,29 @@ REVOKE SELECT ON v FROM "test-user"
 query TTT
 SHOW GRANTS ON v
 ----
-v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-v     root      ALL
-v     test-user CREATE,DROP,GRANT,UPDATE
+v  readwrite  CREATE
+v  readwrite  DROP
+v  readwrite  GRANT
+v  readwrite  SELECT
+v  readwrite  UPDATE
+v  root       ALL
+v  test-user  CREATE
+v  test-user  DROP
+v  test-user  GRANT
+v  test-user  UPDATE
 
 query TTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
-v     test-user CREATE,DROP,GRANT,UPDATE
+v  readwrite  CREATE
+v  readwrite  DROP
+v  readwrite  GRANT
+v  readwrite  SELECT
+v  readwrite  UPDATE
+v  test-user  CREATE
+v  test-user  DROP
+v  test-user  GRANT
+v  test-user  UPDATE
 
 statement ok
 REVOKE ALL ON v FROM readwrite,"test-user"

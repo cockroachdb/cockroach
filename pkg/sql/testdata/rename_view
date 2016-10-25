@@ -140,8 +140,6 @@ ALTER VIEW test.v2 RENAME TO test2.v2
 query T
 SHOW TABLES FROM test
 ----
-kv
-t
 
 query T
 SHOW TABLES FROM test2

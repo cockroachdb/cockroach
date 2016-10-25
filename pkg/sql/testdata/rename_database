@@ -35,8 +35,9 @@ statement error database "test" does not exist
 SELECT * FROM kv
 ----
 
-statement error database "test" does not exist
+query TTT
 SHOW GRANTS ON DATABASE test
+----
 
 query T
 SHOW DATABASES
@@ -91,9 +92,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
-system
 t
-u
 
 user root
 

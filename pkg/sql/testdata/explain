@@ -125,14 +125,18 @@ EXPLAIN DROP TABLE foo
 query ITT
 EXPLAIN SHOW DATABASES
 ----
-0 virtual table SHOW DATABASES
-1 values 1 column, 5 rows
+0  virtual table  SHOW DATABASES
+1  sort           +Database
+2  virtual table  information_schema.schemata
+3  values         4 columns, 5 rows
 
 query ITT
 EXPLAIN SHOW TABLES
 ----
-0 virtual table SHOW TABLES FROM test
-1 values 1 column, 1 row
+0  virtual table  SHOW TABLES FROM test
+1  sort           +"Table"
+2  virtual table  information_schema.tables
+3  values         5 columns, 23 rows
 
 query ITT
 EXPLAIN SHOW DATABASE
@@ -173,20 +177,24 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 query ITT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-0 virtual table SHOW COLUMNS FROM foo
-1 values 4 columns, 2 rows
+0  virtual table  SHOW COLUMNS FROM foo
+1  sort           +ORDINAL_POSITION
+2  virtual table  information_schema.columns
+3  values         13 columns, 173 rows
 
 query ITT
 EXPLAIN SHOW GRANTS ON foo
 ----
-0 virtual table SHOW GRANTS
-1 values 3 columns, 1 row
+0  virtual table  SHOW GRANTS
+1  sort           +"Table",+"User",+Privileges
+2  virtual table  information_schema.table_privileges
+3  values         8 columns, 19 rows
 
 query ITT
 EXPLAIN SHOW INDEX FROM foo
 ----
-0 virtual table SHOW INDEX FROM foo
-1 values 7 columns, 2 rows
+0  virtual table  SHOW INDEX FROM foo
+1  values         7 columns, 2 rows
 
 query ITT
 EXPLAIN SHOW CONSTRAINTS FROM foo

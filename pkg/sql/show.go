@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -107,25 +106,15 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		name:    "SHOW COLUMNS FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-
-			for i, col := range desc.Columns {
-				defaultExpr := parser.DNull
-				if e := desc.Columns[i].DefaultExpr; e != nil {
-					defaultExpr = parser.NewDString(*e)
-				}
-				newRow := parser.DTuple{
-					parser.NewDString(desc.Columns[i].Name),
-					parser.NewDString(col.Type.SQLString()),
-					parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
-					defaultExpr,
-				}
-				if err := v.rows.AddRow(newRow); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
+			getColumns := fmt.Sprintf("SELECT COLUMN_NAME AS \"Field\", DATA_TYPE AS \"Type\", (IS_NULLABLE!='NO') AS \"Null\","+
+				" COLUMN_DEFAULT AS \"Default\" FROM information_schema.columns WHERE TABLE_SCHEMA='%s' AND TABLE_NAME='%s'"+
+				" ORDER BY ORDINAL_POSITION;",
+				tn.Database(), tn.Table())
+			stmt, err := parser.ParseOneTraditional(getColumns)
+			if err != nil {
+				return nil, err
 			}
-			return v, nil
+			return p.newPlan(stmt, nil, true)
 		},
 	}, nil
 }
@@ -365,31 +354,11 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 		name:    "SHOW DATABASES",
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			prefix := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "")
-			sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
+			stmt, err := parser.ParseOneTraditional("SELECT SCHEMA_NAME AS \"Database\" FROM information_schema.schemata ORDER BY \"Database\";")
 			if err != nil {
 				return nil, err
 			}
-			v := p.newContainerValuesNode(columns, 0)
-			for _, db := range p.virtualSchemas().orderedNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-			for _, row := range sr {
-				_, name, err := encoding.DecodeUnsafeStringAscending(
-					bytes.TrimPrefix(row.Key, prefix), nil)
-				if err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-			return v, nil
+			return p.newPlan(stmt, nil, true)
 		},
 	}, nil
 }
@@ -402,10 +371,6 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
 		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
-	}
-	descriptors, err := p.getDescriptorsFromTargetList(*n.Targets)
-	if err != nil {
-		return nil, err
 	}
 
 	objectType := "Database"
@@ -424,35 +389,70 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		name:    "SHOW GRANTS",
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
-			var wantedUsers map[string]struct{}
-			if len(n.Grantees) != 0 {
-				wantedUsers = make(map[string]struct{})
-			}
-			for _, u := range n.Grantees {
-				wantedUsers[string(u)] = struct{}{}
+			getGrants := "SELECT TABLE_SCHEMA AS \"Database\", GRANTEE AS \"User\", " +
+				"PRIVILEGE_TYPE AS \"Privileges\" FROM information_schema.schema_privileges"
+			var whereClause []string
+			if n.Targets.Databases != nil {
+				s := "TABLE_SCHEMA IN ( "
+				for i, db := range n.Targets.Databases {
+					if i > 0 {
+						s += ","
+					}
+					s += fmt.Sprintf("'%s'", string(db))
+				}
+				s += ")"
+				whereClause = append(whereClause, s)
 			}
 
-			for _, descriptor := range descriptors {
-				userPrivileges := descriptor.GetPrivileges().Show()
-				for _, userPriv := range userPrivileges {
-					if wantedUsers != nil {
-						if _, ok := wantedUsers[userPriv.User]; !ok {
-							continue
-						}
-					}
-					newRow := parser.DTuple{
-						parser.NewDString(descriptor.GetName()),
-						parser.NewDString(userPriv.User),
-						parser.NewDString(userPriv.PrivilegeString()),
-					}
-					if err := v.rows.AddRow(newRow); err != nil {
-						v.rows.Close()
+			if n.Targets.Tables != nil {
+				getGrants = "SELECT TABLE_NAME AS \"Table\", GRANTEE AS \"User\", " +
+					"PRIVILEGE_TYPE AS \"Privileges\" FROM information_schema.table_privileges"
+				var tablesWanted []string
+				for _, tableTarget := range n.Targets.Tables {
+					tableGlob, err := tableTarget.NormalizeTablePattern()
+					if err != nil {
 						return nil, err
 					}
+					tables, err := p.expandTableGlob(tableGlob)
+					if err != nil {
+						return nil, err
+					}
+					for i := range tables {
+						tablesWanted = append(tablesWanted, fmt.Sprintf("(TABLE_SCHEMA='%s' "+
+							"AND TABLE_NAME='%s')", tables[i].Database(), tables[i].Table()))
+					}
+				}
+				whereClause = append(whereClause, strings.Join(tablesWanted, " OR "))
+			}
+
+			if len(n.Grantees) != 0 {
+				var wantedUsers []string
+				for _, u := range n.Grantees {
+					wantedUsers = append(wantedUsers, fmt.Sprintf("'%s'", string(u)))
+				}
+				whereClause = append(whereClause, fmt.Sprintf("GRANTEE IN(%s)", strings.Join(wantedUsers, ",")))
+			}
+
+			if len(whereClause) > 0 {
+				getGrants += " WHERE "
+				for i, w := range whereClause {
+					if i > 0 {
+						getGrants += " AND "
+					}
+					getGrants += fmt.Sprintf("(%s)", w)
 				}
 			}
-			return v, nil
+
+			if n.Targets.Databases != nil {
+				getGrants += " ORDER BY \"Database\", \"User\",  \"Privileges\""
+			} else if n.Targets.Tables != nil {
+				getGrants += " ORDER BY \"Table\", \"User\",  \"Privileges\""
+			}
+			stmt, err := parser.ParseOneTraditional(getGrants)
+			if err != nil {
+				return nil, err
+			}
+			return p.newPlan(stmt, nil, true)
 		},
 	}, nil
 }
@@ -630,25 +630,14 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		name:    "SHOW TABLES FROM " + name,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			dbDesc, err := p.mustGetDatabaseDesc(name)
+			getTables := fmt.Sprintf("SELECT TABLE_NAME AS \"Table\" FROM information_schema.tables WHERE TABLE_SCHEMA = '%s' ORDER BY \"Table\"",
+				name)
+			stmt, err := parser.ParseOneTraditional(getTables)
 			if err != nil {
 				return nil, err
 			}
 
-			tableNames, err := p.getTableNames(dbDesc)
-			if err != nil {
-				return nil, err
-			}
-
-			v := p.newContainerValuesNode(columns, len(tableNames))
-			for _, name := range tableNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name.Table())}); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-
-			return v, nil
+			return p.newPlan(stmt, nil, true)
 		},
 	}, nil
 }

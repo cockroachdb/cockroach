@@ -13,11 +13,11 @@ CREATE DATABASE ""
 query T colnames
 SHOW DATABASES
 ----
-Database
-information_schema
-pg_catalog
-a
-system
+Database                                                                                       
+a                                                                                              
+information_schema                                                                             
+pg_catalog                                                                                     
+system                                                                                         
 test
 
 statement ok
@@ -35,11 +35,11 @@ CREATE DATABASE c
 query T
 SHOW DATABASES
 ----
-information_schema
-pg_catalog
 a
 b
 c
+information_schema
+pg_catalog
 system
 test
 
@@ -75,10 +75,10 @@ query T colnames
 SHOW DATABASES
 ----
 Database
-information_schema
-pg_catalog
 a
 c
+information_schema
+pg_catalog
 system
 test
 
