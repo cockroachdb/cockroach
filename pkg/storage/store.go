@@ -2076,30 +2076,37 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}, nil
 }
 
+// deadReplicas returns a list of all the dead replicas on the store.
 func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
-	sid := s.StoreID()
+	// We can't use a storeReplicaVisitor here as it skips destroyed replicas.
+	// Similar to in the storeReplicaVisitor, make a copy of the current
+	// replicas to iterate over so we don't have to hold the store lock during
+	// processing.
+	// TODO(bram): does this need to visit all the stores? Could we just use the
+	// store pool to locate any dead replicas on this store directly?
+	s.mu.Lock()
+	replicas := make([]*Replica, 0, len(s.mu.replicas))
+	for _, repl := range s.mu.replicas {
+		replicas = append(replicas, repl)
+	}
+	s.mu.Unlock()
 
 	var deadReplicas []roachpb.ReplicaIdent
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+	for _, r := range replicas {
 		r.mu.Lock()
 		destroyed := r.mu.destroyed
+		desc := r.mu.state.Desc
 		r.mu.Unlock()
-		desc := r.Desc()
-		replicaDesc, ok := desc.GetReplicaDescriptor(sid)
+		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
 		if ok && destroyed != nil {
 			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
 				RangeID: desc.RangeID,
-				Replica: roachpb.ReplicaDescriptor{
-					NodeID:    s.Ident.NodeID,
-					StoreID:   sid,
-					ReplicaID: replicaDesc.ReplicaID,
-				},
+				Replica: replicaDesc,
 			})
 		}
-		return true // more
-	})
+	}
 	return roachpb.StoreDeadReplicas{
-		StoreID:  s.StoreID(),
+		StoreID:  s.Ident.StoreID,
 		Replicas: deadReplicas,
 	}
 }
