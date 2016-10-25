@@ -552,10 +552,11 @@ func TestRocksDBTimeBound(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles, stopper)
-	if err := rocksdb.Open(); err != nil {
+	rocksdb, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles)
+	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
+	stopper.AddCloser(rocksdb)
 
 	var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
 	var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
