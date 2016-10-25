@@ -288,7 +288,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
 		log.Fatal(ctx, err)
 	}
-	startupSession.Finish()
+	startupSession.Finish(exec)
 
 	return exec
 }

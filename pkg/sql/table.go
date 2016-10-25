@@ -129,7 +129,7 @@ var _ SchemaAccessor = &planner{}
 
 // getTableOrViewDesc implements the SchemaAccessor interface.
 func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	virtual, err := p.virtualSchemas().getVirtualTableDesc(tn)
+	virtual, err := p.session.virtualSchemas.getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
 		if _, ok := err.(*sqlbase.ErrUndefinedTable); ok {
 			return nil, nil
@@ -244,7 +244,7 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
-	isVirtualDB := p.virtualSchemas().isVirtualDatabase(tn.Database())
+	isVirtualDB := p.session.virtualSchemas.isVirtualDatabase(tn.Database())
 	if isSystemDB || isVirtualDB || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for:
 		// - system tables. The system.lease and system.descriptor table, in
@@ -392,7 +392,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 
 // getTableNames implements the SchemaAccessor interface.
 func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.TableNames, error) {
-	if e, ok := p.virtualSchemas().getVirtualSchemaEntry(dbDesc.Name); ok {
+	if e, ok := p.session.virtualSchemas.getVirtualSchemaEntry(dbDesc.Name); ok {
 		return e.tableNames(), nil
 	}
 
