@@ -64,16 +64,27 @@ const (
 type Flow struct {
 	FlowCtx
 
-	flowRegistry       *flowRegistry
+	flowRegistry *flowRegistry
+	processors   []processor
+	outboxes     []*outbox
+	// simpleFlowConsumer is a special outbox which instead of sending rows to
+	// another host, returns them directly (as a result to a SetupSimpleFlow RPC,
+	// or to the local host).
 	simpleFlowConsumer RowReceiver
-	waitGroup          sync.WaitGroup
-	processors         []processor
-	outboxes           []*outbox
 
-	// inboundStreams are streams that receive data from other hosts, through
-	// the FlowStream API.
-	inboundStreams map[StreamID]RowReceiver
-	localStreams   map[StreamID]RowReceiver
+	localStreams map[StreamID]RowReceiver
+
+	// inboundStreams are streams that receive data from other hosts; this map
+	// is to be passed to flowRegistry.RegisterFlow.
+	inboundStreams map[StreamID]*inboundStreamInfo
+
+	// waitGroup is used to wait for async components of the flow:
+	//  - processors
+	//  - inbound streams
+	//  - outboxes
+	waitGroup sync.WaitGroup
+
+	doneFn func()
 
 	status flowStatus
 }
@@ -83,12 +94,13 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowRecei
 		panic("flow context has no span")
 	}
 	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
-	return &Flow{
+	f := &Flow{
 		FlowCtx:            flowCtx,
 		flowRegistry:       flowReg,
 		simpleFlowConsumer: simpleFlowConsumer,
-		status:             FlowNotStarted,
 	}
+	f.status = FlowNotStarted
+	return f
 }
 
 // setupInboundStream adds a stream to the stream map (inboundStreams or
@@ -103,12 +115,12 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 			return errors.Errorf("inbound stream %d has multiple consumers", sid)
 		}
 		if f.inboundStreams == nil {
-			f.inboundStreams = make(map[StreamID]RowReceiver)
+			f.inboundStreams = make(map[StreamID]*inboundStreamInfo)
 		}
 		if log.V(2) {
 			log.Infof(f.FlowCtx.Context, "set up inbound stream %d", sid)
 		}
-		f.inboundStreams[sid] = receiver
+		f.inboundStreams[sid] = &inboundStreamInfo{receiver: receiver, waitGroup: &f.waitGroup}
 		return nil
 	}
 	if _, found := f.localStreams[sid]; found {
@@ -289,26 +301,20 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 	return nil
 }
 
-func (f *Flow) getInboundStream(sid StreamID) (RowReceiver, error) {
-	// TODO(radu): detect if we connect to a stream multiple times.
-	recv, ok := f.inboundStreams[sid]
-	if !ok {
-		return nil, errors.Errorf("no inbound stream %d for flow %s", sid, f.id)
-	}
-	return recv, nil
-}
-
 // Start starts the flow (each processor runs in their own goroutine).
-func (f *Flow) Start() {
+func (f *Flow) Start(doneFn func()) {
+	f.doneFn = doneFn
 	log.VEventf(
 		f.Context, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
 	)
 	f.status = FlowRunning
-	f.flowRegistry.RegisterFlow(f.id, f)
+	f.flowRegistry.RegisterFlow(f.id, f, f.inboundStreams)
+	f.waitGroup.Add(len(f.inboundStreams))
+	f.waitGroup.Add(len(f.outboxes))
+	f.waitGroup.Add(len(f.processors))
 	for _, o := range f.outboxes {
 		o.start(&f.waitGroup)
 	}
-	f.waitGroup.Add(len(f.processors))
 	for _, p := range f.processors {
 		go p.Run(&f.waitGroup)
 	}
@@ -334,6 +340,8 @@ func (f *Flow) Cleanup() {
 		f.flowRegistry.UnregisterFlow(f.id)
 	}
 	f.status = FlowFinished
+	f.doneFn()
+	f.doneFn = nil
 }
 
 // RunSync runs the processors in the flow in order (serially), in the same
