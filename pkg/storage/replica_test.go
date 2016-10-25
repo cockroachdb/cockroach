@@ -564,8 +564,10 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 // hasLease returns whether the most recent range lease was held by the given
 // range replica and whether it's expired for the given timestamp.
 func hasLease(rng *Replica, timestamp hlc.Timestamp) (owned bool, expired bool) {
-	l, _ := rng.getLease()
-	return l.OwnedBy(rng.store.StoreID()), !l.Covers(timestamp)
+	rng.mu.Lock()
+	defer rng.mu.Unlock()
+	l := rng.mu.state.Lease
+	return l.OwnedBy(rng.store.StoreID()) && rng.mu.leaseResetAfterStart, !l.Covers(timestamp)
 }
 
 func TestReplicaLease(t *testing.T) {
