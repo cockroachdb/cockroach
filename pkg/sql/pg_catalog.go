@@ -24,6 +24,8 @@ import (
 	"hash/fnv"
 	"strconv"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -47,6 +49,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogConstraintTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
+		pgCatalogProcTable,
 		pgCatalogTablesTable,
 	},
 }
@@ -590,6 +593,111 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+// pgCatalogProcTable stores information about builtin functions
+var pgCatalogProcTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_proc (
+  oid INT,
+  proname STRING,
+  pronamespace INT,
+  proowner INT,
+  prolang INT,
+  procost FLOAT,
+  prorows FLOAT,
+  provariadic INT,
+  protransform STRING,
+  proisagg BOOL,
+  proiswindow BOOL,
+  prosecdef BOOL,
+  proleakproof BOOL,
+  proisstrict BOOL,
+  proretset BOOL,
+  provolatile CHAR,
+  proparallel CHAR,
+  pronargs INT,
+  pronargdefaults INT,
+  prorettype INT,
+  proargtypes STRING,
+  proallargtypes STRING,
+  proargmodes STRING,
+  proargnames STRING,
+  proargdefaults STRING,
+  protrftypes STRING,
+  prosrc STRING,
+  probin STRING,
+  proconfig STRING,
+  proacl STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		dbDesc, err := p.getDatabaseDesc(informationSchema.name)
+		if err != nil {
+			return err
+		}
+		for name, builtins := range parser.Builtins {
+			for _, builtin := range builtins {
+				argTypes := builtin.Types
+				dArgTypes := make([]string, len(argTypes.Types()))
+				for i, argType := range argTypes.Types() {
+					dArgTypes[i] = h.TypeOid(argType).String()
+				}
+				dArgTypeString := strings.Join(dArgTypes, ", ")
+
+				var argmodes parser.Datum
+				var variadicType *parser.DInt
+				switch argTypes.(type) {
+				case parser.VariadicType:
+					argmodes = parser.NewDString("v")
+					variadicType = h.TypeOid(argTypes.Types()[0])
+				default:
+					argmodes = parser.DNull
+					variadicType = oidZero
+				}
+				dName := parser.NewDString(name)
+				isAggregate := builtin.Class() == parser.AggregateClass
+				isWindow := builtin.Class() == parser.WindowClass
+				err := addRow(
+					h.BuiltinOid(name, &builtin), // oid
+					dName,                                             // proname
+					h.DBOid(dbDesc),                                   // pronamespace
+					parser.DNull,                                      // proowner
+					oidZero,                                           // prolang
+					parser.DNull,                                      // procost
+					parser.DNull,                                      // prorows
+					variadicType,                                      // provariadic
+					parser.DNull,                                      // protransform
+					parser.MakeDBool(parser.DBool(isAggregate)),       // proisagg
+					parser.MakeDBool(parser.DBool(isWindow)),          // proiswindow
+					parser.MakeDBool(false),                           // prosecdef
+					parser.MakeDBool(parser.DBool(!builtin.Impure())), // proleakproof
+					parser.MakeDBool(false),                           // proisstrict
+					parser.MakeDBool(false),                           // proretset
+					parser.DNull,                                      // provolatile
+					parser.DNull,                                      // proparallel
+					parser.NewDInt(parser.DInt(builtin.Types.Length())), // pronargs
+					parser.NewDInt(parser.DInt(0)),                      // pronargdefaults
+					h.TypeOid(builtin.ReturnType),                       // prorettype
+					parser.NewDString(dArgTypeString),                   // proargtypes
+					parser.DNull,                                        // proallargtypes
+					argmodes,                                            // proargmodes
+					parser.DNull,                                        // proargnames
+					parser.DNull,                                        // proargdefaults
+					parser.DNull,                                        // protrftypes
+					dName,                                               // prosrc
+					parser.DNull,                                        // probin
+					parser.DNull,                                        // proconfig
+					parser.DNull,                                        // proacl
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-tables.html.
 var pgCatalogTablesTable = virtualSchemaTable{
 	schema: `
@@ -692,6 +800,7 @@ const (
 	pKeyConstraintTypeTag
 	uniqueConstraintTypeTag
 	typeTypeTag
+	functionTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -816,7 +925,18 @@ func (h oidHasher) UniqueConstraintOid(
 }
 
 func (h oidHasher) TypeOid(typ parser.Type) *parser.DInt {
+	// The result of AnyType builtins is nil.
+	if typ == nil {
+		return oidZero
+	}
 	h.writeTypeTag(typeTypeTag)
 	h.writeType(typ)
+	return h.getOid()
+}
+
+func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DInt {
+	h.writeTypeTag(functionTypeTag)
+	h.writeStr(name)
+	h.writeStr(builtin.Types.String())
 	return h.getOid()
 }

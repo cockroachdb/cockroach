@@ -50,6 +50,7 @@ pg_class
 pg_constraint
 pg_indexes
 pg_namespace
+pg_proc
 pg_tables
 
 query TT colnames
@@ -473,3 +474,13 @@ ORDER BY con.oid
 conname  confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
 fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
 fk       {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
+
+query TIBBBITT colnames
+SELECT proname, provariadic, proisagg, proiswindow, proleakproof, pronargs, proargmodes, prosrc
+FROM pg_catalog.pg_proc
+WHERE proiswindow IS true AND proname = 'LEAD' AND pronargs = 3
+LIMIT 1
+----
+proname  provariadic  proisagg  proiswindow  proleakproof  pronargs  proargmodes  prosrc
+LEAD     0            false     true         false         3         NULL         LEAD
+
