@@ -198,7 +198,6 @@ func (m *outbox) run() {
 }
 
 func (m *outbox) start(wg *sync.WaitGroup) {
-	wg.Add(1)
 	m.wg = wg
 	m.RowChannel.Init()
 	go m.run()
