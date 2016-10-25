@@ -18,7 +18,6 @@ package distsql
 
 import (
 	"io"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -46,13 +45,10 @@ type ServerConfig struct {
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	ServerConfig
-	evalCtx      parser.EvalContext
-	flowRegistry *flowRegistry
+	evalCtx       parser.EvalContext
+	flowRegistry  *flowRegistry
+	flowScheduler *flowScheduler
 }
-
-// flowStreamTimeout is the amount of time incoming streams wait for a flow to
-// be set up before erroring out.
-const flowStreamTimeout time.Duration = 2000 * time.Millisecond
 
 var _ DistSQLServer = &ServerImpl{}
 
@@ -63,9 +59,15 @@ func NewServer(cfg ServerConfig) *ServerImpl {
 		evalCtx: parser.EvalContext{
 			ReCache: parser.NewRegexpCache(512),
 		},
-		flowRegistry: makeFlowRegistry(),
+		flowRegistry:  makeFlowRegistry(),
+		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
 	}
 	return ds
+}
+
+// Start launches workers for the server.
+func (ds *ServerImpl) Start() {
+	ds.flowScheduler.Start()
 }
 
 func (ds *ServerImpl) setupTxn(ctx context.Context, txnProto *roachpb.Transaction) *client.Txn {
@@ -117,7 +119,7 @@ func (ds *ServerImpl) RunSimpleFlow(
 ) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSimpleFlowStream(stream)
-	ctx := ds.AnnotateCtx(context.TODO())
+	ctx := ds.AnnotateCtx(stream.Context())
 
 	f, err := ds.SetupSimpleFlow(ctx, req, mbox)
 	if err != nil {
@@ -127,8 +129,9 @@ func (ds *ServerImpl) RunSimpleFlow(
 	mbox.setFlowCtx(&f.FlowCtx)
 
 	if err := ds.Stopper.RunTask(func() {
+		f.waitGroup.Add(1)
 		mbox.start(&f.waitGroup)
-		f.Start()
+		f.Start(func() {})
 		f.Wait()
 		f.Cleanup()
 	}); err != nil {
@@ -146,13 +149,9 @@ func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*Simp
 	if err != nil {
 		return nil, err
 	}
-	f.Start()
-	// TODO(radu): firing off a goroutine just to call Cleanup is temporary. We
-	// will have a flow scheduler that will be notified when the flow completes.
-	ds.Stopper.RunWorker(func() {
-		f.Wait()
-		f.Cleanup()
-	})
+	if err := ds.flowScheduler.ScheduleFlow(f); err != nil {
+		return nil, err
+	}
 	return &SimpleResponse{}, nil
 }
 
@@ -169,20 +168,17 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 		return errors.Errorf("no header in first message")
 	}
 	flowID := msg.Header.FlowID
-	f := ds.flowRegistry.LookupFlow(flowID, flowStreamTimeout)
-	if f == nil {
-		return errors.Errorf("flow %s not found", flowID)
-	}
-	rowChan, err := f.getInboundStream(msg.Header.StreamID)
+	f, streamInfo, err := ds.flowRegistry.ConnectInboundStream(flowID, msg.Header.StreamID)
 	if err != nil {
 		return err
 	}
-	return ProcessInboundStream(&f.FlowCtx, stream, msg, rowChan)
+	defer ds.flowRegistry.FinishInboundStream(streamInfo)
+	return ProcessInboundStream(&f.FlowCtx, stream, msg, streamInfo.receiver)
 }
 
 // FlowStream is part of the DistSQLServer interface.
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
-	ctx := ds.AnnotateCtx(context.TODO())
+	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(stream)
 	if err != nil {
 		log.Error(ctx, err)
