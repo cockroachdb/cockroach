@@ -235,7 +235,7 @@ type createViewNode struct {
 }
 
 // CreateView creates a view.
-// Privileges: CREATE on underlying table(s).
+// Privileges: CREATE on database plus SELECT on all the selected columns.
 //   notes: postgres requires CREATE on database plus SELECT on all the
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
