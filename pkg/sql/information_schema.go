@@ -31,6 +31,7 @@ var informationSchema = virtualSchema{
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaSchemataTable,
 		informationSchemaSchemataTablePrivileges,
+		informationSchemaStatisticsTable,
 		informationSchemaTableConstraintTable,
 		informationSchemaTablePrivileges,
 		informationSchemaTablesTable,
@@ -401,6 +402,64 @@ CREATE TABLE information_schema.tables (
 					tableType,                     // table_type
 					parser.NewDInt(parser.DInt(table.Version)), // version
 				)
+			},
+		)
+	},
+}
+
+var informationSchemaStatisticsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.statistics (
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	NON_UNIQUE BOOL NOT NULL DEFAULT FALSE,
+	INDEX_SCHEMA STRING NOT NULL DEFAULT '',
+	INDEX_NAME STRING NOT NULL DEFAULT '',
+	SEQ_IN_INDEX INT NOT NULL DEFAULT 0,
+	COLUMN_NAME STRING NOT NULL DEFAULT '',
+	"COLLATION" STRING NOT NULL DEFAULT '',
+	CARDINALITY INT NOT NULL DEFAULT 0,
+	DIRECTION STRING NOT NULL DEFAULT '',
+	STORING BOOL NOT NULL DEFAULT FALSE 
+);`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
+					direction string, isStored bool) error {
+					return addRow(
+						parser.NewDString("def"),                     //table_catalog
+						parser.NewDString(db.GetName()),              //table_schema
+						parser.NewDString(table.GetName()),           //table_name
+						parser.MakeDBool(parser.DBool(index.Unique)), //non_unique
+						parser.NewDString(db.GetName()),              //index_schema
+						parser.NewDString(index.Name),                //index_name
+						parser.NewDInt(parser.DInt(sequence)),        //seq_in_index
+						parser.NewDString(colName),                   //column_name
+						parser.DNull,                                 //collation
+						parser.DNull,                                 //cardinality
+						parser.NewDString(direction),                 //direction
+						parser.MakeDBool(parser.DBool(isStored)),     //storing
+					)
+				}
+
+				for _, index := range append([]sqlbase.IndexDescriptor{table.PrimaryIndex}, table.Indexes...) {
+					sequence := 1
+					for i, col := range index.ColumnNames {
+						if err := appendRow(index, col, sequence, index.ColumnDirections[i].String(), false); err != nil {
+							return err
+						}
+						sequence++
+					}
+					for _, col := range index.StoreColumnNames {
+						if err := appendRow(index, col, sequence, "N/A", true); err != nil {
+							return err
+						}
+						sequence++
+					}
+				}
+				return nil
 			},
 		)
 	},
