@@ -243,7 +243,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
-	tn, err := n.Index.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := p.expandIndexName(n.Index)
 	if err != nil {
 		return nil, err
 	}

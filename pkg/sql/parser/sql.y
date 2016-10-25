@@ -4396,6 +4396,10 @@ table_name_with_index:
   {
     $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
   }
+| qualified_name
+  {
+    $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), SearchTable: true}
+  }
 
 // table_pattern accepts:
 // <database>.<table>
