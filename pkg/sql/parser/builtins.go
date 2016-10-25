@@ -146,7 +146,17 @@ func (b Builtin) Category() string {
 	return ""
 }
 
-// Signature returns a human-readable signature
+// Class returns the FunctionClass of this builtin.
+func (b Builtin) Class() FunctionClass {
+	return b.class
+}
+
+// Impure returns false if this builtin is a pure function of its inputs.
+func (b Builtin) Impure() bool {
+	return b.impure
+}
+
+// Signature returns a human-readable signature.
 func (b Builtin) Signature() string {
 	if b.ReturnType == nil {
 		return "<T>... -> <T>" // Special-case for LEAST and GREATEST.

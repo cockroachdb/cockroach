@@ -50,6 +50,7 @@ pg_class
 pg_constraint
 pg_indexes
 pg_namespace
+pg_proc
 pg_tables
 pg_type
 
@@ -581,3 +582,14 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 1184  timestamptz  0         0             NULL           NULL        NULL
 1186  interval     0         0             NULL           NULL        NULL
 1700  decimal      0         0             NULL           NULL        NULL
+
+# pg_catalog.pg_proc
+
+query TIBBBITT colnames
+SELECT proname, provariadic, proisagg, proiswindow, proleakproof, pronargs, proargmodes, prosrc
+FROM pg_catalog.pg_proc
+WHERE proiswindow IS true AND proname = 'LEAD' AND pronargs = 3
+LIMIT 1
+----
+proname  provariadic  proisagg  proiswindow  proleakproof  pronargs  proargmodes  prosrc
+LEAD     0            false     true         false         3         NULL         LEAD
