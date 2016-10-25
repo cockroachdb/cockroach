@@ -599,6 +599,20 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	return res
 }
 
+// getUserProperties fetches the user properties stored in each sstable's
+// metadata.
+func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
+	buf := cStringToGoBytes(C.DBGetUserProperties(r.rdb))
+	var ssts enginepb.SSTUserPropertiesCollection
+	if err := ssts.Unmarshal(buf); err != nil {
+		return enginepb.SSTUserPropertiesCollection{}, err
+	}
+	if ssts.Error != "" {
+		return enginepb.SSTUserPropertiesCollection{}, errors.New(ssts.Error)
+	}
+	return ssts, nil
+}
+
 // GetStats retrieves stats from this engine's RocksDB instance and
 // returns it in a new instance of Stats.
 func (r *RocksDB) GetStats() (*Stats, error) {

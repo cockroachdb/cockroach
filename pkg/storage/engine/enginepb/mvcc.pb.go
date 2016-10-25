@@ -7,11 +7,14 @@
 
 	It is generated from these files:
 		cockroach/pkg/storage/engine/enginepb/mvcc.proto
+		cockroach/pkg/storage/engine/enginepb/rocksdb.proto
 
 	It has these top-level messages:
 		TxnMeta
 		MVCCMetadata
 		MVCCStats
+		SSTUserProperties
+		SSTUserPropertiesCollection
 */
 package enginepb
 

@@ -21,9 +21,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -37,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,20 +62,6 @@ const (
 		FAMILY (id, balance, payload)
 	)`
 )
-
-func testingTempDir(t testing.TB, depth int) (string, func()) {
-	_, _, name := caller.Lookup(depth + 1)
-	dir, err := ioutil.TempDir("", name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cleanup := func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
-		}
-	}
-	return dir, cleanup
-}
 
 func TestIntersectHalfOpen(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -181,7 +165,7 @@ func backupRestoreTestSetup(
 ) {
 	ctx = context.Background()
 
-	dir, dirCleanupFn := testingTempDir(t, 1)
+	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
 	// Use ReplicationManual so we can force full replication, which is needed
 	// to later move the leases around.
@@ -418,7 +402,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 func BenchmarkSstRekey(b *testing.B) {
 	// TODO(dan): DRY this with BenchmarkRocksDBSstFileReader.
 
-	dir, cleanupFn := testingTempDir(b, 1)
+	dir, cleanupFn := testutils.TempDir(b, 1)
 	defer cleanupFn()
 
 	sstPath := filepath.Join(dir, "sst")

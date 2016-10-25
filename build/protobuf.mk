@@ -58,7 +58,7 @@ GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 UI_SOURCES := $(PKG_ROOT)/ui/app/js/protos.js $(PKG_ROOT)/ui/generated/protos.json $(PKG_ROOT)/ui/generated/protos.d.ts
 
-CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
+CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/rocksdb.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 

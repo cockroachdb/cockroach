@@ -227,6 +227,11 @@ typedef struct {
 // table.
 DBSSTable* DBGetSSTables(DBEngine* db, int* n);
 
+// DBGetUserProperties fetches the user properties stored in each sstable's
+// metadata. These are returned as a serialized SSTUserPropertiesCollection
+// proto.
+DBString DBGetUserProperties(DBEngine* db);
+
 // Bulk adds the file at the given path to a database. See the RocksDB
 // documentation on `AddFile` for the various restrictions on what can be added.
 DBStatus DBEngineAddFile(DBEngine* db, DBSlice path);
