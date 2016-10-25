@@ -244,8 +244,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	if err := eng.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadStoreIdent(context.Background(), eng); err != nil {
-		t.Fatalf("unable to read store ident: %s", err)
+	if err := ReadStoreIdent(context.Background(), eng, nil); err != nil {
+		t.Fatal(err)
 	}
 
 	// Try to get 1st range--non-existent.

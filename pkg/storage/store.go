@@ -28,6 +28,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -912,19 +913,25 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	}
 }
 
-// ReadStoreIdent reads the StoreIdent from the store.
+// ReadStoreIdent reads the StoreIdent from the engine.
 // It returns *NotBootstrappedError if the ident is missing (meaning that the
 // store needs to be bootstrapped).
-func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent, error) {
-	var ident roachpb.StoreIdent
-	ok, err := engine.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &ident)
-	if err != nil {
-		return roachpb.StoreIdent{}, err
-	} else if !ok {
-		return roachpb.StoreIdent{}, &NotBootstrappedError{}
+func ReadStoreIdent(ctx context.Context, eng engine.Engine, ident *roachpb.StoreIdent) error {
+	// NB: MVCCGetProto's last argument is nil-safe, but it is of an interface
+	// type; if we pass a nil value of a concrete type, it will be treated as a
+	// non- nil interface value, and MVCCGetProto will NPE.
+	var msg proto.Message
+	if ident != nil {
+		msg = ident
 	}
-	return ident, err
+	ok, err := engine.MVCCGetProto(ctx, eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, msg)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return &NotBootstrappedError{}
+	}
+	return nil
 }
 
 // Start the engine, set the GC and read the StoreIdent.
@@ -943,11 +950,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// the store has already been initialized.
 	if s.Ident.NodeID == 0 {
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ident, err := ReadStoreIdent(ctx, s.engine)
-		if err != nil {
+		if err := ReadStoreIdent(ctx, s.engine, &s.Ident); err != nil {
 			return err
 		}
-		s.Ident = ident
 	}
 	log.Event(ctx, "read store identity")
 
@@ -1352,30 +1357,47 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return errors.Errorf("engine already bootstrapped")
 	}
 	ctx := s.AnnotateCtx(context.Background())
-	s.Ident = ident
-	kvs, err := engine.Scan(s.engine,
+	kvs, err := engine.Scan(
+		s.engine,
 		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
-		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)), 10)
+		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)),
+		10,
+	)
 	if err != nil {
-		return errors.Errorf("store %s: unable to access: %s", s.engine, err)
-	} else if len(kvs) > 0 {
-		// See if this is an already-bootstrapped store.
-		ident, err := ReadStoreIdent(ctx, s.engine)
-		if err != nil {
-			return errors.Wrapf(err, "unable to read ident of non-empty store %s "+
-				"during bootstrap:", s.engine)
-		}
-		s.Ident = ident
-		keyVals := []string{}
-		for _, kv := range kvs {
-			keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
-		}
-		return errors.Errorf("can't bootstap non-empty store %s (clusterID: %d, first %d key/values: %s)",
-			s.engine, s.Ident.ClusterID, len(keyVals), keyVals)
+		return errors.Wrapf(err, "scan of store %s failed", s)
 	}
-	err = engine.MVCCPutProto(ctx, s.engine, nil,
-		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
-	if err != nil {
+	if len(kvs) > 0 {
+		// See if this is an already-bootstrapped store.
+		if err := ReadStoreIdent(ctx, s.engine, &s.Ident); err != nil {
+			return errors.Wrapf(
+				err,
+				"unable to read ident of non-empty store %s during bootstrap",
+				s,
+			)
+		}
+		keyVals := make([]string, len(kvs))
+		for i, kv := range kvs {
+			keyVals[i] = fmt.Sprintf("%s: %q", kv.Key, kv.Value)
+		}
+		return errors.Errorf(
+			"can't bootstap non-empty store %s (clusterID: %d, first %d key/values: %s)",
+			s,
+			s.Ident.ClusterID,
+			len(keyVals),
+			keyVals,
+		)
+	}
+	s.Ident = ident
+
+	if err := engine.MVCCPutProto(
+		ctx,
+		s.engine,
+		nil,
+		keys.StoreIdentKey(),
+		hlc.ZeroTimestamp,
+		nil,
+		&s.Ident,
+	); err != nil {
 		return err
 	}
 

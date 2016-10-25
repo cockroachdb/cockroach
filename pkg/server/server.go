@@ -544,7 +544,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	anyStoreBootstrapped := false
 	for _, e := range s.engines {
-		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
+		if err := storage.ReadStoreIdent(ctx, e, nil); err != nil {
 			// NotBootstrappedError is expected.
 			if _, ok := err.(*storage.NotBootstrappedError); !ok {
 				return err
