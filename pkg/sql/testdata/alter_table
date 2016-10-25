@@ -283,13 +283,13 @@ ALTER TABLE t ADD COLUMN e INT
 statement ok
 CREATE VIEW v AS SELECT x, y FROM t WHERE e > 5
 
-statement error cannot drop column "x" because it is depended on by view "test.v"
+statement error cannot drop column "x" because view "v" depends on it
 ALTER TABLE t DROP COLUMN x
 
-statement error cannot drop column "y" because it is depended on by view "test.v"
+statement error cannot drop column "y" because view "v" depends on it
 ALTER TABLE t DROP COLUMN y
 
-statement error cannot drop column "e" because it is depended on by view "test.v"
+statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN e
 
 statement ok
@@ -307,7 +307,7 @@ CREATE VIEW v AS SELECT x, y FROM t WHERE e > 5
 statement ok
 ALTER TABLE t DROP COLUMN IF EXISTS q
 
-statement error cannot drop column "e" because it is depended on by view "test.v"
+statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN IF EXISTS e
 
 statement ok

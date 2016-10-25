@@ -97,7 +97,7 @@ users bar     false  1   title  ASC       false
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
 
-statement error cannot drop index "foo" because it is depended on by view "test.v"
+statement error cannot drop index "foo" because view "v" depends on it
 DROP INDEX users@foo
 
 statement ok

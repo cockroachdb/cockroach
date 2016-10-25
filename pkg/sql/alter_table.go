@@ -192,12 +192,13 @@ func (n *alterTableNode) Start() error {
 				if !found {
 					continue
 				}
-				err := n.p.canRemoveDependentViewGeneric("column", string(t.Column), ref, t.DropBehavior)
+				err := n.p.canRemoveDependentViewGeneric(
+					"column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior)
 				if err != nil {
 					return err
 				}
-				viewDesc, err :=
-					n.p.getViewDescForCascade("column", string(t.Column), ref.ID, t.DropBehavior)
+				viewDesc, err := n.p.getViewDescForCascade(
+					"column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior)
 				if err != nil {
 					return err
 				}
