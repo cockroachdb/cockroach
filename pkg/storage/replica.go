@@ -374,6 +374,11 @@ type Replica struct {
 		// The pending outgoing snapshot if there is one.
 		outSnap OutgoingSnapshot
 	}
+
+	unreachablesMu struct {
+		syncutil.TimedMutex
+		unreachableRemotes []roachpb.ReplicaID
+	}
 }
 
 // KeyRange is an interface type for the replicasByKey BTree, to compare
@@ -550,6 +555,18 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(cmdQMuLogger)
+
+	unreachablesMuLogger := syncutil.ThresholdLogger(
+		r.AnnotateCtx(context.Background()),
+		defaultReplicaMuWarnThreshold,
+		func(ctx context.Context, msg string, args ...interface{}) {
+			log.Warningf(ctx, "unreachablesMu: "+msg, args...)
+		},
+		func(t time.Duration) {
+			r.store.metrics.MuCommandQueueNanos.RecordValue(t.Nanoseconds())
+		},
+	)
+	r.unreachablesMu.TimedMutex = syncutil.MakeTimedMutex(unreachablesMuLogger)
 	return r
 }
 
@@ -2198,6 +2215,15 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.unreachablesMu.Lock()
+	unreachableRemotes := r.unreachablesMu.unreachableRemotes
+	r.unreachablesMu.unreachableRemotes = nil
+	r.unreachablesMu.Unlock()
+
+	for _, remoteReplica := range unreachableRemotes {
+		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+	}
+
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
 	if r.mu.internalRaftGroup == nil {
@@ -2661,10 +2687,10 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 // reportUnreachable reports the remote replica as unreachable to the internal
 // raft group.
-func (r *Replica) reportUnreachable(remoteReplica roachpb.ReplicaID) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
+	r.unreachablesMu.Lock()
+	r.unreachablesMu.unreachableRemotes = append(r.unreachablesMu.unreachableRemotes, remoteReplica)
+	r.unreachablesMu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
