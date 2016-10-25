@@ -240,9 +240,6 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 // blocks until the transfer is done. If a transfer is already in progress,
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaderError is returned.
-//
-// TODO(andrei): figure out how to persist the "not serving" state across node
-// restarts.
 func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
