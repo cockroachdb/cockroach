@@ -602,10 +602,6 @@ type StoreTestingKnobs struct {
 	// If your filter is not idempotent, consider wrapping it in a
 	// ReplayProtectionFilterWrapper.
 	TestingCommandFilter storagebase.ReplicaCommandFilter
-	// TestingResponseFilter is called after the replica processes a
-	// command in order for unittests to modify the batch response,
-	// error returned to the client, or to simulate network failures.
-	TestingResponseFilter storagebase.ReplicaResponseFilter
 	// If non-nil, BadChecksumPanic is called by CheckConsistency() instead of
 	// panicking on a checksum mismatch.
 	BadChecksumPanic func(roachpb.StoreIdent)
