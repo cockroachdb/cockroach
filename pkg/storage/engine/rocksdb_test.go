@@ -544,3 +544,51 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		}
 	}
 }
+
+func TestRocksDBTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, dirCleanup := testutils.TempDir(t, 0)
+	defer dirCleanup()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rocksdb := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles, stopper)
+	if err := rocksdb.Open(); err != nil {
+		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+	}
+
+	var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
+	var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
+	times := []hlc.Timestamp{
+		{WallTime: 2, Logical: 0},
+		minTimestamp,
+		maxTimestamp,
+		{WallTime: 2, Logical: 0},
+	}
+
+	for i, time := range times {
+		s := fmt.Sprintf("%02d", i)
+		key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
+		if err := rocksdb.Put(key, []byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := rocksdb.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	ssts, err := rocksdb.getUserProperties()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ssts.Sst) != 1 {
+		t.Fatalf("expected 1 sstable got %d", len(ssts.Sst))
+	}
+	sst := ssts.Sst[0]
+	if sst.TsMin == nil || !sst.TsMin.Equal(minTimestamp) {
+		t.Fatalf("got min %v expected %v", sst.TsMin, minTimestamp)
+	}
+	if sst.TsMax == nil || !sst.TsMax.Equal(maxTimestamp) {
+		t.Fatalf("got max %v expected %v", sst.TsMax, maxTimestamp)
+	}
+}
