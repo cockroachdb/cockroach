@@ -463,7 +463,7 @@ func (l *LocalCluster) createCACert() {
 }
 
 func (l *LocalCluster) createNodeCerts() {
-	nodes := []string{dockerIP().String()}
+	nodes := []string{"localhost", dockerIP().String()}
 	for _, node := range l.Nodes {
 		nodes = append(nodes, node.nodeStr)
 	}
