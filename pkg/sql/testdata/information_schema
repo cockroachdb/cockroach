@@ -348,6 +348,7 @@ pg_class
 pg_constraint
 pg_indexes
 pg_namespace
+pg_proc
 pg_tables
 pg_type
 descriptor
@@ -374,6 +375,7 @@ schema_privileges
 rangelog
 pg_type
 pg_tables
+pg_proc
 pg_namespace
 pg_indexes
 pg_constraint
@@ -401,6 +403,7 @@ def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
@@ -440,6 +443,7 @@ def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
 
@@ -468,6 +472,7 @@ def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
 

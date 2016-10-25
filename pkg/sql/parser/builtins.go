@@ -146,11 +146,18 @@ func (b Builtin) Category() string {
 	return ""
 }
 
-// Signature returns a human-readable signature
+// Class returns the FunctionClass of this builtin.
+func (b Builtin) Class() FunctionClass {
+	return b.class
+}
+
+// Impure returns false if this builtin is a pure function of its inputs.
+func (b Builtin) Impure() bool {
+	return b.impure
+}
+
+// Signature returns a human-readable signature.
 func (b Builtin) Signature() string {
-	if b.ReturnType == nil {
-		return "<T>... -> <T>" // Special-case for LEAST and GREATEST.
-	}
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType)
 }
 
@@ -570,7 +577,7 @@ var Builtins = map[string][]Builtin{
 	"greatest": {
 		Builtin{
 			Types:      AnyType{},
-			ReturnType: nil, // No explicit return type because AnyType parameters.
+			ReturnType: TypeAny,
 			category:   categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
@@ -581,7 +588,7 @@ var Builtins = map[string][]Builtin{
 	"least": {
 		Builtin{
 			Types:      AnyType{},
-			ReturnType: nil, // No explicit return type because AnyType parameters.
+			ReturnType: TypeAny,
 			category:   categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
