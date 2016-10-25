@@ -113,9 +113,9 @@ var Aggregates = map[string][]Builtin{
 	},
 
 	"stddev": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntStddevAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStddevAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStddevAggregate),
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntStdDevAggregate),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStdDevAggregate),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStdDevAggregate),
 	},
 }
 
@@ -158,7 +158,7 @@ var _ AggregateFunc = &MinAggregate{}
 var _ AggregateFunc = &intSumAggregate{}
 var _ AggregateFunc = &decimalSumAggregate{}
 var _ AggregateFunc = &floatSumAggregate{}
-var _ AggregateFunc = &stddevAggregate{}
+var _ AggregateFunc = &stdDevAggregate{}
 var _ AggregateFunc = &intVarianceAggregate{}
 var _ AggregateFunc = &floatVarianceAggregate{}
 var _ AggregateFunc = &decimalVarianceAggregate{}
@@ -624,27 +624,27 @@ func (a *decimalVarianceAggregate) Result() Datum {
 	return dd
 }
 
-type stddevAggregate struct {
+type stdDevAggregate struct {
 	agg AggregateFunc
 }
 
-func newIntStddevAggregate() AggregateFunc {
-	return &stddevAggregate{agg: newIntVarianceAggregate()}
+func newIntStdDevAggregate() AggregateFunc {
+	return &stdDevAggregate{agg: newIntVarianceAggregate()}
 }
-func newFloatStddevAggregate() AggregateFunc {
-	return &stddevAggregate{agg: newFloatVarianceAggregate()}
+func newFloatStdDevAggregate() AggregateFunc {
+	return &stdDevAggregate{agg: newFloatVarianceAggregate()}
 }
-func newDecimalStddevAggregate() AggregateFunc {
-	return &stddevAggregate{agg: newDecimalVarianceAggregate()}
+func newDecimalStdDevAggregate() AggregateFunc {
+	return &stdDevAggregate{agg: newDecimalVarianceAggregate()}
 }
 
 // Add implements the AggregateFunc interface.
-func (a *stddevAggregate) Add(datum Datum) {
+func (a *stdDevAggregate) Add(datum Datum) {
 	a.agg.Add(datum)
 }
 
 // Result computes the square root of the variance.
-func (a *stddevAggregate) Result() Datum {
+func (a *stdDevAggregate) Result() Datum {
 	variance := a.agg.Result()
 	if variance == DNull {
 		return variance

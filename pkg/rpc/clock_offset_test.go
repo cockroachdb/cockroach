@@ -110,9 +110,9 @@ func TestVerifyClockOffset(t *testing.T) {
 	}{
 		// no error if no offsets.
 		{[]RemoteOffset{}, false},
-		// no error when a majority of offsets are under the maximum offset.
-		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 58, Uncertainty: 20}, {Offset: 71, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, false},
-		// error when less than a majority of offsets are under the maximum offset.
+		// no error when a majority of offsets are under the maximum tolerated offset.
+		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 48, Uncertainty: 20}, {Offset: 61, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, false},
+		// error when less than a majority of offsets are under the maximum tolerated offset.
 		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 58, Uncertainty: 20}, {Offset: 85, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, true},
 	} {
 		monitor.mu.offsets = make(map[string]RemoteOffset)
@@ -163,33 +163,28 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 
 func TestClockOffsetMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	// Create a RemoteClockMonitor with a hand-picked offset.
-	offset := RemoteOffset{
-		Offset:      13,
-		Uncertainty: 7,
-		MeasuredAt:  6,
-	}
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
 	clock.SetMaxOffset(20 * time.Nanosecond)
 	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
 	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": offset,
+		"0": {
+			Offset:      13,
+			Uncertainty: 7,
+			MeasuredAt:  6,
+		},
 	}
 
 	if err := monitor.VerifyClockOffset(); err != nil {
 		t.Fatal(err)
 	}
 
-	expLower := offset.Offset - offset.Uncertainty
-	if a, e := monitor.Metrics().ClusterOffsetLowerBound.Value(), expLower; a != e {
-		t.Errorf("lower bound %d != expected %d", a, e)
+	if a, e := monitor.Metrics().ClockOffsetMeanNanos.Value(), int64(13); a != e {
+		t.Errorf("mean %d != expected %d", a, e)
 	}
-	expHigher := offset.Offset + offset.Uncertainty
-	if a, e := monitor.Metrics().ClusterOffsetUpperBound.Value(), expHigher; a != e {
-		t.Errorf("upper bound %d != expected %d", a, e)
+	if a, e := monitor.Metrics().ClockOffsetStdDevNanos.Value(), int64(7); a != e {
+		t.Errorf("stdDev %d != expected %d", a, e)
 	}
 }
