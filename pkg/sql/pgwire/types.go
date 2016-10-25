@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -398,38 +397,6 @@ func pgBinaryToDate(i int32) *parser.DDate {
 	daysSinceEpoch := pgEpochJDateFromUnix + i
 	return parser.NewDDate(parser.DDate(daysSinceEpoch))
 }
-
-var (
-	oidToDatum = map[oid.Oid]parser.Type{
-		oid.T_bool:        parser.TypeBool,
-		oid.T_bytea:       parser.TypeBytes,
-		oid.T_date:        parser.TypeDate,
-		oid.T_float4:      parser.TypeFloat,
-		oid.T_float8:      parser.TypeFloat,
-		oid.T_int2:        parser.TypeInt,
-		oid.T_int4:        parser.TypeInt,
-		oid.T_int8:        parser.TypeInt,
-		oid.T_interval:    parser.TypeInterval,
-		oid.T_numeric:     parser.TypeDecimal,
-		oid.T_text:        parser.TypeString,
-		oid.T_timestamp:   parser.TypeTimestamp,
-		oid.T_timestamptz: parser.TypeTimestampTZ,
-		oid.T_varchar:     parser.TypeString,
-	}
-	// Using reflection to support unhashable types.
-	datumToOid = map[reflect.Type]oid.Oid{
-		reflect.TypeOf(parser.TypeBool):        oid.T_bool,
-		reflect.TypeOf(parser.TypeBytes):       oid.T_bytea,
-		reflect.TypeOf(parser.TypeDate):        oid.T_date,
-		reflect.TypeOf(parser.TypeFloat):       oid.T_float8,
-		reflect.TypeOf(parser.TypeInt):         oid.T_int8,
-		reflect.TypeOf(parser.TypeInterval):    oid.T_interval,
-		reflect.TypeOf(parser.TypeDecimal):     oid.T_numeric,
-		reflect.TypeOf(parser.TypeString):      oid.T_text,
-		reflect.TypeOf(parser.TypeTimestamp):   oid.T_timestamp,
-		reflect.TypeOf(parser.TypeTimestampTZ): oid.T_timestamptz,
-	}
-)
 
 // decodeOidDatum decodes bytes with specified Oid and format code into
 // a datum.
