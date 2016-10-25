@@ -24,9 +24,12 @@ import (
 	"hash/fnv"
 	"reflect"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -36,11 +39,13 @@ var (
 	negOneVal = parser.NewDInt(-1)
 )
 
+const pgCatalogName = "pg_catalog"
+
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 // This code attempts to comply as closely as possible to the system catalogs documented
 // in https://www.postgresql.org/docs/9.6/static/catalogs.html.
 var pgCatalog = virtualSchema{
-	name: "pg_catalog",
+	name: pgCatalogName,
 	tables: []virtualSchemaTable{
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
@@ -48,6 +53,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogConstraintTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
+		pgCatalogProcTable,
 		pgCatalogTablesTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
@@ -593,6 +599,161 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+var (
+	proArgModeInOut    = parser.NewDString("b")
+	proArgModeIn       = parser.NewDString("i")
+	proArgModeOut      = parser.NewDString("o")
+	proArgModeTable    = parser.NewDString("t")
+	proArgModeVariadic = parser.NewDString("v")
+
+	// Avoid unused warning for constants.
+	_ = proArgModeInOut
+	_ = proArgModeIn
+	_ = proArgModeOut
+	_ = proArgModeTable
+)
+
+func datumToOidOrPanic(typ parser.Type, builtin parser.Builtin) oid.Oid {
+	oid, ok := DatumToOid(typ)
+	if !ok {
+		panic(fmt.Sprintf("programmer error: could not find referenced type %v on builtin %v",
+			typ, builtin))
+	}
+	return oid
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-proc.html
+var pgCatalogProcTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_proc (
+	oid INT,
+	proname STRING,
+	pronamespace INT,
+	proowner INT,
+	prolang INT,
+	procost FLOAT,
+	prorows FLOAT,
+	provariadic INT,
+	protransform STRING,
+	proisagg BOOL,
+	proiswindow BOOL,
+	prosecdef BOOL,
+	proleakproof BOOL,
+	proisstrict BOOL,
+	proretset BOOL,
+	provolatile CHAR,
+	proparallel CHAR,
+	pronargs INT,
+	pronargdefaults INT,
+	prorettype INT,
+	proargtypes STRING,
+	proallargtypes STRING,
+	proargmodes STRING,
+	proargnames STRING,
+	proargdefaults STRING,
+	protrftypes STRING,
+	prosrc STRING,
+	probin STRING,
+	proconfig STRING,
+	proacl STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		dbDesc, err := p.getDatabaseDesc(pgCatalogName)
+		dbOid := h.DBOid(dbDesc)
+		if err != nil {
+			return err
+		}
+		for name, builtins := range parser.Builtins {
+			// parser.Builtins contains duplicate uppercase and lowercase keys.
+			// Only return the lowercase ones for compatibility with postgres.
+			var first rune
+			for _, c := range name {
+				first = c
+				break
+			}
+			if unicode.IsUpper(first) {
+				continue
+			}
+			for _, builtin := range builtins {
+				dName := parser.NewDString(name)
+				isAggregate := builtin.Class() == parser.AggregateClass
+				isWindow := builtin.Class() == parser.WindowClass
+
+				var retType parser.Datum
+				if builtin.ReturnType != nil {
+					oid := datumToOidOrPanic(builtin.ReturnType, builtin)
+					retType = parser.NewDInt(parser.DInt(oid))
+				}
+
+				argTypes := builtin.Types
+				dArgTypes := make([]string, len(argTypes.Types()))
+				for i, argType := range argTypes.Types() {
+					dArgType := datumToOidOrPanic(argType, builtin)
+					dArgTypes[i] = strconv.Itoa(int(dArgType))
+				}
+				dArgTypeString := strings.Join(dArgTypes, ", ")
+
+				var argmodes parser.Datum
+				var variadicType *parser.DInt
+				switch argTypes.(type) {
+				case parser.VariadicType:
+					argmodes = proArgModeVariadic
+					argType := argTypes.Types()[0]
+					oid := datumToOidOrPanic(argType, builtin)
+					variadicType = parser.NewDInt(parser.DInt(oid))
+				case parser.AnyType:
+					argmodes = proArgModeVariadic
+					argType := parser.TypeAny
+					oid := datumToOidOrPanic(argType, builtin)
+					variadicType = parser.NewDInt(parser.DInt(oid))
+
+				default:
+					argmodes = parser.DNull
+					variadicType = oidZero
+				}
+				err := addRow(
+					h.BuiltinOid(name, &builtin), // oid
+					dName,                                             // proname
+					dbOid,                                             // pronamespace
+					parser.DNull,                                      // proowner
+					oidZero,                                           // prolang
+					parser.DNull,                                      // procost
+					parser.DNull,                                      // prorows
+					variadicType,                                      // provariadic
+					parser.DNull,                                      // protransform
+					parser.MakeDBool(parser.DBool(isAggregate)),       // proisagg
+					parser.MakeDBool(parser.DBool(isWindow)),          // proiswindow
+					parser.MakeDBool(false),                           // prosecdef
+					parser.MakeDBool(parser.DBool(!builtin.Impure())), // proleakproof
+					parser.MakeDBool(false),                           // proisstrict
+					parser.MakeDBool(false),                           // proretset
+					parser.DNull,                                      // provolatile
+					parser.DNull,                                      // proparallel
+					parser.NewDInt(parser.DInt(builtin.Types.Length())), // pronargs
+					parser.NewDInt(parser.DInt(0)),                      // pronargdefaults
+					retType, // prorettype
+					parser.NewDString(dArgTypeString), // proargtypes
+					parser.DNull,                      // proallargtypes
+					argmodes,                          // proargmodes
+					parser.DNull,                      // proargnames
+					parser.DNull,                      // proargdefaults
+					parser.DNull,                      // protrftypes
+					dName,                             // prosrc
+					parser.DNull,                      // probin
+					parser.DNull,                      // proconfig
+					parser.DNull,                      // proacl
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-tables.html.
 var pgCatalogTablesTable = virtualSchemaTable{
 	schema: `
@@ -778,6 +939,8 @@ func typByVal(typ parser.Type) parser.Datum {
 
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
+	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
+	reflect.TypeOf(parser.TypeArray):       typCategoryArray,
 	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
 	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
 	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
@@ -788,6 +951,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeString):      typCategoryString,
 	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
+	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
 }
 
 func typCategory(typ parser.Type) parser.Datum {
@@ -888,6 +1052,7 @@ const (
 	fkConstraintTypeTag
 	pKeyConstraintTypeTag
 	uniqueConstraintTypeTag
+	functionTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -1004,5 +1169,12 @@ func (h oidHasher) UniqueConstraintOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
+	return h.getOid()
+}
+
+func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DInt {
+	h.writeTypeTag(functionTypeTag)
+	h.writeStr(name)
+	h.writeStr(builtin.Types.String())
 	return h.getOid()
 }
