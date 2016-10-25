@@ -327,6 +327,21 @@ func (e *RangeFrozenError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RangeFrozenError{}
 
+// NewAmbiguousCommitError initializes a new AmbiguousCommitError.
+func NewAmbiguousCommitError() *AmbiguousCommitError {
+	return &AmbiguousCommitError{}
+}
+
+func (e *AmbiguousCommitError) Error() string {
+	return "transaction commit result is ambiguous"
+}
+
+func (e *AmbiguousCommitError) message(_ *Error) string {
+	return e.Error()
+}
+
+var _ ErrorDetailInterface = &AmbiguousCommitError{}
+
 func (e *TransactionAbortedError) Error() string {
 	return "txn aborted"
 }
