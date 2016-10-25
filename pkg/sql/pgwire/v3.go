@@ -21,7 +21,6 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"reflect"
 	"strconv"
 
 	"github.com/lib/pq/oid"
@@ -366,7 +365,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if t == 0 {
 			continue
 		}
-		v, ok := oidToDatum[t]
+		v, ok := sql.OidToDatum(t)
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
 		}
@@ -401,7 +400,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if inTypes[i] != 0 {
 			continue
 		}
-		id, ok := datumToOid[reflect.TypeOf(t)]
+		id, ok := sql.DatumToOid(t)
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", t))
 		}
