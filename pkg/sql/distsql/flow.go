@@ -19,6 +19,7 @@ package distsql
 
 import (
 	"sync"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -63,6 +65,13 @@ const (
 	FlowFinished
 )
 
+type inboundStreamInfo struct {
+	receiver  RowReceiver
+	connected bool
+	// if set, indicates that we waited too long for an inbound connection.
+	timedOut bool
+}
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
 	FlowCtx
@@ -73,12 +82,22 @@ type Flow struct {
 	processors         []processor
 	outboxes           []*outbox
 
-	// inboundStreams are streams that receive data from other hosts, through
-	// the FlowStream API.
-	inboundStreams map[StreamID]RowReceiver
-	localStreams   map[LocalStreamID]RowReceiver
+	localStreams map[LocalStreamID]RowReceiver
 
-	status flowStatus
+	doneChan chan<- *Flow
+
+	mu struct {
+		syncutil.Mutex
+		status flowStatus
+
+		// inboundStreams are streams that receive data from other hosts, through
+		// the FlowStream API.
+		inboundStreams map[StreamID]inboundStreamInfo
+
+		// streamTimer is a timer that fires after a timeout and verifies that all
+		// inbound streams have been connected.
+		streamTimer *time.Timer
+	}
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowReceiver) *Flow {
@@ -86,12 +105,13 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowRecei
 		panic("flow context has no span")
 	}
 	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
-	return &Flow{
+	f := &Flow{
 		FlowCtx:            flowCtx,
 		flowRegistry:       flowReg,
 		simpleFlowConsumer: simpleFlowConsumer,
-		status:             FlowNotStarted,
 	}
+	f.mu.status = FlowNotStarted
+	return f
 }
 
 // setupInboundStream adds a stream to the stream map (inboundStreams or
@@ -102,16 +122,16 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 			return errors.Errorf("inbound stream has SimpleResponse or TargetAddr set")
 		}
 		sid := spec.Mailbox.StreamID
-		if _, found := f.inboundStreams[sid]; found {
+		if _, found := f.mu.inboundStreams[sid]; found {
 			return errors.Errorf("inbound stream %d has multiple consumers", sid)
 		}
-		if f.inboundStreams == nil {
-			f.inboundStreams = make(map[StreamID]RowReceiver)
+		if f.mu.inboundStreams == nil {
+			f.mu.inboundStreams = make(map[StreamID]inboundStreamInfo)
 		}
 		if log.V(2) {
 			log.Infof(f.FlowCtx.Context, "set up inbound stream %d", sid)
 		}
-		f.inboundStreams[sid] = receiver
+		f.mu.inboundStreams[sid] = inboundStreamInfo{receiver: receiver}
 		return nil
 	}
 	sid := spec.LocalStreamID
@@ -293,28 +313,80 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 	return nil
 }
 
-func (f *Flow) getInboundStream(sid StreamID) (RowReceiver, error) {
-	// TODO(radu): detect if we connect to a stream multiple times.
-	recv, ok := f.inboundStreams[sid]
+func (f *Flow) connectInboundStream(sid StreamID) (RowReceiver, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// We don't add flows to the registry before they start, so this function
+	// cannot be called with an unstarted flow.
+	if f.mu.status == FlowNotStarted {
+		panic("trying to connect to flow that didn't start yet")
+	}
+	if f.mu.status != FlowRunning {
+		return nil, errors.Errorf("inbound stream %d for finished flow %s", sid, f.id)
+	}
+
+	s, ok := f.mu.inboundStreams[sid]
 	if !ok {
 		return nil, errors.Errorf("no inbound stream %d for flow %s", sid, f.id)
 	}
-	return recv, nil
+	if s.connected {
+		return nil, errors.Errorf("inbound stream %d for flow %s already connected", sid, f.id)
+	}
+	if s.timedOut {
+		return nil, errors.Errorf("inbound stream %d for flow %s came too late", sid, f.id)
+	}
+	s.connected = true
+	f.mu.inboundStreams[sid] = s
+	return s.receiver, nil
 }
 
 // Start starts the flow (each processor runs in their own goroutine).
-func (f *Flow) Start() {
+func (f *Flow) Start(doneChan chan<- *Flow) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.doneChan = doneChan
 	log.VEventf(
 		f.Context, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
 	)
-	f.status = FlowRunning
+	f.mu.status = FlowRunning
 	f.flowRegistry.RegisterFlow(f.id, f)
+	f.waitGroup.Add(len(f.mu.inboundStreams))
+	f.waitGroup.Add(len(f.outboxes))
+	f.waitGroup.Add(len(f.processors))
 	for _, o := range f.outboxes {
 		o.start(&f.waitGroup)
 	}
-	f.waitGroup.Add(len(f.processors))
 	for _, p := range f.processors {
 		go p.Run(&f.waitGroup)
+	}
+	if len(f.mu.inboundStreams) > 0 {
+		// Set up a function to time out inbound streams after a while.
+		f.mu.streamTimer = time.AfterFunc(flowStreamTimeout, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.mu.status != FlowRunning {
+				// Timer fired after the flow completed.
+				return
+			}
+			numTimedOut := 0
+			for i, info := range f.mu.inboundStreams {
+				if info.timedOut {
+					panic("already timed out")
+				}
+				if !info.connected {
+					info.timedOut = true
+					f.mu.inboundStreams[i] = info
+					numTimedOut++
+					info.receiver.Close(errors.Errorf("no inbound stream connection"))
+					f.waitGroup.Done()
+				}
+			}
+			if numTimedOut != 0 {
+				log.Infof(f.Context, "%d inbound streams timed out after %s; stopping flow",
+					numTimedOut, flowStreamTimeout)
+			}
+		})
 	}
 }
 
@@ -326,18 +398,28 @@ func (f *Flow) Wait() {
 // Cleanup should be called when the flow completes (after all processors and
 // mailboxes exited).
 func (f *Flow) Cleanup() {
-	if f.status == FlowFinished {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.mu.status == FlowFinished {
 		panic("flow cleanup called twice")
+	}
+	if f.mu.streamTimer != nil {
+		f.mu.streamTimer.Stop()
+		f.mu.streamTimer = nil
 	}
 	if log.V(1) {
 		log.Infof(f.Context, "cleaning up")
 	}
 	sp := opentracing.SpanFromContext(f.Context)
 	sp.Finish()
-	if f.status != FlowNotStarted {
+	if f.mu.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.id)
 	}
-	f.status = FlowFinished
+	f.mu.status = FlowFinished
+	if f.doneChan != nil {
+		f.doneChan <- f
+		f.doneChan = nil
+	}
 }
 
 // RunSync runs the processors in the flow in order (serially), in the same

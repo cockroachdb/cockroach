@@ -18,6 +18,7 @@ package distsql
 
 import (
 	"io"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -27,7 +28,11 @@ import (
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func ProcessInboundStream(
-	flowCtx *FlowCtx, stream DistSQL_FlowStreamServer, firstMsg *StreamMessage, dst RowReceiver,
+	flowCtx *FlowCtx,
+	stream DistSQL_FlowStreamServer,
+	firstMsg *StreamMessage,
+	dst RowReceiver,
+	wg *sync.WaitGroup,
 ) error {
 	ctx := flowCtx.Context
 	// Function which we call when we are done.
@@ -41,6 +46,7 @@ func ProcessInboundStream(
 		if log.V(1) {
 			log.Infof(ctx, "inbound stream done")
 		}
+		wg.Done()
 		return stream.SendAndClose(&SimpleResponse{})
 	}
 
