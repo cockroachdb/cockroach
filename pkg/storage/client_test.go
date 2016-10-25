@@ -508,6 +508,9 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	}
 }
 
+func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+}
+
 func (t *multiTestContextKVTransport) Close() {
 	t.cancel()
 }

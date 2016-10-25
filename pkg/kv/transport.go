@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
@@ -55,6 +56,8 @@ type batchClient struct {
 	client     roachpb.InternalClient
 	args       roachpb.BatchRequest
 	healthy    bool
+	retried    bool
+	pending    bool
 }
 
 // BatchCall contains a response and an RPC error (note that the
@@ -92,6 +95,12 @@ type Transport interface {
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
 	SendNext(chan<- BatchCall)
+
+	// MoveToFront locates the specified replica and moves it to the
+	// front of the ordering of replicas to try. If the replica has
+	// already been tried, it will be retried. If the specified replica
+	// can't be found, this is a noop.
+	MoveToFront(roachpb.ReplicaDescriptor)
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
@@ -137,19 +146,24 @@ func grpcTransportFactoryImpl(
 type grpcTransport struct {
 	opts           SendOptions
 	rpcContext     *rpc.Context
+	clientIndex    int
 	orderedClients []batchClient
+	syncutil.Mutex
 }
 
 func (gt *grpcTransport) IsExhausted() bool {
-	return len(gt.orderedClients) == 0
+	return gt.clientIndex == len(gt.orderedClients)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
 func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
-	client := gt.orderedClients[0]
-	gt.orderedClients = gt.orderedClients[1:]
+	gt.Lock()
+	client := &gt.orderedClients[gt.clientIndex]
+	client.pending = true
+	gt.clientIndex++
+	gt.Unlock()
 
 	addr := client.remoteAddr
 	if log.V(2) {
@@ -170,6 +184,9 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 		}
 
 		reply, err := localServer.Batch(gt.opts.ctx, &client.args)
+		gt.Lock()
+		client.pending = false
+		gt.Unlock()
 		done <- BatchCall{Reply: reply, Err: err}
 		return
 	}
@@ -191,8 +208,34 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 				}
 			}
 		}
+		gt.Lock()
+		client.pending = false
+		gt.Unlock()
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
+}
+
+func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+	gt.Lock()
+	defer gt.Unlock()
+	for i := range gt.orderedClients {
+		if gt.orderedClients[i].args.Replica == replica {
+			// If a call to this replica is active or retried, don't move it.
+			if gt.orderedClients[i].pending || gt.orderedClients[i].retried {
+				return
+			}
+			// If we've already processed the replica, decrement the current
+			// index before we swap.
+			if i < gt.clientIndex {
+				gt.orderedClients[i].retried = true
+				gt.clientIndex--
+			}
+			// Swap the client representing this replica to the front.
+			gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
+				gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
+			return
+		}
+	}
 }
 
 func (*grpcTransport) Close() {
@@ -268,6 +311,9 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 		log.Event(ctx, "error: "+pErr.String())
 	}
 	done <- BatchCall{Reply: br}
+}
+
+func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 }
 
 func (s *senderTransport) Close() {

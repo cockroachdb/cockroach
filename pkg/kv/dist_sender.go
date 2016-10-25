@@ -22,6 +22,9 @@ import (
 	"time"
 	"unsafe"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -936,10 +939,11 @@ func fillSkippedResponses(
 	}
 }
 
-// sendToReplicas sends one or more RPCs to clients specified by the slice of
-// replicas. On success, Send returns the first successful reply. Otherwise,
-// Send returns an error if and as soon as the number of failed RPCs exceeds
-// the available endpoints less the number of required replies.
+// sendToReplicas sends one or more RPCs to clients specified by the
+// slice of replicas. On success, Send returns the first successful
+// reply. If an error occurs which is not specific to a single
+// replica, it's returned immediately. Otherwise, when all replicas
+// have been tried and failed, returns a send error.
 func (ds *DistSender) sendToReplicas(
 	opts SendOptions,
 	rangeID roachpb.RangeID,
@@ -953,6 +957,14 @@ func (ds *DistSender) sendToReplicas(
 				len(replicas), 1))
 	}
 
+	var ambiguousCommit bool
+	var haveCommit bool
+	// We only check for committed txns, not aborts because aborts may
+	// be retried without any risk of inconsistencies.
+	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok &&
+		etArg.(*roachpb.EndTransactionRequest).Commit {
+		haveCommit = true
+	}
 	done := make(chan BatchCall, len(replicas))
 
 	transportFactory := opts.transportFactory
@@ -1001,7 +1013,16 @@ func (ds *DistSender) sendToReplicas(
 					log.Infof(opts.ctx, "application error: %s", call.Reply.Error)
 				}
 
-				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
+				if call.Reply.Error == nil {
+					return call.Reply, nil
+				} else if !ds.handlePerReplicaError(transport, rangeID, call.Reply.Error) {
+					// The error received is not specific to this replica, so we
+					// should return it instead of trying other replicas. However,
+					// if there are still other RPCs outstanding or an ambiguous
+					// RPC error was received, we must continue.
+					if haveCommit && (pending > 0 || ambiguousCommit) {
+						return nil, roachpb.NewAmbiguousCommitError()
+					}
 					return call.Reply, nil
 				}
 
@@ -1013,8 +1034,27 @@ func (ds *DistSender) sendToReplicas(
 				// we've seen (for example, a NotLeaseHolderError conveys more
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
-			} else if log.V(1) {
-				log.Warningf(opts.ctx, "RPC error: %s", err)
+			} else {
+				if log.V(1) {
+					log.Warningf(opts.ctx, "RPC error: %s", err)
+				}
+				// All connection errors except for an unavailable node (this
+				// is GRPC's fail-fast error), may mean that the request
+				// succeeded on the remote server, but we were unable to
+				// receive the reply. Set the ambiguous commit flag.
+				//
+				// We retry ambiguous commit batches to avoid returning the
+				// unrecoverable AmbiguousCommitError. This is safe because
+				// repeating an already-successfully applied batch is
+				// guaranteed to return either a TransactionReplayError (in
+				// case the replay happens at the original leader), or a
+				// TransactionRetryError (in case the replay happens at a new
+				// leader). If the original attempt merely timed out or was
+				// lost, then the batch will succeed and we can be assured the
+				// commit was applied just once.
+				if haveCommit && grpc.Code(err) != codes.Unavailable {
+					ambiguousCommit = true
+				}
 			}
 
 			// Send to additional replicas if available.
@@ -1024,12 +1064,17 @@ func (ds *DistSender) sendToReplicas(
 				transport.SendNext(done)
 			}
 			if pending == 0 {
-				log.VEventf(opts.ctx, 2,
-					"sending to all %d replicas failed; last error: %s",
-					len(replicas), err)
-				return nil, roachpb.NewSendError(
-					fmt.Sprintf("sending to all %d replicas failed; last error: %v",
-						len(replicas), err))
+				if ambiguousCommit {
+					err = roachpb.NewAmbiguousCommitError()
+				} else {
+					err = roachpb.NewSendError(
+						fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), err),
+					)
+				}
+				if log.V(2) {
+					log.ErrEvent(opts.ctx, err.Error())
+				}
+				return nil, err
 			}
 		}
 	}
@@ -1040,7 +1085,9 @@ func (ds *DistSender) sendToReplicas(
 // replicas is likely to produce different results. This method should
 // be called only once for each error as it may have side effects such
 // as updating caches.
-func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roachpb.Error) bool {
+func (ds *DistSender) handlePerReplicaError(
+	transport Transport, rangeID roachpb.RangeID, pErr *roachpb.Error,
+) bool {
 	switch tErr := pErr.GetDetail().(type) {
 	case *roachpb.RangeNotFoundError:
 		return true
@@ -1049,10 +1096,11 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 	case *roachpb.NotLeaseHolderError:
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
-			ds.updateLeaseHolderCache(rangeID, *tErr.LeaseHolder)
+			leaseHolder := *tErr.LeaseHolder
+			ds.updateLeaseHolderCache(rangeID, leaseHolder)
 
-			// TODO(bdarnell): Move the new lease holder to the head of the queue
-			// for the next retry.
+			// Move the new lease holder to the head of the queue for the next retry.
+			transport.MoveToFront(leaseHolder)
 		}
 		return true
 	}
