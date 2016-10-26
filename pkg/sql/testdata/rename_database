@@ -108,7 +108,7 @@ SHOW TABLES FROM u
 ----
 kv
 
-statement error cannot rename database because table "kv" is depended on by view "t.v"
+statement error cannot rename database because view "t.v" depends on table "kv"
 ALTER DATABASE u RENAME TO v
 
 statement ok
@@ -120,5 +120,5 @@ ALTER DATABASE u RENAME TO v
 statement ok
 CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
-statement error cannot rename database because table "kv" is depended on by view "v.v"
+statement error cannot rename database because view "v" depends on table "kv"
 ALTER DATABASE v RENAME TO u
