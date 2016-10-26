@@ -884,7 +884,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			corrupt.Lock()
 			defer corrupt.Unlock()
-			replicas := corrupt.store.GetDeadReplicas()
+			replicas := corrupt.store.GetCorruptReplicas()
 			if len(replicas.Replicas) == 0 {
 				return errors.New("expected corrupt store to have a dead replica")
 			}

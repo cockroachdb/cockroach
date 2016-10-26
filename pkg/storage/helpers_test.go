@@ -101,9 +101,9 @@ func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() {
 	forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
 }
 
-// GetDeadReplicas exports s.deadReplicas for tests.
-func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
-	return s.deadReplicas()
+// GetCorruptReplicas exports s.corruptReplicas for tests.
+func (s *Store) GetCorruptReplicas() roachpb.StoreDeadReplicas {
+	return s.corruptReplicas()
 }
 
 // LeaseExpiration returns an int64 to increment a manual clock with to

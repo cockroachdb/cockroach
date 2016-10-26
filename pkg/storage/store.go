@@ -1335,7 +1335,7 @@ func (s *Store) canCampaignIdleReplica() bool {
 
 // GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
 func (s *Store) GossipDeadReplicas(ctx context.Context) error {
-	deadReplicas := s.deadReplicas()
+	deadReplicas := s.corruptReplicas()
 	// Don't gossip if there's nothing to gossip.
 	if len(deadReplicas.Replicas) == 0 {
 		return nil
@@ -2087,8 +2087,8 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}, nil
 }
 
-// deadReplicas returns a list of all the dead replicas on the store.
-func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
+// corruptReplicas returns a list of all the corrupted replicas on the store.
+func (s *Store) corruptReplicas() roachpb.StoreDeadReplicas {
 	// We can't use a storeReplicaVisitor here as it skips destroyed replicas.
 	// Similar to in the storeReplicaVisitor, make a copy of the current
 	// replicas to iterate over so we don't have to hold the store lock during
@@ -2105,11 +2105,11 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	var deadReplicas []roachpb.ReplicaIdent
 	for _, r := range replicas {
 		r.mu.Lock()
-		destroyed := r.mu.destroyed
+		corrupted := r.mu.corrupted
 		desc := r.mu.state.Desc
 		r.mu.Unlock()
 		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
-		if ok && destroyed != nil {
+		if ok && corrupted {
 			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
 				RangeID: desc.RangeID,
 				Replica: replicaDesc,
@@ -3755,7 +3755,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 
 // Reserve requests a reservation from the store's bookie.
 func (s *Store) Reserve(ctx context.Context, req ReservationRequest) ReservationResponse {
-	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
+	return s.bookie.Reserve(ctx, req, s.corruptReplicas().Replicas)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

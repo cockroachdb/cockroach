@@ -120,7 +120,7 @@ func newBookie(
 // outstanding reservations already or not having enough free disk space.
 // Accepted reservations return a ReservationResponse with Reserved set to true.
 func (b *bookie) Reserve(
-	ctx context.Context, req ReservationRequest, deadReplicas []roachpb.ReplicaIdent,
+	ctx context.Context, req ReservationRequest, corruptReplicas []roachpb.ReplicaIdent,
 ) ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -181,7 +181,7 @@ func (b *bookie) Reserve(
 	}
 
 	// Make sure that we don't add back a destroyed replica.
-	for _, rep := range deadReplicas {
+	for _, rep := range corruptReplicas {
 		if req.RangeID == rep.RangeID {
 			if log.V(1) {
 				log.Infof(ctx, "could not book reservation %+v, the replica has been destroyed",
