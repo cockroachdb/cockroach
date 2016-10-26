@@ -169,14 +169,12 @@ func TestBasicManualReplication(t *testing.T) {
 	}
 }
 
-func TestWaitForFullReplication(t *testing.T) {
+func TestBasicAutoReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Error(err)
-	}
+	// NB: StartTestCluster will wait for full replication.
 }
 
 func TestStopServer(t *testing.T) {
@@ -192,9 +190,6 @@ func TestStopServer(t *testing.T) {
 		ReplicationMode: base.ReplicationAuto,
 	})
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 
 	// Connect to server 1, ensure it is answering requests over HTTP and GRPC.
 	server1 := tc.Server(1)
