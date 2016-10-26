@@ -1093,7 +1093,7 @@ func TestLogic(t *testing.T) {
 		defer l.printErrorSummary()
 	}
 	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
+		t.Run(filepath.Base(path), func(t *testing.T) {
 			// the `t` given to this anonymous function may be different
 			// from the t above, so re-bind it to `l` for the duration of
 			// the test.
