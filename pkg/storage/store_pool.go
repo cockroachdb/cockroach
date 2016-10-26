@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -91,57 +90,46 @@ func (sd *storeDetail) markAlive(foundAliveOn hlc.Timestamp, storeDesc *roachpb.
 	sd.lastUpdatedTime = foundAliveOn
 }
 
-// storeMatch is the return value for match().
-type storeMatch int
+// isThrottled returns whether the store is currently throttled.
+func (sd storeDetail) isThrottled(now time.Time) bool {
+	return sd.throttledUntil.After(now)
+}
 
-// These are the possible values for a storeMatch.
+// storeStatus is the current status of a store.
+type storeStatus int
+
+// These are the possible values for a storeStatus.
 const (
 	// The store is not yet available or has been timed out.
-	storeMatchDead storeMatch = iota
-	// The store is alive, but its attributes didn't match the required ones.
-	storeMatchAlive
+	storeStatusDead storeStatus = iota
 	// The store is alive and its attributes matched, but it is throttled.
-	storeMatchThrottled
+	storeStatusThrottled
 	// The store is alive and its attributes matched, but a replica for the
 	// same rangeID was recently discovered to be corrupt.
-	storeMatchReplicaCorrupted
+	storeStatusReplicaCorrupted
 	// The store is alive, available and its attributes matched.
-	storeMatchAvailable
+	storeStatusAvailable
 )
 
-// match checks the store against the attributes and returns a storeMatch.
-func (sd *storeDetail) match(
-	now time.Time, constraints config.Constraints, rangeID roachpb.RangeID,
-) storeMatch {
+// status returns the current status of the store.
+func (sd *storeDetail) status(now time.Time, rangeID roachpb.RangeID) storeStatus {
 	// The store must be alive and it must have a descriptor to be considered
 	// alive.
 	if sd.dead || sd.desc == nil {
-		return storeMatchDead
-	}
-
-	// Does the store match the attributes?
-	m := map[string]struct{}{}
-	for _, s := range sd.desc.CombinedAttrs().Attrs {
-		m[s] = struct{}{}
-	}
-	for _, c := range constraints.Constraints {
-		// TODO(d4l3k): Locality constraints, number of matches.
-		if _, ok := m[c.Value]; !ok {
-			return storeMatchAlive
-		}
+		return storeStatusDead
 	}
 
 	// The store must not have a recent declined reservation to be available.
-	if sd.throttledUntil.After(now) {
-		return storeMatchThrottled
+	if sd.isThrottled(now) {
+		return storeStatusThrottled
 	}
 
 	// The store must not have a corrupt replica on it.
 	if len(sd.deadReplicas[rangeID]) > 0 {
-		return storeMatchReplicaCorrupted
+		return storeStatusReplicaCorrupted
 	}
 
-	return storeMatchAvailable
+	return storeStatusAvailable
 }
 
 // storePoolPQ implements the heap.Interface (which includes sort.Interface)
@@ -223,8 +211,9 @@ type StorePool struct {
 		syncutil.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
 		// pointers are used so that data can be kept in sync.
-		storeDetails map[roachpb.StoreID]*storeDetail
-		queue        storePoolPQ
+		storeDetails  map[roachpb.StoreID]*storeDetail
+		queue         storePoolPQ
+		deterministic bool
 	}
 }
 
@@ -487,46 +476,47 @@ func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 	}
 }
 
-// getStoreList returns a storeList that contains all active stores that
-// contain the required attributes and their associated stats. It also returns
-// the total number of alive and throttled stores.
-// TODO(embark, spencer): consider using a reverse index map from
-// Attr->stores, for efficiency. Ensure that entries in this map still
-// have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(
-	constraints config.Constraints, rangeID roachpb.RangeID, deterministic bool,
-) (StoreList, int, int) {
+var _ sort.Interface = StoreList{}
+
+// Len implements sort.Interface.
+func (sl StoreList) Len() int { return len(sl.stores) }
+
+// Less implements sort.Interface.
+func (sl StoreList) Less(i, j int) bool { return sl.stores[i].StoreID < sl.stores[j].StoreID }
+
+// Swap implements sort.Interface.
+func (sl StoreList) Swap(i, j int) { sl.stores[i], sl.stores[j] = sl.stores[j], sl.stores[i] }
+
+// getStoreList returns a storeList that contains all active stores and their
+// associated stats. It also returns the total number of alive and throttled
+// stores.
+func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
-	var storeIDs roachpb.StoreIDSlice
-	for storeID := range sp.mu.storeDetails {
-		storeIDs = append(storeIDs, storeID)
-	}
-	// Sort the stores by key if deterministic is requested. This is only for
-	// unit testing.
-	if deterministic {
-		sort.Sort(storeIDs)
-	}
 	now := sp.clock.Now().GoTime()
 	sl := StoreList{}
 	var aliveStoreCount int
 	var throttledStoreCount int
-	for _, storeID := range storeIDs {
+
+	for storeID := range sp.mu.storeDetails {
 		detail := sp.mu.storeDetails[storeID]
-		// TODO(d4l3k): Sort by number of matches.
-		matched := detail.match(now, constraints, rangeID)
-		switch matched {
-		case storeMatchAlive, storeMatchReplicaCorrupted:
-			aliveStoreCount++
-		case storeMatchThrottled:
+		switch detail.status(now, rangeID) {
+		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++
-		case storeMatchAvailable:
+		case storeStatusReplicaCorrupted:
+			aliveStoreCount++
+		case storeStatusAvailable:
 			aliveStoreCount++
 			sl.add(*detail.desc)
 		}
 	}
+
+	if sp.mu.deterministic {
+		sort.Sort(sl)
+	}
+
 	return sl, aliveStoreCount, throttledStoreCount
 }
 

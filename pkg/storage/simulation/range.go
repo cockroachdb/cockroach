@@ -118,7 +118,6 @@ func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 		r.zone.Constraints,
 		r.desc.Replicas,
 		r.desc.RangeID,
-		true,
 	)
 	if err != nil {
 		return 0, err
@@ -131,7 +130,7 @@ func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
 	// Pass in an invalid store ID since we don't consider range leases as part
 	// of the simulator.
-	removeStore, err := r.allocator.RemoveTarget(r.desc.Replicas, roachpb.StoreID(-1))
+	removeStore, err := r.allocator.RemoveTarget(r.zone.Constraints, r.desc.Replicas, roachpb.StoreID(-1))
 	if err != nil {
 		return 0, err
 	}
@@ -142,12 +141,15 @@ func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
 // candidate to add a replica for rebalancing. Returns true only if a target is
 // found.
 func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bool) {
-	rebalanceTarget := r.allocator.RebalanceTarget(
+	rebalanceTarget, err := r.allocator.RebalanceTarget(
 		r.zone.Constraints,
 		r.desc.Replicas,
 		storeID,
 		r.desc.RangeID,
 	)
+	if err != nil {
+		panic(err)
+	}
 	if rebalanceTarget == nil {
 		return 0, false
 	}

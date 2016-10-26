@@ -20,16 +20,16 @@ package storage
 
 import (
 	"fmt"
-	"math/rand"
+	"math"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -99,58 +99,28 @@ func (*allocatorError) purgatoryErrorMarker() {}
 
 var _ purgatoryError = &allocatorError{}
 
-// allocatorRand pairs a rand.Rand with a mutex.
-// TODO: Allocator is typically only accessed from a single thread (the
-// replication queue), but this assumption is broken in tests which force
-// replication scans. If those tests can be modified to suspend the normal
-// replication queue during the forced scan, then this rand could be used
-// without a mutex.
-type allocatorRand struct {
-	*syncutil.Mutex
-	*rand.Rand
-}
-
-func makeAllocatorRand(source rand.Source) allocatorRand {
-	return allocatorRand{
-		Mutex: &syncutil.Mutex{},
-		Rand:  rand.New(source),
-	}
-}
-
 // AllocatorOptions are configurable options which effect the way that the
 // replicate queue will handle rebalancing opportunities.
 type AllocatorOptions struct {
 	// AllowRebalance allows this store to attempt to rebalance its own
 	// replicas to other stores.
 	AllowRebalance bool
-
-	// Deterministic makes allocation decisions deterministic, based on
-	// current cluster statistics. If this flag is not set, allocation operations
-	// will have random behavior. This flag is intended to be set for testing
-	// purposes only.
-	Deterministic bool
 }
 
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
-	storePool *StorePool
-	randGen   allocatorRand
-	options   AllocatorOptions
+	storePool  *StorePool
+	options    AllocatorOptions
+	ruleSolver *ruleSolver
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
 func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
-	var randSource rand.Source
-	if options.Deterministic {
-		randSource = rand.NewSource(777)
-	} else {
-		randSource = rand.NewSource(rand.Int63())
-	}
 	return Allocator{
-		storePool: storePool,
-		options:   options,
-		randGen:   makeAllocatorRand(randSource),
+		storePool:  storePool,
+		options:    options,
+		ruleSolver: makeDefaultRuleSolver(storePool),
 	}
 }
 
@@ -197,69 +167,44 @@ func (a *Allocator) ComputeAction(
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the
-// required attributes. Nodes already accommodating existing replicas are ruled
-// out as targets. The range ID of the replica being allocated for is also
-// passed in to ensure that we don't try to replace an existing dead replica on
-// a store. If relaxConstraints is true, then the required attributes will be
-// relaxed as necessary, from least specific to most specific, in order to
-// allocate a target.
+// required attributes. Nodes already accommodating existing or dead replicas
+// are ruled out as targets.
 func (a *Allocator) AllocateTarget(
-	constraints config.Constraints,
-	existing []roachpb.ReplicaDescriptor,
-	rangeID roachpb.RangeID,
-	relaxConstraints bool,
+	constraints config.Constraints, existing []roachpb.ReplicaDescriptor, rangeID roachpb.RangeID,
 ) (*roachpb.StoreDescriptor, error) {
-	existingNodes := make(nodeIDSet, len(existing))
-	for _, repl := range existing {
-		existingNodes[repl.NodeID] = struct{}{}
+	candidates, err := a.ruleSolver.Solve(constraints, existing, rangeID)
+	if err != nil {
+		return nil, err
 	}
 
-	// Because more redundancy is better than less, if relaxConstraints, the
-	// matching here is lenient, and tries to find a target by relaxing an
-	// attribute constraint, from last attribute to first.
-	for attrs := append([]config.Constraint(nil), constraints.Constraints...); ; attrs = attrs[:len(attrs)-1] {
-		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
-			config.Constraints{Constraints: attrs},
-			rangeID,
-			a.options.Deterministic,
-		)
-		if target := a.selectGood(sl, existingNodes); target != nil {
-			return target, nil
-		}
-
-		// When there are throttled stores that do match, we shouldn't send
-		// the replica to purgatory or even consider relaxing the constraints.
-		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
-		}
-		if len(attrs) == 0 || !relaxConstraints {
-			return nil, &allocatorError{
-				required:         constraints.Constraints,
-				relaxConstraints: relaxConstraints,
-				aliveStoreCount:  aliveStoreCount,
-			}
+	if len(candidates) == 0 {
+		return nil, &allocatorError{
+			required: constraints.Constraints,
 		}
 	}
+	return &candidates[0].store, nil
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
 // set. It attempts to consider which of the provided replicas would be the best
 // candidate for removal. It also will exclude any replica that belongs to the
 // range lease holder's store ID.
-//
-// TODO(mrtracy): removeTarget eventually needs to accept the attributes from
-// the zone config associated with the provided replicas. This will allow it to
-// make correct decisions in the case of ranges with heterogeneous replica
-// requirements (i.e. multiple data centers).
 func (a Allocator) RemoveTarget(
-	existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID,
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
 ) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
 		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
-	// Retrieve store descriptors for the provided replicas from the StorePool.
-	sl := StoreList{}
+	// TODO(bram): Is this getStoreList call required?
+	// Use an invalid range ID as we don't care about a corrupt ranges.
+	sl, _, _ := a.storePool.getStoreList(roachpb.RangeID(0))
+
+	found := false
+	var worst roachpb.ReplicaDescriptor
+	var worstScore float64
 	for _, exist := range existing {
 		if exist.StoreID == leaseStoreID {
 			continue
@@ -268,16 +213,26 @@ func (a Allocator) RemoveTarget(
 		if !ok {
 			continue
 		}
-		sl.add(desc)
-	}
-
-	if bad := a.selectBad(sl); bad != nil {
-		for _, exist := range existing {
-			if exist.StoreID == bad.StoreID {
-				return exist, nil
-			}
+		// If it's not a valid candidate, score will be zero.
+		candidate, _ := a.ruleSolver.computeCandidate(solveState{
+			constraints: constraints,
+			store:       desc,
+			existing:    nil,
+			sl:          sl,
+			tierOrder:   canonicalTierOrder(sl),
+			tiers:       storeTierMap(sl),
+		})
+		if !found || candidate.score < worstScore {
+			worstScore = candidate.score
+			worst = exist
+			found = true
 		}
 	}
+
+	if found {
+		return worst, nil
+	}
+
 	return roachpb.ReplicaDescriptor{}, errors.Errorf("RemoveTarget() could not select an appropriate replica to be remove")
 }
 
@@ -306,16 +261,14 @@ func (a Allocator) RebalanceTarget(
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
-) *roachpb.StoreDescriptor {
+) (*roachpb.StoreDescriptor, error) {
 	if !a.options.AllowRebalance {
-		return nil
+		return nil, nil
 	}
 
-	sl, _, _ := a.storePool.getStoreList(
-		constraints,
-		rangeID,
-		a.options.Deterministic,
-	)
+	// TODO(bram): getStoreList is called twice, once now, and again in solve,
+	// fix this.
+	sl, _, _ := a.storePool.getStoreList(rangeID)
 	if log.V(3) {
 		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
@@ -332,47 +285,85 @@ func (a Allocator) RebalanceTarget(
 		}
 	}
 	if !shouldRebalance {
-		return nil
+		return nil, nil
 	}
 
-	existingNodes := make(nodeIDSet, len(existing))
-	for _, repl := range existing {
-		existingNodes[repl.NodeID] = struct{}{}
+	// Get candidate stores.
+	candidates, err := a.ruleSolver.Solve(constraints, nil, rangeID)
+	if err != nil {
+		return nil, err
 	}
-	return a.improve(sl, existingNodes)
+
+	// Find a candidate that is better than one of the existing stores, otherwise
+	// return nil.
+	candidatesFound := 0
+	for _, candidate := range candidates {
+		store := candidate.store
+		found := false
+		for _, repl := range existing {
+			if repl.StoreID == store.StoreID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return &store, nil
+		}
+		candidatesFound++
+		if candidatesFound > len(existing) {
+			break
+		}
+	}
+	return nil, nil
 }
 
-// selectGood attempts to select a store from the supplied store list that it
-// considers to be 'Good' relative to the other stores in the list. Any nodes
-// in the supplied 'exclude' list will be disqualified from selection. Returns
-// the selected store or nil if no such store can be found.
-func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.selectGood(sl, excluded)
-}
-
-// selectBad attempts to select a store from the supplied store list that it
-// considers to be 'Bad' relative to the other stores in the list. Returns the
-// selected store or nil if no such store can be found.
-func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.selectBad(sl)
-}
-
-// improve attempts to select an improvement over the given store from the
-// stores in the given store list. Any nodes in the supplied 'exclude' list
-// will be disqualified from selection. Returns the selected store, or nil if
-// no such store can be found.
-func (a Allocator) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.improve(sl, excluded)
-}
+// RebalanceThreshold is the minimum ratio of a store's range surplus to the
+// mean range count that permits rebalances away from that store.
+var RebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
 
 // shouldRebalance returns whether the specified store is a candidate for
 // having a replica removed from it given the candidate store list.
 func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.shouldRebalance(store, sl)
+	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
+	// node becomes fuller than maxFractionUsedThreshold we will always select it
+	// for rebalancing. This is currently utilized by tests.
+	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
+
+	// Rebalance if we're above the rebalance target, which is
+	// mean*(1+RebalanceThreshold).
+	target := int32(math.Ceil(sl.candidateCount.mean * (1 + RebalanceThreshold)))
+	rangeCountAboveTarget := store.Capacity.RangeCount > target
+
+	// Rebalance if the candidate store has a range count above the mean, and
+	// there exists another store that is underfull: its range count is smaller
+	// than mean*(1-RebalanceThreshold).
+	var rebalanceToUnderfullStore bool
+	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
+		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - RebalanceThreshold)))
+		for _, desc := range sl.stores {
+			if desc.Capacity.RangeCount < underfullThreshold {
+				rebalanceToUnderfullStore = true
+				break
+			}
+		}
+	}
+
+	// Require that moving a replica from the given store makes its range count
+	// converge on the mean range count. This only affects clusters with a
+	// small number of ranges.
+	rebalanceConvergesOnMean := float64(store.Capacity.RangeCount) > sl.candidateCount.mean+0.5
+
+	shouldRebalance :=
+		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
+	if log.V(2) {
+		log.Infof(context.TODO(),
+			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
+				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
+			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(),
+			store.Capacity.RangeCount, sl.candidateCount.mean, target,
+			maxCapacityUsed, rangeCountAboveTarget, rebalanceToUnderfullStore, rebalanceConvergesOnMean)
+	}
+	return shouldRebalance
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
