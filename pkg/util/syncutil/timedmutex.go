@@ -50,6 +50,8 @@ func ThresholdLogger(
 	return func(heldFor time.Duration) {
 		record(heldFor)
 		if heldFor > warnDuration {
+			// NB: this doesn't use `util/caller.Lookup` because that would result
+			// in an import cycle.
 			pc, _, _, ok := runtime.Caller(2)
 			fun := "?"
 			if ok {

@@ -17,10 +17,10 @@
 package sql
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -39,7 +39,7 @@ type computeOrderCase struct {
 
 func defTestCase(expected, expectedReverse int, desired ...sqlbase.ColumnOrderInfo) desiredCase {
 	// The line number is used to identify testcases in error messages.
-	_, _, line, _ := runtime.Caller(1)
+	_, line, _ := caller.Lookup(1)
 	return desiredCase{
 		line:            line,
 		desired:         desired,
