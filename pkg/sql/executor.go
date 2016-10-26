@@ -19,9 +19,9 @@ package sql
 
 import (
 	"fmt"
-	"math"
-	"math/big"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1388,22 +1387,27 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	case *parser.DInt:
 		ts.WallTime = int64(*d)
 	case *parser.DDecimal:
-		logicalScale := 10 - int(d.Scale())
-		if logicalScale < 0 {
-			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+		s := d.String()
+		parts := strings.SplitN(s, ".", 2)
+		nanos, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
 		}
-		nanos := new(big.Int)
-		logical := new(big.Int)
-		nanos.QuoRem(d.UnscaledBig(), decimal.PowerOfTenInt(int(d.Scale())), logical)
-		logical.Mul(logical, decimal.PowerOfTenInt(logicalScale))
-		if nanos.Cmp(big.NewInt(math.MaxInt64)) > 0 {
-			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: nanoseconds part too large: %s > %d", nanos, math.MaxInt64)
+		var logical int64
+		if len(parts) > 1 {
+			p := parts[1]
+			if lp := len(p); lp > 10 {
+				return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+			} else if lp < 10 {
+				p += strings.Repeat("0", 10-lp)
+			}
+			logical, err = strconv.ParseInt(p, 10, 32)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+			}
 		}
-		if logical.Cmp(big.NewInt(math.MaxInt32)) > 0 {
-			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part too large: %s > %d", logical, math.MaxInt32)
-		}
-		ts.WallTime = nanos.Int64()
-		ts.Logical = int32(logical.Int64())
+		ts.WallTime = nanos
+		ts.Logical = int32(logical)
 	default:
 		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
 	}
