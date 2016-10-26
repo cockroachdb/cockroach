@@ -2101,7 +2101,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}, nil
 }
 
-// deadReplicas returns a list of all the dead replicas on the store.
+// deadReplicas returns a list of all the corrupt replicas on the store.
 func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	// We can't use a storeReplicaVisitor here as it skips destroyed replicas.
 	// Similar to in the storeReplicaVisitor, make a copy of the current
@@ -2119,11 +2119,11 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	var deadReplicas []roachpb.ReplicaIdent
 	for _, r := range replicas {
 		r.mu.Lock()
-		destroyed := r.mu.destroyed
+		corrupted := r.mu.corrupted
 		desc := r.mu.state.Desc
 		r.mu.Unlock()
 		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
-		if ok && destroyed != nil {
+		if ok && corrupted {
 			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
 				RangeID: desc.RangeID,
 				Replica: replicaDesc,
