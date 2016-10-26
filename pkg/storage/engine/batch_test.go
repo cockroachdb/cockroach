@@ -228,6 +228,71 @@ func TestBatchRepr(t *testing.T) {
 	})
 }
 
+// Regression test for flush issue which caused
+// b2.ApplyBatchRepr(b1.Repr()).Repr() to not equal a noop.
+func ApplyBatchRepr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
+
+	// Failure to represent the absorbed Batch again.
+	{
+		b1 := e.NewBatch()
+		defer b1.Close()
+
+		if err := b1.Put(mvccKey("lost"), []byte("update")); err != nil {
+			t.Fatal(err)
+		}
+
+		repr1 := b1.Repr()
+
+		b2 := e.NewBatch()
+		defer b2.Close()
+		if err := b2.ApplyBatchRepr(repr1); err != nil {
+			t.Fatal(err)
+		}
+		repr2 := b2.Repr()
+
+		if !reflect.DeepEqual(repr1, repr2) {
+			t.Fatalf("old batch represents to:\n%q\nrestored batch to:\n%q", repr1, repr2)
+		}
+	}
+
+	// Failure to commit what was absorbed.
+	{
+		b3 := e.NewBatch()
+		defer b3.Close()
+
+		key := mvccKey("phantom")
+		val := []byte("phantom")
+
+		if err := b3.Put(key, val); err != nil {
+			t.Fatal(err)
+		}
+
+		repr := b3.Repr()
+
+		b4 := e.NewBatch()
+		defer b4.Close()
+		if err := b4.ApplyBatchRepr(repr); err != nil {
+			t.Fatal(err)
+		}
+		// Intentionally don't call Repr() because the expected user wouldn't.
+		if err := b4.Commit(); err != nil {
+			t.Fatal(err)
+		}
+
+		if b, err := e.Get(key); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b, val) {
+			t.Fatalf("read %q from engine, expected %q", b, val)
+		}
+	}
+
+}
+
 func TestBatchGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
