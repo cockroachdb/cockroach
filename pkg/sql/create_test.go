@@ -246,9 +246,6 @@ func TestParallelCreateTables(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
@@ -302,9 +299,6 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
