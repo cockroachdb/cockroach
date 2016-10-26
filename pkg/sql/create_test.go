@@ -183,10 +183,17 @@ func createTestTable(
 			val INT
 		)`, id)
 
-	if _, err := db.Exec(tableSQL); err != nil {
-		t.Errorf("table %d: could not be created: %s", id, err)
-	} else {
-		completed <- id
+	for {
+		if _, err := db.Exec(tableSQL); err != nil {
+			if testutils.IsSQLRetryableError(err) {
+				continue
+			}
+			t.Errorf("table %d: could not be created: %v", id, err)
+			return
+		} else {
+			completed <- id
+			break
+		}
 	}
 }
 
