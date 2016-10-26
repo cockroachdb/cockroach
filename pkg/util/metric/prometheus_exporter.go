@@ -64,9 +64,11 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 	return family
 }
 
-// AddMetricsFromRegistry takes a registry and adds all metrics to the metric family map.
-// It creates a new family if needed.
-func (pm *PrometheusExporter) AddMetricsFromRegistry(registry *Registry) {
+// ScrapeRegistry scrapes all metrics contained in the registry to the metric
+// family map, holding on only to the scraped data (which is no longer
+// connected to the registry and metrics within) when returning from the the
+// call. It creates new families as needed.
+func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry) {
 	labels := registry.getLabels()
 	for _, metric := range registry.tracked {
 		metric.Inspect(func(v interface{}) {
@@ -82,10 +84,10 @@ func (pm *PrometheusExporter) AddMetricsFromRegistry(registry *Registry) {
 	}
 }
 
-// Export writes all metrics in the families map to the iowriter in
+// PrintAsText writes all metrics in the families map to the io.Writer in
 // prometheus' text format. It removes individual metrics from the families
 // as it goes, readying the families for another found of registry additions.
-func (pm *PrometheusExporter) Export(w io.Writer) error {
+func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 	for _, family := range pm.families {
 		if _, err := expfmt.MetricFamilyToText(w, family); err != nil {
 			return err
