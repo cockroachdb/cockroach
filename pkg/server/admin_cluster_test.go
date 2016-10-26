@@ -42,9 +42,6 @@ func TestAdminAPITableStats(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 	server0 := tc.Server(0)
 
 	// Create clients (SQL, HTTP) connected to server 0.
