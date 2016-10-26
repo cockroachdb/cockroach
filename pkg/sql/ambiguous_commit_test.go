@@ -96,13 +96,15 @@ func TestAmbiguousCommit(t *testing.T) {
 
 	// Wait for new table to split.
 	util.SucceedsSoon(t, func() error {
-		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(tableStartKey.Load().([]byte)))
+		startKey := tableStartKey.Load().([]byte)
+
+		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(startKey))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !desc.StartKey.Equal(tableStartKey.Load().([]byte)) {
+		if !desc.StartKey.Equal(startKey) {
 			return errors.Errorf("expected range start key %s; got %s",
-				tableStartKey.Load().([]byte), desc.StartKey)
+				startKey, desc.StartKey)
 		}
 		return nil
 	})
