@@ -167,22 +167,26 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(topLevel)
 }
 
-// PrintAsText writes the current metrics values as plain-text to the writer.
-func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
+// scrapePrometheus updates the prometheusExporter's metrics snapshot.
+func (mr *MetricsRecorder) scrapePrometheus() {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder.MarshalText() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
-		return nil
 	}
 
 	mr.prometheusExporter.ScrapeRegistry(mr.mu.nodeRegistry)
 	for _, reg := range mr.mu.storeRegistries {
 		mr.prometheusExporter.ScrapeRegistry(reg)
 	}
+}
+
+// PrintAsText writes the current metrics values as plain-text to the writer.
+func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
+	mr.scrapePrometheus()
 	return mr.prometheusExporter.PrintAsText(w)
 }
 
