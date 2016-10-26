@@ -82,9 +82,6 @@ func TestAmbiguousCommit(t *testing.T) {
 	const numReplicas = 3
 	tc := testcluster.StartTestCluster(t, numReplicas, testClusterArgs)
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 

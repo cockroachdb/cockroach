@@ -39,9 +39,6 @@ func TestSplitAtTableBoundary(t *testing.T) {
 	}
 	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
 	defer tc.Stopper().Stop()
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 
 	runner := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 	runner.Exec(`CREATE DATABASE test`)
