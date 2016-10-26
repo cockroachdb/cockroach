@@ -772,7 +772,7 @@ func copyWords(buf []byte, nat []big.Word) []byte {
 // k and k+1 that the binary r digits could be representing.
 //
 // Using this proof, for a given digit count, the map will return the lower number
-// of decimal digits (k) the binary digit count could represenent, along with the
+// of decimal digits (k) the binary digit count could represent, along with the
 // value of the border between the two decimal digit counts (10^k).
 const tableSize = 128
 
