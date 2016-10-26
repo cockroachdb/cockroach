@@ -35,7 +35,8 @@ var cmdBase = []string{
 
 func TestDockerCLI(t *testing.T) {
 	if err := testDockerOneShot(t, "cli_test", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
-		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+		// See #6086.
+		t.Skipf("no binary in one-shot container: %s", err)
 	}
 
 	paths, err := filepath.Glob(testGlob)

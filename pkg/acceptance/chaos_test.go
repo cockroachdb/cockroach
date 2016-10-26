@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -309,7 +310,7 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 // being killed and restarted continuously. The test doesn't measure write
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
-	t.Skip("Skipped due to flakiness until we can investigate #8538 further.")
+	flaky.Register(t, 8538)
 	runTestOnConfigs(t, testClusterRecoveryInner)
 }
 

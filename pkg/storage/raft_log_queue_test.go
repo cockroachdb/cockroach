@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
@@ -220,7 +221,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 // log even when replica scanning is disabled.
 func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9772")
+	flaky.Register(t, 9772)
 
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()

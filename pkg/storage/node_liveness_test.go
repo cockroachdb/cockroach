@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -59,7 +60,7 @@ func stopNodeLivenessHeartbeats(mtc *multiTestContext) {
 
 func TestNodeLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9973")
+	flaky.Register(t, 9973)
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
