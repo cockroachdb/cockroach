@@ -428,10 +428,11 @@ func updateStatsOnGC(
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the enginepb.MVCCStats struct.
 func MVCCGetRangeStats(
-	ctx context.Context, engine Reader, rangeID roachpb.RangeID, ms *enginepb.MVCCStats,
-) error {
-	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, ms)
-	return err
+	ctx context.Context, engine Reader, rangeID roachpb.RangeID,
+) (enginepb.MVCCStats, error) {
+	var ms enginepb.MVCCStats
+	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, &ms)
+	return ms, err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
@@ -2180,8 +2181,8 @@ func MVCCFindSplitKey(
 	logf("searching split key for %d [%s, %s)", rangeID, key, endKey)
 
 	// Get range size from stats.
-	var ms enginepb.MVCCStats
-	if err := MVCCGetRangeStats(ctx, engine, rangeID, &ms); err != nil {
+	ms, err := MVCCGetRangeStats(ctx, engine, rangeID)
+	if err != nil {
 		return nil, err
 	}
 

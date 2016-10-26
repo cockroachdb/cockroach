@@ -376,8 +376,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID, &ms); err != nil {
+	ms, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
@@ -451,12 +451,13 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	var left, right enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID, &left); err != nil {
+	left, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), newRng.RangeID, &right); err != nil {
+	right, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), newRng.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	rKeyBytes, rValBytes := right.KeyBytes, right.ValBytes
@@ -509,8 +510,8 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &ms); err != nil {
+	ms, err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyRecomputedStats(snap, rng.Desc(), ms, manual.UnixNano()); err != nil {
@@ -532,12 +533,13 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	var msLeft, msRight enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &msLeft); err != nil {
+	msLeft, err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupReplica(midKey, nil)
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID, &msRight); err != nil {
+	msRight, err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -624,12 +626,13 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	var msLeft, msRight enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &msLeft); err != nil {
+	msLeft, err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupReplica(midKey, nil)
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID, &msRight); err != nil {
+	msRight, err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -658,8 +661,8 @@ func fillRange(
 ) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		var ms enginepb.MVCCStats
-		if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID, &ms); err != nil {
+		ms, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID)
+		if err != nil {
 			t.Fatal(err)
 		}
 		keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
