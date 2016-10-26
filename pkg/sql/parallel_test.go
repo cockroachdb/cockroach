@@ -225,14 +225,6 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		sqlutils.MakeSQLRunner(t, t.clients[i][0]).Exec("SET DATABASE = test")
 	}
 
-	if spec.ClusterSize >= 3 {
-		if testing.Verbose() || log.V(1) {
-			log.Infof(t.ctx, "Waiting for full replication")
-		}
-		if err := t.cluster.WaitForFullReplication(); err != nil {
-			t.Fatal(err)
-		}
-	}
 	if testing.Verbose() || log.V(1) {
 		log.Infof(t.ctx, "Test setup done")
 	}
