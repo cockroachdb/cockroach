@@ -203,7 +203,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 		}
 
 		// Bootstrap store to persist the store ident.
-		if err := s.Bootstrap(sIdent, stopper); err != nil {
+		if err := s.Bootstrap(sIdent); err != nil {
 			return uuid.UUID{}, err
 		}
 		// Create first range, writing directly to engine. Note this does
@@ -535,7 +535,7 @@ func (n *Node) bootstrapStores(
 		StoreID:   firstID,
 	}
 	for _, s := range bootstraps {
-		if err := s.Bootstrap(sIdent, stopper); err != nil {
+		if err := s.Bootstrap(sIdent); err != nil {
 			log.Fatal(ctx, err)
 		}
 		if err := s.Start(ctx, stopper); err != nil {

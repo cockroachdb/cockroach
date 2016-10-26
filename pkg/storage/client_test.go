@@ -161,7 +161,7 @@ func createTestStoreWithEngine(
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
 	if bootstrap {
-		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
+		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -706,11 +706,10 @@ func (m *multiTestContext) addStore(idx int) {
 	)
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
-		err := store.Bootstrap(roachpb.StoreIdent{
+		if err := store.Bootstrap(roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}, stopper)
-		if err != nil {
+		}); err != nil {
 			m.t.Fatal(err)
 		}
 

@@ -172,7 +172,7 @@ func createTestStoreWithoutStart(
 	cfg.DB = client.NewDB(sender)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	sender.store = store
-	if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
+	if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.BootstrapRange(nil); err != nil {
@@ -236,7 +236,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Bootstrap with a fake ident.
-	if err := store.Bootstrap(testIdent, stopper); err != nil {
+	if err := store.Bootstrap(testIdent); err != nil {
 		t.Errorf("error bootstrapping store: %s", err)
 	}
 
@@ -299,13 +299,17 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	if err := store.Start(context.Background(), stopper); err == nil {
-		t.Error("expected failure initializing un-bootstrapped store")
+	switch err := errors.Cause(store.Start(context.Background(), stopper)); err.(type) {
+	case *NotBootstrappedError:
+	default:
+		t.Errorf("unexpected error initializing un-bootstrapped store: %v", err)
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	if err := store.Bootstrap(testIdent, stopper); err == nil {
-		t.Error("expected bootstrap error on non-empty store")
+	switch err := errors.Cause(store.Bootstrap(testIdent)); err.(type) {
+	case *NotBootstrappedError:
+	default:
+		t.Errorf("unexpected error bootstrapping non-empty store: %v", err)
 	}
 }
 
