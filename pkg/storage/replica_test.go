@@ -5791,7 +5791,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	cfg := TestStoreConfig()
 	// Disable ticks to avoid automatic reproposals after a timeout, which
 	// would pass this test.
-	cfg.RaftTickInterval = time.Hour
+	cfg.RaftTickInterval = math.MaxInt64
 	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
 	rng := tc.rng
@@ -5934,7 +5934,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 
 	const num = 10
 
-	var chs []chan proposalResult
+	var chs []chan proposalResult // protected by rng.mu
 
 	func() {
 		for i := 0; i < num; i++ {
@@ -5955,7 +5955,6 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			} else if err := rng.submitProposalLocked(cmd); err != nil {
 				t.Error(err)
 			} else {
-
 				chs = append(chs, cmd.done)
 			}
 			rng.mu.Unlock()
@@ -6067,7 +6066,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tc testContext
 	cfg := TestStoreConfig()
-	cfg.RaftTickInterval = 24 * time.Hour // disable ticks
+	// Disable ticks which would interfere with the manual ticking in this test.
+	cfg.RaftTickInterval = math.MaxInt64
 	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
 
