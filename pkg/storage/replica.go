@@ -2493,7 +2493,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	// that they can make it in the right place. Reproposing in order is
 	// definitely required, however.
 	//
-	// TODO(tschottdorf): evaluate whether `proposals` should be a list/slice.
+	// TODO(tschottdorf): evaluate whether `r.mu.proposals` should be a list/slice.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)

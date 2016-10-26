@@ -19,8 +19,8 @@ package storage_test
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -49,7 +49,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
 	sc := storage.TestStoreConfig()
-	sc.RaftTickInterval = time.Hour * 24
+	sc.RaftTickInterval = math.MaxInt64
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc.storeConfig = &sc
 
