@@ -55,7 +55,7 @@ func IsPError(pErr *roachpb.Error, re string) bool {
 // that show a connection issue or an issue with the node itself. This can
 // occur when a node is restarting or is unstable in some other way.
 func IsSQLRetryError(err error) bool {
-	return IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF)")
+	return IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|commit result is ambiguous)")
 }
 
 // Caller returns filename and line number info for the specified stack
