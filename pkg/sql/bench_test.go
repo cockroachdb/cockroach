@@ -59,9 +59,6 @@ func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
-	if err := tc.WaitForFullReplication(); err != nil {
-		b.Fatal(err)
-	}
 	defer tc.Stopper().Stop()
 
 	f(b, tc.Conns[0])
