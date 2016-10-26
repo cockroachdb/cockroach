@@ -282,7 +282,19 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	invert := false
 	if x.Cmp(decimalOne) > 0 {
 		invert = true
-		x.QuoRound(decimalOne, x, s*2, inf.RoundHalfUp)
+		ns := s * 2
+		// In the case of a very large number, s*2 is not enough precision to
+		// hold 1/x, so x.QuoRound will set x to zero. We use the string length *
+		// 2 because one length of the string will cover the 0s after the decimal,
+		// and the other length of the string covers the digits of the division.
+		// TODO(mjibson): figure out a way to do this without converting to a string. I
+		// attempted to use x.Unscaled().BitLen(), but was not able to determine the
+		// correct formula to use. You cannot simply use x.Scale() * 2 because the scale
+		// could be 0 even for a very large x.
+		if xs := inf.Scale(len(x.String()) * 2); xs > ns {
+			ns = xs
+		}
+		x.QuoRound(decimalOne, x, ns, inf.RoundHalfUp)
 	}
 
 	// x = mantissa * 2**exp, and 0.5 <= mantissa < 1.
