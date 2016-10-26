@@ -1347,39 +1347,53 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error {
-	if s.Ident.NodeID != 0 {
-		return errors.Errorf("engine already bootstrapped")
+func (s *Store) Bootstrap(ident roachpb.StoreIdent) error {
+	if (s.Ident != roachpb.StoreIdent{}) {
+		return errors.Errorf("store %s is already bootstrapped", s)
 	}
 	ctx := s.AnnotateCtx(context.Background())
-	s.Ident = ident
-	kvs, err := engine.Scan(s.engine,
-		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
-		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)), 10)
-	if err != nil {
-		return errors.Errorf("store %s: unable to access: %s", s.engine, err)
-	} else if len(kvs) > 0 {
-		// See if this is an already-bootstrapped store.
-		ident, err := ReadStoreIdent(ctx, s.engine)
-		if err != nil {
-			return errors.Wrapf(err, "unable to read ident of non-empty store %s "+
-				"during bootstrap:", s.engine)
-		}
-		s.Ident = ident
-		keyVals := []string{}
-		for _, kv := range kvs {
-			keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
-		}
-		return errors.Errorf("can't bootstap non-empty store %s (clusterID: %d, first %d key/values: %s)",
-			s.engine, s.Ident.ClusterID, len(keyVals), keyVals)
+	if err := checkEngineEmpty(ctx, s.engine); err != nil {
+		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}
-	err = engine.MVCCPutProto(ctx, s.engine, nil,
-		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
-	if err != nil {
+	s.Ident = ident
+	if err := engine.MVCCPutProto(
+		ctx,
+		s.engine,
+		nil,
+		keys.StoreIdentKey(),
+		hlc.ZeroTimestamp,
+		nil,
+		&s.Ident,
+	); err != nil {
 		return err
 	}
 
 	s.NotifyBootstrapped()
+	return nil
+}
+
+func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
+	kvs, err := engine.Scan(
+		eng,
+		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
+		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)),
+		10,
+	)
+	if err != nil {
+		return err
+	}
+	if len(kvs) > 0 {
+		// See if this is an already-bootstrapped store.
+		ident, err := ReadStoreIdent(ctx, eng)
+		if err != nil {
+			return errors.Wrap(err, "unable to read store ident")
+		}
+		keyVals := make([]string, len(kvs))
+		for i, kv := range kvs {
+			keyVals[i] = fmt.Sprintf("%s: %q", kv.Key, kv.Value)
+		}
+		return errors.Errorf("engine belongs to store %s, contains %s", ident, keyVals)
+	}
 	return nil
 }
 
