@@ -699,7 +699,7 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 
 	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
-		RangeLeaseDurations(time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval)
+		RangeLeaseDurations(RaftElectionTimeout(sc.RaftTickInterval, sc.RaftElectionTimeoutTicks))
 	if sc.RangeLeaseActiveDuration == 0 {
 		sc.RangeLeaseActiveDuration = rangeLeaseActiveDuration
 	}
