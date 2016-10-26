@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"reflect"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -48,6 +49,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+		pgCatalogTypeTable,
 	},
 }
 
@@ -123,7 +125,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 					return addRow(
 						attRelID,                            // attrelid
 						parser.NewDString(column.Name),      // attname
-						h.TypeOid(colTyp),                   // atttypid
+						typOid(colTyp),                      // atttypid
 						zeroVal,                             // attstattarget
 						typLen(colTyp),                      // attlen
 						parser.NewDInt(parser.DInt(colNum)), // attnum
@@ -625,11 +627,170 @@ CREATE TABLE pg_catalog.pg_tables (
 	},
 }
 
-func typLen(typ parser.Type) parser.Datum {
+var (
+	typTypeBase      = parser.NewDString("b")
+	typTypeComposite = parser.NewDString("c")
+	typTypeDomain    = parser.NewDString("d")
+	typTypeEnum      = parser.NewDString("e")
+	typTypePseudo    = parser.NewDString("p")
+	typTypeRange     = parser.NewDString("r")
+
+	// Avoid unused warning for constants.
+	_ = typTypeComposite
+	_ = typTypeDomain
+	_ = typTypeEnum
+	_ = typTypePseudo
+	_ = typTypeRange
+
+	// See https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html#CATALOG-TYPCATEGORY-TABLE.
+	typCategoryArray       = parser.NewDString("A")
+	typCategoryBoolean     = parser.NewDString("B")
+	typCategoryComposite   = parser.NewDString("C")
+	typCategoryDateTime    = parser.NewDString("D")
+	typCategoryEnum        = parser.NewDString("E")
+	typCategoryGeometric   = parser.NewDString("G")
+	typCategoryNetworkAddr = parser.NewDString("I")
+	typCategoryNumeric     = parser.NewDString("N")
+	typCategoryPseudo      = parser.NewDString("P")
+	typCategoryRange       = parser.NewDString("R")
+	typCategoryString      = parser.NewDString("S")
+	typCategoryTimespan    = parser.NewDString("T")
+	typCategoryUserDefined = parser.NewDString("U")
+	typCategoryBitString   = parser.NewDString("V")
+	typCategoryUnknown     = parser.NewDString("X")
+
+	// Avoid unused warning for constants.
+	_ = typCategoryArray
+	_ = typCategoryComposite
+	_ = typCategoryEnum
+	_ = typCategoryGeometric
+	_ = typCategoryNetworkAddr
+	_ = typCategoryPseudo
+	_ = typCategoryRange
+	_ = typCategoryBitString
+	_ = typCategoryUnknown
+
+	typDelim = parser.NewDString(",")
+)
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
+var pgCatalogTypeTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_type (
+	oid INT,
+	typname STRING NOT NULL DEFAULT '',
+	typnamespace INT,
+	typowner INT,
+	typlen INT,
+	typbyval BOOL,
+	typtype CHAR,
+	typcategory CHAR,
+	typispreferred BOOL,
+	typisdefined BOOL,
+	typdelim CHAR,
+	typrelid INT,
+	typelem INT,
+	typarray INT,
+	typinput INT,
+	typoutput INT,
+	typreceive INT,
+	typsend INT,
+	typmodin INT,
+	typmodout INT,
+	typanalyze INT,
+	typalign CHAR,
+	typstorage CHAR,
+	typnotnull BOOL,
+	typbasetype INT,
+	typtypmod INT,
+	typndims INT,
+	typcollation INT,
+	typdefaultbin STRING,
+	typdefault STRING,
+	typacl STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		for oid, typ := range oidToDatum {
+			if err := addRow(
+				parser.NewDInt(parser.DInt(oid)), // oid
+				parser.NewDString(typ.String()),  // typname
+				parser.DNull,                     // typnamespace
+				parser.DNull,                     // typowner
+				typLen(typ),                      // typlen
+				typByVal(typ),                    // typbyval
+				typTypeBase,                      // typtype
+				typCategory(typ),                 // typcategory
+				parser.MakeDBool(false),          // typispreferred
+				parser.MakeDBool(true),           // typisdefined
+				typDelim,                         // typdelim
+				zeroVal,                          // typrelid
+				zeroVal,                          // typelem
+				zeroVal,                          // typarray
+
+				// regproc references
+				zeroVal, // typinput
+				zeroVal, // typoutput
+				zeroVal, // typreceive
+				zeroVal, // typsend
+				zeroVal, // typmodin
+				zeroVal, // typmodout
+				zeroVal, // typanalyze
+
+				parser.DNull,            // typalign
+				parser.DNull,            // typstorage
+				parser.MakeDBool(false), // typnotnull
+				zeroVal,                 // typbasetype
+				negOneVal,               // typtypmod
+				zeroVal,                 // typndims
+				zeroVal,                 // typcollation
+				parser.DNull,            // typdefaultbin
+				parser.DNull,            // typdefault
+				parser.DNull,            // typacl
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// typOid is the only OID generation approach that does not use oidHasher, because
+// object identifiers for types are not arbitrary, but instead need to be kept in
+// sync with Postgres.
+func typOid(typ parser.Type) *parser.DInt {
+	oid, _ := DatumToOid(typ)
+	return parser.NewDInt(parser.DInt(oid))
+}
+
+func typLen(typ parser.Type) *parser.DInt {
 	if sz, variable := typ.Size(); !variable {
 		return parser.NewDInt(parser.DInt(sz))
 	}
 	return negOneVal
+}
+
+func typByVal(typ parser.Type) parser.Datum {
+	_, variable := typ.Size()
+	return parser.MakeDBool(parser.DBool(!variable))
+}
+
+// This mapping should be kept sync with PG's categorization.
+var datumToTypeCategory = map[reflect.Type]*parser.DString{
+	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
+	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
+	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
+	reflect.TypeOf(parser.TypeFloat):       typCategoryNumeric,
+	reflect.TypeOf(parser.TypeInt):         typCategoryNumeric,
+	reflect.TypeOf(parser.TypeInterval):    typCategoryTimespan,
+	reflect.TypeOf(parser.TypeDecimal):     typCategoryNumeric,
+	reflect.TypeOf(parser.TypeString):      typCategoryString,
+	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
+	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
+}
+
+func typCategory(typ parser.Type) parser.Datum {
+	return datumToTypeCategory[reflect.TypeOf(typ)]
 }
 
 // oidHasher provides a consistent hashing mechanism for object identifiers in
@@ -691,7 +852,6 @@ const (
 	fkConstraintTypeTag
 	pKeyConstraintTypeTag
 	uniqueConstraintTypeTag
-	typeTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -732,10 +892,6 @@ func (h oidHasher) writeForeignKeyReference(fk *sqlbase.ForeignKeyReference) {
 	h.writeUInt32(uint32(fk.Table))
 	h.writeUInt32(uint32(fk.Index))
 	h.writeStr(fk.Name)
-}
-
-func (h oidHasher) writeType(typ parser.Type) {
-	h.writeStr(typ.String())
 }
 
 func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
@@ -812,11 +968,5 @@ func (h oidHasher) UniqueConstraintOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
-	return h.getOid()
-}
-
-func (h oidHasher) TypeOid(typ parser.Type) *parser.DInt {
-	h.writeTypeTag(typeTypeTag)
-	h.writeType(typ)
 	return h.getOid()
 }

@@ -349,6 +349,7 @@ pg_constraint
 pg_indexes
 pg_namespace
 pg_tables
+pg_type
 descriptor
 eventlog
 lease
@@ -371,6 +372,7 @@ table_constraints
 schemata
 schema_privileges
 rangelog
+pg_type
 pg_tables
 pg_namespace
 pg_indexes
@@ -400,6 +402,7 @@ def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
+def            pg_catalog          pg_type            SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
 def            system              lease              BASE TABLE   1
@@ -438,6 +441,7 @@ def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
+def            pg_catalog          pg_type            SYSTEM VIEW  1
 
 user root
 
@@ -465,6 +469,7 @@ def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
+def            pg_catalog          pg_type            SYSTEM VIEW  1
 
 user root
 
