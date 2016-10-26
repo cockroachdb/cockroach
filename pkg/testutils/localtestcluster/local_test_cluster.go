@@ -121,7 +121,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	cfg.Transport = transport
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
-	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
+	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.Stores.AddStore(ltc.Store)

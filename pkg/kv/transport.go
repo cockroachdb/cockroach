@@ -238,6 +238,10 @@ func (*grpcTransport) Close() {
 	// time out anyway)
 }
 
+// NB: this method's callers may have a reference to the client they wish to
+// mutate, but the clients reside in a slice which is shuffled via
+// MoveToFront, making it unsafe to mutate the client through a reference to
+// the slice.
 func (gt *grpcTransport) setPending(replica roachpb.ReplicaDescriptor, pending bool) {
 	gt.clientPendingMu.Lock()
 	defer gt.clientPendingMu.Unlock()

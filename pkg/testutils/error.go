@@ -20,9 +20,9 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // IsError returns true if err is non-nil and the error string matches the
@@ -65,7 +65,7 @@ func Caller(depth ...int) string {
 	var sep string
 	var buf bytes.Buffer
 	for _, d := range depth {
-		_, file, line, _ := runtime.Caller(d + 1)
+		file, line, _ := caller.Lookup(d + 1)
 		fmt.Fprintf(&buf, "%s%s:%d", sep, file, line)
 		sep = " "
 	}
