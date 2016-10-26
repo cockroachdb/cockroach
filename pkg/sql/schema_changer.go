@@ -654,6 +654,10 @@ type SchemaChangerTestingKnobs struct {
 	// caller of SchemaChanger.exec().
 	RunBeforeBackfillChunk func(sp roachpb.Span) error
 
+	// RunAfterBackfillChunk is called after executing each chunk of a
+	// backfill during a schema change operation.
+	RunAfterBackfillChunk func()
+
 	// RenameOldNameNotInUseNotification is called during a rename schema
 	// change, after all leases on the version of the descriptor with the old
 	// name are gone, and just before the mapping of the old name to the
@@ -671,6 +675,9 @@ type SchemaChangerTestingKnobs struct {
 	// WriteCheckpointInterval is the interval after which a checkpoint is
 	// written.
 	WriteCheckpointInterval time.Duration
+
+	// BackfillChunkSize is to be used for all backfill chunked operations.
+	BackfillChunkSize int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

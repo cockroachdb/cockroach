@@ -142,56 +142,54 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	var addedIndexDescs []sqlbase.IndexDescriptor
 	// Indexes within the Mutations slice for checkpointing.
 	mutationSentinel := -1
-	columnMutationIdx, addedIndexMutationIdx, droppedIndexMutationIdx :=
-		mutationSentinel, mutationSentinel, mutationSentinel
+	var columnMutationIdx, addedIndexMutationIdx, droppedIndexMutationIdx int
 
+	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-
-		for i, m := range tableDesc.Mutations {
-			if m.MutationID != sc.mutationID {
-				break
-			}
-			switch m.Direction {
-			case sqlbase.DescriptorMutation_ADD:
-				switch t := m.Descriptor_.(type) {
-				case *sqlbase.DescriptorMutation_Column:
-					addedColumnDescs = append(addedColumnDescs, *t.Column)
-					if columnMutationIdx == mutationSentinel {
-						columnMutationIdx = i
-					}
-				case *sqlbase.DescriptorMutation_Index:
-					addedIndexDescs = append(addedIndexDescs, *t.Index)
-					if addedIndexMutationIdx == mutationSentinel {
-						addedIndexMutationIdx = i
-					}
-				default:
-					return errors.Errorf("unsupported mutation: %+v", m)
-				}
-
-			case sqlbase.DescriptorMutation_DROP:
-				switch t := m.Descriptor_.(type) {
-				case *sqlbase.DescriptorMutation_Column:
-					droppedColumnDescs = append(droppedColumnDescs, *t.Column)
-					if columnMutationIdx == mutationSentinel {
-						columnMutationIdx = i
-					}
-				case *sqlbase.DescriptorMutation_Index:
-					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
-					if droppedIndexMutationIdx == mutationSentinel {
-						droppedIndexMutationIdx = i
-					}
-				default:
-					return errors.Errorf("unsupported mutation: %+v", m)
-				}
-			}
-		}
-		return nil
+		var getError error
+		tableDesc, getError = sqlbase.GetTableDescFromID(txn, sc.tableID)
+		return getError
 	}); err != nil {
 		return err
+	}
+
+	for i, m := range tableDesc.Mutations {
+		if m.MutationID != sc.mutationID {
+			break
+		}
+		switch m.Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			switch t := m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Column:
+				addedColumnDescs = append(addedColumnDescs, *t.Column)
+				if columnMutationIdx == mutationSentinel {
+					columnMutationIdx = i
+				}
+			case *sqlbase.DescriptorMutation_Index:
+				addedIndexDescs = append(addedIndexDescs, *t.Index)
+				if addedIndexMutationIdx == mutationSentinel {
+					addedIndexMutationIdx = i
+				}
+			default:
+				return errors.Errorf("unsupported mutation: %+v", m)
+			}
+
+		case sqlbase.DescriptorMutation_DROP:
+			switch t := m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Column:
+				droppedColumnDescs = append(droppedColumnDescs, *t.Column)
+				if columnMutationIdx == mutationSentinel {
+					columnMutationIdx = i
+				}
+			case *sqlbase.DescriptorMutation_Index:
+				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+				if droppedIndexMutationIdx == mutationSentinel {
+					droppedIndexMutationIdx = i
+				}
+			default:
+				return errors.Errorf("unsupported mutation: %+v", m)
+			}
+		}
 	}
 
 	// First drop indexes, then add/drop columns, and only then add indexes.
@@ -304,7 +302,10 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		}
 
 		// Run through the entire table key space adding and deleting columns.
-		const chunkSize = ColumnTruncateAndBackfillChunkSize
+		chunkSize := int64(ColumnTruncateAndBackfillChunkSize)
+		if sc.testingKnobs.BackfillChunkSize > 0 {
+			chunkSize = sc.testingKnobs.BackfillChunkSize
+		}
 		// Evaluate default values.
 		updateCols := append(added, dropped...)
 		updateValues := make(parser.DTuple, len(updateCols))
@@ -350,6 +351,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return nil
 }
 
+// truncateAndBackfillColumnsChunk returns the next-key, done and an error.
+// next-key and done are invalid if error != nil. next-key is invalid if done
+// is true.
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
@@ -369,8 +373,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
-		if tableDesc.Deleted() {
-			done = true
+		if done = tableDesc.Deleted(); done {
 			return nil
 		}
 
@@ -378,6 +381,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			if err := sc.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
 			}
+		}
+		if sc.testingKnobs.RunAfterBackfillChunk != nil {
+			defer sc.testingKnobs.RunAfterBackfillChunk()
 		}
 
 		updateCols := append(added, dropped...)
@@ -465,8 +471,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err := txn.Run(writeBatch); err != nil {
 			return convertBackfillError(tableDesc, writeBatch)
 		}
-		if i < chunkSize {
-			done = true
+		if done = i < chunkSize; done {
 			return nil
 		}
 		curIndexKey, _, err := sqlbase.EncodeIndexKey(
@@ -490,7 +495,10 @@ func (sc *SchemaChanger) truncateIndexes(
 	dropped []sqlbase.IndexDescriptor,
 	mutationIdx int,
 ) error {
-	const chunkSize = IndexTruncateChunkSize
+	chunkSize := int64(IndexTruncateChunkSize)
+	if sc.testingKnobs.BackfillChunkSize > 0 {
+		chunkSize = sc.testingKnobs.BackfillChunkSize
+	}
 	for _, desc := range dropped {
 		var resume roachpb.Span
 		lastCheckpoint := timeutil.Now()
@@ -513,8 +521,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				// Short circuit the truncation if the table has been deleted.
-				if tableDesc.Deleted() {
-					done = true
+				if done = tableDesc.Deleted(); done {
 					return nil
 				}
 
@@ -522,6 +529,9 @@ func (sc *SchemaChanger) truncateIndexes(
 					if err := sc.testingKnobs.RunBeforeBackfillChunk(resume); err != nil {
 						return err
 					}
+				}
+				if sc.testingKnobs.RunAfterBackfillChunk != nil {
+					defer sc.testingKnobs.RunAfterBackfillChunk()
 				}
 
 				rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
@@ -567,7 +577,10 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	// Backfill the index entries for all the rows.
-	const chunkSize = IndexBackfillChunkSize
+	chunkSize := int64(IndexBackfillChunkSize)
+	if sc.testingKnobs.BackfillChunkSize > 0 {
+		chunkSize = sc.testingKnobs.BackfillChunkSize
+	}
 	lastCheckpoint := timeutil.Now()
 	for row, done := int64(0), false; !done; row += chunkSize {
 		// First extend the schema change lease.
@@ -588,6 +601,8 @@ func (sc *SchemaChanger) backfillIndexes(
 	return nil
 }
 
+// backfillIndexesChunk returns the next-key, done and an error. next-key and
+// done are invalid if error != nil. next-key is invalid if done is true.
 func (sc *SchemaChanger) backfillIndexesChunk(
 	added []sqlbase.IndexDescriptor,
 	sp roachpb.Span,
@@ -604,8 +619,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
-		if tableDesc.Deleted() {
-			done = true
+		if done = tableDesc.Deleted(); done {
 			return nil
 		}
 
@@ -614,7 +628,9 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 				return err
 			}
 		}
-
+		if sc.testingKnobs.RunAfterBackfillChunk != nil {
+			defer sc.testingKnobs.RunAfterBackfillChunk()
+		}
 		// Get the next set of rows.
 		// TODO(tamird): Support partial indexes?
 		//
@@ -677,8 +693,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return convertBackfillError(tableDesc, b)
 		}
 		// Have we processed all the table rows?
-		if numRows < chunkSize {
-			done = true
+		if done = numRows < chunkSize; done {
 			return nil
 		}
 		// Keep track of the next key.

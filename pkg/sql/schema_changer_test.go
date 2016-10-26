@@ -708,6 +708,133 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 }
 
+// Test aborting a schema change backfill transaction and check that the
+// backfill is completed correctly. The backfill transaction is aborted at a
+// time when it thinks it has processed all the rows of the table. Later,
+// before the transaction is retried, the table is populated with more rows
+// that a backfill chunk, requiring the backfill to forget that it is at the
+// end of its processing and needs to continue on to process two more chunks
+// of data.
+func TestAbortSchemaChangeBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var backfillNotification, commandsDone chan bool
+	var dontAbortBackfill uint32
+	params, _ := createTestServerParams()
+	maxValue := 100
+	// Disable asynchronous schema change execution to allow synchronous path
+	// to trigger start of backfill notification.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			RunAfterBackfillChunk: func() {
+				if dont := atomic.LoadUint32(&dontAbortBackfill); dont == 1 {
+					return
+				}
+				// Close channel to notify that the backfill has been
+				// completed but hasn't yet committed.
+				close(backfillNotification)
+				// Receive signal that the commands that push the backfill
+				// transaction have completed; The backfill will attempt
+				// to commit and will abort.
+				<-commandsDone
+				atomic.StoreUint32(&dontAbortBackfill, 1)
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			// Set the backfill chunk size for all the backfill operations.
+			BackfillChunkSize: int64(maxValue),
+		},
+	}
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert enough rows to exceed the chunk size.
+	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, 0)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+
+	// Different test cases. The two drop cases (column and index) do not need
+	// to be tested here because the INSERT down below will not insert an
+	// entry for a dropped column or index, however, it's still nice to have
+	// them just in case INSERT is messed up.
+	testCases := []struct {
+		sql                   string
+		expectedNumKeysPerRow int
+	}{
+		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 2},
+		{"ALTER TABLE t.test DROP x", 1},
+		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
+		{"DROP INDEX t.test@foo", 1},
+	}
+
+	for _, testCase := range testCases {
+		// Delete two rows so that the table size is smaller than a backfill
+		// chunk. The two values will be added later to make the table larger
+		// than a backfill chunk after the schema change backfill is aborted.
+		for i := range []int{0, 1} {
+			if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, i); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		backfillNotification = make(chan bool)
+		commandsDone = make(chan bool)
+		atomic.StoreUint32(&dontAbortBackfill, 0)
+		// Run the column schema change in a separate goroutine.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			// Start schema change that eventually runs a backfill.
+			if _, err := sqlDB.Exec(testCase.sql); err != nil {
+				t.Error(err)
+			}
+
+			wg.Done()
+		}()
+
+		// Wait until the schema change backfill ends.
+		<-backfillNotification
+
+		// Delete a row that will push the backfill transaction.
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, 2); err != nil {
+			t.Fatal(err)
+		}
+
+		// Add missing rows so that the table exceeds the size of a backfill
+		// chunk.
+		for i := range []int{0, 1, 2} {
+			if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, i, i); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Release backfill so that it can commit and get aborted.
+		close(commandsDone)
+
+		wg.Wait() // for schema change to complete.
+
+		// Verify the number of keys left behind in the table to validate
+		// schema change operations.
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+		tableEnd := tablePrefix.PrefixEnd()
+		if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+			t.Fatal(err)
+		} else if e := testCase.expectedNumKeysPerRow * (maxValue + 1); len(kvs) != e {
+			t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+		}
+	}
+}
+
 // Test schema changes are retried and complete properly. This also checks
 // that a mutation checkpoint reduces the number of chunks operated on during
 // a retry.
