@@ -88,8 +88,8 @@ func TestAmbiguousCommit(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
-	_ = sqlDB.Exec(`CREATE DATABASE test`)
-	_ = sqlDB.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
+	sqlDB.Exec(`CREATE DATABASE test`)
+	sqlDB.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
 
 	tableID := sqlutils.QueryTableID(t, tc.Conns[0], "test", "t")
 	tableStartKey.Store(keys.MakeTablePrefix(tableID))
