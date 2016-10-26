@@ -85,21 +85,23 @@ func TestAmbiguousCommit(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
-	_ = sqlDB.Exec(`CREATE DATABASE test`)
-	_ = sqlDB.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
+	sqlDB.Exec(`CREATE DATABASE test`)
+	sqlDB.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
 
 	tableID := sqlutils.QueryTableID(t, tc.Conns[0], "test", "t")
 	tableStartKey.Store(keys.MakeTablePrefix(tableID))
 
 	// Wait for new table to split.
 	util.SucceedsSoon(t, func() error {
-		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(tableStartKey.Load().([]byte)))
+		startKey := tableStartKey.Load().([]byte)
+
+		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(startKey))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !desc.StartKey.Equal(tableStartKey.Load().([]byte)) {
+		if !desc.StartKey.Equal(startKey) {
 			return errors.Errorf("expected range start key %s; got %s",
-				tableStartKey.Load().([]byte), desc.StartKey)
+				startKey, desc.StartKey)
 		}
 		return nil
 	})

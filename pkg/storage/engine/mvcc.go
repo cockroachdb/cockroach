@@ -428,10 +428,11 @@ func updateStatsOnGC(
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the enginepb.MVCCStats struct.
 func MVCCGetRangeStats(
-	ctx context.Context, engine Reader, rangeID roachpb.RangeID, ms *enginepb.MVCCStats,
-) error {
-	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, ms)
-	return err
+	ctx context.Context, engine Reader, rangeID roachpb.RangeID,
+) (enginepb.MVCCStats, error) {
+	var ms enginepb.MVCCStats
+	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, &ms)
+	return ms, err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
@@ -441,12 +442,9 @@ func MVCCSetRangeStats(
 	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, nil, ms)
 }
 
-// MVCCGetProto fetches the value at the specified key and unmarshals
-// it using a protobuf decoder. Returns true on success or false if
-// the key was not found. In the event of a WriteIntentError when
-// consistent=false, we return the error and the decoded result; for
-// all other errors (or when consistent=true) the decoded value is
-// invalid.
+// MVCCGetProto fetches the value at the specified key and unmarshals it into
+// msg if msg is non-nil. Returns true on success or false if the key was not
+// found. The semantics of consistent are the same as in MVCCGet.
 func MVCCGetProto(
 	ctx context.Context,
 	engine Reader,
@@ -2183,8 +2181,8 @@ func MVCCFindSplitKey(
 	logf("searching split key for %d [%s, %s)", rangeID, key, endKey)
 
 	// Get range size from stats.
-	var ms enginepb.MVCCStats
-	if err := MVCCGetRangeStats(ctx, engine, rangeID, &ms); err != nil {
+	ms, err := MVCCGetRangeStats(ctx, engine, rangeID)
+	if err != nil {
 		return nil, err
 	}
 

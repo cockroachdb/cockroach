@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,7 +177,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}, tc.stopper); err != nil {
+		}); err != nil {
 			t.Fatal(err)
 		}
 		// Now that we have our actual store, monkey patch the sender used in cfg.DB.
@@ -4249,17 +4248,15 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(
-	eng engine.Engine, rangeID roachpb.RangeID, expMS enginepb.MVCCStats, t *testing.T,
-) {
-	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
-		t.Fatal(err)
+func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
+	ms, err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID)
+	if err != nil {
+		return err
 	}
-	if !reflect.DeepEqual(expMS, ms) {
-		f, l, _ := caller.Lookup(1)
-		t.Fatalf("%s:%d: expected and actual stats differ:\n%s", f, l, pretty.Diff(expMS, ms))
+	if ms != expMS {
+		return errors.Errorf("expected and actual stats differ:\n%s", pretty.Diff(expMS, ms))
 	}
+	return nil
 }
 
 // TestReplicaStatsComputation verifies that commands executed against a
@@ -4298,7 +4295,9 @@ func TestReplicaStatsComputation(t *testing.T) {
 		ValCount:  1,
 	})
 
-	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
+	if err := verifyRangeStats(tc.engine, tc.rng.RangeID, expMS); err != nil {
+		t.Fatal(err)
+	}
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
@@ -4328,7 +4327,9 @@ func TestReplicaStatsComputation(t *testing.T) {
 		ValCount:    2,
 		IntentCount: 1,
 	})
-	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
+	if err := verifyRangeStats(tc.engine, tc.rng.RangeID, expMS); err != nil {
+		t.Fatal(err)
+	}
 
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
@@ -4351,7 +4352,9 @@ func TestReplicaStatsComputation(t *testing.T) {
 		KeyCount:  2,
 		ValCount:  2,
 	})
-	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
+	if err := verifyRangeStats(tc.engine, tc.rng.RangeID, expMS); err != nil {
+		t.Fatal(err)
+	}
 
 	// Delete the 1st value.
 	dArgs := deleteArgs([]byte("a"))
@@ -4368,7 +4371,9 @@ func TestReplicaStatsComputation(t *testing.T) {
 		KeyCount:  2,
 		ValCount:  3,
 	})
-	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
+	if err := verifyRangeStats(tc.engine, tc.rng.RangeID, expMS); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestMerge verifies that the Merge command is behaving as expected. Time
@@ -5786,7 +5791,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	cfg := TestStoreConfig()
 	// Disable ticks to avoid automatic reproposals after a timeout, which
 	// would pass this test.
-	cfg.RaftTickInterval = time.Hour
+	cfg.RaftTickInterval = math.MaxInt32
 	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
 	rng := tc.rng
@@ -5929,7 +5934,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 
 	const num = 10
 
-	var chs []chan proposalResult
+	var chs []chan proposalResult // protected by rng.mu
 
 	func() {
 		for i := 0; i < num; i++ {
@@ -5950,7 +5955,6 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			} else if err := rng.submitProposalLocked(cmd); err != nil {
 				t.Error(err)
 			} else {
-
 				chs = append(chs, cmd.done)
 			}
 			rng.mu.Unlock()
@@ -6062,7 +6066,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tc testContext
 	cfg := TestStoreConfig()
-	cfg.RaftTickInterval = 24 * time.Hour // disable ticks
+	// Disable ticks which would interfere with the manual ticking in this test.
+	cfg.RaftTickInterval = math.MaxInt32
 	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
 

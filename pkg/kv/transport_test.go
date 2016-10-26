@@ -17,10 +17,10 @@
 package kv
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -37,11 +37,11 @@ func TestTransportMoveToFront(t *testing.T) {
 	gt := grpcTransport{orderedClients: clients}
 
 	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {
-		_, fn, line, _ := runtime.Caller(1)
+		file, line, _ := caller.Lookup(1)
 		for i, bc := range gt.orderedClients {
 			if bc.args.Replica != replicas[i] {
 				t.Fatalf("%s:%d: expected order %+v; got mismatch at index %d: %+v",
-					fn, line, replicas, i, bc.args.Replica)
+					file, line, replicas, i, bc.args.Replica)
 			}
 		}
 	}

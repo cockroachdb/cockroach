@@ -598,30 +598,28 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
 	}
 
-	{
-		// We might have to sleep a bit to protect against this node producing
-		// non-monotonic timestamps. Before restarting, its clock might have been
-		// driven by other nodes' fast clocks, but when we restarted, we lost all this
-		// information. For example, a client might have written a value at a
-		// timestamp that's in the future of the restarted node's clock, and if we
-		// don't do something, the same client's read would not return it.
-		// So, we wait up to MaxOffset. We assume we couldn't have served timestamps
-		// more than MaxOffset in the future.
-		//
-		// As an optimization for tests, we don't sleep if all the stores are brand
-		// new. In this case, the node will not serve anything anyway until it
-		// synchronizes with other nodes.
-		if anyStoreBootstrapped {
-			sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
-			if sleepDuration > 0 {
-				log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
-				time.Sleep(sleepDuration)
-			}
+	// We might have to sleep a bit to protect against this node producing non-
+	// monotonic timestamps. Before restarting, its clock might have been driven
+	// by other nodes' fast clocks, but when we restarted, we lost all this
+	// information. For example, a client might have written a value at a
+	// timestamp that's in the future of the restarted node's clock, and if we
+	// don't do something, the same client's read would not return it. So, we
+	// wait up to MaxOffset. We assume we couldn't have served timestamps more
+	// than MaxOffset in the future.
+	//
+	// As an optimization for tests, we don't sleep if all the stores are brand
+	// new. In this case, the node will not serve anything anyway until it
+	// synchronizes with other nodes.
+	if anyStoreBootstrapped {
+		sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
+		if sleepDuration > 0 {
+			log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
+			time.Sleep(sleepDuration)
 		}
-		s.stopper.RunWorker(func() {
-			netutil.FatalIfUnexpected(m.Serve())
-		})
 	}
+	s.stopper.RunWorker(func() {
+		netutil.FatalIfUnexpected(m.Serve())
+	})
 
 	log.Event(ctx, "accepting connections")
 
