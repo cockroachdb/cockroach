@@ -395,6 +395,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "SetSystemConfigTrigger"}: {},
 		key{txnType, "SystemConfigTrigger"}:    {},
 		key{txnType, "UpdateDeadlineMaybe"}:    {},
+		key{txnType, "AddCommitTrigger"}:       {},
 	}
 
 	for b := range omittedChecks {
