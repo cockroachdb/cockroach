@@ -1658,11 +1658,18 @@ func splitPostApply(
 	// Update store stats with difference in stats before and after split.
 	r.store.metrics.addMVCCStats(deltaMS)
 
-	// If the range was not properly replicated before the split, the
-	// replicate queue may not have picked it up (due to the need for
-	// a split). Enqueue both left and right halves to speed up a
-	// potentially necessary replication. See #7022 and #7800.
 	now := r.store.Clock().Now()
+
+	// While performing the split, zone config changes or a newly created table
+	// might require the range to be split again. Enqueue both the left and right
+	// ranges to speed up such splits. See #10160.
+	r.store.splitQueue.MaybeAdd(r, now)
+	r.store.splitQueue.MaybeAdd(rightRng, now)
+
+	// If the range was not properly replicated before the split, the replicate
+	// queue may not have picked it up (due to the need for a split). Enqueue
+	// both the left and right ranges to speed up a potentially necessary
+	// replication. See #7022 and #7800.
 	r.store.replicateQueue.MaybeAdd(r, now)
 	r.store.replicateQueue.MaybeAdd(rightRng, now)
 
