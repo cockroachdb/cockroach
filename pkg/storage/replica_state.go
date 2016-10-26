@@ -42,10 +42,11 @@ func loadState(
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the range lease.
-	var err error
-	if s.Lease, err = loadLease(ctx, reader, desc.RangeID); err != nil {
+	lease, err := loadLease(ctx, reader, desc.RangeID)
+	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	s.Lease = &lease
 
 	if s.Frozen, err = loadFrozenStatus(ctx, reader, desc.RangeID); err != nil {
 		return storagebase.ReplicaState{}, err
@@ -122,15 +123,13 @@ func saveState(
 
 func loadLease(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
-) (*roachpb.Lease, error) {
-	lease := &roachpb.Lease{}
+) (roachpb.Lease, error) {
+	var lease roachpb.Lease
 	_, err := engine.MVCCGetProto(ctx, reader,
 		keys.RangeLeaseKey(rangeID), hlc.ZeroTimestamp,
-		true, nil, lease)
-	if err != nil {
-		return nil, err
-	}
-	return lease, nil
+		true, nil, &lease,
+	)
+	return lease, err
 }
 
 func setLease(
@@ -286,11 +285,7 @@ func setTxnSpanGCThreshold(
 func loadMVCCStats(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (enginepb.MVCCStats, error) {
-	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(ctx, reader, rangeID, &ms); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	return ms, nil
+	return engine.MVCCGetRangeStats(ctx, reader, rangeID)
 }
 
 func setMVCCStats(
@@ -495,7 +490,7 @@ func writeInitialState(
 
 	if existingLease, err := loadLease(ctx, eng, desc.RangeID); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
-	} else if (existingLease != nil && *existingLease != roachpb.Lease{}) {
+	} else if (existingLease != roachpb.Lease{}) {
 		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
 	}
 

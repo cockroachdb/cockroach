@@ -1185,14 +1185,14 @@ func TestSortRangeDescByAge(t *testing.T) {
 }
 
 func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
-	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
+	ms, err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID)
+	if err != nil {
 		return err
 	}
 	// Clear system counts as these are expected to vary.
 	ms.SysBytes, ms.SysCount = 0, 0
-	if expMS != ms {
-		return fmt.Errorf("expected stats %+v; got %+v", expMS, ms)
+	if ms != expMS {
+		return errors.Errorf("expected and actual stats differ:\n%s", pretty.Diff(expMS, ms))
 	}
 	return nil
 }
