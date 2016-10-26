@@ -139,8 +139,7 @@ func (t *parallelTest) run(dir string) {
 	}
 
 	if spec.SkipReason != "" {
-		log.Warningf(t.ctx, "Skipping test %s: %s", dir, spec.SkipReason)
-		return
+		t.Skip(spec.SkipReason)
 	}
 
 	log.Infof(t.ctx, "Running test %s", dir)
@@ -251,10 +250,12 @@ func TestParallel(t *testing.T) {
 		t.Fatalf("No testfiles found (glob: %s)", glob)
 	}
 	total := 0
-	for _, p := range paths {
-		pt := parallelTest{T: t, ctx: context.Background()}
-		pt.run(p)
-		total++
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			pt := parallelTest{T: t, ctx: context.Background()}
+			pt.run(path)
+			total++
+		})
 	}
 	log.Infof(context.Background(), "%d parallel tests passed", total)
 }
