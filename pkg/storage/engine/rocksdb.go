@@ -915,6 +915,7 @@ func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	return dbApplyBatchRepr(r.batch, repr)
 }
 
