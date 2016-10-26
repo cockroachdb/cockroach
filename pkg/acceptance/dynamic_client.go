@@ -78,7 +78,7 @@ func (dc *dynamicClient) exec(query string, args ...interface{}) (gosql.Result, 
 		}
 		if result, err := client.Exec(
 			query, args...,
-		); err == nil || !testutils.IsSQLRetryError(err) {
+		); err == nil || !testutils.IsSQLRetryableError(err) {
 			return result, err
 		}
 	}
@@ -95,7 +95,7 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 		}
 		if err := client.QueryRow(
 			query, queryArgs...,
-		).Scan(destArgs...); err == nil || !testutils.IsSQLRetryError(err) {
+		).Scan(destArgs...); err == nil || !testutils.IsSQLRetryableError(err) {
 			return err
 		}
 	}

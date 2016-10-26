@@ -147,7 +147,7 @@ func verifyAccounts(t *testing.T, client *testClient) {
 		client.RLock()
 		defer client.RUnlock()
 		err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum)
-		if err != nil && !testutils.IsSQLRetryError(err) {
+		if err != nil && !testutils.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
 		return err
@@ -164,7 +164,7 @@ func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) 
 	for !state.done() {
 		if err := transferMoney(client, numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
-			if !testutils.IsSQLRetryError(err) {
+			if !testutils.IsSQLRetryableError(err) {
 				// Report the err and terminate.
 				state.errChan <- err
 				break
