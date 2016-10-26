@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -1092,15 +1093,15 @@ func TestLogic(t *testing.T) {
 	if *printErrorSummary {
 		defer l.printErrorSummary()
 	}
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
+	for _, p := range paths {
+		t.Run(path.Base(p), func(t *testing.T) {
 			// the `t` given to this anonymous function may be different
 			// from the t above, so re-bind it to `l` for the duration of
 			// the test.
 			l.T = t
 			defer l.close()
 			l.setup()
-			if err := l.processTestFile(path); err != nil {
+			if err := l.processTestFile(p); err != nil {
 				t.Error(err)
 			}
 		})
