@@ -1,0 +1,173 @@
+go test -v  -tags '' -i -c ./storage -o ./storage/stress.test
+github.com/cockroachdb/cockroach/storage
+github.com/cockroachdb/cockroach/storage_test
+testmain
+cd ./storage && stress -p 100 -stderr -maxfails 1 ./stress.test -test.run "TestRaftRemoveRace" -test.timeout 15s -test.v
+351 runs so far, 0 failures, over 5s
+718 runs so far, 0 failures, over 10s
+1089 runs so far, 0 failures, over 15s
+1472 runs so far, 0 failures, over 20s
+1844 runs so far, 0 failures, over 25s
+2217 runs so far, 0 failures, over 30s
+2594 runs so far, 0 failures, over 35s
+
+I161007 00:27:32.319758 1 rand.go:76  Random seed: -8328855967269786437
+=== RUN   TestRaftRemoveRace
+I161007 00:27:32.363106 22 storage/engine/rocksdb.go:349  opening in memory rocksdb instance
+I161007 00:27:32.518128 22 gossip/gossip.go:234  initial resolvers: []
+W161007 00:27:32.518166 22 gossip/gossip.go:1045  no resolvers found; use --join to specify a connected node
+I161007 00:27:32.518220 22 gossip/gossip.go:268  NodeID set to 1
+I161007 00:27:32.520679 22 gossip/gossip.go:268  NodeID set to 1
+I161007 00:27:32.532072 75 storage/replica_trigger.go:252  [s1,r1:/M{in-ax},r1:/M{in-ax}] new range lease replica {1 1 1} 1970-01-01 00:00:00 +0000 UTC 900ms following replica {0 0 0} 1970-01-01 00:00:00 +0000 UTC 0s [physicalTime=1970-01-01 00:00:00 +0000 UTC]
+I161007 00:27:32.532308 22 storage/store.go:1046  [n1,s1]: failed initial metrics computation: [n1,s1]: system config not yet available
+I161007 00:27:32.533303 22 gossip/gossip.go:282  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:41973" > attrs:<>
+I161007 00:27:32.575073 22 storage/engine/rocksdb.go:349  opening in memory rocksdb instance
+I161007 00:27:32.576901 22 gossip/gossip.go:234  initial resolvers: [127.0.0.1:41973]
+W161007 00:27:32.576977 22 gossip/gossip.go:1047  no incoming or outgoing connections
+I161007 00:27:32.577071 22 gossip/gossip.go:268  NodeID set to 2
+I161007 00:27:32.592603 22 gossip/gossip.go:268  NodeID set to 2
+I161007 00:27:32.594037 194 gossip/client.go:125  node 2: started gossip client to 127.0.0.1:41973
+I161007 00:27:32.608345 22 gossip/gossip.go:282  NodeDescriptor set to node_id:2 address:<network_field:"tcp" address_field:"127.0.0.1:37451" > attrs:<>
+I161007 00:27:32.609358 22 storage/engine/rocksdb.go:349  opening in memory rocksdb instance
+I161007 00:27:32.610414 22 gossip/gossip.go:234  initial resolvers: [127.0.0.1:41973]
+W161007 00:27:32.610835 22 gossip/gossip.go:1047  no incoming or outgoing connections
+I161007 00:27:32.610952 22 gossip/gossip.go:268  NodeID set to 3
+I161007 00:27:32.612713 22 gossip/gossip.go:268  NodeID set to 3
+I161007 00:27:32.613032 22 storage/store.go:1046  [n3,s3]: failed initial metrics computation: [n3,s3]: system config not yet available
+I161007 00:27:32.613109 22 gossip/gossip.go:282  NodeDescriptor set to node_id:3 address:<network_field:"tcp" address_field:"127.0.0.1:40668" > attrs:<>
+I161007 00:27:32.617323 284 gossip/client.go:125  node 3: started gossip client to 127.0.0.1:41973
+I161007 00:27:32.619254 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 7b859eed for range 1 at index 12 in 52.124µs.
+I161007 00:27:32.619910 22 storage/store.go:2741  streamed snapshot: kv pairs: 31, log entries: 2
+I161007 00:27:32.620253 407 storage/replica_raftstorage.go:573  [s2] [n2,s2,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 12 (id=7b859eed, encoded size=16, 1 rocksdb batches, 2 log entries)
+I161007 00:27:32.620678 407 storage/replica_raftstorage.go:576  [s2] [n2,s2,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.000s
+I161007 00:27:32.621232 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > next_replica_id:2
+I161007 00:27:32.622223 411 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:2 StoreID:2 ReplicaID:2} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:32.623286 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 910b98c9 for range 1 at index 14 in 58.473µs.
+I161007 00:27:32.624405 22 storage/store.go:2741  streamed snapshot: kv pairs: 34, log entries: 4
+I161007 00:27:32.624806 418 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 14 (id=910b98c9, encoded size=16, 1 rocksdb batches, 4 log entries)
+I161007 00:27:32.625339 418 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.001s
+I161007 00:27:32.625979 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:3
+I161007 00:27:32.627519 426 storage/raft_transport.go:418  raft transport stream to node 1 established
+I161007 00:27:32.631749 436 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:3} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:3}]
+I161007 00:27:32.640315 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:3 > next_replica_id:4
+I161007 00:27:32.668434 458 storage/raft_transport.go:418  raft transport stream to node 1 established
+I161007 00:27:32.670389 464 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:3} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:32.787301 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 1684be25 for range 1 at index 18 in 103.115µs.
+I161007 00:27:32.791184 22 storage/store.go:2741  streamed snapshot: kv pairs: 40, log entries: 8
+I161007 00:27:32.801265 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:4
+I161007 00:27:32.802575 460 storage/store.go:2626  [s3] [n3,s3,r1:/M{in-ax}]: added to replica GC queue (peer suggestion)
+I161007 00:27:32.806018 483 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:4} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:4}]
+I161007 00:27:32.829380 140 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 626df170 for range 1 at index 20 in 124.86µs.
+I161007 00:27:32.830054 477 storage/store.go:2741  [s1,r1:/M{in-ax}] streamed snapshot: kv pairs: 43, log entries: 10
+I161007 00:27:32.830239 480 storage/replica_raftstorage.go:573  [s3,r1:{-}] [n3,s3,r1:{-}]: with replicaID 4, applying Raft snapshot at index 20 (id=626df170, encoded size=16, 1 rocksdb batches, 10 log entries)
+I161007 00:27:32.830926 480 storage/replica_raftstorage.go:576  [s3,r1:/M{in-ax}] [n3,s3,r1:/M{in-ax}]: with replicaID 4, applied Raft snapshot in 0.001s
+I161007 00:27:32.846278 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:4 > next_replica_id:5
+I161007 00:27:32.848365 515 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:4} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:32.850709 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot f90523b6 for range 1 at index 22 in 55.322µs.
+I161007 00:27:32.852948 22 storage/store.go:2741  streamed snapshot: kv pairs: 46, log entries: 12
+I161007 00:27:32.855711 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:5
+I161007 00:27:32.857820 543 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:5} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:5}]
+I161007 00:27:32.930105 71 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 809ea01d for range 1 at index 24 in 122.784µs.
+I161007 00:27:32.930859 503 storage/store.go:2741  [s1,r1:/M{in-ax}] streamed snapshot: kv pairs: 49, log entries: 14
+I161007 00:27:32.931077 506 storage/replica_raftstorage.go:573  [s3,r1:{-}] [n3,s3,r1:{-}]: with replicaID 5, applying Raft snapshot at index 24 (id=809ea01d, encoded size=16, 1 rocksdb batches, 14 log entries)
+I161007 00:27:32.931830 506 storage/replica_raftstorage.go:576  [s3,r1:/M{in-ax}] [n3,s3,r1:/M{in-ax}]: with replicaID 5, applied Raft snapshot in 0.001s
+I161007 00:27:32.947620 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:5 > next_replica_id:6
+I161007 00:27:32.949725 438 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:5} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:32.951705 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot d38a1e3a for range 1 at index 26 in 53.848µs.
+I161007 00:27:32.955289 460 storage/store.go:2626  [s3] [n3,s3,r1:/M{in-ax}]: added to replica GC queue (peer suggestion)
+I161007 00:27:32.955686 22 storage/store.go:2741  streamed snapshot: kv pairs: 52, log entries: 16
+I161007 00:27:32.956850 520 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 26 (id=d38a1e3a, encoded size=16, 1 rocksdb batches, 16 log entries)
+I161007 00:27:32.957811 520 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.001s
+I161007 00:27:32.958455 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:6
+I161007 00:27:32.960797 554 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:6} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:6}]
+I161007 00:27:33.001560 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:6 > next_replica_id:7
+I161007 00:27:33.021706 513 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:6} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.024623 460 storage/store.go:2626  [s3] [n3,s3,r1:/M{in-ax}]: added to replica GC queue (peer suggestion)
+I161007 00:27:33.027266 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot b2437b9f for range 1 at index 30 in 86.629µs.
+I161007 00:27:33.028519 22 storage/store.go:2741  streamed snapshot: kv pairs: 58, log entries: 20
+I161007 00:27:33.029255 580 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 30 (id=b2437b9f, encoded size=16, 1 rocksdb batches, 20 log entries)
+I161007 00:27:33.030367 580 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.001s
+I161007 00:27:33.030957 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:7
+I161007 00:27:33.032708 492 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:7} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:7}]
+I161007 00:27:33.034846 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:7 > next_replica_id:8
+I161007 00:27:33.037831 610 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:7} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.043645 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot c183199d for range 1 at index 34 in 88.512µs.
+I161007 00:27:33.049168 22 storage/store.go:2741  streamed snapshot: kv pairs: 64, log entries: 24
+I161007 00:27:33.049859 526 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 34 (id=c183199d, encoded size=16, 1 rocksdb batches, 24 log entries)
+I161007 00:27:33.051270 526 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.001s
+I161007 00:27:33.051830 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:8
+I161007 00:27:33.053429 573 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:8} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:8}]
+I161007 00:27:33.055429 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:8 > next_replica_id:9
+I161007 00:27:33.060234 634 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:8} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.062834 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot edab495b for range 1 at index 38 in 64.648µs.
+I161007 00:27:33.063271 460 storage/store.go:2626  [s3] [n3,s3,r1:/M{in-ax}]: added to replica GC queue (peer suggestion)
+I161007 00:27:33.115141 22 storage/store.go:2741  streamed snapshot: kv pairs: 70, log entries: 28
+I161007 00:27:33.116159 649 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 38 (id=edab495b, encoded size=16, 1 rocksdb batches, 28 log entries)
+I161007 00:27:33.131304 649 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.015s
+I161007 00:27:33.131984 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:9
+I161007 00:27:33.134450 637 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:9} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:9}]
+I161007 00:27:33.140757 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:9 > next_replica_id:10
+I161007 00:27:33.143408 679 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:9} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.145866 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 3d9d2baa for range 1 at index 42 in 76.564µs.
+I161007 00:27:33.146434 460 storage/store.go:2626  [s3] [n3,s3,r1:/M{in-ax}]: added to replica GC queue (peer suggestion)
+I161007 00:27:33.147545 22 storage/store.go:2741  streamed snapshot: kv pairs: 76, log entries: 32
+I161007 00:27:33.153560 690 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 42 (id=3d9d2baa, encoded size=16, 1 rocksdb batches, 32 log entries)
+I161007 00:27:33.155970 690 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.002s
+I161007 00:27:33.157538 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:10
+I161007 00:27:33.160027 639 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:10} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:10}]
+I161007 00:27:33.162077 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:10 > next_replica_id:11
+I161007 00:27:33.165075 693 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:10} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.168332 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 7210fe10 for range 1 at index 46 in 53.279µs.
+I161007 00:27:33.170180 22 storage/store.go:2741  streamed snapshot: kv pairs: 82, log entries: 36
+I161007 00:27:33.170929 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:11
+I161007 00:27:33.173602 609 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:11} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:11}]
+I161007 00:27:33.175646 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:11 > next_replica_id:12
+I161007 00:27:33.178409 697 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:11} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.180272 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 33ee8976 for range 1 at index 50 in 58.028µs.
+I161007 00:27:33.202935 22 storage/store.go:2741  streamed snapshot: kv pairs: 88, log entries: 40
+I161007 00:27:33.203956 702 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID [?], applying preemptive snapshot at index 50 (id=33ee8976, encoded size=16, 1 rocksdb batches, 40 log entries)
+I161007 00:27:33.206521 702 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID [?], applied preemptive snapshot in 0.001s
+I161007 00:27:33.207182 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > next_replica_id:12
+I161007 00:27:33.208003 460 storage/store.go:2626  [s3] [n3,s3,r1:/M{in-ax}]: added to replica GC queue (peer suggestion)
+I161007 00:27:33.210041 715 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing ADD_REPLICA {NodeID:3 StoreID:3 ReplicaID:12} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2} {NodeID:3 StoreID:3 ReplicaID:12}]
+I161007 00:27:33.212365 22 storage/replica_command.go:3236  change replicas: read existing descriptor range_id:1 start_key:"" end_key:"\377\377" replicas:<node_id:1 store_id:1 replica_id:1 > replicas:<node_id:2 store_id:2 replica_id:2 > replicas:<node_id:3 store_id:3 replica_id:12 > next_replica_id:13
+I161007 00:27:33.216261 781 storage/replica.go:1739  [s1,r1:/M{in-ax}] proposing REMOVE_REPLICA {NodeID:3 StoreID:3 ReplicaID:12} for range 1: [{NodeID:1 StoreID:1 ReplicaID:1} {NodeID:2 StoreID:2 ReplicaID:2}]
+I161007 00:27:33.228532 22 storage/replica_raftstorage.go:443  [s1,r1:/M{in-ax}] generated snapshot 5acac9cc for range 1 at index 54 in 93.239µs.
+I161007 00:27:33.238891 22 storage/store.go:2741  streamed snapshot: kv pairs: 94, log entries: 44
+E161007 00:27:33.239283 460 storage/store.go:2621  [s3] [n3,s3,r1:{-}]: unable to add replica {3 3 12} to GC queue: replica not initialized
+I161007 00:27:33.240226 449 storage/replica_raftstorage.go:573  [s3] [n3,s3,r1:{-}]: with replicaID 12, applying Raft snapshot at index 54 (id=5acac9cc, encoded size=16, 1 rocksdb batches, 44 log entries)
+I161007 00:27:33.243052 449 storage/replica_raftstorage.go:576  [s3] [n3,s3,r1:/M{in-ax}]: with replicaID 12, applied Raft snapshot in 0.003s
+F161007 00:27:33.243126 449 storage/store.go:2446  [s3] [n3,s3,r1:/M{in-ax}]: could not remove placeholder after preemptive snapshot
+goroutine 449 [running]:
+github.com/cockroachdb/cockroach/util/log.getStacks(0x100, 0xe7dd01a, 0x2564e20, 0xc4203f7108)
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/log/clog.go:846 +0xa5
+github.com/cockroachdb/cockroach/util/log.(*loggingT).outputLogEntry(0x2566460, 0xc400000004, 0x1f1f862, 0x10, 0x98e, 0xc4205878c0, 0x51)
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/log/clog.go:709 +0x7ae
+github.com/cockroachdb/cockroach/util/log.addStructured(0x7fdc3ed2ba40, 0xc420dba870, 0x4, 0x2, 0x1824405, 0x3a, 0xc4203f73b0, 0x1, 0x1)
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/log/structured.go:72 +0x2a7
+github.com/cockroachdb/cockroach/util/log.logDepth(0x7fdc3ed2ba40, 0xc420dba870, 0x1, 0x4, 0x1824405, 0x3a, 0xc4203f73b0, 0x1, 0x1)
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/log/log.go:88 +0x8c
+github.com/cockroachdb/cockroach/util/log.Fatalf(0x7fdc3ed2ba40, 0xc420dba870, 0x1824405, 0x3a, 0xc4203f73b0, 0x1, 0x1)
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/log/log.go:172 +0x7e
+github.com/cockroachdb/cockroach/storage.(*Store).processRaftRequest.func3(0xc420256580, 0xc4203f754b, 0xc420b043d8, 0x7fdc3ed2ba40, 0xc420dba870, 0xc420190e00, 0xc4203f7b88, 0xc4203f754a)
+	/home/tamird/src/github.com/cockroachdb/cockroach/storage/store.go:2446 +0x222
+github.com/cockroachdb/cockroach/storage.(*Store).processRaftRequest(0xc420256580, 0x7fdc3ed2ba40, 0xc420dba870, 0xc420b043d8, 0xdf4a17fbccc9ca5a, 0x81046b4bad69df95, 0x1, 0x25a2f10, 0x0, 0x0, ...)
+	/home/tamird/src/github.com/cockroachdb/cockroach/storage/store.go:2558 +0x7ff
+github.com/cockroachdb/cockroach/storage.(*Store).HandleSnapshot(0xc420256580, 0xc420b04380, 0x22222e0, 0xc4201ae910, 0x5d3101, 0xc4200e7540)
+	/home/tamird/src/github.com/cockroachdb/cockroach/storage/store.go:2318 +0x4df
+github.com/cockroachdb/cockroach/storage.(*RaftTransport).RaftSnapshot.func1.1(0x22222e0, 0xc4201ae910, 0xc42063a1e0, 0xc420341f38, 0xc420341f40)
+	/home/tamird/src/github.com/cockroachdb/cockroach/storage/raft_transport.go:350 +0x14d
+github.com/cockroachdb/cockroach/storage.(*RaftTransport).RaftSnapshot.func1(0x7fdc3ed2ba40, 0xc420dba780)
+	/home/tamird/src/github.com/cockroachdb/cockroach/storage/raft_transport.go:351 +0x45
+github.com/cockroachdb/cockroach/util/stop.(*Stopper).RunAsyncTask.func1(0xc42019c000, 0x1f1f943, 0x19, 0x160, 0x0, 0x0, 0xc420dba810, 0x7fdc3ed2ba40, 0xc420dba780)
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/stop/stopper.go:239 +0xdf
+created by github.com/cockroachdb/cockroach/util/stop.(*Stopper).RunAsyncTask
+	/home/tamird/src/github.com/cockroachdb/cockroach/util/stop/stopper.go:240 +0x234
+
+
+ERROR: exit status 255
+
+2692 runs completed, 1 failures, over 36s
+FAIL
+Makefile:122: recipe for target 'stress' failed
+make: *** [stress] Error 1
