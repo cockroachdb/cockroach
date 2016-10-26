@@ -1017,15 +1017,19 @@ func (ds *DistSender) sendToReplicas(
 					return call.Reply, nil
 				} else if !ds.handlePerReplicaError(transport, rangeID, call.Reply.Error) {
 					// The error received is not specific to this replica, so we
-					// should return it instead of trying other replicas. However,
-					// if we're trying to commit a transaction and there are
-					// still other RPCs outstanding or an ambiguous RPC error
-					// was already received, we must return an ambiguous commit
-					// error instead of returned error.
-					if haveCommit && (pending > 0 || ambiguousCommit) {
+					// should return it instead of trying other replicas.
+					if haveCommit && pending > 0 {
+						// If there are still pending RPCs, we need to wait them
+						// out if this is a commit. There's a chance we'll get an
+						// ambiguous commit error.
+					} else if ambiguousCommit {
+						// If we're trying to commit a transaction and we've
+						// received an ambiguous RPC error, we must return an
+						// ambiguous commit error instead of the returned error.
 						return nil, roachpb.NewAmbiguousCommitError()
+					} else {
+						return call.Reply, nil
 					}
-					return call.Reply, nil
 				}
 
 				// Extract the detail so it can be included in the error
@@ -1040,6 +1044,7 @@ func (ds *DistSender) sendToReplicas(
 				if log.V(1) {
 					log.Warningf(opts.ctx, "RPC error: %s", err)
 				}
+				log.Warningf(opts.ctx, "RPC error: %s", err)
 				// All connection errors except for an unavailable node (this
 				// is GRPC's fail-fast error), may mean that the request
 				// succeeded on the remote server, but we were unable to
@@ -1074,6 +1079,7 @@ func (ds *DistSender) sendToReplicas(
 			}
 			if pending == 0 {
 				if ambiguousCommit {
+					log.Infof(opts.ctx, "failing with ambiguous commit flag after all sends complete")
 					err = roachpb.NewAmbiguousCommitError()
 				} else {
 					err = roachpb.NewSendError(
