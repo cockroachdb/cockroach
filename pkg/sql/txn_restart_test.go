@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1123,7 +1124,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 // the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
 func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9774")
+	flaky.Register(t, 9774)
 
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)

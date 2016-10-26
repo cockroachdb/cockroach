@@ -33,11 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestFreezeCluster(t *testing.T) {
-	t.Skip("#7957")
+	flaky.Register(t, 7957)
 	runTestOnConfigs(t, testFreezeClusterInner)
 }
 

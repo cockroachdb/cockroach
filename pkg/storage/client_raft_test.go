@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/flaky"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -2081,7 +2082,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// The change to error reporting means that we can no longer trap
 	// transport errors separately from error messages and send them to
 	// errChan.
-	t.Skip("TODO(bdarnell): flaky (#8308), and needs update for change to raft transport error reporting")
+	t.Skip("needs update for change to raft transport error reporting")
+	// It's also flaky.
+	flaky.Register(t, 8308)
 
 	mtc := startMultiTestContext(t, 4)
 	defer mtc.Stop()
