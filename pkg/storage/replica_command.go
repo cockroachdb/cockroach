@@ -2739,7 +2739,7 @@ func (r *Replica) splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to load lease")
 		}
-		if (leftLease == nil || *leftLease == roachpb.Lease{}) {
+		if (leftLease == roachpb.Lease{}) {
 			log.Fatalf(ctx, "LHS of split has no lease")
 		}
 
@@ -2754,7 +2754,7 @@ func (r *Replica) splitTrigger(
 		rightLease.Replica = replica
 
 		rightMS, err = writeInitialState(
-			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease,
+			ctx, batch, rightMS, split.RightDesc, oldHS, &rightLease,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to write initial state")
@@ -2931,16 +2931,15 @@ func (r *Replica) mergeTrigger(
 
 	// Add in stats for right hand side of merge, excluding system-local
 	// stats, which will need to be recomputed.
-	var rightMS enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID, &rightMS); err != nil {
+	rightMS, err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID)
+	if err != nil {
 		return ProposalData{}, err
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
 
 	// Copy the RHS range's abort cache to the new LHS one.
-	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID)
-	if err != nil {
+	if _, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {
 		return ProposalData{}, errors.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 

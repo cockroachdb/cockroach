@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -376,9 +375,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split the range.
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
+	aDesc, bDesc, pErr := createSplitRanges(store)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Write some values left and right of the proposed split key.
@@ -386,13 +385,14 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	writeRandomDataToRange(t, store, bDesc.RangeID, []byte("ccc"))
 
 	// Get the range stats for both ranges now that we have data.
-	var msA, msB enginepb.MVCCStats
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, aDesc.RangeID, &msA); err != nil {
+	msA, err := engine.MVCCGetRangeStats(context.Background(), snap, aDesc.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, bDesc.RangeID, &msB); err != nil {
+	msB, err := engine.MVCCGetRangeStats(context.Background(), snap, bDesc.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -416,8 +416,8 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	var msMerged enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngMerged.RangeID, &msMerged); err != nil {
+	msMerged, err := engine.MVCCGetRangeStats(context.Background(), snap, rngMerged.RangeID)
+	if err != nil {
 		t.Fatal(err)
 	}
 
