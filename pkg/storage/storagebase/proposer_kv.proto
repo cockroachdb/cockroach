@@ -24,45 +24,6 @@ import "cockroach/pkg/storage/storagebase/state.proto";
 
 import "gogoproto/gogo.proto";
 
-// A RaftCommand is a command which can be serialized and sent via
-// raft.
-message RaftCommand {
-  optional int64 range_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  optional roachpb.ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
-  optional roachpb.BatchRequest cmd = 3 [(gogoproto.nullable) = false];
-  // When the command is applied, its result is an error if the lease log
-  // counter has already reached (or exceeded) max_lease_index.
-  //
-  // The lease index is a replay protection mechanism. Similar to the Raft
-  // applied index, it is strictly increasing, but may have gaps. A command
-  // will only apply successfully if its max_lease_index has not been surpassed
-  // by the Range's applied lease index (in which case the command may need
-  // to be retried, that is, regenerated with a higher max_lease_index).
-  // When the command applies, the new lease index will increase to
-  // max_lease_index (so a potential later replay will fail).
-  //
-  // This mechanism was introduced as a simpler alternative to using the Raft
-  // applied index, which is fraught with complexity due to the need to predict
-  // exactly the log position at which a command will apply, even when the Raft
-  // leader is not colocated with the lease holder (which usually proposes all
-  // commands).
-  //
-  // Pinning the lease-index to the assigned slot (as opposed to allowing gaps
-  // as we do now) is an interesting venue to explore from the standpoint of
-  // parallelization: One could hope to enforce command ordering in that way
-  // (without recourse to a higher-level locking primitive such as the command
-  // queue). This is a hard problem: First of all, managing the pending
-  // commands gets more involved; a command must not be removed if others have
-  // been added after it, and on removal, the assignment counters must be
-  // updated accordingly. Managing retry of proposals becomes trickier as
-  // well as that uproots whatever ordering was originally envisioned.
-  optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
-}
-
-
-
 // Split is emitted when a Replica commits a split trigger. It signals that the
 // Replica has prepared the on-disk state for both the left and right hand
 // sides of the split, and that the left hand side Replica should be updated as
@@ -93,20 +54,61 @@ message Merge {
 // followers to reliably produce errors for proposals which apply after a
 // lease change.
 message ReplicatedProposalData {
+  // ======================================
+  // Beginning of what was formerly RaftCommand
+  // ======================================
+
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  optional roachpb.ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.BatchRequest cmd = 3;
+  // When the command is applied, its result is an error if the lease log
+  // counter has already reached (or exceeded) max_lease_index.
+  //
+  // The lease index is a replay protection mechanism. Similar to the Raft
+  // applied index, it is strictly increasing, but may have gaps. A command
+  // will only apply successfully if its max_lease_index has not been surpassed
+  // by the Range's applied lease index (in which case the command may need
+  // to be retried, that is, regenerated with a higher max_lease_index).
+  // When the command applies, the new lease index will increase to
+  // max_lease_index (so a potential later replay will fail).
+  //
+  // This mechanism was introduced as a simpler alternative to using the Raft
+  // applied index, which is fraught with complexity due to the need to predict
+  // exactly the log position at which a command will apply, even when the Raft
+  // leader is not colocated with the lease holder (which usually proposes all
+  // commands).
+  //
+  // Pinning the lease-index to the assigned slot (as opposed to allowing gaps
+  // as we do now) is an interesting venue to explore from the standpoint of
+  // parallelization: One could hope to enforce command ordering in that way
+  // (without recourse to a higher-level locking primitive such as the command
+  // queue). This is a hard problem: First of all, managing the pending
+  // commands gets more involved; a command must not be removed if others have
+  // been added after it, and on removal, the assignment counters must be
+  // updated accordingly. Managing retry of proposals becomes trickier as
+  // well as that uproots whatever ordering was originally envisioned.
+  optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
+
+  // ======================================
+  // End of what was formerly RaftCommand and
+  // beginning of proposer-evaluated KV protos.
+  // These are not stable, i.e. fields can be
+  // added, removed and retagged at will.
+  // ======================================
+
   // Whether to block concurrent readers while processing the proposal data.
-  optional bool block_reads = 1 [(gogoproto.nullable) = false];
+  optional bool block_reads = 5 [(gogoproto.nullable) = false];
   // Updates to the Replica's ReplicaState. By convention and as outlined on
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
   // which additional side effects (for instance on a descriptor update).
-  optional storage.storagebase.ReplicaState state = 2 [(gogoproto.nullable) = false];
-  optional Split split = 3;
-  optional Merge merge = 4;
+  optional storage.storagebase.ReplicaState state = 6 [(gogoproto.nullable) = false];
+  optional Split split = 7;
+  optional Merge merge = 8;
   // TODO(tschottdorf): trim this down; we shouldn't need the whole request.
-  optional roachpb.ComputeChecksumRequest compute_checksum = 5;
-  // TODO(tschottdorf): add the WriteBatch.
+  optional roachpb.ComputeChecksumRequest compute_checksum = 9;
 
-  // Deprecated once proposer-evaluated-kv is in place: the Raft command which
-  // executes on all Replicas.
-  optional RaftCommand raft_command = 999;
+  // TODO(tschottdorf): add the WriteBatch here.
 }
