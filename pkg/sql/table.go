@@ -518,16 +518,6 @@ func (p *planner) databaseFromSearchPath(tn *parser.TableName) (string, error) {
 	return p.session.Database, nil
 }
 
-// getQualifiedTableNameFromID returns the database-qualified name of the table
-// or view with the provided ID.
-func (p *planner) getQualifiedTableNameFromID(id sqlbase.ID) (string, error) {
-	desc, err := sqlbase.GetTableDescFromID(p.txn, id)
-	if err != nil {
-		return "", err
-	}
-	return p.getQualifiedTableName(desc)
-}
-
 // getQualifiedTableName returns the database-qualified name of the table
 // or view represented by the provided descriptor.
 func (p *planner) getQualifiedTableName(desc *sqlbase.TableDescriptor) (string, error) {

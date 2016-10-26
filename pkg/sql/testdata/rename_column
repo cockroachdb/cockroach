@@ -82,10 +82,10 @@ users  bar      true    2    username ASC        false
 statement ok
 CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'
 
-statement error cannot rename column "id" because it is depended on by view "test.v1"
+statement error cannot rename column "id" because view "v1" depends on it
 ALTER TABLE users RENAME COLUMN id TO uid
 
-statement error cannot rename column "username" because it is depended on by view "test.v1"
+statement error cannot rename column "username" because view "v1" depends on it
 ALTER TABLE users RENAME COLUMN username TO name
 
 statement ok
@@ -97,7 +97,7 @@ CREATE VIEW v2 AS SELECT id from users
 statement ok
 DROP VIEW v1
 
-statement error cannot rename column "id" because it is depended on by view "test.v2"
+statement error cannot rename column "id" because view "v2" depends on it
 ALTER TABLE users RENAME COLUMN id TO uid
 
 statement ok
