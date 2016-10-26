@@ -898,16 +898,15 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			t.Fatal(err)
 		}
 		// Check that we don't see any rows, so the previous txn was rolled back.
-		var rows *gosql.Rows
-		var err error
-		if rows, err = sqlDB.Query("SELECT * FROM t.test"); err != nil {
+		rows, err := sqlDB.Query("SELECT * FROM t.test")
+		if err != nil {
 			t.Fatal(err)
 		}
 		if rows.Next() {
 			var k int
 			var v string
-			_ = rows.Scan(&k, &v)
-			t.Fatalf("found unexpected row: %d %s", k, v)
+			err := rows.Scan(&k, &v)
+			t.Fatalf("found unexpected row: %d %s, %v", k, v, err)
 		}
 		rows.Close()
 		if _, err := sqlDB.Exec("END"); err != nil {
