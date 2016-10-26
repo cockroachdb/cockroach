@@ -35,8 +35,8 @@ func TestPrometheusExporter(t *testing.T) {
 	r2.AddMetric(NewCounter(c2Meta))
 
 	pe := MakePrometheusExporter()
-	pe.AddMetricsFromRegistry(r1)
-	pe.AddMetricsFromRegistry(r2)
+	pe.ScrapeRegistry(r1)
+	pe.ScrapeRegistry(r2)
 
 	type metricLabels map[string]string
 	type family struct {

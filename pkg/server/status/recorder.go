@@ -179,11 +179,11 @@ func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 		return nil
 	}
 
-	mr.prometheusExporter.AddMetricsFromRegistry(mr.mu.nodeRegistry)
+	mr.prometheusExporter.ScrapeRegistry(mr.mu.nodeRegistry)
 	for _, reg := range mr.mu.storeRegistries {
-		mr.prometheusExporter.AddMetricsFromRegistry(reg)
+		mr.prometheusExporter.ScrapeRegistry(reg)
 	}
-	return mr.prometheusExporter.Export(w)
+	return mr.prometheusExporter.PrintAsText(w)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by

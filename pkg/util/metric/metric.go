@@ -68,6 +68,8 @@ type PrometheusExportable interface {
 	GetLabels() []*prometheusgo.LabelPair
 	// ToPrometheusMetric returns a filled-in prometheus metric of the right type
 	// for the given metric. It does not fill in labels.
+	// The implementation must return thread-safe data to the caller, i.e.
+	// usually a copy of internal state.
 	ToPrometheusMetric() *prometheusgo.Metric
 }
 
