@@ -183,6 +183,10 @@ func (b *bookie) Reserve(
 	// Make sure that we don't add back a destroyed replica.
 	for _, rep := range deadReplicas {
 		if req.RangeID == rep.RangeID {
+			if log.V(1) {
+				log.Infof(ctx, "could not book reservation %+v, the replica has been destroyed",
+					req)
+			}
 			return ReservationResponse{Reserved: false}
 		}
 	}
