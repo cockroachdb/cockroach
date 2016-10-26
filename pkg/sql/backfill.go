@@ -146,6 +146,12 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 		mutationSentinel, mutationSentinel, mutationSentinel
 
 	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		// Reinit all the side-effects.
+		droppedColumnDescs, droppedIndexDescs, addedColumnDescs, addedIndexDescs =
+			nil, nil, nil, nil
+		columnMutationIdx, addedIndexMutationIdx, droppedIndexMutationIdx =
+			mutationSentinel, mutationSentinel, mutationSentinel
+
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
@@ -350,6 +356,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return nil
 }
 
+// truncateAndBackfillColumnsChunk returns the next-key, done and an error.
+// next-key and done are invalid if error != nil. next-key is invalid if done
+// is true.
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
@@ -369,8 +378,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
-		if tableDesc.Deleted() {
-			done = true
+		if done = tableDesc.Deleted(); done {
 			return nil
 		}
 
@@ -465,8 +473,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err := txn.Run(writeBatch); err != nil {
 			return convertBackfillError(tableDesc, writeBatch)
 		}
-		if i < chunkSize {
-			done = true
+		if done = i < chunkSize; done {
 			return nil
 		}
 		curIndexKey, _, err := sqlbase.EncodeIndexKey(
@@ -513,8 +520,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				// Short circuit the truncation if the table has been deleted.
-				if tableDesc.Deleted() {
-					done = true
+				if done = tableDesc.Deleted(); done {
 					return nil
 				}
 
@@ -588,6 +594,8 @@ func (sc *SchemaChanger) backfillIndexes(
 	return nil
 }
 
+// backfillIndexesChunk returns the next-key, done and an error. next-key and
+// done are invalid if error != nil. next-key is invalid if done is true.
 func (sc *SchemaChanger) backfillIndexesChunk(
 	added []sqlbase.IndexDescriptor,
 	sp roachpb.Span,
@@ -604,8 +612,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
-		if tableDesc.Deleted() {
-			done = true
+		if done = tableDesc.Deleted(); done {
 			return nil
 		}
 
@@ -677,8 +684,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return convertBackfillError(tableDesc, b)
 		}
 		// Have we processed all the table rows?
-		if numRows < chunkSize {
-			done = true
+		if done = numRows < chunkSize; done {
 			return nil
 		}
 		// Keep track of the next key.
