@@ -171,8 +171,14 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	stopper := stop.NewStopper()
-	leaseMgr := csql.NewLeaseManager(&base.NodeIDContainer{}, *kvDB, hlc.NewClock(hlc.UnixNano),
-		csql.LeaseManagerTestingKnobs{}, stopper, &csql.MemoryMetrics{})
+	leaseMgr := csql.NewLeaseManager(
+		&base.NodeIDContainer{},
+		*kvDB,
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		csql.LeaseManagerTestingKnobs{},
+		stopper,
+		&csql.MemoryMetrics{},
+	)
 	defer stopper.Stop()
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr)
 
@@ -1010,7 +1016,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if eCount := maxValue + 1; eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
-	numKeysPerRow += 1
+	numKeysPerRow++
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
@@ -1023,7 +1029,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
 		t.Fatal(err)
 	}
-	numKeysPerRow -= 1
+	numKeysPerRow--
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {

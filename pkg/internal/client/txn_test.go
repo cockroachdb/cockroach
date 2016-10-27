@@ -566,8 +566,8 @@ func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a TestSender that aborts a transaction 2 times before succeeding.
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
+	mc := hlc.NewManualClock(123)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	count := 0
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Put); ok {
@@ -719,7 +719,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	mc := hlc.NewManualClock(100)
-	clock := hlc.NewClock(mc.UnixNano)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	var execOpt TxnExecOptions
 	refTimestamp := clock.Now()
 	execOpt.Clock = clock

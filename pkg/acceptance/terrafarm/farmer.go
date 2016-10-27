@@ -216,11 +216,11 @@ func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 		Insecure: true,
 		User:     security.NodeUser,
 	}, nil, stopper)
-	sender, err := client.NewSender(rpcContext, f.Addr(i, base.DefaultPort))
+	conn, err := rpcContext.GRPCDial(f.Addr(i, base.DefaultPort))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(sender), stopper
+	return client.NewDB(client.NewSender(conn)), stopper
 }
 
 // PGUrl returns a URL string for the given node postgres server.
