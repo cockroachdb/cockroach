@@ -158,8 +158,11 @@ func TestBasicManualReplication(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// TODO(peter): Removing the range leader (tc.Target(1)) causes the test to
-	// take ~13s vs ~1.5s for removing a non-leader. Track down that slowness.
+	// NB: Removing the leaseholder (tc.Target(1)) causes the test to take ~11s
+	// vs ~1.5s for removing a non-leaseholder. This is due to needing to wait
+	// for the lease to timeout which takes ~9s. Testing leaseholder removal is
+	// not necessary because internal rebalancing avoids every removing the
+	// leaseholder for the exact reason that it causes performance hiccups.
 	desc, err = tc.RemoveReplicas(desc.StartKey.AsRawKey(), tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
