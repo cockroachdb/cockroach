@@ -254,9 +254,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
 
 	tracer := tracing.NewTracer()
-	startCtx := tracing.WithTracer(context.Background(), tracer)
 	sp := tracer.StartSpan("server start")
-	startCtx = opentracing.ContextWithSpan(startCtx, sp)
+	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	if err := initInsecure(); err != nil {
 		return err
