@@ -282,7 +282,16 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	invert := false
 	if x.Cmp(decimalOne) > 0 {
 		invert = true
-		x.QuoRound(decimalOne, x, s*2, inf.RoundHalfUp)
+		ns := s * 2
+		// In the case of a very large number, s*2 is not enough precision to
+		// hold 1/x, so x.QuoRound will set x to zero. We use the string length *
+		// 2 because one length of the string will cover the 0s after the decimal,
+		// and the other length of the string covers the digits of the division.
+		nd, _ := NumDigits(x.UnscaledBig(), nil)
+		if nd := inf.Scale(nd * 2); nd > ns {
+			ns = nd
+		}
+		x.QuoRound(decimalOne, x, ns, inf.RoundHalfUp)
 	}
 
 	// x = mantissa * 2**exp, and 0.5 <= mantissa < 1.
