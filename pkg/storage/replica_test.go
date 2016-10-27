@@ -397,7 +397,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
-	ch, _, err := r.propose(context.TODO(), ba)
+	ch, err := r.propose(context.TODO(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -978,7 +978,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.rng.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, err := tc.rng.propose(context.Background(), ba)
+	ch, err := tc.rng.propose(context.Background(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -3082,7 +3082,7 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft replay) and
 		// also avoid updating the timestamp cache; verify WriteTooOldError.
 		ba.Timestamp = txn.OrigTimestamp
-		ch, _, err := tc.rng.propose(context.Background(), ba)
+		ch, err := tc.rng.propose(context.Background(), ba)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -5540,61 +5540,35 @@ func TestGCIncorrectRange(t *testing.T) {
 	}
 }
 
-// TestReplicaCancelRaft checks that it is possible to safely abandon Raft
-// commands via a cancelable context.Context.
-func TestReplicaCancelRaft(t *testing.T) {
+// TestReplicaCancelCommand verifies that cancellation of replica
+// commands still affects the timestamp cache.
+func TestReplicaCancelCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, cancelEarly := range []bool{true, false} {
-		func() {
-			// Pick a key unlikely to be used by background processes.
-			key := []byte("acdfg")
-			ctx, cancel := context.WithCancel(context.Background())
-			tsc := TestStoreConfig()
-			if !cancelEarly {
-				tsc.TestingKnobs.TestingCommandFilter =
-					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						if !filterArgs.Req.Header().Key.Equal(key) {
-							return nil
-						}
-						cancel()
-						return nil
-					}
-
+	// Pick a key unlikely to be used by background processes.
+	key := []byte("acdfg")
+	ctx, cancel := context.WithCancel(context.Background())
+	tsc := TestStoreConfig()
+	tsc.TestingKnobs.TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if !filterArgs.Req.Header().Key.Equal(key) {
+				return nil
 			}
-			tc := testContext{}
-			tc.StartWithStoreConfig(t, tsc)
-			defer tc.Stop()
-			if cancelEarly {
-				cancel()
-				tc.rng.mu.Lock()
-				tc.rng.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.rng.mu.Unlock()
-			}
-			var ba roachpb.BatchRequest
-			ba.Add(&roachpb.GetRequest{
-				Span: roachpb.Span{Key: key},
-			})
-			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
-				t.Fatal(err)
-			}
-			br, pErr := tc.rng.addWriteCmd(ctx, ba)
-			if pErr == nil {
-				if !cancelEarly {
-					// We cancelled the context while the command was already
-					// being processed, so the client had to wait for successful
-					// execution.
-					return
-				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
-			}
-			// If we cancelled the context early enough, we expect to receive a
-			// corresponding error and not wait for the command.
-			if !testutils.IsPError(pErr, context.Canceled.Error()) {
-				t.Fatalf("unexpected error: %s", pErr)
-			}
-		}()
+			cancel()
+			return nil
+		}
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, tsc)
+	defer tc.Stop()
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{Key: key},
+	})
+	if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+		t.Fatal(err)
+	}
+	_, pErr := tc.rng.addWriteCmd(ctx, ba)
+	if pErr != nil {
+		t.Fatalf("expected an success processing command; got %v", pErr)
 	}
 }
 
@@ -5810,7 +5784,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 			Key: roachpb.Key("a"),
 		},
 	})
-	_, _, err := rng.propose(context.Background(), ba)
+	_, err := rng.propose(context.Background(), ba)
 	if err != nil {
 		t.Fatal(err)
 	}
