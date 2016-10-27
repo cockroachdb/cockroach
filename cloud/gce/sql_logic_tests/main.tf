@@ -50,7 +50,7 @@ resource "google_compute_instance" "sql_logic_test" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}"
+    private_key = "${file("~/.ssh/${var.key_name}")}"
   }
 
   service_account {
