@@ -174,7 +174,6 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 // use in tests. Stopper must be stopped by the caller.
 func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
 	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
-	manualClock.Set(hlc.UnixNano())
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a, manualClock
 }
@@ -1275,15 +1274,22 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{},
+		&base.Config{Insecure: true},
+		clock,
+		stopper,
+	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	sp := NewStorePool(
 		log.AmbientContext{},
 		g,
-		hlc.NewClock(hlc.UnixNano),
+		clock,
 		nil,
 		TestTimeUntilStoreDeadOff,
 		stopper,

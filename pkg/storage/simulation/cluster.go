@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"sort"
 	"text/tabwriter"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -76,7 +77,7 @@ func createCluster(
 	script Script,
 	rand *rand.Rand,
 ) *Cluster {
-	clock := hlc.NewClock(hlc.UnixNano)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext)
 	// We set the node ID to MaxInt32 for the cluster Gossip instance to prevent

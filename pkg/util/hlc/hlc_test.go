@@ -41,7 +41,7 @@ const (
 func ExampleNewClock() {
 	// Initialize a new clock, using the local
 	// physical clock.
-	c := NewClock(UnixNano)
+	c := NewClock(UnixNano, time.Nanosecond)
 	// Update the state of the hybrid clock.
 	s := c.Now()
 	time.Sleep(50 * time.Nanosecond)
@@ -64,14 +64,14 @@ func ExampleNewClock() {
 }
 
 func TestHLCLess(t *testing.T) {
-	m := NewManualClock(0)
-	c := NewClock(m.UnixNano)
-	a := c.Timestamp()
-	b := c.Timestamp()
+	m := NewManualClock(1)
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	a := c.Now()
+	b := a
 	if a.Less(b) || b.Less(a) {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
-	m.Set(1)
+	m.Increment(1)
 	b = c.Now()
 	if !a.Less(b) {
 		t.Errorf("expected %+v < %+v", a, b)
@@ -83,14 +83,14 @@ func TestHLCLess(t *testing.T) {
 }
 
 func TestHLCEqual(t *testing.T) {
-	m := NewManualClock(0)
-	c := NewClock(m.UnixNano)
-	a := c.Timestamp()
-	b := c.Timestamp()
+	m := NewManualClock(1)
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	a := c.Now()
+	b := a
 	if !a.Equal(b) {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
-	m.Set(1)
+	m.Increment(1)
 	b = c.Now()
 	if a.Equal(b) {
 		t.Errorf("expected %+v < %+v", a, b)
@@ -104,9 +104,8 @@ func TestHLCEqual(t *testing.T) {
 // TestHLCClock performs a complete test of all basic phenomena,
 // including backward jumps in local physical time and clock offset.
 func TestHLCClock(t *testing.T) {
-	m := NewManualClock(0)
-	c := NewClock(m.UnixNano)
-	c.SetMaxOffset(1000)
+	m := NewManualClock(1)
+	c := NewClock(m.UnixNano, 1000*time.Nanosecond)
 	expectedHistory := []struct {
 		// The physical time that this event should take place at.
 		wallClock int64
@@ -123,12 +122,12 @@ func TestHLCClock(t *testing.T) {
 		// Our clock mysteriously jumps back.
 		{7, SEND, nil, Timestamp{WallTime: 10, Logical: 7}},
 		// Wall clocks coincide, but the local logical clock wins.
-		{8, RECV, &Timestamp{WallTime: 10, Logical: 4}, Timestamp{WallTime: 10, Logical: 8}},
+		{8, RECV, &Timestamp{WallTime: 10, Logical: 4}, Timestamp{WallTime: 10, Logical: 9}},
 		// Wall clocks coincide, but the remote logical clock wins.
 		{10, RECV, &Timestamp{WallTime: 10, Logical: 99}, Timestamp{WallTime: 10, Logical: 100}},
 		// The physical clock has caught up and takes over.
-		{11, RECV, &Timestamp{WallTime: 10, Logical: 31}, Timestamp{WallTime: 11, Logical: 0}},
-		{11, SEND, nil, Timestamp{WallTime: 11, Logical: 1}},
+		{11, RECV, &Timestamp{WallTime: 10, Logical: 31}, Timestamp{WallTime: 11, Logical: 1}},
+		{11, SEND, nil, Timestamp{WallTime: 11, Logical: 2}},
 	}
 
 	var current Timestamp
@@ -140,7 +139,7 @@ func TestHLCClock(t *testing.T) {
 		case RECV:
 			fallthrough
 		default:
-			previous := c.Timestamp()
+			previous := c.Now()
 			current = c.Update(*step.input)
 			if current.Equal(previous) {
 				t.Errorf("%d: clock not updated", i)
@@ -150,46 +149,51 @@ func TestHLCClock(t *testing.T) {
 			t.Fatalf("HLC error: %d expected %v, got %v", i, step.expected, current)
 		}
 	}
-	c.Now()
 }
 
 // TestExampleManualClock shows how a manual clock can be
 // used as a physical clock. This is useful for testing.
 func TestExampleManualClock(t *testing.T) {
 	m := NewManualClock(10)
-	c := NewClock(m.UnixNano)
-	c.Now()
-	if c.Timestamp().WallTime != 10 {
-		t.Fatalf("manual clock error")
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	if wallNanos := c.Now().WallTime; wallNanos != 10 {
+		t.Fatalf("unexpected wall time: %d", wallNanos)
 	}
-	m.Set(20)
-	c.Now()
-	if c.Timestamp().WallTime != 20 {
-		t.Fatalf("manual clock error")
+	m.Increment(10)
+	if wallNanos := c.Now().WallTime; wallNanos != 20 {
+		t.Fatalf("unexpected wall time: %d", wallNanos)
 	}
 }
 
 func TestHLCMonotonicityCheck(t *testing.T) {
 	m := NewManualClock(100000)
-	c := NewClock(m.UnixNano)
+	c := NewClock(m.UnixNano, 100*time.Nanosecond)
 
 	// Update the state of the hybrid clock.
 	firstTime := c.Now()
-
-	m.Increment((-10 * time.Minute).Nanoseconds())
-
+	m.Increment((-110 * time.Nanosecond).Nanoseconds())
 	secondTime := c.Now()
-	if c.monotonicityErrorsCount != 1 {
-		t.Fatalf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
+
+	{
+		c.mu.Lock()
+		errCount := c.mu.monotonicityErrorsCount
+		c.mu.Unlock()
+
+		if errCount != 1 {
+			t.Fatalf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
+		}
 	}
 
-	c.SetMaxOffset(10 * time.Hour)
-
-	m.Increment((-10 * time.Minute).Nanoseconds())
-
+	m.Increment((-10 * time.Nanosecond).Nanoseconds())
 	thirdTime := c.Now()
-	if c.monotonicityErrorsCount != 1 {
-		t.Fatalf("clock backward jump below threshold was incorrectly detected by the monotonicity checker (from %s to %s)", secondTime, thirdTime)
-	}
 
+	{
+		c.mu.Lock()
+		errCount := c.mu.monotonicityErrorsCount
+		c.mu.Unlock()
+
+		if errCount != 1 {
+			t.Fatalf("clock backward jump below threshold was incorrectly detected by the monotonicity checker (from %s to %s)", secondTime, thirdTime)
+		}
+	}
 }

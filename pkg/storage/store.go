@@ -128,9 +128,13 @@ func RangeLeaseDurations(
 }
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
-func TestStoreConfig() StoreConfig {
+func TestStoreConfig(clock *hlc.Clock) StoreConfig {
+	if clock == nil {
+		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	}
 	return StoreConfig{
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,
 		CoalescedHeartbeatsInterval:    50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,

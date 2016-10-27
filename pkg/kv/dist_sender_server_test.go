@@ -19,6 +19,7 @@ package kv_test
 import (
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
@@ -56,7 +57,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -86,9 +87,9 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // The caller is responsible for stopping the server and
 // closing the client.
 func setupMultipleRanges(
-	t *testing.T, ts serverutils.TestServerInterface, splitAt ...string,
+	t *testing.T, s serverutils.TestServerInterface, splitAt ...string,
 ) *client.DB {
-	db := createTestClient(t, ts.Stopper(), ts.ServingAddr())
+	db := createTestClient(t, s)
 
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
@@ -763,7 +764,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
 	} {
 		manual := hlc.NewManualClock(ts[0].WallTime + 1)
-		clock := hlc.NewClock(manual.UnixNano)
+		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 		ds := kv.NewDistSender(
 			kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()},
 			s.(*server.TestServer).Gossip(),
@@ -804,7 +805,7 @@ func TestParallelSender(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	// Split into multiple ranges.
 	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
@@ -845,7 +846,7 @@ func TestParallelSender(t *testing.T) {
 }
 
 func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *client.DB {
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
@@ -974,7 +975,7 @@ func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 	ctx := context.TODO()
 
 	// Write key "a".
