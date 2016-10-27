@@ -539,7 +539,7 @@ func (p *planner) getQualifiedTableName(desc *sqlbase.TableDescriptor) (string, 
 func (p *planner) findTableContainingIndex(
 	dbName parser.Name, idxName parser.Name,
 ) (result *parser.TableName, err error) {
-	dbDesc, err := p.mustGetDatabaseDesc(sqlbase.NormalizeName(dbName))
+	dbDesc, err := p.mustGetDatabaseDesc(dbName.Normalize())
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +549,7 @@ func (p *planner) findTableContainingIndex(
 		return nil, err
 	}
 
-	normName := sqlbase.NormalizeName(idxName)
+	normName := idxName.Normalize()
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
