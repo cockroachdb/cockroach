@@ -264,6 +264,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeID:                &s.nodeIDContainer,
 		DB:                    s.db,
 		Gossip:                s.gossip,
+		DistSender:            s.distSender,
 		LeaseManager:          s.leaseMgr,
 		Clock:                 s.clock,
 		DistSQLSrv:            s.distSQLServer,
@@ -280,7 +281,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
 	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper, &s.adminMemMetrics)
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
 	s.pgServer = pgwire.MakeServer(
@@ -625,6 +626,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
+	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
 	s.distSQLServer.Start()
 
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
