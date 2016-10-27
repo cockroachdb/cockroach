@@ -1431,17 +1431,21 @@ func TestRaftHeartbeats(t *testing.T) {
 	mtc.replicateRange(1, 1, 2)
 
 	// Capture the initial term and state.
-	status := mtc.stores[0].RaftStatus(1)
-	initialTerm := status.Term
-	if status.SoftState.RaftState != raft.StateLeader {
-		t.Errorf("expected node 0 to initially be leader but was %s", status.SoftState.RaftState)
+	leaderID := -1
+	var initialTerm uint64
+	for i := 0; i < 3; i++ {
+		if mtc.stores[i].RaftStatus(1).SoftState.RaftState == raft.StateLeader {
+			leaderID = i
+			initialTerm = mtc.stores[i].RaftStatus(1).Term
+			break
+		}
 	}
 
 	// Wait for several ticks to elapse.
 	time.Sleep(5 * mtc.makeStoreConfig(0).RaftTickInterval)
-	status = mtc.stores[0].RaftStatus(1)
+	status := mtc.stores[leaderID].RaftStatus(1)
 	if status.SoftState.RaftState != raft.StateLeader {
-		t.Errorf("expected node 0 to be leader after sleeping but was %s", status.SoftState.RaftState)
+		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderID, status.SoftState.RaftState)
 	}
 	if status.Term != initialTerm {
 		t.Errorf("while sleeping, term changed from %d to %d", initialTerm, status.Term)
