@@ -91,8 +91,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 
 	ltc.tester = t
-	ltc.Manual = hlc.NewManualClock(0)
-	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
+	ltc.Manual = hlc.NewManualClock(123)
+	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
@@ -110,12 +110,11 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	}
 	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
-	cfg := storage.TestStoreConfig()
+	cfg := storage.TestStoreConfig(ltc.Clock)
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
 	cfg.AmbientCtx = ambient
-	cfg.Clock = ltc.Clock
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
 	cfg.Transport = transport

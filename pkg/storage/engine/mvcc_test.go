@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"golang.org/x/net/context"
@@ -1872,7 +1873,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
 
 	err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, &value2, nil)
 	if err == nil {
@@ -1966,7 +1967,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
 
 	// Write value1.
 	txn := *txn1
@@ -1988,7 +1989,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	// Commit value3.
 	txnCommit := txn
 	txnCommit.Status = roachpb.COMMITTED
-	txnCommit.Timestamp = makeTS(1, 0)
+	txnCommit.Timestamp = clock.Now().Add(1, 0)
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txnCommit.Status, Txn: txnCommit.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
@@ -2062,7 +2063,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
 
 	txn := *txn1
 	txn.Sequence++
@@ -2090,7 +2091,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	// Commit value3.
 	txnCommit := txn
 	txnCommit.Status = roachpb.COMMITTED
-	txnCommit.Timestamp = makeTS(1, 0)
+	txnCommit.Timestamp = clock.Now().Add(1, 0)
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil,
 		roachpb.Intent{
 			Span:   roachpb.Span{Key: testKey1},

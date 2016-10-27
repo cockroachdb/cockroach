@@ -131,7 +131,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s := &Server{
 		mux:     http.NewServeMux(),
-		clock:   hlc.NewClock(hlc.UnixNano),
+		clock:   hlc.NewClock(hlc.UnixNano, cfg.MaxOffset),
 		stopper: stopper,
 		cfg:     cfg,
 	}
@@ -153,8 +153,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.Insecure {
 		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
-
-	s.clock.SetMaxOffset(cfg.MaxOffset)
 
 	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {

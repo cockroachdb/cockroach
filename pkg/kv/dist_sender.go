@@ -140,16 +140,14 @@ type DistSenderConfig struct {
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
-	ds := &DistSender{gossip: g}
+	ds := &DistSender{
+		clock:  cfg.Clock,
+		gossip: g,
+	}
 
 	ds.AmbientContext = cfg.AmbientCtx
 	if ds.AmbientContext.Tracer == nil {
 		ds.AmbientContext.Tracer = tracing.NewTracer()
-	}
-
-	ds.clock = cfg.Clock
-	if ds.clock == nil {
-		ds.clock = hlc.NewClock(hlc.UnixNano)
 	}
 
 	if cfg.nodeDescriptor != nil {
