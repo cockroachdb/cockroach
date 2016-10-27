@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 )
@@ -83,7 +82,7 @@ func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 			// opentracing's "follows-from" spans as opposed to
 			// "parent-child" spans when expressing this relationship
 			// between the sort and the select.
-			ctx:      opentracing.ContextWithSpan(tracing.WithTracer(p.ctx(), nil), nil),
+			ctx:      opentracing.ContextWithSpan(p.ctx(), nil),
 			p:        p,
 			ordering: traceOrdering,
 			columns:  traceColumns,

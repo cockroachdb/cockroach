@@ -60,7 +60,7 @@ func InitSenderForLocalTestCluster(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
-	distSender := NewDistSender(&DistSenderConfig{
+	distSender := NewDistSender(DistSenderConfig{
 		Clock:           clock,
 		RPCRetryOptions: &retryOpts,
 		nodeDescriptor:  nodeDesc,

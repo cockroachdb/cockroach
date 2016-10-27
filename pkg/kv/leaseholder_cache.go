@@ -46,17 +46,19 @@ func newLeaseHolderCache(size int) *leaseHolderCache {
 }
 
 // Lookup returns the cached leader of the given range ID.
-func (lc *leaseHolderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDescriptor, bool) {
+func (lc *leaseHolderCache) Lookup(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (roachpb.ReplicaDescriptor, bool) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	if v, ok := lc.cache.Get(rangeID); ok {
 		if log.V(2) {
-			log.Infof(context.TODO(), "lookup lease holder for range %d: %s", rangeID, v)
+			log.Infof(ctx, "lookup lease holder for range %d: %s", rangeID, v)
 		}
 		return v.(roachpb.ReplicaDescriptor), true
 	}
 	if log.V(2) {
-		log.Infof(context.TODO(), "lookup lease holder for range %d: not found", rangeID)
+		log.Infof(ctx, "lookup lease holder for range %d: not found", rangeID)
 	}
 	return roachpb.ReplicaDescriptor{}, false
 }
@@ -64,17 +66,19 @@ func (lc *leaseHolderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDesc
 // Update invalidates the cached leader for the given range ID. If an empty
 // replica descriptor is passed, the cached leader is evicted. Otherwise, the
 // passed-in replica descriptor is cached.
-func (lc *leaseHolderCache) Update(rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor) {
+func (lc *leaseHolderCache) Update(
+	ctx context.Context, rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor,
+) {
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	if (repDesc == roachpb.ReplicaDescriptor{}) {
 		if log.V(2) {
-			log.Infof(context.TODO(), "evicting lease holder for range %d", rangeID)
+			log.Infof(ctx, "evicting lease holder for range %d", rangeID)
 		}
 		lc.cache.Del(rangeID)
 	} else {
 		if log.V(2) {
-			log.Infof(context.TODO(), "updating lease holder for range %d: %s", rangeID, repDesc)
+			log.Infof(ctx, "updating lease holder for range %d: %s", rangeID, repDesc)
 		}
 		lc.cache.Add(rangeID, repDesc)
 	}
