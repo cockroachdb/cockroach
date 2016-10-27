@@ -397,7 +397,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
-	ch, _, err := r.propose(context.TODO(), ba)
+	ch, err := r.propose(context.TODO(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -978,7 +978,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.rng.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, err := tc.rng.propose(context.Background(), ba)
+	ch, err := tc.rng.propose(context.Background(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -3082,7 +3082,7 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft replay) and
 		// also avoid updating the timestamp cache; verify WriteTooOldError.
 		ba.Timestamp = txn.OrigTimestamp
-		ch, _, err := tc.rng.propose(context.Background(), ba)
+		ch, err := tc.rng.propose(context.Background(), ba)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -5544,58 +5544,70 @@ func TestGCIncorrectRange(t *testing.T) {
 // commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, cancelEarly := range []bool{true, false} {
-		func() {
-			// Pick a key unlikely to be used by background processes.
-			key := []byte("acdfg")
-			ctx, cancel := context.WithCancel(context.Background())
-			tsc := TestStoreConfig()
-			if !cancelEarly {
-				tsc.TestingKnobs.TestingCommandFilter =
-					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						if !filterArgs.Req.Header().Key.Equal(key) {
-							return nil
-						}
-						cancel()
-						return nil
-					}
-
+	key := []byte("cancel-key")
+	value := []byte("value")
+	wait := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	tsc := TestStoreConfig()
+	tsc.TestingKnobs.TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if !filterArgs.Req.Header().Key.Equal(key) {
+				return nil
 			}
-			tc := testContext{}
-			tc.StartWithStoreConfig(t, tsc)
-			defer tc.Stop()
-			if cancelEarly {
-				cancel()
-				tc.rng.mu.Lock()
-				tc.rng.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.rng.mu.Unlock()
-			}
-			var ba roachpb.BatchRequest
-			ba.Add(&roachpb.GetRequest{
-				Span: roachpb.Span{Key: key},
-			})
-			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
-				t.Fatal(err)
-			}
-			br, pErr := tc.rng.addWriteCmd(ctx, ba)
-			if pErr == nil {
-				if !cancelEarly {
-					// We cancelled the context while the command was already
-					// being processed, so the client had to wait for successful
-					// execution.
-					return
-				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
-			}
-			// If we cancelled the context early enough, we expect to receive a
-			// corresponding error and not wait for the command.
-			if !testutils.IsPError(pErr, context.Canceled.Error()) {
-				t.Fatalf("unexpected error: %s", pErr)
-			}
-		}()
+			cancel()
+			<-wait
+			return nil
+		}
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, tsc)
+	defer tc.Stop()
+	var ba roachpb.BatchRequest
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	btArgs, _ := beginTxnArgs(key, txn)
+	pArgs := putArgs(key, value)
+	etArgs, _ := endTxnArgs(txn, true /* commit */)
+	ba.Header.Txn = txn
+	ba.Add(&btArgs)
+	ba.Add(&pArgs)
+	ba.Add(&etArgs)
+	if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+		t.Fatal(err)
 	}
+	_, pErr := tc.rng.addWriteCmd(ctx, ba)
+	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+		t.Fatalf("expected an ambiguous result error, but got %v", pErr)
+	}
+	close(wait)
+
+	// Verify that the write goes through using inconsistent reads so we
+	// don't affect the timestamp cache. Then try repeating the txn, and
+	// verify the result is a replay error.
+	util.SucceedsSoon(t, func() error {
+		gArgs := getArgs(key)
+		reply, pErr := tc.SendWrappedWith(roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &gArgs)
+		if pErr != nil {
+			t.Fatalf("expected success reading with inconsistent: %s", pErr)
+		}
+		resp := reply.(*roachpb.GetResponse)
+		if resp.Value == nil {
+			return errors.Errorf("no value at %s", key)
+		}
+		if val, err := resp.Value.GetBytes(); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(val, value) {
+			t.Fatalf("expected %q; got %q", value, val)
+		}
+
+		// Now that write is persistent, verify resending results in a
+		// txn replay error.
+		_, pErr = tc.rng.addWriteCmd(context.Background(), ba)
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
+			t.Fatalf("expected an transaction replay error, but got %v", pErr)
+		}
+		return nil
+	})
 }
 
 // TestComputeChecksumVersioning checks that the ComputeChecksum post-commit
@@ -5810,7 +5822,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 			Key: roachpb.Key("a"),
 		},
 	})
-	_, _, err := rng.propose(context.Background(), ba)
+	_, err := rng.propose(context.Background(), ba)
 	if err != nil {
 		t.Fatal(err)
 	}
