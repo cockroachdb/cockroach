@@ -146,10 +146,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.cfg.AmbientCtx.AddLogTag("n", &s.nodeIDContainer)
 
 	ctx := s.AnnotateCtx(context.Background())
-	// TODO(radu): this will go away when we pass AmbientContext into all
-	// components.
-	ctx = tracing.WithTracer(ctx, s.cfg.AmbientCtx.Tracer)
-
 	if s.cfg.Insecure {
 		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}

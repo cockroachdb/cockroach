@@ -303,29 +303,25 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	// The span is closed by finishSQLTxn().
 	// TODO(andrei): figure out how to close these spans on server shutdown?
 	ctx := s.context
+	var sp opentracing.Span
 	if traceSQL {
-		sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
+		var err error
+		sp, err = tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
 			ts.CollectedSpans = append(ts.CollectedSpans, sp)
 		})
 		if err != nil {
 			log.Warningf(ctx, "unable to create snowball tracer: %s", err)
 			return
 		}
-		// sp is using a new tracer, so put it in the context.
-		ctx = tracing.WithTracer(
-			opentracing.ContextWithSpan(ctx, sp), sp.Tracer())
 	} else if traceSQLFor7881 {
-		sp, tr, err := tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
+		var err error
+		sp, _, err = tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
 			ts.CollectedSpans = append(ts.CollectedSpans, sp)
 		})
 		if err != nil {
-			panic(fmt.Sprintf("couldn't create a tracer for debugging #7881: %s", err))
+			log.Fatalf(ctx, "couldn't create a tracer for debugging #7881: %s", err)
 		}
-		// Put both the new tracer and the span in the txn's context.
-		ctx = tracing.WithTracer(
-			opentracing.ContextWithSpan(ctx, sp), tr)
 	} else {
-		var sp opentracing.Span
 		if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
 			// Create a child span for this SQL txn.
 			tracer := parentSp.Tracer()
@@ -335,8 +331,9 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			tracer := e.cfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan("sql txn")
 		}
-		ctx = opentracing.ContextWithSpan(ctx, sp)
 	}
+	// Put the new span in the context.
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 	ts.Ctx = ctx
 
 	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
