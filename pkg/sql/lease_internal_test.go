@@ -268,7 +268,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Tests that a name cache entry with by an expired lease is not returned.
 func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		MaxOffset: 10 * LeaseDuration, // so we can advance the clock
+	})
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
@@ -296,7 +298,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 	// Advance the clock to expire the lease.
-	s.Clock().SetMaxOffset(10 * LeaseDuration)
 	s.Clock().Update(s.Clock().Now().Add(int64(2*LeaseDuration), 0))
 
 	// Check the name no longer resolves.
