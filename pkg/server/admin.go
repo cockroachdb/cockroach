@@ -456,7 +456,7 @@ func (s *adminServer) TableDetails(
 			if err != nil {
 				return nil, s.serverError(err)
 			}
-			rangeCount, err := s.server.distSender.CountRanges(tableRSpan)
+			rangeCount, err := s.server.distSender.CountRanges(ctx, tableRSpan)
 			if err != nil {
 				return nil, s.serverError(err)
 			}
@@ -995,8 +995,8 @@ func (s *adminServer) waitForStoreFrozen(
 			// Run a limited, non-blocking task. That means the task simply
 			// won't run if the semaphore is full (or the node is draining).
 			// Both are handled by the surrounding retry loop.
-			if err := s.server.stopper.RunLimitedAsyncTask(context.TODO(), sem,
-				func(_ context.Context) {
+			if err := s.server.stopper.RunLimitedAsyncTask(
+				context.TODO(), sem, true /* wait */, func(_ context.Context) {
 					if err := action(); err != nil {
 						sendErr(err)
 					}
