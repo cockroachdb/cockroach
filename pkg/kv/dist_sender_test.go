@@ -648,14 +648,14 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 		return []roachpb.RangeDescriptor{desc}, nil, nil
 	})
 
-	ctx := &DistSenderConfig{
+	cfg := &DistSenderConfig{
 		TransportFactory: SenderTransportFactory(
 			tracing.NewTracer(), client.SenderFunc(sender),
 		),
 		RangeDescriptorDB: rDB,
 	}
 
-	ds := NewDistSender(ctx, g)
+	ds := NewDistSender(cfg, g)
 
 	anyKey := roachpb.Key("anything")
 	rAnyKey := keys.MustAddr(anyKey)
@@ -924,7 +924,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		node.Gossip.EnableSimulationCycler(false)
 	}
 	n.Start()
-	ds := NewDistSender(nil, n.Nodes[0].Gossip)
+	ds := NewDistSender(&DistSenderConfig{}, n.Nodes[0].Gossip)
 	if _, err := ds.FirstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
 	}

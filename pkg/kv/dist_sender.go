@@ -140,10 +140,6 @@ type DistSenderConfig struct {
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
 func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
-	if cfg == nil {
-		cfg = &DistSenderConfig{}
-	}
-
 	ds := &DistSender{gossip: g}
 
 	ds.AmbientContext = cfg.AmbientCtx
