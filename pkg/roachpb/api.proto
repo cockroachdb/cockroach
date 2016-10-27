@@ -45,6 +45,13 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
+// RangeInfo describes a range which executed a request. It contains
+// the range descriptor and lease information at the time of execution.
+message RangeInfo {
+  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  optional Lease lease = 2 [(gogoproto.nullable) = false];
+}
+
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
   // txn is non-nil if the request specified a non-nil transaction.
@@ -60,6 +67,9 @@ message ResponseHeader {
   optional Span resume_span = 4;
   // The number of keys operated on.
   optional int64 num_keys = 5 [(gogoproto.nullable) = false];
+  // Range or list of ranges used to execute the request. Multiple
+  // ranges may be returned for Scan, ReverseScan or DeleteRange.
+  repeated RangeInfo range_infos = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetRequest is the argument for the Get() method.
@@ -811,12 +821,15 @@ message Header {
   // If a batch limit is used with ReverseScan requests, the spans for the
   // requests must be non-overlapping and in decreasing order.
   optional int64 max_span_request_keys = 8 [(gogoproto.nullable) = false];
-  // if set, all of the spans in the batch are distinct. Note that the
+  // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTransactionRequest. Currently set conservatively: a request
   // might be composed of distinct spans yet have this field set to
   // false.
   optional bool distinct_spans = 9 [(gogoproto.nullable) = false];
+  // If set, return_range_info causes RangeInfo details to be returned with
+  // each ResponseHeader.
+  optional bool return_range_info = 10 [(gogoproto.nullable) = false];
 }
 
 

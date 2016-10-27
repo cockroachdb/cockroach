@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -55,6 +54,8 @@ const (
 	defaultLeaseHolderCacheSize = 1 << 16
 	// The default size of the range descriptor cache.
 	defaultRangeDescriptorCacheSize = 1 << 20
+	// The default limit for asynchronous senders.
+	defaultSenderConcurrency = 500
 )
 
 // A firstRangeMissingError indicates that the first range has not yet
@@ -99,6 +100,8 @@ type DistSender struct {
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
 	sendNextTimeout  time.Duration
+	asyncSenderSem   chan struct{}
+	asyncSenderCount int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -131,6 +134,10 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	SendNextTimeout   time.Duration
+	// SenderConcurrency specifies the parallelization available when
+	// splitting batches into multiple requests when they span ranges.
+	// TODO(spencer): This is per-process. We should add a per-batch limit.
+	SenderConcurrency int32
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -200,6 +207,11 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	} else {
 		ds.sendNextTimeout = defaultSendNextTimeout
 	}
+	if cfg.SenderConcurrency != 0 {
+		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
+	} else {
+		ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
+	}
 
 	if g != nil {
 		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
@@ -220,6 +232,12 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 			})
 	}
 	return ds
+}
+
+// GetParallelSendCount returns the number of parallel batch requests
+// the dist sender has dispatched of its lifetime.
+func (ds *DistSender) GetParallelSendCount() int32 {
+	return atomic.LoadInt32(&ds.asyncSenderCount)
 }
 
 // RangeLookup implements the RangeDescriptorDB interface.
@@ -331,12 +349,13 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 	return nil
 }
 
-// sendRPC sends one or more RPCs to replicas from the supplied roachpb.Replica
-// slice. Returns an RPC error if the request could not be sent. Note
-// that the reply may contain a higher level error and must be checked in
-// addition to the RPC error.
-// The replicas are assume to have been ordered by preference, closer ones (if
-// any) at the front.
+// sendRPC sends one or more RPCs to replicas from the supplied
+// roachpb.Replica slice. Returns an RPC error if the request could
+// not be sent. Note that the reply may contain a higher level error
+// and must be checked in addition to the RPC error.
+//
+// The replicas are assumed to be ordered by preference, with closer
+// ones (i.e. expected lowest latency) first.
 func (ds *DistSender) sendRPC(
 	ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
@@ -367,63 +386,42 @@ func (ds *DistSender) sendRPC(
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
-func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, error) {
+func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
-	for {
-		desc, needAnother, _, err := ds.getDescriptors(
-			context.TODO(), rs, nil, false /*useReverseScan*/)
-		if err != nil {
-			return -1, err
-		}
+	ri := NewRangeIterator(ds, false /*reverse*/)
+	for ri.Seek(ctx, rs.Key); ri.Valid(); ri.Next(ctx) {
 		count++
-		if !needAnother {
+		if !ri.NeedAnother(rs) {
 			break
 		}
-		rs.Key = desc.EndKey
 	}
-	return count, nil
+	return count, ri.Error().GoError()
 }
 
-// getDescriptors looks up the range descriptor to use for a query over the
-// key range span rs with the given options. The lookup takes into consideration
-// the last range descriptor that the caller had used for this key range span,
-// if any, and if the last range descriptor has been evicted because it was
-// found to be stale, which is all managed through the evictionToken. The
-// function should be provided with an evictionToken if one was acquired from
-// this function on a previous call. If not, an empty evictionToken can be provided.
+// getDescriptor looks up the range descriptor to use for a query of
+// the key descKey with the given options. The lookup takes into
+// consideration the last range descriptor that the caller had used
+// for this key span, if any, and if the last range descriptor has
+// been evicted because it was found to be stale, which is all managed
+// through the EvictionToken. The function should be provided with an
+// EvictionToken if one was acquired from this function on a previous
+// call. If not, an empty EvictionToken can be provided.
 //
 // The range descriptor which contains the range in which the request should
-// start its query is returned first. Next returned is an evictionToken. In
-// case the descriptor is discovered stale, the returned evictionToken's evict
-// method should be called; it evicts the cache appropriately. Finally, the
-// returned bool is true in case the given range reaches outside the returned
-// descriptor.
-func (ds *DistSender) getDescriptors(
-	ctx context.Context, rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, bool, *evictionToken, error) {
-	var descKey roachpb.RKey
-	if !useReverseScan {
-		descKey = rs.Key
-	} else {
-		descKey = rs.EndKey
-	}
-
+// start its query is returned first. Next returned is an EvictionToken. In
+// case the descriptor is discovered stale, the returned EvictionToken's evict
+// method should be called; it evicts the cache appropriately.
+func (ds *DistSender) getDescriptor(
+	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, *EvictionToken, error) {
 	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptor(
 		ctx, descKey, evictToken, useReverseScan,
 	)
 	if err != nil {
-		return nil, false, returnToken, err
+		return nil, returnToken, err
 	}
 
-	// Checks whether need to get next range descriptor.
-	var needAnother bool
-	if useReverseScan {
-		needAnother = rs.Key.Less(desc.StartKey)
-	} else {
-		needAnother = desc.EndKey.Less(rs.EndKey)
-	}
-
-	return desc, needAnother, returnToken, nil
+	return desc, returnToken, nil
 }
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
@@ -467,22 +465,11 @@ func (ds *DistSender) sendSingleRange(
 	return br, pErr
 }
 
-// Send implements the batch.Sender interface. It subdivides
-// the Batch into batches admissible for sending (preventing certain
-// illegal mixtures of requests), executes each individual part
-// (which may span multiple ranges), and recombines the response.
-// When the request spans ranges, it is split up and the corresponding
-// ranges queried serially, in ascending order.
-// In particular, the first write in a transaction may not be part of the first
-// request sent. This is relevant since the first write is a BeginTransaction
-// request, thus opening up a window of time during which there may be intents
-// of a transaction, but no entry. Pushing such a transaction will succeed, and
-// may lead to the transaction being aborted early.
-func (ds *DistSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	tracing.AnnotateTrace()
-
+// initAndVerifyBatch initializes timestamp-related information and
+// verifies batch constraints before splitting.
+func (ds *DistSender) initAndVerifyBatch(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) *roachpb.Error {
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(hlc.ZeroTimestamp) {
@@ -524,7 +511,7 @@ func (ds *DistSender) Send(
 	}
 
 	if len(ba.Requests) < 1 {
-		panic("empty batch")
+		return roachpb.NewErrorf("empty batch")
 	}
 
 	if ba.MaxSpanRequestKeys != 0 {
@@ -540,17 +527,52 @@ func (ds *DistSender) Send(
 				// not supported.
 				// TODO(vivek): don't enumerate all range requests.
 				if isReverse {
-					return nil, roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
+					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 				}
 
 			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
 				continue
 
 			default:
-				return nil, roachpb.NewErrorf("batch with limit contains %T request", inner)
+				return roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
 		}
 	}
+
+	return nil
+}
+
+// errNo1PCTxn indicates that a batch cannot be sent as a 1 phase
+// commit because it spans multiple ranges and must be split into at
+// least two parts, with the final part containing the EndTransaction
+// request.
+var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
+
+// Send implements the batch.Sender interface. It subdivides the Batch
+// into batches admissible for sending (preventing certain illegal
+// mixtures of requests), executes each individual part (which may
+// span multiple ranges), and recombines the response.
+//
+// When the request spans ranges, it is split by range and a partial
+// subset of the batch request is sent to affected ranges in parallel.
+//
+// The first write in a transaction may not arrive before writes to
+// other ranges. This is relevant in the case of a BeginTransaction
+// request. Intents written to other ranges before the transaction
+// record is created will cause the transaction to abort early.
+func (ds *DistSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	tracing.AnnotateTrace()
+
+	if pErr := ds.initAndVerifyBatch(ctx, &ba); pErr != nil {
+		return nil, pErr
+	}
+
+	// TODO(radu): when contexts are properly plumbed, we should be able to get
+	// the tracer from ctx, not from the DistSender.
+	ctx, cleanup := tracing.EnsureContext(ctx, tracing.TracerFromCtx(ds.Ctx))
+	defer cleanup()
 
 	var rplChunks []*roachpb.BatchResponse
 	parts := ba.Split(false /* don't split ET */)
@@ -562,8 +584,17 @@ func (ds *DistSender) Send(
 	for len(parts) > 0 {
 		part := parts[0]
 		ba.Requests = part
-		rpl, pErr, shouldSplitET := ds.sendChunk(ctx, ba)
-		if shouldSplitET {
+		// The minimal key range encompassing all requests contained within.
+		// Local addressing has already been resolved.
+		// TODO(tschottdorf): consider rudimentary validation of the batch here
+		// (for example, non-range requests with EndKey, or empty key ranges).
+		rs, err := keys.Range(ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		rpl, pErr := ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* isFirst */)
+
+		if pErr == errNo1PCTxn {
 			// If we tried to send a single round-trip EndTransaction but
 			// it looks like it's going to hit multiple ranges, split it
 			// here and try again.
@@ -595,230 +626,118 @@ func (ds *DistSender) Send(
 	return reply, nil
 }
 
-// sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
-// which doesn't need to be subdivided further before going to a range (so no
-// mixing of forward and reverse scans, etc). The parameters and return values
-// correspond to client.Sender with the exception of the returned boolean,
-// which is true when indicating that the caller should retry but needs to send
-// EndTransaction in a separate request.
-func (ds *DistSender) sendChunk(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error, bool) {
+type response struct {
+	reply *roachpb.BatchResponse
+	pErr  *roachpb.Error
+}
+
+// divideAndSendBatchToRanges sends the supplied batch to all of the
+// ranges which comprise the span specified by rs. The batch request
+// is trimmed against each range which is part of the span and sent
+// either serially or in parallel, if possible. isFirst indicates
+// whether this is the first time this method has been called on the
+// batch. It's specified false where this method is invoked recursively.
+func (ds *DistSender) divideAndSendBatchToRanges(
+	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, isFirst bool,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// This function builds a channel of responses for each range
+	// implicated in the span (rs) and combines them into a single
+	// BatchResponse when finished.
+	var responseChs []chan response
+	defer func() {
+		for _, responseCh := range responseChs {
+			resp := <-responseCh
+			if resp.pErr != nil {
+				if pErr == nil {
+					pErr = resp.pErr
+				}
+				continue
+			}
+			if br == nil {
+				// First response from a Range.
+				br = resp.reply
+			} else {
+				// This was the second or later call in a cross-Range request.
+				// Combine the new response with the existing one.
+				if err := br.Combine(resp.reply); err != nil {
+					pErr = roachpb.NewError(err)
+					return
+				}
+				br.Txn.Update(resp.reply.Txn)
+			}
+		}
+
+		// If we experienced an error, don't neglect to update the error's
+		// attached transaction with any responses which were received.
+		if pErr != nil {
+			if br != nil {
+				pErr.UpdateTxn(br.Txn)
+			}
+		}
+	}()
+
+	// Get initial seek key depending on direction of iteration.
+	var seekKey roachpb.RKey
 	isReverse := ba.IsReverse()
-
-	// TODO(radu): when contexts are properly plumbed, we should be able to get
-	// the tracer from ctx, not from the DistSender.
-	ctx, cleanup := tracing.EnsureContext(ctx, tracing.TracerFromCtx(ds.Ctx))
-	defer cleanup()
-
-	// The minimal key range encompassing all requests contained within.
-	// Local addressing has already been resolved.
-	// TODO(tschottdorf): consider rudimentary validation of the batch here
-	// (for example, non-range requests with EndKey, or empty key ranges).
-	rs, err := keys.Range(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err), false
+	if isReverse {
+		seekKey = rs.EndKey
+	} else {
+		seekKey = rs.Key
 	}
-	var br *roachpb.BatchResponse
-
 	// Send the request to one range per iteration.
-	for {
+	ri := NewRangeIterator(ds, isReverse)
+	for ri.Seek(ctx, seekKey); ri.Valid(); ri.Seek(ctx, seekKey) {
 		// Increase the sequence counter only once before sending RPCs to
-		// the ranges involved in this chunk of the batch (as opposed to for
-		// each RPC individually). On RPC errors, there's no guarantee that
-		// the request hasn't made its way to the target regardless of the
-		// error; we'd like the second execution to be caught by the sequence
-		// cache if that happens. There is a small chance that that we address
-		// a range twice in this chunk (stale/suboptimal descriptors due to
-		// splits/merges) which leads to a transaction retry.
-		// TODO(tschottdorf): it's possible that if we don't evict from the
-		//   cache we could be in for a busy loop.
+		// the ranges involved in this chunk of the batch (as opposed to
+		// for each RPC individually). On RPC errors, there's no guarantee
+		// that the request hasn't made its way to the target regardless
+		// of the error; we'd like the second execution to be caught by
+		// the sequence cache if that happens. There is a small chance
+		// that we address a range twice in this chunk (stale/suboptimal
+		// descriptors due to splits/merges) which leads to a transaction
+		// retry.
+		//
+		// TODO(tschottdorf): it's possible that if we don't evict from
+		// the cache we could be in for a busy loop.
 		ba.SetNewRequest()
 
-		var curReply *roachpb.BatchResponse
-		var desc *roachpb.RangeDescriptor
-		var evictToken *evictionToken
-		var needAnother bool
-		var pErr *roachpb.Error
-		var finished bool
-		for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
-			// Get range descriptor (or, when spanning range, descriptors). Our
-			// error handling below may clear them on certain errors, so we
-			// refresh (likely from the cache) on every retry.
-			var err error
-			desc, needAnother, evictToken, err = ds.getDescriptors(ctx, rs, evictToken, isReverse)
+		responseCh := make(chan response, 1)
+		responseChs = append(responseChs, responseCh)
 
-			// getDescriptors may fail retryably if, for example, the first
-			// range isn't available via Gossip. Assume that all errors at
-			// this level are retryable. Non-retryable errors would be for
-			// things like malformed requests which we should have checked
-			// for before reaching this point.
-			if err != nil {
-				log.Event(ctx, "range descriptor lookup failed: "+err.Error())
-				if log.V(1) {
-					log.Warning(ctx, err)
-				}
-				pErr = roachpb.NewError(err)
-				continue
-			}
-
-			if needAnother && br == nil {
-				// TODO(tschottdorf): we should have a mechanism for discovering
-				// range merges (descriptor staleness will mostly go unnoticed),
-				// or we'll be turning single-range queries into multi-range
-				// queries for no good reason.
-
-				// If there's no transaction and op spans ranges, possibly
-				// re-run as part of a transaction for consistency. The
-				// case where we don't need to re-run is if the read
-				// consistency is not required.
-				if ba.Txn == nil && ba.IsPossibleTransaction() &&
-					ba.ReadConsistency != roachpb.INCONSISTENT {
-					return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{}), false
-				}
-				// If the request is more than but ends with EndTransaction, we
-				// want the caller to come again with the EndTransaction in an
-				// extra call.
-				if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
-					return nil, roachpb.NewError(errors.New("cannot send 1PC txn to multiple ranges")), true /* shouldSplitET */
-				}
-			}
-
-			// It's possible that the returned descriptor misses parts of the
-			// keys it's supposed to scan after it's truncated to match the
-			// descriptor. Example revscan [a,g), first desc lookup for "g"
-			// returns descriptor [c,d) -> [d,g) is never scanned.
-			// We evict and retry in such a case.
-			frontOfCurSpan := rs.Key
-			containsFn := (*roachpb.RangeDescriptor).ContainsKey
-			if isReverse {
-				frontOfCurSpan = rs.EndKey
-				containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
-			}
-
-			if !containsFn(desc, frontOfCurSpan) {
-				if err := evictToken.Evict(ctx); err != nil {
-					return nil, roachpb.NewError(err), false
-				}
-				// On addressing errors, don't backoff; retry immediately.
-				r.Reset()
-				log.VEventf(ctx, 1,
-					"addressing error: %s not appropriate for remaining range %s",
-					desc, rs)
-				continue
-			}
-
-			curReply, pErr = func() (*roachpb.BatchResponse, *roachpb.Error) {
-				// Truncate the request to our current key range.
-				intersected, iErr := rs.Intersect(desc)
-				if iErr != nil {
-					return nil, roachpb.NewError(iErr)
-				}
-				truncBA, numActive, trErr := truncate(ba, intersected)
-				if numActive == 0 && trErr == nil {
-					// This shouldn't happen in the wild, but some tests
-					// exercise it.
-					return nil, roachpb.NewErrorf("truncation resulted in empty batch on [%s,%s): %s",
-						rs.Key, rs.EndKey, ba)
-				}
-				if trErr != nil {
-					return nil, roachpb.NewError(trErr)
-				}
-				return ds.sendSingleRange(ctx, truncBA, desc)
-			}()
-			// If sending succeeded, break this loop.
-			if pErr == nil {
-				finished = true
-				break
-			}
-
-			log.VEventf(ctx, 1, "reply error %s: %s", ba, pErr)
-
-			// Error handling: If the error indicates that our range
-			// descriptor is out of date, evict it from the cache and try
-			// again. Errors that apply only to a single replica were
-			// handled in send().
+		if isFirst && ri.NeedAnother(rs) {
+			// TODO(tschottdorf): we should have a mechanism for discovering
+			// range merges (descriptor staleness will mostly go unnoticed),
+			// or we'll be turning single-range queries into multi-range
+			// queries for no good reason.
 			//
-			// TODO(bdarnell): Don't retry endlessly. If we fail twice in a
-			// row and the range descriptor hasn't changed, return the error
-			// to our caller.
-			switch tErr := pErr.GetDetail().(type) {
-			case *roachpb.SendError:
-				// We've tried all the replicas without success. Either
-				// they're all down, or we're using an out-of-date range
-				// descriptor. Invalidate the cache and try again with the new
-				// metadata.
-				if err := evictToken.Evict(ctx); err != nil {
-					return nil, roachpb.NewError(err), false
-				}
-				continue
-			case *roachpb.RangeKeyMismatchError:
-				// Range descriptor might be out of date - evict it. This is
-				// likely the result of a range split. If we have new range
-				// descriptors, insert them instead as long as they are different
-				// from the last descriptor to avoid endless loops.
-				var replacements []roachpb.RangeDescriptor
-				different := func(rd *roachpb.RangeDescriptor) bool {
-					return !desc.RSpan().Equal(rd.RSpan())
-				}
-				if tErr.MismatchedRange != nil && different(tErr.MismatchedRange) {
-					replacements = append(replacements, *tErr.MismatchedRange)
-				}
-				if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
-					if containsFn(tErr.SuggestedRange, frontOfCurSpan) {
-						replacements = append(replacements, *tErr.SuggestedRange)
-
-					}
-				}
-				// Same as Evict() if replacements is empty.
-				if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
-					return nil, roachpb.NewError(err), false
-				}
-				// On addressing errors, don't backoff; retry immediately.
-				r.Reset()
-				if log.V(1) {
-					log.Warning(ctx, tErr)
-				}
-				continue
+			// If there's no transaction and op spans ranges, possibly
+			// re-run as part of a transaction for consistency. The
+			// case where we don't need to re-run is if the read
+			// consistency is not required.
+			if ba.Txn == nil && ba.IsPossibleTransaction() && ba.ReadConsistency != roachpb.INCONSISTENT {
+				responseCh <- response{pErr: roachpb.NewError(&roachpb.OpRequiresTxnError{})}
+				return
 			}
-			break
-		}
-
-		// Immediately return if querying a range failed non-retryably.
-		if pErr != nil {
-			log.Eventf(ctx, "non-retryable failure: %s", pErr)
-			return nil, pErr, false
-		} else if !finished {
-			log.Event(ctx, "DistSender gave up")
-			select {
-			case <-ds.rpcRetryOptions.Closer:
-				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
-			case <-ctx.Done():
-				return nil, roachpb.NewError(ctx.Err()), false
-			default:
-				log.Fatal(ctx, "exited retry loop with nil error but finished=false")
+			// If the request is more than but ends with EndTransaction, we
+			// want the caller to come again with the EndTransaction in an
+			// extra call.
+			if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
+				responseCh <- response{pErr: errNo1PCTxn}
+				return
 			}
 		}
 
-		ba.UpdateTxn(curReply.Txn)
-
-		if br == nil {
-			// First response from a Range.
-			br = curReply
-		} else {
-			// This was the second or later call in a cross-Range request.
-			// Combine the new response with the existing one.
-			if err := br.Combine(curReply); err != nil {
-				return nil, roachpb.NewError(err), false
-			}
-		}
-
+		// Determine next seek key, taking a potentially sparse batch into
+		// consideration.
+		var err error
+		nextRS := rs
 		if isReverse {
 			// In next iteration, query previous range.
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			rs.EndKey, err = prev(ba, desc.StartKey)
+			seekKey, err = prev(ba, ri.Desc().StartKey)
+			nextRS.EndKey = seekKey
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -827,50 +746,245 @@ func (ds *DistSender) sendChunk(
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			rs.Key, err = next(ba, desc.EndKey)
+			seekKey, err = next(ba, ri.Desc().EndKey)
+			nextRS.Key = seekKey
 		}
 		if err != nil {
-			return nil, roachpb.NewError(err), false
+			responseCh <- response{pErr: roachpb.NewError(err)}
+			return
 		}
 
-		if ba.MaxSpanRequestKeys > 0 {
-			// Count how many results we received.
-			var numResults int64
-			for _, resp := range curReply.Responses {
-				numResults += resp.GetInner().Header().NumKeys
+		// Send the next partial batch to the first range in the "rs" span.
+		// If we're not handling a request which limits responses and we
+		// can reserve one of the limited goroutines available for parallel
+		// batch RPCs, send asynchronously.
+		if ba.MaxSpanRequestKeys == 0 && ri.NeedAnother(rs) && ds.rpcContext != nil &&
+			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), isFirst, responseCh) {
+			// Note that we pass the batch request by value to the parallel
+			// goroutine to avoid using the cloned txn.
+
+			// Clone the txn to preserve the current txn sequence for the async call.
+			if ba.Txn != nil {
+				txnClone := ba.Txn.Clone()
+				ba.Txn = &txnClone
 			}
-			if numResults > ba.MaxSpanRequestKeys {
-				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
+		} else {
+			// Send synchronously if there is no parallel capacity left, there's a
+			// max results limit, or this is the final request in the span.
+			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), isFirst)
+			responseCh <- resp
+			if resp.pErr != nil {
+				return
 			}
-			ba.MaxSpanRequestKeys -= numResults
-			if ba.MaxSpanRequestKeys == 0 {
-				// prepare the batch response after meeting the max key limit.
-				fillSkippedResponses(ba, br, rs)
-				// done, exit loop.
-				log.Event(ctx, "request is saturated")
-				return br, nil, false
+			ba.UpdateTxn(resp.reply.Txn)
+
+			// Check whether we've received enough responses to exit query loop.
+			if ba.MaxSpanRequestKeys > 0 {
+				var numResults int64
+				for _, r := range resp.reply.Responses {
+					numResults += r.GetInner().Header().NumKeys
+				}
+				if numResults > ba.MaxSpanRequestKeys {
+					panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
+				}
+				ba.MaxSpanRequestKeys -= numResults
+				// Exiting; fill in missing responses.
+				if ba.MaxSpanRequestKeys == 0 {
+					fillSkippedResponses(ba, resp.reply, seekKey)
+					return
+				}
 			}
 		}
 
-		// If this was the last range accessed by this call, exit loop.
-		if !needAnother {
-			return br, nil, false
+		// Check for completion.
+		if !ri.NeedAnother(rs) {
+			return
 		}
-
-		// key cannot be less that the end key.
-		if !rs.Key.Less(rs.EndKey) {
-			panic(fmt.Sprintf("start key %s is less than %s", rs.Key, rs.EndKey))
-		}
-
-		log.Event(ctx, "querying next range")
+		isFirst = false // next range will not be first!
+		rs = nextRS
 	}
+
+	// We've exited early. Return the range iterator error.
+	responseCh := make(chan response, 1)
+	responseCh <- response{pErr: ri.Error()}
+	responseChs = append(responseChs, responseCh)
+	return
+}
+
+// sendPartialBatchAsync sends the partial batch asynchronously if
+// there aren't currently more than the allowed number of concurrent
+// async requests outstanding. Returns whether the partial batch was
+// sent.
+func (ds *DistSender) sendPartialBatchAsync(
+	ctx context.Context,
+	ba roachpb.BatchRequest,
+	rs roachpb.RSpan,
+	desc *roachpb.RangeDescriptor,
+	evictToken *EvictionToken,
+	isFirst bool,
+	responseCh chan response,
+) bool {
+	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
+		ctx, ds.asyncSenderSem, false /* !wait */, func(ctx context.Context) {
+			atomic.AddInt32(&ds.asyncSenderCount, 1)
+			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, isFirst)
+		},
+	); err != nil {
+		return false
+	}
+	return true
+}
+
+// sendPartialBatch sends the supplied batch to the range specified by
+// desc. The batch request is first truncated so that it contains only
+// requests which intersect the range descriptor and keys for each
+// request are limited to the range's key span. The send occurs in a
+// retry loop to handle send failures. On failure to send to any
+// replicas, we backoff and retry by refetching the range
+// descriptor. If the underlying range seems to have split, we
+// recursively invoke divideAndSendBatchToRanges to re-enumerate the
+// ranges in the span and resend to each.
+func (ds *DistSender) sendPartialBatch(
+	ctx context.Context,
+	ba roachpb.BatchRequest,
+	rs roachpb.RSpan,
+	desc *roachpb.RangeDescriptor,
+	evictToken *EvictionToken,
+	isFirst bool,
+) response {
+	var reply *roachpb.BatchResponse
+	var pErr *roachpb.Error
+	isReverse := ba.IsReverse()
+
+	// Truncate the request to range descriptor.
+	intersected, err := rs.Intersect(desc)
+	if err != nil {
+		return response{pErr: roachpb.NewError(err)}
+	}
+	truncBA, numActive, err := truncate(ba, intersected)
+	if numActive == 0 && err == nil {
+		// This shouldn't happen in the wild, but some tests exercise it.
+		return response{
+			pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", intersected, ba),
+		}
+	}
+	if err != nil {
+		return response{pErr: roachpb.NewError(err)}
+	}
+
+	// Start a retry loop for sending the batch to the range.
+	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+		// If we've cleared the descriptor on a send failure, re-lookup.
+		if desc == nil {
+			var descKey roachpb.RKey
+			if isReverse {
+				descKey = intersected.EndKey
+			} else {
+				descKey = intersected.Key
+			}
+			desc, evictToken, err = ds.getDescriptor(ctx, descKey, nil, isReverse)
+			if err != nil {
+				log.ErrEventf(ctx, "range descriptor re-lookup failed: %s", err)
+				continue
+			}
+		}
+
+		reply, pErr = ds.sendSingleRange(ctx, truncBA, desc)
+
+		// If sending succeeded, return immediately.
+		if pErr == nil {
+			return response{reply: reply}
+		}
+
+		log.ErrEventf(ctx, "reply error %s: %s", ba, pErr)
+
+		// Error handling: If the error indicates that our range
+		// descriptor is out of date, evict it from the cache and try
+		// again. Errors that apply only to a single replica were
+		// handled in send().
+		//
+		// TODO(bdarnell): Don't retry endlessly. If we fail twice in a
+		// row and the range descriptor hasn't changed, return the error
+		// to our caller.
+		switch tErr := pErr.GetDetail().(type) {
+		case *roachpb.SendError:
+			// We've tried all the replicas without success. Either
+			// they're all down, or we're using an out-of-date range
+			// descriptor. Invalidate the cache and try again with the new
+			// metadata.
+			log.Event(ctx, "evicting range descriptor on send error and backoff for re-lookup")
+			if err := evictToken.Evict(ctx); err != nil {
+				return response{pErr: roachpb.NewError(err)}
+			}
+			// Clear the descriptor to reload on the next attempt.
+			desc = nil
+			continue
+		case *roachpb.RangeKeyMismatchError:
+			// Range descriptor might be out of date - evict it. This is
+			// likely the result of a range split. If we have new range
+			// descriptors, insert them instead as long as they are different
+			// from the last descriptor to avoid endless loops.
+			var replacements []roachpb.RangeDescriptor
+			different := func(rd *roachpb.RangeDescriptor) bool {
+				return !desc.RSpan().Equal(rd.RSpan())
+			}
+			if tErr.MismatchedRange != nil && different(tErr.MismatchedRange) {
+				replacements = append(replacements, *tErr.MismatchedRange)
+			}
+			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
+				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
+					replacements = append(replacements, *tErr.SuggestedRange)
+				}
+			}
+			// Same as Evict() if replacements is empty.
+			if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
+				return response{pErr: roachpb.NewError(err)}
+			}
+			// On addressing errors (likely a split), we need to re-invoke
+			// the range descriptor lookup machinery, so we recurse by
+			// sending batch to just the partial span this descriptor was
+			// supposed to cover.
+			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, isFirst)
+			return response{reply: reply, pErr: pErr}
+		}
+		break
+	}
+
+	// Propagate error if either the retry closer or context done
+	// channels were closed.
+	if pErr == nil {
+		if pErr = ds.deduceRetryEarlyExitError(ctx); pErr == nil {
+			log.Fatal(ctx, "exited retry loop without an error")
+		}
+	}
+
+	return response{pErr: pErr}
+}
+
+func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) *roachpb.Error {
+	select {
+	case <-ds.rpcRetryOptions.Closer:
+		// Typically happens during shutdown.
+		return roachpb.NewError(&roachpb.NodeUnavailableError{})
+	case <-ctx.Done():
+		// Happens when the client request is cancelled.
+		return roachpb.NewError(ctx.Err())
+	default:
+	}
+	return nil
+}
+
+func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roachpb.RSpan) bool {
+	if isReverse {
+		return rd.ContainsExclusiveEndKey(rs.EndKey)
+	}
+	return rd.ContainsKey(rs.Key)
 }
 
 // fillSkippedResponses after meeting the batch key max limit for range
 // requests.
-func fillSkippedResponses(
-	ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextSpan roachpb.RSpan,
-) {
+func fillSkippedResponses(ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextKey roachpb.RKey) {
 	// Some requests might have NoopResponses; we must replace them with empty
 	// responses of the proper type.
 	for i, req := range ba.Requests {
@@ -912,12 +1026,12 @@ func fillSkippedResponses(
 				// The ResumeSpan.Key might be set to the StartKey of a range;
 				// correctly set it to the Key of the original request span.
 				hdr.ResumeSpan.Key = origSpan.Key
-			} else if roachpb.RKey(origSpan.Key).Less(nextSpan.EndKey) {
+			} else if roachpb.RKey(origSpan.Key).Less(nextKey) {
 				// Some keys have yet to be processed.
 				hdr.ResumeSpan = &origSpan
-				if nextSpan.EndKey.Less(roachpb.RKey(origSpan.EndKey)) {
+				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
 					// The original span has been partially processed.
-					hdr.ResumeSpan.EndKey = nextSpan.EndKey.AsRawKey()
+					hdr.ResumeSpan.EndKey = nextKey.AsRawKey()
 				}
 			}
 		} else {
@@ -926,12 +1040,12 @@ func fillSkippedResponses(
 				// range; correctly set it to the EndKey of the original
 				// request span.
 				hdr.ResumeSpan.EndKey = origSpan.EndKey
-			} else if nextSpan.Key.Less(roachpb.RKey(origSpan.EndKey)) {
+			} else if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
 				// Some keys have yet to be processed.
 				hdr.ResumeSpan = &origSpan
-				if roachpb.RKey(origSpan.Key).Less(nextSpan.Key) {
+				if roachpb.RKey(origSpan.Key).Less(nextKey) {
 					// The original span has been partially processed.
-					hdr.ResumeSpan.Key = nextSpan.Key.AsRawKey()
+					hdr.ResumeSpan.Key = nextKey.AsRawKey()
 				}
 			}
 		}
