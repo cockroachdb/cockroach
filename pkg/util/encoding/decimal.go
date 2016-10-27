@@ -542,7 +542,7 @@ func EncodeNonsortingDecimal(b []byte, d *inf.Dec) []byte {
 
 	// Determine the exponent of the decimal, with the
 	// exponent defined as .xyz * 10^exp.
-	nDigits, formatted := numDigits(bi, tmp)
+	nDigits, formatted := decimal.NumDigits(bi, tmp)
 	e := nDigits - int(d.Scale())
 
 	// Handle big.Int having zeros at the end of its
@@ -694,7 +694,7 @@ func decodeNonsortingDecimalValue(dec *inf.Dec, negExp bool, buf, tmp []byte) er
 	bi.SetBytes(buf)
 
 	// Set the decimal's scale.
-	nDigits, _ := numDigits(bi, tmp)
+	nDigits, _ := decimal.NumDigits(bi, tmp)
 	exp := int(e) - nDigits
 	dec.SetScale(inf.Scale(-exp))
 	return nil
@@ -705,7 +705,7 @@ func decodeNonsortingDecimalValueWithoutExp(dec *inf.Dec, buf, tmp []byte) {
 	bi.SetBytes(buf)
 
 	// Set the decimal's scale.
-	nDigits, _ := numDigits(bi, tmp)
+	nDigits, _ := decimal.NumDigits(bi, tmp)
 	dec.SetScale(inf.Scale(nDigits))
 }
 
@@ -763,65 +763,6 @@ func copyWords(buf []byte, nat []big.Word) []byte {
 		}
 	}
 	return buf
-}
-
-// digitsLookupTable is used to map binary digit counts to their corresponding
-// decimal border values. The map relies on the proof that (without leading zeros)
-// for any given number of binary digits r, such that the number represented is
-// between 2^r and 2^(r+1)-1, there are only two possible decimal digit counts
-// k and k+1 that the binary r digits could be representing.
-//
-// Using this proof, for a given digit count, the map will return the lower number
-// of decimal digits (k) the binary digit count could represenent, along with the
-// value of the border between the two decimal digit counts (10^k).
-const tableSize = 128
-
-var digitsLookupTable [tableSize + 1]tableVal
-
-type tableVal struct {
-	digits int
-	border big.Int
-}
-
-func init() {
-	curVal := big.NewInt(1)
-	curExp := new(big.Int)
-	for i := 1; i <= tableSize; i++ {
-		if i > 1 {
-			curVal.Lsh(curVal, 1)
-		}
-
-		elem := &digitsLookupTable[i]
-		elem.digits = len(curVal.String())
-
-		elem.border.SetInt64(10)
-		curExp.SetInt64(int64(elem.digits))
-		elem.border.Exp(&elem.border, curExp, nil)
-	}
-}
-
-func lookupBits(bitLen int) (tableVal, bool) {
-	if bitLen > 0 && bitLen < len(digitsLookupTable) {
-		return digitsLookupTable[bitLen], true
-	}
-	return tableVal{}, false
-}
-
-// numDigits returns the number of decimal digits that make up
-// big.Int value. The function first attempts to look this digit
-// count up in the digitsLookupTable. If the value is not there,
-// it defaults to constructing a string value for the big.Int and
-// using this to determine the number of digits. If a string value
-// is constructed, it will be returned so it can be used again.
-func numDigits(bi *big.Int, tmp []byte) (int, []byte) {
-	if val, ok := lookupBits(bi.BitLen()); ok {
-		if bi.Cmp(&val.border) < 0 {
-			return val.digits, nil
-		}
-		return val.digits + 1, nil
-	}
-	bs := bi.Append(tmp, 10)
-	return len(bs), bs
 }
 
 // trailingZeros counts the number of trailing zeros in the
