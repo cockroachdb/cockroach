@@ -283,6 +283,8 @@ func (s *Stopper) RunLimitedAsyncTask(
 	// Wait for permission to run from the semaphore.
 	select {
 	case sem <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-s.ShouldQuiesce():
 		return errUnavailable
 	default:
@@ -293,9 +295,20 @@ func (s *Stopper) RunLimitedAsyncTask(
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-s.ShouldQuiesce():
 			return errUnavailable
 		}
+	}
+
+	// Check for canceled context: it's possible to get the semaphore even
+	// if the context is canceled.
+	select {
+	case <-ctx.Done():
+		<-sem
+		return ctx.Err()
+	default:
 	}
 
 	if !s.runPrelude(key) {
