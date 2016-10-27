@@ -19,6 +19,7 @@ package stop_test
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -464,6 +465,62 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	)
 	if err != stop.ErrThrottled {
 		t.Fatalf("expected %v; got %v", stop.ErrThrottled, err)
+	}
+}
+
+func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	defer s.Stop()
+
+	const maxConcurrency = 5
+	sem := make(chan struct{}, maxConcurrency)
+
+	// Synchronization channels.
+	workersDone := make(chan struct{})
+	workerStarted := make(chan struct{})
+
+	var workersRun int32 = 0
+	var workersCancelled int32 = 0
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	f := func(ctx context.Context) {
+		atomic.AddInt32(&workersRun, 1)
+		workerStarted <- struct{}{}
+		<-ctx.Done()
+	}
+
+	// This loop will block when the semaphore is filled.
+	if err := s.RunAsyncTask(ctx, func(ctx context.Context) {
+		for i := 0; i < maxConcurrency*2; i++ {
+			if err := s.RunLimitedAsyncTask(ctx, sem, true, f); err != nil {
+				if err != context.Canceled {
+					t.Fatal(err)
+				}
+				atomic.AddInt32(&workersCancelled, 1)
+			}
+		}
+		close(workersDone)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that the semaphore fills up, leaving maxConcurrency workers
+	// waiting for context cancelation.
+	for i := 0; i < maxConcurrency; i++ {
+		<-workerStarted
+	}
+
+	// Cancel the context, which should result in all subsequent attempts to
+	// queue workers failing.
+	cancel()
+	<-workersDone
+
+	if a, e := atomic.LoadInt32(&workersRun), int32(maxConcurrency); a != e {
+		t.Fatalf("%d workers ran before context close, expected exactly %d", a, e)
+	}
+	if a, e := atomic.LoadInt32(&workersCancelled), int32(maxConcurrency); a != e {
+		t.Fatalf("%d workers cancelled after context close, expected exactly %d", a, e)
 	}
 }
 
