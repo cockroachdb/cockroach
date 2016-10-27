@@ -1450,6 +1450,60 @@ func TestRaftHeartbeats(t *testing.T) {
 	}
 }
 
+// TestReportUnreachableHeartbeats tests that if a single transport fails,
+// coalesced heartbeats are not stalled out entirely.
+func TestReportUnreachableHeartbeats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	// Replicate the range onto all three stores
+	mtc.replicateRange(1, 1, 2)
+
+	// Send a single increment to ensure the range is up.
+	key := roachpb.Key("a")
+	incArgs := incrementArgs(key, 2)
+	if _, err := client.SendWrapped(context.Background(),
+		mtc.distSenders[0], &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(key, []int64{2, 2, 2})
+
+	leaderID := -1
+	var initialTerm uint64
+	for i := 0; i < 3; i++ {
+		if mtc.stores[i].RaftStatus(1).SoftState.RaftState == raft.StateLeader {
+			leaderID = i
+			initialTerm = mtc.stores[i].RaftStatus(1).Term
+			break
+		}
+	}
+
+	// Shut down a raft transport via the circuit breaker, and trigger the
+	// reportUnreachable code path.
+	cb := mtc.transports[0].GetCircuitBreaker(roachpb.NodeID(3))
+	cb.Break()
+	time.Sleep(5 * mtc.makeStoreConfig(0).RaftTickInterval)
+
+	// Ensure that the leadership has not changed, and that the two remaining
+	// replicas can make progress.
+	status := mtc.stores[leaderID].RaftStatus(1)
+	if status.SoftState.RaftState != raft.StateLeader {
+		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderID, status.SoftState.RaftState)
+	}
+	if status.Term != initialTerm {
+		t.Errorf("while sleeping, term changed from %d to %d", initialTerm, status.Term)
+	}
+
+	incArgs = incrementArgs(key, 1)
+	if _, err := client.SendWrapped(context.Background(),
+		mtc.distSenders[0], &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(key, []int64{3, 3, 2})
+}
+
 // TestReplicateAfterSplit verifies that a new replica whose start key
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
