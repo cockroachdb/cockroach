@@ -17,88 +17,17 @@
 package sqlbase
 
 import (
-	"strings"
-	"unicode"
-
-	"golang.org/x/text/unicode/norm"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// Special case normalization rules for Turkish/Azeri lowercase dotless-i and
-// uppercase dotted-i. Fold both dotted and dotless 'i' into the ascii i/I, so
-// our case-insensitive comparison functions can be locale-invariant. This
-// mapping implements case-insensitivity for Turkish and other latin-derived
-// languages simultaneously, with the additional quirk that it is also
-// insensitive to the dottedness of the i's
-var normalize = unicode.SpecialCase{
-	unicode.CaseRange{
-		Lo: 0x0130,
-		Hi: 0x0130,
-		Delta: [unicode.MaxCase]rune{
-			0x49 - 0x130, // Upper
-			0x69 - 0x130, // Lower
-			0x49 - 0x130, // Title
-		},
-	},
-	unicode.CaseRange{
-		Lo: 0x0131,
-		Hi: 0x0131,
-		Delta: [unicode.MaxCase]rune{
-			0x49 - 0x131, // Upper
-			0x69 - 0x131, // Lower
-			0x49 - 0x131, // Title
-		},
-	},
-}
-
-// NormalizeName normalizes to lowercase and Unicode Normalization Form C
-// (NFC).
-func NormalizeName(name parser.Name) string {
-	lower := strings.Map(normalize.ToLower, string(name))
-	if isASCII(lower) {
-		return lower
-	}
-	return norm.NFC.String(lower)
-}
-
-// ReNormalizeName performs the same work as NormalizeName but when
-// the string originates from the database. We define a different
-// function so as to be able to track usage of this function (cf. #8200).
-func ReNormalizeName(name string) string {
-	return NormalizeName(parser.Name(name))
-}
-
-// EqualName returns true iff the normalizations of a and b are equal.
-func EqualName(a, b parser.Name) bool {
-	return NormalizeName(a) == NormalizeName(b)
-}
-
-func isASCII(s string) bool {
-	for _, c := range s {
-		if c > unicode.MaxASCII {
-			return false
-		}
-	}
-	return true
-}
-
-// NormalizeTableName normalizes the TableName using NormalizeName().
-func NormalizeTableName(tn parser.TableName) parser.TableName {
-	return parser.TableName{
-		DatabaseName: parser.Name(NormalizeName(tn.DatabaseName)),
-		TableName:    parser.Name(NormalizeName(tn.TableName)),
-	}
-}
-
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order
 // to generate the prefix key to use to scan over all of the names for the
 // specified parentID.
 func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
-	normName := ReNormalizeName(name)
+	normName := parser.ReNormalizeName(name)
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))

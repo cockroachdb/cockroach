@@ -261,7 +261,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
-	normIdxName := sqlbase.NormalizeName(n.Index.Index)
+	normIdxName := n.Index.Index.Normalize()
 	status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
 	if err != nil {
 		if n.IfExists {
@@ -287,7 +287,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if n.NewName == "" {
 		return nil, errEmptyIndexName
 	}
-	normNewIdxName := sqlbase.NormalizeName(n.NewName)
+	normNewIdxName := n.NewName.Normalize()
 
 	if normIdxName == normNewIdxName {
 		// Noop.
@@ -348,8 +348,8 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if n.NewName == "" {
 		return nil, errEmptyColumnName
 	}
-	normNewColName := sqlbase.NormalizeName(n.NewName)
-	normColName := sqlbase.NormalizeName(n.Name)
+	normNewColName := n.NewName.Normalize()
+	normColName := n.Name.Normalize()
 
 	status, i, err := tableDesc.FindColumnByNormalizedName(normColName)
 	// n.IfExists only applies to table, no need to check here.
@@ -392,7 +392,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 				return err, false, nil
 			}
 			if c, ok := v.(*parser.ColumnItem); ok {
-				if sqlbase.NormalizeName(c.ColumnName) == normColName {
+				if c.ColumnName.Normalize() == normColName {
 					c.ColumnName = n.NewName
 				}
 			}
