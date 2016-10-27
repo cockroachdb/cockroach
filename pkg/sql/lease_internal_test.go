@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -272,10 +273,12 @@ func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*LeaseManager)
 
-	if _, err := db.Exec(`
+	const tableName = "test"
+
+	if _, err := db.Exec(fmt.Sprintf(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
-`); err != nil {
+CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
+`, tableName)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -284,24 +287,28 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", tableName)
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	lease := leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock())
-	if lease == nil {
-		t.Fatalf("no name cache entry")
+	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock()); lease == nil {
+		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
+	} else {
+		if err := leaseManager.Release(lease); err != nil {
+			t.Fatal(err)
+		}
+
+		// Manually expire the lease. This is pretty gross, but such is life.
+		leaseManager.tableNames.mu.Lock()
+		lease.expiration = parser.DTimestamp{
+			Time: s.Clock().Now().GoTime().Add(-time.Millisecond),
+		}
+		leaseManager.tableNames.mu.Unlock()
 	}
-	if err := leaseManager.Release(lease); err != nil {
-		t.Fatal(err)
-	}
-	// Advance the clock to expire the lease.
-	s.Clock().SetMaxOffset(10 * LeaseDuration)
-	s.Clock().Update(s.Clock().Now().Add(int64(2*LeaseDuration), 0))
 
 	// Check the name no longer resolves.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock()) != nil {
-		t.Fatalf("name resolves when it shouldn't")
+	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock()); lease != nil {
+		t.Fatalf("name cache has unexpired entry for (%d, %s): %s", tableDesc.ParentID, tableName, lease)
 	}
 }
 
