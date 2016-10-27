@@ -242,7 +242,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ts := s.(*TestServer)
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = ts.stopper.ShouldQuiesce()
-	ds := kv.NewDistSender(&kv.DistSenderConfig{
+	ds := kv.NewDistSender(kv.DistSenderConfig{
 		Clock:           s.Clock(),
 		RPCContext:      s.RPCContext(),
 		RPCRetryOptions: &retryOpts,
@@ -345,7 +345,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		ts := s.(*TestServer)
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = ts.stopper.ShouldQuiesce()
-		ds := kv.NewDistSender(&kv.DistSenderConfig{
+		ds := kv.NewDistSender(kv.DistSenderConfig{
 			Clock:           s.Clock(),
 			RPCContext:      s.RPCContext(),
 			RPCRetryOptions: &retryOpts,

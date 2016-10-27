@@ -764,7 +764,10 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	} {
 		manual := hlc.NewManualClock(ts[0].WallTime + 1)
 		clock := hlc.NewClock(manual.UnixNano)
-		ds := kv.NewDistSender(&kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()}, s.(*server.TestServer).Gossip())
+		ds := kv.NewDistSender(
+			kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()},
+			s.(*server.TestServer).Gossip(),
+		)
 
 		reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -1312,7 +1315,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	// bogus range. The DistSender needs to be in scope for its own
 	// MockRangeDescriptorDB closure.
 	var sender *kv.DistSender
-	sender = kv.NewDistSender(&kv.DistSenderConfig{
+	sender = kv.NewDistSender(kv.DistSenderConfig{
 		Clock:      s.Clock(),
 		RPCContext: s.RPCContext(),
 		RangeDescriptorDB: kv.MockRangeDescriptorDB(

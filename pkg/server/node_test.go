@@ -98,7 +98,7 @@ func createTestNode(
 	}
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	distSender := kv.NewDistSender(&kv.DistSenderConfig{
+	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
