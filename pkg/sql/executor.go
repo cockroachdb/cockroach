@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -74,12 +76,14 @@ var (
 type distSQLExecMode int
 
 const (
-	distSQLDisabled distSQLExecMode = iota
-	//The plan does not instantiate any goroutines internally.
-	distSQLSync
-	distSQLAsync
+	// distSQLOff means that we never use distSQL.
+	distSQLOff distSQLExecMode = iota
+	// distSQLOn means that we use distSQL for queries that are supported.
+	distSQLOn
+	// distSQLOnly means that we only use distSQL; unsupported queries fail.
+	distSQLAlways
 )
-const testDistSQL distSQLExecMode = distSQLDisabled
+const testDistSQL distSQLExecMode = distSQLOff
 
 type traceResult struct {
 	tag   string
@@ -163,6 +167,7 @@ type ResultColumns []ResultColumn
 // Executor is thread-safe.
 type Executor struct {
 	cfg            ExecutorConfig
+	stopper        *stop.Stopper
 	reCache        *parser.RegexpCache
 	virtualSchemas virtualSchemaHolder
 
@@ -191,6 +196,8 @@ type Executor struct {
 	// execution of statements. So don't go on changing state after you've
 	// Wait()ed on it.
 	systemConfigCond *sync.Cond
+
+	distSQLPlanner *distSQLPlanner
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -202,6 +209,7 @@ type ExecutorConfig struct {
 	NodeID       *base.NodeIDContainer
 	DB           *client.DB
 	Gossip       *gossip.Gossip
+	DistSender   *kv.DistSender
 	LeaseManager *LeaseManager
 	Clock        *hlc.Clock
 	DistSQLSrv   *distsql.ServerImpl
@@ -253,11 +261,10 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(
-	cfg ExecutorConfig, stopper *stop.Stopper, startupMemMetrics *MemoryMetrics,
-) *Executor {
+func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
 		cfg:     cfg,
+		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
 
 		Latency:          metric.NewLatency(MetaLatency, cfg.MetricsSampleInterval),
@@ -274,28 +281,6 @@ func NewExecutor(
 		QueryCount:       metric.NewCounter(MetaQuery),
 	}
 
-	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
-
-	gossipUpdateC := cfg.Gossip.RegisterSystemConfigChannel()
-	stopper.RunWorker(func() {
-		for {
-			select {
-			case <-gossipUpdateC:
-				sysCfg, _ := cfg.Gossip.GetSystemConfig()
-				exec.updateSystemConfig(sysCfg)
-			case <-stopper.ShouldStop():
-				return
-			}
-		}
-	})
-
-	ctx := log.WithLogTag(context.Background(), "startup", nil)
-	startupSession := NewSession(ctx, SessionArgs{}, exec, nil, startupMemMetrics)
-	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
-		log.Fatal(ctx, err)
-	}
-	startupSession.Finish(exec)
-
 	return exec
 }
 
@@ -306,6 +291,39 @@ func NewDummyExecutor() *Executor {
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		},
 	}
+}
+
+// Start starts workers for the executor and initializes the distSQLPlanner.
+func (e *Executor) Start(
+	ctx context.Context, startupMemMetrics *MemoryMetrics, nodeDesc roachpb.NodeDescriptor,
+) {
+	ctx = e.AnnotateCtx(ctx)
+	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
+	e.distSQLPlanner = newDistSQLPlanner(
+		nodeDesc, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
+	)
+
+	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
+
+	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
+	e.stopper.RunWorker(func() {
+		for {
+			select {
+			case <-gossipUpdateC:
+				sysCfg, _ := e.cfg.Gossip.GetSystemConfig()
+				e.updateSystemConfig(sysCfg)
+			case <-e.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
+	ctx = log.WithLogTag(ctx, "startup", nil)
+	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
+	if err := e.virtualSchemas.init(&startupSession.planner); err != nil {
+		log.Fatal(ctx, err)
+	}
+	startupSession.Finish(e)
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
@@ -1161,24 +1179,64 @@ func commitSQLTransaction(
 	return result, err
 }
 
+func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
+	// Note: if we just want the row count, result.Rows is nil here.
+	recv := distSQLReceiver{rows: result.Rows}
+	err := e.distSQLPlanner.PlanAndRun(planMaker.session.Ctx(), planMaker.txn, tree, &recv)
+	if err != nil {
+		return err
+	}
+	if recv.err != nil {
+		return recv.err
+	}
+	if result.Type == parser.RowsAffected {
+		result.RowsAffected = int(recv.numRows)
+	}
+	return nil
+}
+
 // The current transaction might have been committed/rolled back when this returns.
+// The caller closes result.Rows (even in error cases).
 func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner, autoCommit bool,
 ) (Result, error) {
-	var result Result
 	plan, err := planMaker.makePlan(stmt, autoCommit)
 	if err != nil {
-		return result, err
+		return Result{}, err
 	}
 
 	defer plan.Close()
 
+	result := Result{
+		PGTag: stmt.StatementTag(),
+		Type:  stmt.StatementType(),
+	}
+	if result.Type == parser.Rows {
+		result.Columns = plan.Columns()
+		for _, c := range result.Columns {
+			if err := checkResultType(c.Typ); err != nil {
+				return result, err
+			}
+		}
+		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+	}
+
 	distSQLMode := testDistSQL
-	if planMaker.session.DistSQLMode != distSQLDisabled {
+	if planMaker.session.DistSQLMode != distSQLOff {
 		distSQLMode = planMaker.session.DistSQLMode
 	}
-	if distSQLMode != distSQLDisabled {
-		if err := hackPlanToUseDistSQL(plan, distSQLMode); err != nil {
+
+	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
+	if _, empty := plan.(*emptyNode); !empty && distSQLMode != distSQLOff {
+		if err := e.distSQLPlanner.CheckSupport(plan); err != nil {
+			if distSQLMode == distSQLAlways {
+				return result, err
+			}
+			// Don't use distSQL for this request.
+			log.Infof(planMaker.session.Ctx(), "query not supported for distSQL: %s", err)
+			// Fall through below.
+		} else {
+			err := e.execDistSQL(planMaker, plan, &result)
 			return result, err
 		}
 	}
@@ -1186,9 +1244,6 @@ func (e *Executor) execStmt(
 	if err := plan.Start(); err != nil {
 		return result, err
 	}
-
-	result.PGTag = stmt.StatementTag()
-	result.Type = stmt.StatementType()
 
 	switch result.Type {
 	case parser.RowsAffected:
@@ -1199,14 +1254,6 @@ func (e *Executor) execStmt(
 		result.RowsAffected += count
 
 	case parser.Rows:
-		result.Columns = plan.Columns()
-		for _, c := range result.Columns {
-			if err := checkResultType(c.Typ); err != nil {
-				return result, err
-			}
-		}
-		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
-
 		next, err := plan.Next()
 		for ; next; next, err = plan.Next() {
 			// The plan.Values DTuple needs to be copied on each iteration.

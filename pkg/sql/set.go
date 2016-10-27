@@ -112,10 +112,12 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 			return nil, err
 		}
 		switch parser.Name(s).Normalize() {
-		case parser.ReNormalizeName("sync"):
-			p.session.DistSQLMode = distSQLSync
-		case parser.ReNormalizeName("async"):
-			p.session.DistSQLMode = distSQLAsync
+		case parser.ReNormalizeName("off"):
+			p.session.DistSQLMode = distSQLOff
+		case parser.ReNormalizeName("on"):
+			p.session.DistSQLMode = distSQLOn
+		case parser.ReNormalizeName("always"):
+			p.session.DistSQLMode = distSQLAlways
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
 		}
