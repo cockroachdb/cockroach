@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -162,7 +161,6 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 // It copies the Server's tracer into the Session's context.
 func (s *adminServer) NewSessionForRPC(ctx context.Context, args sql.SessionArgs) *sql.Session {
 	ctx = s.server.AnnotateCtx(ctx)
-	ctx = tracing.WithTracer(ctx, s.server.cfg.AmbientCtx.Tracer)
 	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
 }
 

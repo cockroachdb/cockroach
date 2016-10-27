@@ -146,10 +146,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.cfg.AmbientCtx.AddLogTag("n", &s.nodeIDContainer)
 
 	ctx := s.AnnotateCtx(context.Background())
-	// TODO(radu): this will go away when we pass AmbientContext into all
-	// components.
-	ctx = tracing.WithTracer(ctx, s.cfg.AmbientCtx.Tracer)
-
 	if s.cfg.Insecure {
 		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
@@ -197,12 +193,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		Ctx:             ctx,
+		AmbientCtx:      s.cfg.AmbientCtx,
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}
-	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
+	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
