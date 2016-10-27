@@ -110,7 +110,7 @@
 		ConditionFailedError
 		LeaseRejectedError
 		SendError
-		AmbiguousCommitError
+		AmbiguousResultError
 		RaftGroupDeletedError
 		ReplicaCorruptionError
 		ReplicaTooOldError

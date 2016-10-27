@@ -1054,7 +1054,7 @@ func (ds *DistSender) sendToReplicas(
 				len(replicas), 1))
 	}
 
-	var ambiguousCommit bool
+	var ambiguousResult bool
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
@@ -1119,8 +1119,8 @@ func (ds *DistSender) sendToReplicas(
 					// still other RPCs outstanding or an ambiguous RPC error
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
-					if haveCommit && (pending > 0 || ambiguousCommit) {
-						return nil, roachpb.NewAmbiguousCommitError()
+					if haveCommit && (pending > 0 || ambiguousResult) {
+						return nil, roachpb.NewAmbiguousResultError()
 					}
 					return call.Reply, nil
 				}
@@ -1143,7 +1143,7 @@ func (ds *DistSender) sendToReplicas(
 				// receive the reply. Set the ambiguous commit flag.
 				//
 				// We retry ambiguous commit batches to avoid returning the
-				// unrecoverable AmbiguousCommitError. This is safe because
+				// unrecoverable AmbiguousResultError. This is safe because
 				// repeating an already-successfully applied batch is
 				// guaranteed to return either a TransactionReplayError (in
 				// case the replay happens at the original leader), or a
@@ -1159,7 +1159,7 @@ func (ds *DistSender) sendToReplicas(
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
 				if haveCommit && grpc.Code(err) != codes.Unavailable {
-					ambiguousCommit = true
+					ambiguousResult = true
 				}
 			}
 
@@ -1170,8 +1170,8 @@ func (ds *DistSender) sendToReplicas(
 				transport.SendNext(done)
 			}
 			if pending == 0 {
-				if ambiguousCommit {
-					err = roachpb.NewAmbiguousCommitError()
+				if ambiguousResult {
+					err = roachpb.NewAmbiguousResultError()
 				} else {
 					err = roachpb.NewSendError(
 						fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), err),
