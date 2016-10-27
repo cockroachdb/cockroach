@@ -119,6 +119,41 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify queries with positive scale work properly.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e1"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, `pq: database "d" does not exist`) {
+		t.Fatal(err)
+	}
+
+	// Verify queries with large exponents error properly.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, "value out of range") {
+		t.Fatal(err)
+	}
+
+	// Verify logical parts parse with < 10 digits.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.123456789"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, `pq: database "d" does not exist`) {
+		t.Fatal(err)
+	}
+
+	// Verify logical parts parse with == 10 digits.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.1234567890"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, `pq: database "d" does not exist`) {
+		t.Fatal(err)
+	}
+
+	// Too much logical precision is an error.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.12345678901"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, "logical part has too many digits") {
+		t.Fatal(err)
+	}
+
 	// Old queries shouldn't work.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-31'").Scan(&i); err == nil {
 		t.Fatal("expected error")
