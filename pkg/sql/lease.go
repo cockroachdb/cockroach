@@ -126,7 +126,7 @@ func jitteredLeaseDuration() time.Duration {
 
 // Acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
-// being deleted, the error will be errTableDeleted.
+// being dropped, the error will be errTableDropped.
 func (s LeaseStore) Acquire(
 	txn *client.Txn,
 	tableID sqlbase.ID,
@@ -776,7 +776,7 @@ func (t *tableState) purgeOldLeases(
 		var err error
 		if !deleted {
 			lease, err = t.acquire(txn, minVersion, store)
-			if err == errTableDeleted {
+			if err == errTableDropped {
 				deleted = true
 			}
 		}
@@ -1175,12 +1175,12 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						}
 						if log.V(2) {
 							log.Infof(context.TODO(), "%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
-								kv.Key, table.ID, table.Name, table.Version, table.Deleted())
+								kv.Key, table.ID, table.Name, table.Version, table.Dropped())
 						}
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
-								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
+								db, table.Dropped(), table.Version, m.LeaseStore); err != nil {
 								log.Warningf(context.TODO(), "error purging leases for table %d(%s): %s",
 									table.ID, table.Name, err)
 							}
