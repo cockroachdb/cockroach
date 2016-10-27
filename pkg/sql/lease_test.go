@@ -454,7 +454,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
-	if !testutils.IsError(err, "table is being deleted") {
+	if !testutils.IsError(err, "table is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
@@ -470,7 +470,7 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 		panic("unable to unmarshal table descriptor")
 	}
 	table := descriptor.GetTable()
-	return table.Deleted()
+	return table.Dropped()
 }
 
 func acquire(
@@ -580,7 +580,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 	// Now we shouldn't be able to acquire any more.
 	_, err = acquire(s.(*server.TestServer), tableDesc.ID, 0)
-	if !testutils.IsError(err, "table is being deleted") {
+	if !testutils.IsError(err, "table is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 }

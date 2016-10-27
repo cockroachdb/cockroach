@@ -1482,8 +1482,8 @@ func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
 	return mutationID, nil
 }
 
-// Deleted returns true if the table is being deleted.
-func (desc *TableDescriptor) Deleted() bool {
+// Dropped returns true if the table is being dropped.
+func (desc *TableDescriptor) Dropped() bool {
 	return desc.State == TableDescriptor_DROP
 }
 
@@ -1499,12 +1499,12 @@ func (desc *TableDescriptor) Renamed() bool {
 
 // SetUpVersion sets the up_version marker on the table descriptor (see the proto
 func (desc *TableDescriptor) SetUpVersion() error {
-	if desc.Deleted() {
+	if desc.Dropped() {
 		// We don't allow the version to be incremented any more once a table
 		// has been deleted. This will block new mutations from being queued on the
 		// table; it'd be misleading to allow them to be queued, since the
 		// respective schema change will never run.
-		return fmt.Errorf("table %q has been deleted", desc.Name)
+		return fmt.Errorf("table %q is being dropped", desc.Name)
 	}
 	desc.UpVersion = true
 	return nil
