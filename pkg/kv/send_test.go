@@ -75,7 +75,7 @@ func TestInvalidAddrLength(t *testing.T) {
 	// The provided replicas is nil, so its length will be always less than the
 	// specified response number
 	opts := SendOptions{ctx: context.Background()}
-	ds := &DistSender{Ctx: context.Background()}
+	ds := &DistSender{}
 	ret, err := ds.sendToReplicas(opts, 0, nil, roachpb.BatchRequest{}, nil)
 
 	// the expected return is nil and SendError
@@ -571,6 +571,6 @@ func makeReplicas(addrs ...net.Addr) ReplicaSlice {
 func sendBatch(
 	opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
 ) (*roachpb.BatchResponse, error) {
-	ds := &DistSender{Ctx: context.Background()}
+	ds := &DistSender{}
 	return ds.sendToReplicas(opts, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
 }

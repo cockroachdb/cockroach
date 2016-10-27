@@ -19,41 +19,44 @@ package kv
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestLeaseHolderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
 	lc := newLeaseHolderCache(3)
-	if repDesc, ok := lc.Lookup(12); ok {
+	if repDesc, ok := lc.Lookup(ctx, 12); ok {
 		t.Errorf("lookup of missing key returned: %+v", repDesc)
 	}
 	rangeID := roachpb.RangeID(5)
 	replica := roachpb.ReplicaDescriptor{StoreID: 1}
-	lc.Update(rangeID, replica)
-	if repDesc, ok := lc.Lookup(rangeID); !ok {
+	lc.Update(ctx, rangeID, replica)
+	if repDesc, ok := lc.Lookup(ctx, rangeID); !ok {
 		t.Fatalf("expected %+v", replica)
 	} else if repDesc != replica {
 		t.Errorf("expected %+v, got %+v", replica, repDesc)
 	}
 	newReplica := roachpb.ReplicaDescriptor{StoreID: 7}
-	lc.Update(rangeID, newReplica)
-	if repDesc, ok := lc.Lookup(rangeID); !ok {
+	lc.Update(ctx, rangeID, newReplica)
+	if repDesc, ok := lc.Lookup(ctx, rangeID); !ok {
 		t.Fatalf("expected %+v", replica)
 	} else if repDesc != newReplica {
 		t.Errorf("expected %+v, got %+v", newReplica, repDesc)
 	}
-	lc.Update(rangeID, roachpb.ReplicaDescriptor{})
-	if repDesc, ok := lc.Lookup(rangeID); ok {
+	lc.Update(ctx, rangeID, roachpb.ReplicaDescriptor{})
+	if repDesc, ok := lc.Lookup(ctx, rangeID); ok {
 		t.Errorf("lookup of evicted key returned: %+v", repDesc)
 	}
 
 	for i := 10; i < 20; i++ {
-		lc.Update(roachpb.RangeID(i), replica)
+		lc.Update(ctx, roachpb.RangeID(i), replica)
 	}
-	_, ok16 := lc.Lookup(16)
-	_, ok17 := lc.Lookup(17)
+	_, ok16 := lc.Lookup(ctx, 16)
+	_, ok17 := lc.Lookup(ctx, 17)
 	if ok16 || !ok17 {
 		t.Fatalf("unexpected policy used in cache")
 	}

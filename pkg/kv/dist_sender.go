@@ -74,10 +74,7 @@ func (f firstRangeMissingError) Error() string {
 // ranges. RPCs are sent to one or more of the replicas to satisfy
 // the method invocation.
 type DistSender struct {
-	// Ctx is the "base context" for DistSender, used for log messages that are
-	// not associated with a more specific request context. It also holds the
-	// Tracer that should be used.
-	Ctx context.Context
+	log.AmbientContext
 
 	// nodeDescriptor, if set, holds the descriptor of the node the
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
@@ -113,9 +110,7 @@ type rpcSendFn func(SendOptions, ReplicaSlice,
 // DistSenderConfig holds configuration and auxiliary objects that can be passed
 // to NewDistSender.
 type DistSenderConfig struct {
-	// Base context for the DistSender. The context can have a Tracer set. If nil,
-	// context.Background() will be used.
-	Ctx context.Context
+	AmbientCtx log.AmbientContext
 
 	Clock                    *hlc.Clock
 	RangeDescriptorCacheSize int32
@@ -151,17 +146,9 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 
 	ds := &DistSender{gossip: g}
 
-	ds.Ctx = cfg.Ctx
-	if ds.Ctx == nil {
-		ds.Ctx = context.Background()
-	}
-
-	if ds.Ctx.Done() != nil {
-		panic("context with cancel or deadline")
-	}
-
-	if tracing.TracerFromCtx(ds.Ctx) == nil {
-		ds.Ctx = tracing.WithTracer(ds.Ctx, tracing.NewTracer())
+	ds.AmbientContext = cfg.AmbientCtx
+	if ds.AmbientContext.Tracer == nil {
+		ds.AmbientContext.Tracer = tracing.NewTracer()
 	}
 
 	ds.clock = cfg.Clock
@@ -180,7 +167,7 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = newRangeDescriptorCache(ds.Ctx, rdb, int(rcSize))
+	ds.rangeCache = newRangeDescriptorCache(ds.AnnotateCtx(context.TODO()), rdb, int(rcSize))
 	lcSize := cfg.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
@@ -214,20 +201,20 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	}
 
 	if g != nil {
+		ctx := ds.AnnotateCtx(context.Background())
 		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
 			func(_ string, value roachpb.Value) {
 				if log.V(1) {
 					var desc roachpb.RangeDescriptor
 					if err := value.GetProto(&desc); err != nil {
-						log.Errorf(ds.Ctx, "unable to parse gossiped first range descriptor: %s", err)
+						log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
 					} else {
-						log.Infof(ds.Ctx,
-							"gossiped first range descriptor: %+v", desc.Replicas)
+						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas)
 					}
 				}
 				err := ds.rangeCache.EvictCachedRangeDescriptor(roachpb.RKeyMin, nil, false)
 				if err != nil {
-					log.Warningf(ds.Ctx, "failed to evict first range descriptor: %s", err)
+					log.Warningf(ctx, "failed to evict first range descriptor: %s", err)
 				}
 			})
 	}
@@ -344,7 +331,8 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 			return nodeDesc
 		}
 	}
-	log.Infof(ds.Ctx, "unable to determine this node's attributes for replica "+
+	ctx := ds.AnnotateCtx(context.TODO())
+	log.Infof(ctx, "unable to determine this node's attributes for replica "+
 		"selection; node is most likely bootstrapping")
 	return nil
 }
@@ -439,7 +427,7 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if leaseHolder, ok := ds.leaseHolderCache.Lookup(desc.RangeID); ok {
+		if leaseHolder, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
 			if i := replicas.FindReplica(leaseHolder.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 			}
@@ -569,9 +557,8 @@ func (ds *DistSender) Send(
 		return nil, pErr
 	}
 
-	// TODO(radu): when contexts are properly plumbed, we should be able to get
-	// the tracer from ctx, not from the DistSender.
-	ctx, cleanup := tracing.EnsureContext(ctx, tracing.TracerFromCtx(ds.Ctx))
+	ctx = ds.AnnotateCtx(ctx)
+	ctx, cleanup := tracing.EnsureContext(ctx, ds.AmbientContext.Tracer)
 	defer cleanup()
 
 	var rplChunks []*roachpb.BatchResponse
@@ -1129,7 +1116,7 @@ func (ds *DistSender) sendToReplicas(
 
 				if call.Reply.Error == nil {
 					return call.Reply, nil
-				} else if !ds.handlePerReplicaError(transport, rangeID, call.Reply.Error) {
+				} else if !ds.handlePerReplicaError(opts.ctx, transport, rangeID, call.Reply.Error) {
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
 					// if we're trying to commit a transaction and there are
@@ -1209,7 +1196,7 @@ func (ds *DistSender) sendToReplicas(
 // be called only once for each error as it may have side effects such
 // as updating caches.
 func (ds *DistSender) handlePerReplicaError(
-	transport Transport, rangeID roachpb.RangeID, pErr *roachpb.Error,
+	ctx context.Context, transport Transport, rangeID roachpb.RangeID, pErr *roachpb.Error,
 ) bool {
 	switch tErr := pErr.GetDetail().(type) {
 	case *roachpb.RangeNotFoundError:
@@ -1220,7 +1207,7 @@ func (ds *DistSender) handlePerReplicaError(
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
 			leaseHolder := *tErr.LeaseHolder
-			ds.updateLeaseHolderCache(rangeID, leaseHolder)
+			ds.updateLeaseHolderCache(ctx, rangeID, leaseHolder)
 
 			// Move the new lease holder to the head of the queue for the next retry.
 			transport.MoveToFront(leaseHolder)
@@ -1232,18 +1219,21 @@ func (ds *DistSender) handlePerReplicaError(
 
 // updateLeaseHolderCache updates the cached lease holder for the given range.
 func (ds *DistSender) updateLeaseHolderCache(
-	rangeID roachpb.RangeID, newLeaseHolder roachpb.ReplicaDescriptor,
+	ctx context.Context, rangeID roachpb.RangeID, newLeaseHolder roachpb.ReplicaDescriptor,
 ) {
 	if log.V(1) {
-		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(rangeID); ok {
+		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok {
 			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
-				log.Infof(ds.Ctx, "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
+				log.Infof(ctx, "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
 			} else if newLeaseHolder != oldLeaseHolder {
-				log.Infof(ds.Ctx, "range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
+				log.Infof(
+					ctx, "range %d: replacing cached lease holder %+v with %+v",
+					rangeID, oldLeaseHolder, newLeaseHolder,
+				)
 			}
 		} else {
-			log.Infof(ds.Ctx, "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
+			log.Infof(ctx, "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
 		}
 	}
-	ds.leaseHolderCache.Update(rangeID, newLeaseHolder)
+	ds.leaseHolderCache.Update(ctx, rangeID, newLeaseHolder)
 }
