@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -66,9 +67,9 @@ func createSplitRanges(
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	if _, _, err := createSplitRanges(store); err != nil {
@@ -95,9 +96,9 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
@@ -174,9 +175,9 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	content := roachpb.Key("testing!")
@@ -302,9 +303,9 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 // fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Merge last range.
@@ -369,9 +370,10 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 // range has stats consistent with recomputations.
 func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, manual := createTestStoreWithConfig(t, storeCfg)
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Split the range.
@@ -429,9 +431,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	defer tracing.Disable()()
-	storeCfg := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithConfig(b, storeCfg)
+	store, stopper := createTestStoreWithConfig(b, storeCfg)
 	defer stopper.Stop()
 
 	// Perform initial split of ranges.

@@ -58,8 +58,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	var clocks []*hlc.Clock
 	for i := 0; i < numNodes; i++ {
 		manuals = append(manuals, hlc.NewManualClock(1))
-		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano))
-		clocks[i].SetMaxOffset(100 * time.Millisecond)
+		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, 100*time.Millisecond))
 	}
 	mtc := &multiTestContext{clocks: clocks}
 	mtc.Start(t, numNodes)
@@ -107,46 +106,50 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 func TestRejectFutureCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const maxOffset = 100 * time.Millisecond
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(maxOffset)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, 100*time.Millisecond)
 	mtc := &multiTestContext{clock: clock}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 
-	startTime := manual.UnixNano()
+	ts1 := clock.Now()
+
+	key := roachpb.Key("a")
+	incArgs := incrementArgs(key, 5)
 
 	// Commands with a future timestamp that is within the MaxOffset
 	// bound will be accepted and will cause the clock to advance.
-	for i := int64(0); i < 3; i++ {
-		incArgs := incrementArgs([]byte("a"), 5)
-		ts := hlc.ZeroTimestamp.Add(startTime+((i+1)*30)*int64(time.Millisecond), 0)
+	const numCmds = 3
+	clockOffset := clock.MaxOffset() / numCmds
+	for i := int64(1); i <= numCmds; i++ {
+		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0)
 		if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if now := clock.Now(); now.WallTime != int64(90*time.Millisecond) {
-		t.Fatalf("expected clock to advance to 90ms; got %s", now)
+
+	ts2 := clock.Now()
+	if expAdvance, advance := ts2.GoTime().Sub(ts1.GoTime()), numCmds*clockOffset; advance != expAdvance {
+		t.Fatalf("expected clock to advance %s; got %s", expAdvance, advance)
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	incArgs := incrementArgs([]byte("a"), 11)
-	ts := hlc.ZeroTimestamp.Add(int64((time.Duration(startTime)+maxOffset+1)*time.Millisecond), 0)
-	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err == nil {
-		t.Fatalf("expected clock offset error but got nil")
+	_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, &incArgs)
+	if !testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+		t.Fatalf("unexpected error %v", pErr)
 	}
 
-	// The clock remained at 90ms and the final command was not executed.
-	if now := clock.Now(); now.WallTime != int64(90*time.Millisecond) {
-		t.Errorf("expected clock to stay at 90ms; got %s", now)
+	// The clock did not advance and the final command was not executed.
+	ts3 := clock.Now()
+	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
+		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
 	}
-	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], roachpb.Key("a"), clock.Now(), true, nil)
+	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], key, ts3, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := mustGetInt(val); v != 15 {
-		t.Errorf("expected 15, got %v", v)
+	if a, e := mustGetInt(val), incArgs.Increment*numCmds; a != e {
+		t.Errorf("expected %d, got %d", e, a)
 	}
 }
 
@@ -178,15 +181,14 @@ func TestRejectFutureCommand(t *testing.T) {
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	key := "key"
+	const key = "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
 
-	manualClock := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manualClock.UnixNano)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	cfg := storage.TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
@@ -206,10 +208,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	stopper.AddCloser(eng)
 	store := createTestStoreWithEngine(t,
 		eng,
-		clock,
 		true,
 		cfg,
-		stopper)
+		stopper,
+	)
 
 	// Put an initial value.
 	initVal := []byte("initVal")
@@ -278,15 +280,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Advance the clock and send a get operation with higher
 	// priority to trigger the txn restart.
-	manualClock.Increment(100)
+	manual.Increment(100)
 
 	priority := roachpb.UserPriority(-math.MaxInt32)
 	requestHeader := roachpb.Span{
 		Key: roachpb.Key(key),
 	}
-	ts := clock.Now()
 	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
-		Timestamp:    ts,
+		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
@@ -300,11 +301,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// we use TestingCommandFilter so that a get operation is not
 	// processed after the write intent is resolved (to prevent the
 	// timestamp cache from being updated).
-	manualClock.Increment(100)
+	manual.Increment(100)
 
-	ts = clock.Now()
 	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
-		Timestamp:    ts,
+		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
@@ -318,9 +318,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Init test ranges:
@@ -453,7 +453,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := storage.TestStoreConfig()
+	cfg := storage.TestStoreConfig(nil)
 	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
 	cfg.TestingKnobs.TestingCommandFilter =

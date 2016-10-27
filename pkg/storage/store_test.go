@@ -27,6 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -51,9 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/pkg/errors"
 )
 
 var defaultMuLogger = syncutil.ThresholdLogger(
@@ -139,9 +140,7 @@ func (db *testSender) Send(
 // clock's manual unix nanos time and a stopper. The caller is
 // responsible for stopping the stopper upon completion.
 // Some fields of ctx are populated by this function.
-func createTestStoreWithoutStart(
-	t testing.TB, cfg *StoreConfig,
-) (*Store, *hlc.ManualClock, *stop.Stopper) {
+func createTestStoreWithoutStart(t testing.TB, cfg *StoreConfig) (*Store, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
@@ -152,11 +151,9 @@ func createTestStoreWithoutStart(
 		}
 	}()
 
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, cfg.Clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
-	manual := hlc.NewManualClock(0)
-	cfg.Clock = hlc.NewClock(manual.UnixNano)
 	cfg.StorePool = NewStorePool(
 		log.AmbientContext{},
 		cfg.Gossip,
@@ -178,11 +175,12 @@ func createTestStoreWithoutStart(
 	if err := store.BootstrapRange(nil); err != nil {
 		t.Fatal(err)
 	}
-	return store, manual, stopper
+	return store, stopper
 }
 
 func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
-	cfg := TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	// Many tests using this test harness (as opposed to higher-level
 	// ones like multiTestContext or TestServer) want to micro-manage
 	// replicas and the background queues just get in the way. The
@@ -193,18 +191,17 @@ func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	// The scanner affects background operations; we must also disable
 	// the split queue separately to cover event-driven splits.
 	cfg.TestingKnobs.DisableSplitQueue = true
-	return createTestStoreWithContext(t, &cfg)
+	store, stopper := createTestStoreWithConfig(t, &cfg)
+	return store, manual, stopper
 }
 
 // createTestStore creates a test store using an in-memory
 // engine. It returns the store, the store clock's manual unix nanos time
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
-func createTestStoreWithContext(
-	t testing.TB, cfg *StoreConfig,
-) (*Store, *hlc.ManualClock, *stop.Stopper) {
+func createTestStoreWithConfig(t testing.TB, cfg *StoreConfig) (*Store, *stop.Stopper) {
 
-	store, manual, stopper := createTestStoreWithoutStart(t, cfg)
+	store, stopper := createTestStoreWithoutStart(t, cfg)
 	// Put an empty system config into gossip.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig,
 		&config.SystemConfig{}, 0); err != nil {
@@ -214,15 +211,14 @@ func createTestStoreWithContext(
 		t.Fatal(err)
 	}
 	store.WaitForInit()
-	return store, manual, stopper
+	return store, stopper
 }
 
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := TestStoreConfig()
-	manual := hlc.NewManualClock(0)
-	cfg.Clock = hlc.NewClock(manual.UnixNano)
+	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
+	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
@@ -271,11 +267,11 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	rs := r.GetMVCCStats()
 
 	// Stats should agree with a recomputation.
-	now := r.store.Clock().Timestamp()
+	now := r.store.Clock().Now()
 	if ms, err := ComputeStatsForRange(r.Desc(), eng, now.WallTime); err != nil {
 		t.Errorf("failure computing range's stats: %s", err)
 	} else if ms != rs {
-		t.Errorf("expected range's stats to agree with recomputation: computed\n%+v\nbut in-memory is \n%+v", ms, rs)
+		t.Errorf("expected range's stats to agree with recomputation: %s", pretty.Diff(ms, rs))
 	}
 }
 
@@ -292,9 +288,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
-	cfg := TestStoreConfig()
-	manual := hlc.NewManualClock(0)
-	cfg.Clock = hlc.NewClock(manual.UnixNano)
+	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport()
 	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
@@ -739,14 +733,13 @@ func TestStoreObservedTimestamp(t *testing.T) {
 		StoreID:   1,
 		ReplicaID: 2,
 	}
-	const wallTime = 1000
 
 	testCases := []struct {
 		key   roachpb.Key
-		check func(roachpb.Response, *roachpb.Error)
+		check func(int64, roachpb.Response, *roachpb.Error)
 	}{
 		{badKey,
-			func(_ roachpb.Response, pErr *roachpb.Error) {
+			func(wallNanos int64, _ roachpb.Response, pErr *roachpb.Error) {
 				if pErr == nil {
 					t.Fatal("expected an error")
 				}
@@ -754,9 +747,9 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				if txn == nil || txn.ID == nil {
 					t.Fatalf("expected nontrivial transaction in %s", pErr)
 				}
-				if ts, _ := txn.GetObservedTimestamp(desc.NodeID); ts.WallTime != wallTime {
+				if ts, _ := txn.GetObservedTimestamp(desc.NodeID); ts.WallTime != wallNanos {
 					t.Fatalf("unexpected observed timestamps, expected %d->%d but got map %+v",
-						desc.NodeID, wallTime, txn.ObservedTimestamps)
+						desc.NodeID, wallNanos, txn.ObservedTimestamps)
 				}
 				if pErr.OriginNode != desc.NodeID {
 					t.Fatalf("unexpected OriginNode %d, expected %d",
@@ -765,7 +758,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 
 			}},
 		{goodKey,
-			func(pReply roachpb.Response, pErr *roachpb.Error) {
+			func(wallNanos int64, pReply roachpb.Response, pErr *roachpb.Error) {
 				if pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -774,7 +767,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 					t.Fatal("expected transactional response")
 				}
 				obs, _ := txn.GetObservedTimestamp(desc.NodeID)
-				if act, exp := obs.WallTime, int64(wallTime); exp != act {
+				if act, exp := obs.WallTime, wallNanos; exp != act {
 					t.Fatalf("unexpected observed wall time: %d, wanted %d", act, exp)
 				}
 			}},
@@ -782,7 +775,8 @@ func TestStoreObservedTimestamp(t *testing.T) {
 
 	for _, test := range testCases {
 		func() {
-			cfg := TestStoreConfig()
+			manual := hlc.NewManualClock(123)
+			cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 			cfg.TestingKnobs.TestingCommandFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -790,7 +784,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 					}
 					return nil
 				}
-			store, mc, stopper := createTestStoreWithContext(t, &cfg)
+			store, stopper := createTestStoreWithConfig(t, &cfg)
 			defer stopper.Stop()
 			txn := newTransaction("test", test.key, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
 			txn.MaxTimestamp = hlc.MaxTimestamp
@@ -799,8 +793,8 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				Txn:     txn,
 				Replica: desc,
 			}
-			mc.Set(wallTime)
-			test.check(client.SendWrappedWith(context.Background(), store.testSender(), h, &pArgs))
+			pReply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &pArgs)
+			test.check(manual.UnixNano(), pReply, pErr)
 		}()
 	}
 }
@@ -844,7 +838,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 	for _, useTxn := range []bool{false, true} {
 		for _, test := range testCases {
 			func() {
-				cfg := TestStoreConfig()
+				cfg := TestStoreConfig(nil)
 				cfg.TestingKnobs.TestingCommandFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 						if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -852,7 +846,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 						}
 						return nil
 					}
-				store, _, stopper := createTestStoreWithContext(t, &cfg)
+				store, stopper := createTestStoreWithConfig(t, &cfg)
 				defer stopper.Stop()
 				var txn *roachpb.Transaction
 				if useTxn {
@@ -958,13 +952,12 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args := getArgs([]byte("a"))
-	reqTS := store.cfg.Clock.Now()
-	reqTS.WallTime += (100 * time.Millisecond).Nanoseconds()
+	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds(), 0)
 	_, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{Timestamp: reqTS}, &args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	ts := store.cfg.Clock.Timestamp()
+	ts := store.cfg.Clock.Now()
 	if ts.WallTime != reqTS.WallTime || ts.Logical <= reqTS.Logical {
 		t.Errorf("expected store clock to advance to %s; got %s", reqTS, ts)
 	}
@@ -974,12 +967,10 @@ func TestStoreSendUpdateTime(t *testing.T) {
 // the command to assume the node's wall time.
 func TestStoreSendWithZeroTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, mc, stopper := createTestStore(t)
+	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args := getArgs([]byte("a"))
 
-	// Set clock to time 1.
-	mc.Set(1)
 	_, respH, pErr := SendWrapped(context.Background(), store.testSender(), roachpb.Header{}, &args)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -997,19 +988,14 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 // maximum allowed clock offset, the cmd fails.
 func TestStoreSendWithClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, mc, stopper := createTestStore(t)
+	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args := getArgs([]byte("a"))
-
-	// Set clock to time 1.
-	mc.Set(1)
-	// Set clock max offset to 250ms.
-	maxOffset := 250 * time.Millisecond
-	store.cfg.Clock.SetMaxOffset(maxOffset)
 	// Set args timestamp to exceed max offset.
-	ts := store.cfg.Clock.Now().Add(maxOffset.Nanoseconds()+1, 0)
-	if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{Timestamp: ts}, &args); pErr == nil {
-		t.Error("expected max offset clock error")
+	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0)
+	_, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{Timestamp: reqTS}, &args)
+	if !testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+		t.Errorf("unexpected error: %v", pErr)
 	}
 }
 
@@ -1197,9 +1183,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 // Verifies no starvation for both serializable and snapshot txns.
 func TestStoreLongTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := TestStoreConfig()
+	storeCfg := TestStoreConfig(nil)
 	storeCfg.RangeRetryOptions = testRetryOptions()
-	store, _, stopper := createTestStoreWithContext(t, &storeCfg)
+	store, stopper := createTestStoreWithConfig(t, &storeCfg)
 	defer stopper.Stop()
 
 	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
@@ -1256,22 +1242,20 @@ func TestStoreLongTxnStarvation(t *testing.T) {
 // TransactionPushError is returned.
 func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var mc *hlc.ManualClock
-	var store *Store
-	var stopper *stop.Stopper
-	cfg := TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
 				return nil
 			}
-			if exp, act := mc.UnixNano(), pr.PushTo.WallTime; exp > act {
+			if exp, act := manual.UnixNano(), pr.PushTo.WallTime; exp > act {
 				return roachpb.NewError(fmt.Errorf("expected PushTo >= WallTime, but got %d < %d:\n%+v", act, exp, pr))
 			}
 			return nil
 		}
-	store, mc, stopper = createTestStoreWithContext(t, &cfg)
+	store, stopper := createTestStoreWithConfig(t, &cfg)
 	defer stopper.Stop()
 
 	for i, resolvable := range []bool{true, false} {
@@ -1294,7 +1278,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		mc.Increment(100)
+		manual.Increment(100)
 		// Now, try a put using the pusher's txn.
 		h.Txn = pusher
 		_, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &pArgs)
@@ -1362,9 +1346,9 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // push, verify a write intent error is returned with !Resolvable.
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg := TestStoreConfig()
+	storeCfg := TestStoreConfig(nil)
 	storeCfg.RangeRetryOptions = testRetryOptions()
-	store, _, stopper := createTestStoreWithContext(t, &storeCfg)
+	store, stopper := createTestStoreWithConfig(t, &storeCfg)
 	defer stopper.Stop()
 
 	testCases := []struct {
@@ -1729,7 +1713,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 func TestStoreScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	cfg := TestStoreConfig()
+	cfg := TestStoreConfig(nil)
 	var count int32
 	countPtr := &count
 
@@ -1740,7 +1724,7 @@ func TestStoreScanIntents(t *testing.T) {
 			}
 			return nil
 		}
-	store, _, stopper := createTestStoreWithContext(t, &cfg)
+	store, stopper := createTestStoreWithConfig(t, &cfg)
 	defer stopper.Stop()
 
 	testCases := []struct {
@@ -1849,7 +1833,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer setTxnAutoGC(false)()
 	var intercept atomic.Value
 	intercept.Store(true)
-	cfg := TestStoreConfig()
+	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
@@ -1858,7 +1842,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 			}
 			return nil
 		}
-	store, _, stopper := createTestStoreWithContext(t, &cfg)
+	store, stopper := createTestStoreWithConfig(t, &cfg)
 	defer stopper.Stop()
 
 	// Lay down 10 intents to scan over.
@@ -1991,8 +1975,8 @@ func (fq *fakeRangeQueue) MaybeRemove(rangeID roachpb.RangeID) {
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
 func TestMaybeRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := TestStoreConfig()
-	store, _, stopper := createTestStoreWithoutStart(t, &cfg)
+	cfg := TestStoreConfig(nil)
+	store, stopper := createTestStoreWithoutStart(t, &cfg)
 	defer stopper.Stop()
 
 	// Add a queue to the scanner before starting the store and running the scanner.

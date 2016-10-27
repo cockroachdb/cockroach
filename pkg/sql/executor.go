@@ -508,7 +508,9 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		// Each iteration consumes a transaction's worth of statements.
 
 		inTxn := txnState.State != NoTxn
-		var execOpt client.TxnExecOptions
+		execOpt := client.TxnExecOptions{
+			Clock: e.cfg.Clock,
+		}
 		// Figure out the statements out of which we're going to try to consume
 		// this iteration. If we need to create an implicit txn, only one statement
 		// can be consumed.
@@ -516,7 +518,6 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
-		execOpt.Clock = e.cfg.Clock
 		// We can AutoRetry the next batch of statements if we're in a clean state
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).

@@ -38,25 +38,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
-	return createTestClientForUser(t, stopper, addr, security.NodeUser)
+func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
+	return createTestClientForUser(t, s, security.NodeUser)
 }
 
-func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
+func createTestClientForUser(
+	t *testing.T, s serverutils.TestServerInterface, user string,
+) *client.DB {
 	var ctx base.Config
 	ctx.InitDefaults()
 	ctx.User = user
 	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
 	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
 	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
-	sender, err := client.NewSender(rpc.NewContext(log.AmbientContext{}, &ctx, nil, stopper), addr)
+	conn, err := rpc.NewContext(log.AmbientContext{}, &ctx, s.Clock(), s.Stopper()).GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(sender)
+	return client.NewDB(client.NewSender(conn))
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
@@ -67,7 +68,7 @@ func TestKVDBCoverage(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 	key := roachpb.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
@@ -187,7 +188,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		},
 	}
 	// Verify internal methods experience bad request errors.
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 	for i, args := range testCases {
 		{
 			header := args.Header()
@@ -215,7 +216,7 @@ func TestKVDBTransaction(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
@@ -267,7 +268,7 @@ func TestAuthentication(t *testing.T) {
 
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
-	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
+	db1 := createTestClientForUser(t, s, security.NodeUser)
 	if err := db1.Run(context.TODO(), b1); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +278,7 @@ func TestAuthentication(t *testing.T) {
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
-	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
+	db2 := createTestClientForUser(t, s, security.RootUser)
 	if err := db2.Run(context.TODO(), b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
 	}

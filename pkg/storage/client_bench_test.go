@@ -26,9 +26,9 @@ import (
 
 func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer tracing.Disable()()
-	storeCfg := TestStoreConfig()
+	storeCfg := TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, _, stopper := createTestStoreWithContext(b, &storeCfg)
+	store, stopper := createTestStoreWithConfig(b, &storeCfg)
 	defer stopper.Stop()
 	// We want to manually control the size of the raft log.
 	store.SetRaftLogQueueActive(false)

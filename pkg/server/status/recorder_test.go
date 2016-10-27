@@ -144,7 +144,7 @@ func TestMetricsRecorder(t *testing.T) {
 		registry: metric.NewRegistry(),
 	}
 	manual := hlc.NewManualClock(100)
-	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano))
+	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50)

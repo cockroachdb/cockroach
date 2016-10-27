@@ -169,11 +169,11 @@ func (c *Cluster) makeNode(nodeIdx int, extraArgs, extraEnv []string) *Node {
 }
 
 func (c *Cluster) makeClient(nodeIdx int) *client.DB {
-	sender, err := client.NewSender(c.rpcCtx, c.RPCAddr(nodeIdx))
+	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
-	return client.NewDB(sender)
+	return client.NewDB(client.NewSender(conn))
 }
 
 func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {

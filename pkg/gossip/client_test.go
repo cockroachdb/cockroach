@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -47,6 +48,15 @@ func startGossip(
 	return startGossipAtAddr(nodeID, util.IsolatedTestAddr, stopper, t, registry)
 }
 
+func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
+	return rpc.NewContext(
+		log.AmbientContext{},
+		&base.Config{Insecure: true},
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		stopper,
+	)
+}
+
 func startGossipAtAddr(
 	nodeID roachpb.NodeID,
 	addr net.Addr,
@@ -54,7 +64,7 @@ func startGossipAtAddr(
 	t *testing.T,
 	registry *metric.Registry,
 ) *Gossip {
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := newInsecureRPCContext(stopper)
 	server := rpc.NewServer(rpcContext)
 	g := NewTest(nodeID, rpcContext, server, nil, stopper, registry)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
@@ -111,10 +121,9 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 // faked gossip instance. The remote gossip instance launches its
 // faked gossip service just for check the client message.
 func startFakeServerGossips(
-	t *testing.T, localNodeID roachpb.NodeID,
-) (*Gossip, *fakeGossipServer, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	lRPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	t *testing.T, localNodeID roachpb.NodeID, stopper *stop.Stopper,
+) (*Gossip, *fakeGossipServer) {
+	lRPCContext := newInsecureRPCContext(stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
 	local := NewTest(localNodeID, lRPCContext, lserver, nil, stopper, metric.NewRegistry())
@@ -124,7 +133,7 @@ func startFakeServerGossips(
 	}
 	local.start(lln.Addr())
 
-	rRPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	rRPCContext := newInsecureRPCContext(stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
@@ -134,7 +143,7 @@ func startFakeServerGossips(
 	remote := newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	return local, remote, stopper
+	return local, remote
 }
 
 func gossipSucceedsSoon(
@@ -145,7 +154,7 @@ func gossipSucceedsSoon(
 	f func() error,
 ) {
 	// Use an insecure context since we don't need a valid cert.
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := newInsecureRPCContext(stopper)
 
 	for c := range gossip {
 		disconnected <- c
@@ -260,13 +269,15 @@ func TestClientGossipMetrics(t *testing.T) {
 func TestClientNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	stopper := stop.NewStopper()
+	disconnected := make(chan *client, 1)
+
 	localNodeID := roachpb.NodeID(1)
-	local, remote, stopper := startFakeServerGossips(t, localNodeID)
+	local, remote := startFakeServerGossips(t, localNodeID, stopper)
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+	rpcContext := newInsecureRPCContext(stopper)
 	c := newClient(log.AmbientContext{}, &remote.nodeAddr, makeMetrics())
-	disconnected := make(chan *client, 1)
 	disconnected <- c
 
 	defer func() {
@@ -409,7 +420,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	var g []*Gossip
 	var gossipAddr string
 	for i := 0; i < 3; i++ {
-		RPCContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, nil, stopper)
+		RPCContext := newInsecureRPCContext(stopper)
 
 		server := rpc.NewServer(RPCContext)
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)

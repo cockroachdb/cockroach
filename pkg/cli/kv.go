@@ -28,13 +28,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -50,27 +46,11 @@ func addrWithDefaultHost(addr string) (string, error) {
 }
 
 func makeDBClient() (*client.DB, *stop.Stopper, error) {
-	stopper := stop.NewStopper()
-	cfg := &base.Config{
-		User:       security.NodeUser,
-		SSLCA:      baseCfg.SSLCA,
-		SSLCert:    baseCfg.SSLCert,
-		SSLCertKey: baseCfg.SSLCertKey,
-		Insecure:   baseCfg.Insecure,
-	}
-	addr, err := addrWithDefaultHost(baseCfg.Addr)
+	conn, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
-	sender, err := client.NewSender(
-		rpc.NewContext(log.AmbientContext{}, cfg, nil, stopper),
-		addr,
-	)
-	if err != nil {
-		stopper.Stop()
-		return nil, nil, errors.Wrap(err, "failed to initialize KV client")
-	}
-	return client.NewDB(sender), stopper, nil
+	return client.NewDB(client.NewSender(conn)), stopper, nil
 }
 
 // unquoteArg unquotes the provided argument using Go double-quoted

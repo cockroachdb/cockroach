@@ -166,8 +166,8 @@ func TestGCQueueProcess(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
-	tc.manualClock.Set(now)
+	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
+	now := tc.Clock().Now().WallTime
 
 	ts1 := makeTS(now-2*24*60*60*1E9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
 	ts2 := makeTS(now-25*60*60*1E9, 0)                         // GC will occur at time=25 hours
@@ -239,7 +239,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.clock)
+				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
@@ -253,7 +253,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs := putArgs(datum.key, []byte("value"))
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.clock)
+				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
@@ -273,7 +273,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -334,18 +334,22 @@ func TestGCQueueProcess(t *testing.T) {
 func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const now time.Duration = 3 * 24 * time.Hour
+	manual := hlc.NewManualClock(123)
+	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
-	const gcTxnAndAC = now - txnCleanupThreshold
-	const gcACOnly = now - abortCacheAgeThreshold
+	now := manual.UnixNano()
+
+	gcTxnAndAC := now - txnCleanupThreshold.Nanoseconds()
+	gcACOnly := now - abortCacheAgeThreshold.Nanoseconds()
 	if gcTxnAndAC >= gcACOnly {
 		t.Fatalf("test assumption violated due to changing constants; needs adjustment")
 	}
 
 	type spec struct {
 		status      roachpb.TransactionStatus
-		orig        time.Duration
-		hb          time.Duration             // last heartbeat (none if ZeroTimestamp)
+		orig        int64
+		hb          int64                     // last heartbeat (none if ZeroTimestamp)
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
@@ -372,6 +376,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		// It's old enough to delete the abort cache entry though.
 		"ba": {
 			status:     roachpb.PENDING,
+			orig:       1, // immaterial
 			hb:         gcTxnAndAC + 1,
 			newStatus:  roachpb.PENDING,
 			expAbortGC: true,
@@ -431,8 +436,6 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	resolved := map[string][]roachpb.Span{}
 
-	tc := testContext{}
-	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
@@ -449,9 +452,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			}
 			return nil
 		}
+	tc := testContext{manualClock: manual}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
-	tc.manualClock.Set(int64(now))
 
 	outsideKey := tc.rng.Desc().EndKey.Next().AsRawKey()
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
@@ -459,12 +462,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.orig)).UnixNano)
+		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig).UnixNano, time.Nanosecond)
 		txn := newTransaction("txn1", baseKey, 1, enginepb.SERIALIZABLE, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
-			txn.LastHeartbeat = &hlc.Timestamp{WallTime: int64(test.hb)}
+			txn.LastHeartbeat = &hlc.Timestamp{WallTime: test.hb}
 		}
 		// Set a high Timestamp to make sure it does not matter. Only
 		// OrigTimestamp (and heartbeat) are used for GC decisions.
@@ -489,7 +492,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -566,12 +569,12 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
-	tc.manualClock.Set(now)
+	tc.manualClock.Set(48 * 60 * 60 * 1E9) // 2d past the epoch
+	now := tc.Clock().Now().WallTime
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-00000"), 1, enginepb.SERIALIZABLE, tc.clock),
-		newTransaction("txn2", roachpb.Key("1-00000"), 1, enginepb.SERIALIZABLE, tc.clock),
+		newTransaction("txn1", roachpb.Key("0-00000"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn2", roachpb.Key("1-00000"), 1, enginepb.SERIALIZABLE, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS
@@ -601,7 +604,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
