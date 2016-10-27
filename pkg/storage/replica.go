@@ -1664,37 +1664,31 @@ func (r *Replica) tryAddWriteCmd(
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
+	shouldQuiesce := r.store.stopper.ShouldQuiesce()
 	for {
 		select {
 		case respWithErr := <-ch:
 			return respWithErr.Reply, respWithErr.Err, respWithErr.ShouldRetry
 		case <-ctxDone:
-			// Cancellation is somewhat tricky since we can't prevent the
-			// Raft command from executing at some point in the future.
-			// We try to remove the pending command, but if the processRaft
-			// goroutine has already grabbed it (as would typically be the
-			// case right as it executes), it's too late and we're still
-			// going to have to wait until the command returns (which would
-			// typically be right away).
-			// A typical outcome of a bug here would be use-after-free of
-			// the trace of this client request; we finish it when
-			// returning from here, but the Raft execution also uses it.
+			// We ignore cancelled contexts for running commands in order to
+			// properly update the timestamp and command queue. Exiting early,
+			// before knowing the final disposition of the command would make
+			// those updates impossible, leading to potential inconsistencies.
+			// TODO(spencer): move updates to the timestamp cache to raft
+			// command execution.
+			log.Warningf(ctx, "ignoring cancelled context for command %s", ba)
 			ctxDone = nil
+		case <-shouldQuiesce:
+			// If we're shutting down, return an AmbiguousResultError to
+			// indicate to caller that the command may have executed.
+			// However, we proceed only if the command isn't already being
+			// executed and using our context, in which case we expect it to
+			// finish soon.
 			if tryAbandon() {
-				// TODO(tschottdorf): the command will still execute at
-				// some process, so maybe this should be a structured error
-				// which can be interpreted appropriately upstream.
-				return nil, roachpb.NewError(ctx.Err()), false
+				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
 			}
-			log.Warningf(ctx, "unable to cancel expired Raft command %s", ba)
-		case <-r.store.stopper.ShouldQuiesce():
-			// If we can't abandon this command, the surrounding loop will
-			// run hot on this path, but not being able to abandon implies
-			// that the request is being processed and should be available
-			// momentarily.
-			if tryAbandon() {
-				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
-			}
+			shouldQuiesce = nil
 		}
 	}
 }

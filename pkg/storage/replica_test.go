@@ -5544,57 +5544,21 @@ func TestGCIncorrectRange(t *testing.T) {
 // commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, cancelEarly := range []bool{true, false} {
-		func() {
-			// Pick a key unlikely to be used by background processes.
-			key := []byte("acdfg")
-			ctx, cancel := context.WithCancel(context.Background())
-			tsc := TestStoreConfig()
-			if !cancelEarly {
-				tsc.TestingKnobs.TestingCommandFilter =
-					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						if !filterArgs.Req.Header().Key.Equal(key) {
-							return nil
-						}
-						cancel()
-						return nil
-					}
-
-			}
-			tc := testContext{}
-			tc.StartWithStoreConfig(t, tsc)
-			defer tc.Stop()
-			if cancelEarly {
-				cancel()
-				tc.rng.mu.Lock()
-				tc.rng.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.rng.mu.Unlock()
-			}
-			var ba roachpb.BatchRequest
-			ba.Add(&roachpb.GetRequest{
-				Span: roachpb.Span{Key: key},
-			})
-			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
-				t.Fatal(err)
-			}
-			br, pErr := tc.rng.addWriteCmd(ctx, ba)
-			if pErr == nil {
-				if !cancelEarly {
-					// We cancelled the context while the command was already
-					// being processed, so the client had to wait for successful
-					// execution.
-					return
-				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
-			}
-			// If we cancelled the context early enough, we expect to receive a
-			// corresponding error and not wait for the command.
-			if !testutils.IsPError(pErr, context.Canceled.Error()) {
-				t.Fatalf("unexpected error: %s", pErr)
-			}
-		}()
+	// Pick a key unlikely to be used by background processes.
+	key := []byte("acdfg")
+	tc := testContext{}
+	tc.Start(t)
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{Key: key},
+	})
+	if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+		t.Fatal(err)
+	}
+	tc.Stop()
+	_, pErr := tc.rng.addWriteCmd(context.Background(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+		t.Fatalf("expected an ambiguous result error; got %v", pErr)
 	}
 }
 
