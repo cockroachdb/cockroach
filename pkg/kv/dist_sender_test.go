@@ -348,9 +348,13 @@ func TestSendRPCOrder(t *testing.T) {
 			}
 		}
 
-		ds.leaseHolderCache.Update(roachpb.RangeID(rangeID), roachpb.ReplicaDescriptor{})
+		ds.leaseHolderCache.Update(
+			context.TODO(), roachpb.RangeID(rangeID), roachpb.ReplicaDescriptor{},
+		)
 		if tc.leaseHolder > 0 {
-			ds.leaseHolderCache.Update(roachpb.RangeID(rangeID), descriptor.Replicas[tc.leaseHolder-1])
+			ds.leaseHolderCache.Update(
+				context.TODO(), roachpb.RangeID(rangeID), descriptor.Replicas[tc.leaseHolder-1],
+			)
 		}
 
 		args := tc.args
@@ -533,7 +537,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		t.Errorf("The command did not retry")
 	}
 	rangeID := roachpb.RangeID(2)
-	if cur, ok := ds.leaseHolderCache.Lookup(rangeID); !ok {
+	if cur, ok := ds.leaseHolderCache.Lookup(context.TODO(), rangeID); !ok {
 		t.Errorf("lease holder cache was not updated: expected %+v", leaseHolder)
 	} else if cur.StoreID != leaseHolder.StoreID {
 		t.Errorf("lease holder cache was not updated: expected %+v, got %+v", leaseHolder, cur)
@@ -741,14 +745,14 @@ func TestEvictCacheOnError(t *testing.T) {
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		}
 		ds := NewDistSender(cfg, g)
-		ds.updateLeaseHolderCache(1, leaseHolder)
+		ds.updateLeaseHolderCache(context.TODO(), 1, leaseHolder)
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
 		if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil && !testutils.IsPError(pErr, errString) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
-		if _, ok := ds.leaseHolderCache.Lookup(1); ok != !tc.shouldClearLeaseHolder {
+		if _, ok := ds.leaseHolderCache.Lookup(context.TODO(), 1); ok != !tc.shouldClearLeaseHolder {
 			t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
 		}
 		if _, cachedDesc, err := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */); err != nil {
