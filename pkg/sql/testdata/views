@@ -160,6 +160,9 @@ SELECT * FROM v1;
 query error user testuser does not have SELECT privilege on view v6
 SELECT * FROM v6;
 
+query error user testuser has no privileges on view v1
+SHOW CREATE VIEW v1;
+
 user root
 
 statement ok
@@ -182,6 +185,11 @@ SELECT * FROM v1;
 
 query error user testuser does not have SELECT privilege on view v6
 SELECT * FROM v6;
+
+query TT
+SHOW CREATE VIEW v1;
+----
+v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
 
 user root
 
