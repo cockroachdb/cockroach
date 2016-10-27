@@ -141,8 +141,8 @@ func (p *planner) makeUpsertHelper(
 			break
 		}
 		if len(c.Selector) > 0 ||
-			!sqlbase.EqualName(c.TableName.TableName, upsertExcludedTable.TableName) ||
-			sqlbase.NormalizeName(c.ColumnName) != sqlbase.ReNormalizeName(updateCols[i].Name) {
+			!c.TableName.TableName.Equal(upsertExcludedTable.TableName) ||
+			c.ColumnName.Normalize() != parser.ReNormalizeName(updateCols[i].Name) {
 			helper.allExprsIdentity = false
 			break
 		}
@@ -234,7 +234,7 @@ func upsertExprsAndIndex(
 			return false
 		}
 		for i, colName := range index.ColumnNames {
-			if sqlbase.ReNormalizeName(colName) != sqlbase.NormalizeName(onConflict.Columns[i]) {
+			if parser.ReNormalizeName(colName) != onConflict.Columns[i].Normalize() {
 				return false
 			}
 		}

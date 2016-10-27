@@ -483,8 +483,8 @@ func restoreTableDesc(
 func userTablesAndDBsMatchingName(
 	descs []sqlbase.Descriptor, name parser.TableName,
 ) ([]sqlbase.Descriptor, error) {
-	tableName := sqlbase.NormalizeName(name.TableName)
-	dbName := sqlbase.NormalizeName(name.DatabaseName)
+	tableName := name.TableName.Normalize()
+	dbName := name.DatabaseName.Normalize()
 
 	matches := make([]sqlbase.Descriptor, 0, len(descs))
 	dbIDsToName := make(map[sqlbase.ID]string)
@@ -493,7 +493,7 @@ func userTablesAndDBsMatchingName(
 			if db.ID == keys.SystemDatabaseID {
 				continue // Not a user database.
 			}
-			if n := sqlbase.NormalizeName(parser.Name(db.Name)); dbName == "*" || n == dbName {
+			if n := parser.Name(db.Name).Normalize(); dbName == "*" || n == dbName {
 				matches = append(matches, desc)
 				dbIDsToName[db.ID] = n
 			}
@@ -505,7 +505,7 @@ func userTablesAndDBsMatchingName(
 			if _, ok := dbIDsToName[table.ParentID]; !ok {
 				continue
 			}
-			if tableName == "*" || sqlbase.NormalizeName(parser.Name(table.Name)) == tableName {
+			if tableName == "*" || parser.Name(table.Name).Normalize() == tableName {
 				matches = append(matches, desc)
 			}
 		}

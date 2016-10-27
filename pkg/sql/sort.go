@@ -101,9 +101,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := sqlbase.NormalizeName(c.ColumnName)
+				target := c.ColumnName.Normalize()
 				for j, col := range columns {
-					if sqlbase.ReNormalizeName(col.Name) == target {
+					if parser.ReNormalizeName(col.Name) == target {
 						index = j
 						break
 					}

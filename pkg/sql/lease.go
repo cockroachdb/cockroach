@@ -922,7 +922,7 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 }
 
 func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
-	return tableNameCacheKey{dbID, sqlbase.ReNormalizeName(tableName)}
+	return tableNameCacheKey{dbID, parser.ReNormalizeName(tableName)}
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
@@ -975,7 +975,7 @@ func NewLeaseManager(
 
 func nameMatchesLease(lease *LeaseState, dbID sqlbase.ID, tableName string) bool {
 	return lease.ParentID == dbID &&
-		sqlbase.ReNormalizeName(lease.Name) == sqlbase.ReNormalizeName(tableName)
+		parser.ReNormalizeName(lease.Name) == parser.ReNormalizeName(tableName)
 }
 
 // AcquireByName acquires a read lease for the specified table.
