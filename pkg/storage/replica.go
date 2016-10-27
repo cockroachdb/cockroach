@@ -1610,6 +1610,12 @@ func (r *Replica) addWriteCmd(
 func (r *Replica) tryAddWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
+	// Create a new span for the context scoped to the resolution of the
+	// write command. The caller might return before usage of the
+	// context is completed.
+	ctx, sp := r.AnnotateCtxWithSpan(ctx, "tryAddWriteCmd")
+
+	var ch chan proposalResult
 	isNonKV := ba.IsNonKV()
 	if !isNonKV {
 		// Add the write to the command queue to gate subsequent overlapping
@@ -1626,7 +1632,27 @@ func (r *Replica) tryAddWriteCmd(
 		// Guarantee we remove the commands from the command queue. This is
 		// wrapped to delay pErr evaluation to its value when returning.
 		defer func() {
-			pErr = endCmdsFunc(br, pErr)
+			// To keep the timestamp cache properly updated in the case of
+			// an ambiguous result, we launch a goroutine to handle the
+			// pending command.
+			if _, ambiguous := pErr.GetDetail().(*roachpb.AmbiguousResultError); ambiguous {
+				// If ch is nil, we're shutting down; since no other write
+				// commands can execute, it's safe to skip updates to the
+				// timestamp cache. We return without waiting because during
+				// shutdown, we don't expect Raft to execute commands.
+				if ch == nil {
+					endCmdsFunc(nil, pErr)
+					return
+				}
+				go func() {
+					respWithErr := <-ch
+					endCmdsFunc(respWithErr.Reply, respWithErr.Err)
+					sp.Finish()
+				}()
+			} else {
+				pErr = endCmdsFunc(br, pErr)
+				sp.Finish()
+			}
 		}()
 	}
 
@@ -1657,44 +1683,31 @@ func (r *Replica) tryAddWriteCmd(
 
 	log.Event(ctx, "raft")
 
-	ch, tryAbandon, err := r.propose(ctx, ba)
+	var err error
+	ch, err = r.propose(ctx, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err), false
 	}
 
 	// If the command was accepted by raft, wait for the range to apply it.
-	ctxDone := ctx.Done()
+	//
+	// Cancellation is tricky since we can't be sure to prevent the
+	// Raft command from executing at some point in the future. We
+	// return an AmbiguousResultError to indicate that the command
+	// may have succeeded.
 	for {
 		select {
 		case respWithErr := <-ch:
 			return respWithErr.Reply, respWithErr.Err, respWithErr.ShouldRetry
-		case <-ctxDone:
-			// Cancellation is somewhat tricky since we can't prevent the
-			// Raft command from executing at some point in the future.
-			// We try to remove the pending command, but if the processRaft
-			// goroutine has already grabbed it (as would typically be the
-			// case right as it executes), it's too late and we're still
-			// going to have to wait until the command returns (which would
-			// typically be right away).
-			// A typical outcome of a bug here would be use-after-free of
-			// the trace of this client request; we finish it when
-			// returning from here, but the Raft execution also uses it.
-			ctxDone = nil
-			if tryAbandon() {
-				// TODO(tschottdorf): the command will still execute at
-				// some process, so maybe this should be a structured error
-				// which can be interpreted appropriately upstream.
-				return nil, roachpb.NewError(ctx.Err()), false
-			}
-			log.Warningf(ctx, "unable to cancel expired Raft command %s", ba)
+		case <-ctx.Done():
+			log.Warningf(ctx, "context cancellation of command %s", ba)
+			return nil, roachpb.NewError(&roachpb.AmbiguousResultError{}), false
 		case <-r.store.stopper.ShouldQuiesce():
-			// If we can't abandon this command, the surrounding loop will
-			// run hot on this path, but not being able to abandon implies
-			// that the request is being processed and should be available
-			// momentarily.
-			if tryAbandon() {
-				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
-			}
+			log.Warningf(ctx, "shutdown cancellation of command %s", ba)
+			// If we're shutting down, we'll have trouble waiting on raft
+			// commands, so we set the channel to nil before returning.
+			ch = nil
+			return nil, roachpb.NewError(&roachpb.AmbiguousResultError{}), false
 		}
 	}
 }
@@ -1763,25 +1776,20 @@ func makeIDKey() storagebase.CmdIDKey {
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns
 // - a channel which receives a response or error upon application
-// - a closure used to attempt to abandon the command. When called, it tries to
-//   remove the pending command from the internal commands map. This is
-//   possible until execution of the command at the local replica has already
-//   begun, in which case false is returned and the client needs to continue
-//   waiting for successful execution.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (chan proposalResult, func() bool, error) {
+) (chan proposalResult, error) {
 	r.mu.Lock()
 	if r.mu.destroyed != nil {
 		r.mu.Unlock()
-		return nil, nil, r.mu.destroyed
+		return nil, r.mu.destroyed
 	}
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
 		r.mu.Unlock()
-		return nil, nil, err
+		return nil, err
 	}
 	r.mu.Unlock()
 
@@ -1809,16 +1817,9 @@ func (r *Replica) propose(
 
 	if err := r.submitProposalLocked(pCmd); err != nil {
 		delete(r.mu.proposals, pCmd.idKey)
-		return nil, nil, err
+		return nil, err
 	}
-	tryAbandon := func() bool {
-		r.mu.Lock()
-		_, ok := r.mu.proposals[pCmd.idKey]
-		delete(r.mu.proposals, pCmd.idKey)
-		r.mu.Unlock()
-		return ok
-	}
-	return pCmd.done, tryAbandon, nil
+	return pCmd.done, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.

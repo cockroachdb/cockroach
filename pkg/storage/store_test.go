@@ -517,7 +517,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	if _, _, err := rng1.propose(
+	if _, err := rng1.propose(
 		context.Background(), roachpb.BatchRequest{},
 	); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)

@@ -33,16 +33,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TestAmbiguousCommit verifies that an ambiguous commit error is
-// returned from sql.Exec in situations where an EndTransaction is
-// part of a batch and the disposition of the batch request is unknown
-// after a network failure or timeout. The goal here is to prevent
-// spurious transaction retries after the initial transaction actually
-// succeeded. In cases where there's an auto-generated primary key,
-// this can result in silent duplications. In cases where the primary
-// key is specified in advance, it can result in violated uniqueness
-// constraints, or duplicate key violations. See #6053, #7604, and #10023.
-func TestAmbiguousCommit(t *testing.T) {
+// TestAmbiguousCommitDueToLeadershipChange verifies that an ambiguous
+// commit error is returned from sql.Exec in situations where an
+// EndTransaction is part of a batch and the disposition of the batch
+// request is unknown after a network failure or timeout. The goal
+// here is to prevent spurious transaction retries after the initial
+// transaction actually succeeded. In cases where there's an
+// auto-generated primary key, this can result in silent
+// duplications. In cases where the primary key is specified in
+// advance, it can result in violated uniqueness constraints, or
+// duplicate key violations. See #6053, #7604, and #10023.
+func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a command filter which prevents EndTransaction from
@@ -149,7 +150,7 @@ func TestAmbiguousCommit(t *testing.T) {
 	}
 
 	// Close the wait channel and wait for the error from the pending SQL insert.
-	if err := <-sqlErrCh; !testutils.IsError(err, "transaction commit result is ambiguous") {
+	if err := <-sqlErrCh; !testutils.IsError(err, "result is ambiguous") {
 		t.Errorf("expected ambiguous commit error; got %v", err)
 	}
 
