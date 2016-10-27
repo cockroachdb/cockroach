@@ -365,11 +365,11 @@ type Store struct {
 	drainLeases atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
-	// obeyed: Replica.raftMu < < Replica.readOnlyCmdMu < Store.mu.Mutex <
-	// Replica.mu.Mutex < Store.scheduler.mu. (It is not required to acquire
-	// every lock in sequence, but when multiple locks are held at the same time,
-	// it is incorrect to acquire a lock with "lesser" value in this sequence
-	// after one with "greater" value)
+	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
+	// < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
+	// (It is not required to acquire every lock in sequence, but when multiple
+	// locks are held at the same time, it is incorrect to acquire a lock with
+	// "lesser" value in this sequence after one with "greater" value).
 	//
 	// Methods of Store with a "Locked" suffix require that
 	// Store.mu.Mutex be held. Other locking requirements are indicated
@@ -3246,24 +3246,16 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 	}
 
 	if !s.cfg.Transport.SendAsync(chReq) {
-		toReport := make(map[*Replica][]roachpb.ReplicaID)
-
 		s.mu.Lock()
 		for _, beat := range beats {
 			replica := s.mu.replicas[beat.RangeID]
-			toReport[replica] = append(toReport[replica], beat.ToReplicaID)
+			replica.addUnreachableRemoteReplica(beat.ToReplicaID)
 		}
 		for _, resp := range resps {
 			replica := s.mu.replicas[resp.RangeID]
-			toReport[replica] = append(toReport[replica], resp.ToReplicaID)
+			replica.addUnreachableRemoteReplica(resp.ToReplicaID)
 		}
 		s.mu.Unlock()
-
-		for replica, beats := range toReport {
-			for _, to := range beats {
-				replica.reportUnreachable(to)
-			}
-		}
 		return 0
 	}
 	return len(beats) + len(resps)
@@ -3271,18 +3263,20 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 
 func (s *Store) sendQueuedHeartbeats() {
 	s.coalescedMu.Lock()
-	defer s.coalescedMu.Unlock()
+	heartbeats := s.coalescedMu.heartbeats
+	heartbeatResponses := s.coalescedMu.heartbeatResponses
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.Unlock()
 
 	var beatsSent int
 
-	for to, beats := range s.coalescedMu.heartbeats {
+	for to, beats := range heartbeats {
 		beatsSent += s.sendQueuedHeartbeatsToNode(beats, nil, to)
 	}
-	for to, resps := range s.coalescedMu.heartbeatResponses {
+	for to, resps := range heartbeatResponses {
 		beatsSent += s.sendQueuedHeartbeatsToNode(nil, resps, to)
 	}
-	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
-	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
 
