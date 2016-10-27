@@ -79,7 +79,7 @@ func TestRangeIterForward(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := &DistSenderConfig{
+	cfg := DistSenderConfig{
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 	}
 	ctx := context.Background()
@@ -107,7 +107,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := &DistSenderConfig{
+	cfg := DistSenderConfig{
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 	}
 	ctx := context.Background()
@@ -140,7 +140,7 @@ func TestRangeIterReverse(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := &DistSenderConfig{
+	cfg := DistSenderConfig{
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 	}
 	ctx := context.Background()
@@ -168,7 +168,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := &DistSenderConfig{
+	cfg := DistSenderConfig{
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 	}
 	ctx := context.Background()

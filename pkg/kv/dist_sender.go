@@ -139,11 +139,7 @@ type DistSenderConfig struct {
 // Cockroach cluster via the supplied gossip instance. Supplying a
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
-func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
-	if cfg == nil {
-		cfg = &DistSenderConfig{}
-	}
-
+func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{gossip: g}
 
 	ds.AmbientContext = cfg.AmbientCtx

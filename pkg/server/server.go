@@ -198,7 +198,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}
-	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
+	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
