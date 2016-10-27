@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type backupContext struct {
@@ -56,7 +57,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 	defer stopper.Stop()
 
-	desc, err := sql.Backup(ctx, *kvDB, base, hlc.NewClock(hlc.UnixNano).Now())
+	desc, err := sql.Backup(ctx, *kvDB, base, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	if err != nil {
 		return err
 	}

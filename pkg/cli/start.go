@@ -459,7 +459,7 @@ func rerunBackground() error {
 func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{}, serverCfg.Config, hlc.NewClock(hlc.UnixNano), stopper,
+		log.AmbientContext{}, serverCfg.Config, hlc.NewClock(hlc.UnixNano, 0), stopper,
 	)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {

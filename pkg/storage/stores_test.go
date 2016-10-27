@@ -20,6 +20,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,7 +35,7 @@ import (
 
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	store := Store{}
 	ls.AddStore(&store)
 	if !ls.HasStore(store.Ident.StoreID) {
@@ -47,7 +48,7 @@ func TestStoresAddStore(t *testing.T) {
 
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 
 	storeID := roachpb.StoreID(89)
 
@@ -62,7 +63,7 @@ func TestStoresRemoveStore(t *testing.T) {
 
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
@@ -78,7 +79,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
 		ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
@@ -106,7 +107,7 @@ func TestStoresVisitStores(t *testing.T) {
 
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano))
+	ls := NewStores(log.AmbientContext{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, pErr := ls.GetStore(replica.StoreID)
@@ -130,9 +131,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	cfg := TestStoreConfig()
-	manualClock := hlc.NewManualClock(0)
-	cfg.Clock = hlc.NewClock(manualClock.UnixNano)
+	cfg, _ := TestStoreConfig()
 	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
 	// Create two new stores with ranges we care about.
@@ -230,9 +229,7 @@ var storeIDAlloc roachpb.StoreID
 // createStores creates a slice of count stores.
 func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	cfg := TestStoreConfig()
-	manualClock := hlc.NewManualClock(0)
-	cfg.Clock = hlc.NewClock(manualClock.UnixNano)
+	cfg, manualClock := TestStoreConfig()
 	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
 	// Create two stores with ranges we care about.
@@ -256,8 +253,6 @@ func TestStoresGossipStorage(t *testing.T) {
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop()
 	ls.AddStore(stores[0])
-
-	manual.Set(1)
 
 	// Verify initial read is empty.
 	var bi gossip.BootstrapInfo
@@ -307,9 +302,6 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop()
 	ls.AddStore(stores[0])
-
-	// Set clock to 1.
-	manual.Set(1)
 
 	// Add a fake address and write.
 	var bi gossip.BootstrapInfo

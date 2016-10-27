@@ -83,24 +83,24 @@ func rg1(s *storage.Store) client.Sender {
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
-	return createTestStoreWithConfig(t, storage.TestStoreConfig())
+	cfg, manual := storage.TestStoreConfig()
+	store, stopper := createTestStoreWithConfig(t, cfg)
+	return store, stopper, manual
 }
 
 func createTestStoreWithConfig(
 	t testing.TB, storeCfg storage.StoreConfig,
-) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
+) (*storage.Store, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	manual := hlc.NewManualClock(123)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
 	store := createTestStoreWithEngine(t,
 		eng,
-		hlc.NewClock(manual.UnixNano),
 		true,
 		storeCfg,
 		stopper,
 	)
-	return store, stopper, manual
+	return store, stopper
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
@@ -109,7 +109,6 @@ func createTestStoreWithConfig(
 func createTestStoreWithEngine(
 	t testing.TB,
 	eng engine.Engine,
-	clock *hlc.Clock,
 	bootstrap bool,
 	storeCfg storage.StoreConfig,
 	stopper *stop.Stopper,
@@ -118,14 +117,14 @@ func createTestStoreWithEngine(
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
 
-	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
 		nodeDesc.NodeID, rpcContext, server, nil, stopper, metric.NewRegistry(),
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := storage.NewStores(ac, clock)
+	stores := storage.NewStores(ac, storeCfg.Clock)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -134,7 +133,7 @@ func createTestStoreWithEngine(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
-		Clock:            clock,
+		Clock:            storeCfg.Clock,
 		TransportFactory: kv.SenderTransportFactory(tracer, stores),
 		RPCRetryOptions:  &retryOpts,
 	}, storeCfg.Gossip)
@@ -142,17 +141,16 @@ func createTestStoreWithEngine(
 	sender := kv.NewTxnCoordSender(
 		ac,
 		distSender,
-		clock,
+		storeCfg.Clock,
 		false,
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	storeCfg.Clock = clock
 	storeCfg.DB = client.NewDB(sender)
 	storeCfg.StorePool = storage.NewStorePool(
 		log.AmbientContext{},
 		storeCfg.Gossip,
-		clock,
+		storeCfg.Clock,
 		rpcContext,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
@@ -266,10 +264,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
 
 	if m.manualClock == nil {
-		m.manualClock = hlc.NewManualClock(0)
+		m.manualClock = hlc.NewManualClock(123)
 	}
 	if m.clock == nil {
-		m.clock = hlc.NewClock(m.manualClock.UnixNano)
+		m.clock = hlc.NewClock(m.manualClock.UnixNano, time.Nanosecond)
 	}
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()
@@ -590,7 +588,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	if m.storeConfig != nil {
 		cfg = *m.storeConfig
 	} else {
-		cfg = storage.TestStoreConfig()
+		cfg, _ = storage.TestStoreConfig()
 	}
 	cfg.Clock = m.clocks[i]
 	cfg.Transport = m.transports[i]

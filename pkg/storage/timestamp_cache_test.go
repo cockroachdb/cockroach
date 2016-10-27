@@ -19,6 +19,7 @@ package storage
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,10 +29,9 @@ import (
 
 func TestTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
 	baseTS := int64(100)
-	manual.Set(baseTS)
+	manual := hlc.NewManualClock(baseTS)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 	tc.SetLowWater(hlc.ZeroTimestamp.Add(baseTS, 0))
 
@@ -51,7 +51,7 @@ func TestTimestampCache(t *testing.T) {
 	}
 
 	// Advance the clock and verify same low water mark.
-	manual.Set(200)
+	manual.Increment(100)
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != baseTS || ok {
 		t.Errorf("expected baseTS for key \"a\"; ok=%t", ok)
 	}
@@ -103,12 +103,12 @@ func TestTimestampCache(t *testing.T) {
 // water mark moves max timestamps forward as appropriate.
 func TestTimestampCacheSetLowWater(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
 	// Increment time to the low water mark + 10.
-	manual.Set(10)
+	manual.Increment(10)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 
@@ -152,13 +152,13 @@ func TestTimestampCacheSetLowWater(t *testing.T) {
 // timestamp cache entries after MinTSCacheWindow interval.
 func TestTimestampCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 	tc.evictionSizeThreshold = 0
 
 	// Increment time to the low water mark + 1.
-	manual.Set(1)
+	manual.Increment(1)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 
@@ -177,12 +177,12 @@ func TestTimestampCacheEviction(t *testing.T) {
 // its size threshold, it will not evict entries.
 func TestTimestampCacheNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
 	// Increment time to the low water mark + 1.
-	manual.Set(1)
+	manual.Increment(1)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 	tc.AddRequest(cacheRequest{
@@ -206,8 +206,8 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 
 func TestTimestampCacheMergeInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
 	testCases := []struct {
 		useClear bool
@@ -458,8 +458,8 @@ var layeredIntervalTestCase5 = layeredIntervalTestCase{
 // determine layering, and that the interval insertion order is irrelevant.
 func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
 	// Run each test case in several configurations.
@@ -534,22 +534,27 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 
 func TestTimestampCacheClear(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
-	manual.Set(5000000)
-	ts := clock.Now()
-	tc.add(roachpb.Key("a"), nil, ts, nil, true)
+	key := roachpb.Key("a")
 
+	ts := clock.Now()
+	tc.add(key, nil, ts, nil, true)
+
+	manual.Increment(5000000)
+
+	expTS := clock.Now()
 	// Clear the cache, which will reset the low water mark to
 	// the current time.
-	tc.Clear(clock.Now())
+	tc.Clear(expTS)
 
 	// Fetching any keys should give current time.
-	expTS := clock.Timestamp()
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); !rTS.Equal(expTS) || ok {
-		t.Errorf("expected \"a\" to have cleared timestamp; exp ok=false; got %t", ok)
+	if rTS, _, ok := tc.GetMaxRead(key, nil); ok {
+		t.Errorf("expected %s to have cleared timestamp", key)
+	} else if !rTS.Equal(expTS) {
+		t.Errorf("expected %s, got %s", rTS, expTS)
 	}
 }
 
@@ -557,8 +562,8 @@ func TestTimestampCacheClear(t *testing.T) {
 // can differentiate between read and write timestamp.
 func TestTimestampCacheReadVsWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
 	// Add read-only non-txn entry at current time.
@@ -585,8 +590,8 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 // timestamp is not owned by either one.
 func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
 	txn1 := uuid.NewV4()
@@ -619,8 +624,8 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 }
 
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
 	for i := 0; i < b.N; i++ {

@@ -94,12 +94,12 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		pruneSeenEndKeys:   make(map[string]struct{}),
 	}
 
-	cfg := storage.TestStoreConfig()
+	cfg, _ := storage.TestStoreConfig()
 	cfg.TimeSeriesDataStore = model
 	cfg.TestingKnobs.DisableScanner = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 
-	store, stopper, _ := createTestStoreWithConfig(t, cfg)
+	store, stopper := createTestStoreWithConfig(t, cfg)
 	defer stopper.Stop()
 
 	// Generate several splits.

@@ -92,7 +92,7 @@ func TestSendToOneClient(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	ctx := newNodeTestContext(nil, stopper)
+	ctx := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
 	s, ln := newTestServer(t, ctx)
 	roachpb.RegisterInternalServer(s, Node(0))
 
@@ -113,10 +113,10 @@ func TestRetryableError(t *testing.T) {
 
 	clientStopper := stop.NewStopper()
 	defer clientStopper.Stop()
-	clientContext := newNodeTestContext(nil, clientStopper)
+	clientContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), clientStopper)
 
 	serverStopper := stop.NewStopper()
-	serverContext := newNodeTestContext(nil, serverStopper)
+	serverContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), serverStopper)
 
 	s, ln := newTestServer(t, serverContext)
 	roachpb.RegisterInternalServer(s, Node(0))
@@ -181,7 +181,7 @@ func (*channelSaveTransport) Close() {
 // distinguishing them and just send a single channel.
 func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	nodeContext := newNodeTestContext(nil, stopper)
+	nodeContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
 
 	addrs := []net.Addr{
 		util.NewUnresolvedAddr("dummy", "1"),
@@ -434,7 +434,7 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := newNodeTestContext(nil, stopper)
+	nodeContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
 	// Rework this test to incorporate application-level errors carried in

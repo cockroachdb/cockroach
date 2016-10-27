@@ -281,7 +281,7 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc := TestStoreConfig()
+	tsc, _ := TestStoreConfig()
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
@@ -313,7 +313,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
-	bq.Start(tc.clock, tc.stopper)
+	bq.Start(tc.Clock(), tc.stopper)
 
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
@@ -382,8 +382,8 @@ func TestBaseQueueAddRemove(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
+	mc := hlc.NewManualClock(123)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	bq.Start(clock, tc.stopper)
 
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
@@ -530,7 +530,7 @@ func (*testError) purgatoryErrorMarker() {
 // the purgatory channel causes the replicas to be reprocessed.
 func TestBaseQueuePurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc := TestStoreConfig()
+	tsc, _ := TestStoreConfig()
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
@@ -557,7 +557,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	replicaCount := 10
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: replicaCount})
-	bq.Start(tc.clock, tc.stopper)
+	bq.Start(tc.Clock(), tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
 		r := createReplica(tc.store, roachpb.RangeID(i+1000),
@@ -700,7 +700,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
-	bq.Start(tc.clock, tc.stopper)
+	bq.Start(tc.Clock(), tc.stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
 	if l := bq.Length(); l != 1 {
@@ -751,7 +751,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
-	bq.Start(tc.clock, tc.stopper)
+	bq.Start(tc.Clock(), tc.stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
 	util.SucceedsSoon(t, func() error {

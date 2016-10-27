@@ -139,7 +139,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 // it verifies the pre and post ranges still contain the expected data.
 func TestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := TestStoreConfig()
+	cfg, _ := TestStoreConfig()
 	// Disable Raft processing for this test as it mucks with low-level details
 	// of replica storage in an unsafe way.
 	cfg.TestingKnobs.DisableProcessRaft = true

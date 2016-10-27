@@ -61,20 +61,18 @@ func newKVNative(b *testing.B) kvInterface {
 	// TestServer.DB() returns the TxnCoordSender wrapped client. But that isn't
 	// a fair comparison with SQL as we want these client requests to be sent
 	// over the network.
-	sender, err := client.NewSender(
-		rpc.NewContext(log.AmbientContext{}, &base.Config{
-			User:       security.NodeUser,
-			SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-			SSLCert:    filepath.Join(security.EmbeddedCertsDir, "node.crt"),
-			SSLCertKey: filepath.Join(security.EmbeddedCertsDir, "node.key"),
-		}, nil, s.Stopper()),
-		s.ServingAddr())
+	conn, err := rpc.NewContext(log.AmbientContext{}, &base.Config{
+		User:       security.NodeUser,
+		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+		SSLCert:    filepath.Join(security.EmbeddedCertsDir, "node.crt"),
+		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, "node.key"),
+	}, nil, s.Stopper()).GRPCDial(s.ServingAddr())
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	return &kvNative{
-		db: client.NewDB(sender),
+		db: client.NewDB(client.NewSender(conn)),
 		doneFn: func() {
 			s.Stopper().Stop()
 			enableTracing()
