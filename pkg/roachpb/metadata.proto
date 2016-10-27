@@ -112,8 +112,8 @@ message StoreDeadReplicas {
   repeated ReplicaIdent replicas = 2 [(gogoproto.nullable) = false];
 }
 
-// Locality is an ordered set of key value Tiers that describe a nodes location.
-// The tier keys should be the same across all nodes.
+// Locality is an ordered set of key value Tiers that describe a node's
+// location. The tier keys should be the same across all nodes.
 message Locality {
   option (gogoproto.goproto_stringer) = false;
 
