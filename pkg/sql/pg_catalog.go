@@ -50,6 +50,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
 		pgCatalogTypeTable,
+		pgCatalogViewsTable,
 	},
 }
 
@@ -621,6 +622,41 @@ CREATE TABLE pg_catalog.pg_tables (
 					parser.MakeDBool(false),                                 // hasrules
 					parser.MakeDBool(false),                                 // hastriggers
 					parser.MakeDBool(false),                                 // rowsecurity
+				)
+			},
+		)
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-views.html.
+var pgCatalogViewsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_views (
+	schemaname STRING,
+	viewname STRING,
+	viewowner STRING,
+	definition STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, desc *sqlbase.TableDescriptor) error {
+				if !desc.IsView() {
+					return nil
+				}
+				// Note that the view query printed will not include any column aliases
+				// specifed outside the initial view query into the definition returned,
+				// unlike postgres. For example, for the view created via
+				//  `CREATE VIEW (a) AS SELECT b FROM foo`
+				// we'll only print `SELECT b FROM foo` as the view definition here,
+				// while postgres would more accurately print `SELECT b AS a FROM foo`.
+				// TODO(a-robinson): Insert column aliases into view query once we
+				// have a semantic query representation to work with (#10083).
+				return addRow(
+					parser.NewDString(db.Name),        // schemaname
+					parser.NewDString(desc.Name),      // viewname
+					parser.DNull,                      // viewowner
+					parser.NewDString(desc.ViewQuery), // definition
 				)
 			},
 		)
