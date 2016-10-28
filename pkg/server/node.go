@@ -774,29 +774,9 @@ func (n *Node) recordJoinEvent() {
 	})
 }
 
-// Batch implements the roachpb.InternalServer interface.
-func (n *Node) Batch(
+func (n *Node) batchInternal(
 	ctx context.Context, args *roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, err error) {
-	ctx = n.AnnotateCtx(ctx)
-	// TODO(marc,bdarnell): this code is duplicated in server/node.go,
-	// which should be fixed.
-	defer func() {
-		// We always return errors via BatchResponse.Error so structure is
-		// preserved; plain errors are presumed to be from the RPC
-		// framework and not from cockroach.
-		if err != nil {
-			if br == nil {
-				br = &roachpb.BatchResponse{}
-			}
-			if br.Error != nil {
-				panic(fmt.Sprintf(
-					"attempting to return both a plain error (%s) and roachpb.Error (%s)", err, br.Error))
-			}
-			br.Error = roachpb.NewError(err)
-			err = nil
-		}
-	}()
+) (*roachpb.BatchResponse, error) {
 	// TODO(marc): grpc's authentication model (which gives credential access in
 	// the request handler) doesn't really fit with the current design of the
 	// security package (which assumes that TLS state is only given at connection
@@ -813,18 +793,13 @@ func (n *Node) Batch(
 		}
 	}
 
-	const opName = "node.Batch"
+	var br *roachpb.BatchResponse
 
-	fail := func(err error) {
-		br = &roachpb.BatchResponse{}
-		br.Error = roachpb.NewError(err)
-	}
-
-	f := func() {
+	if err := n.stopper.RunTaskWithErr(func() error {
+		const opName = "node.Batch"
 		sp, err := tracing.JoinOrNew(n.storeCfg.AmbientCtx.Tracer, args.TraceContext, opName)
 		if err != nil {
-			fail(err)
-			return
+			return err
 		}
 		// If this is a snowball span, it gets special treatment: It skips the
 		// regular tracing machinery, and we instead send the collected spans
@@ -833,15 +808,17 @@ func (n *Node) Batch(
 		if sp.BaggageItem(tracing.Snowball) != "" {
 			sp.LogEvent("delegating to snowball tracing")
 			sp.Finish()
-			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, func(rawSpan basictracer.RawSpan) {
+
+			recorder := func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
 					log.Warning(ctx, err)
 				}
 				br.CollectedSpans = append(br.CollectedSpans, encSp)
-			}); err != nil {
-				fail(err)
-				return
+			}
+
+			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, recorder); err != nil {
+				return err
 			}
 		}
 		defer sp.Finish()
@@ -860,10 +837,34 @@ func (n *Node) Batch(
 		}
 		n.metrics.callComplete(timeutil.Since(tStart), pErr)
 		br.Error = pErr
-	}
-
-	if err := n.stopper.RunTask(f); err != nil {
+		return nil
+	}); err != nil {
 		return nil, err
+	}
+	return br, nil
+}
+
+// Batch implements the roachpb.InternalServer interface.
+func (n *Node) Batch(
+	ctx context.Context, args *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	ctx = n.AnnotateCtx(ctx)
+
+	br, err := n.batchInternal(ctx, args)
+
+	// We always return errors via BatchResponse.Error so structure is
+	// preserved; plain errors are presumed to be from the RPC
+	// framework and not from cockroach.
+	if err != nil {
+		if br == nil {
+			br = &roachpb.BatchResponse{}
+		}
+		if br.Error != nil {
+			log.Fatalf(
+				ctx, "attempting to return both a plain error (%s) and roachpb.Error (%s)", err, br.Error,
+			)
+		}
+		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
 }
