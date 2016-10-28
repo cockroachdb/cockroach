@@ -31,7 +31,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/elazarl/go-bindata-assetfs"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -58,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/pbmarshal"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -620,7 +620,7 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
-	jsonpb := &util.JSONPb{
+	jsonpb := &pbmarshal.JSONPb{
 		EnumsAsInts:  true,
 		EmitDefaults: true,
 		Indent:       "  ",
