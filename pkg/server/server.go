@@ -625,7 +625,7 @@ func (s *Server) Start(ctx context.Context) error {
 		EmitDefaults: true,
 		Indent:       "  ",
 	}
-	protopb := new(util.ProtoPb)
+	protopb := new(pbmarshal.ProtoPb)
 	gwMux := gwruntime.NewServeMux(
 		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
 		gwruntime.WithMarshalerOption(util.JSONContentType, jsonpb),
