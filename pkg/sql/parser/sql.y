@@ -1231,10 +1231,7 @@ set_stmt:
   {
     $$.val = $2.stmt()
   }
-| SET LOCAL set_rest
-  {
-    $$.val = $3.stmt()
-  }
+| SET LOCAL set_rest { return unimplemented(sqllex) }
 | SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
   {
     $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
