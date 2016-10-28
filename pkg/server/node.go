@@ -60,9 +60,6 @@ const (
 	gossipStatusInterval = 1 * time.Minute
 	// gossipNodeDescriptorInterval is the interval for gossiping the node descriptor.
 	gossipNodeDescriptorInterval = 1 * time.Hour
-	// publishStatusInterval is the interval for publishing periodic statistics
-	// from stores to the internal event feed.
-	publishStatusInterval = 10 * time.Second
 
 	// FirstNodeID is the node ID of the first node in a new cluster.
 	FirstNodeID = 1
@@ -361,7 +358,7 @@ func (n *Node) start(
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
-	n.startComputePeriodicMetrics(n.stopper)
+	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
 	n.startGossip(n.stopper)
 
 	// Record node started event.
@@ -646,11 +643,11 @@ func (n *Node) gossipStores(ctx context.Context) {
 // startComputePeriodicMetrics starts a loop which periodically instructs each
 // store to compute the value of metrics which cannot be incrementally
 // maintained.
-func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper) {
+func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.Duration) {
 	stopper.RunWorker(func() {
 		ctx := n.AnnotateCtx(context.Background())
-		// Publish status at the same frequency as metrics are collected.
-		ticker := time.NewTicker(publishStatusInterval)
+		// Compute periodic stats at the same frequency as metrics are sampled.
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for tick := 0; ; tick++ {
 			select {
