@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -795,6 +796,13 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 
+	type snowballInfo struct {
+		syncutil.Mutex
+		collectedSpans [][]byte
+		done           bool
+	}
+	var snowball *snowballInfo
+
 	if err := n.stopper.RunTaskWithErr(func() error {
 		const opName = "node.Batch"
 		sp, err := tracing.JoinOrNew(n.storeCfg.AmbientCtx.Tracer, args.TraceContext, opName)
@@ -809,12 +817,20 @@ func (n *Node) batchInternal(
 			sp.LogEvent("delegating to snowball tracing")
 			sp.Finish()
 
+			snowball = new(snowballInfo)
 			recorder := func(rawSpan basictracer.RawSpan) {
+				snowball.Lock()
+				defer snowball.Unlock()
+				if snowball.done {
+					// This is a late span that we must discard because the request was
+					// already completed.
+					return
+				}
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
 					log.Warning(ctx, err)
 				}
-				br.CollectedSpans = append(br.CollectedSpans, encSp)
+				snowball.collectedSpans = append(snowball.collectedSpans, encSp)
 			}
 
 			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, recorder); err != nil {
@@ -841,6 +857,14 @@ func (n *Node) batchInternal(
 	}); err != nil {
 		return nil, err
 	}
+
+	if snowball != nil {
+		snowball.Lock()
+		br.CollectedSpans = snowball.collectedSpans
+		snowball.done = true
+		snowball.Unlock()
+	}
+
 	return br, nil
 }
 
