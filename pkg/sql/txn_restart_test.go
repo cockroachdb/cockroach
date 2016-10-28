@@ -505,9 +505,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	// of txns (statements batched together with the BEGIN stmt) - are retried.
 	// We also exercise the SQL cluster logical timestamp in here, because
 	// this must be properly propagated across retries.
+	// The SELECT within the transaction also checks that discarded
+	// intermediate result sets are properly released to the memory
+	// monitor.
 	if _, err := sqlDB.Exec(`
 INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp());
 BEGIN;
+SELECT COUNT(*) FROM t.test;
 INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp());
 INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp());
 END;
