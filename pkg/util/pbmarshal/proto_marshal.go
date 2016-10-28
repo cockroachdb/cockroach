@@ -24,7 +24,6 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -35,7 +34,7 @@ type ProtoPb struct{}
 
 // ContentType implements gwruntime.Marshaler.
 func (*ProtoPb) ContentType() string {
-	return util.ProtoContentType
+	return "application/x-protobuf"
 }
 
 // Marshal implements gwruntime.Marshaler.
