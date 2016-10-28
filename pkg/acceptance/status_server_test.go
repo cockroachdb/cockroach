@@ -82,7 +82,7 @@ func checkNode(
 	}
 	var details serverpb.DetailsResponse
 	for _, urlID := range urlIDs {
-		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/"+urlID, &details); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/"+urlID, &details); err != nil {
 			t.Fatal(errors.Errorf("unable to parse details - %s", err))
 		}
 		if details.NodeID != expectedNodeID {
@@ -108,7 +108,7 @@ func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConf
 	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
 		var details serverpb.DetailsResponse
-		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
 		idMap[i] = details.NodeID

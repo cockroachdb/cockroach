@@ -78,7 +78,7 @@ func TestStatusLocalStacks(t *testing.T) {
 }
 
 // TestStatusJson verifies that status endpoints return expected Json results.
-// The content type of the responses is always util.JSONContentType.
+// The content type of the responses is always httputil.JSONContentType.
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -497,7 +497,7 @@ func TestSpanStatsResponse(t *testing.T) {
 	}
 
 	url := ts.AdminURL() + statusPrefix + "span"
-	if err := util.PostJSON(httpClient, url, &request, &response); err != nil {
+	if err := httputil.PostJSON(httpClient, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 	if a, e := int(response.RangeCount), ExpectedInitialRangeCount(); a != e {

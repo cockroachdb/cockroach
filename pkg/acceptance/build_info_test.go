@@ -39,7 +39,7 @@ func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			t.Fatalf("interrupted")
 		default:
 		}
-		return util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/details/local", &details)
+		return httputil.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/details/local", &details)
 	})
 
 	bi := details.BuildInfo

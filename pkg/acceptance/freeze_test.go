@@ -59,7 +59,7 @@ func postFreeze(
 			log.Infof(context.Background(), "%+v", &resp)
 		}
 	}
-	err := util.StreamJSON(
+	err := httputil.StreamJSON(
 		httpClient,
 		c.URL(0)+"/_admin/v1/cluster/freeze",
 		&serverpb.ClusterFreezeRequest{Freeze: freeze},

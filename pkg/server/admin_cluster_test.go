@@ -84,7 +84,7 @@ func TestAdminAPITableStats(t *testing.T) {
 	// The new SQL table may not yet have split into its own range. Wait for
 	// this to occur, and for full replication.
 	util.SucceedsSoon(t, func() error {
-		if err := util.GetJSON(client, url, &tsResponse); err != nil {
+		if err := httputil.GetJSON(client, url, &tsResponse); err != nil {
 			return err
 		}
 		if tsResponse.RangeCount != 1 {
@@ -112,7 +112,7 @@ func TestAdminAPITableStats(t *testing.T) {
 	// lower.
 	tc.StopServer(1)
 
-	if err := util.GetJSON(client, url, &tsResponse); err != nil {
+	if err := httputil.GetJSON(client, url, &tsResponse); err != nil {
 		t.Fatal(err)
 	}
 	if a, e := tsResponse.NodeCount, int64(nodeCount); a != e {
@@ -137,5 +137,5 @@ func TestAdminAPITableStats(t *testing.T) {
 	// timeout; however, in aggregate (or in stress tests) this will suffice for
 	// detecting leaks.
 	client.Timeout = 1 * time.Nanosecond
-	_ = util.GetJSON(client, url, &tsResponse)
+	_ = httputil.GetJSON(client, url, &tsResponse)
 }

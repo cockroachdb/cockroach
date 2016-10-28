@@ -55,10 +55,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/pbmarshal"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -621,18 +622,18 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
-	jsonpb := &pbmarshal.JSONPb{
+	jsonpb := &protoutil.JSONPb{
 		EnumsAsInts:  true,
 		EmitDefaults: true,
 		Indent:       "  ",
 	}
-	protopb := new(pbmarshal.ProtoPb)
+	protopb := new(protoutil.ProtoPb)
 	gwMux := gwruntime.NewServeMux(
 		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
-		gwruntime.WithMarshalerOption(util.JSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(util.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
 	)
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
@@ -768,10 +769,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
 
-	ae := r.Header.Get(util.AcceptEncodingHeader)
+	ae := r.Header.Get(httputil.AcceptEncodingHeader)
 	switch {
-	case strings.Contains(ae, util.GzipEncoding):
-		w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
+	case strings.Contains(ae, httputil.GzipEncoding):
+		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
 		gzw := newGzipResponseWriter(w)
 		defer gzw.Close()
 		w = gzw

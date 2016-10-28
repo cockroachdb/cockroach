@@ -161,7 +161,7 @@ func GetJSONProto(ts TestServerInterface, path string, response proto.Message) e
 	if err != nil {
 		return err
 	}
-	return util.GetJSON(httpClient, ts.AdminURL()+path, response)
+	return httputil.GetJSON(httpClient, ts.AdminURL()+path, response)
 }
 
 // PostJSONProto uses the supplied client to POST request to the URL specified by
@@ -171,7 +171,7 @@ func PostJSONProto(ts TestServerInterface, path string, request, response proto.
 	if err != nil {
 		return err
 	}
-	return util.PostJSON(httpClient, ts.AdminURL()+path, request, response)
+	return httputil.PostJSON(httpClient, ts.AdminURL()+path, request, response)
 }
 
 // LookupRange returns the descriptor of the range containing key.

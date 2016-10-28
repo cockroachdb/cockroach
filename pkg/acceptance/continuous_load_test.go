@@ -74,7 +74,7 @@ func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 	var client http.Client
 	var resp status.NodeStatus
 	host := f.Nodes()[0]
-	if err := util.GetJSON(client, "http://"+host+":8080/_status/nodes/local", &resp); err != nil {
+	if err := httputil.GetJSON(client, "http://"+host+":8080/_status/nodes/local", &resp); err != nil {
 		return 0, err
 	}
 	count, ok := resp.Metrics["sql.query.count"]

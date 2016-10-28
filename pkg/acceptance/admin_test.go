@@ -44,7 +44,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	nodeIDs := make([]roachpb.NodeID, c.NumNodes())
 	for i := 0; i < c.NumNodes(); i++ {
 		var details serverpb.DetailsResponse
-		if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
 		nodeIDs[i] = details.NodeID
@@ -59,13 +59,13 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 
 	// Retrieve node statuses.
 	var nodes serverpb.NodesResponse
-	if err := util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes", &nodes); err != nil {
+	if err := httputil.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes", &nodes); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, nodeID := range nodeIDs {
 		var nodeStatus status.NodeStatus
-		if err := util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes/"+strconv.Itoa(int(nodeID)), &nodeStatus); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes/"+strconv.Itoa(int(nodeID)), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -80,7 +80,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 		},
 	}
 	var queryResponse tspb.TimeSeriesQueryResponse
-	if err := util.PostJSON(cluster.HTTPClient, c.URL(0)+"/ts/query",
+	if err := httputil.PostJSON(cluster.HTTPClient, c.URL(0)+"/ts/query",
 		&queryRequest, &queryResponse); err != nil {
 		t.Fatal(err)
 	}

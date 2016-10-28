@@ -200,7 +200,7 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	url := server1.AdminURL() + "/_admin/v1/health"
-	if err := util.GetJSON(httpClient1, url, &response); err != nil {
+	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
 
@@ -223,7 +223,7 @@ func TestStopServer(t *testing.T) {
 
 	// Verify HTTP and GRPC requests to server now fail.
 	httpErrorText := "connection refused"
-	if err := util.GetJSON(httpClient1, url, &response); err == nil {
+	if err := httputil.GetJSON(httpClient1, url, &response); err == nil {
 		t.Fatal("Expected HTTP Request to fail after server stopped")
 	} else if !testutils.IsError(err, httpErrorText) {
 		t.Fatalf("Expected error from server with text %q, got error with text %q", httpErrorText, err.Error())
@@ -242,7 +242,7 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	url = tc.Server(0).AdminURL() + "/_admin/v1/health"
-	if err := util.GetJSON(httpClient1, url, &response); err != nil {
+	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
 }

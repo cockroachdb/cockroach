@@ -204,7 +204,7 @@ func (at *allocatorTest) stdDev() (float64, error) {
 	var client http.Client
 	var nodesResp serverpb.NodesResponse
 	url := fmt.Sprintf("http://%s:%s/_status/nodes", host, adminPort)
-	if err := util.GetJSON(client, url, &nodesResp); err != nil {
+	if err := httputil.GetJSON(client, url, &nodesResp); err != nil {
 		return 0, err
 	}
 	var replicaCounts stats.Float64Data
