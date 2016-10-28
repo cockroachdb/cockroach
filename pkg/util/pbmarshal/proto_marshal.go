@@ -20,11 +20,10 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 var _ gwruntime.Marshaler = (*ProtoPb)(nil)
