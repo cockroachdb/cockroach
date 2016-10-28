@@ -8,12 +8,12 @@ spawn $argv sql
 eexpect root@
 
 # Check that syntax errors are handled client-side when running interactive.
-send "begin;\r"
+send "begin;\r\r"
 eexpect BEGIN
 eexpect root@
 
 send "select 3+;\r"
-eexpect "statement not sent"
+eexpect "statement ignored"
 eexpect root@
 
 send "select 1;\r"
