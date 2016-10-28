@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Marc berhault (marc@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package cli
 
@@ -43,6 +44,8 @@ type sqlConnI interface {
 	driver.Conn
 	driver.Execer
 	driver.Queryer
+	// Next allows retrieval of the next set of results in a multi-statement
+	// query. Returns ErrNoMoreResults if no more results are available.
 	Next() (driver.Rows, error)
 }
 
@@ -87,7 +90,8 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
+	sRows := makeSQLRows(rows.(sqlRowsI), c)
+	return &sRows, nil
 }
 
 func (c *sqlConn) Next() (*sqlRows, error) {
@@ -102,7 +106,8 @@ func (c *sqlConn) Next() (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
+	sRows := makeSQLRows(rows.(sqlRowsI), c)
+	return &sRows, nil
 }
 
 func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
@@ -111,9 +116,14 @@ func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, e
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	vals := make([]driver.Value, len(rows.Columns()))
-	err = rows.Next(vals)
-	return vals, err
+	hasRow := rows.Next()
+	if !hasRow {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("no results for query: %q", query)
+	}
+	return rows.ScanRaw(), nil
 }
 
 func (c *sqlConn) Close() {
@@ -126,29 +136,43 @@ func (c *sqlConn) Close() {
 	}
 }
 
+// sqlRowsI models a driver.Rows for the use of SQLRows.
 type sqlRowsI interface {
 	driver.Rows
 	Result() driver.Result
 	Tag() string
 }
 
+// sqlRows wraps a driver.Rows and attempts to give it an interface more similar
+// to that of a golang sql.Rows.
 type sqlRows struct {
-	rows sqlRowsI
-	conn *sqlConn
+	rows    sqlRowsI
+	conn    *sqlConn
+	vals    []driver.Value
+	lastErr error
 }
 
+// makeSQLRows wraps a rows.
+func makeSQLRows(rows sqlRowsI, conn *sqlConn) sqlRows {
+	return sqlRows{rows: rows, conn: conn}
+}
+
+// Columns returns the list of columns.
 func (r *sqlRows) Columns() []string {
 	return r.rows.Columns()
 }
 
+// Result returns the query result.
 func (r *sqlRows) Result() driver.Result {
 	return r.rows.Result()
 }
 
+// Tag returns the result tag.
 func (r *sqlRows) Tag() string {
 	return r.rows.Tag()
 }
 
+// Close releases resources.
 func (r *sqlRows) Close() error {
 	err := r.rows.Close()
 	if err == driver.ErrBadConn {
@@ -161,18 +185,50 @@ func (r *sqlRows) Close() error {
 // so that subsequent calls to Next and Close do not mutate values. This
 // makes it slower than theoretically possible but the safety concerns
 // (since this is unobvious and unexpected behavior) outweigh.
-func (r *sqlRows) Next(values []driver.Value) error {
-	err := r.rows.Next(values)
-	if err == driver.ErrBadConn {
-		r.conn.reconnecting = true
-		r.conn.Close()
+//
+// It returns true on success, or false if there is no next result row or an
+// error happened while preparing it. Err should be consulted to distinguish
+// between the two cases.
+//
+// Every call to Scan, even the first one, must be preceded by a call to Next.
+func (r *sqlRows) Next() bool {
+	if r.vals == nil {
+		r.vals = make([]driver.Value, len(r.rows.Columns()))
 	}
-	for i, v := range values {
+	err := r.rows.Next(r.vals)
+	if err != nil {
+		r.lastErr = err
+		if err == driver.ErrBadConn {
+			r.conn.Close()
+			r.conn.reconnecting = true
+		}
+		return false
+	}
+	for i, v := range r.vals {
 		if b, ok := v.([]byte); ok {
-			values[i] = append([]byte{}, b...)
+			r.vals[i] = append([]byte{}, b...)
 		}
 	}
-	return err
+	return true
+}
+
+// Err returns the error, if any, that was encountered during iteration.
+// It may be called after a call to Close() or after Next() returns false.
+func (r *sqlRows) Err() error {
+	if r.lastErr == io.EOF {
+		return nil
+	}
+	return r.lastErr
+}
+
+// ScanRaw returns the current row as []driver.Value.
+// Every call to ScanRaw, even the first one, must be preceded by a call to
+// Next.
+func (r *sqlRows) ScanRaw() []driver.Value {
+	if r.lastErr != nil {
+		panic(fmt.Sprintf("ScanRaw called after error had been encountered: %s", r.lastErr))
+	}
+	return r.vals
 }
 
 func makeSQLConn(url string) *sqlConn {
@@ -283,24 +339,17 @@ func sqlRowsToStrings(rows *sqlRows, pretty bool) ([]string, [][]string, string,
 	}
 
 	var allRows [][]string
-	var vals []driver.Value
-	if len(cols) > 0 {
-		vals = make([]driver.Value, len(cols))
-	}
 
-	for {
-		err := rows.Next(vals)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, nil, "", err
-		}
+	for rows.Next() {
+		vals := rows.ScanRaw()
 		rowStrings := make([]string, len(cols))
 		for i, v := range vals {
 			rowStrings[i] = formatVal(v, pretty, pretty)
 		}
 		allRows = append(allRows, rowStrings)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, "", err
 	}
 
 	result := rows.Result()

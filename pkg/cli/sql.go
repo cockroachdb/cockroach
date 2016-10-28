@@ -18,7 +18,6 @@ package cli
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -363,22 +362,12 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Query the server for the current transaction status.
-	query := makeQuery(`SHOW TRANSACTION STATUS`)
-	rows, err := query(c.conn)
-	if err != nil {
+	vals, err := c.conn.QueryRow("SHOW TRANSACTION STATUS", nil)
+	if err != nil || len(vals) == 0 {
+		fmt.Fprintf(osStderr, "invalid transaction status: %v", err)
 		return c.refreshPrompts(" ?", nextState)
 	}
-	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(osStderr, "invalid transaction status")
-		return c.refreshPrompts(" ?", nextState)
-	}
-	val := make([]driver.Value, len(rows.Columns()))
-	err = rows.Next(val)
-	if err != nil {
-		fmt.Fprintf(osStderr, "invalid transaction status")
-		return c.refreshPrompts(" ?", nextState)
-	}
-	txnString := formatVal(val[0], false, false)
+	txnString := formatVal(vals[0], false, false)
 
 	// Change the prompt based on the response from the server.
 	promptSuffix := " ?"

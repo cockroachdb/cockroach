@@ -149,14 +149,10 @@ func getTableNames(conn *sqlConn, dbName parser.Name) (tableNames []string, err 
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 
-	vals := make([]driver.Value, 1)
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, err
-		}
+	for rows.Next() {
+		vals := rows.ScanRaw()
 		nameI := vals[0]
 		name, ok := nameI.(string)
 		if !ok {
@@ -164,8 +160,7 @@ func getTableNames(conn *sqlConn, dbName parser.Name) (tableNames []string, err 
 		}
 		tableNames = append(tableNames, name)
 	}
-
-	if err := rows.Close(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -187,15 +182,11 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	vals := make([]driver.Value, 2)
+	defer func() { _ = rows.Close() }()
 	coltypes := make(map[string]string)
 	var colnames bytes.Buffer
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return tableMetadata{}, err
-		}
+	for rows.Next() {
+		vals := rows.ScanRaw()
 		nameI, typI := vals[0], vals[1]
 		name, ok := nameI.(string)
 		if !ok {
@@ -211,6 +202,9 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		}
 		parser.Name(name).Format(&colnames, parser.FmtSimple)
 	}
+	if err := rows.Err(); err != nil {
+		return tableMetadata{}, err
+	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
 	}
@@ -220,18 +214,13 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	vals = make([]driver.Value, 5)
 
 	var numIndexCols int
 	var primaryIndex string
 	var idxColNames bytes.Buffer
 	// Find the primary index columns.
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return tableMetadata{}, err
-		}
+	for rows.Next() {
+		vals := rows.ScanRaw()
 		b, ok := vals[1].(string)
 		if !ok {
 			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[1])
@@ -251,6 +240,9 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		parser.Name(b).Format(&idxColNames, parser.FmtSimple)
 		numIndexCols++
 	}
+	if err := rows.Err(); err != nil {
+		return tableMetadata{}, err
+	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
 	}
@@ -258,7 +250,7 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		return tableMetadata{}, fmt.Errorf("no primary key index found")
 	}
 
-	vals, err = conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName), nil)
+	vals, err := conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName), nil)
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -322,13 +314,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 		cols = cols[md.numIndexCols:]
 		inserts := make([][]string, 0, limit)
 		i := 0
-		for i < limit {
-			vals := make([]driver.Value, len(cols)+len(pkcols))
-			if err := rows.Next(vals); err == io.EOF {
-				break
-			} else if err != nil {
-				return err
-			}
+		for i < limit && rows.Next() {
+			vals := rows.ScanRaw()
 			if pk == nil {
 				q = fmt.Sprintf(bs, wbuf.String())
 			}
@@ -385,6 +372,11 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 			}
 			inserts = append(inserts, ivals)
 			i++
+		}
+		if i != limit {
+			if err := rows.Err(); err != nil {
+				return err
+			}
 		}
 		for si, sv := range pk {
 			b, ok := sv.([]byte)

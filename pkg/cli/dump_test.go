@@ -437,10 +437,11 @@ func TestDumpRandom(t *testing.T) {
 				}
 			}()
 			for gi, generatedRow := range generatedRows {
-				fetched := make([]driver.Value, len(nrows.Columns()))
-				if err := nrows.Next(fetched); err != nil {
-					t.Fatal(err)
+				hasRow := nrows.Next()
+				if !hasRow {
+					t.Fatalf("no more rows; was expecting: %d - %s", gi, generatedRow)
 				}
+				fetched := nrows.ScanRaw()
 
 				for i, fetchedVal := range fetched {
 					generatedVal := generatedRow[i]
@@ -456,6 +457,13 @@ func TestDumpRandom(t *testing.T) {
 				if t.Failed() {
 					t.FailNow()
 				}
+			}
+			hasRow := nrows.Next()
+			if hasRow {
+				t.Fatalf("unexpected row: %s", nrows.ScanRaw())
+			}
+			if err := nrows.Err(); err != nil {
+				t.Fatal(err)
 			}
 		}
 

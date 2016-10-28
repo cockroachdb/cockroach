@@ -20,7 +20,6 @@ package cli
 import (
 	"database/sql/driver"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"sort"
@@ -52,17 +51,10 @@ func queryZones(conn *sqlConn) (map[sqlbase.ID]config.ZoneConfig, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	vals := make([]driver.Value, len(rows.Columns()))
 	zones := make(map[sqlbase.ID]config.ZoneConfig)
 
-	for {
-		if err := rows.Next(vals); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-
+	for rows.Next() {
+		vals := rows.ScanRaw()
 		id, ok := vals[0].(int64)
 		if !ok {
 			return nil, fmt.Errorf("unexpected value: %T", vals[0])
@@ -72,6 +64,12 @@ func queryZones(conn *sqlConn) (map[sqlbase.ID]config.ZoneConfig, error) {
 			return nil, err
 		}
 		zones[sqlbase.ID(id)] = zone
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return zones, nil
 }
@@ -87,14 +85,11 @@ func queryZone(conn *sqlConn, id sqlbase.ID) (config.ZoneConfig, bool, error) {
 		return config.ZoneConfig{}, false, fmt.Errorf("unexpected result columns: %d", len(rows.Columns()))
 	}
 
-	vals := make([]driver.Value, 1)
-	if err := rows.Next(vals); err != nil {
-		if err == io.EOF {
-			return config.ZoneConfig{}, false, nil
-		}
-		return config.ZoneConfig{}, false, err
+	hasRow := rows.Next()
+	if !hasRow {
+		return config.ZoneConfig{}, false, rows.Err()
 	}
-
+	vals := rows.ScanRaw()
 	var zone config.ZoneConfig
 	return zone, true, unmarshalProto(vals[0], &zone)
 }
@@ -116,26 +111,24 @@ func queryDescriptors(conn *sqlConn) (map[sqlbase.ID]*sqlbase.Descriptor, error)
 	}
 	defer func() { _ = rows.Close() }()
 
-	vals := make([]driver.Value, len(rows.Columns()))
 	descs := map[sqlbase.ID]*sqlbase.Descriptor{}
 
-	for {
-		if err := rows.Next(vals); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-
+	for rows.Next() {
+		vals := rows.ScanRaw()
 		desc := &sqlbase.Descriptor{}
 		if err := unmarshalProto(vals[0], desc); err != nil {
 			return nil, err
 		}
 		descs[desc.GetID()] = desc
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return descs, nil
 }
+
+var errNamespaceNotFound = fmt.Errorf("namespace not found")
 
 func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID, error) {
 	rows, err := makeQuery(
@@ -146,16 +139,18 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 	}
 	defer func() { _ = rows.Close() }()
 
-	if err != nil {
-		return 0, fmt.Errorf("%s not found: %v", name, err)
-	}
 	if len(rows.Columns()) != 1 {
 		return 0, fmt.Errorf("unexpected result columns: %d", len(rows.Columns()))
 	}
-	vals := make([]driver.Value, 1)
-	if err := rows.Next(vals); err != nil {
-		return 0, err
+	hasRow := rows.Next()
+	if !hasRow {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, errNamespaceNotFound
 	}
+
+	vals := rows.ScanRaw()
 	switch t := vals[0].(type) {
 	case int64:
 		return sqlbase.ID(t), nil
@@ -232,7 +227,7 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 
 	path, err := queryDescriptorIDPath(conn, names)
 	if err != nil {
-		if err == io.EOF {
+		if err == errNamespaceNotFound {
 			fmt.Printf("%s not found\n", args[0])
 			return nil
 		}
@@ -370,7 +365,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 
 	path, err := queryDescriptorIDPath(conn, names)
 	if err != nil {
-		if err == io.EOF {
+		if err == errNamespaceNotFound {
 			fmt.Printf("%s not found\n", args[0])
 			return nil
 		}
@@ -461,7 +456,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 
 	path, err := queryDescriptorIDPath(conn, names)
 	if err != nil {
-		if err == io.EOF {
+		if err == errNamespaceNotFound {
 			fmt.Printf("%s not found\n", args[0])
 			return nil
 		}
