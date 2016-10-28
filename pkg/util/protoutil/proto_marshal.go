@@ -33,6 +33,14 @@ var _ gwruntime.Marshaler = (*ProtoPb)(nil)
 // Interceptor is not safe to modify concurrently with calls to Marshal.
 var Interceptor = func(_ proto.Message) {}
 
+// Marshal uses proto.Marshal to encode pb into the wire format. It is used in
+// some tests to intercept calls to proto.Marshal.
+func Marshal(pb proto.Message) ([]byte, error) {
+	Interceptor(pb)
+
+	return proto.Marshal(pb)
+}
+
 // ProtoPb is a gwruntime.Marshaler that uses github.com/gogo/protobuf/proto.
 type ProtoPb struct{}
 
@@ -42,13 +50,9 @@ func (*ProtoPb) ContentType() string {
 }
 
 // Marshal implements gwruntime.Marshaler.
-// Marshal uses proto.Marshal to encode pb into the wire format. It is used in
-// some tests to intercept calls to proto.Marshal.
 func (*ProtoPb) Marshal(v interface{}) ([]byte, error) {
 	if p, ok := v.(proto.Message); ok {
-		Interceptor(p)
-
-		return proto.Marshal(p)
+		Marshal(p)
 	}
 	return nil, errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
