@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package pbmarshal
+package protoutil
 
 import (
 	"bytes"
@@ -38,7 +38,7 @@ type JSONPb jsonpb.Marshaler
 
 // ContentType implements gwruntime.Marshaler.
 func (*JSONPb) ContentType() string {
-	return "application/json"
+	return httphttputil.JSONContentType
 }
 
 // Marshal implements gwruntime.Marshaler.

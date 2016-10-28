@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package pbmarshal
+package protoutil
 
 import (
 	"io"
@@ -24,23 +24,31 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 var _ gwruntime.Marshaler = (*ProtoPb)(nil)
+
+// Interceptor will be called with every proto before it is marshalled.
+// Interceptor is not safe to modify concurrently with calls to Marshal.
+var Interceptor = func(_ proto.Message) {}
 
 // ProtoPb is a gwruntime.Marshaler that uses github.com/gogo/protobuf/proto.
 type ProtoPb struct{}
 
 // ContentType implements gwruntime.Marshaler.
 func (*ProtoPb) ContentType() string {
-	return "application/x-protobuf"
+	return httputil.ProtoContentType
 }
 
 // Marshal implements gwruntime.Marshaler.
+// Marshal uses proto.Marshal to encode pb into the wire format. It is used in
+// some tests to intercept calls to proto.Marshal.
 func (*ProtoPb) Marshal(v interface{}) ([]byte, error) {
 	if p, ok := v.(proto.Message); ok {
-		return protoutil.Marshal(p)
+		Interceptor(p)
+
+		return proto.Marshal(p)
 	}
 	return nil, errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
@@ -86,7 +94,7 @@ func (*ProtoPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 // Encode implements gwruntime.Marshaler.
 func (e *protoEncoder) Encode(v interface{}) error {
 	if p, ok := v.(proto.Message); ok {
-		bytes, err := protoutil.Marshal(p)
+		bytes, err := Marshal(p)
 		if err == nil {
 			_, err = e.w.Write(bytes)
 		}
