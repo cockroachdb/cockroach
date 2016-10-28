@@ -107,7 +107,12 @@ type StatementResults struct {
 
 // Close ensures that the resources claimed by the results are released.
 func (s *StatementResults) Close() {
-	for _, r := range s.ResultList {
+	s.ResultList.Close()
+}
+
+// Close ensures that the resources claimed by the results are released.
+func (rl ResultList) Close() {
+	for _, r := range rl {
 		r.Close()
 	}
 }
@@ -564,6 +569,10 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			}
 
 			var err error
+			if results != nil {
+				// Some results were produced by a previous attempt. Discard them.
+				ResultList(results).Close()
+			}
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
 
 			// TODO(andrei): Until #7881 fixed.
