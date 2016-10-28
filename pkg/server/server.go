@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/elazarl/go-bindata-assetfs"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
