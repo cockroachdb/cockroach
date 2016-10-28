@@ -348,6 +348,7 @@ pg_class
 pg_constraint
 pg_indexes
 pg_namespace
+pg_settings
 pg_tables
 descriptor
 eventlog
@@ -372,6 +373,7 @@ schemata
 schema_privileges
 rangelog
 pg_tables
+pg_settings
 pg_namespace
 pg_indexes
 pg_constraint
@@ -399,6 +401,7 @@ def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_settings        SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
@@ -437,6 +440,7 @@ def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_settings        SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
 user root
@@ -464,6 +468,7 @@ def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_settings        SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
 user root

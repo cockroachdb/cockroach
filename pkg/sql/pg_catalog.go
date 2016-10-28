@@ -48,6 +48,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+		pgCatalogSettingsTable,
 	},
 }
 
@@ -587,6 +588,59 @@ CREATE TABLE pg_catalog.pg_namespace (
 				parser.DNull,               // aclitem
 			)
 		})
+	},
+}
+
+// See : https://www.postgresql.org/docs/9.6/static/view-pg-settings.html
+var pgCatalogSettingsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_settings (
+    name STRING,
+    setting STRING,
+    unit   STRING,
+    category STRING,
+    short_desc STRING,
+    extra_desc STRING,
+    context STRING,
+    vartype STRING,
+    source STRING,
+    min_val STRING,
+    max_val STRING,
+    enumvals STRING,
+    boot_val STRING,
+    reset_val STRING,
+    sourcefile STRING,
+    sourceline int,
+    pending_restart BOOL  
+);    
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		for _, vName := range varNames {
+			gen := varGen[vName]
+			value := gen(p)
+			if err := addRow(
+				parser.NewDString(vName),    // name
+				parser.NewDString(value),    // setting
+				parser.DNull,                // unit
+				parser.DNull,                // category
+				parser.DNull,                // short_desc
+				parser.DNull,                // extra_desc
+				parser.NewDString("user"),   // context
+				parser.NewDString("string"), // vartype
+				parser.DNull,                // source
+				parser.DNull,                // min_val
+				parser.DNull,                // max_val
+				parser.DNull,                // enumvals
+				parser.NewDString(value),    // boot_val
+				parser.NewDString(value),    // reset_val
+				parser.DNull,                // sourcefile
+				parser.DNull,                // sourceline
+				parser.MakeDBool(false),     // pending_restart
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 

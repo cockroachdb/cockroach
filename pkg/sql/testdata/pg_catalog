@@ -50,6 +50,7 @@ pg_class
 pg_constraint
 pg_indexes
 pg_namespace
+pg_settings
 pg_tables
 
 query TT colnames
@@ -132,6 +133,20 @@ oid         nspname             nspowner  aclitem
 3178318485  pg_catalog          NULL      NULL
 1793492844  system              NULL      NULL
 2091240128  test                NULL      NULL
+
+## pg_catalog.pg_settings
+
+query TTTTTTTTTTTTTTTTB colnames
+SELECT * FROM pg_catalog.pg_settings
+----
+name                           setting       unit  category  short_desc  extra_desc  context  vartype  source  min_val  max_val  enumvals  boot_val      reset_val      sourcefile  sourceline  pending_restart
+DATABASE                       test          NULL  NULL      NULL        NULL        user     string   NULL    NULL     NULL     NULL      test          test          NULL        NULL        false
+DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE  NULL  NULL      NULL        NULL        user     string   NULL    NULL     NULL     NULL      SERIALIZABLE  SERIALIZABLE  NULL        NULL        false
+SYNTAX                         Traditional   NULL  NULL      NULL        NULL        user     string   NULL    NULL     NULL     NULL      Traditional   Traditional   NULL        NULL        false
+TIME ZONE                      UTC           NULL  NULL      NULL        NULL        user     string   NULL    NULL     NULL     NULL      UTC           UTC           NULL        NULL        false
+TRANSACTION ISOLATION LEVEL    SERIALIZABLE  NULL  NULL      NULL        NULL        user     string   NULL    NULL     NULL     NULL      SERIALIZABLE  SERIALIZABLE  NULL        NULL        false
+TRANSACTION PRIORITY           NORMAL        NULL  NULL      NULL        NULL        user     string   NULL    NULL     NULL     NULL      NORMAL        NORMAL        NULL        NULL        false
+
 
 ## pg_catalog.pg_tables
 
