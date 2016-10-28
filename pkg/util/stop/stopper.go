@@ -225,6 +225,26 @@ func (s *Stopper) RunTask(f func()) error {
 	return nil
 }
 
+// RunTaskWithErr adds one to the count of tasks left to quiesce in the system.
+// Any worker which is a "first mover" when starting tasks must call this method
+// before starting work on a new task. First movers include goroutines launched
+// to do periodic work and the kv/db.go gateway which accepts external client
+// requests.
+//
+// If the system is currently quiescing and function f was not called, returns
+// an error indicating this condition. Otherwise, returns whatever f returns.
+func (s *Stopper) RunTaskWithErr(f func() error) error {
+	file, line, _ := caller.Lookup(1)
+	key := taskKey{file, line}
+	if !s.runPrelude(key) {
+		return errUnavailable
+	}
+	// Call f.
+	defer s.Recover()
+	defer s.runPostlude(key)
+	return f()
+}
+
 // RunAsyncTask runs function f in a goroutine. It returns an error when the
 // Stopper is quiescing, in which case the function is not executed.
 func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) error {
