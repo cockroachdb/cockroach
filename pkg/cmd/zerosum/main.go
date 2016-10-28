@@ -456,7 +456,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	c.Start("zerosum", *workers, flag.Args())
+	c.Start("zerosum", *workers, flag.Args(), nil)
 
 	z := newZeroSum(c, *numAccounts, *chaosType)
 	z.run(*workers, *monkeys)
