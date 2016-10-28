@@ -34,6 +34,7 @@ var informationSchema = virtualSchema{
 		informationSchemaTableConstraintTable,
 		informationSchemaTablePrivileges,
 		informationSchemaTablesTable,
+		informationSchemaViewsTable,
 	},
 }
 
@@ -400,6 +401,51 @@ CREATE TABLE information_schema.tables (
 					parser.NewDString(table.Name), // table_name
 					tableType,                     // table_type
 					parser.NewDInt(parser.DInt(table.Version)), // version
+				)
+			},
+		)
+	},
+}
+
+var informationSchemaViewsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.views (
+    TABLE_CATALOG STRING NOT NULL DEFAULT '',
+    TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+    TABLE_NAME STRING NOT NULL DEFAULT '',
+    VIEW_DEFINITION STRING NOT NULL DEFAULT '',
+    CHECK_OPTION STRING NOT NULL DEFAULT '',
+    IS_UPDATABLE BOOL NOT NULL DEFAULT FALSE,
+    IS_INSERTABLE_INTO BOOL NOT NULL DEFAULT FALSE,
+    IS_TRIGGER_UPDATABLE BOOL NOT NULL DEFAULT FALSE,
+    IS_TRIGGER_DELETABLE BOOL NOT NULL DEFAULT FALSE,
+    IS_TRIGGER_INSERTABLE_INTO BOOL NOT NULL DEFAULT FALSE
+);`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				if !table.IsView() {
+					return nil
+				}
+				// Note that the view query printed will not include any column aliases
+				// specified outside the initial view query into the definition returned,
+				// unlike Postgres. For example, for the view created via
+				//  `CREATE VIEW (a) AS SELECT b FROM foo`
+				// we'll only print `SELECT b FROM foo` as the view definition here,
+				// while Postgres would more accurately print `SELECT b AS a FROM foo`.
+				// TODO(a-robinson): Insert column aliases into view query once we
+				// have a semantic query representation to work with (#10083).
+				return addRow(
+					defString,                          // table_catalog
+					parser.NewDString(db.Name),         // table_schema
+					parser.NewDString(table.Name),      // table_name
+					parser.NewDString(table.ViewQuery), // view_definition
+					parser.DNull,                       // check_option
+					parser.DNull,                       // is_updatable
+					parser.DNull,                       // is_insertable_into
+					parser.DNull,                       // is_trigger_updatable
+					parser.DNull,                       // is_trigger_deletable
+					parser.DNull,                       // is_trigger_insertable_into
 				)
 			},
 		)
