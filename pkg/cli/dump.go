@@ -88,10 +88,12 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 	if err != nil {
 		return err
 	}
-	vals = make([]driver.Value, 2)
+	defer func() { _ = rows.Close() }()
 	coltypes := make(map[string]string)
-	for {
-		if err := rows.Next(vals); err == io.EOF {
+	for rows.Next() {
+		var err error
+		vals, err = rows.ScanRaw()
+		if err == io.EOF {
 			break
 		} else if err != nil {
 			return err
@@ -119,11 +121,13 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 	if err != nil {
 		return err
 	}
-	vals = make([]driver.Value, 5)
+	defer func() { _ = rows.Close() }()
 	var primaryIndex string
 	// Find the primary index columns.
-	for {
-		if err := rows.Next(vals); err == io.EOF {
+	for rows.Next() {
+		var err error
+		vals, err = rows.ScanRaw()
+		if err == io.EOF {
 			break
 		} else if err != nil {
 			return err
@@ -198,8 +202,9 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 		inserts := make([][]string, 0, limit)
 		i := 0
 		for i < limit {
-			vals := make([]driver.Value, len(cols)+len(pkcols))
-			if err := rows.Next(vals); err == io.EOF {
+			rows.Next()
+			vals, err := rows.ScanRaw()
+			if err == io.EOF {
 				break
 			} else if err != nil {
 				return err

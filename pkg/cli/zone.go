@@ -52,11 +52,11 @@ func queryZones(conn *sqlConn) (map[sqlbase.ID]config.ZoneConfig, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	vals := make([]driver.Value, len(rows.Columns()))
 	zones := make(map[sqlbase.ID]config.ZoneConfig)
 
-	for {
-		if err := rows.Next(vals); err != nil {
+	for rows.Next() {
+		vals, err := rows.ScanRaw()
+		if err != nil {
 			if err == io.EOF {
 				break
 			}
@@ -87,8 +87,9 @@ func queryZone(conn *sqlConn, id sqlbase.ID) (config.ZoneConfig, bool, error) {
 		return config.ZoneConfig{}, false, fmt.Errorf("unexpected result columns: %d", len(rows.Columns()))
 	}
 
-	vals := make([]driver.Value, 1)
-	if err := rows.Next(vals); err != nil {
+	rows.Next()
+	vals, err := rows.ScanRaw()
+	if err != nil {
 		if err == io.EOF {
 			return config.ZoneConfig{}, false, nil
 		}
@@ -116,11 +117,11 @@ func queryDescriptors(conn *sqlConn) (map[sqlbase.ID]*sqlbase.Descriptor, error)
 	}
 	defer func() { _ = rows.Close() }()
 
-	vals := make([]driver.Value, len(rows.Columns()))
 	descs := map[sqlbase.ID]*sqlbase.Descriptor{}
 
-	for {
-		if err := rows.Next(vals); err != nil {
+	for rows.Next() {
+		vals, err := rows.ScanRaw()
+		if err != nil {
 			if err == io.EOF {
 				break
 			}
@@ -152,16 +153,13 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 	if len(rows.Columns()) != 1 {
 		return 0, fmt.Errorf("unexpected result columns: %d", len(rows.Columns()))
 	}
-	vals := make([]driver.Value, 1)
-	if err := rows.Next(vals); err != nil {
+	rows.Next()
+
+	var id int64
+	if err := rows.Scan(&id); err != nil {
 		return 0, err
 	}
-	switch t := vals[0].(type) {
-	case int64:
-		return sqlbase.ID(t), nil
-	default:
-		return 0, fmt.Errorf("unexpected result type: %T", vals[0])
-	}
+	return sqlbase.ID(id), nil
 }
 
 func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {

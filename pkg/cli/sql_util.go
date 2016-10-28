@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sqlutil"
 	"github.com/cockroachdb/pq"
 )
 
@@ -41,6 +42,8 @@ type sqlConnI interface {
 	driver.Conn
 	driver.Execer
 	driver.Queryer
+	// Next allows retrieval of the next set of results in a multi-statement
+	// query. Returns ErrNoMoreResults if no more results are available.
 	Next() (driver.Rows, error)
 }
 
@@ -73,7 +76,7 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 	return err
 }
 
-func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
+func (c *sqlConn) Query(query string, args []driver.Value) (*sqlutil.SQLRows, error) {
 	if err := c.ensureConn(); err != nil {
 		return nil, err
 	}
@@ -85,10 +88,11 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
+	sqlRows := sqlutil.MakeSQLRows(rows.(sqlutil.SQLRowsI), c)
+	return &sqlRows, nil
 }
 
-func (c *sqlConn) Next() (*sqlRows, error) {
+func (c *sqlConn) Next() (*sqlutil.SQLRows, error) {
 	if c.conn == nil {
 		return nil, driver.ErrBadConn
 	}
@@ -100,7 +104,8 @@ func (c *sqlConn) Next() (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
+	sqlRows := sqlutil.MakeSQLRows(rows.(sqlutil.SQLRowsI), c)
+	return &sqlRows, nil
 }
 
 func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
@@ -109,9 +114,8 @@ func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, e
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	vals := make([]driver.Value, len(rows.Columns()))
-	err = rows.Next(vals)
-	return vals, err
+	rows.Next()
+	return rows.ScanRaw()
 }
 
 func (c *sqlConn) Close() {
@@ -124,53 +128,9 @@ func (c *sqlConn) Close() {
 	}
 }
 
-type sqlRowsI interface {
-	driver.Rows
-	Result() driver.Result
-	Tag() string
-}
-
-type sqlRows struct {
-	rows sqlRowsI
-	conn *sqlConn
-}
-
-func (r *sqlRows) Columns() []string {
-	return r.rows.Columns()
-}
-
-func (r *sqlRows) Result() driver.Result {
-	return r.rows.Result()
-}
-
-func (r *sqlRows) Tag() string {
-	return r.rows.Tag()
-}
-
-func (r *sqlRows) Close() error {
-	err := r.rows.Close()
-	if err == driver.ErrBadConn {
-		r.conn.Close()
-	}
-	return err
-}
-
-// Next populates values with the next row of results. []byte values are copied
-// so that subsequent calls to Next and Close do not mutate values. This
-// makes it slower than theoretically possible but the safety concerns
-// (since this is unobvious and unexpected behavior) outweigh.
-func (r *sqlRows) Next(values []driver.Value) error {
-	err := r.rows.Next(values)
-	if err == driver.ErrBadConn {
-		r.conn.reconnecting = true
-		r.conn.Close()
-	}
-	for i, v := range values {
-		if b, ok := v.([]byte); ok {
-			values[i] = append([]byte{}, b...)
-		}
-	}
-	return err
+func (c *sqlConn) Reset() {
+	c.Close()
+	c.reconnecting = true
 }
 
 func makeSQLConn(url string) *sqlConn {
@@ -213,14 +173,14 @@ func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
 	return makeSQLConn(sqlURL), nil
 }
 
-type queryFunc func(conn *sqlConn) (*sqlRows, error)
+type queryFunc func(conn *sqlConn) (*sqlutil.SQLRows, error)
 
-func nextResult(conn *sqlConn) (*sqlRows, error) {
+func nextResult(conn *sqlConn) (*sqlutil.SQLRows, error) {
 	return conn.Next()
 }
 
 func makeQuery(query string, parameters ...driver.Value) queryFunc {
-	return func(conn *sqlConn) (*sqlRows, error) {
+	return func(conn *sqlConn) (*sqlutil.SQLRows, error) {
 		// driver.Value is an alias for interface{}, but must adhere to a restricted
 		// set of types when being passed to driver.Queryer.Query (see
 		// driver.IsValue). We use driver.DefaultParameterConverter to perform the
@@ -273,7 +233,7 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc, pretty b
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
 // If pretty is true, then more characters are not escaped.
-func sqlRowsToStrings(rows *sqlRows, pretty bool) ([]string, [][]string, string, error) {
+func sqlRowsToStrings(rows *sqlutil.SQLRows, pretty bool) ([]string, [][]string, string, error) {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
@@ -281,13 +241,9 @@ func sqlRowsToStrings(rows *sqlRows, pretty bool) ([]string, [][]string, string,
 	}
 
 	var allRows [][]string
-	var vals []driver.Value
-	if len(cols) > 0 {
-		vals = make([]driver.Value, len(cols))
-	}
 
-	for {
-		err := rows.Next(vals)
+	for rows.Next() {
+		vals, err := rows.ScanRaw()
 		if err == io.EOF {
 			break
 		}

@@ -290,8 +290,9 @@ func TestDumpRandom(t *testing.T) {
 				}
 			}()
 			for gi, generatedRow := range generatedRows {
-				fetched := make([]driver.Value, len(nrows.Columns()))
-				if err := nrows.Next(fetched); err != nil {
+				nrows.Next()
+				fetched, err := nrows.ScanRaw()
+				if err != nil {
 					t.Fatal(err)
 				}
 
