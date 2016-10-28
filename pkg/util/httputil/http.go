@@ -14,7 +14,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package httputil
 
 import (
 	"bytes"

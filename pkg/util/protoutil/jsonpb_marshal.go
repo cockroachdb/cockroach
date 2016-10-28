@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package util
+package protoutil
 
 import (
 	"bytes"
@@ -27,6 +27,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 var _ gwruntime.Marshaler = (*JSONPb)(nil)
@@ -38,7 +40,7 @@ type JSONPb jsonpb.Marshaler
 
 // ContentType implements gwruntime.Marshaler.
 func (*JSONPb) ContentType() string {
-	return "application/json"
+	return httputil.JSONContentType
 }
 
 // Marshal implements gwruntime.Marshaler.
