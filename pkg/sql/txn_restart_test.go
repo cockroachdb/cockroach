@@ -505,9 +505,21 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	// of txns (statements batched together with the BEGIN stmt) - are retried.
 	// We also exercise the SQL cluster logical timestamp in here, because
 	// this must be properly propagated across retries.
+	//
+	// The SELECT within the transaction also checks that discarded
+	// intermediate result sets are properly released: the result set it
+	// produces is accounted for by the session monitor, and if it is
+	// not properly released upon a retry the monitor will cause the
+	// server to panic (and thus the test to fail) when the connection
+	// is closed.
+	//
+	// TODO(knz) This test can be made more robust by exposing the
+	// current allocation count in monitor and checking that it has the
+	// same value at the beginning of each retry.
 	if _, err := sqlDB.Exec(`
 INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp());
 BEGIN;
+SELECT * FROM t.test;
 INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp());
 INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp());
 END;
