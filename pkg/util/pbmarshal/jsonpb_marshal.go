@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package util
+package pbmarshal
 
 import (
 	"bytes"
