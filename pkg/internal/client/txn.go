@@ -49,6 +49,8 @@ type Txn struct {
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
+	// commitTriggers are run upon successful commit.
+	commitTriggers []func()
 	// The txn has to be committed by this deadline. A nil value indicates no
 	// deadline.
 	deadline *hlc.Timestamp
@@ -313,6 +315,9 @@ func (txn *Txn) commit() error {
 	err := txn.sendEndTxnReq(true /* commit */, txn.deadline)
 	if err == nil {
 		txn.finalized = true
+		for _, t := range txn.commitTriggers {
+			t()
+		}
 	}
 	return err
 }
@@ -396,6 +401,12 @@ func (txn *Txn) Rollback() error {
 	err := txn.sendEndTxnReq(false /* commit */, nil)
 	txn.finalized = true
 	return err
+}
+
+// AddCommitTrigger adds a closure to be executed on successful commit
+// of the transaction.
+func (txn *Txn) AddCommitTrigger(trigger func()) {
+	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *hlc.Timestamp) error {
@@ -542,6 +553,8 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 				r.Reset()
 			}
 		}
+		txn.commitTriggers = nil
+
 		log.VEventf(txn.Context, 2, "automatically retrying transaction: %s because of error: %s",
 			txn.DebugName(), err)
 	}

@@ -148,7 +148,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 	}
 
-	// Close the wait channel and wait for the error from the pending SQL insert.
+	// Wait for the error from the pending SQL insert.
 	if err := <-sqlErrCh; !testutils.IsError(err, "transaction commit result is ambiguous") {
 		t.Errorf("expected ambiguous commit error; got %v", err)
 	}

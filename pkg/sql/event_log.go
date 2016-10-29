@@ -88,10 +88,12 @@ func (ev EventLogger) InsertEventRecord(
 	txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{},
 ) error {
 	// Record event record insertion in local log output.
-	log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",
-		eventType,
-		targetID,
-		info)
+	txn.AddCommitTrigger(func() {
+		log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",
+			eventType,
+			targetID,
+			info)
+	})
 
 	const insertEventTableStmt = `
 INSERT INTO system.eventlog (
