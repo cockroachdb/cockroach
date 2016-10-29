@@ -161,6 +161,14 @@ SELECT SUBSTRING('f(oabaroob' from '\(o(.)b' for '+')
 query error unknown signature for SUBSTRING: SUBSTRING()
 SELECT SUBSTRING()
 
+query error unknown signature for CONCAT_WS: CONCAT_WS()
+SELECT CONCAT_WS()
+
+query T
+SELECT CONCAT_WS(NULL::STRING, 'a', 'b')
+----
+NULL
+
 query T
 SELECT CONCAT_WS(',', 'abcde', NULL)
 ----
