@@ -21,8 +21,11 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -164,4 +167,50 @@ func (r *RSG) Float64() float64 {
 	}
 	r.lock.Unlock()
 	return v
+}
+
+// GenerateRandomArg generates a random, valid, SQL function argument of
+// the spcified type.
+func (r *RSG) GenerateRandomArg(typ parser.Type) string {
+	if r.Intn(10) == 0 {
+		return "NULL"
+	}
+	var v interface{}
+	switch typ {
+	case parser.TypeInt:
+		i := r.Int63()
+		i -= r.Int63()
+		v = i
+	case parser.TypeFloat, parser.TypeDecimal:
+		v = r.Float64()
+	case parser.TypeString:
+		v = `'string'`
+	case parser.TypeBytes:
+		v = `b'bytes'`
+	case parser.TypeTimestamp, parser.TypeTimestampTZ:
+		t := time.Unix(0, r.Int63())
+		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
+	case parser.TypeBool:
+		if r.Intn(2) == 0 {
+			v = "false"
+		} else {
+			v = "true"
+		}
+	case parser.TypeDate:
+		i := r.Int63()
+		i -= r.Int63()
+		d := parser.NewDDate(parser.DDate(i))
+		v = fmt.Sprintf(`'%s'`, d)
+	case parser.TypeInterval:
+		d := duration.Duration{Nanos: r.Int63()}
+		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
+	default:
+		switch typ.(type) {
+		case parser.TTuple:
+			v = "NULL"
+		default:
+			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))
+		}
+	}
+	return fmt.Sprint(v)
 }
