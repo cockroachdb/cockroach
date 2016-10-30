@@ -4,6 +4,7 @@ CREATE DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 foo-bar
@@ -16,6 +17,7 @@ DROP DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system
@@ -27,6 +29,7 @@ CREATE DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 foo bar
@@ -39,6 +42,7 @@ DROP DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system
@@ -123,6 +127,7 @@ SELECT * FROM d2.v4
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 d1
@@ -136,6 +141,7 @@ DROP DATABASE d1
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 d2
@@ -164,6 +170,7 @@ DROP DATABASE d2
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system

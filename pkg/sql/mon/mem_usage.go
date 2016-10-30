@@ -134,3 +134,8 @@ func (mm *MemoryUsageMonitor) StopMonitor(ctx context.Context) {
 	// uses outside of monitor control get errors.
 	mm.maxAllocatedBudget = 0
 }
+
+// CurAllocated exposes the current curAllocated member.
+func (mm *MemoryUsageMonitor) CurAllocated() int64 {
+	return mm.curAllocated
+}

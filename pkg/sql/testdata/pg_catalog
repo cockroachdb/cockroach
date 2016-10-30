@@ -128,6 +128,7 @@ query ITIT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner  aclitem
+2811752821  cdb_internal        NULL      NULL
 3061586988  constraint_db       NULL      NULL
 3816276882  information_schema  NULL      NULL
 3178318485  pg_catalog          NULL      NULL

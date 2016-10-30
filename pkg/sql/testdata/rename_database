@@ -1,6 +1,7 @@
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system
@@ -41,6 +42,7 @@ SHOW GRANTS ON DATABASE test
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system
@@ -89,6 +91,7 @@ ALTER DATABASE t RENAME TO v
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system

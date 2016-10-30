@@ -162,9 +162,10 @@ type ResultColumns []ResultColumn
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
-	cfg            ExecutorConfig
-	reCache        *parser.RegexpCache
-	virtualSchemas virtualSchemaHolder
+	cfg             ExecutorConfig
+	reCache         *parser.RegexpCache
+	virtualSchemas  virtualSchemaHolder
+	sessionRegistry sessionRegistry
 
 	// Transient stats.
 	Latency       *metric.Histogram
@@ -255,8 +256,9 @@ type ExecutorTestingKnobs struct {
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
-		cfg:     cfg,
-		reCache: parser.NewRegexpCache(512),
+		cfg:             cfg,
+		reCache:         parser.NewRegexpCache(512),
+		sessionRegistry: makeSessionRegistry(),
 
 		Latency:          metric.NewLatency(MetaLatency, cfg.MetricsSampleInterval),
 		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
@@ -300,6 +302,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 // NewDummyExecutor creates an empty Executor that is used for certain tests.
 func NewDummyExecutor() *Executor {
 	return &Executor{
+		sessionRegistry: makeSessionRegistry(),
 		cfg: ExecutorConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		},

@@ -1,0 +1,50 @@
+query error user root does not have DROP privilege on database cdb_internal
+ALTER DATABASE cdb_internal RENAME TO not_cdb_internal
+
+statement error user root does not have CREATE privilege on database cdb_internal
+CREATE TABLE cdb_internal.t (x INT)
+
+query error user root does not have DROP privilege on database cdb_internal
+DROP DATABASE cdb_internal
+
+statement ok
+CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
+
+query TIT
+SELECT t.name, t.version, t.state FROM cdb_internal.tables AS t JOIN system.namespace AS n ON (n.id = t.parent_id and n.name = 'testdb');
+----
+foo 1 PUBLIC
+
+# Ensure there is a lease taken on foo.
+query I
+SELECT * FROM testdb.foo
+----
+
+# Check the lease.
+query T
+SELECT l.name FROM cdb_internal.leases AS l JOIN system.namespace AS n ON (n.id = l.table_id and n.name = 'foo');
+----
+foo
+
+# We merely check the column list for schema_changes.
+query IITTITTTTT colnames
+SELECT * FROM cdb_internal.schema_changes
+----
+TABLE_ID PARENT_ID NAME TYPE TARGET_ID TARGET_NAME STATE DIRECTION RESUME_KEY RESUME_ENDKEY
+
+query TB colnames
+SET DATABASE=testdb; SELECT s.txn_state, tx.writing FROM cdb_internal.sessions AS s JOIN cdb_internal.txns AS tx USING(txn_id) WHERE s.default_database='testdb'
+----
+txn_state writing
+Open      false
+
+
+query TB colnames
+SET DATABASE=testdb; BEGIN;
+     DROP TABLE testdb.foo;
+     SELECT s.txn_state, tx.writing FROM cdb_internal.sessions AS s JOIN cdb_internal.txns AS tx USING(txn_id) WHERE s.default_database='testdb';
+     COMMIT
+----
+txn_state writing
+Open      true
+

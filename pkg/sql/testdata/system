@@ -1,6 +1,7 @@
 query T
 SHOW DATABASES
 ----
+cdb_internal
 information_schema
 pg_catalog
 system

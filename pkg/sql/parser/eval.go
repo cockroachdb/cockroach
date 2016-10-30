@@ -1488,6 +1488,25 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 	return ctx.stmtTimestamp
 }
 
+// TimestampToDecimal converts the logical timestamp into a decimal
+// value with the number of nanoseconds in the integer part and the
+// logical counter in the decimal part.
+func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
+	// Compute Walltime * 10^10 + Logical.
+	// We need 10 decimals for the Logical field because its maximum
+	// value is 4294967295 (2^32-1), a value with 10 decimal digits.
+	var res DDecimal
+	val := res.UnscaledBig()
+	val.SetInt64(ts.WallTime)
+	val.Mul(val, decimal.PowerOfTenInt(10))
+	val.Add(val, big.NewInt(int64(ts.Logical)))
+
+	// Shift 10 decimals to the right, so that the logical
+	// field appears as fractional part.
+	res.Dec.SetScale(10)
+	return &res
+}
+
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
@@ -1499,19 +1518,7 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 		}
 	}
 
-	// Compute Walltime * 10^10 + Logical.
-	// We need 10 decimals for the Logical field because its maximum
-	// value is 4294967295 (2^32-1), a value with 10 decimal digits.
-	var res DDecimal
-	val := res.UnscaledBig()
-	val.SetInt64(ctx.clusterTimestamp.WallTime)
-	val.Mul(val, decimal.PowerOfTenInt(10))
-	val.Add(val, big.NewInt(int64(ctx.clusterTimestamp.Logical)))
-
-	// Shift 10 decimals to the right, so that the logical
-	// field appears as fractional part.
-	res.Dec.SetScale(10)
-	return &res
+	return TimestampToDecimal(ctx.clusterTimestamp)
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per

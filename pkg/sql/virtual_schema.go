@@ -54,6 +54,7 @@ type virtualSchemaTable struct {
 var virtualSchemas = []virtualSchema{
 	informationSchema,
 	pgCatalog,
+	cdbInternal,
 }
 
 //
