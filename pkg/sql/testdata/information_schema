@@ -96,6 +96,7 @@ SET DATABASE = test
 query T
 SHOW DATABASES
 ----
+crdb_internal
 information_schema
 pg_catalog
 system
@@ -119,12 +120,12 @@ SHOW CREATE TABLE information_schema.tables
 ----
 Table                      CreateTable
 information_schema.tables  CREATE TABLE "information_schema.tables" (
-                               TABLE_CATALOG STRING NOT NULL DEFAULT '',
-                               TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-                               TABLE_NAME STRING NOT NULL DEFAULT '',
-                               TABLE_TYPE STRING NOT NULL DEFAULT '',
-                               VERSION INT NULL
-                           )
+			       TABLE_CATALOG STRING NOT NULL DEFAULT '',
+			       TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+			       TABLE_NAME STRING NOT NULL DEFAULT '',
+			       TABLE_TYPE STRING NOT NULL DEFAULT '',
+			       VERSION INT NULL
+			   )
 
 query TTBT colnames
 SHOW COLUMNS FROM information_schema.tables
@@ -159,7 +160,7 @@ Table  User  Privileges
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM information_schema.columns
-WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog'
+WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog' AND table_schema != 'crdb_internal'
 ----
 table_catalog  table_schema        table_name  column_name               ordinal_position
 def            system              descriptor  id                        1
@@ -291,6 +292,7 @@ query TTTT colnames
 SELECT * FROM information_schema.schemata
 ----
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           crdb_internal       NULL                        NULL
 def           information_schema  NULL                        NULL
 def           pg_catalog          NULL                        NULL
 def           system              NULL                        NULL
@@ -300,6 +302,7 @@ query TTTT colnames
 SELECT * FROM INFormaTION_SCHEMa.schemata
 ----
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           crdb_internal       NULL                        NULL
 def           information_schema  NULL                        NULL
 def           pg_catalog          NULL                        NULL
 def           system              NULL                        NULL
@@ -312,6 +315,7 @@ query TTTT colnames
 SELECT * FROM information_schema.schemata
 ----
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           crdb_internal       NULL                        NULL
 def           information_schema  NULL                        NULL
 def           other_db            NULL                        NULL
 def           pg_catalog          NULL                        NULL
@@ -335,6 +339,11 @@ CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 query T
 SELECT table_name FROM information_schema.tables
 ----
+leases
+schema_changes
+sessions
+tables
+txns
 columns
 key_column_usage
 schema_privileges
@@ -378,12 +387,16 @@ xyz
 views
 users
 ui
+txns
+tables
 tables
 table_privileges
 table_constraints
 statistics
+sessions
 schemata
 schema_privileges
+schema_changes
 rangelog
 pg_views
 pg_type
@@ -406,6 +419,11 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            crdb_internal       leases             SYSTEM VIEW  1
+def            crdb_internal       schema_changes     SYSTEM VIEW  1
+def            crdb_internal       sessions           SYSTEM VIEW  1
+def            crdb_internal       tables             SYSTEM VIEW  1
+def            crdb_internal       txns               SYSTEM VIEW  1
 def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
@@ -456,6 +474,11 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            crdb_internal       leases             SYSTEM VIEW  1
+def            crdb_internal       schema_changes     SYSTEM VIEW  1
+def            crdb_internal       sessions           SYSTEM VIEW  1
+def            crdb_internal       tables             SYSTEM VIEW  1
+def            crdb_internal       txns               SYSTEM VIEW  1
 def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
@@ -492,6 +515,11 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            crdb_internal       leases             SYSTEM VIEW  1
+def            crdb_internal       schema_changes     SYSTEM VIEW  1
+def            crdb_internal       sessions           SYSTEM VIEW  1
+def            crdb_internal       tables             SYSTEM VIEW  1
+def            crdb_internal       txns               SYSTEM VIEW  1
 def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1

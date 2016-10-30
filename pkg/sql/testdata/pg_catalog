@@ -136,6 +136,7 @@ SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner  aclitem
 3061586988  constraint_db       NULL      NULL
+1685686813  crdb_internal       NULL      NULL
 3816276882  information_schema  NULL      NULL
 3178318485  pg_catalog          NULL      NULL
 1793492844  system              NULL      NULL
@@ -625,6 +626,7 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid         datname             datdba  encoding  datcollate  datctype    datistemplate  datallowconn
+1685686813  crdb_internal       NULL    6         en_US.utf8  en_US.utf8  false          true
 1793492844  system              NULL    6         en_US.utf8  en_US.utf8  false          true
 2091240128  test                NULL    6         en_US.utf8  en_US.utf8  false          true
 3061586988  constraint_db       NULL    6         en_US.utf8  en_US.utf8  false          true
@@ -637,6 +639,7 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid         datname             datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
+1685686813  crdb_internal       -1            NULL           NULL          NULL        NULL           NULL 
 1793492844  system              -1            NULL           NULL          NULL        NULL           NULL
 2091240128  test                -1            NULL           NULL          NULL        NULL           NULL
 3061586988  constraint_db       -1            NULL           NULL          NULL        NULL           NULL
