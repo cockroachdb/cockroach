@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -111,44 +110,33 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		switch ft := fn.Types.(type) {
 		case parser.ArgTypes:
 			for _, typ := range ft {
-				var v interface{}
-				switch typ {
-				case parser.TypeInt:
-					i := r.Int63()
-					i -= r.Int63()
-					v = i
-				case parser.TypeFloat, parser.TypeDecimal:
-					v = r.Float64()
-				case parser.TypeString:
-					v = `'string'`
-				case parser.TypeBytes:
-					v = `b'bytes'`
-				case parser.TypeTimestamp, parser.TypeTimestampTZ:
-					t := time.Unix(0, r.Int63())
-					v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-				case parser.TypeBool:
-					if r.Intn(2) == 0 {
-						v = "false"
-					} else {
-						v = "true"
-					}
-				case parser.TypeDate:
-					i := r.Int63()
-					i -= r.Int63()
-					d := parser.NewDDate(parser.DDate(i))
-					v = fmt.Sprintf(`'%s'`, d)
-				case parser.TypeInterval:
-					d := duration.Duration{Nanos: r.Int63()}
-					v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-				case parser.TypeTuple:
-					v = "NULL"
-				default:
-					panic(fmt.Errorf("unknown arg type: %s", typ))
+				args = append(args, r.GenerateRandomArg(typ))
+			}
+		case parser.NamedArgTypes:
+			for _, arg := range ft {
+				args = append(args, r.GenerateRandomArg(arg.Typ))
+			}
+		case parser.AnyType:
+			for i := r.Intn(5); i > 0; i-- {
+				var typ parser.Type
+				switch r.Intn(4) {
+				case 0:
+					typ = parser.TypeString
+				case 1:
+					typ = parser.TypeFloat
+				case 2:
+					typ = parser.TypeBool
+				case 3:
+					typ = parser.TypeTimestampTZ
 				}
-				args = append(args, fmt.Sprint(v))
+				args = append(args, r.GenerateRandomArg(typ))
+			}
+		case parser.VariadicType:
+			for i := r.Intn(5); i > 0; i-- {
+				args = append(args, r.GenerateRandomArg(ft.Typ))
 			}
 		default:
-			return false
+			panic(fmt.Errorf("unknown fn.Types: %T", ft))
 		}
 		s := fmt.Sprintf("SELECT %s(%s)", name, strings.Join(args, ", "))
 		funcdone := make(chan bool, 1)
