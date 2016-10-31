@@ -320,6 +320,16 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 		return
 	}
 
+	if bq.needsLease {
+		// Check to see if either we own the lease or do not know who the lease
+		// holder is.
+		if lease, _ := repl.getLease(); lease != nil &&
+			lease.Covers(repl.store.Clock().Now()) && !lease.OwnedBy(repl.store.StoreID()) {
+			log.VEventf(ctx, 1, "%s: needs lease; not adding: %+v", repl, lease)
+			return
+		}
+	}
+
 	should, priority := bq.impl.shouldQueue(ctx, now, repl, cfg)
 	if _, err := bq.addInternal(ctx, repl.Desc(), should, priority); !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add %s: %s", repl, err)
