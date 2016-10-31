@@ -1718,10 +1718,10 @@ func (r *Replica) evaluateProposal(
 	// since evaluating a proposal is expensive (at least under proposer-
 	// evaluated KV).
 	var pd ProposalData
-	pd.RaftCommand = &storagebase.RaftCommand{
+	pd.ReplicatedProposalData = storagebase.ReplicatedProposalData{
 		RangeID:       r.RangeID,
 		OriginReplica: replica,
-		Cmd:           ba,
+		Cmd:           &ba,
 	}
 	pd.ctx = ctx
 	pd.idKey = idKey
@@ -1737,13 +1737,13 @@ func (r *Replica) insertProposalLocked(pd *ProposalData) {
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
-	if !pd.RaftCommand.Cmd.IsLeaseRequest() {
+	if !pd.Cmd.IsLeaseRequest() {
 		r.mu.lastAssignedLeaseIndex++
 	}
-	pd.RaftCommand.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
+	pd.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	if log.V(4) {
 		log.Infof(pd.ctx, "submitting proposal %x: maxLeaseIndex=%d",
-			pd.idKey, pd.RaftCommand.MaxLeaseIndex)
+			pd.idKey, pd.MaxLeaseIndex)
 	}
 
 	if _, ok := r.mu.proposals[pd.idKey]; ok {
@@ -1838,26 +1838,26 @@ func (r *Replica) isSoloReplicaLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	if p.RaftCommand.Cmd.Timestamp == hlc.ZeroTimestamp {
+	if p.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
 	}
 
 	ctx := r.AnnotateCtx(context.TODO())
 
-	data, err := protoutil.Marshal(p.RaftCommand)
+	data, err := protoutil.Marshal(&p.ReplicatedProposalData)
 	if err != nil {
 		return err
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
-	if union, ok := p.RaftCommand.Cmd.GetArg(roachpb.EndTransaction); ok {
+	if union, ok := p.Cmd.GetArg(roachpb.EndTransaction); ok {
 		ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
 		if crt := ict.GetChangeReplicasTrigger(); crt != nil {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special
 			// because raft needs to understand it; it cannot simply be an
 			// opaque command.
 			log.Infof(ctx, "proposing %s %+v for range %d: %+v",
-				crt.ChangeType, crt.Replica, p.RaftCommand.RangeID, crt.UpdatedReplicas)
+				crt.ChangeType, crt.Replica, p.RangeID, crt.UpdatedReplicas)
 
 			confChangeCtx := ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -2116,7 +2116,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		case raftpb.EntryNormal:
 
 			var commandID storagebase.CmdIDKey
-			var command storagebase.RaftCommand
+			var command storagebase.ReplicatedProposalData
 
 			// Process committed entries. etcd raft occasionally adds a nil entry
 			// (our own commands are never empty). This happens in two situations:
@@ -2154,7 +2154,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 			if err := ccCtx.Unmarshal(cc.Context); err != nil {
 				return err
 			}
-			var command storagebase.RaftCommand
+			var command storagebase.ReplicatedProposalData
 			if err := command.Unmarshal(ccCtx.Payload); err != nil {
 				return err
 			}
@@ -2431,7 +2431,7 @@ type pendingCmdSlice []*ProposalData
 func (s pendingCmdSlice) Len() int      { return len(s) }
 func (s pendingCmdSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s pendingCmdSlice) Less(i, j int) bool {
-	return s[i].RaftCommand.MaxLeaseIndex < s[j].RaftCommand.MaxLeaseIndex
+	return s[i].MaxLeaseIndex < s[j].MaxLeaseIndex
 }
 
 //go:generate stringer -type refreshRaftReason
@@ -2465,7 +2465,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
-		if p.RaftCommand.MaxLeaseIndex > maxMustRetryCommandIndex {
+		if p.MaxLeaseIndex > maxMustRetryCommandIndex {
 			if p.proposedAtTicks > refreshAtTicks {
 				// The command was proposed too recently, don't bother reproprosing
 				// it yet. Note that if refreshAtDelta is 0, refreshAtTicks will be
@@ -2716,7 +2716,10 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 // which will apply as a no-op (without accessing raftCmd, via an error),
 // updating only the applied index.
 func (r *Replica) processRaftCommand(
-	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	index uint64,
+	raftCmd storagebase.ReplicatedProposalData,
 ) (pErr *roachpb.Error) {
 	if index == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
@@ -2827,10 +2830,10 @@ func (r *Replica) processRaftCommand(
 	}
 	r.mu.Unlock()
 
-	if splitMergeUnlock := r.maybeAcquireSplitMergeLock(raftCmd.Cmd); splitMergeUnlock != nil {
-		defer func() {
-			splitMergeUnlock(pErr)
-		}()
+	// TODO(tschottdorf): not all commands have a BatchRequest (for example,
+	// empty appends). Be more careful with this in proposer-eval'ed KV.
+	if raftCmd.Cmd == nil {
+		raftCmd.Cmd = &roachpb.BatchRequest{}
 	}
 
 	// applyRaftCommand will return "expected" errors, but may also indicate
@@ -2840,10 +2843,17 @@ func (r *Replica) processRaftCommand(
 		log.VEventf(ctx, 1, "applying command with forced error: %s", forcedErr)
 	} else {
 		log.Event(ctx, "applying command")
+
+		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(*raftCmd.Cmd); splitMergeUnlock != nil {
+			defer func() {
+				splitMergeUnlock(pErr)
+			}()
+		}
+
 	}
 	var response proposalResult
 	{
-		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
+		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, *raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
 
 		// TODO(tschottdorf): this field should be zeroed earlier.
