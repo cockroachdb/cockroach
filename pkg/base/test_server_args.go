@@ -51,7 +51,6 @@ type TestServerArgs struct {
 	// Fields copied to the server.Config.
 	Insecure                 bool
 	MetricsSampleInterval    time.Duration
-	MaxOffset                time.Duration
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration

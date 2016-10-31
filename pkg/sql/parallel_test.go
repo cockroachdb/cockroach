@@ -185,7 +185,6 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			MaxOffset: logicMaxOffset,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WaitForGossipUpdate:   true,

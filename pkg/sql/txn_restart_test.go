@@ -1143,7 +1143,8 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var clockUpdate int32
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingCommandFilter: cmdFilters.runFilters,
+		TestingCommandFilter:  cmdFilters.runFilters,
+		DisableMaxOffsetCheck: true,
 		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
 			if atomic.LoadInt32(&clockUpdate) > 0 {
 				return
@@ -1165,10 +1166,6 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	}
 
 	params, _ := createTestServerParams()
-	// Use a large max offset to avoid rejecting a transaction whose timestanp is in
-	// future (as we will advance the transaction timestamp with ReadWithinUncertaintyIntervalError).
-	params.MaxOffset = advancement
-
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()

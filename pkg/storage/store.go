@@ -618,6 +618,17 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// MaxOffset, if set, overrides the server clock's MaxOffset at server
+	// creation time.
+	// See also DisableMaxOffsetCheck.
+	MaxOffset time.Duration
+	// DisableMaxOffsetCheck disables the rejection (in Store.Send) of requests
+	// with the timestamp too much in the future. Normally, this rejection is a
+	// good sanity check, but certain test unfortunately insert a "message from
+	// the future" into the system to advance the clock of a TestServer.
+	// We should get rid of such practices once we make TestServer take a
+	// ManualClock.
+	DisableMaxOffsetCheck bool
 	// LeaseTransferBlockedOnExtensionEvent, if set, is called when
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
@@ -2187,7 +2198,7 @@ func (s *Store) Send(
 		// appears to come from a node with a bad clock, reject it now
 		// before we reach that point.
 		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
-		if offset > s.Clock().MaxOffset() {
+		if offset > s.Clock().MaxOffset() && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
 			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
 				ba.Timestamp.WallTime, offset)
 		}
