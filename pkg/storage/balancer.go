@@ -87,24 +87,36 @@ func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roac
 	return good
 }
 
-func (rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	var worst *roachpb.StoreDescriptor
-	for i := range sl.stores {
-		candidate := &sl.stores[i]
-		if worst == nil {
-			worst = candidate
-			continue
+func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
+	var bad *roachpb.StoreDescriptor
+	if len(sl.stores) > 0 {
+		// Find the list of removal candidates that are on stores that have more
+		// than the average numbers of ranges.
+		candidates := make([]*roachpb.StoreDescriptor, 0, len(sl.stores))
+		for i := range sl.stores {
+			candidate := &sl.stores[i]
+			if rebalanceFromConvergesOnMean(sl, *candidate) {
+				candidates = append(candidates, candidate)
+			}
 		}
-		if candidate.Capacity.RangeCount > worst.Capacity.RangeCount {
-			worst = candidate
+
+		rcb.rand.Lock()
+		if len(candidates) > 0 {
+			// Randomnly choose a store from one of the above average range count
+			// candidates.
+			bad = candidates[rcb.rand.Intn(len(candidates))]
+		} else {
+			// Fallback to choosing a random store to remove from.
+			bad = &sl.stores[rcb.rand.Intn(len(sl.stores))]
 		}
+		rcb.rand.Unlock()
 	}
 
 	if log.V(2) {
 		log.Infof(context.TODO(), "selected bad: mean=%.1f %s",
-			sl.candidateCount.mean, formatCandidates(worst, sl.stores))
+			sl.candidateCount.mean, formatCandidates(bad, sl.stores))
 	}
-	return worst
+	return bad
 }
 
 // improve returns a candidate StoreDescriptor to rebalance a replica to. The
@@ -124,7 +136,7 @@ func (rcb rangeCountBalancer) improve(sl StoreList, excluded nodeIDSet) *roachpb
 
 	// Adding a replica to the candidate must make its range count converge on the
 	// mean range count.
-	rebalanceConvergesOnMean := float64(candidate.Capacity.RangeCount) < sl.candidateCount.mean-0.5
+	rebalanceConvergesOnMean := rebalanceToConvergesOnMean(sl, *candidate)
 	if !rebalanceConvergesOnMean {
 		if log.V(2) {
 			log.Infof(context.TODO(), "not rebalancing: %s wouldn't converge on the mean %.1f",
@@ -172,7 +184,7 @@ func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl Stor
 	// Require that moving a replica from the given store makes its range count
 	// converge on the mean range count. This only affects clusters with a
 	// small number of ranges.
-	rebalanceConvergesOnMean := float64(store.Capacity.RangeCount) > sl.candidateCount.mean+0.5
+	rebalanceConvergesOnMean := rebalanceFromConvergesOnMean(sl, store)
 
 	shouldRebalance :=
 		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
@@ -215,4 +227,12 @@ func selectRandom(
 		}
 	}
 	return descs
+}
+
+func rebalanceFromConvergesOnMean(sl StoreList, candidate roachpb.StoreDescriptor) bool {
+	return float64(candidate.Capacity.RangeCount) > sl.candidateCount.mean+0.5
+}
+
+func rebalanceToConvergesOnMean(sl StoreList, candidate roachpb.StoreDescriptor) bool {
+	return float64(candidate.Capacity.RangeCount) < sl.candidateCount.mean-0.5
 }
