@@ -154,7 +154,7 @@ func (z *zeroSum) accountsLen() int {
 }
 
 func (z *zeroSum) maybeLogError(err error) {
-	if strings.Contains(err.Error(), "range is frozen") {
+	if isUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
 	log.Error(context.Background(), err)
