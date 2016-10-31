@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 func TestBuildInfo(t *testing.T) {
@@ -39,7 +40,7 @@ func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			t.Fatalf("interrupted")
 		default:
 		}
-		return util.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/details/local", &details)
+		return httputil.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/details/local", &details)
 	})
 
 	bi := details.BuildInfo

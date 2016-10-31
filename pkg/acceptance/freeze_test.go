@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -59,7 +60,7 @@ func postFreeze(
 			log.Infof(context.Background(), "%+v", &resp)
 		}
 	}
-	err := util.StreamJSON(
+	err := httputil.StreamJSON(
 		httpClient,
 		c.URL(0)+"/_admin/v1/cluster/freeze",
 		&serverpb.ClusterFreezeRequest{Freeze: freeze},

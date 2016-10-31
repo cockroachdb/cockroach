@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -199,7 +200,7 @@ func TestAcceptEncoding(t *testing.T) {
 				return b
 			},
 		},
-		{util.GzipEncoding,
+		{httputil.GzipEncoding,
 			func(b io.Reader) io.Reader {
 				r, err := gzip.NewReader(b)
 				if err != nil {
@@ -215,14 +216,14 @@ func TestAcceptEncoding(t *testing.T) {
 			t.Fatalf("could not create request: %s", err)
 		}
 		if d.acceptEncoding != "" {
-			req.Header.Set(util.AcceptEncodingHeader, d.acceptEncoding)
+			req.Header.Set(httputil.AcceptEncodingHeader, d.acceptEncoding)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatalf("could not make request to %s: %s", req.URL, err)
 		}
 		defer resp.Body.Close()
-		if ce := resp.Header.Get(util.ContentEncodingHeader); ce != d.acceptEncoding {
+		if ce := resp.Header.Get(httputil.ContentEncodingHeader); ce != d.acceptEncoding {
 			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
 		}
 		r := d.newReader(resp.Body)
