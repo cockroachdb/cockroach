@@ -86,7 +86,8 @@ func NewSchemaChangerForTesting(
 		mutationID: mutationID,
 		nodeID:     nodeID,
 		db:         db,
-		leaseMgr:   leaseMgr}
+		leaseMgr:   leaseMgr,
+	}
 }
 
 func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_SchemaChangeLease {

@@ -75,14 +75,14 @@ func (ps PreparedStatements) New(
 	// statement name. When we start storing the prepared query plan
 	// during prepare, this should be tallied up to the monitor as well.
 	sz := int64(uintptr(len(query)+len(name)) + unsafe.Sizeof(*stmt))
-	if err := stmt.memAcc.W(ps.session).OpenAndInit(sz); err != nil {
+	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(sz); err != nil {
 		return nil, err
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
 	cols, err := e.Prepare(query, ps.session, placeholderHints)
 	if err != nil {
-		stmt.memAcc.W(ps.session).Close()
+		stmt.memAcc.Wsession(ps.session).Close()
 		return nil, err
 	}
 	stmt.Query = query
@@ -91,7 +91,7 @@ func (ps PreparedStatements) New(
 	stmt.portalNames = make(map[string]struct{})
 
 	if prevStmt, ok := ps.Get(name); ok {
-		prevStmt.memAcc.W(ps.session).Close()
+		prevStmt.memAcc.Wsession(ps.session).Close()
 	}
 
 	ps.stmts[name] = stmt
@@ -106,11 +106,11 @@ func (ps PreparedStatements) Delete(name string) bool {
 			for portalName := range stmt.portalNames {
 				if portal, ok := ps.session.PreparedPortals.Get(name); ok {
 					delete(ps.session.PreparedPortals.portals, portalName)
-					portal.memAcc.W(ps.session).Close()
+					portal.memAcc.Wsession(ps.session).Close()
 				}
 			}
 		}
-		stmt.memAcc.W(ps.session).Close()
+		stmt.memAcc.Wsession(ps.session).Close()
 		delete(ps.stmts, name)
 		return true
 	}
@@ -120,10 +120,10 @@ func (ps PreparedStatements) Delete(name string) bool {
 // closeAll de-registers all statements and portals from the monitor.
 func (ps PreparedStatements) closeAll(s *Session) {
 	for _, stmt := range ps.stmts {
-		stmt.memAcc.W(s).Close()
+		stmt.memAcc.Wsession(s).Close()
 	}
 	for _, portal := range s.PreparedPortals.portals {
-		portal.memAcc.W(s).Close()
+		portal.memAcc.Wsession(s).Close()
 	}
 }
 
@@ -191,14 +191,14 @@ func (pp PreparedPortals) New(
 		Qargs: qargs,
 	}
 	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
-	if err := portal.memAcc.W(pp.session).OpenAndInit(sz); err != nil {
+	if err := portal.memAcc.Wsession(pp.session).OpenAndInit(sz); err != nil {
 		return nil, err
 	}
 
 	stmt.portalNames[name] = struct{}{}
 
 	if prevPortal, ok := pp.Get(name); ok {
-		prevPortal.memAcc.W(pp.session).Close()
+		prevPortal.memAcc.Wsession(pp.session).Close()
 	}
 
 	pp.portals[name] = portal
@@ -210,7 +210,7 @@ func (pp PreparedPortals) New(
 func (pp PreparedPortals) Delete(name string) bool {
 	if portal, ok := pp.Get(name); ok {
 		delete(portal.Stmt.portalNames, name)
-		portal.memAcc.W(pp.session).Close()
+		portal.memAcc.Wsession(pp.session).Close()
 		delete(pp.portals, name)
 		return true
 	}

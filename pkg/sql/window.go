@@ -90,10 +90,11 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	window.replaceIndexedVars(s)
 	indexedVarCols := s.columns[len(renderCols)+len(windowDefCols):]
 
-	window.wrappedRenderVals = p.NewRowContainer(renderCols, 0)
-	window.wrappedWindowDefVals = p.NewRowContainer(windowDefCols, 0)
-	window.wrappedIndexedVarVals = p.NewRowContainer(indexedVarCols, 0)
-	window.windowsAcc = p.session.OpenAccount()
+	acc := p.session.TxnState.makeBoundAccount()
+	window.wrappedRenderVals = p.NewRowContainer(acc, renderCols, 0)
+	window.wrappedWindowDefVals = p.NewRowContainer(acc, windowDefCols, 0)
+	window.wrappedIndexedVarVals = p.NewRowContainer(acc, indexedVarCols, 0)
+	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
 }
@@ -515,7 +516,7 @@ func (n *windowNode) computeWindows() error {
 	}
 
 	windowCount := len(n.funcs)
-	acc := n.windowsAcc.W(n.planner.session)
+	acc := n.windowsAcc.Wtxn(n.planner.session)
 
 	winValSz := uintptr(rowCount) * unsafe.Sizeof([]parser.Datum{})
 	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(parser.Datum(nil))
@@ -682,9 +683,11 @@ func (n *windowNode) computeWindows() error {
 // populateValues populates n.values with final datum values after computing
 // window result values in n.windowValues.
 func (n *windowNode) populateValues() error {
-	acc := n.windowsAcc.W(n.planner.session)
+	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
-	n.values.rows = n.planner.NewRowContainer(n.values.columns, rowCount)
+	n.values.rows = n.planner.NewRowContainer(
+		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
+	)
 
 	rowWidth := len(n.windowRender)
 
@@ -793,7 +796,7 @@ func (n *windowNode) Close() {
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
-		n.windowsAcc.W(n.planner.session).Close()
+		n.windowsAcc.Wtxn(n.planner.session).Close()
 	}
 	n.values.Close()
 }

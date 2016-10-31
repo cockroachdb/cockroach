@@ -253,7 +253,9 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
+func NewExecutor(
+	cfg ExecutorConfig, stopper *stop.Stopper, startupMemMetrics *MemoryMetrics,
+) *Executor {
 	exec := &Executor{
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
@@ -288,7 +290,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	})
 
 	ctx := log.WithLogTag(context.Background(), "startup", nil)
-	startupSession := NewSession(ctx, SessionArgs{}, exec, nil)
+	startupSession := NewSession(ctx, SessionArgs{}, exec, nil, startupMemMetrics)
 	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -1187,7 +1189,9 @@ func (e *Executor) execStmt(
 				return result, err
 			}
 		}
-		result.Rows = planMaker.NewRowContainer(result.Columns, 0)
+		result.Rows = planMaker.NewRowContainer(
+			planMaker.session.makeBoundAccount(),
+			result.Columns, 0)
 
 		// valuesAlloc is used to allocate the backing storage for the
 		// result row slices in chunks.
