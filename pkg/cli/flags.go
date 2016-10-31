@@ -57,6 +57,7 @@ var debugCtx = debugContext{
 	replicated: false,
 }
 
+var sqlSize *bytesValue
 var cacheSize *bytesValue
 var insecure *insecureValue
 
@@ -297,9 +298,12 @@ func init() {
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 
 		// Engine flags.
-		setDefaultCacheSize(&serverCfg)
+		setDefaultSizeParameters(&serverCfg)
 		cacheSize = newBytesValue(&serverCfg.CacheSize)
 		varFlag(f, cacheSize, cliflags.Cache)
+
+		sqlSize = newBytesValue(&serverCfg.SQLMemoryPoolSize)
+		varFlag(f, sqlSize, cliflags.SQLMem)
 	}
 
 	for _, cmd := range certCmds {
