@@ -54,6 +54,14 @@ The UI also supports live reload in debug mode. To take advantage of this, run
 `make livereload` from this directory - the UI will automatically reload files
 as you modify them, taking advantage of TypeScript's incremental compilation.
 
+## Running tests
+
+If you'd like to run the tests directly you can run `make test`. If you're
+having trouble debugging tests, we recommend using `make test-debug` which
+prettifies the test output and runs the tests in Chrome. When a webpage opens,
+you can press the debug button in the top righthand corner to run tests and set
+breakpoints directly in the browser.
+
 ## Proxying
 
 When prototyping changes to the CockroachDB Admin UI, it is desirable to see

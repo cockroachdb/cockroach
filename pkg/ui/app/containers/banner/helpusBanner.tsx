@@ -6,7 +6,7 @@ import _ from "lodash";
 
 import Banner from "./banner";
 import { AdminUIState } from "../../redux/state";
-import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData } from "../../redux/uiData";
+import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData, UIDataSet } from "../../redux/uiData";
 import { setUISetting } from "../../redux/ui";
 
 export let HELPUS_BANNER_DISMISSED_KEY = "banner/helpusBanner/DISMISSED";
@@ -57,23 +57,19 @@ class HelpusBanner extends React.Component<HelpusBannerProps, {}> {
   }
 }
 
-interface UIDataState {
-  data: { [key: string]: any; };
-}
-
-let uiDataState = (state: AdminUIState): UIDataState => state && state.uiData;
+let uiDataState = (state: AdminUIState): UIDataSet => state.uiData;
 
 // optinAttributes are the saved attributes that indicate whether the user has
 // opted in to usage reporting
 let optinAttributes = createSelector(
   uiDataState,
-  (state: UIDataState) => state && state.data[KEY_HELPUS]
+  (state: UIDataSet) => state[KEY_HELPUS] && state[KEY_HELPUS].data
 );
 
 // attributesLoaded is a boolean that indicates whether the optinAttributes have been loaded yet
 let attributesLoaded = createSelector(
   uiDataState,
-  (state: UIDataState) => state && _.has(state.data, KEY_HELPUS)
+  (state: UIDataSet) => state && _.has(state, KEY_HELPUS)
 );
 
 let helpusBannerDismissed = (state: AdminUIState): boolean => state.ui[HELPUS_BANNER_DISMISSED_KEY] || false;
