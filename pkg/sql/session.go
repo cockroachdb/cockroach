@@ -333,6 +333,7 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 		}
 	}
 	// Put the new span in the context.
+	ts.sp = sp
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 	ts.Ctx = ctx
 
@@ -375,12 +376,12 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // This needs to be called before resetForNewSQLTransaction() is called for
 // starting another SQL txn.
 func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
-	span := opentracing.SpanFromContext(ts.Ctx)
-	if span == nil {
+	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
-	sampledFor7881 := (span.BaggageItem(keyFor7881Sample) != "")
-	span.Finish()
+	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
+	ts.sp.Finish()
+	ts.sp = nil
 	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.CollectedSpans)
