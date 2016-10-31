@@ -98,14 +98,26 @@ Start up a client pod and open up an interactive, (mostly) Postgres-flavor
 SQL shell using:
 
 ```console
-$ kubectl run -it cockroach-client --image=cockroachdb/cockroach --restart=Never --command -- bash
-root@cockroach-client # ./cockroach sql --host cockroachdb-public
+$ kubectl run -it --rm cockroach-client --image=cockroachdb/cockroach --restart=Never --command -- ./cockroach sql --host cockroachdb-public
 ```
 
 You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
 commands. Some more basic examples can be found within
 [CockroachDB's documentation](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html).
+
+## Accessing the admin UI
+
+If you want to see information about how the cluster is doing, you can try
+pulling up the CockroachDB admin UI by port-forwarding from your local machine
+to one of the pods:
+
+```shell
+kubectl port-forward cockroachdb-0 8080
+```
+
+Once you’ve done that, you should be able to access the admin UI by visiting
+http://localhost:8080/ in your web browser.
 
 ## Simulating failures
 
