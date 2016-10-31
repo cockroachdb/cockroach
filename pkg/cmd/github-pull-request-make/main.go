@@ -129,6 +129,10 @@ func main() {
 			break
 		}
 	}
+	if currentPull == nil {
+		log.Printf("SHA %s not found in open pull requests, skipping stress", sha)
+		return
+	}
 
 	resp, err := http.Get(*currentPull.DiffURL)
 	if err != nil {
