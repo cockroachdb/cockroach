@@ -601,6 +601,7 @@ func TestTxnObeysLeaseExpiration(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	leaseManager := s.LeaseManager().(*csql.LeaseManager)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -610,20 +611,16 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	clock := s.Clock()
-
-	// Increase the MaxOffset so that the clock can be updated to expire the
-	// table leases.
-	clock.SetMaxOffset(10 * csql.LeaseDuration)
-
 	// Run a number of sql operations and expire the lease they acquire.
-	runCommandAndExpireLease(t, clock, sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
-	runCommandAndExpireLease(t, clock, sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
-	runCommandAndExpireLease(t, clock, sqlDB, `DELETE FROM t.kv WHERE k = 'a'`)
-	runCommandAndExpireLease(t, clock, sqlDB, `TRUNCATE TABLE t.kv`)
+	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
+	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
+	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `DELETE FROM t.kv WHERE k = 'a'`)
+	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `TRUNCATE TABLE t.kv`)
 }
 
-func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, sql string) {
+func runCommandAndExpireLease(
+	t *testing.T, leaseManager *csql.LeaseManager, clock *hlc.Clock, sqlDB *gosql.DB, sql string,
+) {
 	// Run a transaction that lets its table lease expire.
 	txn, err := sqlDB.Begin()
 	if err != nil {
@@ -638,8 +635,7 @@ func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, s
 		t.Fatal(err)
 	}
 
-	// Update the clock to expire the table lease.
-	_ = clock.Update(clock.Now().Add(int64(2*csql.LeaseDuration), 0))
+	leaseManager.ExpireLeases(clock)
 
 	// Run another transaction that pushes the above transaction.
 	if _, err := sqlDB.Query("SELECT * FROM t.kv"); err != nil {

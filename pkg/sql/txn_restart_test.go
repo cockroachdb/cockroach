@@ -1134,7 +1134,8 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 // the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
 func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9774")
+
+	advancement := 2 * sql.LeaseDuration
 
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
@@ -1154,7 +1155,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					if bytes.Contains(req.Key, testKey) {
 						atomic.AddInt32(&clockUpdate, 1)
 						now := c.Now()
-						now.WallTime += int64(5 * sql.LeaseDuration)
+						now.WallTime += advancement.Nanoseconds()
 						c.Update(now)
 						break
 					}
@@ -1164,6 +1165,10 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	}
 
 	params, _ := createTestServerParams()
+	// Use a large max offset to avoid rejecting a transaction whose timestanp is in
+	// future (as we will advance the transaction timestamp with ReadWithinUncertaintyIntervalError).
+	params.MaxOffset = advancement
+
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
@@ -1189,10 +1194,6 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 			return nil
 		}, false)
 	defer cleanupFilter()
-
-	// Use a large max offset to avoid rejecting a transaction whose timestanp is in
-	// future (as we will advance the transaction timestamp with ReadWithinUncertaintyIntervalError).
-	s.Clock().SetMaxOffset(sql.LeaseDuration * 10)
 
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`
