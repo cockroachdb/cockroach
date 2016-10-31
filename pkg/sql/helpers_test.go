@@ -16,7 +16,13 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
@@ -79,4 +85,16 @@ func (w *LeaseRemovalTracker) LeaseRemovedNotification(lease *LeaseState, err er
 		close(tracker.removed)
 		delete(w.tracking, lease)
 	}
+}
+
+func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
+	past := clock.Now().GoTime().Add(-time.Millisecond)
+
+	m.tableNames.mu.Lock()
+	for _, lease := range m.tableNames.tables {
+		lease.expiration = parser.DTimestamp{
+			Time: past,
+		}
+	}
+	m.tableNames.mu.Unlock()
 }
