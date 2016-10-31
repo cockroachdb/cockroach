@@ -738,7 +738,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		{
 			StoreID:  2,
 			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 12},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 14},
 		},
 		{
 			StoreID:  3,
@@ -754,7 +754,8 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	targetRepl, err := a.RemoveTarget(replicas, stores[0].StoreID)
+	// Exclude store 2 as a removal target.
+	targetRepl, err := a.RemoveTarget(replicas, stores[1].StoreID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -770,6 +771,20 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	}
 	if a, e := targetRepl, replicas[1]; a != e {
 		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
+	}
+
+	var counts [4]int
+	for i := 0; i < 100; i++ {
+		// Exclude store 1 as a removal target. We should see stores 2 and 3
+		// randomly selected as the removal target.
+		targetRepl, err := a.RemoveTarget(replicas, stores[0].StoreID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		counts[targetRepl.StoreID-1]++
+	}
+	if counts[0] != 0 || counts[3] != 0 || counts[1] == 0 || counts[2] == 0 {
+		t.Fatalf("unexpected removal target counts: %d", counts)
 	}
 }
 
