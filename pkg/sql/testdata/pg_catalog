@@ -48,6 +48,7 @@ pg_attrdef
 pg_attribute
 pg_class
 pg_constraint
+pg_database
 pg_indexes
 pg_namespace
 pg_tables
@@ -581,3 +582,29 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 1184  timestamptz  0         0             NULL           NULL        NULL
 1186  interval     0         0             NULL           NULL        NULL
 1700  decimal      0         0             NULL           NULL        NULL
+
+## pg_catalog.pg_database
+
+query ITIITTBB colnames
+SELECT oid, datname, datdba, encoding, datcollate, datctype, datistemplate, datallowconn
+FROM pg_catalog.pg_database
+ORDER BY oid
+----
+oid         datname             datdba  encoding  datcollate  datctype    datistemplate  datallowconn
+1793492844  system              NULL    6         en_US.utf8  en_US.utf8  false          true
+2091240128  test                NULL    6         en_US.utf8  en_US.utf8  false          true
+3061586988  constraint_db       NULL    6         en_US.utf8  en_US.utf8  false          true
+3178318485  pg_catalog          NULL    6         en_US.utf8  en_US.utf8  false          true
+3816276882  information_schema  NULL    6         en_US.utf8  en_US.utf8  false          true
+
+query ITIIIIIT colnames
+SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
+FROM pg_catalog.pg_database
+ORDER BY oid
+----
+oid         datname             datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
+1793492844  system              -1            NULL           NULL          NULL        NULL           NULL
+2091240128  test                -1            NULL           NULL          NULL        NULL           NULL
+3061586988  constraint_db       -1            NULL           NULL          NULL        NULL           NULL
+3178318485  pg_catalog          -1            NULL           NULL          NULL        NULL           NULL
+3816276882  information_schema  -1            NULL           NULL          NULL        NULL           NULL
