@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -203,7 +203,7 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	url := server1.AdminURL() + "/_admin/v1/health"
-	if err := util.GetJSON(httpClient1, url, &response); err != nil {
+	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
 
@@ -226,7 +226,7 @@ func TestStopServer(t *testing.T) {
 
 	// Verify HTTP and GRPC requests to server now fail.
 	httpErrorText := "connection refused"
-	if err := util.GetJSON(httpClient1, url, &response); err == nil {
+	if err := httputil.GetJSON(httpClient1, url, &response); err == nil {
 		t.Fatal("Expected HTTP Request to fail after server stopped")
 	} else if !testutils.IsError(err, httpErrorText) {
 		t.Fatalf("Expected error from server with text %q, got error with text %q", httpErrorText, err.Error())
@@ -245,7 +245,7 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	url = tc.Server(0).AdminURL() + "/_admin/v1/health"
-	if err := util.GetJSON(httpClient1, url, &response); err != nil {
+	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
 }

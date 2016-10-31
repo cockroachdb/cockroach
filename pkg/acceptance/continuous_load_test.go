@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -74,7 +75,7 @@ func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 	var client http.Client
 	var resp status.NodeStatus
 	host := f.Nodes()[0]
-	if err := util.GetJSON(client, "http://"+host+":8080/_status/nodes/local", &resp); err != nil {
+	if err := httputil.GetJSON(client, "http://"+host+":8080/_status/nodes/local", &resp); err != nil {
 		return 0, err
 	}
 	count, ok := resp.Metrics["sql.query.count"]

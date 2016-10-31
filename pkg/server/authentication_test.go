@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
@@ -52,7 +52,7 @@ func doHTTPReq(
 		t.Fatalf("%s %s: error building request: %s", method, url, err)
 	}
 	if b != nil {
-		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
+		req.Header.Add(httputil.ContentTypeHeader, httputil.ProtoContentType)
 	}
 
 	return client.Do(req)

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -53,7 +54,7 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration, f checkGossip
 
 		var infoStatus gossip.InfoStatus
 		for i := 0; i < c.NumNodes(); i++ {
-			if err := util.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/gossip/local", &infoStatus); err != nil {
+			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/gossip/local", &infoStatus); err != nil {
 				return err
 			}
 			if err := f(infoStatus.Infos); err != nil {

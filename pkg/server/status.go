@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -547,7 +547,7 @@ func (s *statusServer) RaftDebug(
 }
 
 func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
+	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
 	err := s.metricSource.PrintAsText(w)
 	if err != nil {
 		log.Error(r.Context(), err)

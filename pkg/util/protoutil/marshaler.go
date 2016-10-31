@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package util
+package protoutil
 
 import (
 	"io"
@@ -24,7 +24,7 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 var _ gwruntime.Marshaler = (*ProtoPb)(nil)
@@ -34,13 +34,13 @@ type ProtoPb struct{}
 
 // ContentType implements gwruntime.Marshaler.
 func (*ProtoPb) ContentType() string {
-	return ProtoContentType
+	return httputil.ProtoContentType
 }
 
 // Marshal implements gwruntime.Marshaler.
 func (*ProtoPb) Marshal(v interface{}) ([]byte, error) {
 	if p, ok := v.(proto.Message); ok {
-		return protoutil.Marshal(p)
+		return Marshal(p)
 	}
 	return nil, errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
@@ -86,7 +86,7 @@ func (*ProtoPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 // Encode implements gwruntime.Marshaler.
 func (e *protoEncoder) Encode(v interface{}) error {
 	if p, ok := v.(proto.Message); ok {
-		bytes, err := protoutil.Marshal(p)
+		bytes, err := Marshal(p)
 		if err == nil {
 			_, err = e.w.Write(bytes)
 		}
