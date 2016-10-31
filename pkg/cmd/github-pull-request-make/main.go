@@ -40,12 +40,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	"github.com/google/go-github/github"
 )
 
-const githubAPITokenEnv = "GITHUB_API_TOKEN"
 const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
 const makeTargetEnv = "TARGET"
 
@@ -104,11 +101,6 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 }
 
 func main() {
-	token, ok := os.LookupEnv(githubAPITokenEnv)
-	if !ok {
-		log.Fatalf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
-	}
-
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
 		log.Fatalf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
@@ -119,9 +111,7 @@ func main() {
 		log.Fatalf("make target variable %s is not set", makeTargetEnv)
 	}
 
-	client := github.NewClient(oauth2.NewClient(oauth2.NoContext, oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)))
+	client := github.NewClient(nil)
 
 	crdb, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
 	if err != nil {
