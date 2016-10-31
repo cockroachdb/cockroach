@@ -38,6 +38,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/github"
 )
@@ -142,30 +143,34 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for name, pkg := range pkgs {
-		tests := "-"
-		if len(pkg.tests) > 0 {
-			tests = "(" + strings.Join(pkg.tests, "|") + ")"
-		}
-		benchmarks := "-"
-		if len(pkg.benchmarks) > 0 {
-			benchmarks = "(" + strings.Join(pkg.benchmarks, "|") + ")"
-		}
+	if len(pkgs) > 0 {
+		// 5 minutes total seems OK.
+		duration := (5 * time.Minute) / time.Duration(len(pkgs))
+		for name, pkg := range pkgs {
+			tests := "-"
+			if len(pkg.tests) > 0 {
+				tests = "(" + strings.Join(pkg.tests, "|") + ")"
+			}
+			benchmarks := "-"
+			if len(pkg.benchmarks) > 0 {
+				benchmarks = "(" + strings.Join(pkg.benchmarks, "|") + ")"
+			}
 
-		cmd := exec.Command(
-			"make",
-			target,
-			fmt.Sprintf("PKG=./%s", name),
-			fmt.Sprintf("TESTS=%s", tests),
-			fmt.Sprintf("TESTFLAGS=-test.bench %s", benchmarks),
-			"STRESSFLAGS=-stderr -maxfails 1 -maxtime 5m",
-		)
-		cmd.Dir = crdb.Dir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Println(cmd.Args)
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
+			cmd := exec.Command(
+				"make",
+				target,
+				fmt.Sprintf("PKG=./%s", name),
+				fmt.Sprintf("TESTS=%s", tests),
+				fmt.Sprintf("TESTFLAGS=-test.bench %s", benchmarks),
+				fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
+			)
+			cmd.Dir = crdb.Dir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			log.Println(cmd.Args)
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }
