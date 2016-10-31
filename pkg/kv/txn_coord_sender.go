@@ -723,8 +723,20 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 
 	// Before we send a heartbeat, determine whether this transaction should be
 	// considered abandoned. If so, exit heartbeat. If ctx.Done() is not nil, then
-	// it is a cancelable Context and we skip this check and use the ctx lifetime
+	// it is a cancellable Context and we skip this check and use the ctx lifetime
 	// instead of a timeout.
+	//
+	// TODO(andrei): We should disallow non-cancellable contexts in the heartbeat
+	// goroutine and enforce that our kv client cancels the context when it's
+	// done. Unfortunately we have remote clients (roachpb.ExternalClient) that
+	// make it hard for the TxnCoordSender to get a context with the same lifetime
+	// as the transaction (the TxnCoordSender associates the context of the txn's
+	// first write with the txn). For this reason, we currently override the
+	// context we get from gRPC to make it non-cancellable in DBServer.Batch. We
+	// should move to using only use local clients (i.e. merge, or at least
+	// co-locate client.Txn and the TxnCoordSender). At that point, we probably
+	// don't even need to deal with context cancellation any more; the client will
+	// be trusted to always send an EndRequest when it's done with a transaction.
 	if ctx.Done() == nil && hasAbandoned {
 		if log.V(1) {
 			log.Infof(ctx, "transaction %s abandoned; stopping heartbeat", txnMeta.txn)
