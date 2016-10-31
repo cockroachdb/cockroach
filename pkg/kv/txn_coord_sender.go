@@ -725,6 +725,10 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// considered abandoned. If so, exit heartbeat. If ctx.Done() is not nil, then
 	// it is a cancelable Context and we skip this check and use the ctx lifetime
 	// instead of a timeout.
+	// TODO(andrei): We'd like all transactions to use a cancelable Context and
+	// get rid of hasAbandoned and txnMeta.lastUpdateNanos. The problem is
+	// internal transactions started in various RPC handlers; we should
+	// investigate using a cancelable context from GRPC.
 	if ctx.Done() == nil && hasAbandoned {
 		if log.V(1) {
 			log.Infof(ctx, "transaction %s abandoned; stopping heartbeat", txnMeta.txn)
