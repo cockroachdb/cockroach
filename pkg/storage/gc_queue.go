@@ -321,8 +321,9 @@ func (gcq *gcQueue) process(
 	// We have the "luxury" of having two relevant contexts here: One which
 	// goes to the queue's EventLog and one which goes to tracing for this
 	// operation.
-	queueCtx := gcq.AnnotateCtx(context.TODO())
-	log.Infof(queueCtx, "completed with stats %+v", info)
+	if log.V(1) {
+		log.Infof(ctx, "completed with stats %+v", info)
+	}
 	log.Eventf(ctx, "completed with stats %+v", info)
 
 	info.updateMetrics(gcq.store.metrics)
