@@ -1146,3 +1146,28 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 ----
 NULL
 
+query T
+SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
+----
+1.2.3.4
+
+query T
+SELECT FROM_IP(TO_IP('1.2.3.4'))
+----
+1.2.3.4
+
+# net.IP.String() always gives us the most succinct form of ipv6
+query T
+select FROM_IP(TO_IP('2001:0db8:85a3:0000:0000:8a2e:0370:7334'))
+----
+2001:db8:85a3::8a2e:370:7334
+
+query error pq: unknown signature for TO_IP: TO_IP()
+SELECT TO_IP()
+
+query T
+SELECT FROM_IP(TO_IP(''))
+----
+NULL
+
+
