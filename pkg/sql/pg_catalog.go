@@ -46,6 +46,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
 		pgCatalogConstraintTable,
+		pgCatalogDatabaseTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
@@ -753,6 +754,55 @@ CREATE TABLE pg_catalog.pg_type (
 			}
 		}
 		return nil
+	},
+}
+
+var (
+	// http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
+	datEncodingUTFId = parser.NewDInt(6)
+	datEncodingEnUTF = parser.NewDString("en_US.utf8")
+)
+
+// See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html
+var pgCatalogDatabaseTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_database (
+	oid INT,
+	datname STRING,
+	datdba INT,
+	encoding INT,
+	datcollate STRING,
+	datctype STRING,
+	datistemplate BOOL,
+	datallowconn BOOL,
+	datconnlimit INT,
+	datlastsysoid INT,
+	datfrozenxid INT,
+	datminmxid INT,
+	dattablespace INT,
+	datacl STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
+			return addRow(
+				h.DBOid(db),                // oid
+				parser.NewDString(db.Name), // datname
+				parser.DNull,               // datdba
+				datEncodingUTFId,           // encoding
+				datEncodingEnUTF,           // datcollate
+				datEncodingEnUTF,           // datctype
+				parser.MakeDBool(false),    // datistemplate
+				parser.MakeDBool(true),     // datallowconn
+				negOneVal,                  // datconnlimit
+				parser.DNull,               // datlastsysoid
+				parser.DNull,               // datfrozenxid
+				parser.DNull,               // datminmxid
+				parser.DNull,               // dattablespace
+				parser.DNull,               // datacl
+			)
+		})
 	},
 }
 
