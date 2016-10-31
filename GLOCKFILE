@@ -1,9 +1,10 @@
 cmd github.com/client9/misspell/cmd/misspell
-cmd github.com/cockroachdb/build-utils/cmd/post-github
-cmd github.com/cockroachdb/build-utils/cmd/teamcity-trigger
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
+cmd github.com/cockroachdb/cockroach/pkg/cmd/github-post
+cmd github.com/cockroachdb/cockroach/pkg/cmd/github-pull-request-make
 cmd github.com/cockroachdb/cockroach/pkg/cmd/glock-diff-parser
 cmd github.com/cockroachdb/cockroach/pkg/cmd/protoc-gen-gogoroach
+cmd github.com/cockroachdb/cockroach/pkg/cmd/teamcity-trigger
 cmd github.com/cockroachdb/crlfmt
 cmd github.com/cockroachdb/stress
 cmd github.com/golang/lint/golint
@@ -35,7 +36,6 @@ github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/cenk/backoff 8edc80b07f38c27352fb186d971c628a6c32552b
 github.com/chzyer/readline 25c2772d5fd908077927228597b084a1f1a0e66d
 github.com/client9/misspell 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
-github.com/cockroachdb/build-utils e3e7983f47ba9e36ec408e746b34fa1aaf421432
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 951f3e665896e7ba939fd1f2db9aeaae6ca988f8
 github.com/cockroachdb/c-rocksdb b5ca031b93fde49bfa2ba99aba423136aebf3c06

@@ -140,6 +140,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
+			stream.GrepNot(`^cmd/`),
 			stream.GrepNot(`^(build/style_test\.go|((util/(log|envutil|sdnotify))|acceptance(/.*)?)/\w+\.go)\b`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "envutil" instead`, s)
