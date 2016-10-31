@@ -52,6 +52,7 @@ pg_indexes
 pg_namespace
 pg_tables
 pg_type
+pg_views
 
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
@@ -151,6 +152,14 @@ tablename          hasindexes
 table_constraints  false
 table_privileges   false
 tables             false
+
+## pg_catalog.pg_views
+
+query TTTT colnames
+SELECT * FROM pg_catalog.pg_views
+----
+schemaname     viewname  viewowner  definition
+constraint_db  v1        NULL       SELECT p, a, b, c FROM constraint_db.t1
 
 ## pg_catalog.pg_class
 
