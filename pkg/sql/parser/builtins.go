@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net"
 	"regexp"
 	"regexp/syntax"
 	"strconv"
@@ -235,6 +236,33 @@ var Builtins = map[string][]Builtin{
 					buf.WriteString(string(*d.(*DString)))
 				}
 				return NewDString(buf.String()), nil
+			},
+		},
+	},
+
+	"from_ip": {
+		Builtin{
+			Types:      ArgTypes{TypeBytes},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				ipstr := args[0].(*DBytes)
+				nboip := net.IP(*ipstr)
+				sv := nboip.String()
+				if sv == "<nil>" {
+					return DNull, nil
+				}
+				return NewDString(sv), nil
+			},
+		},
+	},
+
+	"to_ip": {
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeBytes,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				ipdstr := args[0].(*DString)
+				return NewDBytes(DBytes(net.ParseIP(string(*ipdstr)))), nil
 			},
 		},
 	},
