@@ -17,10 +17,12 @@
 package ts_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -242,4 +244,119 @@ func TestServerQuery(t *testing.T) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}
+}
+
+// TestServerQueryStarvation tests a very specific scenario, wherein a single
+// query request has more queries than the server's MaxWorkers count.
+func TestServerQueryStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	workerCount := 20
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		TimeSeriesQueryWorkerMax: workerCount,
+	})
+	defer s.Stopper().Stop()
+	tsrv := s.(*server.TestServer)
+
+	seriesCount := workerCount * 2
+	if err := populateSeries(seriesCount, 10, tsrv.TsDB()); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	queries := make([]tspb.Query, 0, seriesCount)
+	for i := 0; i < seriesCount; i++ {
+		queries = append(queries, tspb.Query{
+			Name: seriesName(i),
+		})
+	}
+
+	if _, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 0 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func BenchmarkServerQuery(b *testing.B) {
+	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	tsrv := s.(*server.TestServer)
+
+	// Populate data for large number of time series.
+	seriesCount := 50
+	sourceCount := 10
+	if err := populateSeries(seriesCount, sourceCount, tsrv.TsDB()); err != nil {
+		b.Fatal(err)
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	if err != nil {
+		b.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	queries := make([]tspb.Query, 0, seriesCount)
+	for i := 0; i < seriesCount; i++ {
+		queries = append(queries, tspb.Query{
+			Name: fmt.Sprintf("metric.%d", i),
+		})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 0 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    queries,
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func seriesName(seriesNum int) string {
+	return fmt.Sprintf("metric.%d", seriesNum)
+}
+
+func sourceName(sourceNum int) string {
+	return fmt.Sprintf("source.%d", sourceNum)
+}
+
+func populateSeries(seriesCount, sourceCount int, tsdb *ts.DB) error {
+	for series := 0; series < seriesCount; series++ {
+		for source := 0; source < sourceCount; source++ {
+			if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+				{
+					Name:   seriesName(series),
+					Source: sourceName(source),
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{
+							TimestampNanos: 100 * 1e9,
+							Value:          100.0,
+						},
+						{
+							TimestampNanos: 200 * 1e9,
+							Value:          200.0,
+						},
+						{
+							TimestampNanos: 300 * 1e9,
+							Value:          300.0,
+						},
+					},
+				},
+			}); err != nil {
+				return errors.Errorf(
+					"error storing data for series %d, source %d: %s", series, source, err,
+				)
+			}
+		}
+	}
+	return nil
 }
