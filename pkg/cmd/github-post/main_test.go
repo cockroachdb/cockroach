@@ -49,9 +49,17 @@ goroutine 449 \[running\]:
 `, sha))
 
 	if val, ok := os.LookupEnv(teamcityVCSNumberEnv); ok {
-		defer os.Setenv(teamcityVCSNumberEnv, val)
+		defer func() {
+			if err := os.Setenv(teamcityVCSNumberEnv, val); err != nil {
+				t.Error(err)
+			}
+		}()
 	} else {
-		defer os.Unsetenv(teamcityVCSNumberEnv)
+		defer func() {
+			if err := os.Unsetenv(teamcityVCSNumberEnv); err != nil {
+				t.Error(err)
+			}
+		}()
 	}
 
 	if err := os.Setenv(teamcityVCSNumberEnv, sha); err != nil {
