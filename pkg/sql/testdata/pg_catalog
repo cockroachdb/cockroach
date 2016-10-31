@@ -53,6 +53,7 @@ pg_database
 pg_indexes
 pg_namespace
 pg_proc
+pg_roles
 pg_tables
 pg_type
 pg_views
@@ -704,3 +705,14 @@ WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
 least    2283         1         2283        2283         v
+
+## pg_catalog.pg_roles
+
+query TBBBBBBITTTI colnames
+SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcatupdate, rolcanlogin, rolconnlimit, rolpassword, rolvaliduntil, rolconfig, oid
+FROM pg_catalog.pg_roles
+ORDER BY rolname;
+----
+rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolconnlimit  rolpassword  rolvaliduntil  rolconfig  oid
+root      true      false       true           true         false         true         -1            ********     NULL           {}         4230608961
+testuser  false     false       false          false        false         true         -1            ********     NULL           {}         4079356392
