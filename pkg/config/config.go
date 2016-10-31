@@ -37,8 +37,7 @@ import (
 
 const (
 	// minRangeMaxBytes is the minimum value for range max bytes.
-	// TODO(marc): should we revise this lower?
-	minRangeMaxBytes = 1 << 20
+	minRangeMaxBytes = 64 << 10 // 64 KB
 )
 
 type zoneConfigHook func(SystemConfig, uint32) (ZoneConfig, bool, error)
@@ -48,8 +47,8 @@ var (
 	// config has been specified.
 	defaultZoneConfig = ZoneConfig{
 		NumReplicas:   3,
-		RangeMinBytes: 1 << 20,
-		RangeMaxBytes: 64 << 20,
+		RangeMinBytes: 1 << 20,  // 1 MB
+		RangeMaxBytes: 64 << 20, // 64 MB
 		GC: GCPolicy{
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
