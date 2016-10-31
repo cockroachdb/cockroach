@@ -198,11 +198,6 @@ var (
 		"do not shorten the error or SQL strings when printing the summary for -allow-prepare-fail or -flex-types.")
 )
 
-// logicMaxOffset is the value of the MaxOffset parameter used for
-// each test database. This value is smaller than the default so as to
-// make the tests run faster.
-const logicMaxOffset = 50 * time.Millisecond
-
 // lineScanner handles reading from input test files.
 type lineScanner struct {
 	*bufio.Scanner
@@ -447,7 +442,6 @@ func (t *logicTest) setup() {
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
 	params := base.TestServerArgs{
-		MaxOffset: logicMaxOffset,
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				WaitForGossipUpdate:   true,
