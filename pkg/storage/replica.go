@@ -374,6 +374,11 @@ type Replica struct {
 		// The pending outgoing snapshot if there is one.
 		outSnap OutgoingSnapshot
 	}
+
+	unreachablesMu struct {
+		syncutil.Mutex
+		remotes map[roachpb.ReplicaID]struct{}
+	}
 }
 
 // KeyRange is an interface type for the replicasByKey BTree, to compare
@@ -2202,6 +2207,15 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.unreachablesMu.Lock()
+	remotes := r.unreachablesMu.remotes
+	r.unreachablesMu.remotes = nil
+	r.unreachablesMu.Unlock()
+
+	for remoteReplica := range remotes {
+		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+	}
+
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
 	if r.mu.internalRaftGroup == nil {
@@ -2663,12 +2677,15 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	}
 }
 
-// reportUnreachable reports the remote replica as unreachable to the internal
-// raft group.
-func (r *Replica) reportUnreachable(remoteReplica roachpb.ReplicaID) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+// addUnreachableRemoteReplica adds the given remote ReplicaID to be reported
+// as unreachable on the next tick.
+func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
+	r.unreachablesMu.Lock()
+	if r.unreachablesMu.remotes == nil {
+		r.unreachablesMu.remotes = make(map[roachpb.ReplicaID]struct{})
+	}
+	r.unreachablesMu.remotes[remoteReplica] = struct{}{}
+	r.unreachablesMu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
