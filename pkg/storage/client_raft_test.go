@@ -1456,6 +1456,60 @@ func TestRaftHeartbeats(t *testing.T) {
 	}
 }
 
+// TestReportUnreachableHeartbeats tests that if a single transport fails,
+// coalesced heartbeats are not stalled out entirely.
+func TestReportUnreachableHeartbeats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	// Replicate the range onto all three stores
+	mtc.replicateRange(1, 1, 2)
+
+	// Send a single increment to ensure the range is up.
+	key := roachpb.Key("a")
+	incArgs := incrementArgs(key, 2)
+	if _, err := client.SendWrapped(context.Background(),
+		mtc.distSenders[0], &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(key, []int64{2, 2, 2})
+
+	leaderIdx := -1
+	for i, store := range mtc.stores {
+		if store.RaftStatus(1).SoftState.RaftState == raft.StateLeader {
+			leaderIdx = i
+			break
+		}
+	}
+	initialTerm := mtc.stores[leaderIdx].RaftStatus(1).Term
+	// Choose a follower index that is guaranteed to not be the leader
+	followerIdx := len(mtc.stores) + 1 - leaderIdx
+
+	// Shut down a raft transport via the circuit breaker, and wait for two
+	// election timeouts to trigger an election if reportUnreachable broke
+	// heartbeat transmission to the other store.
+	cb := mtc.transports[0].GetCircuitBreaker(roachpb.NodeID(followerIdx))
+	cb.Break()
+
+	ticksToWait := 2 * mtc.makeStoreConfig(0).RaftElectionTimeoutTicks
+	ticks := mtc.stores[leaderIdx].Metrics().RaftTicks.Count
+	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Ensure that the leadership has not changed, to confirm that heartbeats
+	// are sent to the store with a functioning transport.
+	status := mtc.stores[leaderIdx].RaftStatus(1)
+	if status.SoftState.RaftState != raft.StateLeader {
+		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderIdx, status.SoftState.RaftState)
+	}
+	if status.Term != initialTerm {
+		t.Errorf("while sleeping, term changed from %d to %d", initialTerm, status.Term)
+	}
+}
+
 // TestReplicateAfterSplit verifies that a new replica whose start key
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
