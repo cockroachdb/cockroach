@@ -1638,8 +1638,8 @@ func (s *Store) NewRangeDescriptor(
 	return desc, nil
 }
 
-// splitTriggerPostCommit is the part of the split trigger which coordinates
-// the actual split with the Store. Requires that Replica.raftMu is held.
+// splitPostApply is the part of the split trigger which coordinates the actual
+// split with the Store. Requires that Replica.raftMu is held.
 //
 // TODO(tschottdorf): Want to merge this with SplitRange, but some legacy
 // testing code calls SplitRange directly.
@@ -1720,7 +1720,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	defer s.mu.Unlock()
 	if exRng, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
 		// If we have an uninitialized replica of the new range we require pointer
-		// equivalence with newRng. See Store.splitTriggerPostCommit()
+		// equivalence with newRng. See Store.splitTriggerPostApply().
 		if exRng != newRng {
 			ctx := s.AnnotateCtx(context.TODO())
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
