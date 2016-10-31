@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -86,7 +87,11 @@ func TestServerStartClock(t *testing.T) {
 	// MaxOffset, we don't hide that under the latency of the Start operation
 	// which would allow the physical clock to catch up to the pushed one.
 	params := base.TestServerArgs{
-		MaxOffset: time.Second,
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				MaxOffset: time.Second,
+			},
+		},
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
