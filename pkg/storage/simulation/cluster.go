@@ -98,7 +98,6 @@ func createCluster(
 		storePool: storePool,
 		allocator: storage.MakeAllocator(storePool, storage.AllocatorOptions{
 			AllowRebalance: true,
-			Deterministic:  true,
 		}),
 		storeGossiper:   gossiputil.NewStoreGossiper(g),
 		nodes:           make(map[roachpb.NodeID]*Node),

@@ -22,8 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -35,8 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
+
+// TestSetDeterministic makes StorePool return results in a deterministic way.
+func (sp *StorePool) TestSetDeterministic(deterministic bool) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.mu.deterministic = deterministic
+}
 
 var uniqueStore = []*roachpb.StoreDescriptor{
 	{
@@ -212,18 +219,13 @@ func TestStorePoolDies(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
-	constraints config.Constraints,
 	rangeID roachpb.RangeID,
 	expected []int,
 	expectedAliveStoreCount int,
 	expectedThrottledStoreCount int,
 ) error {
 	var actual []int
-	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(
-		constraints,
-		rangeID,
-		false,
-	)
+	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(rangeID)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
 			expectedAliveStoreCount, aliveStoreCount)
@@ -244,73 +246,51 @@ func verifyStoreList(
 }
 
 // TestStorePoolGetStoreList ensures that the store list returns only stores
-// that are alive and match the attribute criteria.
+// that are alive.
 func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
-	constraints := config.Constraints{Constraints: []config.Constraint{{Value: "ssd"}, {Value: "dc"}}}
-	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl, _, _ := sp.getStoreList(
-		constraints,
-		roachpb.RangeID(0),
-		false,
-	); len(sl.stores) != 0 {
+	if sl, _, _ := sp.getStoreList(roachpb.RangeID(0)); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
 	matchingStore := roachpb.StoreDescriptor{
 		StoreID: 1,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 	supersetStore := roachpb.StoreDescriptor{
 		StoreID: 2,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{Attrs: append(required, "db")},
-	}
-	unmatchingStore := roachpb.StoreDescriptor{
-		StoreID: 3,
-		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{Attrs: []string{"ssd", "otherdc"}},
-	}
-	emptyStore := roachpb.StoreDescriptor{
-		StoreID: 4,
-		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{},
 	}
 	deadStore := roachpb.StoreDescriptor{
-		StoreID: 5,
+		StoreID: 3,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 	declinedStore := roachpb.StoreDescriptor{
-		StoreID: 6,
+		StoreID: 4,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 	corruptReplicaStore := roachpb.StoreDescriptor{
 		StoreID: 7,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
-		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 
 	corruptedRangeID := roachpb.RangeID(1)
 
-	// Mark all alive initially.
-	sg.GossipStores([]*roachpb.StoreDescriptor{
+	allStores := []*roachpb.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
-		&unmatchingStore,
-		&emptyStore,
 		&deadStore,
 		&declinedStore,
 		&corruptReplicaStore,
-	}, t)
+	}
 
+	// Mark all alive initially.
+	sg.GossipStores(allStores, t)
 	// Add some corrupt replicas that should not affect getStoreList().
 	sp.mu.Lock()
 	sp.mu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
@@ -332,7 +312,6 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	if err := verifyStoreList(
 		sp,
-		constraints,
 		corruptedRangeID,
 		[]int{
 			int(matchingStore.StoreID),
@@ -341,7 +320,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 			int(declinedStore.StoreID),
 			int(corruptReplicaStore.StoreID),
 		},
-		/* expectedAliveStoreCount */ 7,
+		/* expectedAliveStoreCount */ len(allStores),
 		/* expectedThrottledStoreCount */ 0,
 	); err != nil {
 		t.Error(err)
@@ -362,13 +341,12 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	if err := verifyStoreList(
 		sp,
-		constraints,
 		corruptedRangeID,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 		},
-		/* expectedAliveStoreCount */ 6,
+		/* expectedAliveStoreCount */ len(allStores)-1,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
@@ -484,11 +462,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
-	sl, alive, throttled := sp.getStoreList(
-		config.Constraints{},
-		roachpb.RangeID(0),
-		true,
-	)
+	sl, alive, throttled := sp.getStoreList(roachpb.RangeID(0))
 	if len(sl.stores) > 0 {
 		t.Errorf("expected no live stores; got list of %v", sl)
 	}

@@ -119,12 +119,15 @@ func (rq *replicateQueue) shouldQueue(
 	if lease, _ := repl.getLease(); lease != nil {
 		leaseStoreID = lease.Replica.StoreID
 	}
-	target := rq.allocator.RebalanceTarget(
+	target, err := rq.allocator.RebalanceTarget(
 		zone.Constraints,
 		desc.Replicas,
 		leaseStoreID,
 		desc.RangeID,
 	)
+	if err != nil {
+		return false, 0
+	}
 	if log.V(2) {
 		if target != nil {
 			log.Infof(ctx, "%s rebalance target found, enqueuing", repl)
@@ -158,12 +161,7 @@ func (rq *replicateQueue) process(
 	switch action {
 	case AllocatorAdd:
 		log.Event(ctx, "adding a new replica")
-		newStore, err := rq.allocator.AllocateTarget(
-			zone.Constraints,
-			desc.Replicas,
-			desc.RangeID,
-			true,
-		)
+		newStore, err := rq.allocator.AllocateTarget(zone.Constraints, desc.Replicas, desc.RangeID)
 		if err != nil {
 			return err
 		}
@@ -180,7 +178,7 @@ func (rq *replicateQueue) process(
 		log.Event(ctx, "removing a replica")
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
+		removeReplica, err := rq.allocator.RemoveTarget(zone.Constraints, desc.Replicas, repl.store.StoreID())
 		if err != nil {
 			return err
 		}
@@ -212,17 +210,17 @@ func (rq *replicateQueue) process(
 		//
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		rebalanceStore := rq.allocator.RebalanceTarget(
+		rebalanceStore, err := rq.allocator.RebalanceTarget(
 			zone.Constraints,
 			desc.Replicas,
 			repl.store.StoreID(),
 			desc.RangeID,
 		)
-		if rebalanceStore == nil {
-			log.VEventf(ctx, 1, "no suitable rebalance target")
+		if rebalanceStore == nil || err != nil {
+			log.VEventf(ctx, 1, "%s: no suitable rebalance target", repl)
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
-			return nil
+			return err
 		}
 		rebalanceReplica := roachpb.ReplicaDescriptor{
 			NodeID:  rebalanceStore.Node.NodeID,
