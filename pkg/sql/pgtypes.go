@@ -24,6 +24,7 @@ import (
 )
 
 var oidToDatum = map[oid.Oid]parser.Type{
+	oid.T_anyelement:  parser.TypeAny,
 	oid.T_bool:        parser.TypeBool,
 	oid.T_bytea:       parser.TypeBytes,
 	oid.T_date:        parser.TypeDate,
@@ -35,12 +36,16 @@ var oidToDatum = map[oid.Oid]parser.Type{
 	oid.T_interval:    parser.TypeInterval,
 	oid.T_numeric:     parser.TypeDecimal,
 	oid.T_text:        parser.TypeString,
+	oid.T__text:       parser.TypeArray,
 	oid.T_timestamp:   parser.TypeTimestamp,
 	oid.T_timestamptz: parser.TypeTimestampTZ,
 	oid.T_varchar:     parser.TypeString,
 }
 
 var datumToOid = map[reflect.Type]oid.Oid{
+	reflect.TypeOf(parser.TypeAny): oid.T_anyelement,
+	// Currently, only text arrays are supported.
+	reflect.TypeOf(parser.TypeArray):       oid.T__text,
 	reflect.TypeOf(parser.TypeBool):        oid.T_bool,
 	reflect.TypeOf(parser.TypeBytes):       oid.T_bytea,
 	reflect.TypeOf(parser.TypeDate):        oid.T_date,
@@ -51,6 +56,7 @@ var datumToOid = map[reflect.Type]oid.Oid{
 	reflect.TypeOf(parser.TypeString):      oid.T_text,
 	reflect.TypeOf(parser.TypeTimestamp):   oid.T_timestamp,
 	reflect.TypeOf(parser.TypeTimestampTZ): oid.T_timestamptz,
+	reflect.TypeOf(parser.TypeTuple):       oid.T_record,
 }
 
 // OidToDatum maps Postgres object IDs to CockroachDB types.

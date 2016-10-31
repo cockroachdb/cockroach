@@ -41,7 +41,11 @@ type typeList interface {
 	// getAt returns the type at the given index in the typeList, or nil if the typeList
 	// cannot have a parameter at index i.
 	getAt(i int) Type
-	// human readable signature
+	// Length returns the number of types in the list
+	Length() int
+	// Types returns a realized copy of the list. variadic lists return a list of size one.
+	Types() []Type
+	// String returns a human readable signature
 	String() string
 }
 
@@ -77,6 +81,16 @@ func (a ArgTypes) matchLen(l int) bool {
 
 func (a ArgTypes) getAt(i int) Type {
 	return a[i]
+}
+
+// Length implements the typeList interface.
+func (a ArgTypes) Length() int {
+	return len(a)
+}
+
+// Types implements the typeList interface.
+func (a ArgTypes) Types() []Type {
+	return a
 }
 
 func (a ArgTypes) String() string {
@@ -122,6 +136,21 @@ func (a NamedArgTypes) getAt(i int) Type {
 	return a[i].Typ
 }
 
+// Length implements the typeList interface.
+func (a NamedArgTypes) Length() int {
+	return len(a)
+}
+
+// Types implements the typeList interface.
+func (a NamedArgTypes) Types() []Type {
+	n := len(a)
+	ret := make([]Type, n, n)
+	for i, s := range a {
+		ret[i] = s.Typ
+	}
+	return ret
+}
+
 func (a NamedArgTypes) String() string {
 	var s bytes.Buffer
 	for i, arg := range a {
@@ -154,8 +183,18 @@ func (AnyType) getAt(i int) Type {
 	panic("getAt called on AnyType")
 }
 
+// Length implements the typeList interface.
+func (a AnyType) Length() int {
+	return 1
+}
+
+// Types implements the typeList interface.
+func (a AnyType) Types() []Type {
+	return []Type{TypeAny}
+}
+
 func (AnyType) String() string {
-	return "*"
+	return "anyelement..."
 }
 
 // VariadicType is a typeList implementation which accepts any number of
@@ -184,6 +223,16 @@ func (v VariadicType) matchLen(l int) bool {
 
 func (v VariadicType) getAt(i int) Type {
 	return v.Typ
+}
+
+// Length implements the typeList interface.
+func (v VariadicType) Length() int {
+	return 1
+}
+
+// Types implements the typeList interface.
+func (v VariadicType) Types() []Type {
+	return []Type{v.Typ}
 }
 
 func (v VariadicType) String() string {
@@ -220,6 +269,16 @@ func (s SingleType) getAt(i int) Type {
 		return nil
 	}
 	return s.Typ
+}
+
+// Length implements the typeList interface.
+func (s SingleType) Length() int {
+	return 1
+}
+
+// Types implements the typeList interface.
+func (s SingleType) Types() []Type {
+	return []Type{s.Typ}
 }
 
 func (s SingleType) String() string {

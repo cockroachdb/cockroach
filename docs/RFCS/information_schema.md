@@ -116,7 +116,7 @@ detailed discussion on `pg_catalog` until the implementation of `information_sch
 
 ### Standards Considerations
 
-It is advised that we take a similar approach to MySQL in it's representation of
+It is advised that we take a similar approach to MySQL in its representation of
 `information_schema`. The `information_schema` table structure will follow the ANSI/ISO
 SQL:2003 standard Part 11 Schemata. The intent is approximate compliance with SQL:2003 core
 feature F021 Basic information schema.
