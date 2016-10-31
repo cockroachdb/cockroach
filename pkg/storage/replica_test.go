@@ -1623,7 +1623,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			var seen int32
 			tc.rng.mu.Lock()
 			tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
-				ll, ok := cmd.RaftCommand.Cmd.Requests[0].
+				ll, ok := cmd.Cmd.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
 					return defaultSubmitProposalLocked(tc.rng, cmd)
@@ -5784,7 +5784,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	commandProposed := make(chan struct{}, 1)
 	rng.mu.Lock()
 	rng.mu.submitProposalFn = func(p *ProposalData) error {
-		if p.RaftCommand.Cmd.Timestamp.Equal(magicTS) {
+		if p.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
@@ -5816,7 +5816,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				cmd.RaftCommand.MaxLeaseIndex = wrongLeaseIndex
+				cmd.MaxLeaseIndex = wrongLeaseIndex
 			}
 		}
 		return defaultSubmitProposalLocked(tc.rng, cmd)
@@ -5955,7 +5955,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.rng.mu.Lock()
 	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
-			seenCmds = append(seenCmds, int(cmd.RaftCommand.MaxLeaseIndex))
+			seenCmds = append(seenCmds, int(cmd.MaxLeaseIndex))
 		}
 		return defaultSubmitProposalLocked(tc.rng, cmd)
 	}
@@ -5990,7 +5990,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		tc.rng.mu.Lock()
 		for _, p := range tc.rng.mu.proposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
-				origIndexes = append(origIndexes, int(p.RaftCommand.MaxLeaseIndex))
+				origIndexes = append(origIndexes, int(p.MaxLeaseIndex))
 			}
 		}
 		tc.rng.mu.Unlock()
