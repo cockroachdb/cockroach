@@ -33,6 +33,10 @@ type sender struct {
 //
 // This must not be used by server.Server or any of its components, only by
 // clients talking to a Cockroach cluster through the external interface.
+//
+// This Sender is DEPRECATED. Don't use it since it doesn't provide a cancelable
+// context for the transactions it starts. See comments in
+// TxnCoordSender.hearbeat() about wanting cancelable contexts for all txns.
 func NewSender(ctx *rpc.Context, target string) (Sender, error) {
 	conn, err := ctx.GRPCDial(target)
 	if err != nil {

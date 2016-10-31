@@ -49,6 +49,9 @@ func addrWithDefaultHost(addr string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
+// makeDBClient is DEPRECATED. Don't use it since it doesn't provide a
+// cancelable context for the transactions it starts. See comments in
+// TxnCoordSender.hearbeat() about wanting cancelable contexts for all txns.
 func makeDBClient() (*client.DB, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	cfg := &base.Config{
