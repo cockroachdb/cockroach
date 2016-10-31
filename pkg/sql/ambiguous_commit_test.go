@@ -45,6 +45,7 @@ import (
 // duplicate key violations. See #6053, #7604, and #10023.
 func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#10341")
 
 	// Create a command filter which prevents EndTransaction from
 	// returning a response.
