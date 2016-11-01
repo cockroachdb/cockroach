@@ -49,14 +49,17 @@ type LocalProposalData struct {
 	proposedAtTicks int
 	ctx             context.Context
 
+	// The error resulting from the proposal. Most failing proposals will
+	// fail-fast, i.e. will return an error to the client above Raft. However,
+	// some proposals need to commit data even on error, and in that case we
+	// treat the proposal like a successful one, except that the error stored
+	// here will be sent to the client when the associated batch commits. In
+	// the common case, this field is nil.
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
 	done  chan proposalResult // Used to signal waiting RPC handler
 
 	Batch engine.Batch
-	// The stats delta that the application of the Raft command would cause.
-	// On a split, contains only the contributions to the left-hand side.
-	delta enginepb.MVCCStats
 
 	// The new (estimated, i.e. not necessarily consistently replicated)
 	// raftLogSize.
@@ -103,8 +106,10 @@ type ProposalData struct {
 	storagebase.ReplicatedProposalData
 }
 
-func coalesceBool(lhs *bool, rhs bool) {
-	*lhs = *lhs || rhs
+// coalesceBool ORs rhs into lhs and then zeroes rhs.
+func coalesceBool(lhs *bool, rhs *bool) {
+	*lhs = *lhs || *rhs
+	*rhs = false
 }
 
 // MergeAndDestroy absorbs the supplied ProposalData while validating that the
@@ -127,46 +132,68 @@ func (p *ProposalData) MergeAndDestroy(q ProposalData) error {
 	} else if q.State.Desc != nil {
 		return errors.New("conflicting RangeDescriptor")
 	}
+	q.State.Desc = nil
+
 	if p.State.Lease == nil {
 		p.State.Lease = q.State.Lease
 	} else if q.State.Lease != nil {
 		return errors.New("conflicting Lease")
 	}
+	q.State.Lease = nil
+
 	if p.State.TruncatedState == nil {
 		p.State.TruncatedState = q.State.TruncatedState
 	} else if q.State.TruncatedState != nil {
 		return errors.New("conflicting TruncatedState")
 	}
+	q.State.TruncatedState = nil
+
 	p.State.GCThreshold.Forward(q.State.GCThreshold)
+	q.State.GCThreshold = hlc.ZeroTimestamp
 	p.State.TxnSpanGCThreshold.Forward(q.State.TxnSpanGCThreshold)
+	q.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+
 	if (q.State.Stats != enginepb.MVCCStats{}) {
 		return errors.New("must not specify Stats")
 	}
+
 	if p.State.Frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
 		p.State.Frozen = q.State.Frozen
 	} else if q.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
 		return errors.New("conflicting FrozenStatus")
 	}
+	q.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
 
 	p.BlockReads = p.BlockReads || q.BlockReads
+	q.BlockReads = false
 
 	if p.Split == nil {
 		p.Split = q.Split
 	} else if q.Split != nil {
 		return errors.New("conflicting Split")
 	}
+	q.Split = nil
 
 	if p.Merge == nil {
 		p.Merge = q.Merge
 	} else if q.Merge != nil {
 		return errors.New("conflicting Merge")
 	}
+	q.Merge = nil
+
+	if p.ChangeReplicas == nil {
+		p.ChangeReplicas = q.ChangeReplicas
+	} else if q.ChangeReplicas != nil {
+		return errors.New("conflicting ChangeReplicas")
+	}
+	q.ChangeReplicas = nil
 
 	if p.ComputeChecksum == nil {
 		p.ComputeChecksum = q.ComputeChecksum
 	} else if q.ComputeChecksum != nil {
 		return errors.New("conflicting ComputeChecksum")
 	}
+	q.ComputeChecksum = nil
 
 	// ==================
 	// LocalProposalData.
@@ -177,6 +204,7 @@ func (p *ProposalData) MergeAndDestroy(q ProposalData) error {
 	} else if q.raftLogSize != nil {
 		return errors.New("conflicting raftLogSize")
 	}
+	q.raftLogSize = nil
 
 	if q.intents != nil {
 		if p.intents == nil {
@@ -185,23 +213,31 @@ func (p *ProposalData) MergeAndDestroy(q ProposalData) error {
 			*p.intents = append(*p.intents, *q.intents...)
 		}
 	}
+	q.intents = nil
 
 	if p.leaseMetricsResult == nil {
 		p.leaseMetricsResult = q.leaseMetricsResult
 	} else if q.leaseMetricsResult != nil {
 		return errors.New("conflicting leaseMetricsResult")
 	}
+	q.leaseMetricsResult = nil
 
 	if p.maybeGossipNodeLiveness == nil {
 		p.maybeGossipNodeLiveness = q.maybeGossipNodeLiveness
 	} else if q.maybeGossipNodeLiveness != nil {
 		return errors.New("conflicting maybeGossipNodeLiveness")
 	}
+	q.maybeGossipNodeLiveness = nil
 
-	coalesceBool(&p.gossipFirstRange, q.gossipFirstRange)
-	coalesceBool(&p.maybeGossipSystemConfig, q.maybeGossipSystemConfig)
-	coalesceBool(&p.maybeAddToSplitQueue, q.maybeAddToSplitQueue)
-	coalesceBool(&p.addToReplicaGCQueue, q.addToReplicaGCQueue)
+	coalesceBool(&p.gossipFirstRange, &q.gossipFirstRange)
+	coalesceBool(&p.maybeGossipSystemConfig, &q.maybeGossipSystemConfig)
+	coalesceBool(&p.maybeAddToSplitQueue, &q.maybeAddToSplitQueue)
+	coalesceBool(&p.addToReplicaGCQueue, &q.addToReplicaGCQueue)
+
+	if (q != ProposalData{}) {
+		log.Fatalf(context.TODO(), "unhandled ProposalData: %s", pretty.Diff(q, ProposalData{}))
+	}
+
 	return nil
 }
 
@@ -355,34 +391,60 @@ func (r *Replica) maybeTransferRaftLeadership(
 	}
 }
 
-func (r *Replica) handleProposalData(
-	ctx context.Context, originReplica roachpb.ReplicaDescriptor, pd ProposalData,
-) {
-	if pd.BlockReads {
+func (r *Replica) handleReplicatedProposalData(
+	ctx context.Context, rpd storagebase.ReplicatedProposalData,
+) (shouldAssert bool) {
+	rpd.WriteBatch = nil
+	rpd.IsLeaseRequest = false
+	rpd.IsConsistencyRelated = false
+	rpd.IsFreeze = false
+	rpd.RangeID = 0
+	rpd.Cmd = nil
+	rpd.MaxLeaseIndex = 0
+	rpd.Timestamp = hlc.ZeroTimestamp
+
+	if rpd.BlockReads {
 		r.readOnlyCmdMu.Lock()
 		defer r.readOnlyCmdMu.Unlock()
-		pd.BlockReads = false
+		rpd.BlockReads = false
 	}
 
 	// Update MVCC stats and Raft portion of ReplicaState.
 	r.mu.Lock()
-	r.mu.state.Stats = pd.State.Stats
-	r.mu.state.RaftAppliedIndex = pd.State.RaftAppliedIndex
-	r.mu.state.LeaseAppliedIndex = pd.State.LeaseAppliedIndex
+	r.mu.state.Stats.Add(rpd.Delta)
+	if rpd.State.RaftAppliedIndex != 0 {
+		r.mu.state.RaftAppliedIndex = rpd.State.RaftAppliedIndex
+	}
+	if rpd.State.LeaseAppliedIndex != 0 {
+		r.mu.state.LeaseAppliedIndex = rpd.State.LeaseAppliedIndex
+	}
+	needsSplitBySize := r.needsSplitBySizeLocked()
 	r.mu.Unlock()
 
-	pd.State.Stats = enginepb.MVCCStats{}
-	pd.State.LeaseAppliedIndex = 0
-	pd.State.RaftAppliedIndex = 0
+	r.store.metrics.addMVCCStats(rpd.Delta)
+	rpd.Delta = enginepb.MVCCStats{}
+
+	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
+	if rpd.State.RaftAppliedIndex%raftLogCheckFrequency == 1 {
+		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
+	if needsSplitBySize {
+		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
+
+	rpd.State.Stats = enginepb.MVCCStats{}
+	rpd.State.LeaseAppliedIndex = 0
+	rpd.State.RaftAppliedIndex = 0
+	rpd.OriginReplica = roachpb.ReplicaDescriptor{}
 
 	// The above are always present, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert := (pd.ReplicatedProposalData != storagebase.ReplicatedProposalData{})
+	shouldAssert = (rpd != storagebase.ReplicatedProposalData{})
 
 	// Process Split or Merge. This needs to happen after stats update because
 	// of the ContainsEstimates hack.
 
-	if pd.Split != nil {
+	if rpd.Split != nil {
 		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
 		// machinery update our stats for the left-hand side. But there is no
 		// way to pass up an MVCCStats object that will clear out the
@@ -402,35 +464,33 @@ func (r *Replica) handleProposalData(
 
 		splitPostApply(
 			r.AnnotateCtx(context.TODO()),
-			pd.Split.RHSDelta,
-			&pd.Split.SplitTrigger,
+			rpd.Split.RHSDelta,
+			&rpd.Split.SplitTrigger,
 			r,
 		)
-		pd.Split = nil
+		rpd.Split = nil
 	}
 
-	if pd.Merge != nil {
-		if err := r.store.MergeRange(ctx, r, pd.Merge.LeftDesc.EndKey,
-			pd.Merge.RightDesc.RangeID,
+	if rpd.Merge != nil {
+		if err := r.store.MergeRange(ctx, r, rpd.Merge.LeftDesc.EndKey,
+			rpd.Merge.RightDesc.RangeID,
 		); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf(ctx, "failed to update store after merging range: %s", err)
 		}
-		pd.Merge = nil
+		rpd.Merge = nil
 	}
 
 	// Update the remaining ReplicaState.
 
-	if pd.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+	if rpd.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
 		r.mu.Lock()
-		r.mu.state.Frozen = pd.State.Frozen
+		r.mu.state.Frozen = rpd.State.Frozen
 		r.mu.Unlock()
 	}
-	pd.State.Frozen = storagebase.ReplicaState_FrozenEnum(0)
+	rpd.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
 
-	if newDesc := pd.State.Desc; newDesc != nil {
-		pd.State.Desc = nil // for assertion
-
+	if newDesc := rpd.State.Desc; newDesc != nil {
 		if err := r.setDesc(newDesc); err != nil {
 			// Log the error. There's not much we can do because the commit may
 			// have already occurred at this point.
@@ -440,10 +500,12 @@ func (r *Replica) handleProposalData(
 				newDesc, err,
 			)
 		}
+		rpd.State.Desc = nil
+		rpd.ChangeReplicas = nil
 	}
 
-	if newLease := pd.State.Lease; newLease != nil {
-		pd.State.Lease = nil // for assertion
+	if newLease := rpd.State.Lease; newLease != nil {
+		rpd.State.Lease = nil // for assertion
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
@@ -454,8 +516,8 @@ func (r *Replica) handleProposalData(
 		r.leasePostApply(ctx, newLease, replicaID, prevLease)
 	}
 
-	if newTruncState := pd.State.TruncatedState; newTruncState != nil {
-		pd.State.TruncatedState = nil // for assertion
+	if newTruncState := rpd.State.TruncatedState; newTruncState != nil {
+		rpd.State.TruncatedState = nil // for assertion
 		r.mu.Lock()
 		r.mu.state.TruncatedState = newTruncState
 		r.mu.Unlock()
@@ -464,25 +526,59 @@ func (r *Replica) handleProposalData(
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
 	}
 
-	if newThresh := pd.State.GCThreshold; newThresh != hlc.ZeroTimestamp {
+	if newThresh := rpd.State.GCThreshold; newThresh != hlc.ZeroTimestamp {
 		r.mu.Lock()
 		r.mu.state.GCThreshold = newThresh
 		r.mu.Unlock()
-		pd.State.GCThreshold = hlc.ZeroTimestamp
+		rpd.State.GCThreshold = hlc.ZeroTimestamp
 	}
 
-	if newThresh := pd.State.TxnSpanGCThreshold; newThresh != hlc.ZeroTimestamp {
+	if newThresh := rpd.State.TxnSpanGCThreshold; newThresh != hlc.ZeroTimestamp {
 		r.mu.Lock()
 		r.mu.state.TxnSpanGCThreshold = newThresh
 		r.mu.Unlock()
-		pd.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+		rpd.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
 	}
+
+	if rpd.ComputeChecksum != nil {
+		r.computeChecksumPostApply(ctx, *rpd.ComputeChecksum)
+		rpd.ComputeChecksum = nil
+	}
+
+	if (rpd != storagebase.ReplicatedProposalData{}) {
+		log.Fatalf(context.TODO(), "unhandled field in ReplicatedProposalData: %s", pretty.Diff(rpd, storagebase.ReplicatedProposalData{}))
+	}
+	return shouldAssert
+}
+
+func (r *Replica) handleProposalData(
+	ctx context.Context, lpd LocalProposalData, rpd storagebase.ReplicatedProposalData,
+) {
+	originReplica := rpd.OriginReplica
+	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
+	shouldAssert := r.handleReplicatedProposalData(ctx, rpd)
+	shouldAssert = r.handleLocalProposalData(ctx, originReplica, lpd) || shouldAssert
+	if shouldAssert {
+		// Assert that the on-disk state doesn't diverge from the in-memory
+		// state as a result of the side effects.
+		r.assertState(r.store.Engine())
+	}
+}
+
+func (r *Replica) handleLocalProposalData(
+	ctx context.Context, originReplica roachpb.ReplicaDescriptor, lpd LocalProposalData,
+) (shouldAssert bool) {
+	lpd.idKey = storagebase.CmdIDKey("")
+	lpd.Batch = nil
+	lpd.done = nil
+	lpd.ctx = nil
+	lpd.Err = nil
+	lpd.proposedAtTicks = 0
+	lpd.Reply = nil
 
 	// ======================
 	// Non-state updates and actions.
 	// ======================
-	r.store.metrics.addMVCCStats(pd.delta)
-	pd.delta = enginepb.MVCCStats{}
 
 	if originReplica.StoreID == r.store.StoreID() {
 		// On the replica on which this command originated, resolve skipped
@@ -494,24 +590,24 @@ func (r *Replica) handleProposalData(
 		// slice and here still results in that intent slice arriving here
 		// without the EndTransaction having committed. We should clearly
 		// separate the part of the ProposalData which also applies on errors.
-		if pd.intents != nil {
-			r.store.intentResolver.processIntentsAsync(r, *pd.intents)
+		if lpd.intents != nil {
+			r.store.intentResolver.processIntentsAsync(r, *lpd.intents)
 		}
 	}
-	pd.intents = nil
+	lpd.intents = nil
 
 	// The above are present too often, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert = shouldAssert || (pd.LocalProposalData != LocalProposalData{})
+	shouldAssert = (lpd != LocalProposalData{})
 
-	if pd.raftLogSize != nil {
+	if lpd.raftLogSize != nil {
 		r.mu.Lock()
-		r.mu.raftLogSize = *pd.raftLogSize
+		r.mu.raftLogSize = *lpd.raftLogSize
 		r.mu.Unlock()
-		pd.raftLogSize = nil
+		lpd.raftLogSize = nil
 	}
 
-	if pd.gossipFirstRange {
+	if lpd.gossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
 		// the range lease and we'll deadlock if we try to acquire it while
 		// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
@@ -530,52 +626,43 @@ func (r *Replica) handleProposalData(
 		}); err != nil {
 			log.Infof(ctx, "unable to gossip first range: %s", err)
 		}
-		pd.gossipFirstRange = false
+		lpd.gossipFirstRange = false
 	}
 
-	if pd.addToReplicaGCQueue {
+	if lpd.addToReplicaGCQueue {
 		if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
 			// Log the error; the range should still be GC'd eventually.
 			log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 		}
-		pd.addToReplicaGCQueue = false
+		lpd.addToReplicaGCQueue = false
 	}
 
-	if pd.maybeAddToSplitQueue {
+	if lpd.maybeAddToSplitQueue {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
-		pd.maybeAddToSplitQueue = false
+		lpd.maybeAddToSplitQueue = false
 	}
 
-	if pd.maybeGossipSystemConfig {
+	if lpd.maybeGossipSystemConfig {
 		r.maybeGossipSystemConfig()
-		pd.maybeGossipSystemConfig = false
+		lpd.maybeGossipSystemConfig = false
 	}
 
 	if originReplica.StoreID == r.store.StoreID() {
-		if pd.leaseMetricsResult != nil {
-			r.store.metrics.leaseRequestComplete(*pd.leaseMetricsResult)
+		if lpd.leaseMetricsResult != nil {
+			r.store.metrics.leaseRequestComplete(*lpd.leaseMetricsResult)
 		}
-		if pd.maybeGossipNodeLiveness != nil {
-			r.maybeGossipNodeLiveness(*pd.maybeGossipNodeLiveness)
+		if lpd.maybeGossipNodeLiveness != nil {
+			r.maybeGossipNodeLiveness(*lpd.maybeGossipNodeLiveness)
 		}
 	}
 	// Satisfy the assertions for all of the items processed only on the
 	// proposer (the block just above).
-	pd.leaseMetricsResult = nil
-	pd.maybeGossipNodeLiveness = nil
+	lpd.leaseMetricsResult = nil
+	lpd.maybeGossipNodeLiveness = nil
 
-	if pd.ComputeChecksum != nil {
-		r.computeChecksumPostApply(ctx, *pd.ComputeChecksum)
-		pd.ComputeChecksum = nil
+	if (lpd != LocalProposalData{}) {
+		log.Fatalf(context.TODO(), "unhandled field in LocalProposalData: %s", pretty.Diff(lpd, LocalProposalData{}))
 	}
 
-	if (pd != ProposalData{}) {
-		log.Fatalf(context.TODO(), "unhandled field in ProposalData: %s", pretty.Diff(pd, ProposalData{}))
-	}
-
-	if shouldAssert {
-		// Assert that the on-disk state doesn't diverge from the in-memory
-		// state as a result of the side effects.
-		r.assertState(r.store.Engine())
-	}
+	return shouldAssert
 }

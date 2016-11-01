@@ -602,6 +602,7 @@ type StoreTestingKnobs struct {
 	// If your filter is not idempotent, consider wrapping it in a
 	// ReplayProtectionFilterWrapper.
 	TestingCommandFilter storagebase.ReplicaCommandFilter
+	TestingApplyFilter   storagebase.ReplicaApplyFilter
 	// TestingResponseFilter is called after the replica processes a
 	// command in order for unittests to modify the batch response,
 	// error returned to the client, or to simulate network failures.
@@ -2839,15 +2840,12 @@ func (s *Store) processRaftRequest(
 				return roachpb.NewError(errors.Wrap(err, "unable to process preemptive snapshot"))
 			}
 			// In the normal case, the group should ask us to apply a snapshot.
-			// If it doesn't, our snapshot was probably stale.
+			// If it doesn't, our snapshot was probably stale. In that case we
+			// still go ahead and apply a noop because we want that case to be
+			// counted by stats as a successful application.
 			var ready raft.Ready
 			if raftGroup.HasReady() {
 				ready = raftGroup.Ready()
-			}
-			if raft.IsEmptySnap(ready.Snapshot) {
-				// Raft discarded the snapshot, indicating that our local
-				// state is already ahead of what the snapshot provides.
-				return nil
 			}
 
 			// Apply the snapshot, as Raft told us to.
