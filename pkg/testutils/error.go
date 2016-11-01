@@ -57,7 +57,9 @@ func IsPError(pErr *roachpb.Error, re string) bool {
 // some other way. Note that retryable errors may occur event in cases
 // where the SQL execution ran to completion.
 func IsSQLRetryableError(err error) bool {
-	return IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|commit result is ambiguous)")
+	// Don't forget to update the corresponding test when making adjustments
+	// here.
+	return IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|result is ambiguous)")
 }
 
 // Caller returns filename and line number info for the specified stack
