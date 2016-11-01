@@ -27,7 +27,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -206,10 +205,8 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 }
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
-func (sp *StorePool) GetStoreList(
-	constraints config.Constraints, rangeID roachpb.RangeID, deterministic bool,
-) (StoreList, int, int) {
-	return sp.getStoreList(constraints, rangeID, deterministic)
+func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
+	return sp.getStoreList(rangeID)
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.
