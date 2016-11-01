@@ -321,6 +321,8 @@ func (p *planner) newPlan(
 		return p.ShowIndex(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
+	case *parser.ShowUsers:
+		return p.ShowUsers(n)
 	case *parser.Split:
 		return p.Split(n)
 	case *parser.Truncate:
@@ -366,6 +368,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
+	case *parser.ShowUsers:
+		return p.ShowUsers(n)
 	case *parser.Split:
 		return p.Split(n)
 	case *parser.Update:

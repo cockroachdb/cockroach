@@ -255,9 +255,8 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.evalCtx.SearchPath = append([]string(nil), p.session.SearchPath...)
 }
 
-// query initializes a planNode from a SQL statement string.  This
-// should not be used directly; queryRow() and exec() below should be
-// used instead.
+// query initializes a planNode from a SQL statement string. Close() must be
+// called on the returned planNode after use.
 func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	stmt, err := parser.ParseOneTraditional(sql)
 	if err != nil {
