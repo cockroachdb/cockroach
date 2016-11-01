@@ -44,6 +44,7 @@ SET DATABASE = test
 query T
 SHOW TABLES FROM pg_catalog
 ----
+pg_am
 pg_attrdef
 pg_attribute
 pg_class
@@ -167,7 +168,7 @@ constraint_db  v1        NULL       SELECT p, a, b, c FROM constraint_db.t1
 
 query ITIIIIII colnames
 SELECT c.oid, relname, relnamespace, reltype, relowner, relam, relfilenode, reltablespace
-FROM pg_catalog.pg_class c 
+FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
@@ -186,7 +187,7 @@ oid         relname       relnamespace  reltype  relowner  relam  relfilenode  r
 
 query TIRIIBB colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
-FROM pg_catalog.pg_class c 
+FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
@@ -205,7 +206,7 @@ v1            NULL      NULL       0              0              false        fa
 
 query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
-FROM pg_catalog.pg_class c 
+FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
@@ -224,7 +225,7 @@ v1            false      v        4         0          false       false
 
 query TBBBITT colnames
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
-FROM pg_catalog.pg_class c 
+FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
@@ -326,6 +327,16 @@ v1            p        false         true        0            NULL    NULL      
 v1            a        false         true        0            NULL    NULL        NULL
 v1            b        false         true        0            NULL    NULL        NULL
 v1            c        false         true        0            NULL    NULL        NULL
+
+
+## pg_catalog.pg_am
+
+query ITIT colnames
+SELECT *
+FROM pg_catalog.pg_am
+----
+oid         amname  amhandler  amtype
+2631952481  prefix  NULL       i
 
 ## pg_catalog.pg_attrdef
 
