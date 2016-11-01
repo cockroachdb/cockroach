@@ -1431,7 +1431,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 			return n, true
 		case parser.Like:
 			// a LIKE 'foo%' -> a >= "foo" AND a < "fop"
-			if d, ok := right.(*parser.DString); ok {
+			if d, ok := right.(*parser.DUTF8String); ok {
 				if i := strings.IndexAny(string(*d), "_%"); i >= 0 {
 					return makePrefixRange((*d)[:i], left, false), false
 				}
@@ -1440,11 +1440,11 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 			// TODO(pmattis): Support parser.DBytes?
 		case parser.SimilarTo:
 			// a SIMILAR TO "foo.*" -> a >= "foo" AND a < "fop"
-			if d, ok := right.(*parser.DString); ok {
+			if d, ok := right.(*parser.DUTF8String); ok {
 				pattern := parser.SimilarEscape(string(*d))
 				if re, err := regexp.Compile(pattern); err == nil {
 					prefix, complete := re.LiteralPrefix()
-					return makePrefixRange(parser.DString(prefix), left, complete), false
+					return makePrefixRange(parser.DUTF8String(prefix), left, complete), false
 				}
 			}
 			// TODO(pmattis): Support parser.DBytes?
@@ -1453,7 +1453,9 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 	return parser.MakeDBool(true), false
 }
 
-func makePrefixRange(prefix parser.DString, datum parser.TypedExpr, complete bool) parser.TypedExpr {
+func makePrefixRange(
+	prefix parser.DUTF8String, datum parser.TypedExpr, complete bool,
+) parser.TypedExpr {
 	if complete {
 		return parser.NewTypedComparisonExpr(
 			parser.EQ,
@@ -1473,7 +1475,7 @@ func makePrefixRange(prefix parser.DString, datum parser.TypedExpr, complete boo
 		parser.NewTypedComparisonExpr(
 			parser.LT,
 			datum,
-			parser.NewDString(string(roachpb.Key(prefix).PrefixEnd())),
+			parser.NewDUTF8String(string(roachpb.Key(prefix).PrefixEnd())),
 		),
 	)
 }

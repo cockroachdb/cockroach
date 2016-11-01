@@ -155,8 +155,8 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.putInt32(int32(len(result)))
 		b.write(result)
 
-	case *parser.DString:
-		b.writeLengthPrefixedString(string(*v))
+	case parser.DString:
+		b.writeLengthPrefixedString(v.Contents())
 
 	case *parser.DDate:
 		t := time.Unix(int64(*v)*secondsInDay, 0)
@@ -164,7 +164,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *parser.DTimestamp:
+	case *parser.DTimestampNoTZ:
 		s := formatTs(v.Time, nil)
 		b.putInt32(int32(len(s)))
 		b.write(s)
@@ -287,10 +287,10 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
 
-	case *parser.DString:
-		b.writeLengthPrefixedString(string(*v))
+	case parser.DString:
+		b.writeLengthPrefixedString(v.Contents())
 
-	case *parser.DTimestamp:
+	case *parser.DTimestampNoTZ:
 		b.putInt32(8)
 		b.putInt64(timeToPgBinary(v.Time, nil))
 
@@ -596,7 +596,8 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_text, oid.T_varchar:
 		switch code {
 		case formatText, formatBinary:
-			d = parser.NewDString(string(b))
+			// TODO(eisen): locale support.
+			d = parser.NewDUTF8String(string(b))
 		default:
 			return d, errors.Errorf("unsupported text format code: %s", code)
 		}
@@ -630,13 +631,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err != nil {
 				return d, errors.Errorf("could not parse string %q as timestamp", b)
 			}
-			d = parser.MakeDTimestamp(ts, time.Microsecond)
+			d = parser.MakeDTimestampNoTZ(ts, time.Microsecond)
 		case formatBinary:
 			if len(b) < 8 {
 				return d, errors.Errorf("timestamp requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			d = parser.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond)
+			d = parser.MakeDTimestampNoTZ(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamp format code: %s", code)
 		}

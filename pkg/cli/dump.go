@@ -222,7 +222,7 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 				case float64:
 					ivals[si] = parser.NewDFloat(parser.DFloat(t)).String()
 				case string:
-					ivals[si] = parser.NewDString(t).String()
+					ivals[si] = parser.NewDUTF8String(t).String()
 				case []byte:
 					switch ct := coltypes[cols[si]]; ct {
 					case "INTERVAL":
@@ -233,7 +233,7 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
 						if strings.HasPrefix(coltypes[cols[si]], "STRING") {
-							ivals[si] = parser.NewDString(string(t)).String()
+							ivals[si] = parser.NewDUTF8String(string(t)).String()
 						} else if strings.HasPrefix(coltypes[cols[si]], "DECIMAL") {
 							ivals[si] = string(t)
 						} else {
@@ -247,7 +247,7 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					case "DATE":
 						d = parser.NewDDateFromTime(t, time.UTC)
 					case "TIMESTAMP":
-						d = parser.MakeDTimestamp(t, time.Nanosecond)
+						d = parser.MakeDTimestampNoTZ(t, time.Nanosecond)
 					case "TIMESTAMP WITH TIME ZONE":
 						d = parser.MakeDTimestampTZ(t, time.Nanosecond)
 					default:

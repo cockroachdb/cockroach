@@ -168,7 +168,7 @@ var anyElementTypes = []Type{
 	TypeDate,
 	TypeTimestamp,
 	TypeInterval,
-	TypeTuple,
+	TTuple(nil),
 }
 
 func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {

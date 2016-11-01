@@ -42,13 +42,13 @@ var (
 	// defString is used as the value for columns included in the sql standard
 	// of information_schema that don't make sense for CockroachDB. This is
 	// identical to the behavior of MySQL.
-	defString = parser.NewDString("def")
+	defString = parser.NewDUTF8String("def")
 
 	// information_schema was defined before the BOOLEAN data type was added to
 	// the SQL specification. Because of this, boolean values are represented
 	// as strings.
-	yesString = parser.NewDString("YES")
-	noString  = parser.NewDString("NO")
+	yesString = parser.NewDUTF8String("YES")
+	noString  = parser.NewDUTF8String("NO")
 )
 
 func yesOrNoDatum(b bool) parser.Datum {
@@ -62,14 +62,14 @@ func dStringOrNull(s string) parser.Datum {
 	if s == "" {
 		return parser.DNull
 	}
-	return parser.NewDString(s)
+	return parser.NewDUTF8String(s)
 }
 
 func dStringPtrOrNull(s *string) parser.Datum {
 	if s == nil {
 		return parser.DNull
 	}
-	return parser.NewDString(*s)
+	return parser.NewDUTF8String(*s)
 }
 
 func dIntFnOrNull(fn func() (int32, bool)) parser.Datum {
@@ -105,19 +105,19 @@ CREATE TABLE information_schema.columns (
 				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 					visible++
 					return addRow(
-						defString,                                    // table_catalog
-						parser.NewDString(db.Name),                   // table_schema
-						parser.NewDString(table.Name),                // table_name
-						parser.NewDString(column.Name),               // column_name
-						parser.NewDInt(parser.DInt(visible)),         // ordinal_position, 1-indexed
-						dStringPtrOrNull(column.DefaultExpr),         // column_default
-						yesOrNoDatum(column.Nullable),                // is_nullable
-						parser.NewDString(column.Type.Kind.String()), // data_type
-						characterMaximumLength(column.Type),          // character_maximum_length
-						characterOctetLength(column.Type),            // character_octet_length
-						numericPrecision(column.Type),                // numeric_precision
-						numericScale(column.Type),                    // numeric_scale
-						datetimePrecision(column.Type),               // datetime_precision
+						defString,                                        // table_catalog
+						parser.NewDUTF8String(db.Name),                   // table_schema
+						parser.NewDUTF8String(table.Name),                // table_name
+						parser.NewDUTF8String(column.Name),               // column_name
+						parser.NewDInt(parser.DInt(visible)),             // ordinal_position, 1-indexed
+						dStringPtrOrNull(column.DefaultExpr),             // column_default
+						yesOrNoDatum(column.Nullable),                    // is_nullable
+						parser.NewDUTF8String(column.Type.Kind.String()), // data_type
+						characterMaximumLength(column.Type),              // character_maximum_length
+						characterOctetLength(column.Type),                // character_octet_length
+						numericPrecision(column.Type),                    // numeric_precision
+						numericScale(column.Type),                        // numeric_scale
+						datetimePrecision(column.Type),                   // datetime_precision
 					)
 				})
 			},
@@ -196,15 +196,15 @@ CREATE TABLE information_schema.key_column_usage (
 							uniquePos = ordinalPos
 						}
 						if err := addRow(
-							defString,                     // constraint_catalog
-							parser.NewDString(db.Name),    // constraint_schema
-							dStringOrNull(c.name),         // constraint_name
-							defString,                     // table_catalog
-							parser.NewDString(db.Name),    // table_schema
-							parser.NewDString(table.Name), // table_name
-							parser.NewDString(column),     // column_name
-							ordinalPos,                    // ordinal_position, 1-indexed
-							uniquePos,                     // position_in_unique_constraint
+							defString,                         // constraint_catalog
+							parser.NewDUTF8String(db.Name),    // constraint_schema
+							dStringOrNull(c.name),             // constraint_name
+							defString,                         // table_catalog
+							parser.NewDUTF8String(db.Name),    // table_schema
+							parser.NewDUTF8String(table.Name), // table_name
+							parser.NewDUTF8String(column),     // column_name
+							ordinalPos,                        // ordinal_position, 1-indexed
+							uniquePos,                         // position_in_unique_constraint
 						); err != nil {
 							return err
 						}
@@ -227,10 +227,10 @@ CREATE TABLE information_schema.schemata (
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				defString,                  // catalog_name
-				parser.NewDString(db.Name), // schema_name
-				parser.DNull,               // default_character_set_name
-				parser.DNull,               // sql_path
+				defString,                      // catalog_name
+				parser.NewDUTF8String(db.Name), // schema_name
+				parser.DNull,                   // default_character_set_name
+				parser.DNull,                   // sql_path
 			)
 		})
 	},
@@ -251,11 +251,11 @@ CREATE TABLE information_schema.schema_privileges (
 			for _, u := range db.Privileges.Show() {
 				for _, privilege := range u.Privileges {
 					if err := addRow(
-						parser.NewDString(u.User),    // grantee
-						defString,                    // table_catalog,
-						parser.NewDString(db.Name),   // table_schema
-						parser.NewDString(privilege), // privilege_type
-						parser.DNull,                 // is_grantable
+						parser.NewDUTF8String(u.User),    // grantee
+						defString,                        // table_catalog,
+						parser.NewDUTF8String(db.Name),   // table_schema
+						parser.NewDUTF8String(privilege), // privilege_type
+						parser.DNull,                     // is_grantable
 					); err != nil {
 						return err
 					}
@@ -293,16 +293,16 @@ CREATE TABLE information_schema.statistics (
 					direction string, isStored bool) error {
 					return addRow(
 						defString,                                    // table_catalog
-						parser.NewDString(db.GetName()),              // table_schema
-						parser.NewDString(table.GetName()),           // table_name
+						parser.NewDUTF8String(db.GetName()),          // table_schema
+						parser.NewDUTF8String(table.GetName()),       // table_name
 						parser.MakeDBool(parser.DBool(index.Unique)), // non_unique
-						parser.NewDString(db.GetName()),              // index_schema
-						parser.NewDString(index.Name),                // index_name
+						parser.NewDUTF8String(db.GetName()),          // index_schema
+						parser.NewDUTF8String(index.Name),            // index_name
 						parser.NewDInt(parser.DInt(sequence)),        // seq_in_index
-						parser.NewDString(colName),                   // column_name
+						parser.NewDUTF8String(colName),               // column_name
 						parser.DNull,                                 // collation
 						parser.DNull,                                 // cardinality
-						parser.NewDString(direction),                 // direction
+						parser.NewDUTF8String(direction),             // direction
 						parser.MakeDBool(parser.DBool(isStored)),     // storing
 					)
 				}
@@ -333,10 +333,10 @@ CREATE TABLE information_schema.statistics (
 }
 
 var (
-	constraintTypeCheck      = parser.NewDString("CHECK")
-	constraintTypeForeignKey = parser.NewDString("FOREIGN KEY")
-	constraintTypePrimaryKey = parser.NewDString("PRIMARY KEY")
-	constraintTypeUnique     = parser.NewDString("UNIQUE")
+	constraintTypeCheck      = parser.NewDUTF8String("CHECK")
+	constraintTypeForeignKey = parser.NewDUTF8String("FOREIGN KEY")
+	constraintTypePrimaryKey = parser.NewDUTF8String("PRIMARY KEY")
+	constraintTypeUnique     = parser.NewDUTF8String("UNIQUE")
 )
 
 // TODO(dt): switch using common GetConstraintInfo helper.
@@ -383,11 +383,11 @@ CREATE TABLE information_schema.table_constraints (
 				}
 				for _, c := range constraints {
 					if err := addRow(
-						defString,                     // constraint_catalog
-						parser.NewDString(db.Name),    // constraint_schema
-						dStringOrNull(c.name),         // constraint_name
-						parser.NewDString(db.Name),    // table_schema
-						parser.NewDString(table.Name), // table_name
+						defString,                         // constraint_catalog
+						parser.NewDUTF8String(db.Name),    // constraint_schema
+						dStringOrNull(c.name),             // constraint_name
+						parser.NewDUTF8String(db.Name),    // table_schema
+						parser.NewDUTF8String(table.Name), // table_name
 						c.typ, // constraint_type
 					); err != nil {
 						return err
@@ -418,14 +418,14 @@ CREATE TABLE information_schema.table_privileges (
 				for _, u := range table.Privileges.Show() {
 					for _, privilege := range u.Privileges {
 						if err := addRow(
-							parser.DNull,                  // grantor
-							parser.NewDString(u.User),     // grantee
-							defString,                     // table_catalog,
-							parser.NewDString(db.Name),    // table_schema
-							parser.NewDString(table.Name), // table_name
-							parser.NewDString(privilege),  // privilege_type
-							parser.DNull,                  // is_grantable
-							parser.DNull,                  // with_hierarchy
+							parser.DNull,                      // grantor
+							parser.NewDUTF8String(u.User),     // grantee
+							defString,                         // table_catalog,
+							parser.NewDUTF8String(db.Name),    // table_schema
+							parser.NewDUTF8String(table.Name), // table_name
+							parser.NewDUTF8String(privilege),  // privilege_type
+							parser.DNull,                      // is_grantable
+							parser.DNull,                      // with_hierarchy
 						); err != nil {
 							return err
 						}
@@ -438,9 +438,9 @@ CREATE TABLE information_schema.table_privileges (
 }
 
 var (
-	tableTypeSystemView = parser.NewDString("SYSTEM VIEW")
-	tableTypeBaseTable  = parser.NewDString("BASE TABLE")
-	tableTypeView       = parser.NewDString("VIEW")
+	tableTypeSystemView = parser.NewDUTF8String("SYSTEM VIEW")
+	tableTypeBaseTable  = parser.NewDUTF8String("BASE TABLE")
+	tableTypeView       = parser.NewDUTF8String("VIEW")
 )
 
 var informationSchemaTablesTable = virtualSchemaTable{
@@ -462,10 +462,10 @@ CREATE TABLE information_schema.tables (
 					tableType = tableTypeView
 				}
 				return addRow(
-					defString,                     // table_catalog
-					parser.NewDString(db.Name),    // table_schema
-					parser.NewDString(table.Name), // table_name
-					tableType,                     // table_type
+					defString,                         // table_catalog
+					parser.NewDUTF8String(db.Name),    // table_schema
+					parser.NewDUTF8String(table.Name), // table_name
+					tableType,                         // table_type
 					parser.NewDInt(parser.DInt(table.Version)), // version
 				)
 			},

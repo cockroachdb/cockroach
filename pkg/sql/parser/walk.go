@@ -411,10 +411,10 @@ func (expr *DInterval) Walk(_ Visitor) Expr { return expr }
 func (expr dNull) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *DString) Walk(_ Visitor) Expr { return expr }
+func (expr *DUTF8String) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *DTimestamp) Walk(_ Visitor) Expr { return expr }
+func (expr *DTimestampNoTZ) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DTimestampTZ) Walk(_ Visitor) Expr { return expr }

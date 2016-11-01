@@ -1282,7 +1282,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 		case parser.Datum:
 			d = t
 		case time.Time:
-			d = parser.MakeDTimestamp(t, time.Microsecond)
+			d = parser.MakeDTimestampNoTZ(t, time.Microsecond)
 		case time.Duration:
 			d = &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
 		case *inf.Dec:
@@ -1307,7 +1307,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 			case reflect.Float32, reflect.Float64:
 				d = parser.NewDFloat(parser.DFloat(val.Float()))
 			case reflect.String:
-				d = parser.NewDString(val.String())
+				d = parser.NewDUTF8String(val.String())
 			case reflect.Slice:
 				// Handle byte slices.
 				if val.Type().Elem().Kind() == reflect.Uint8 {
@@ -1336,8 +1336,6 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeArray:
-	case parser.TypePlaceholder:
-		return errors.Errorf("could not determine data type of %s", typ)
 	default:
 		return errors.Errorf("unsupported result type: %s", typ)
 	}
@@ -1389,10 +1387,10 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	}
 	var ts hlc.Timestamp
 	switch d := d.(type) {
-	case *parser.DString:
+	case parser.DString:
 		// Allow nanosecond precision because the timestamp is only used by the
 		// system and won't be returned to the user over pgwire.
-		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
+		dt, err := parser.ParseDTimestampNoTZ(d.Contents(), time.Nanosecond)
 		if err != nil {
 			return nil, err
 		}

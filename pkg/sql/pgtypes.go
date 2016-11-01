@@ -56,7 +56,7 @@ var datumToOid = map[reflect.Type]oid.Oid{
 	reflect.TypeOf(parser.TypeString):      oid.T_text,
 	reflect.TypeOf(parser.TypeTimestamp):   oid.T_timestamp,
 	reflect.TypeOf(parser.TypeTimestampTZ): oid.T_timestamptz,
-	reflect.TypeOf(parser.TypeTuple):       oid.T_record,
+	reflect.TypeOf(parser.TTuple(nil)):     oid.T_record,
 }
 
 // OidToDatum maps Postgres object IDs to CockroachDB types.

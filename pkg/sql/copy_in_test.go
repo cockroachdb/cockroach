@@ -226,7 +226,7 @@ func TestCopyRandom(t *testing.T) {
 			case []byte:
 				ds = string(d)
 			case time.Time:
-				ds = parser.MakeDTimestamp(d, time.Microsecond).String()
+				ds = parser.MakeDTimestampNoTZ(d, time.Microsecond).String()
 			}
 			if !reflect.DeepEqual(in[i], ds) {
 				t.Fatalf("row %v, col %v: got %#v (%T), expected %#v", row, i, ds, d, in[i])

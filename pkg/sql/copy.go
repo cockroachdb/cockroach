@@ -224,13 +224,13 @@ func (n *copyNode) addRow(line []byte) error {
 			d, err = parser.ParseDInterval(s)
 		case parser.TypeString:
 			s, err = decodeCopy(s)
-			d = parser.NewDString(s)
+			d = parser.NewDUTF8String(s)
 		case parser.TypeTimestamp:
 			s, err = decodeCopy(s)
 			if err != nil {
 				break
 			}
-			d, err = parser.ParseDTimestamp(s, time.Microsecond)
+			d, err = parser.ParseDTimestampNoTZ(s, time.Microsecond)
 		case parser.TypeTimestampTZ:
 			s, err = decodeCopy(s)
 			if err != nil {

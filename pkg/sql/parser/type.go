@@ -49,37 +49,33 @@ const (
 	variableSize = true
 )
 
+// Type singletons. Can be compared with ==.
 var (
-	// TypeNull is the type of a DNull. Can be compared with ==.
+	// TypeNull is the type of a DNull.
 	TypeNull Type = tNull{}
-	// TypeBool is the type of a DBool. Can be compared with ==.
+	// TypeBool is the type of a DBool.
 	TypeBool Type = tBool{}
-	// TypeInt is the type of a DInt. Can be compared with ==.
+	// TypeInt is the type of a DInt.
 	TypeInt Type = tInt{}
-	// TypeFloat is the type of a DFloat. Can be compared with ==.
+	// TypeFloat is the type of a DFloat.
 	TypeFloat Type = tFloat{}
-	// TypeDecimal is the type of a DDecimal. Can be compared with ==.
+	// TypeDecimal is the type of a DDecimal.
 	TypeDecimal Type = tDecimal{}
-	// TypeString is the type of a DString. Can be compared with ==.
+	// TypeString is the type of a DString.
 	TypeString Type = tString{}
-	// TypeBytes is the type of a DBytes. Can be compared with ==.
+	// TypeBytes is the type of a DBytes.
 	TypeBytes Type = tBytes{}
-	// TypeDate is the type of a DDate. Can be compared with ==.
+	// TypeDate is the type of a DDate.
 	TypeDate Type = tDate{}
-	// TypeTimestamp is the type of a DTimestamp. Can be compared with ==.
+	// TypeTimestamp is the type of a DTimestamp.
 	TypeTimestamp Type = tTimestamp{}
-	// TypeTimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
+	// TypeTimestampTZ is the type of a DTimestampTZ.
 	TypeTimestampTZ Type = tTimestampTZ{}
-	// TypeInterval is the type of a DInterval. Can be compared with ==.
+	// TypeInterval is the type of a DInterval.
 	TypeInterval Type = tInterval{}
-	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
-	TypeTuple Type = TTuple(nil)
-	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
-	// with ==.
-	TypePlaceholder Type = TPlaceholder{}
-	// TypeArray is the type family of a DArray. Can be compared with ==.
-	TypeArray Type = tArray{TypeString}
-	// TypeAny can be any type. Can be compared with ==.
+	// TypeArray is the type of a DArray of strings.
+	TypeArray Type = tArray{}
+	// TypeAny can be any type.
 	TypeAny Type = tAny{}
 )
 
@@ -125,7 +121,7 @@ type tString struct{}
 func (tString) String() string              { return "string" }
 func (tString) Equal(other Type) bool       { return other == TypeString }
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
-func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DUTF8String("")), variableSize }
 
 type tBytes struct{}
 
@@ -146,7 +142,7 @@ type tTimestamp struct{}
 func (tTimestamp) String() string              { return "timestamp" }
 func (tTimestamp) Equal(other Type) bool       { return other == TypeTimestamp }
 func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
-func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
+func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampNoTZ{}), fixedSize }
 
 type tTimestampTZ struct{}
 
@@ -237,30 +233,17 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 // Size implements the Type interface.
 func (t TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
 
-// TArray is the type of a DArray. For now, this only supports arrays of
-// strings.
-type tArray struct{ Typ Type }
+// TArray is the type of a DArray of strings.
+type tArray struct{}
 
-func (a tArray) String() string { return a.Typ.String() + "[]" }
-
-// Equal implements the Type interface.
-func (tArray) Equal(other Type) bool {
-	return other == TypeArray
-}
-
-// FamilyEqual implements the Type interface.
-func (tArray) FamilyEqual(other Type) bool {
-	return other == TypeArray
-}
-
-// Size implements the Type interface.
-func (tArray) Size() (uintptr, bool) {
-	return unsafe.Sizeof(DString("")), variableSize
-}
+func (tArray) String() string              { return "string[]" }
+func (tArray) Equal(other Type) bool       { return other == TypeArray }
+func (tArray) FamilyEqual(other Type) bool { return other == TypeArray }
+func (tArray) Size() (uintptr, bool)       { return unsafe.Sizeof(DArray{}), variableSize }
 
 type tAny struct{}
 
 func (tAny) String() string              { return "anyelement" }
 func (tAny) Equal(other Type) bool       { return other == TypeAny }
 func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
-func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DUTF8String("")), variableSize }

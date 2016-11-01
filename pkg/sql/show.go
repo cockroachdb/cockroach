@@ -77,8 +77,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				for _, vName := range varNames {
 					gen := varGen[vName]
 					value := gen(p)
-					if err := v.rows.AddRow(parser.DTuple{parser.NewDString(vName),
-						parser.NewDString(value)}); err != nil {
+					if err := v.rows.AddRow(parser.DTuple{parser.NewDUTF8String(vName),
+						parser.NewDUTF8String(value)}); err != nil {
 						v.rows.Close()
 						return nil, err
 					}
@@ -88,7 +88,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// check above.
 				gen := varGen[name]
 				value := gen(p)
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
+				if err := v.rows.AddRow(parser.DTuple{parser.NewDUTF8String(value)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -133,11 +133,11 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 			for i, col := range desc.Columns {
 				defaultExpr := parser.DNull
 				if e := desc.Columns[i].DefaultExpr; e != nil {
-					defaultExpr = parser.NewDString(*e)
+					defaultExpr = parser.NewDUTF8String(*e)
 				}
 				newRow := parser.DTuple{
-					parser.NewDString(desc.Columns[i].Name),
-					parser.NewDString(col.Type.SQLString()),
+					parser.NewDUTF8String(desc.Columns[i].Name),
+					parser.NewDUTF8String(col.Type.SQLString()),
 					parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
 					defaultExpr,
 				}
@@ -275,8 +275,8 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			buf.WriteString(interleave)
 
 			if err := v.rows.AddRow(parser.DTuple{
-				parser.NewDString(n.Table.String()),
-				parser.NewDString(buf.String()),
+				parser.NewDUTF8String(n.Table.String()),
+				parser.NewDUTF8String(buf.String()),
 			}); err != nil {
 				v.rows.Close()
 				return nil, err
@@ -365,8 +365,8 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
 			if err := v.rows.AddRow(parser.DTuple{
-				parser.NewDString(n.View.String()),
-				parser.NewDString(buf.String()),
+				parser.NewDUTF8String(n.View.String()),
+				parser.NewDUTF8String(buf.String()),
 			}); err != nil {
 				v.rows.Close()
 				return nil, err
@@ -399,7 +399,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 			}
 			v := p.newContainerValuesNode(columns, 0)
 			for _, db := range p.session.virtualSchemas.orderedNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
+				if err := v.rows.AddRow(parser.DTuple{parser.NewDUTF8String(db)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -411,7 +411,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 					v.rows.Close()
 					return nil, err
 				}
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
+				if err := v.rows.AddRow(parser.DTuple{parser.NewDUTF8String(name)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -469,9 +469,9 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 						}
 					}
 					newRow := parser.DTuple{
-						parser.NewDString(descriptor.GetName()),
-						parser.NewDString(userPriv.User),
-						parser.NewDString(userPriv.PrivilegeString()),
+						parser.NewDUTF8String(descriptor.GetName()),
+						parser.NewDUTF8String(userPriv.User),
+						parser.NewDUTF8String(userPriv.PrivilegeString()),
 					}
 					if err := v.rows.AddRow(newRow); err != nil {
 						v.rows.Close()
@@ -522,12 +522,12 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
 				direction string, isStored bool) error {
 				newRow := parser.DTuple{
-					parser.NewDString(tn.Table()),
-					parser.NewDString(index.Name),
+					parser.NewDUTF8String(tn.Table()),
+					parser.NewDUTF8String(index.Name),
 					parser.MakeDBool(parser.DBool(index.Unique)),
 					parser.NewDInt(parser.DInt(sequence)),
-					parser.NewDString(colName),
-					parser.NewDString(direction),
+					parser.NewDUTF8String(colName),
+					parser.NewDUTF8String(direction),
 					parser.MakeDBool(parser.DBool(isStored)),
 				}
 				return v.rows.AddRow(newRow)
@@ -595,20 +595,20 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 			for name, c := range info {
 				detailsDatum := parser.DNull
 				if c.Details != "" {
-					detailsDatum = parser.NewDString(c.Details)
+					detailsDatum = parser.NewDUTF8String(c.Details)
 				}
 				columnsDatum := parser.DNull
 				if c.Columns != nil {
-					columnsDatum = parser.NewDString(strings.Join(c.Columns, ", "))
+					columnsDatum = parser.NewDUTF8String(strings.Join(c.Columns, ", "))
 				}
 				kind := string(c.Kind)
 				if c.Unvalidated {
 					kind += " (UNVALIDATED)"
 				}
 				newRow := []parser.Datum{
-					parser.NewDString(tn.Table()),
-					parser.NewDString(name),
-					parser.NewDString(kind),
+					parser.NewDUTF8String(tn.Table()),
+					parser.NewDUTF8String(name),
+					parser.NewDUTF8String(kind),
 					columnsDatum,
 					detailsDatum,
 				}
@@ -679,7 +679,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 					}
 				}
 
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(tableName)}); err != nil {
+				if err := v.rows.AddRow(parser.DTuple{parser.NewDUTF8String(tableName)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -725,10 +725,10 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 
 			for _, f := range matches {
 				row := parser.DTuple{
-					parser.NewDString(name),
-					parser.NewDString(f.Signature()),
-					parser.NewDString(f.Category()),
-					parser.NewDString(f.Info),
+					parser.NewDUTF8String(name),
+					parser.NewDUTF8String(f.Signature()),
+					parser.NewDUTF8String(f.Category()),
+					parser.NewDUTF8String(f.Info),
 				}
 				if err := v.rows.AddRow(row); err != nil {
 					v.Close()

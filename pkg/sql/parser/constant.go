@@ -327,15 +327,16 @@ func (expr *StrVal) AvailableTypes() []Type {
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	switch typ {
 	case TypeString:
-		expr.resString = DString(expr.s)
-		return &expr.resString, nil
+		// TODO(eisen): locale support.
+		expr.resString = NewDUTF8String(expr.s)
+		return expr.resString, nil
 	case TypeBytes:
 		expr.resBytes = DBytes(expr.s)
 		return &expr.resBytes, nil
 	case TypeDate:
 		return ParseDDate(expr.s, ctx.getLocation())
 	case TypeTimestamp:
-		return ParseDTimestamp(expr.s, time.Microsecond)
+		return ParseDTimestampNoTZ(expr.s, time.Microsecond)
 	case TypeTimestampTZ:
 		return ParseDTimestampTZ(expr.s, ctx.getLocation(), time.Microsecond)
 	case TypeInterval:

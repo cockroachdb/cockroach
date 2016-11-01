@@ -368,11 +368,11 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeDecimalAscending(b, &t.Dec), nil
 		}
 		return encoding.EncodeDecimalDescending(b, &t.Dec), nil
-	case *parser.DString:
+	case parser.DString:
 		if dir == encoding.Ascending {
-			return encoding.EncodeStringAscending(b, string(*t)), nil
+			return encoding.EncodeStringAscending(b, t.Contents()), nil
 		}
-		return encoding.EncodeStringDescending(b, string(*t)), nil
+		return encoding.EncodeStringDescending(b, t.Contents()), nil
 	case *parser.DBytes:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(*t)), nil
@@ -383,7 +383,7 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
-	case *parser.DTimestamp:
+	case *parser.DTimestampNoTZ:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
 		}
@@ -426,13 +426,13 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeFloatValue(appendTo, uint32(colID), float64(*t)), nil
 	case *parser.DDecimal:
 		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Dec), nil
-	case *parser.DString:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
+	case parser.DString:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents())), nil
 	case *parser.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *parser.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
-	case *parser.DTimestamp:
+	case *parser.DTimestampNoTZ:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *parser.DTimestampTZ:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
@@ -735,11 +735,11 @@ const datumAllocSize = 16 // Arbitrary, could be tuned.
 type DatumAlloc struct {
 	dintAlloc         []parser.DInt
 	dfloatAlloc       []parser.DFloat
-	dstringAlloc      []parser.DString
+	dstringAlloc      []parser.DUTF8String
 	dbytesAlloc       []parser.DBytes
 	ddecimalAlloc     []parser.DDecimal
 	ddateAlloc        []parser.DDate
-	dtimestampAlloc   []parser.DTimestamp
+	dtimestampAlloc   []parser.DTimestampNoTZ
 	dtimestampTzAlloc []parser.DTimestampTZ
 	dintervalAlloc    []parser.DInterval
 }
@@ -768,11 +768,11 @@ func (a *DatumAlloc) NewDFloat(v parser.DFloat) *parser.DFloat {
 	return r
 }
 
-// NewDString allocates a DString.
-func (a *DatumAlloc) NewDString(v parser.DString) *parser.DString {
+// NewDUTF8String allocates a DUTF8String.
+func (a *DatumAlloc) NewDUTF8String(v parser.DUTF8String) *parser.DUTF8String {
 	buf := &a.dstringAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DString, datumAllocSize)
+		*buf = make([]parser.DUTF8String, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -817,10 +817,10 @@ func (a *DatumAlloc) NewDDate(v parser.DDate) *parser.DDate {
 }
 
 // NewDTimestamp allocates a DTimestamp.
-func (a *DatumAlloc) NewDTimestamp(v parser.DTimestamp) *parser.DTimestamp {
+func (a *DatumAlloc) NewDTimestamp(v parser.DTimestampNoTZ) *parser.DTimestampNoTZ {
 	buf := &a.dtimestampAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DTimestamp, datumAllocSize)
+		*buf = make([]parser.DTimestampNoTZ, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -909,7 +909,8 @@ func DecodeTableKey(
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
-		return a.NewDString(parser.DString(r)), rkey, err
+		// TODO(eisen): locale support.
+		return a.NewDUTF8String(parser.DUTF8String(r)), rkey, err
 	case parser.TypeBytes:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -933,7 +934,7 @@ func DecodeTableKey(
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		return a.NewDTimestamp(parser.DTimestamp{Time: t}), rkey, err
+		return a.NewDTimestamp(parser.DTimestampNoTZ{Time: t}), rkey, err
 	case parser.TypeTimestampTZ:
 		var t time.Time
 		if dir == encoding.Ascending {
@@ -988,7 +989,8 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	case parser.TypeString:
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)
-		return a.NewDString(parser.DString(data)), b, err
+		// TODO(eisen): locale support.
+		return a.NewDUTF8String(parser.DUTF8String(data)), b, err
 	case parser.TypeBytes:
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)
@@ -1000,7 +1002,7 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	case parser.TypeTimestamp:
 		var t time.Time
 		b, t, err = encoding.DecodeTimeValue(b)
-		return a.NewDTimestamp(parser.DTimestamp{Time: t}), b, err
+		return a.NewDTimestamp(parser.DTimestampNoTZ{Time: t}), b, err
 	case parser.TypeTimestampTZ:
 		var t time.Time
 		b, t, err = encoding.DecodeTimeValue(b)
@@ -1173,8 +1175,8 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, err
 		}
 	case ColumnType_STRING:
-		if v, ok := val.(*parser.DString); ok {
-			r.SetString(string(*v))
+		if v, ok := val.(parser.DString); ok {
+			r.SetString(v.Contents())
 			return r, nil
 		}
 	case ColumnType_BYTES:
@@ -1182,8 +1184,8 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetString(string(*v))
 			return r, nil
 		}
-		if v, ok := val.(*parser.DString); ok {
-			r.SetString(string(*v))
+		if v, ok := val.(parser.DString); ok {
+			r.SetString(v.Contents())
 			return r, nil
 		}
 	case ColumnType_DATE:
@@ -1192,7 +1194,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, nil
 		}
 	case ColumnType_TIMESTAMP:
-		if v, ok := val.(*parser.DTimestamp); ok {
+		if v, ok := val.(*parser.DTimestampNoTZ); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
@@ -1255,7 +1257,8 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDString(parser.DString(v)), nil
+		// TODO(eisen): locale support.
+		return a.NewDUTF8String(parser.DUTF8String(v)), nil
 	case ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
@@ -1273,7 +1276,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDTimestamp(parser.DTimestamp{Time: v}), nil
+		return a.NewDTimestamp(parser.DTimestampNoTZ{Time: v}), nil
 	case ColumnType_TIMESTAMPTZ:
 		v, err := value.GetTime()
 		if err != nil {
@@ -1297,8 +1300,8 @@ func UnmarshalColumnValue(
 func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
 	case ColumnType_STRING:
-		if v, ok := val.(*parser.DString); ok {
-			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
+		if v, ok := val.(parser.DString); ok {
+			if col.Type.Width > 0 && utf8.RuneCountInString(v.Contents()) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)",
 					col.Type.SQLString(), col.Name)
 			}

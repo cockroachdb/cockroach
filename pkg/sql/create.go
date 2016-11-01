@@ -49,7 +49,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		encodingStr := string(*encoding.(*parser.DString))
+		encodingStr := encoding.(parser.DString).Contents()
 		// We only support UTF8 (and aliases for UTF8).
 		if !(strings.EqualFold(encodingStr, "UTF8") ||
 			strings.EqualFold(encodingStr, "UTF-8") ||
@@ -258,7 +258,7 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 			return nil, err
 		}
 
-		resolvedPassword = string(*password.(*parser.DString))
+		resolvedPassword = password.(parser.DString).Contents()
 	}
 
 	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
