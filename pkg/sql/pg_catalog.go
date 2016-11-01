@@ -39,7 +39,10 @@ var (
 	negOneVal = parser.NewDInt(-1)
 )
 
-const pgCatalogName = "pg_catalog"
+const (
+	pgCatalogName          = "pg_catalog"
+	cockroachIndexEncoding = "prefix"
+)
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 // This code attempts to comply as closely as possible to the system catalogs documented
@@ -47,6 +50,7 @@ const pgCatalogName = "pg_catalog"
 var pgCatalog = virtualSchema{
 	name: pgCatalogName,
 	tables: []virtualSchemaTable{
+		pgCatalogAmTable,
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
@@ -58,6 +62,28 @@ var pgCatalog = virtualSchema{
 		pgCatalogTablesTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
+	},
+}
+
+// See: https://www.postgresql.org/docs/current/static/catalog-pg-am.html.
+var pgCatalogAmTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_am (
+	oid INT,
+	amname STRING,
+	amhandler INT,
+	amtype CHAR
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		h.writeStr(cockroachIndexEncoding)
+		return addRow(
+			h.getOid(),
+			parser.NewDString(cockroachIndexEncoding),
+			parser.DNull,
+			parser.NewDString("i"),
+		)
 	},
 }
 
