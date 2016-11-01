@@ -344,6 +344,7 @@ table_privileges
 tables
 abc
 xyz
+pg_am
 pg_attrdef
 pg_attribute
 pg_class
@@ -389,6 +390,7 @@ pg_constraint
 pg_class
 pg_attribute
 pg_attrdef
+pg_am
 namespace
 
 query TTTTI colnames
@@ -405,6 +407,7 @@ def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            abc                VIEW         1
 def            other_db            xyz                BASE TABLE   2
+def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
@@ -448,6 +451,7 @@ def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
@@ -480,6 +484,7 @@ def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   6
+def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
@@ -558,7 +563,7 @@ CREATE TABLE constraint_column.t1 (
   a INT UNIQUE,
   b INT,
   c INT,
-  UNIQUE INDEX index_key(b, c) 
+  UNIQUE INDEX index_key(b, c)
 )
 
 statement ok
