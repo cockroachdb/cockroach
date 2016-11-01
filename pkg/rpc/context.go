@@ -114,6 +114,9 @@ type Context struct {
 func NewContext(
 	ambient log.AmbientContext, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
 ) *Context {
+	if hlcClock == nil {
+		panic("nil clock is verboten")
+	}
 	ctx := &Context{
 		Config:     baseCtx,
 		localClock: hlcClock,

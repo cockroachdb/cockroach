@@ -80,6 +80,9 @@ type ManualClock struct {
 // NewManualClock returns a new instance, initialized with
 // specified timestamp.
 func NewManualClock(nanos int64) *ManualClock {
+	if nanos == 0 {
+		panic("zero clock is verboten")
+	}
 	return &ManualClock{nanos: nanos}
 }
 
