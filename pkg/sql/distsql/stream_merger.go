@@ -18,46 +18,27 @@ package distsql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
-// stream is a thin wrapper around an ordered RowSource buffering in the most
+// streamCacher is a thin wrapper around an ordered RowSource buffering in the most
 // recently received rows.
-type stream struct {
-	noCopy util.NoCopy
-
+type streamCacher struct {
 	src      RowSource
 	ordering sqlbase.ColumnOrdering
 	// rows contains the last set of rows received from the source.
-	rows []sqlbase.EncDatumRow
-}
-
-// advance discards the oldest row seen and returns row following right after.
-func (s *stream) advance() (sqlbase.EncDatumRow, error) {
-	if len(s.rows) == 0 {
-		panic("advancing empty row set")
-	}
-
-	// If we have only one row stored, we retrieve the next row from the source.
-	if len(s.rows) == 1 {
-		if _, err := s.nextRow(); err != nil {
-			return nil, err
-		}
-	}
-	// We discard the oldest row seen effectively 'advancing' along the stream.
-	s.rows = s.rows[1:]
-	return s.rows[0], nil
+	rows       []sqlbase.EncDatumRow
+	datumAlloc sqlbase.DatumAlloc
 }
 
 // nextRow() is a wrapper around RowSource.NextRow(), it simultaneously saves the
 // retrieved row within the stream's most recently added rows buffer.
-func (s *stream) nextRow() (sqlbase.EncDatumRow, error) {
+func (s *streamCacher) nextRow() (sqlbase.EncDatumRow, error) {
 	row, err := s.src.NextRow()
 	// We don't make the explicit check for row == nil and therefore add the nil
 	// row to the row buffer, this is because the nil row can be used in
-	// co-group comparisons (end of stream is effectively another co-group).
+	// group comparisons (end of stream is effectively another group).
 	if err != nil {
 		return nil, err
 	}
@@ -65,17 +46,52 @@ func (s *stream) nextRow() (sqlbase.EncDatumRow, error) {
 	return row, nil
 }
 
-// We define a co-group to be a set of rows from a given source with the same
+// currentGroup returns the set of rows belonging to the same group as
+// s.rows[0], i.e. with the same group key (comprised of the set of ordered
+// columns).
+func (s *streamCacher) currentGroup() []sqlbase.EncDatumRow {
+	// we ignore the last row of the row buffer because this is either a nil row
+	// (end of stream) or a row not "equal" to s.rows[0], either case it belongs
+	// to the next group.
+	return s.rows[:len(s.rows)-1]
+}
+
+// advanceGroup moves over the 'current group' window to point to the next group
+// discarding the previous.
+func (s *streamCacher) advanceGroup() sqlbase.EncDatumRow {
+	// for each stream we discard all the rows except the last row (which is
+	// either a nil row or a row not "equal" to s.rows[0], either case it
+	// belongs to the next group.
+	s.rows[0] = s.rows[len(s.rows)-1]
+	s.rows = s.rows[:1]
+	return s.rows[0]
+}
+
+// accumulateGroup collects all the rows that are "equal" to s.rows[0], the
+// first occurrence of a row not "equal" to s.rows[0] is stored at the end of
+// s.rows.
+func (s *streamCacher) accumulateGroup() error {
+	for {
+		next, err := s.nextRow()
+		if err != nil || next == nil {
+			return err
+		}
+		cmp, err := s.rows[0].Compare(&s.datumAlloc, s.ordering, next)
+		if err != nil || cmp != 0 {
+			return err
+		}
+	}
+}
+
+// We define a group to be a set of rows from a given source with the same
 // group key, in this case the set of ordered columns. streamMerger emits
-// batches of rows that are the cross-product of matching co-groups from each
+// batches of rows that are the cross-product of matching groups from each
 // stream.
 type streamMerger struct {
-	noCopy util.NoCopy
-
-	left         stream
-	right        stream
+	left         streamCacher
+	right        streamCacher
 	datumAlloc   sqlbase.DatumAlloc
-	outputBuffer []sqlbase.EncDatumRows
+	outputBuffer [][2]sqlbase.EncDatumRow
 	initialized  bool
 }
 
@@ -89,94 +105,83 @@ func (sm *streamMerger) initialize() error {
 	return err
 }
 
-// computeBatch adds the cross-product of the next matching set of co-groups
+// computeBatch adds the cross-product of the next matching set of groups
 // from each of streams to the output buffer.
 func (sm *streamMerger) computeBatch() error {
-	lrow := sm.left.rows[0]
-	rrow := sm.right.rows[0]
+	sm.outputBuffer = sm.outputBuffer[:0]
 
-	for lrow != nil && rrow != nil {
-		cmp, err := sm.compare(lrow, rrow)
-		if err != nil {
+	lrow := sm.left.advanceGroup()
+	rrow := sm.right.advanceGroup()
+
+	if lrow == nil && rrow == nil {
+		return nil
+	}
+
+	cmp, err := sm.compare(lrow, rrow)
+	if err != nil {
+		return err
+	}
+
+	if cmp < 0 {
+		// lrow < rrow or rrow == nil, accumulate set of rows "equal" to lrow
+		// and emit (lrow, nil) tuples.
+		if err := sm.left.accumulateGroup(); err != nil {
 			return err
 		}
-		if cmp == -1 { // lrow < rrow, advance lrow and discard previous.
-			next, err := sm.left.advance()
-			if err != nil {
-				return err
-			}
-			lrow = next
-		} else if cmp == 1 { // rrow < lrow, advance rrow and discard previous.
-			next, err := sm.right.advance()
-			if err != nil {
-				return err
-			}
-			rrow = next
-		} else { // lrow == rrow, output cross product of co-groups.
-			// Buffer in all rows from the right stream in the same co-group as
-			// rrow.
-			for {
-				nextRight, err := sm.right.nextRow()
-				if err != nil {
-					return err
-				}
-				if nextRight == nil {
-					break
-				}
-				cmp, err := sm.compare(rrow, nextRight)
-				if err != nil {
-					return err
-				}
-				if cmp != 0 {
-					break
-				}
-			}
 
-			// Buffer in all rows from the left stream in the same co-group as
-			// lrow.
-			for {
-				nextLeft, err := sm.left.nextRow()
-				if err != nil {
-					return err
-				}
-				if nextLeft == nil {
-					break
-				}
-				cmp, err := sm.compare(lrow, nextLeft)
-				if err != nil {
-					return err
-				}
-				if cmp != 0 {
-					break
-				}
-			}
+		for _, l := range sm.left.currentGroup() {
+			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{l, nil})
+		}
+		return nil
+	}
 
-			// Output cross-product, we ignore the last row of each stream
-			// buffer because this is either a nil row (end of stream) or a row
-			// belonging to the next co-group.
-			for _, l := range sm.left.rows[:len(sm.left.rows)-1] {
-				for _, r := range sm.right.rows[:len(sm.right.rows)-1] {
-					sm.outputBuffer = append(sm.outputBuffer, sqlbase.EncDatumRows{l, r})
-				}
-			}
+	if cmp > 0 {
+		// rrow < lrow or lrow == nil, accumulate set of rows "equal" to rrow
+		// and emit (nil, rrow) tuples.
+		if err := sm.right.accumulateGroup(); err != nil {
+			return err
+		}
 
-			// We've finished with the co-groups above, for each stream we
-			// discard all the rows save the row from the next co-group.
-			sm.left.rows = sm.left.rows[len(sm.left.rows)-1:]
-			sm.right.rows = sm.right.rows[len(sm.right.rows)-1:]
+		for _, r := range sm.right.currentGroup() {
+			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{nil, r})
+		}
+		return nil
+	}
 
-			return nil
+	// lrow == rrow, accumulate set of rows "equal" to lrow and set of rows
+	// "equal" to rrow then emit cross product of the two sets ((lrow, rrow)
+	// tuples).
+	if err := sm.right.accumulateGroup(); err != nil {
+		return err
+	}
+	if err := sm.left.accumulateGroup(); err != nil {
+		return err
+	}
+
+	// Output cross-product.
+	for _, l := range sm.left.currentGroup() {
+		for _, r := range sm.right.currentGroup() {
+			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{l, r})
 		}
 	}
+
 	return nil
 }
 
 func (sm *streamMerger) compare(lhs, rhs sqlbase.EncDatumRow) (int, error) {
-	if lhs == nil || rhs == nil {
-		return 0, errors.New("empty row")
+	if lhs == nil && rhs == nil {
+		panic("comparing two nil rows")
 	}
-	for i := 0; i < len(sm.left.ordering); i++ {
-		lIdx := sm.left.ordering[i].ColIdx
+
+	if lhs == nil {
+		return 1, nil
+	}
+	if rhs == nil {
+		return -1, nil
+	}
+
+	for i, ord := range sm.left.ordering {
+		lIdx := ord.ColIdx
 		rIdx := sm.right.ordering[i].ColIdx
 		cmp, err := lhs[lIdx].Compare(&sm.datumAlloc, &rhs[rIdx])
 		if err != nil {
@@ -192,14 +197,13 @@ func (sm *streamMerger) compare(lhs, rhs sqlbase.EncDatumRow) (int, error) {
 	return 0, nil
 }
 
-func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRows, error) {
+func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
 	if !sm.initialized {
 		if err := sm.initialize(); err != nil {
 			return nil, err
 		}
 		sm.initialized = true
 	}
-	sm.outputBuffer = sm.outputBuffer[:0]
 	if err := sm.computeBatch(); err != nil {
 		return nil, err
 	}
@@ -208,33 +212,32 @@ func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRows, error) {
 
 func makeStreamMerger(
 	orderings []sqlbase.ColumnOrdering, sources []RowSource,
-) (*streamMerger, error) {
+) (streamMerger, error) {
 	if len(sources) != 2 {
-		return nil, errors.Errorf("only 2 sources allowed, %d provided", len(sources))
+		return streamMerger{}, errors.Errorf("only 2 sources allowed, %d provided", len(sources))
 	}
 	if len(sources) != len(orderings) {
-		return nil, errors.Errorf(
+		return streamMerger{}, errors.Errorf(
 			"orderings count %d doesn't match source count %d", len(orderings), len(sources))
 	}
 	if len(orderings[0]) != len(orderings[1]) {
-		return nil, errors.Errorf(
+		return streamMerger{}, errors.Errorf(
 			"ordering lengths don't match: %d and %d", len(orderings[0]), len(orderings[1]))
 	}
 	for i, ord := range orderings[0] {
 		if ord.Direction != orderings[1][i].Direction {
-			return nil, errors.New("Ordering mismatch")
+			return streamMerger{}, errors.New("Ordering mismatch")
 		}
 	}
 
-	s := &streamMerger{
-		left: stream{
+	return streamMerger{
+		left: streamCacher{
 			src:      sources[0],
 			ordering: orderings[0],
 		},
-		right: stream{
+		right: streamCacher{
 			src:      sources[1],
 			ordering: orderings[1],
 		},
-	}
-	return s, nil
+	}, nil
 }
