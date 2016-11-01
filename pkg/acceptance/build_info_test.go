@@ -35,7 +35,7 @@ func TestBuildInfo(t *testing.T) {
 func testBuildInfoInner(
 	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
 ) {
-	checkGossip(ctx, t, c, 20*time.Second, hasPeers(c.NumNodes()))
+	CheckGossip(ctx, t, c, 20*time.Second, HasPeers(c.NumNodes()))
 
 	var details serverpb.DetailsResponse
 	util.SucceedsSoon(t, func() error {

@@ -135,7 +135,7 @@ func (at *allocatorTest) Cleanup(t *testing.T) {
 }
 
 func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
-	at.f = farmer(t, at.Prefix, stopper)
+	at.f = MakeFarmer(t, at.Prefix, stopper)
 
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
@@ -145,7 +145,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	if err := at.f.Resize(at.StartNodes); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(ctx, t, at.f, longWaitTime, hasPeers(at.StartNodes))
+	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.StartNodes))
 	at.f.Assert(ctx, t)
 	log.Info(ctx, "initial cluster is up")
 
@@ -184,7 +184,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	if err := at.f.Resize(at.EndNodes); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(ctx, t, at.f, longWaitTime, hasPeers(at.EndNodes))
+	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.EndNodes))
 	at.f.Assert(ctx, t)
 
 	log.Info(ctx, "waiting for rebalance to finish")

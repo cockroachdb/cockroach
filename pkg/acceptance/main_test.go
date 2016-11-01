@@ -35,5 +35,5 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	runTests(m)
+	RunTests(m)
 }

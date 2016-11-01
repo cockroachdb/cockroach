@@ -169,7 +169,7 @@ func (f *Farmer) CollectLogs() {
 }
 
 // Destroy collects the logs and tears down the cluster.
-func (f *Farmer) Destroy(t *testing.T) error {
+func (f *Farmer) Destroy(t testing.TB) error {
 	f.CollectLogs()
 	if f.LogDir != "" {
 		defer f.logf("logs copied to %s\n", f.AbsLogDir())
@@ -195,7 +195,7 @@ func (f *Farmer) Destroy(t *testing.T) error {
 }
 
 // MustDestroy calls Destroy(), fataling on error.
-func (f *Farmer) MustDestroy(t *testing.T) {
+func (f *Farmer) MustDestroy(t testing.TB) {
 	if err := f.Destroy(t); err != nil {
 		t.Fatal(errors.Wrap(err, "cannot destroy cluster"))
 	}
@@ -211,7 +211,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 }
 
 // NewClient implements the Cluster interface.
-func (f *Farmer) NewClient(ctx context.Context, t *testing.T, i int) *client.DB {
+func (f *Farmer) NewClient(ctx context.Context, t testing.TB, i int) *client.DB {
 	conn, err := f.RPCContext.GRPCDial(f.Addr(ctx, i, base.DefaultPort))
 	if err != nil {
 		t.Fatal(err)
@@ -276,7 +276,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
 // TODO(cuongdo): doesn't handle load generators (photos, block_writer)
-func (f *Farmer) Assert(ctx context.Context, t *testing.T) {
+func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
 	for _, item := range []struct {
 		typ   string
 		hosts []string
@@ -291,7 +291,7 @@ func (f *Farmer) Assert(ctx context.Context, t *testing.T) {
 
 // AssertState verifies that on the specified host, the given process (managed
 // by supervisord) is in the expected state.
-func (f *Farmer) AssertState(ctx context.Context, t *testing.T, host, proc, expState string) {
+func (f *Farmer) AssertState(ctx context.Context, t testing.TB, host, proc, expState string) {
 	out, _, err := f.execSupervisor(host, "status "+proc)
 	if err != nil {
 		t.Fatal(err)
@@ -303,7 +303,7 @@ func (f *Farmer) AssertState(ctx context.Context, t *testing.T, host, proc, expS
 
 // AssertAndStop performs the same test as Assert but then proceeds to
 // dismantle the cluster.
-func (f *Farmer) AssertAndStop(ctx context.Context, t *testing.T) {
+func (f *Farmer) AssertAndStop(ctx context.Context, t testing.TB) {
 	f.Assert(ctx, t)
 	f.MustDestroy(t)
 }
