@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -71,6 +73,7 @@ type Cluster struct {
 	rpcCtx  *rpc.Context
 	Nodes   []*Node
 	Clients []*client.DB
+	Status  []serverpb.StatusClient
 	DB      []*gosql.DB
 	stopper *stop.Stopper
 	started time.Time
@@ -81,6 +84,7 @@ func New(size int) *Cluster {
 	return &Cluster{
 		Nodes:   make([]*Node, size),
 		Clients: make([]*client.DB, size),
+		Status:  make([]serverpb.StatusClient, size),
 		DB:      make([]*gosql.DB, size),
 		stopper: stop.NewStopper(),
 	}
@@ -89,7 +93,7 @@ func New(size int) *Cluster {
 // Start starts a cluster. The numWorkers parameter controls the SQL connection
 // settings to avoid unnecessary connection creation. The args parameter can be
 // used to pass extra arguments to each node.
-func (c *Cluster) Start(db string, numWorkers int, args []string) {
+func (c *Cluster) Start(db string, numWorkers int, args, env []string) {
 	c.started = timeutil.Now()
 
 	baseCtx := &base.Config{
@@ -99,8 +103,9 @@ func (c *Cluster) Start(db string, numWorkers int, args []string) {
 	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx, nil, c.stopper)
 
 	for i := range c.Nodes {
-		c.Nodes[i] = c.makeNode(i, args)
+		c.Nodes[i] = c.makeNode(i, args, env)
 		c.Clients[i] = c.makeClient(i)
+		c.Status[i] = c.makeStatus(i)
 		c.DB[i] = c.makeDB(i, numWorkers, db)
 	}
 
@@ -131,7 +136,7 @@ func (c *Cluster) HTTPPort(nodeIdx int) int {
 	return c.RPCPort(nodeIdx) + 1
 }
 
-func (c *Cluster) makeNode(nodeIdx int, extraArgs []string) *Node {
+func (c *Cluster) makeNode(nodeIdx int, extraArgs, extraEnv []string) *Node {
 	name := fmt.Sprintf("%d", nodeIdx+1)
 	dir := filepath.Join(dataDir, name)
 	logDir := filepath.Join(dir, "logs")
@@ -155,8 +160,9 @@ func (c *Cluster) makeNode(nodeIdx int, extraArgs []string) *Node {
 	args = append(args, extraArgs...)
 
 	node := &Node{
-		LogDir: logDir,
-		Args:   args,
+		logDir: logDir,
+		args:   args,
+		env:    extraEnv,
 	}
 	node.Start()
 	return node
@@ -168,6 +174,14 @@ func (c *Cluster) makeClient(nodeIdx int) *client.DB {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
 	return client.NewDB(sender)
+}
+
+func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
+	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
+	if err != nil {
+		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
+	}
+	return serverpb.NewStatusClient(conn)
 }
 
 func (c *Cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
@@ -234,6 +248,22 @@ func (c *Cluster) isReplicated() (bool, string) {
 	}
 	_ = tw.Flush()
 	return done, buf.String()
+}
+
+// UpdateZoneConfig updates the default zone config for the cluster.
+func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
+	zone := config.DefaultZoneConfig()
+	zone.RangeMinBytes = rangeMinBytes
+	zone.RangeMaxBytes = rangeMaxBytes
+
+	buf, err := protoutil.Marshal(&zone)
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
+	_, err = c.DB[0].Exec(`UPSERT INTO system.zones (id, config) VALUES (0, $1)`, buf)
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
 }
 
 // Split splits the range containing the split key at the specified split key.
@@ -322,9 +352,10 @@ func (c *Cluster) RandNode(f func(int) int) int {
 // methods for starting, pausing, resuming and stopping the node.
 type Node struct {
 	syncutil.Mutex
-	LogDir string
-	Args   []string
-	Cmd    *exec.Cmd
+	logDir string
+	args   []string
+	env    []string
+	cmd    *exec.Cmd
 }
 
 // Alive returns true if the node is alive (i.e. not stopped). Note that a
@@ -332,7 +363,7 @@ type Node struct {
 func (n *Node) Alive() bool {
 	n.Lock()
 	defer n.Unlock()
-	return n.Cmd != nil
+	return n.cmd != nil
 }
 
 // Start starts a node.
@@ -340,32 +371,34 @@ func (n *Node) Start() {
 	n.Lock()
 	defer n.Unlock()
 
-	if n.Cmd != nil {
+	if n.cmd != nil {
 		return
 	}
 
-	n.Cmd = exec.Command(n.Args[0], n.Args[1:]...)
+	n.cmd = exec.Command(n.args[0], n.args[1:]...)
+	n.cmd.Env = os.Environ()
+	n.cmd.Env = append(n.cmd.Env, n.env...)
 
-	stdoutPath := filepath.Join(n.LogDir, "stdout")
+	stdoutPath := filepath.Join(n.logDir, "stdout")
 	stdout, err := os.OpenFile(stdoutPath,
 		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to open file %s: %s", stdoutPath, err)
 	}
-	n.Cmd.Stdout = stdout
+	n.cmd.Stdout = stdout
 
-	stderrPath := filepath.Join(n.LogDir, "stderr")
+	stderrPath := filepath.Join(n.logDir, "stderr")
 	stderr, err := os.OpenFile(stderrPath,
 		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to open file %s: %s", stderrPath, err)
 	}
-	n.Cmd.Stderr = stderr
+	n.cmd.Stderr = stderr
 
-	err = n.Cmd.Start()
-	if n.Cmd.Process != nil {
+	err = n.cmd.Start()
+	if n.cmd.Process != nil {
 		log.Infof(context.Background(), "process %d started: %s",
-			n.Cmd.Process.Pid, strings.Join(n.Args, " "))
+			n.cmd.Process.Pid, strings.Join(n.args, " "))
 	}
 	if err != nil {
 		log.Infof(context.Background(), "%v", err)
@@ -389,19 +422,19 @@ func (n *Node) Start() {
 		log.Infof(context.Background(), ps.String())
 
 		n.Lock()
-		n.Cmd = nil
+		n.cmd = nil
 		n.Unlock()
-	}(n.Cmd)
+	}(n.cmd)
 }
 
 // Pause pauses a node by sending it SIGSTOP.
 func (n *Node) Pause() {
 	n.Lock()
 	defer n.Unlock()
-	if n.Cmd == nil || n.Cmd.Process == nil {
+	if n.cmd == nil || n.cmd.Process == nil {
 		return
 	}
-	_ = n.Cmd.Process.Signal(syscall.SIGSTOP)
+	_ = n.cmd.Process.Signal(syscall.SIGSTOP)
 }
 
 // TODO(peter): Node.Pause is currently unused.
@@ -411,10 +444,10 @@ var _ = (*Node).Pause
 func (n *Node) Resume() {
 	n.Lock()
 	defer n.Unlock()
-	if n.Cmd == nil || n.Cmd.Process == nil {
+	if n.cmd == nil || n.cmd.Process == nil {
 		return
 	}
-	_ = n.Cmd.Process.Signal(syscall.SIGCONT)
+	_ = n.cmd.Process.Signal(syscall.SIGCONT)
 }
 
 // TODO(peter): Node.Resume is currently unused.
@@ -424,8 +457,8 @@ var _ = (*Node).Resume
 func (n *Node) Kill() {
 	n.Lock()
 	defer n.Unlock()
-	if n.Cmd == nil || n.Cmd.Process == nil {
+	if n.cmd == nil || n.cmd.Process == nil {
 		return
 	}
-	_ = n.Cmd.Process.Kill()
+	_ = n.cmd.Process.Kill()
 }
