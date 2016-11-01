@@ -240,6 +240,12 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 		}
 		return newMergeJoiner(&f.FlowCtx, ps.Core.MergeJoiner, inputs, outputs[0])
 	}
+	if ps.Core.HashJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+			return nil, err
+		}
+		return newHashJoiner(&f.FlowCtx, ps.Core.HashJoiner, inputs, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor %s", ps)
 }
 

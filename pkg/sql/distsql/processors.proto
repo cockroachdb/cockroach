@@ -192,21 +192,24 @@ message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
   // corresponding columns on the right stream. These must have the same length.
   repeated uint32 left_eq_columns = 1 [packed = true];
-  repeated uint32 right_eq_columns = 2 [packed = true];
+  repeated sqlbase.ColumnType.Kind left_types = 2;
+
+  repeated uint32 right_eq_columns = 3 [packed = true];
+  repeated sqlbase.ColumnType.Kind right_types = 4;
 
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables $0 to $(N-1) refer to
   // columns of the left stream and variables $N to $(N+M-1) refer to columns in
   // the right stream.
-  optional Expression expr = 3 [(gogoproto.nullable) = false];
+  optional Expression expr = 5 [(gogoproto.nullable) = false];
 
-  optional JoinType type = 4 [(gogoproto.nullable) = false];
+  optional JoinType type = 6 [(gogoproto.nullable) = false];
 
   // Columns for the output stream. Assuming that the left stream has N columns
   // and the right stream has M columns, column indices 0 to (N-1) refer to left
   // stream columns and indices N to (N+M-1) refer to right stream columns.
-  repeated uint32 output_columns = 5 [packed = true];
+  repeated uint32 output_columns = 7 [packed = true];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core

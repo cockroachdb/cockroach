@@ -29,6 +29,15 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
+type joinType int
+
+const (
+	innerJoin joinType = iota
+	leftOuter
+	rightOuter
+	fullOuter
+)
+
 const rowChannelBufSize = 16
 
 type columns []uint32
