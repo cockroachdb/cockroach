@@ -21,6 +21,7 @@ import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 
@@ -34,13 +35,22 @@ message Split {
   // right-hand side of the split during the batch which executed it.
   // The on-disk state of the right-hand side is already correct, but the
   // Store must learn about this delta to update its counters appropriately.
-  optional storage.engine.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RHSDelta"];
+  optional storage.engine.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RHSDelta"];
 }
 
 // Merge is emitted by a Replica which commits a transaction with
 // a MergeTrigger (i.e. absorbs its right neighbor).
 message Merge {
-  optional roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false,
+    (gogoproto.embed) = true];
+}
+
+// ChangeReplicas is emitted by a Replica which commits a transaction with
+// a ChangeReplicasTrigger.
+message ChangeReplicas {
+  optional roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
+    (gogoproto.embed) = true];
 }
 
 // ReplicaProposalData is the structured information which together with
@@ -109,6 +119,18 @@ message ReplicatedProposalData {
   optional Merge merge = 10004;
   // TODO(tschottdorf): trim this down; we shouldn't need the whole request.
   optional roachpb.ComputeChecksumRequest compute_checksum = 10005;
-
-  // TODO(tschottdorf): add the WriteBatch here.
+  optional bool is_lease_request = 10006 [(gogoproto.nullable) = false];
+  optional bool is_freeze = 10007 [(gogoproto.nullable) = false];
+  // Denormalizes BatchRequest.Timestamp during the transition period for
+  // proposer-evaluated KV. Only used to verify lease coverage.
+  optional util.hlc.Timestamp timestamp = 10008 [(gogoproto.nullable) = false];
+  optional bool is_consistency_related = 10009 [(gogoproto.nullable) = false];
+  // The stats delta corresponding to the data in this WriteBatch. On
+  // a split, contains only the contributions to the left-hand side.
+  optional storage.engine.enginepb.MVCCStats delta = 10010 [(gogoproto.nullable) = false];
+  message WriteBatch {
+    optional bytes data = 1;
+  }
+  optional WriteBatch write_batch = 10011;
+  optional ChangeReplicas change_replicas = 10012;
 }

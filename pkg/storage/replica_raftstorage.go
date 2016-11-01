@@ -563,6 +563,24 @@ func (r *Replica) applySnapshot(
 	r.mu.Unlock()
 
 	isPreemptive := replicaID == 0 // only used for accounting and log format
+	var appliedSuccessfully bool
+	defer func() {
+		if appliedSuccessfully {
+			if !isPreemptive {
+				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
+			} else {
+				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
+			}
+		}
+	}()
+
+	if raft.IsEmptySnap(snap) {
+		// Raft discarded the snapshot, indicating that our local state is
+		// already ahead of what the snapshot provides. But we count it for
+		// stats (see the defer above).
+		appliedSuccessfully = true
+		return nil
+	}
 
 	replicaIDStr := "[?]"
 	snapType := "preemptive"
@@ -689,11 +707,7 @@ func (r *Replica) applySnapshot(
 
 	r.setDescWithoutProcessUpdate(&desc)
 
-	if !isPreemptive {
-		r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
-	} else {
-		r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
-	}
+	appliedSuccessfully = true
 	return nil
 }
 

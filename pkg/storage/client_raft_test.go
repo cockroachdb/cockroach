@@ -395,6 +395,11 @@ func TestRestoreReplicas(t *testing.T) {
 	}
 }
 
+// TODO(bdarnell): more aggressive testing here; especially with
+// proposer-evaluated KV, what this test does is much less as it doesn't
+// exercise the path in which the replica change fails at *apply* time (we only
+// test the failfast path), in which case the replica change isn't even
+// proposed.
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -815,18 +820,17 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		syncutil.Mutex
 		store *storage.Store
 	}
-	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
 		corrupt.Lock()
 		defer corrupt.Unlock()
 
-		if corrupt.store == nil || filterArgs.Sid != corrupt.store.StoreID() {
+		if corrupt.store == nil || filterArgs.StoreID != corrupt.store.StoreID() {
 			return nil
 		}
 
-		if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-			return roachpb.NewError(storage.NewReplicaCorruptionError(errors.New("test")))
-		}
-		return nil
+		return roachpb.NewError(
+			storage.NewReplicaCorruptionError(errors.New("test")),
+		)
 	}
 
 	// Don't timeout raft leader.
@@ -1049,6 +1053,11 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 
 // TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
+//
+// TODO(tschottdorf): If this test is flaky because the snapshot count does not
+// increase, it's likely because with proposer-evaluated KV, less gets proposed
+// and so sometimes Raft discards the preemptive snapshot (though we count that
+// case in stats already) or doesn't produce a Ready.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
