@@ -17,10 +17,12 @@
 package distsql
 
 import (
-	"context"
 	"errors"
 	"sync"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -28,8 +30,6 @@ import (
 
 type joinType int
 
-// TODO(irfansharif): Add support for left outer, right outer and full outer
-// joins, currently only inner joins supported.
 const (
 	innerJoin joinType = iota
 	leftOuter
@@ -49,10 +49,11 @@ type mergeJoiner struct {
 	outputCols columns
 
 	ctx          context.Context
-	datumAlloc   sqlbase.DatumAlloc
 	combinedRow  sqlbase.EncDatumRow
 	rowAlloc     sqlbase.EncDatumRowAlloc
-	streamMerger *streamMerger
+	streamMerger streamMerger
+	emptyRight   sqlbase.EncDatumRow
+	emptyLeft    sqlbase.EncDatumRow
 }
 
 var _ processor = &mergeJoiner{}
@@ -73,6 +74,15 @@ func newMergeJoiner(
 		outputCols: columns(spec.OutputColumns),
 		joinType:   joinType(spec.Type),
 		filter:     exprHelper{},
+		emptyLeft:  make(sqlbase.EncDatumRow, len(spec.LeftTypes)),
+		emptyRight: make(sqlbase.EncDatumRow, len(spec.RightTypes)),
+	}
+
+	for i := range m.emptyLeft {
+		m.emptyLeft[i].Datum = parser.DNull
+	}
+	for i := range m.emptyRight {
+		m.emptyRight[i].Datum = parser.DNull
 	}
 
 	var err error
@@ -113,8 +123,8 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 			m.output.Close(err)
 			return
 		}
-		for _, rows := range batch {
-			row, err := m.render(rows[0], rows[1])
+		for _, rowPair := range batch {
+			row, err := m.render(rowPair[0], rowPair[1])
 			if err != nil {
 				m.output.Close(err)
 				return
@@ -131,10 +141,31 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 }
 
 // render evaluates the provided filter and constructs a row with columns from
-// both rows as specified by the provided output columns.
+// both rows as specified by the provided output columns. We expect left or
+// right to be nil of there was no explicit "join" match, the filter is then
+// evaluated on a combinedRow with null values for the columns of the nil row.
 func (m *mergeJoiner) render(left, right sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	m.combinedRow = m.combinedRow[:0]
-	m.combinedRow = append(m.combinedRow, left...)
+	switch m.joinType {
+	case innerJoin:
+		if left == nil || right == nil {
+			return nil, nil
+		}
+	case fullOuter:
+		if left == nil {
+			left = m.emptyLeft
+		} else if right == nil {
+			right = m.emptyRight
+		}
+	case leftOuter:
+		if right == nil {
+			right = m.emptyRight
+		}
+	case rightOuter:
+		if left == nil {
+			left = m.emptyLeft
+		}
+	}
+	m.combinedRow = append(m.combinedRow[:0], left...)
 	m.combinedRow = append(m.combinedRow, right...)
 	res, err := m.filter.evalFilter(m.combinedRow)
 	if !res || err != nil {
