@@ -21,6 +21,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -89,6 +90,13 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	// is replaced with your local Cockroach source directory.
 	// Be sure to restart Postgres for this to take effect.
 
+	const addr = "localhost:5432"
+	if conn, err := net.Dial("tcp", addr); err != nil {
+		b.Skipf("unable to connect to postgres server on %s: %s", addr, err)
+	} else {
+		conn.Close()
+	}
+
 	db, err := gosql.Open("postgres", "sslmode=require host=localhost port=5432")
 	if err != nil {
 		b.Fatal(err)
@@ -103,6 +111,13 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 }
 
 func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+	const addr = "localhost:3306"
+	if conn, err := net.Dial("tcp", addr); err != nil {
+		b.Skipf("unable to connect to mysql server on %s: %s", addr, err)
+	} else {
+		conn.Close()
+	}
+
 	db, err := gosql.Open("mysql", "root@tcp(localhost:3306)/")
 	if err != nil {
 		b.Fatal(err)
