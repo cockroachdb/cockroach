@@ -39,5 +39,5 @@ func TestMain(m *testing.M) {
 		log.Infof(context.Background(), "not running with `acceptance` build tag or against remote cluster; skipping")
 		return
 	}
-	runTests(m)
+	RunTests(m)
 }

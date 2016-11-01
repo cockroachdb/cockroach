@@ -18,91 +18,19 @@ package acceptance
 
 import (
 	"math/rand"
-	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/net/context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const longWaitTime = 2 * time.Minute
 const shortWaitTime = 20 * time.Second
-
-type checkGossipFunc func(map[string]gossip.Info) error
-
-// checkGossip fetches the gossip infoStore from each node and invokes the given
-// function. The test passes if the function returns 0 for every node,
-// retrying for up to the given duration.
-func checkGossip(
-	ctx context.Context, t *testing.T, c cluster.Cluster, d time.Duration, f checkGossipFunc,
-) {
-	err := util.RetryForDuration(d, func() error {
-		select {
-		case <-stopper.ShouldStop():
-			t.Fatalf("interrupted")
-			return nil
-		case <-time.After(1 * time.Second):
-		}
-
-		var infoStatus gossip.InfoStatus
-		for i := 0; i < c.NumNodes(); i++ {
-			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/gossip/local", &infoStatus); err != nil {
-				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
-			}
-			if err := f(infoStatus.Infos); err != nil {
-				return errors.Errorf("node %d: %s", i, err)
-			}
-		}
-
-		return nil
-	})
-	if err != nil {
-		t.Fatal(errors.Errorf("condition failed to evaluate within %s: %s", d, err))
-	}
-}
-
-// hasPeers returns a checkGossipFunc that passes when the given
-// number of peers are connected via gossip.
-func hasPeers(expected int) checkGossipFunc {
-	return func(infos map[string]gossip.Info) error {
-		count := 0
-		for k := range infos {
-			if strings.HasPrefix(k, "node:") {
-				count++
-			}
-		}
-		if count != expected {
-			return errors.Errorf("expected %d peers, found %d", expected, count)
-		}
-		return nil
-	}
-}
-
-// hasSentinel is a checkGossipFunc that passes when the sentinel gossip is present.
-func hasSentinel(infos map[string]gossip.Info) error {
-	if _, ok := infos[gossip.KeySentinel]; !ok {
-		return errors.Errorf("sentinel not found")
-	}
-	return nil
-}
-
-// hasClusterID is a checkGossipFunc that passes when the cluster ID gossip is present.
-func hasClusterID(infos map[string]gossip.Info) error {
-	if _, ok := infos[gossip.KeyClusterID]; !ok {
-		return errors.Errorf("cluster ID not found")
-	}
-	return nil
-}
 
 func TestGossipPeerings(t *testing.T) {
 	runTestOnConfigs(t, testGossipPeeringsInner)
@@ -121,14 +49,14 @@ func testGossipPeeringsInner(
 	}
 
 	for timeutil.Now().Before(deadline) {
-		checkGossip(ctx, t, c, waitTime, hasPeers(num))
+		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
 
 		// Restart the first node.
 		log.Infof(ctx, "restarting node 0")
 		if err := c.Restart(ctx, 0); err != nil {
 			t.Fatal(err)
 		}
-		checkGossip(ctx, t, c, waitTime, hasPeers(num))
+		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
 
 		// Restart another node (if there is one).
 		var pickedNode int
@@ -139,7 +67,7 @@ func testGossipPeeringsInner(
 		if err := c.Restart(ctx, pickedNode); err != nil {
 			t.Fatal(err)
 		}
-		checkGossip(ctx, t, c, waitTime, hasPeers(num))
+		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
 	}
 }
 
@@ -172,9 +100,9 @@ func testGossipRestartInner(
 
 	for timeutil.Now().Before(deadline) {
 		log.Infof(ctx, "waiting for initial gossip connections")
-		checkGossip(ctx, t, c, waitTime, hasPeers(num))
-		checkGossip(ctx, t, c, waitTime, hasClusterID)
-		checkGossip(ctx, t, c, waitTime, hasSentinel)
+		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
+		CheckGossip(ctx, t, c, waitTime, hasClusterID)
+		CheckGossip(ctx, t, c, waitTime, hasSentinel)
 
 		log.Infof(ctx, "killing all nodes")
 		for i := 0; i < num; i++ {
@@ -191,9 +119,9 @@ func testGossipRestartInner(
 		}
 
 		log.Infof(ctx, "waiting for gossip to be connected")
-		checkGossip(ctx, t, c, waitTime, hasPeers(num))
-		checkGossip(ctx, t, c, waitTime, hasClusterID)
-		checkGossip(ctx, t, c, waitTime, hasSentinel)
+		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
+		CheckGossip(ctx, t, c, waitTime, hasClusterID)
+		CheckGossip(ctx, t, c, waitTime, hasSentinel)
 
 		for i := 0; i < num; i++ {
 			db := c.NewClient(ctx, t, i)

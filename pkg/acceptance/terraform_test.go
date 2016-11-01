@@ -31,7 +31,7 @@ import (
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
 	ctx := context.Background()
-	f := farmer(t, "baby", stopper)
+	f := MakeFarmer(t, "baby", stopper)
 	defer f.CollectLogs()
 	if err := f.Resize(1); err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestBuildBabyCluster(t *testing.T) {
 func TestFiveNodesAndWriters(t *testing.T) {
 	ctx := context.Background()
 	deadline := time.After(*flagDuration)
-	f := farmer(t, "write-5n5w", stopper)
+	f := MakeFarmer(t, "write-5n5w", stopper)
 	defer f.MustDestroy(t)
 	assertClusterUp := func() {
 		f.Assert(ctx, t)
@@ -74,7 +74,7 @@ func TestFiveNodesAndWriters(t *testing.T) {
 	if err := f.WaitReady(3 * time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(ctx, t, f, longWaitTime, hasPeers(size))
+	CheckGossip(ctx, t, f, longWaitTime, HasPeers(size))
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

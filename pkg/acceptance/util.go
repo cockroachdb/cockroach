@@ -34,6 +34,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/namesgenerator"
+	// Import postgres driver.
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -48,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -127,7 +130,8 @@ var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
 var stopper = stop.NewStopper()
 
-func runTests(m *testing.M) {
+// RunTests runs the tests in a package while gracefully handling interrupts.
+func RunTests(m *testing.M) {
 	randutil.SeedForTests()
 	go func() {
 		// Shut down tests when interrupted (for example CTRL+C).
@@ -166,7 +170,8 @@ func getRandomName() string {
 	return strings.Replace(namesgenerator.GetRandomName(0), "_", "", -1)
 }
 
-func farmer(t *testing.T, prefix string, stopper *stop.Stopper) *terrafarm.Farmer {
+// MakeFarmer creates a terrafarm farmer for use in acceptance tests.
+func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.Farmer {
 	SkipUnlessRemote(t)
 
 	if *flagKeyName == "" {
@@ -345,7 +350,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		}
 	}()
 	if *flagRemote {
-		f := farmer(t, "", stopper)
+		f := MakeFarmer(t, "", stopper)
 		c = f
 		if err := f.Resize(*flagNodes); err != nil {
 			t.Fatal(err)
@@ -418,21 +423,21 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 }
 
 // SkipUnlessLocal calls t.Skip if not running against a local cluster.
-func SkipUnlessLocal(t *testing.T) {
+func SkipUnlessLocal(t testing.TB) {
 	if *flagRemote {
 		t.Skip("skipping since not run against local cluster")
 	}
 }
 
 // SkipUnlessRemote calls t.Skip if not running against a remote cluster.
-func SkipUnlessRemote(t *testing.T) {
+func SkipUnlessRemote(t testing.TB) {
 	if !*flagRemote {
 		t.Skip("skipping since not run against remote cluster")
 	}
 }
 
-// SkipUnlessLocal calls t.Skip if not running with the privileged flag.
-func SkipUnlessPrivileged(t *testing.T) {
+// SkipUnlessPrivileged calls t.Skip if not running with the privileged flag.
+func SkipUnlessPrivileged(t testing.TB) {
 	if !*flagPrivileged {
 		t.Skip("skipping since not run in privileged mode")
 	}
@@ -512,4 +517,71 @@ func testDockerOneShot(
 	ctx context.Context, t *testing.T, name string, containerConfig container.Config,
 ) error {
 	return testDocker(ctx, t, 0, name, containerConfig)
+}
+
+// CheckGossipFunc is the type of callback used in CheckGossip.
+type CheckGossipFunc func(map[string]gossip.Info) error
+
+// CheckGossip fetches the gossip infoStore from each node and invokes the given
+// function. The test passes if the function returns 0 for every node,
+// retrying for up to the given duration.
+func CheckGossip(
+	ctx context.Context, t testing.TB, c cluster.Cluster, d time.Duration, f CheckGossipFunc,
+) {
+	err := util.RetryForDuration(d, func() error {
+		select {
+		case <-stopper.ShouldStop():
+			t.Fatalf("interrupted")
+			return nil
+		case <-time.After(1 * time.Second):
+		}
+
+		var infoStatus gossip.InfoStatus
+		for i := 0; i < c.NumNodes(); i++ {
+			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/gossip/local", &infoStatus); err != nil {
+				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
+			}
+			if err := f(infoStatus.Infos); err != nil {
+				return errors.Errorf("node %d: %s", i, err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatal(errors.Errorf("condition failed to evaluate within %s: %s", d, err))
+	}
+}
+
+// HasPeers returns a CheckGossipFunc that passes when the given
+// number of peers are connected via gossip.
+func HasPeers(expected int) CheckGossipFunc {
+	return func(infos map[string]gossip.Info) error {
+		count := 0
+		for k := range infos {
+			if strings.HasPrefix(k, "node:") {
+				count++
+			}
+		}
+		if count != expected {
+			return errors.Errorf("expected %d peers, found %d", expected, count)
+		}
+		return nil
+	}
+}
+
+// hasSentinel is a checkGossipFunc that passes when the sentinel gossip is present.
+func hasSentinel(infos map[string]gossip.Info) error {
+	if _, ok := infos[gossip.KeySentinel]; !ok {
+		return errors.Errorf("sentinel not found")
+	}
+	return nil
+}
+
+// hasClusterID is a checkGossipFunc that passes when the cluster ID gossip is present.
+func hasClusterID(infos map[string]gossip.Info) error {
+	if _, ok := infos[gossip.KeyClusterID]; !ok {
+		return errors.Errorf("cluster ID not found")
+	}
+	return nil
 }
