@@ -55,6 +55,7 @@ pg_indexes
 pg_namespace
 pg_proc
 pg_roles
+pg_settings
 pg_tables
 pg_type
 pg_views
@@ -733,3 +734,38 @@ query IIIT colnames
 SELECT * FROM pg_catalog.pg_description
 ----
 objoid  classoid  objsubid  description
+
+## pg_catalog.pg_settings
+
+query TTTTTT colnames
+SELECT name, setting, category, short_desc, extra_desc, vartype FROM pg_catalog.pg_settings
+----
+name                           setting       category  short_desc  extra_desc  vartype
+DATABASE                       test          NULL      NULL        NULL        string
+DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE  NULL      NULL        NULL        string
+SYNTAX                         Traditional   NULL      NULL        NULL        string
+TIME ZONE                      UTC           NULL      NULL        NULL        string
+TRANSACTION ISOLATION LEVEL    SERIALIZABLE  NULL      NULL        NULL        string
+TRANSACTION PRIORITY           NORMAL        NULL      NULL        NULL        string
+
+query TTTTTTT colnames
+SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catalog.pg_settings
+----
+name                           setting       unit  context  enumvals  boot_val      reset_val
+DATABASE                       test          NULL  user     NULL      test          test
+DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
+SYNTAX                         Traditional   NULL  user     NULL      Traditional   Traditional
+TIME ZONE                      UTC           NULL  user     NULL      UTC           UTC 
+TRANSACTION ISOLATION LEVEL    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
+TRANSACTION PRIORITY           NORMAL        NULL  user     NULL      NORMAL        NORMAL
+
+query TTTTTT colnames
+SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
+----
+name                           source  min_val  max_val  sourcefile  sourceline
+DATABASE                       NULL    NULL     NULL     NULL        NULL
+DEFAULT_TRANSACTION_ISOLATION  NULL    NULL     NULL     NULL        NULL
+SYNTAX                         NULL    NULL     NULL     NULL        NULL
+TIME ZONE                      NULL    NULL     NULL     NULL        NULL
+TRANSACTION ISOLATION LEVEL    NULL    NULL     NULL     NULL        NULL
+TRANSACTION PRIORITY           NULL    NULL     NULL     NULL        NULL
