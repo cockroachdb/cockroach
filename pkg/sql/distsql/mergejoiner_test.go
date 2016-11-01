@@ -17,8 +17,9 @@
 package distsql
 
 import (
-	"context"
 	"testing"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,6 +33,7 @@ func TestMergeJoiner(t *testing.T) {
 	for i := range v {
 		v[i].SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
+	null := sqlbase.EncDatum{Datum: parser.DNull}
 
 	testCases := []struct {
 		spec     MergeJoinerSpec
@@ -188,6 +190,147 @@ func TestMergeJoiner(t *testing.T) {
 				{v[1], v[1], v[4]},
 				{v[1], v[1], v[5]},
 				{v[1], v[1], v[4]},
+			},
+		},
+		{
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_LEFT_OUTER,
+				OutputColumns: []uint32{0, 3, 4},
+				// Implicit $0 = $2 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[1], v[4]},
+					{v[2], v[4]},
+					{v[3], v[1]},
+					{v[4], v[5]},
+					{v[5], v[5]},
+				},
+				{
+					{v[1], v[0], v[4]},
+					{v[3], v[4], v[1]},
+					{v[4], v[4], v[5]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], null, null},
+				{v[1], v[0], v[4]},
+				{v[2], null, null},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
+				{v[5], null, null},
+			},
+		},
+		{
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_RIGHT_OUTER,
+				OutputColumns: []uint32{3, 1, 2},
+				// Implicit $0 = $2 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[1], v[0], v[4]},
+					{v[3], v[4], v[1]},
+					{v[4], v[4], v[5]},
+				},
+				{
+					{v[0], v[0]},
+					{v[1], v[4]},
+					{v[2], v[4]},
+					{v[3], v[1]},
+					{v[4], v[5]},
+					{v[5], v[5]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], null, null},
+				{v[1], v[0], v[4]},
+				{v[2], null, null},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
+				{v[5], null, null},
+			},
+		},
+		{
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_FULL_OUTER,
+				OutputColumns: []uint32{0, 3, 4},
+				// Implicit $0 = $2 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[1], v[4]},
+					{v[2], v[4]},
+					{v[3], v[1]},
+					{v[4], v[5]},
+				},
+				{
+					{v[1], v[0], v[4]},
+					{v[3], v[4], v[1]},
+					{v[4], v[4], v[5]},
+					{v[5], v[5], v[1]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], null, null},
+				{v[1], v[0], v[4]},
+				{v[2], null, null},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
+				{null, v[5], v[1]},
 			},
 		},
 	}
