@@ -28,15 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-type joinType int
-
-const (
-	innerJoin joinType = iota
-	leftOuter
-	rightOuter
-	fullOuter
-)
-
 // mergeJoiner performs merge join, it has two input row sources with the same
 // ordering on the columns that have equality constraints.
 //
@@ -144,29 +135,29 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 // both rows as specified by the provided output columns. We expect left or
 // right to be nil if there was no explicit "join" match, the filter is then
 // evaluated on a combinedRow with null values for the columns of the nil row.
-func (m *mergeJoiner) render(left, right sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+func (m *mergeJoiner) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
 	switch m.joinType {
 	case innerJoin:
-		if left == nil || right == nil {
+		if lrow == nil || rrow == nil {
 			return nil, nil
 		}
 	case fullOuter:
-		if left == nil {
-			left = m.emptyLeft
-		} else if right == nil {
-			right = m.emptyRight
+		if lrow == nil {
+			lrow = m.emptyLeft
+		} else if rrow == nil {
+			rrow = m.emptyRight
 		}
 	case leftOuter:
-		if right == nil {
-			right = m.emptyRight
+		if rrow == nil {
+			rrow = m.emptyRight
 		}
 	case rightOuter:
-		if left == nil {
-			left = m.emptyLeft
+		if lrow == nil {
+			lrow = m.emptyLeft
 		}
 	}
-	m.combinedRow = append(m.combinedRow[:0], left...)
-	m.combinedRow = append(m.combinedRow, right...)
+	m.combinedRow = append(m.combinedRow[:0], lrow...)
+	m.combinedRow = append(m.combinedRow, rrow...)
 	res, err := m.filter.evalFilter(m.combinedRow)
 	if !res || err != nil {
 		return nil, err
