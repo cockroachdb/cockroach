@@ -710,12 +710,6 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		}
 	}
 
-	// Replace the last entered lines by the last entered statements.
-	c.partialLines = c.partialLines[:c.partialStmtsLen]
-	for i := c.partialStmtsLen; i < len(parsedStmts); i++ {
-		c.partialLines = append(c.partialLines, parsedStmts[i].String()+";")
-	}
-
 	nextState := execState
 
 	// In interactive mode, we make some additional effort to help the user:
