@@ -124,7 +124,7 @@ func TestClusterFlow(t *testing.T) {
 			Output: []OutputRouterSpec{{
 				Type: OutputRouterSpec_MIRROR,
 				Streams: []StreamEndpointSpec{
-					{Mailbox: &MailboxSpec{StreamID: 0, TargetAddr: tc.Server(2).ServingAddr()}},
+					{StreamID: 0, Mailbox: &MailboxSpec{TargetAddr: tc.Server(2).ServingAddr()}},
 				},
 			}},
 		}},
@@ -138,7 +138,7 @@ func TestClusterFlow(t *testing.T) {
 			Output: []OutputRouterSpec{{
 				Type: OutputRouterSpec_MIRROR,
 				Streams: []StreamEndpointSpec{
-					{Mailbox: &MailboxSpec{StreamID: 1, TargetAddr: tc.Server(2).ServingAddr()}},
+					{StreamID: 1, Mailbox: &MailboxSpec{TargetAddr: tc.Server(2).ServingAddr()}},
 				},
 			}},
 		}},
@@ -153,7 +153,7 @@ func TestClusterFlow(t *testing.T) {
 				Output: []OutputRouterSpec{{
 					Type: OutputRouterSpec_MIRROR,
 					Streams: []StreamEndpointSpec{
-						{LocalStreamID: LocalStreamID(0)},
+						{StreamID: StreamID(2)},
 					},
 				}},
 			},
@@ -162,9 +162,9 @@ func TestClusterFlow(t *testing.T) {
 					Type:     InputSyncSpec_ORDERED,
 					Ordering: Ordering{Columns: []Ordering_Column{{1, Ordering_Column_ASC}}},
 					Streams: []StreamEndpointSpec{
-						{Mailbox: &MailboxSpec{StreamID: 0}},
-						{Mailbox: &MailboxSpec{StreamID: 1}},
-						{LocalStreamID: LocalStreamID(0)},
+						{StreamID: 0, Mailbox: &MailboxSpec{}},
+						{StreamID: 1, Mailbox: &MailboxSpec{}},
+						{StreamID: StreamID(2)},
 					},
 				}},
 				Core: ProcessorCoreUnion{JoinReader: &jr},
