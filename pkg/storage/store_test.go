@@ -161,6 +161,7 @@ func createTestStoreWithoutStart(t testing.TB, cfg *StoreConfig) (*Store, *stop.
 		rpcContext,
 		TestTimeUntilStoreDeadOff,
 		stopper,
+		/* deterministic */ false,
 	)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)

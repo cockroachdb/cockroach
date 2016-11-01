@@ -102,7 +102,7 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 
 		rcb.rand.Lock()
 		if len(candidates) > 0 {
-			// Randomnly choose a store from one of the above average range count
+			// Randomly choose a store from one of the above average range count
 			// candidates.
 			bad = candidates[rcb.rand.Intn(len(candidates))]
 		} else {

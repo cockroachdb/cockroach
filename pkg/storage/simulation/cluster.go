@@ -83,6 +83,8 @@ func createCluster(
 	// We set the node ID to MaxInt32 for the cluster Gossip instance to prevent
 	// conflicts with real node IDs.
 	g := gossip.NewTest(math.MaxInt32, rpcContext, server, nil, stopper, metric.NewRegistry())
+	// Set the store pool to deterministic so that a run with the exact same
+	// input will always produce the same output.
 	storePool := storage.NewStorePool(
 		log.AmbientContext{},
 		g,
@@ -90,6 +92,7 @@ func createCluster(
 		rpcContext,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
+		/* deterministic */ true,
 	)
 	c := &Cluster{
 		stopper:   stopper,
@@ -99,7 +102,6 @@ func createCluster(
 		storePool: storePool,
 		allocator: storage.MakeAllocator(storePool, storage.AllocatorOptions{
 			AllowRebalance: true,
-			Deterministic:  true,
 		}),
 		storeGossiper:   gossiputil.NewStoreGossiper(g),
 		nodes:           make(map[roachpb.NodeID]*Node),
