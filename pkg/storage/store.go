@@ -365,11 +365,11 @@ type Store struct {
 	drainLeases atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
-	// obeyed: Replica.raftMu < < Replica.readOnlyCmdMu < Store.mu.Mutex <
-	// Replica.mu.Mutex < Store.scheduler.mu. (It is not required to acquire
-	// every lock in sequence, but when multiple locks are held at the same time,
-	// it is incorrect to acquire a lock with "lesser" value in this sequence
-	// after one with "greater" value)
+	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
+	// < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
+	// (It is not required to acquire every lock in sequence, but when multiple
+	// locks are held at the same time, it is incorrect to acquire a lock with
+	// "lesser" value in this sequence after one with "greater" value).
 	//
 	// Methods of Store with a "Locked" suffix require that
 	// Store.mu.Mutex be held. Other locking requirements are indicated
@@ -1051,30 +1051,31 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return true
 			}
 			wg.Add(1)
-			if s.stopper.RunLimitedAsyncTask(ctx, sem, func(ctx context.Context) {
-				defer wg.Done()
-				desc := r.Desc()
-				var ba roachpb.BatchRequest
-				fReq := roachpb.ChangeFrozenRequest{
-					Span: roachpb.Span{
-						Key:    desc.StartKey.AsRawKey(),
-						EndKey: desc.EndKey.AsRawKey(),
-					},
-					Frozen:      false,
-					MustVersion: build.GetInfo().Tag,
-				}
-				ba.Add(&fReq)
-				if _, pErr := r.Send(ctx, ba); pErr != nil {
-					log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
-				} else {
-					// We don't use the returned RangesAffected (0 or 1) for
-					// counting. One of the other Replicas may have beaten us
-					// to it, but it is still fair to count this as "our"
-					// success; otherwise, the logged count will be distributed
-					// across various nodes' logs.
-					atomic.AddInt64(&unfrozen, 1)
-				}
-			}) != nil {
+			if s.stopper.RunLimitedAsyncTask(
+				ctx, sem, true /* wait */, func(ctx context.Context) {
+					defer wg.Done()
+					desc := r.Desc()
+					var ba roachpb.BatchRequest
+					fReq := roachpb.ChangeFrozenRequest{
+						Span: roachpb.Span{
+							Key:    desc.StartKey.AsRawKey(),
+							EndKey: desc.EndKey.AsRawKey(),
+						},
+						Frozen:      false,
+						MustVersion: build.GetInfo().Tag,
+					}
+					ba.Add(&fReq)
+					if _, pErr := r.Send(ctx, ba); pErr != nil {
+						log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
+					} else {
+						// We don't use the returned RangesAffected (0 or 1) for
+						// counting. One of the other Replicas may have beaten us
+						// to it, but it is still fair to count this as "our"
+						// success; otherwise, the logged count will be distributed
+						// across various nodes' logs.
+						atomic.AddInt64(&unfrozen, 1)
+					}
+				}) != nil {
 				wg.Done()
 			}
 			return true
@@ -1637,8 +1638,8 @@ func (s *Store) NewRangeDescriptor(
 	return desc, nil
 }
 
-// splitTriggerPostCommit is the part of the split trigger which coordinates
-// the actual split with the Store. Requires that Replica.raftMu is held.
+// splitPostApply is the part of the split trigger which coordinates the actual
+// split with the Store. Requires that Replica.raftMu is held.
 //
 // TODO(tschottdorf): Want to merge this with SplitRange, but some legacy
 // testing code calls SplitRange directly.
@@ -1719,7 +1720,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	defer s.mu.Unlock()
 	if exRng, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
 		// If we have an uninitialized replica of the new range we require pointer
-		// equivalence with newRng. See Store.splitTriggerPostCommit()
+		// equivalence with newRng. See Store.splitTriggerPostApply().
 		if exRng != newRng {
 			ctx := s.AnnotateCtx(context.TODO())
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
@@ -3278,24 +3279,16 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 	}
 
 	if !s.cfg.Transport.SendAsync(chReq) {
-		toReport := make(map[*Replica][]roachpb.ReplicaID)
-
 		s.mu.Lock()
 		for _, beat := range beats {
 			replica := s.mu.replicas[beat.RangeID]
-			toReport[replica] = append(toReport[replica], beat.ToReplicaID)
+			replica.addUnreachableRemoteReplica(beat.ToReplicaID)
 		}
 		for _, resp := range resps {
 			replica := s.mu.replicas[resp.RangeID]
-			toReport[replica] = append(toReport[replica], resp.ToReplicaID)
+			replica.addUnreachableRemoteReplica(resp.ToReplicaID)
 		}
 		s.mu.Unlock()
-
-		for replica, beats := range toReport {
-			for _, to := range beats {
-				replica.reportUnreachable(to)
-			}
-		}
 		return 0
 	}
 	return len(beats) + len(resps)
@@ -3303,18 +3296,20 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 
 func (s *Store) sendQueuedHeartbeats() {
 	s.coalescedMu.Lock()
-	defer s.coalescedMu.Unlock()
+	heartbeats := s.coalescedMu.heartbeats
+	heartbeatResponses := s.coalescedMu.heartbeatResponses
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.Unlock()
 
 	var beatsSent int
 
-	for to, beats := range s.coalescedMu.heartbeats {
+	for to, beats := range heartbeats {
 		beatsSent += s.sendQueuedHeartbeatsToNode(beats, nil, to)
 	}
-	for to, resps := range s.coalescedMu.heartbeatResponses {
+	for to, resps := range heartbeatResponses {
 		beatsSent += s.sendQueuedHeartbeatsToNode(nil, resps, to)
 	}
-	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
-	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
 

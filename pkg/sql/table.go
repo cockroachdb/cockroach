@@ -222,13 +222,13 @@ func (p *planner) mustGetViewDesc(tn *parser.TableName) (*sqlbase.TableDescripto
 	return desc, nil
 }
 
-var errTableDeleted = errors.New("table is being deleted")
+var errTableDropped = errors.New("table is being dropped")
 var errTableAdding = errors.New("table is being added")
 
 func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch {
-	case tableDesc.Deleted():
-		return errTableDeleted
+	case tableDesc.Dropped():
+		return errTableDropped
 	case tableDesc.Adding():
 		return errTableAdding
 	case tableDesc.State != sqlbase.TableDescriptor_PUBLIC:

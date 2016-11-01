@@ -86,7 +86,8 @@ func NewSchemaChangerForTesting(
 		mutationID: mutationID,
 		nodeID:     nodeID,
 		db:         db,
-		leaseMgr:   leaseMgr}
+		leaseMgr:   leaseMgr,
+	}
 }
 
 func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_SchemaChangeLease {
@@ -222,7 +223,7 @@ func (sc SchemaChanger) exec() error {
 	}
 	table := desc.GetTable()
 
-	if table.Deleted() {
+	if table.Dropped() {
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
 			return err
@@ -651,8 +652,16 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeBackfillChunk is called before executing each chunk of a
 	// backfill during a schema change operation. It is called with the
 	// current span and returns an error which eventually is returned to the
-	// caller of SchemaChanger.exec().
+	// caller of SchemaChanger.exec(). It is called at the start of the
+	// backfill function passed into the transaction executing the chunk.
 	RunBeforeBackfillChunk func(sp roachpb.Span) error
+
+	// RunAfterBackfillChunk is called after executing each chunk of a
+	// backfill during a schema change operation. It is called just before
+	// returning from the backfill function passed into the transaction
+	// executing the chunk. It is always called even when the backfill
+	// function returns an error, or if the table has already been dropped.
+	RunAfterBackfillChunk func()
 
 	// RenameOldNameNotInUseNotification is called during a rename schema
 	// change, after all leases on the version of the descriptor with the old
@@ -671,6 +680,9 @@ type SchemaChangerTestingKnobs struct {
 	// WriteCheckpointInterval is the interval after which a checkpoint is
 	// written.
 	WriteCheckpointInterval time.Duration
+
+	// BackfillChunkSize is to be used for all backfill chunked operations.
+	BackfillChunkSize int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -781,7 +793,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Deleted() || table.Adding() ||
+						if table.UpVersion || table.Dropped() || table.Adding() ||
 							table.Renamed() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof(context.TODO(), "%s: queue up pending schema change; table: %d, version: %d",

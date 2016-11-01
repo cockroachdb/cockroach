@@ -374,6 +374,11 @@ type Replica struct {
 		// The pending outgoing snapshot if there is one.
 		outSnap OutgoingSnapshot
 	}
+
+	unreachablesMu struct {
+		syncutil.Mutex
+		remotes map[roachpb.ReplicaID]struct{}
+	}
 }
 
 // KeyRange is an interface type for the replicasByKey BTree, to compare
@@ -1664,37 +1669,31 @@ func (r *Replica) tryAddWriteCmd(
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
+	shouldQuiesce := r.store.stopper.ShouldQuiesce()
 	for {
 		select {
 		case respWithErr := <-ch:
 			return respWithErr.Reply, respWithErr.Err, respWithErr.ShouldRetry
 		case <-ctxDone:
-			// Cancellation is somewhat tricky since we can't prevent the
-			// Raft command from executing at some point in the future.
-			// We try to remove the pending command, but if the processRaft
-			// goroutine has already grabbed it (as would typically be the
-			// case right as it executes), it's too late and we're still
-			// going to have to wait until the command returns (which would
-			// typically be right away).
-			// A typical outcome of a bug here would be use-after-free of
-			// the trace of this client request; we finish it when
-			// returning from here, but the Raft execution also uses it.
+			// We ignore cancelled contexts for running commands in order to
+			// properly update the timestamp and command queue. Exiting early,
+			// before knowing the final disposition of the command would make
+			// those updates impossible, leading to potential inconsistencies.
+			// TODO(spencer): move updates to the timestamp cache to raft
+			// command execution.
+			log.Warningf(ctx, "ignoring cancelled context for command %s", ba)
 			ctxDone = nil
+		case <-shouldQuiesce:
+			// If we're shutting down, return an AmbiguousResultError to
+			// indicate to caller that the command may have executed.
+			// However, we proceed only if the command isn't already being
+			// executed and using our context, in which case we expect it to
+			// finish soon.
 			if tryAbandon() {
-				// TODO(tschottdorf): the command will still execute at
-				// some process, so maybe this should be a structured error
-				// which can be interpreted appropriately upstream.
-				return nil, roachpb.NewError(ctx.Err()), false
+				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
 			}
-			log.Warningf(ctx, "unable to cancel expired Raft command %s", ba)
-		case <-r.store.stopper.ShouldQuiesce():
-			// If we can't abandon this command, the surrounding loop will
-			// run hot on this path, but not being able to abandon implies
-			// that the request is being processed and should be available
-			// momentarily.
-			if tryAbandon() {
-				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
-			}
+			shouldQuiesce = nil
 		}
 	}
 }
@@ -1718,10 +1717,10 @@ func (r *Replica) evaluateProposal(
 	// since evaluating a proposal is expensive (at least under proposer-
 	// evaluated KV).
 	var pd ProposalData
-	pd.RaftCommand = &storagebase.RaftCommand{
+	pd.ReplicatedProposalData = storagebase.ReplicatedProposalData{
 		RangeID:       r.RangeID,
 		OriginReplica: replica,
-		Cmd:           ba,
+		Cmd:           &ba,
 	}
 	pd.ctx = ctx
 	pd.idKey = idKey
@@ -1737,13 +1736,13 @@ func (r *Replica) insertProposalLocked(pd *ProposalData) {
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
-	if !pd.RaftCommand.Cmd.IsLeaseRequest() {
+	if !pd.Cmd.IsLeaseRequest() {
 		r.mu.lastAssignedLeaseIndex++
 	}
-	pd.RaftCommand.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
+	pd.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	if log.V(4) {
 		log.Infof(pd.ctx, "submitting proposal %x: maxLeaseIndex=%d",
-			pd.idKey, pd.RaftCommand.MaxLeaseIndex)
+			pd.idKey, pd.MaxLeaseIndex)
 	}
 
 	if _, ok := r.mu.proposals[pd.idKey]; ok {
@@ -1838,26 +1837,26 @@ func (r *Replica) isSoloReplicaLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	if p.RaftCommand.Cmd.Timestamp == hlc.ZeroTimestamp {
+	if p.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
 	}
 
 	ctx := r.AnnotateCtx(context.TODO())
 
-	data, err := protoutil.Marshal(p.RaftCommand)
+	data, err := protoutil.Marshal(&p.ReplicatedProposalData)
 	if err != nil {
 		return err
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
-	if union, ok := p.RaftCommand.Cmd.GetArg(roachpb.EndTransaction); ok {
+	if union, ok := p.Cmd.GetArg(roachpb.EndTransaction); ok {
 		ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
 		if crt := ict.GetChangeReplicasTrigger(); crt != nil {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special
 			// because raft needs to understand it; it cannot simply be an
 			// opaque command.
 			log.Infof(ctx, "proposing %s %+v for range %d: %+v",
-				crt.ChangeType, crt.Replica, p.RaftCommand.RangeID, crt.UpdatedReplicas)
+				crt.ChangeType, crt.Replica, p.RangeID, crt.UpdatedReplicas)
 
 			confChangeCtx := ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -2116,7 +2115,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		case raftpb.EntryNormal:
 
 			var commandID storagebase.CmdIDKey
-			var command storagebase.RaftCommand
+			var command storagebase.ReplicatedProposalData
 
 			// Process committed entries. etcd raft occasionally adds a nil entry
 			// (our own commands are never empty). This happens in two situations:
@@ -2154,7 +2153,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 			if err := ccCtx.Unmarshal(cc.Context); err != nil {
 				return err
 			}
-			var command storagebase.RaftCommand
+			var command storagebase.ReplicatedProposalData
 			if err := command.Unmarshal(ccCtx.Payload); err != nil {
 				return err
 			}
@@ -2201,6 +2200,15 @@ func (r *Replica) tick() (bool, error) {
 func (r *Replica) tickRaftMuLocked() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	r.unreachablesMu.Lock()
+	remotes := r.unreachablesMu.remotes
+	r.unreachablesMu.remotes = nil
+	r.unreachablesMu.Unlock()
+
+	for remoteReplica := range remotes {
+		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+	}
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
@@ -2431,7 +2439,7 @@ type pendingCmdSlice []*ProposalData
 func (s pendingCmdSlice) Len() int      { return len(s) }
 func (s pendingCmdSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s pendingCmdSlice) Less(i, j int) bool {
-	return s[i].RaftCommand.MaxLeaseIndex < s[j].RaftCommand.MaxLeaseIndex
+	return s[i].MaxLeaseIndex < s[j].MaxLeaseIndex
 }
 
 //go:generate stringer -type refreshRaftReason
@@ -2465,7 +2473,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
-		if p.RaftCommand.MaxLeaseIndex > maxMustRetryCommandIndex {
+		if p.MaxLeaseIndex > maxMustRetryCommandIndex {
 			if p.proposedAtTicks > refreshAtTicks {
 				// The command was proposed too recently, don't bother reproprosing
 				// it yet. Note that if refreshAtDelta is 0, refreshAtTicks will be
@@ -2663,12 +2671,15 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	}
 }
 
-// reportUnreachable reports the remote replica as unreachable to the internal
-// raft group.
-func (r *Replica) reportUnreachable(remoteReplica roachpb.ReplicaID) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+// addUnreachableRemoteReplica adds the given remote ReplicaID to be reported
+// as unreachable on the next tick.
+func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
+	r.unreachablesMu.Lock()
+	if r.unreachablesMu.remotes == nil {
+		r.unreachablesMu.remotes = make(map[roachpb.ReplicaID]struct{})
+	}
+	r.unreachablesMu.remotes[remoteReplica] = struct{}{}
+	r.unreachablesMu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
@@ -2716,7 +2727,10 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 // which will apply as a no-op (without accessing raftCmd, via an error),
 // updating only the applied index.
 func (r *Replica) processRaftCommand(
-	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	index uint64,
+	raftCmd storagebase.ReplicatedProposalData,
 ) (pErr *roachpb.Error) {
 	if index == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
@@ -2827,10 +2841,10 @@ func (r *Replica) processRaftCommand(
 	}
 	r.mu.Unlock()
 
-	if splitMergeUnlock := r.maybeAcquireSplitMergeLock(raftCmd.Cmd); splitMergeUnlock != nil {
-		defer func() {
-			splitMergeUnlock(pErr)
-		}()
+	// TODO(tschottdorf): not all commands have a BatchRequest (for example,
+	// empty appends). Be more careful with this in proposer-eval'ed KV.
+	if raftCmd.Cmd == nil {
+		raftCmd.Cmd = &roachpb.BatchRequest{}
 	}
 
 	// applyRaftCommand will return "expected" errors, but may also indicate
@@ -2840,10 +2854,17 @@ func (r *Replica) processRaftCommand(
 		log.VEventf(ctx, 1, "applying command with forced error: %s", forcedErr)
 	} else {
 		log.Event(ctx, "applying command")
+
+		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(*raftCmd.Cmd); splitMergeUnlock != nil {
+			defer func() {
+				splitMergeUnlock(pErr)
+			}()
+		}
+
 	}
 	var response proposalResult
 	{
-		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, raftCmd.Cmd, forcedErr)
+		pd := r.applyRaftCommand(ctx, idKey, index, leaseIndex, *raftCmd.Cmd, forcedErr)
 		pd.Err = r.maybeSetCorrupt(ctx, pd.Err)
 
 		// TODO(tschottdorf): this field should be zeroed earlier.

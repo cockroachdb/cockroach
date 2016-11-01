@@ -887,7 +887,7 @@ func verifyDropTableMetadata(
 	if desc == nil {
 		return errors.Errorf("%s %d missing", objType, tableID)
 	}
-	if desc.Deleted() {
+	if desc.Dropped() {
 		return nil
 	}
 	return errors.Errorf("expected %s %d to be marked as deleted", objType, tableID)
@@ -910,7 +910,7 @@ func (p *planner) dropViewImpl(
 		}
 		// The dependency is also being deleted, so we don't have to remove the
 		// references.
-		if dependencyDesc.Deleted() {
+		if dependencyDesc.Dropped() {
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)

@@ -120,6 +120,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SSLCertKey != "" {
 		cfg.SSLCertKey = params.SSLCertKey
 	}
+	if params.TimeSeriesQueryWorkerMax != 0 {
+		cfg.TimeSeriesServerConfig.QueryWorkerMax = params.TimeSeriesQueryWorkerMax
+	}
 	if params.DisableEventLog {
 		cfg.EventLogEnabled = false
 	}

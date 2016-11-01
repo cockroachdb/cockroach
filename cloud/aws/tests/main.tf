@@ -40,7 +40,7 @@ resource "aws_instance" "sql_logic_test" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}.pem"
+    private_key = "${file(format("~/.ssh/%s.pem", var.key_name))}"
   }
 
   provisioner "file" {

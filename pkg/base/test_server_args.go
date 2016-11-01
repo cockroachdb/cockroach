@@ -48,16 +48,17 @@ type TestServerArgs struct {
 	// will be used.
 	StoreSpecs []StoreSpec
 
-	// Fields copied to the server.Context.
-	Insecure              bool
-	MetricsSampleInterval time.Duration
-	MaxOffset             time.Duration
-	SocketFile            string
-	ScanInterval          time.Duration
-	ScanMaxIdleTime       time.Duration
-	SSLCA                 string
-	SSLCert               string
-	SSLCertKey            string
+	// Fields copied to the server.Config.
+	Insecure                 bool
+	MetricsSampleInterval    time.Duration
+	MaxOffset                time.Duration
+	SocketFile               string
+	ScanInterval             time.Duration
+	ScanMaxIdleTime          time.Duration
+	SSLCA                    string
+	SSLCert                  string
+	SSLCertKey               string
+	TimeSeriesQueryWorkerMax int
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running

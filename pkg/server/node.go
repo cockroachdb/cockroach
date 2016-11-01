@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -60,9 +61,6 @@ const (
 	gossipStatusInterval = 1 * time.Minute
 	// gossipNodeDescriptorInterval is the interval for gossiping the node descriptor.
 	gossipNodeDescriptorInterval = 1 * time.Hour
-	// publishStatusInterval is the interval for publishing periodic statistics
-	// from stores to the internal event feed.
-	publishStatusInterval = 10 * time.Second
 
 	// FirstNodeID is the node ID of the first node in a new cluster.
 	FirstNodeID = 1
@@ -361,7 +359,7 @@ func (n *Node) start(
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
-	n.startComputePeriodicMetrics(n.stopper)
+	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
 	n.startGossip(n.stopper)
 
 	// Record node started event.
@@ -646,11 +644,11 @@ func (n *Node) gossipStores(ctx context.Context) {
 // startComputePeriodicMetrics starts a loop which periodically instructs each
 // store to compute the value of metrics which cannot be incrementally
 // maintained.
-func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper) {
+func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.Duration) {
 	stopper.RunWorker(func() {
 		ctx := n.AnnotateCtx(context.Background())
-		// Publish status at the same frequency as metrics are collected.
-		ticker := time.NewTicker(publishStatusInterval)
+		// Compute periodic stats at the same frequency as metrics are sampled.
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for tick := 0; ; tick++ {
 			select {
@@ -774,29 +772,9 @@ func (n *Node) recordJoinEvent() {
 	})
 }
 
-// Batch implements the roachpb.InternalServer interface.
-func (n *Node) Batch(
+func (n *Node) batchInternal(
 	ctx context.Context, args *roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, err error) {
-	ctx = n.AnnotateCtx(ctx)
-	// TODO(marc,bdarnell): this code is duplicated in server/node.go,
-	// which should be fixed.
-	defer func() {
-		// We always return errors via BatchResponse.Error so structure is
-		// preserved; plain errors are presumed to be from the RPC
-		// framework and not from cockroach.
-		if err != nil {
-			if br == nil {
-				br = &roachpb.BatchResponse{}
-			}
-			if br.Error != nil {
-				panic(fmt.Sprintf(
-					"attempting to return both a plain error (%s) and roachpb.Error (%s)", err, br.Error))
-			}
-			br.Error = roachpb.NewError(err)
-			err = nil
-		}
-	}()
+) (*roachpb.BatchResponse, error) {
 	// TODO(marc): grpc's authentication model (which gives credential access in
 	// the request handler) doesn't really fit with the current design of the
 	// security package (which assumes that TLS state is only given at connection
@@ -813,18 +791,20 @@ func (n *Node) Batch(
 		}
 	}
 
-	const opName = "node.Batch"
+	var br *roachpb.BatchResponse
 
-	fail := func(err error) {
-		br = &roachpb.BatchResponse{}
-		br.Error = roachpb.NewError(err)
+	type snowballInfo struct {
+		syncutil.Mutex
+		collectedSpans [][]byte
+		done           bool
 	}
+	var snowball *snowballInfo
 
-	f := func() {
+	if err := n.stopper.RunTaskWithErr(func() error {
+		const opName = "node.Batch"
 		sp, err := tracing.JoinOrNew(n.storeCfg.AmbientCtx.Tracer, args.TraceContext, opName)
 		if err != nil {
-			fail(err)
-			return
+			return err
 		}
 		// If this is a snowball span, it gets special treatment: It skips the
 		// regular tracing machinery, and we instead send the collected spans
@@ -833,15 +813,25 @@ func (n *Node) Batch(
 		if sp.BaggageItem(tracing.Snowball) != "" {
 			sp.LogEvent("delegating to snowball tracing")
 			sp.Finish()
-			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, func(rawSpan basictracer.RawSpan) {
+
+			snowball = new(snowballInfo)
+			recorder := func(rawSpan basictracer.RawSpan) {
+				snowball.Lock()
+				defer snowball.Unlock()
+				if snowball.done {
+					// This is a late span that we must discard because the request was
+					// already completed.
+					return
+				}
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
 					log.Warning(ctx, err)
 				}
-				br.CollectedSpans = append(br.CollectedSpans, encSp)
-			}); err != nil {
-				fail(err)
-				return
+				snowball.collectedSpans = append(snowball.collectedSpans, encSp)
+			}
+
+			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, recorder); err != nil {
+				return err
 			}
 		}
 		defer sp.Finish()
@@ -860,10 +850,42 @@ func (n *Node) Batch(
 		}
 		n.metrics.callComplete(timeutil.Since(tStart), pErr)
 		br.Error = pErr
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	if err := n.stopper.RunTask(f); err != nil {
-		return nil, err
+	if snowball != nil {
+		snowball.Lock()
+		br.CollectedSpans = snowball.collectedSpans
+		snowball.done = true
+		snowball.Unlock()
+	}
+
+	return br, nil
+}
+
+// Batch implements the roachpb.InternalServer interface.
+func (n *Node) Batch(
+	ctx context.Context, args *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	ctx = n.AnnotateCtx(ctx)
+
+	br, err := n.batchInternal(ctx, args)
+
+	// We always return errors via BatchResponse.Error so structure is
+	// preserved; plain errors are presumed to be from the RPC
+	// framework and not from cockroach.
+	if err != nil {
+		if br == nil {
+			br = &roachpb.BatchResponse{}
+		}
+		if br.Error != nil {
+			log.Fatalf(
+				ctx, "attempting to return both a plain error (%s) and roachpb.Error (%s)", err, br.Error,
+			)
+		}
+		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
 }

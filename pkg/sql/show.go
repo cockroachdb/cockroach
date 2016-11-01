@@ -339,6 +339,12 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 			if !ok {
 				return nil, errors.Errorf("failed to parse underlying query from view %q as a select", tn)
 			}
+
+			// When constructing the Select plan, make sure we don't require any
+			// privileges on the underlying tables.
+			p.skipSelectPrivilegeChecks = true
+			defer func() { p.skipSelectPrivilegeChecks = false }()
+
 			sourcePlan, err := p.Select(sel, []parser.Type{}, false)
 			if err != nil {
 				return nil, err
@@ -663,7 +669,17 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 
 			v := p.newContainerValuesNode(columns, len(tableNames))
 			for _, name := range tableNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name.Table())}); err != nil {
+				tableName := name.Table()
+				// Check to see if the table has been dropped.
+				if _, err := p.mustGetTableOrViewDesc(&name); err != nil {
+					if err == errTableDropped {
+						tableName += " (dropped)"
+					} else {
+						return nil, err
+					}
+				}
+
+				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(tableName)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}

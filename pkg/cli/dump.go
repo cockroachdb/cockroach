@@ -72,12 +72,11 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 		return err
 	}
 
-	vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()::int", nil)
+	vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
 	if err != nil {
 		return err
 	}
-	clusterTSStart := vals[0].(int64)
-	clusterTS := time.Unix(0, clusterTSStart).Format(time.RFC3339Nano)
+	clusterTS := string(vals[0].([]byte))
 
 	// A previous version of the code did a SELECT on system.descriptor. This
 	// required the SELECT privilege to the descriptor table, which only root
@@ -154,7 +153,7 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 
 	// Build the SELECT query.
 	var sbuf bytes.Buffer
-	fmt.Fprintf(&sbuf, "SELECT %s, * FROM %s@%s AS OF SYSTEM TIME '%s'", indexes, tablename, primaryIndex, clusterTS)
+	fmt.Fprintf(&sbuf, "SELECT %s, * FROM %s@%s AS OF SYSTEM TIME %s", indexes, tablename, primaryIndex, clusterTS)
 
 	var wbuf bytes.Buffer
 	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", indexes)

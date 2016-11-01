@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,6 +48,7 @@ const (
 	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultMaxOffset                = 250 * time.Millisecond
 	defaultCacheSize                = 512 << 20 // 512 MB
+	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 5 * time.Second
@@ -85,6 +87,14 @@ type Config struct {
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
+
+	// TimeSeriesServerConfig contains configuration specific to the time series
+	// server.
+	TimeSeriesServerConfig ts.ServerConfig
+
+	// SQLMemoryPoolSize is the amount of memory in bytes that can be
+	// used by SQL clients to store row data in server RAM.
+	SQLMemoryPoolSize int64
 
 	// Parsed values.
 
@@ -327,6 +337,7 @@ func MakeConfig() Config {
 		Config:                   new(base.Config),
 		MaxOffset:                defaultMaxOffset,
 		CacheSize:                defaultCacheSize,
+		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
 		ScanInterval:             defaultScanInterval,
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,

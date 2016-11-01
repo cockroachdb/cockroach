@@ -116,6 +116,7 @@ type LeaseStore struct {
 	nodeID *base.NodeIDContainer
 
 	testingKnobs LeaseStoreTestingKnobs
+	memMetrics   *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
@@ -126,7 +127,7 @@ func jitteredLeaseDuration() time.Duration {
 
 // Acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
-// being deleted, the error will be errTableDeleted.
+// being dropped, the error will be errTableDropped.
 func (s LeaseStore) Acquire(
 	txn *client.Txn,
 	tableID sqlbase.ID,
@@ -143,7 +144,8 @@ func (s LeaseStore) Acquire(
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
-	p := makeInternalPlanner("lease-acquire", txn, security.RootUser)
+	p := makeInternalPlanner("lease-acquire", txn, security.RootUser, s.memMetrics)
+	defer finishInternalPlanner(p)
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
 	values, err := p.queryRow(getDescriptor, int(tableID))
@@ -194,7 +196,8 @@ func (s LeaseStore) Acquire(
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p := makeInternalPlanner("lease-insert", txn, security.RootUser)
+		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics)
+		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
 		count, err := p.exec(insertLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
@@ -219,7 +222,8 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p := makeInternalPlanner("lease-release", txn, security.RootUser)
+		p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
+		defer finishInternalPlanner(p)
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
 		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
@@ -386,7 +390,8 @@ func (s LeaseStore) countLeases(
 ) (int, error) {
 	var count int
 	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		p := makeInternalPlanner("lease-count", txn, security.RootUser)
+		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
+		defer finishInternalPlanner(p)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
 		values, err := p.queryRow(countLeases, descID, int(version), expiration)
@@ -776,7 +781,7 @@ func (t *tableState) purgeOldLeases(
 		var err error
 		if !deleted {
 			lease, err = t.acquire(txn, minVersion, store)
-			if err == errTableDeleted {
+			if err == errTableDropped {
 				deleted = true
 			}
 		}
@@ -955,6 +960,7 @@ func NewLeaseManager(
 	clock *hlc.Clock,
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
+	memMetrics *MemoryMetrics,
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
@@ -962,6 +968,7 @@ func NewLeaseManager(
 			clock:        clock,
 			nodeID:       nodeID,
 			testingKnobs: testingKnobs.LeaseStoreTestingKnobs,
+			memMetrics:   memMetrics,
 		},
 		tables:       make(map[sqlbase.ID]*tableState),
 		testingKnobs: testingKnobs,
@@ -1175,12 +1182,12 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						}
 						if log.V(2) {
 							log.Infof(context.TODO(), "%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
-								kv.Key, table.ID, table.Name, table.Version, table.Deleted())
+								kv.Key, table.ID, table.Name, table.Version, table.Dropped())
 						}
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
-								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
+								db, table.Dropped(), table.Version, m.LeaseStore); err != nil {
 								log.Warningf(context.TODO(), "error purging leases for table %d(%s): %s",
 									table.ID, table.Name, err)
 							}

@@ -108,6 +108,7 @@ columns
 key_column_usage
 schema_privileges
 schemata
+statistics
 table_constraints
 table_privileges
 tables
@@ -338,6 +339,7 @@ columns
 key_column_usage
 schema_privileges
 schemata
+statistics
 table_constraints
 table_privileges
 tables
@@ -348,10 +350,13 @@ pg_attrdef
 pg_attribute
 pg_class
 pg_constraint
+pg_database
 pg_indexes
 pg_namespace
+pg_proc
 pg_tables
 pg_type
+pg_views
 descriptor
 eventlog
 lease
@@ -372,13 +377,17 @@ ui
 tables
 table_privileges
 table_constraints
+statistics
 schemata
 schema_privileges
 rangelog
+pg_views
 pg_type
 pg_tables
+pg_proc
 pg_namespace
 pg_indexes
+pg_database
 pg_constraint
 pg_class
 pg_attribute
@@ -393,6 +402,7 @@ def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
@@ -403,10 +413,13 @@ def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
+def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
+def            pg_catalog          pg_views           SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
 def            system              lease              BASE TABLE   1
@@ -435,6 +448,7 @@ def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
@@ -443,10 +457,13 @@ def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
+def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
+def            pg_catalog          pg_views           SYSTEM VIEW  1
 
 user root
 
@@ -463,6 +480,7 @@ def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
 def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  statistics         SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
@@ -472,10 +490,13 @@ def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
+def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            pg_catalog          pg_type            SYSTEM VIEW  1
+def            pg_catalog          pg_views           SYSTEM VIEW  1
 
 user root
 

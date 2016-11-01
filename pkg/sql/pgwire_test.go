@@ -422,7 +422,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("UTC"),
 		},
 		"HELP LEAST": {
-			baseTest.Results("least", "<T>... -> <T>", "Comparison", ""),
+			baseTest.Results("least", "(anyelement...) -> anyelement", "Comparison", ""),
 		},
 		"SELECT (SELECT 1+$1)": {
 			baseTest.SetArgs(1).Results(2),

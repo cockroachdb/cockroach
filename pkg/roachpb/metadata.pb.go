@@ -130,8 +130,8 @@ func (m *StoreDeadReplicas) String() string            { return proto.CompactTex
 func (*StoreDeadReplicas) ProtoMessage()               {}
 func (*StoreDeadReplicas) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{7} }
 
-// Locality is an ordered set of key value Tiers that describe a nodes location.
-// The tier keys should be the same across all nodes.
+// Locality is an ordered set of key value Tiers that describe a node's
+// location. The tier keys should be the same across all nodes.
 type Locality struct {
 	Tiers []Tier `protobuf:"bytes,1,rep,name=tiers" json:"tiers"`
 }

@@ -55,9 +55,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -78,33 +80,35 @@ var (
 type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
-	cfg            Config
-	mux            *http.ServeMux
-	clock          *hlc.Clock
-	rpcContext     *rpc.Context
-	grpc           *grpc.Server
-	gossip         *gossip.Gossip
-	nodeLiveness   *storage.NodeLiveness
-	storePool      *storage.StorePool
-	txnCoordSender *kv.TxnCoordSender
-	distSender     *kv.DistSender
-	db             *client.DB
-	kvDB           *kv.DBServer
-	pgServer       *pgwire.Server
-	distSQLServer  *distsql.ServerImpl
-	node           *Node
-	registry       *metric.Registry
-	recorder       *status.MetricsRecorder
-	runtime        status.RuntimeStatSampler
-	admin          adminServer
-	status         *statusServer
-	tsDB           *ts.DB
-	tsServer       ts.Server
-	raftTransport  *storage.RaftTransport
-	stopper        *stop.Stopper
-	sqlExecutor    *sql.Executor
-	leaseMgr       *sql.LeaseManager
-	engines        Engines
+	cfg                Config
+	mux                *http.ServeMux
+	clock              *hlc.Clock
+	rpcContext         *rpc.Context
+	grpc               *grpc.Server
+	gossip             *gossip.Gossip
+	nodeLiveness       *storage.NodeLiveness
+	storePool          *storage.StorePool
+	txnCoordSender     *kv.TxnCoordSender
+	distSender         *kv.DistSender
+	db                 *client.DB
+	kvDB               *kv.DBServer
+	pgServer           *pgwire.Server
+	distSQLServer      *distsql.ServerImpl
+	node               *Node
+	registry           *metric.Registry
+	recorder           *status.MetricsRecorder
+	runtime            status.RuntimeStatSampler
+	admin              *adminServer
+	status             *statusServer
+	tsDB               *ts.DB
+	tsServer           ts.Server
+	raftTransport      *storage.RaftTransport
+	stopper            *stop.Stopper
+	sqlExecutor        *sql.Executor
+	leaseMgr           *sql.LeaseManager
+	engines            Engines
+	internalMemMetrics sql.MemoryMetrics
+	adminMemMetrics    sql.MemoryMetrics
 }
 
 // NewServer creates a Server from a server.Context.
@@ -146,10 +150,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.cfg.AmbientCtx.AddLogTag("n", &s.nodeIDContainer)
 
 	ctx := s.AnnotateCtx(context.Background())
-	// TODO(radu): this will go away when we pass AmbientContext into all
-	// components.
-	ctx = tracing.WithTracer(ctx, s.cfg.AmbientCtx.Tracer)
-
 	if s.cfg.Insecure {
 		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
@@ -197,12 +197,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		Ctx:             ctx,
+		AmbientCtx:      s.cfg.AmbientCtx,
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}
-	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
+	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
@@ -232,12 +232,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
+	// Set up internal memory metrics for use by internal SQL executors.
+	s.internalMemMetrics = sql.MakeMemMetrics("internal")
+	s.registry.AddMetricStruct(s.internalMemMetrics)
+
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if cfg.TestingKnobs.SQLLeaseManager != nil {
 		lmKnobs = *s.cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
-	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs, s.stopper)
+	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs,
+		s.stopper, &s.internalMemMetrics)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Set up the DistSQL server
@@ -249,6 +254,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.distSQLServer = distsql.NewServer(distSQLCfg)
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
+
+	// Set up admin memory metrics for use by admin SQL executors.
+	s.adminMemMetrics = sql.MakeMemMetrics("admin")
+	s.registry.AddMetricStruct(s.adminMemMetrics)
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
@@ -272,14 +281,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
 	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper, &s.adminMemMetrics)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor)
+	s.pgServer = pgwire.MakeServer(
+		s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor, s.cfg.SQLMemoryPoolSize,
+	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB)
+	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
@@ -322,11 +333,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
 
-	s.admin = makeAdminServer(s)
+	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx, s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores,
 	)
-	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -624,18 +635,18 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
-	jsonpb := &util.JSONPb{
+	jsonpb := &protoutil.JSONPb{
 		EnumsAsInts:  true,
 		EmitDefaults: true,
 		Indent:       "  ",
 	}
-	protopb := new(util.ProtoPb)
+	protopb := new(protoutil.ProtoPb)
 	gwMux := gwruntime.NewServeMux(
 		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
-		gwruntime.WithMarshalerOption(util.JSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(util.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
 	)
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
@@ -646,7 +657,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
-	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
@@ -771,10 +782,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
 
-	ae := r.Header.Get(util.AcceptEncodingHeader)
+	ae := r.Header.Get(httputil.AcceptEncodingHeader)
 	switch {
-	case strings.Contains(ae, util.GzipEncoding):
-		w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
+	case strings.Contains(ae, httputil.GzipEncoding):
+		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
 		gzw := newGzipResponseWriter(w)
 		defer gzw.Close()
 		w = gzw

@@ -1623,7 +1623,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			var seen int32
 			tc.rng.mu.Lock()
 			tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
-				ll, ok := cmd.RaftCommand.Cmd.Requests[0].
+				ll, ok := cmd.Cmd.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
 					return defaultSubmitProposalLocked(tc.rng, cmd)
@@ -5544,57 +5544,21 @@ func TestGCIncorrectRange(t *testing.T) {
 // commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, cancelEarly := range []bool{true, false} {
-		func() {
-			// Pick a key unlikely to be used by background processes.
-			key := []byte("acdfg")
-			ctx, cancel := context.WithCancel(context.Background())
-			tsc := TestStoreConfig()
-			if !cancelEarly {
-				tsc.TestingKnobs.TestingCommandFilter =
-					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						if !filterArgs.Req.Header().Key.Equal(key) {
-							return nil
-						}
-						cancel()
-						return nil
-					}
-
-			}
-			tc := testContext{}
-			tc.StartWithStoreConfig(t, tsc)
-			defer tc.Stop()
-			if cancelEarly {
-				cancel()
-				tc.rng.mu.Lock()
-				tc.rng.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.rng.mu.Unlock()
-			}
-			var ba roachpb.BatchRequest
-			ba.Add(&roachpb.GetRequest{
-				Span: roachpb.Span{Key: key},
-			})
-			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
-				t.Fatal(err)
-			}
-			br, pErr := tc.rng.addWriteCmd(ctx, ba)
-			if pErr == nil {
-				if !cancelEarly {
-					// We cancelled the context while the command was already
-					// being processed, so the client had to wait for successful
-					// execution.
-					return
-				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
-			}
-			// If we cancelled the context early enough, we expect to receive a
-			// corresponding error and not wait for the command.
-			if !testutils.IsPError(pErr, context.Canceled.Error()) {
-				t.Fatalf("unexpected error: %s", pErr)
-			}
-		}()
+	// Pick a key unlikely to be used by background processes.
+	key := []byte("acdfg")
+	tc := testContext{}
+	tc.Start(t)
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{Key: key},
+	})
+	if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+		t.Fatal(err)
+	}
+	tc.Stop()
+	_, pErr := tc.rng.addWriteCmd(context.Background(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+		t.Fatalf("expected an ambiguous result error; got %v", pErr)
 	}
 }
 
@@ -5820,7 +5784,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	commandProposed := make(chan struct{}, 1)
 	rng.mu.Lock()
 	rng.mu.submitProposalFn = func(p *ProposalData) error {
-		if p.RaftCommand.Cmd.Timestamp.Equal(magicTS) {
+		if p.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
@@ -5852,7 +5816,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				cmd.RaftCommand.MaxLeaseIndex = wrongLeaseIndex
+				cmd.MaxLeaseIndex = wrongLeaseIndex
 			}
 		}
 		return defaultSubmitProposalLocked(tc.rng, cmd)
@@ -5991,7 +5955,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.rng.mu.Lock()
 	tc.rng.mu.submitProposalFn = func(cmd *ProposalData) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
-			seenCmds = append(seenCmds, int(cmd.RaftCommand.MaxLeaseIndex))
+			seenCmds = append(seenCmds, int(cmd.MaxLeaseIndex))
 		}
 		return defaultSubmitProposalLocked(tc.rng, cmd)
 	}
@@ -6026,7 +5990,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		tc.rng.mu.Lock()
 		for _, p := range tc.rng.mu.proposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
-				origIndexes = append(origIndexes, int(p.RaftCommand.MaxLeaseIndex))
+				origIndexes = append(origIndexes, int(p.MaxLeaseIndex))
 			}
 		}
 		tc.rng.mu.Unlock()

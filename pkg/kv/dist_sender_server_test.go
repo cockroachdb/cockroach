@@ -764,7 +764,10 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	} {
 		manual := hlc.NewManualClock(ts[0].WallTime + 1)
 		clock := hlc.NewClock(manual.UnixNano)
-		ds := kv.NewDistSender(&kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()}, s.(*server.TestServer).Gossip())
+		ds := kv.NewDistSender(
+			kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()},
+			s.(*server.TestServer).Gossip(),
+		)
 
 		reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -789,6 +792,55 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		if key := string(rows[0].Key); keys[0] != key {
 			t.Errorf("expected key %q; got %q", keys[0], key)
 		}
+	}
+}
+
+// TestParallelSender splits the keyspace 10 times and verifies that a
+// scan across all and 10 puts to each range both use parallelizing
+// dist sender.
+func TestParallelSender(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	ctx := context.TODO()
+
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+
+	// Split into multiple ranges.
+	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
+	for _, key := range splitKeys {
+		if err := db.AdminSplit(context.TODO(), key); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	psCount := s.DistSender().GetParallelSendCount()
+
+	// Batch writes to each range.
+	if err := db.Txn(ctx, func(txn *client.Txn) error {
+		b := txn.NewBatch()
+		for _, key := range splitKeys {
+			b.Put(key, "val")
+		}
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Errorf("unexpected error on batch put: %s", err)
+	}
+	newPSCount := s.DistSender().GetParallelSendCount()
+	if c := newPSCount - psCount; c < 9 {
+		t.Errorf("expected at least 9 parallel sends; got %d", c)
+	}
+	psCount = newPSCount
+
+	// Scan across all rows.
+	if rows, err := db.Scan(context.TODO(), "a", "z", 0); err != nil {
+		t.Fatalf("unexpected error on Scan: %s", err)
+	} else if l := len(rows); l != len(splitKeys) {
+		t.Fatalf("expected %d rows; got %d", len(splitKeys), l)
+	}
+	newPSCount = s.DistSender().GetParallelSendCount()
+	if c := newPSCount - psCount; c < 9 {
+		t.Errorf("expected at least 9 parallel sends; got %d", c)
 	}
 }
 
@@ -985,7 +1037,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	}
 }
 
-// TestPropagateTxnOnError verifies that DistSender.sendChunk properly
+// TestPropagateTxnOnError verifies that DistSender.sendBatch properly
 // propagates the txn data to a next iteration. Use txn.Writing field to
 // verify that.
 func TestPropagateTxnOnError(t *testing.T) {
@@ -1263,7 +1315,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	// bogus range. The DistSender needs to be in scope for its own
 	// MockRangeDescriptorDB closure.
 	var sender *kv.DistSender
-	sender = kv.NewDistSender(&kv.DistSenderConfig{
+	sender = kv.NewDistSender(kv.DistSenderConfig{
 		Clock:      s.Clock(),
 		RPCContext: s.RPCContext(),
 		RangeDescriptorDB: kv.MockRangeDescriptorDB(

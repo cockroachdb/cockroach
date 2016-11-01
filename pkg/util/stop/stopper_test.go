@@ -19,6 +19,7 @@ package stop_test
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -325,6 +326,7 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			_ = s.RunLimitedAsyncTask(
 				context.Background(),
 				make(chan struct{}, 1),
+				true, /* wait */
 				func(_ context.Context) { explode() },
 			)
 		},
@@ -440,7 +442,9 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < maxConcurrency*3; i++ {
 		wg.Add(1)
-		if err := s.RunLimitedAsyncTask(context.TODO(), sem, f); err != nil {
+		if err := s.RunLimitedAsyncTask(
+			context.TODO(), sem, true /* wait */, f,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -451,6 +455,72 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	if peakConcurrency != maxConcurrency {
 		t.Fatalf("expected peak concurrency %d to equal max concurrency %d",
 			peakConcurrency, maxConcurrency)
+	}
+
+	sem = make(chan struct{}, 1)
+	sem <- struct{}{}
+	err := s.RunLimitedAsyncTask(
+		context.TODO(), sem, false /* wait */, func(_ context.Context) {
+		},
+	)
+	if err != stop.ErrThrottled {
+		t.Fatalf("expected %v; got %v", stop.ErrThrottled, err)
+	}
+}
+
+func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	defer s.Stop()
+
+	const maxConcurrency = 5
+	sem := make(chan struct{}, maxConcurrency)
+
+	// Synchronization channels.
+	workersDone := make(chan struct{})
+	workerStarted := make(chan struct{})
+
+	var workersRun int32
+	var workersCancelled int32
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	f := func(ctx context.Context) {
+		atomic.AddInt32(&workersRun, 1)
+		workerStarted <- struct{}{}
+		<-ctx.Done()
+	}
+
+	// This loop will block when the semaphore is filled.
+	if err := s.RunAsyncTask(ctx, func(ctx context.Context) {
+		for i := 0; i < maxConcurrency*2; i++ {
+			if err := s.RunLimitedAsyncTask(ctx, sem, true, f); err != nil {
+				if err != context.Canceled {
+					t.Fatal(err)
+				}
+				atomic.AddInt32(&workersCancelled, 1)
+			}
+		}
+		close(workersDone)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that the semaphore fills up, leaving maxConcurrency workers
+	// waiting for context cancelation.
+	for i := 0; i < maxConcurrency; i++ {
+		<-workerStarted
+	}
+
+	// Cancel the context, which should result in all subsequent attempts to
+	// queue workers failing.
+	cancel()
+	<-workersDone
+
+	if a, e := atomic.LoadInt32(&workersRun), int32(maxConcurrency); a != e {
+		t.Fatalf("%d workers ran before context close, expected exactly %d", a, e)
+	}
+	if a, e := atomic.LoadInt32(&workersCancelled), int32(maxConcurrency); a != e {
+		t.Fatalf("%d workers cancelled after context close, expected exactly %d", a, e)
 	}
 }
 

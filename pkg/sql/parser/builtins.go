@@ -53,6 +53,7 @@ var (
 	errSqrtOfNegNumber  = errors.New("cannot take square root of a negative number")
 	errLogOfNegNumber   = errors.New("cannot take logarithm of a negative number")
 	errLogOfZero        = errors.New("cannot take logarithm of zero")
+	errInsufficientArgs = errors.New("unknown signature for CONCAT_WS: CONCAT_WS()")
 )
 
 // FunctionClass specifies the class of the builtin function.
@@ -146,11 +147,18 @@ func (b Builtin) Category() string {
 	return ""
 }
 
-// Signature returns a human-readable signature
+// Class returns the FunctionClass of this builtin.
+func (b Builtin) Class() FunctionClass {
+	return b.class
+}
+
+// Impure returns false if this builtin is a pure function of its inputs.
+func (b Builtin) Impure() bool {
+	return b.impure
+}
+
+// Signature returns a human-readable signature.
 func (b Builtin) Signature() string {
-	if b.ReturnType == nil {
-		return "<T>... -> <T>" // Special-case for LEAST and GREATEST.
-	}
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType)
 }
 
@@ -214,19 +222,26 @@ var Builtins = map[string][]Builtin{
 			Types:      VariadicType{TypeString},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				dstr, ok := args[0].(*DString)
-				if !ok {
-					return DNull, fmt.Errorf("unknown signature for concat_ws: concat_ws(%s, ...)", args[0])
+				if len(args) == 0 {
+					return DNull, errInsufficientArgs
 				}
-				sep := string(*dstr)
-				var ss []string
+				if args[0] == DNull {
+					return DNull, nil
+				}
+				sep := string(*args[0].(*DString))
+				var buf bytes.Buffer
+				prefix := ""
 				for _, d := range args[1:] {
 					if d == DNull {
 						continue
 					}
-					ss = append(ss, string(*d.(*DString)))
+					// Note: we can't use the range index here because that
+					// would break when the 2nd argument is NULL.
+					buf.WriteString(prefix)
+					prefix = sep
+					buf.WriteString(string(*d.(*DString)))
 				}
-				return NewDString(strings.Join(ss, sep)), nil
+				return NewDString(buf.String()), nil
 			},
 		},
 	},
@@ -570,7 +585,7 @@ var Builtins = map[string][]Builtin{
 	"greatest": {
 		Builtin{
 			Types:      AnyType{},
-			ReturnType: nil, // No explicit return type because AnyType parameters.
+			ReturnType: TypeAny,
 			category:   categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
@@ -581,7 +596,7 @@ var Builtins = map[string][]Builtin{
 	"least": {
 		Builtin{
 			Types:      AnyType{},
-			ReturnType: nil, // No explicit return type because AnyType parameters.
+			ReturnType: TypeAny,
 			category:   categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)

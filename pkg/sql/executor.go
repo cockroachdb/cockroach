@@ -19,9 +19,9 @@ package sql
 
 import (
 	"fmt"
-	"math"
-	"math/big"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -108,7 +107,12 @@ type StatementResults struct {
 
 // Close ensures that the resources claimed by the results are released.
 func (s *StatementResults) Close() {
-	for _, r := range s.ResultList {
+	s.ResultList.Close()
+}
+
+// Close ensures that the resources claimed by the results are released.
+func (rl ResultList) Close() {
+	for _, r := range rl {
 		r.Close()
 	}
 }
@@ -249,7 +253,9 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
+func NewExecutor(
+	cfg ExecutorConfig, stopper *stop.Stopper, startupMemMetrics *MemoryMetrics,
+) *Executor {
 	exec := &Executor{
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
@@ -284,7 +290,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	})
 
 	ctx := log.WithLogTag(context.Background(), "startup", nil)
-	startupSession := NewSession(ctx, SessionArgs{}, exec, nil)
+	startupSession := NewSession(ctx, SessionArgs{}, exec, nil, startupMemMetrics)
 	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -565,6 +571,10 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			}
 
 			var err error
+			if results != nil {
+				// Some results were produced by a previous attempt. Discard them.
+				ResultList(results).Close()
+			}
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
 
 			// TODO(andrei): Until #7881 fixed.
@@ -1179,7 +1189,9 @@ func (e *Executor) execStmt(
 				return result, err
 			}
 		}
-		result.Rows = planMaker.NewRowContainer(result.Columns, 0)
+		result.Rows = planMaker.NewRowContainer(
+			planMaker.session.makeBoundAccount(),
+			result.Columns, 0)
 
 		// valuesAlloc is used to allocate the backing storage for the
 		// result row slices in chunks.
@@ -1388,22 +1400,33 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	case *parser.DInt:
 		ts.WallTime = int64(*d)
 	case *parser.DDecimal:
-		logicalScale := 10 - int(d.Scale())
-		if logicalScale < 0 {
-			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+		// Format the decimal into a string and split on `.` to extract the nanosecond
+		// walltime and logical tick parts.
+		s := d.String()
+		parts := strings.SplitN(s, ".", 2)
+		nanos, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
 		}
-		nanos := new(big.Int)
-		logical := new(big.Int)
-		nanos.QuoRem(d.UnscaledBig(), decimal.PowerOfTenInt(int(d.Scale())), logical)
-		logical.Mul(logical, decimal.PowerOfTenInt(logicalScale))
-		if nanos.Cmp(big.NewInt(math.MaxInt64)) > 0 {
-			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: nanoseconds part too large: %s > %d", nanos, math.MaxInt64)
+		var logical int64
+		if len(parts) > 1 {
+			// logicalLength is the number of decimal digits expected in the
+			// logical part to the right of the decimal. See the implementation of
+			// cluster_logical_timestamp().
+			const logicalLength = 10
+			p := parts[1]
+			if lp := len(p); lp > logicalLength {
+				return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+			} else if lp < logicalLength {
+				p += strings.Repeat("0", logicalLength-lp)
+			}
+			logical, err = strconv.ParseInt(p, 10, 32)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+			}
 		}
-		if logical.Cmp(big.NewInt(math.MaxInt32)) > 0 {
-			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part too large: %s > %d", logical, math.MaxInt32)
-		}
-		ts.WallTime = nanos.Int64()
-		ts.Logical = int32(logical.Int64())
+		ts.WallTime = nanos
+		ts.Logical = int32(logical)
 	default:
 		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
 	}

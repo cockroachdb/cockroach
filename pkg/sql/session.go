@@ -75,6 +75,7 @@ type Session struct {
 	TxnState txnState
 
 	planner            planner
+	memMetrics         *MemoryMetrics
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 
@@ -90,44 +91,19 @@ type Session struct {
 	// they COMMIT/ROLLBACK.
 	cancel context.CancelFunc
 
-	// mon tracks memory usage for SQL activity within this session.
-	// Currently we bind an instance of MemoryUsageMonitor to each
-	// session, and the logical timespan for tracking memory usage is
-	// also bound to the entire duration of the session.
+	// mon tracks memory usage for SQL activity within this session. It
+	// is not directly used, but rather indirectly used via sessionMon
+	// and TxnState.mon. sessionMon tracks session-bound objects like prepared
+	// statements and result sets.
 	//
-	// The "logical timespan" is the duration between the point in time where
-	// to "begin" monitoring (set counters to 0) and where to "end"
-	// monitoring (check that if counters != 0 then there was a leak, and
-	// report that in logs/errors).
-	//
-	// Alternatives to define the logical timespan were considered and
-	// rejected:
-	//
-	// - binding to a single statement: fails to track transaction
-	//   state including intents across a transaction.
-	// - binding to a single transaction attempt: idem.
-	// - binding to an entire transaction: fails to track the
-	//   ResultList created by Executor.ExecuteStatements which
-	//   stays alive after the transaction commits and until
-	//   pgwire sends the ResultList back to the client.
-	// - binding to the duration of v3.go:handleExecute(): fails
-	//   to track transaction state that spans across multiple
-	//   separate execute messages.
-	//
-	// Ideally we would want a "magic" timespan that extends automatically
-	// from the start of a transaction to the point where all related
-	// Results (ResultList items) have been sent back to the
-	// client. However with this definition and the current code there can
-	// be multiple such "magic" timespans alive simultaneously. This is
-	// because a client can start a new transaction before it reads the
-	// ResultList of a previous transaction, e.g. if issuing `BEGIN;
-	// SELECT; COMMIT; BEGIN; SELECT; COMMIT` in one pgwire message.
-	//
-	// A way forward to implement this "magic" timespan would be to
-	// fix/implement #7775 (stream results from Executor to pgwire) and
-	// take care that the corresponding new streaming/pipeline logic
-	// passes a transaction-bound context to the monitor throughout.
-	mon mon.MemoryUsageMonitor
+	// The reason why TxnState.mon and mon are split is to enable
+	// separate reporting of statistics per transaction and per
+	// session. This is because the "interesting" behavior w.r.t memory
+	// is typically caused by transactions, not sessions. The reason why
+	// sessionMon and mon are split is to enable separate reporting of
+	// statistics for result sets (which escape transactions).
+	mon        mon.MemoryMonitor
+	sessionMon mon.MemoryMonitor
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -138,7 +114,9 @@ type SessionArgs struct {
 
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
-func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
+func NewSession(
+	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
+) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
 		Database:       args.Database,
@@ -146,6 +124,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 		User:           args.User,
 		Location:       time.UTC,
 		virtualSchemas: e.virtualSchemas,
+		memMetrics:     memMetrics,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
@@ -159,7 +138,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	s.PreparedPortals = makePreparedPortals(s)
 
 	if opentracing.SpanFromContext(ctx) == nil {
-		remoteStr := "<internal>"
+		remoteStr := "<admin>"
 		if remote != nil {
 			remoteStr = remote.String()
 		}
@@ -169,7 +148,6 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
 
-	s.mon.StartMonitor()
 	return s
 }
 
@@ -190,7 +168,8 @@ func (s *Session) Finish(e *Executor) {
 	s.planner.releaseLeases()
 
 	s.ClearStatementsAndPortals()
-	s.mon.StopMonitor(s.context)
+	s.sessionMon.Stop(s.context)
+	s.mon.Stop(s.context)
 
 	if s.finishEventLog {
 		log.FinishEventLog(s.context)
@@ -284,6 +263,12 @@ type txnState struct {
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
+
+	// mon tracks txn-bound objects like the running state of
+	// planNode in the midst of performing a computation. We
+	// host this here instead of TxnState because TxnState is
+	// fully reset upon each call to resetForNewSQLTxn().
+	mon mon.MemoryMonitor
 }
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
@@ -295,7 +280,14 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
 	}
 
-	*ts = txnState{}
+	// Reset state vars to defaults.
+	ts.retrying = false
+	ts.retryIntent = false
+	ts.autoRetry = false
+	ts.commitSeen = false
+	// Discard previously collected spans. We start collecting anew on
+	// every fresh SQL txn.
+	ts.CollectedSpans = nil
 
 	// Create a context for this transaction. It will include a
 	// root span that will contain everything executed as part of the
@@ -303,29 +295,25 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	// The span is closed by finishSQLTxn().
 	// TODO(andrei): figure out how to close these spans on server shutdown?
 	ctx := s.context
+	var sp opentracing.Span
 	if traceSQL {
-		sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
+		var err error
+		sp, err = tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
 			ts.CollectedSpans = append(ts.CollectedSpans, sp)
 		})
 		if err != nil {
 			log.Warningf(ctx, "unable to create snowball tracer: %s", err)
 			return
 		}
-		// sp is using a new tracer, so put it in the context.
-		ctx = tracing.WithTracer(
-			opentracing.ContextWithSpan(ctx, sp), sp.Tracer())
 	} else if traceSQLFor7881 {
-		sp, tr, err := tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
+		var err error
+		sp, _, err = tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
 			ts.CollectedSpans = append(ts.CollectedSpans, sp)
 		})
 		if err != nil {
-			panic(fmt.Sprintf("couldn't create a tracer for debugging #7881: %s", err))
+			log.Fatalf(ctx, "couldn't create a tracer for debugging #7881: %s", err)
 		}
-		// Put both the new tracer and the span in the txn's context.
-		ctx = tracing.WithTracer(
-			opentracing.ContextWithSpan(ctx, sp), tr)
 	} else {
-		var sp opentracing.Span
 		if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
 			// Create a child span for this SQL txn.
 			tracer := parentSp.Tracer()
@@ -335,9 +323,13 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			tracer := e.cfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan("sql txn")
 		}
-		ctx = opentracing.ContextWithSpan(ctx, sp)
 	}
+	// Put the new span in the context.
+	ts.sp = sp
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 	ts.Ctx = ctx
+
+	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
@@ -377,13 +369,15 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // finishSQLTxn closes the root span for the current SQL txn.
 // This needs to be called before resetForNewSQLTransaction() is called for
 // starting another SQL txn.
+// The session context is just used for logging the SQL trace.
 func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
-	span := opentracing.SpanFromContext(ts.Ctx)
-	if span == nil {
+	ts.mon.Stop(ts.Ctx)
+	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
-	sampledFor7881 := (span.BaggageItem(keyFor7881Sample) != "")
-	span.Finish()
+	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
+	ts.sp.Finish()
+	ts.sp = nil
 	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.CollectedSpans)

@@ -217,6 +217,18 @@ func (e *Error) GetTxn() *Transaction {
 	return e.UnexposedTxn
 }
 
+// UpdateTxn updates the txn.
+func (e *Error) UpdateTxn(o *Transaction) {
+	if e == nil {
+		return
+	}
+	if e.UnexposedTxn == nil {
+		e.UnexposedTxn = o
+	} else {
+		e.UnexposedTxn.Update(o)
+	}
+}
+
 // SetErrorIndex sets the index of the error.
 func (e *Error) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
@@ -327,20 +339,20 @@ func (e *RangeFrozenError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RangeFrozenError{}
 
-// NewAmbiguousCommitError initializes a new AmbiguousCommitError.
-func NewAmbiguousCommitError() *AmbiguousCommitError {
-	return &AmbiguousCommitError{}
+// NewAmbiguousResultError initializes a new AmbiguousResultError.
+func NewAmbiguousResultError() *AmbiguousResultError {
+	return &AmbiguousResultError{}
 }
 
-func (e *AmbiguousCommitError) Error() string {
-	return "transaction commit result is ambiguous"
+func (e *AmbiguousResultError) Error() string {
+	return "result is ambiguous"
 }
 
-func (e *AmbiguousCommitError) message(_ *Error) string {
+func (e *AmbiguousResultError) message(_ *Error) string {
 	return e.Error()
 }
 
-var _ ErrorDetailInterface = &AmbiguousCommitError{}
+var _ ErrorDetailInterface = &AmbiguousResultError{}
 
 func (e *TransactionAbortedError) Error() string {
 	return "txn aborted"

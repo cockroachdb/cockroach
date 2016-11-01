@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -234,7 +235,8 @@ func TestAdminAPIDatabases(t *testing.T) {
 	// Test databases endpoint.
 	const testdb = "test"
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := "CREATE DATABASE " + testdb
 	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
@@ -385,7 +387,8 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	defer span.Finish()
 
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{
 		fmt.Sprintf("CREATE DATABASE %s", escDBName),
@@ -566,7 +569,8 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 		defer span.Finish()
 
 		session := sql.NewSession(
-			ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+			ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+		session.StartUnlimitedMonitor()
 		defer session.Finish(ts.sqlExecutor)
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
@@ -601,8 +605,8 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
-	defer session.Finish(ts.sqlExecutor)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+	session.StartUnlimitedMonitor()
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		"CREATE TABLE test.tbl (val STRING)",
@@ -711,7 +715,8 @@ func TestAdminAPIUsers(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := `
 INSERT INTO system.users (username, hashedPassword)
@@ -755,7 +760,8 @@ func TestAdminAPIEvents(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
@@ -981,14 +987,14 @@ func TestClusterFreeze(t *testing.T) {
 		}
 		path := s.AdminURL() + adminPrefix + "cluster/freeze"
 
-		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
+		if err := httputil.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)
 		}
 		if aff := resp.RangesAffected; aff == 0 {
 			t.Fatalf("expected affected ranges: %+v", resp)
 		}
 
-		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
+		if err := httputil.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)
 		}
 	}

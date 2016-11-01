@@ -59,6 +59,10 @@ var cockroachBin = func() string {
 	return "cockroach"
 }()
 
+func isUnavailableError(err error) bool {
+	return strings.Contains(err.Error(), "grpc: the connection is unavailable")
+}
+
 type cluster struct {
 	rpcCtx  *rpc.Context
 	nodes   []*node
@@ -188,6 +192,9 @@ func (c *cluster) isReplicated() (bool, string) {
 	db := c.clients[0]
 	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
 	if err != nil {
+		if isUnavailableError(err) {
+			return false, ""
+		}
 		log.Fatalf(context.Background(), "scan failed: %s\n", err)
 	}
 
