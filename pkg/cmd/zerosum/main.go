@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -65,7 +66,7 @@ func newRand() *rand.Rand {
 // a zipf distribution which tilts towards smaller IDs (and hence more
 // contention).
 type zeroSum struct {
-	*cluster
+	*localcluster.Cluster
 	numAccounts int
 	chaosType   string
 	accounts    struct {
@@ -85,9 +86,9 @@ type zeroSum struct {
 	}
 }
 
-func newZeroSum(c *cluster, numAccounts int, chaosType string) *zeroSum {
+func newZeroSum(c *localcluster.Cluster, numAccounts int, chaosType string) *zeroSum {
 	z := &zeroSum{
-		cluster:     c,
+		Cluster:     c,
 		numAccounts: numAccounts,
 		chaosType:   chaosType,
 	}
@@ -115,7 +116,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 }
 
 func (z *zeroSum) setup() uint32 {
-	db := z.db[0]
+	db := z.DB[0]
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -154,7 +155,7 @@ func (z *zeroSum) accountsLen() int {
 }
 
 func (z *zeroSum) maybeLogError(err error) {
-	if isUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
+	if localcluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
 	log.Error(context.Background(), err)
@@ -172,7 +173,7 @@ func (z *zeroSum) worker() {
 			continue
 		}
 
-		db := z.db[z.randNode(r.Intn)]
+		db := z.DB[z.RandNode(r.Intn)]
 		err := crdb.ExecuteTx(db, func(tx *gosql.Tx) error {
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
@@ -225,7 +226,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 
 		switch r.Intn(2) {
 		case 0:
-			if err := z.split(z.randNode(r.Intn), key); err != nil {
+			if err := z.Split(z.RandNode(r.Intn), key); err != nil {
 				if strings.Contains(err.Error(), "range is already split at key") ||
 					strings.Contains(err.Error(), storage.ErrMsgConflictUpdatingRangeDesc) {
 					continue
@@ -235,7 +236,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 				atomic.AddUint64(&z.stats.splits, 1)
 			}
 		case 1:
-			if transferred, err := z.transferLease(z.randNode(r.Intn), r, key); err != nil {
+			if transferred, err := z.TransferLease(z.RandNode(r.Intn), r, key); err != nil {
 				z.maybeLogError(err)
 			} else if transferred {
 				atomic.AddUint64(&z.stats.transfers, 1)
@@ -250,14 +251,14 @@ func (z *zeroSum) chaosSimple() {
 	time.Sleep(d)
 
 	nodeIdx := 0
-	node := z.nodes[nodeIdx]
+	node := z.Nodes[nodeIdx]
 	d = 20 * time.Second
 	fmt.Printf("chaos: killing node %d for %s\n", nodeIdx+1, d)
-	node.kill()
+	node.Kill()
 
 	time.Sleep(d)
 	fmt.Printf("chaos: starting node %d\n", nodeIdx+1)
-	node.start()
+	node.Start()
 }
 
 func (z *zeroSum) chaosFlappy() {
@@ -268,17 +269,17 @@ func (z *zeroSum) chaosFlappy() {
 	for i := 1; true; i++ {
 		time.Sleep(d)
 
-		nodeIdx := z.randNode(r.Intn)
-		node := z.nodes[nodeIdx]
+		nodeIdx := z.RandNode(r.Intn)
+		node := z.Nodes[nodeIdx]
 		d = time.Duration(15+r.Intn(30)) * time.Second
 		fmt.Printf("chaos %d: killing node %d for %s\n", i, nodeIdx+1, d)
-		node.kill()
+		node.Kill()
 
 		time.Sleep(d)
 
 		d = time.Duration(15+r.Intn(30)) * time.Second
 		fmt.Printf("chaos %d: starting node %d, next event in %s\n", i, nodeIdx+1, d)
-		node.start()
+		node.Start()
 	}
 }
 
@@ -292,13 +293,13 @@ func (z *zeroSum) chaosFreeze() {
 
 		d = time.Duration(10+r.Intn(10)) * time.Second
 		fmt.Printf("chaos %d: freezing cluster for %s\n", i, d)
-		z.freeze(z.randNode(rand.Intn), true)
+		z.Freeze(z.RandNode(rand.Intn), true)
 
 		time.Sleep(d)
 
 		d = time.Duration(10+r.Intn(10)) * time.Second
 		fmt.Printf("chaos %d: thawing cluster, next event in %s\n", i, d)
-		z.freeze(z.randNode(rand.Intn), false)
+		z.Freeze(z.RandNode(rand.Intn), false)
 	}
 }
 
@@ -321,7 +322,7 @@ func (z *zeroSum) check(d time.Duration) {
 	for {
 		time.Sleep(d)
 
-		client := z.clients[z.randNode(rand.Intn)]
+		client := z.Clients[z.RandNode(rand.Intn)]
 		if err := client.CheckConsistency(context.Background(), keys.LocalMax, keys.MaxKey, false); err != nil {
 			z.maybeLogError(err)
 		}
@@ -339,7 +340,7 @@ func (z *zeroSum) verify(d time.Duration) {
 		q := `SELECT count(*), sum(balance) FROM accounts`
 		var accounts uint64
 		var total int64
-		db := z.db[z.randNode(rand.Intn)]
+		db := z.DB[z.RandNode(rand.Intn)]
 		if err := db.QueryRow(q).Scan(&accounts, &total); err != nil {
 			z.maybeLogError(err)
 			continue
@@ -355,8 +356,8 @@ func (z *zeroSum) verify(d time.Duration) {
 }
 
 func (z *zeroSum) rangeInfo() (int, []int) {
-	replicas := make([]int, len(z.nodes))
-	client := z.clients[z.randNode(rand.Intn)]
+	replicas := make([]int, len(z.Nodes))
+	client := z.Clients[z.RandNode(rand.Intn)]
 	rows, err := client.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 0)
 	if err != nil {
 		z.maybeLogError(err)
@@ -395,7 +396,7 @@ func (z *zeroSum) formatReplicas(replicas []int) string {
 			_, _ = buf.WriteString(" ")
 		}
 		fmt.Fprintf(&buf, "%d", replicas[i])
-		if !z.nodes[i].alive() {
+		if !z.Nodes[i].Alive() {
 			_, _ = buf.WriteString("*")
 		}
 	}
@@ -437,11 +438,11 @@ func (z *zeroSum) monitor(d time.Duration) {
 func main() {
 	flag.Parse()
 
-	c := newCluster(*numNodes)
-	defer c.close()
+	c := localcluster.New(*numNodes)
+	defer c.Close()
 
 	log.SetExitFunc(func(code int) {
-		c.close()
+		c.Close()
 		os.Exit(code)
 	})
 
@@ -451,12 +452,11 @@ func main() {
 	go func() {
 		s := <-signalCh
 		log.Infof(context.Background(), "signal received: %v", s)
-		c.close()
+		c.Close()
 		os.Exit(1)
 	}()
 
-	c.start("zerosum", *workers, flag.Args())
-	c.waitForFullReplication()
+	c.Start("zerosum", *workers, flag.Args())
 
 	z := newZeroSum(c, *numAccounts, *chaosType)
 	z.run(*workers, *monkeys)

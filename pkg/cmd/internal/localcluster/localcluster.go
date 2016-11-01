@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package main
+package localcluster
 
 import (
 	"bytes"
@@ -59,29 +59,37 @@ var cockroachBin = func() string {
 	return "cockroach"
 }()
 
-func isUnavailableError(err error) bool {
+// IsUnavailableError returns true iff the error corresponds to a GRPC
+// connection unavailable error.
+func IsUnavailableError(err error) bool {
 	return strings.Contains(err.Error(), "grpc: the connection is unavailable")
 }
 
-type cluster struct {
+// Cluster holds the state for a local cluster, providing methods for common
+// operations, access to the underlying nodes and per-node KV and SQL clients.
+type Cluster struct {
 	rpcCtx  *rpc.Context
-	nodes   []*node
-	clients []*client.DB
-	db      []*gosql.DB
+	Nodes   []*Node
+	Clients []*client.DB
+	DB      []*gosql.DB
 	stopper *stop.Stopper
 	started time.Time
 }
 
-func newCluster(size int) *cluster {
-	return &cluster{
-		nodes:   make([]*node, size),
-		clients: make([]*client.DB, size),
-		db:      make([]*gosql.DB, size),
+// New creates a cluster of size nodes.
+func New(size int) *Cluster {
+	return &Cluster{
+		Nodes:   make([]*Node, size),
+		Clients: make([]*client.DB, size),
+		DB:      make([]*gosql.DB, size),
 		stopper: stop.NewStopper(),
 	}
 }
 
-func (c *cluster) start(db string, numWorkers int, args []string) {
+// Start starts a cluster. The numWorkers parameter controls the SQL connection
+// settings to avoid unnecessary connection creation. The args parameter can be
+// used to pass extra arguments to each node.
+func (c *Cluster) Start(db string, numWorkers int, args []string) {
 	c.started = timeutil.Now()
 
 	baseCtx := &base.Config{
@@ -90,35 +98,40 @@ func (c *cluster) start(db string, numWorkers int, args []string) {
 	}
 	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx, nil, c.stopper)
 
-	for i := range c.nodes {
-		c.nodes[i] = c.makeNode(i, args)
-		c.clients[i] = c.makeClient(i)
-		c.db[i] = c.makeDB(i, numWorkers, db)
+	for i := range c.Nodes {
+		c.Nodes[i] = c.makeNode(i, args)
+		c.Clients[i] = c.makeClient(i)
+		c.DB[i] = c.makeDB(i, numWorkers, db)
 	}
 
 	log.Infof(context.Background(), "started %.3fs", timeutil.Since(c.started).Seconds())
+	c.waitForFullReplication()
 }
 
-func (c *cluster) close() {
-	for _, n := range c.nodes {
-		n.kill()
+// Close stops the cluster, killing all of the nodes.
+func (c *Cluster) Close() {
+	for _, n := range c.Nodes {
+		n.Kill()
 	}
 	c.stopper.Stop()
 }
 
-func (c *cluster) rpcPort(nodeIdx int) int {
+// RPCPort returns the RPC port of the specified node.
+func (c *Cluster) RPCPort(nodeIdx int) int {
 	return basePort + nodeIdx*2
 }
 
-func (c *cluster) rpcAddr(nodeIdx int) string {
-	return fmt.Sprintf("localhost:%d", c.rpcPort(nodeIdx))
+// RPCAddr returns the RPC address of the specified node.
+func (c *Cluster) RPCAddr(nodeIdx int) string {
+	return fmt.Sprintf("localhost:%d", c.RPCPort(nodeIdx))
 }
 
-func (c *cluster) httpPort(nodeIdx int) int {
-	return c.rpcPort(nodeIdx) + 1
+// HTTPPort returns the HTTP port of the specified node.
+func (c *Cluster) HTTPPort(nodeIdx int) int {
+	return c.RPCPort(nodeIdx) + 1
 }
 
-func (c *cluster) makeNode(nodeIdx int, extraArgs []string) *node {
+func (c *Cluster) makeNode(nodeIdx int, extraArgs []string) *Node {
 	name := fmt.Sprintf("%d", nodeIdx+1)
 	dir := filepath.Join(dataDir, name)
 	logDir := filepath.Join(dir, "logs")
@@ -130,36 +143,36 @@ func (c *cluster) makeNode(nodeIdx int, extraArgs []string) *node {
 		cockroachBin,
 		"start",
 		"--insecure",
-		fmt.Sprintf("--port=%d", c.rpcPort(nodeIdx)),
-		fmt.Sprintf("--http-port=%d", c.httpPort(nodeIdx)),
+		fmt.Sprintf("--port=%d", c.RPCPort(nodeIdx)),
+		fmt.Sprintf("--http-port=%d", c.HTTPPort(nodeIdx)),
 		fmt.Sprintf("--store=%s", dir),
 		fmt.Sprintf("--cache=256MiB"),
 		fmt.Sprintf("--logtostderr"),
 	}
 	if nodeIdx > 0 {
-		args = append(args, fmt.Sprintf("--join=localhost:%d", c.rpcPort(0)))
+		args = append(args, fmt.Sprintf("--join=localhost:%d", c.RPCPort(0)))
 	}
 	args = append(args, extraArgs...)
 
-	node := &node{
+	node := &Node{
 		LogDir: logDir,
 		Args:   args,
 	}
-	node.start()
+	node.Start()
 	return node
 }
 
-func (c *cluster) makeClient(nodeIdx int) *client.DB {
-	sender, err := client.NewSender(c.rpcCtx, c.rpcAddr(nodeIdx))
+func (c *Cluster) makeClient(nodeIdx int) *client.DB {
+	sender, err := client.NewSender(c.rpcCtx, c.RPCAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
 	return client.NewDB(sender)
 }
 
-func (c *cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
+func (c *Cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
 	url := fmt.Sprintf("postgresql://root@localhost:%d/%s?sslmode=disable",
-		c.rpcPort(nodeIdx), dbName)
+		c.RPCPort(nodeIdx), dbName)
 	conn, err := gosql.Open("postgres", url)
 	if err != nil {
 		log.Fatal(context.Background(), err)
@@ -172,7 +185,8 @@ func (c *cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
 	return conn
 }
 
-func (c *cluster) waitForFullReplication() {
+// waitForFullReplication waits for the cluster to be fully replicated.
+func (c *Cluster) waitForFullReplication() {
 	for i := 1; true; i++ {
 		done, detail := c.isReplicated()
 		if (done && i >= 50) || (i%50) == 0 {
@@ -188,11 +202,11 @@ func (c *cluster) waitForFullReplication() {
 	log.Infof(context.Background(), "replicated %.3fs", timeutil.Since(c.started).Seconds())
 }
 
-func (c *cluster) isReplicated() (bool, string) {
-	db := c.clients[0]
+func (c *Cluster) isReplicated() (bool, string) {
+	db := c.Clients[0]
 	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
 	if err != nil {
-		if isUnavailableError(err) {
+		if IsUnavailableError(err) {
 			return false, ""
 		}
 		log.Fatalf(context.Background(), "scan failed: %s\n", err)
@@ -222,11 +236,14 @@ func (c *cluster) isReplicated() (bool, string) {
 	return done, buf.String()
 }
 
-func (c *cluster) split(nodeIdx int, splitKey roachpb.Key) error {
-	return c.clients[nodeIdx].AdminSplit(context.Background(), splitKey)
+// Split splits the range containing the split key at the specified split key.
+func (c *Cluster) Split(nodeIdx int, splitKey roachpb.Key) error {
+	return c.Clients[nodeIdx].AdminSplit(context.Background(), splitKey)
 }
 
-func (c *cluster) transferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (bool, error) {
+// TransferLease transfers the lease for the range containing key to a random
+// alive node in the range.
+func (c *Cluster) TransferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (bool, error) {
 	desc, err := c.lookupRange(nodeIdx, key)
 	if err != nil {
 		return false, err
@@ -238,24 +255,24 @@ func (c *cluster) transferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 	var target roachpb.StoreID
 	for {
 		target = desc.Replicas[r.Intn(len(desc.Replicas))].StoreID
-		if c.nodes[target-1].alive() {
+		if c.Nodes[target-1].Alive() {
 			break
 		}
 	}
-	if err := c.clients[nodeIdx].AdminTransferLease(context.Background(), key, target); err != nil {
+	if err := c.Clients[nodeIdx].AdminTransferLease(context.Background(), key, target); err != nil {
 		return false, errors.Errorf("%s: transfer lease: %s", key, err)
 	}
 	return true, nil
 }
 
-func (c *cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescriptor, error) {
+func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescriptor, error) {
 	req := &roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(keys.MustAddr(key)),
 		},
 		MaxRanges: 1,
 	}
-	sender := c.clients[nodeIdx].GetSender()
+	sender := c.Clients[nodeIdx].GetSender()
 	resp, pErr := client.SendWrapped(context.Background(), sender, req)
 	if pErr != nil {
 		return nil, errors.Errorf("%s: lookup range: %s", key, pErr)
@@ -263,8 +280,10 @@ func (c *cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 	return &resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
 }
 
-func (c *cluster) freeze(nodeIdx int, freeze bool) {
-	addr := c.rpcAddr(nodeIdx)
+// Freeze freezes (or thaws) the cluster. The freeze request is sent to the
+// specified node.
+func (c *Cluster) Freeze(nodeIdx int, freeze bool) {
+	addr := c.RPCAddr(nodeIdx)
 	conn, err := c.rpcCtx.GRPCDial(addr)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to dial: %s: %v", addr, err)
@@ -289,29 +308,35 @@ func (c *cluster) freeze(nodeIdx int, freeze bool) {
 	fmt.Println("ok")
 }
 
-func (c *cluster) randNode(f func(int) int) int {
+// RandNode returns the index of a random alive node.
+func (c *Cluster) RandNode(f func(int) int) int {
 	for {
-		i := f(len(c.nodes))
-		if c.nodes[i].alive() {
+		i := f(len(c.Nodes))
+		if c.Nodes[i].Alive() {
 			return i
 		}
 	}
 }
 
-type node struct {
+// Node holds the state for a single node in a local cluster and provides
+// methods for starting, pausing, resuming and stopping the node.
+type Node struct {
 	syncutil.Mutex
 	LogDir string
 	Args   []string
 	Cmd    *exec.Cmd
 }
 
-func (n *node) alive() bool {
+// Alive returns true if the node is alive (i.e. not stopped). Note that a
+// paused node is considered alive.
+func (n *Node) Alive() bool {
 	n.Lock()
 	defer n.Unlock()
 	return n.Cmd != nil
 }
 
-func (n *node) start() {
+// Start starts a node.
+func (n *Node) Start() {
 	n.Lock()
 	defer n.Unlock()
 
@@ -369,7 +394,8 @@ func (n *node) start() {
 	}(n.Cmd)
 }
 
-func (n *node) pause() {
+// Pause pauses a node by sending it SIGSTOP.
+func (n *Node) Pause() {
 	n.Lock()
 	defer n.Unlock()
 	if n.Cmd == nil || n.Cmd.Process == nil {
@@ -378,10 +404,11 @@ func (n *node) pause() {
 	_ = n.Cmd.Process.Signal(syscall.SIGSTOP)
 }
 
-// TODO(peter): node.pause is currently unused.
-var _ = (*node).pause
+// TODO(peter): Node.Pause is currently unused.
+var _ = (*Node).Pause
 
-func (n *node) resume() {
+// Resume resumes a node by sending it SIGCONT.
+func (n *Node) Resume() {
 	n.Lock()
 	defer n.Unlock()
 	if n.Cmd == nil || n.Cmd.Process == nil {
@@ -390,10 +417,11 @@ func (n *node) resume() {
 	_ = n.Cmd.Process.Signal(syscall.SIGCONT)
 }
 
-// TODO(peter): node.resume is currently unused.
-var _ = (*node).resume
+// TODO(peter): Node.Resume is currently unused.
+var _ = (*Node).Resume
 
-func (n *node) kill() {
+// Kill stops a node abruptly by sending it SIGKILL.
+func (n *Node) Kill() {
 	n.Lock()
 	defer n.Unlock()
 	if n.Cmd == nil || n.Cmd.Process == nil {
