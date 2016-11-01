@@ -62,24 +62,20 @@ message MailboxSpec {
   // only mailbox in that flow.
   optional bool simple_response = 1 [(gogoproto.nullable) = false];
 
-  // The ID used to refer to this mailbox in a StreamHeader.
-  optional int32 stream_id = 2 [(gogoproto.nullable) = false,
-                                (gogoproto.customname) = "StreamID",
-                                (gogoproto.casttype) = "StreamID"];
-
   // Serving address for the target host, used for outgoing mailboxes.
-  optional string target_addr = 3 [(gogoproto.nullable) = false];
+  optional string target_addr = 2 [(gogoproto.nullable) = false];
 }
 
 // StreamEndpointSpec describes one of the endpoints (input or output) of a physical
 // stream.
 message StreamEndpointSpec {
-  // If set, both ends of the stream are part of the flow on this machine. There
-  // will be a corresponding endpoint with the same local stream ID. Can only be
-  // set if mailbox is not set.
-  optional int32 local_stream_id = 1 [(gogoproto.nullable) = false,
-                                      (gogoproto.customname) = "LocalStreamID",
-                                      (gogoproto.casttype) = "LocalStreamID"];
+  // The ID of this stream. If mailbox is not set, both ends of the stream are
+  // part of the flow on this machine (and there must be a corresponding
+  // endpoint with the same ID). If mailbox is set, this ID is used to refer to
+  // this mailbox in a StreamHeader.
+  optional int32 stream_id = 1 [(gogoproto.nullable) = false,
+                                (gogoproto.customname) = "StreamID",
+                                (gogoproto.casttype) = "StreamID"];
   // If set, the stream crosses flows; the endpoint is a mailbox.
   optional MailboxSpec mailbox = 2;
 }
