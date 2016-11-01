@@ -41,7 +41,7 @@ import (
 //
 // Args:
 //  prefix: A prefix to be prepended to the temp file names generated, for debugging.
-func PGUrl(t testing.TB, servingAddr, user, prefix string) (url.URL, func()) {
+func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.URL, func()) {
 	host, port, err := net.SplitHostPort(servingAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -53,8 +53,8 @@ func PGUrl(t testing.TB, servingAddr, user, prefix string) (url.URL, func()) {
 	}
 
 	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
-	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
+	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user.Username()))
+	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user.Username()))
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.
@@ -69,7 +69,7 @@ func PGUrl(t testing.TB, servingAddr, user, prefix string) (url.URL, func()) {
 
 	return url.URL{
 			Scheme:   "postgres",
-			User:     url.User(user),
+			User:     user,
 			Host:     net.JoinHostPort(host, port),
 			RawQuery: options.Encode(),
 		}, func() {

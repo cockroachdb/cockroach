@@ -46,7 +46,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	conn, err := makeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient()
 	if err != nil {
 		return err
 	}

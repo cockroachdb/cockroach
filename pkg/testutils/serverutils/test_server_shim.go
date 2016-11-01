@@ -27,6 +27,7 @@ package serverutils
 import (
 	gosql "database/sql"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
@@ -125,7 +126,7 @@ func StartServer(
 
 	kvClient := server.KVClient().(*client.DB)
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, server.ServingAddr(), security.RootUser, "StartServer")
+		t, server.ServingAddr(), "StartServer", url.User(security.RootUser))
 	pgURL.Path = params.UseDatabase
 	goDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
