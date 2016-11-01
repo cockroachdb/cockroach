@@ -55,6 +55,7 @@ const (
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
 	clientMsgParse       clientMessageType = 'P'
+	clientMsgPassword    clientMessageType = 'p'
 	clientMsgSimpleQuery clientMessageType = 'Q'
 	clientMsgSync        clientMessageType = 'S'
 	clientMsgTerminate   clientMessageType = 'X'
@@ -97,7 +98,8 @@ const (
 )
 
 const (
-	authOK int32 = 0
+	authOK                int32 = 0
+	authCleartextPassword int32 = 3
 )
 
 // preparedStatementMeta is pgwire-specific metadata which is attached to each
@@ -208,17 +210,45 @@ var statusReportParams = map[string]string{
 // database to look up authentication data, use the internal executor.
 func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
-		tlsState := tlsConn.ConnectionState()
-		authenticationHook, err := security.UserAuthHook(insecure, &tlsState)
+		var authenticationHook security.UserAuthHook
+
+		// Check that the requested user exists and retrieve the hashed
+		// password in case password authentication is needed.
+		hashedPassword, err := sql.GetUserHashedPassword(
+			ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
+		)
 		if err != nil {
 			return c.sendInternalError(err.Error())
 		}
-		if authenticationHook != nil {
-			if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+
+		tlsState := tlsConn.ConnectionState()
+		// If no certificates are provided, default to password
+		// authentication.
+		if len(tlsState.PeerCertificates) == 0 {
+			password, err := c.sendAuthPasswordRequest()
+			if err != nil {
+				return c.sendInternalError(err.Error())
+			}
+			authenticationHook = security.UserAuthPasswordHook(
+				insecure, password, hashedPassword,
+			)
+		} else {
+			// Normalize the username contained in the certificate.
+			tlsState.PeerCertificates[0].Subject.CommonName = parser.Name(
+				tlsState.PeerCertificates[0].Subject.CommonName,
+			).Normalize()
+			var err error
+			authenticationHook, err = security.UserAuthCertHook(insecure, &tlsState)
+			if err != nil {
 				return c.sendInternalError(err.Error())
 			}
 		}
+
+		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+			return c.sendInternalError(err.Error())
+		}
 	}
+
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
 	return c.writeBuf.finishMsg(c.wr)
@@ -354,6 +384,31 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 			return err
 		}
 	}
+}
+
+// sendAuthPasswordRequest requests a cleartext password from the client and
+// returns it.
+func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
+	c.writeBuf.initMsg(serverMsgAuth)
+	c.writeBuf.putInt32(authCleartextPassword)
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return "", err
+	}
+	if err := c.wr.Flush(); err != nil {
+		return "", err
+	}
+
+	typ, n, err := c.readBuf.readTypedMsg(c.rd)
+	c.metrics.BytesInCount.Inc(int64(n))
+	if err != nil {
+		return "", err
+	}
+
+	if typ != clientMsgPassword {
+		return "", errors.Errorf("invalid response to authentication request: %s", typ)
+	}
+
+	return c.readBuf.getString()
 }
 
 func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {
