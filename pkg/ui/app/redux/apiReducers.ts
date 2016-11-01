@@ -8,7 +8,7 @@ import { VersionList } from "../interfaces/cockroachlabs";
 import { versionCheck } from "../util/cockroachlabsAPI";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
 
-const clusterReducerObj = new CachedDataReducer(api.getCluster, "cluster");
+export const clusterReducerObj = new CachedDataReducer(api.getCluster, "cluster");
 export const refreshCluster = clusterReducerObj.refresh;
 
 const eventsReducerObj = new CachedDataReducer(api.getEvents, "events", moment.duration(10, "s"));

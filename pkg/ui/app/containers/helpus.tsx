@@ -123,7 +123,7 @@ export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
           <input name="company" placeholder="Company" value={attributes.company || ""} onChange={this.makeOnChange((o, v) => o.company = v)} />
           <span className="status"></span>
           <div>
-            <input type="checkbox" name="optin" id="optin" checked={attributes.optin} onChange={this.makeOnChange((o, v) => o.optin = v)} />
+            <input type="checkbox" name="optin" id="optin" checked={attributes.optin || false} onChange={this.makeOnChange((o, v) => o.optin = v)} />
             <label htmlFor="optin">Share data with Cockroach Labs</label>
             <div className="optin-text">
                   By enabling this feature, you are agreeing to send us anonymous,
