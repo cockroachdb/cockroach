@@ -47,6 +47,7 @@ const pgCatalogName = "pg_catalog"
 var pgCatalog = virtualSchema{
 	name: pgCatalogName,
 	tables: []virtualSchemaTable{
+		pgCatalogAmTable,
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
@@ -58,6 +59,28 @@ var pgCatalog = virtualSchema{
 		pgCatalogTablesTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
+	},
+}
+
+// See: https://www.postgresql.org/docs/current/static/catalog-pg-am.html
+var pgCatalogAmTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_am (
+	oid INT,
+	amname STRING,
+	amhandler INT,
+	amtype CHAR
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		h.writeStr("prefix")
+		return addRow(
+			h.getOid(),
+			parser.NewDString("prefix"),
+			parser.DNull,
+			parser.NewDString("i"),
+		)
 	},
 }
 
