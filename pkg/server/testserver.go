@@ -59,11 +59,6 @@ const (
 func makeTestConfig() Config {
 	cfg := MakeConfig()
 
-	// MaxOffset is the maximum offset for clocks in the cluster.
-	// This is mostly irrelevant except when testing reads within
-	// uncertainty intervals.
-	cfg.MaxOffset = 50 * time.Millisecond
-
 	// Test servers start in secure mode by default.
 	cfg.Insecure = false
 
@@ -102,8 +97,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.MetricsSampleInterval != time.Duration(0) {
 		cfg.MetricsSampleInterval = params.MetricsSampleInterval
 	}
-	if params.MaxOffset != time.Duration(0) {
-		cfg.MaxOffset = params.MaxOffset
+	if knobs := params.Knobs.Store; knobs != nil {
+		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != time.Duration(0) {
+			cfg.MaxOffset = mo
+		}
 	}
 	if params.ScanInterval != time.Duration(0) {
 		cfg.ScanInterval = params.ScanInterval
