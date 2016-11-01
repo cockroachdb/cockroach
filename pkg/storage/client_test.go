@@ -44,7 +44,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -156,6 +155,7 @@ func createTestStoreWithEngine(
 		rpcContext,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
+		/* deterministic */ false,
 	)
 	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -208,6 +208,10 @@ type multiTestContext struct {
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
 
+	// This controls if both the store pool and allocator should make random or
+	// deterministic decisions.
+	storePoolDeterministic bool
+
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
 	mu       *syncutil.RWMutex
@@ -245,6 +249,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		mCopy.clocks = nil
 		mCopy.clock = nil
 		mCopy.timeUntilStoreDead = 0
+		mCopy.storePoolDeterministic = false
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -405,12 +410,7 @@ func (m *multiTestContext) initGossipNetwork() {
 	m.gossipStores()
 	util.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
-			_, alive, _ := m.storePools[i].GetStoreList(
-				config.Constraints{},
-				roachpb.RangeID(0),
-				/* deterministic */ false,
-			)
-			if alive != len(m.stores) {
+			if _, alive, _ := m.storePools[i].GetStoreList(roachpb.RangeID(0)); alive != len(m.stores) {
 				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
 					m.stores[i].Ident.NodeID, alive, len(m.stores))
 			}
@@ -632,6 +632,7 @@ func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
 		m.rpcContext,
 		m.timeUntilStoreDead,
 		stopper,
+		m.storePoolDeterministic,
 	)
 }
 

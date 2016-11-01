@@ -123,12 +123,6 @@ type AllocatorOptions struct {
 	// AllowRebalance allows this store to attempt to rebalance its own
 	// replicas to other stores.
 	AllowRebalance bool
-
-	// Deterministic makes allocation decisions deterministic, based on
-	// current cluster statistics. If this flag is not set, allocation operations
-	// will have random behavior. This flag is intended to be set for testing
-	// purposes only.
-	Deterministic bool
 }
 
 // Allocator tries to spread replicas as evenly as possible across the stores
@@ -142,7 +136,7 @@ type Allocator struct {
 // MakeAllocator creates a new allocator using the specified StorePool.
 func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	var randSource rand.Source
-	if options.Deterministic {
+	if storePool != nil && storePool.deterministic {
 		randSource = rand.NewSource(777)
 	} else {
 		randSource = rand.NewSource(rand.Int63())
@@ -214,16 +208,14 @@ func (a *Allocator) AllocateTarget(
 		existingNodes[repl.NodeID] = struct{}{}
 	}
 
+	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeID)
+
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]config.Constraint(nil), constraints.Constraints...); ; attrs = attrs[:len(attrs)-1] {
-		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
-			config.Constraints{Constraints: attrs},
-			rangeID,
-			a.options.Deterministic,
-		)
-		if target := a.selectGood(sl, existingNodes); target != nil {
+		filteredSL := sl.filter(config.Constraints{Constraints: attrs})
+		if target := a.selectGood(filteredSL, existingNodes); target != nil {
 			return target, nil
 		}
 
@@ -259,18 +251,17 @@ func (a Allocator) RemoveTarget(
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
-	sl := StoreList{}
+	var descriptors []roachpb.StoreDescriptor
 	for _, exist := range existing {
 		if exist.StoreID == leaseStoreID {
 			continue
 		}
-		desc, ok := a.storePool.getStoreDescriptor(exist.StoreID)
-		if !ok {
-			continue
+		if desc, ok := a.storePool.getStoreDescriptor(exist.StoreID); ok {
+			descriptors = append(descriptors, desc)
 		}
-		sl.add(desc)
 	}
 
+	sl := makeStoreList(descriptors)
 	if bad := a.selectBad(sl); bad != nil {
 		for _, exist := range existing {
 			if exist.StoreID == bad.StoreID {
@@ -311,11 +302,8 @@ func (a Allocator) RebalanceTarget(
 		return nil
 	}
 
-	sl, _, _ := a.storePool.getStoreList(
-		constraints,
-		rangeID,
-		a.options.Deterministic,
-	)
+	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl = sl.filter(constraints)
 	if log.V(3) {
 		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}

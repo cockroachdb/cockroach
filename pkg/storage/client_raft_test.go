@@ -1891,11 +1891,8 @@ func TestStoreRangeRebalance(t *testing.T) {
 
 	// Start multiTestContext with replica rebalancing enabled.
 	sc := storage.TestStoreConfig()
-	sc.AllocatorOptions = storage.AllocatorOptions{
-		AllowRebalance: true,
-		Deterministic:  true,
-	}
-	mtc := &multiTestContext{storeConfig: &sc}
+	sc.AllocatorOptions = storage.AllocatorOptions{AllowRebalance: true}
+	mtc := &multiTestContext{storeConfig: &sc, storePoolDeterministic: true}
 
 	mtc.Start(t, 6)
 	defer mtc.Stop()

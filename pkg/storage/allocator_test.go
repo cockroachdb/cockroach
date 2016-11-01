@@ -172,8 +172,13 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
-func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
+func createTestAllocator(
+	deterministic bool,
+) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
+	stopper, g, manualClock, storePool := createTestStorePool(
+		TestTimeUntilStoreDeadOff,
+		deterministic,
+	)
 	manualClock.Set(hlc.UnixNano())
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a, manualClock
@@ -214,7 +219,7 @@ func mockStorePool(
 
 func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, err := a.AllocateTarget(
@@ -235,7 +240,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 // allocate a new replica on top of a dead (corrupt) one.
 func TestAllocatorCorruptReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, sp, a, _ := createTestAllocator()
+	stopper, g, sp, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	const store1ID = roachpb.StoreID(1)
@@ -265,7 +270,7 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 
 func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, _, a, _ := createTestAllocator()
+	stopper, _, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 	result, err := a.AllocateTarget(
 		simpleZoneConfig.Constraints,
@@ -283,7 +288,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 
 func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 	result1, err := a.AllocateTarget(
@@ -335,7 +340,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 
 func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, err := a.AllocateTarget(
@@ -367,7 +372,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 // if necessary to find an allocation target.
 func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 
@@ -421,7 +426,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 // randomly from amongst stores over the minAvailCapacityThreshold.
 func TestAllocatorRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 
 	stores := []*roachpb.StoreDescriptor{
@@ -485,17 +490,12 @@ func TestAllocatorRebalance(t *testing.T) {
 	}
 
 	// Verify shouldRebalance results.
-	a.options.Deterministic = true
 	for i, store := range stores {
 		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(
-			config.Constraints{},
-			firstRange,
-			true,
-		)
+		sl, _, _ := a.storePool.getStoreList(firstRange)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -585,8 +585,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		if numStores := len(tc); numStores < minStores {
 			t.Fatalf("%d: numStores %d < min %d", i, numStores, minStores)
 		}
-		stopper, g, _, a, _ := createTestAllocator()
-		a.options.Deterministic = true
+		stopper, g, _, a, _ := createTestAllocator(true /* deterministic */)
 		defer stopper.Stop()
 
 		// Create stores with the range counts from the test case and gossip them.
@@ -602,11 +601,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 
 		// Ensure gossiped store descriptor changes have propagated.
 		util.SucceedsSoon(t, func() error {
-			sl, _, _ := a.storePool.getStoreList(
-				config.Constraints{},
-				firstRange,
-				true,
-			)
+			sl, _, _ := a.storePool.getStoreList(firstRange)
 			for j, s := range sl.stores {
 				if a, e := s.Capacity.RangeCount, tc[j].rangeCount; a != e {
 					return errors.Errorf("tc %d: range count for %d = %d != expected %d", i, j, a, e)
@@ -614,11 +609,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			}
 			return nil
 		})
-		sl, _, _ := a.storePool.getStoreList(
-			config.Constraints{},
-			firstRange,
-			true,
-		)
+		sl, _, _ := a.storePool.getStoreList(firstRange)
 
 		// Verify shouldRebalance returns the expected value.
 		for j, store := range stores {
@@ -638,7 +629,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 // exceed the maxAvailCapacityThreshold.
 func TestAllocatorRebalanceByCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(true /* deterministic */)
 	defer stopper.Stop()
 
 	// Setup the stores so that only one is below the standard deviation threshold.
@@ -680,17 +671,12 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	}
 
 	// Verify shouldRebalance results.
-	a.options.Deterministic = true
 	for i, store := range stores {
 		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(
-			config.Constraints{},
-			firstRange,
-			true,
-		)
+		sl, _, _ := a.storePool.getStoreList(firstRange)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -702,7 +688,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 
 	// List of replicas that will be passed to RemoveTarget
@@ -791,7 +777,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 func TestAllocatorComputeAction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, sp, a, _ := createTestAllocator()
+	stopper, _, sp, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 
 	// Set up eight stores. Stores six and seven are marked as dead. Replica eight
@@ -1203,7 +1189,7 @@ func TestAllocatorError(t *testing.T) {
 // will not be sent to purgatory.
 func TestAllocatorThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator(false /* deterministic */)
 	defer stopper.Stop()
 
 	// First test to make sure we would send the replica to purgatory.
@@ -1287,8 +1273,9 @@ func Example_rebalancing() {
 		nil,
 		TestTimeUntilStoreDeadOff,
 		stopper,
+		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(sp, AllocatorOptions{AllowRebalance: true, Deterministic: true})
+	alloc := MakeAllocator(sp, AllocatorOptions{AllowRebalance: true})
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })

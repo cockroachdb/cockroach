@@ -181,6 +181,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.rpcContext,
 		s.cfg.TimeUntilStoreDead,
 		s.stopper,
+		/* deterministic */ false,
 	)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
