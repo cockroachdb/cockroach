@@ -31,13 +31,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// StreamID identifies a stream that crosses machine boundaries. The identifier
-// can only be used in the context of a specific flow.
+// StreamID identifies a stream; it may be local to a flow or it may cross
+// machine boundaries. The identifier can only be used in the context of a
+// specific flow.
 type StreamID int
-
-// LocalStreamID identifies a stream that is local to a flow. The identifier can
-// only be used in the context of a specific flow.
-type LocalStreamID int
 
 // FlowID identifies a flow. It is most importantly used when setting up streams
 // between nodes.
@@ -76,7 +73,7 @@ type Flow struct {
 	// inboundStreams are streams that receive data from other hosts, through
 	// the FlowStream API.
 	inboundStreams map[StreamID]RowReceiver
-	localStreams   map[LocalStreamID]RowReceiver
+	localStreams   map[StreamID]RowReceiver
 
 	status flowStatus
 }
@@ -97,11 +94,11 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowRecei
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver) error {
+	sid := spec.StreamID
 	if spec.Mailbox != nil {
 		if spec.Mailbox.SimpleResponse || spec.Mailbox.TargetAddr != "" {
 			return errors.Errorf("inbound stream has SimpleResponse or TargetAddr set")
 		}
-		sid := spec.Mailbox.StreamID
 		if _, found := f.inboundStreams[sid]; found {
 			return errors.Errorf("inbound stream %d has multiple consumers", sid)
 		}
@@ -114,12 +111,11 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 		f.inboundStreams[sid] = receiver
 		return nil
 	}
-	sid := spec.LocalStreamID
 	if _, found := f.localStreams[sid]; found {
 		return errors.Errorf("local stream %d has multiple consumers", sid)
 	}
 	if f.localStreams == nil {
-		f.localStreams = make(map[LocalStreamID]RowReceiver)
+		f.localStreams = make(map[StreamID]RowReceiver)
 	}
 	f.localStreams[sid] = receiver
 	return nil
@@ -129,15 +125,15 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 // RowChannel is looked up in the localStreams map; otherwise an outgoing
 // mailbox is created.
 func (f *Flow) setupOutStream(spec StreamEndpointSpec) (RowReceiver, error) {
+	sid := spec.StreamID
 	if spec.Mailbox != nil {
 		if spec.Mailbox.SimpleResponse {
 			return f.simpleFlowConsumer, nil
 		}
-		outbox := newOutbox(&f.FlowCtx, spec.Mailbox.TargetAddr, f.id, spec.Mailbox.StreamID)
+		outbox := newOutbox(&f.FlowCtx, spec.Mailbox.TargetAddr, f.id, sid)
 		f.outboxes = append(f.outboxes, outbox)
 		return outbox, nil
 	}
-	sid := spec.LocalStreamID
 	rowChan, found := f.localStreams[sid]
 	if !found {
 		return nil, errors.Errorf("unconnected inbound stream %d", sid)
