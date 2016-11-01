@@ -537,6 +537,16 @@ func runSchemaChangeWithOperations(
 	}
 }
 
+// bulkInsertIntoTable fills up table t.test with (maxValue + 1) rows.
+func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
+	inserts := make([]string, maxValue+1)
+	for i := 0; i < maxValue+1; i++ {
+		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
+	}
+	_, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ","))
+	return err
+}
+
 // Test schema change backfills are not affected by various operations
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
@@ -571,11 +581,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Bulk insert.
 	maxValue := 4000
-	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
-	for i := 1; i <= maxValue; i++ {
-		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
-	}
-	if _, err := sqlDB.Exec(insert); err != nil {
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -934,11 +940,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Bulk insert.
 	maxValue := 5000
-	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
-	for i := 1; i <= maxValue; i++ {
-		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
-	}
-	if _, err := sqlDB.Exec(insert); err != nil {
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1034,6 +1036,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	const chunkSize = 200
 	// Disable the async schema changer.
 	var enableAsyncSchemaChanges uint32
 	attempts := 0
@@ -1062,6 +1065,8 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			// Speed up evaluation of async schema changes so that it
 			// processes a purged schema change quickly.
 			AsyncExecQuickly: true,
+			// Set the backfill chunk size for all the backfill operations.
+			BackfillChunkSize: chunkSize,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1075,12 +1080,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	maxValue := csql.IndexBackfillChunkSize + 1
-	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
-	for i := 1; i <= maxValue; i++ {
-		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
-	}
-	if _, err := sqlDB.Exec(insert); err != nil {
+	const maxValue = chunkSize + 1
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1125,7 +1126,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// There is still some garbage index data that needs to be purged. All the
 	// rows from k = 0 to k = maxValue have index values. The k = maxValue + 1
 	// row with the conflict doesn't contain an index value.
-	numGarbageValues := csql.IndexBackfillChunkSize
+	numGarbageValues := chunkSize
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
@@ -1165,6 +1166,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get
 	// processed asynchronously.
 	var enableAsyncSchemaChanges uint32
@@ -1180,6 +1182,8 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 				return nil
 			},
 			AsyncExecQuickly: true,
+			// Set the backfill chunk size for all the backfill operations.
+			BackfillChunkSize: chunkSize,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1194,12 +1198,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Add some data
-	maxValue := csql.IndexBackfillChunkSize + 1
-	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
-	for i := 1; i <= maxValue; i++ {
-		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
-	}
-	if _, err := sqlDB.Exec(insert); err != nil {
+	const maxValue = chunkSize + 1
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
