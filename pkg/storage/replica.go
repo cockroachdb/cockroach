@@ -3341,7 +3341,13 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // range of keys being written is empty. If so, then the run can be
 // set to put "blindly", meaning no iterator need be used to read
 // existing values during the MVCC write.
-func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinctSpans bool) {
+// The caller should use the returned slice (which is either equal to
+// the input slice, or has been shallow-copied appropriately to avoid
+// mutating the original requests).
+func optimizePuts(
+	batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinctSpans bool,
+) []roachpb.RequestUnion {
+	origReqs := reqs
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
 	if !distinctSpans {
@@ -3381,7 +3387,7 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 	}
 
 	if len(reqs) < optimizePutThreshold { // don't bother if below this threshold
-		return
+		return origReqs
 	}
 	iter := batch.NewIterator(false /* total order iterator */)
 	defer iter.Close()
@@ -3397,18 +3403,25 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 	}
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.
-	for _, r := range reqs {
-		if iterKey == nil || bytes.Compare(iterKey, r.GetInner().Header().Key) > 0 {
-			switch t := r.GetInner().(type) {
+	newReqs := append([]roachpb.RequestUnion(nil), origReqs...)
+	for i := range reqs {
+		inner := reqs[i].GetInner()
+		if iterKey == nil || bytes.Compare(iterKey, inner.Header().Key) > 0 {
+			switch t := inner.(type) {
 			case *roachpb.PutRequest:
-				t.Blind = true
+				shallow := *t
+				shallow.Blind = true
+				(&newReqs[i]).MustSetInner(&shallow)
 			case *roachpb.ConditionalPutRequest:
-				t.Blind = true
+				shallow := *t
+				shallow.Blind = true
+				(&newReqs[i]).MustSetInner(&shallow)
 			default:
 				log.Fatalf(context.TODO(), "unexpected non-put request: %s", t)
 			}
 		}
 	}
+	return newReqs
 }
 
 func (r *Replica) executeBatch(
@@ -3440,7 +3453,7 @@ func (r *Replica) executeBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(ba.Requests) >= optimizePutThreshold {
-		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
+		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
 	// Update the node clock with the serviced request. This maintains a high

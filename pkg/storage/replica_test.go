@@ -1509,7 +1509,19 @@ func TestOptimizePuts(t *testing.T) {
 		for _, r := range c.reqs {
 			batch.Add(r)
 		}
-		optimizePuts(tc.engine, batch.Requests, false)
+		goldenRequests := append([]roachpb.RequestUnion(nil), batch.Requests...)
+		for i := range goldenRequests {
+			clone := protoutil.Clone(goldenRequests[i].GetInner()).(roachpb.Request)
+			(&goldenRequests[i]).MustSetInner(clone)
+		}
+		oldRequests := batch.Requests
+		batch.Requests = optimizePuts(tc.engine, batch.Requests, false)
+		if !reflect.DeepEqual(goldenRequests, oldRequests) {
+			t.Fatalf("%d: optimizePuts mutated the original request slice: %s",
+				i, pretty.Diff(goldenRequests, oldRequests),
+			)
+		}
+
 		blind := []bool{}
 		for _, r := range batch.Requests {
 			switch t := r.GetInner().(type) {
