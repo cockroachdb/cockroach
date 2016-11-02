@@ -3341,11 +3341,16 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // range of keys being written is empty. If so, then the run can be
 // set to put "blindly", meaning no iterator need be used to read
 // existing values during the MVCC write.
-func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinctSpans bool) {
+// The caller should use the returned slice (which is either equal to
+// the input slice, or has been shallow-copied appropriately to avoid
+// mutating the original requests).
+func optimizePuts(
+	batch engine.ReadWriter, origReqs []roachpb.RequestUnion, distinctSpans bool,
+) []roachpb.RequestUnion {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
 	if !distinctSpans {
-		unique = make(map[string]struct{}, len(reqs))
+		unique = make(map[string]struct{}, len(origReqs))
 	}
 	// Returns false on occurrence of a duplicate key.
 	maybeAddPut := func(key roachpb.Key) bool {
@@ -3365,7 +3370,8 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 		return true
 	}
 
-	for i, r := range reqs {
+	firstUnoptimizedIndex := len(origReqs)
+	for i, r := range origReqs {
 		switch t := r.GetInner().(type) {
 		case *roachpb.PutRequest:
 			if maybeAddPut(t.Key) {
@@ -3376,12 +3382,12 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 				continue
 			}
 		}
-		reqs = reqs[:i]
+		firstUnoptimizedIndex = i
 		break
 	}
 
-	if len(reqs) < optimizePutThreshold { // don't bother if below this threshold
-		return
+	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
+		return origReqs
 	}
 	iter := batch.NewIterator(false /* total order iterator */)
 	defer iter.Close()
@@ -3397,21 +3403,27 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 	}
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.
-	for _, r := range reqs {
-		if iterKey == nil || bytes.Compare(iterKey, r.GetInner().Header().Key) > 0 {
-			switch t := r.GetInner().(type) {
+	reqs := append([]roachpb.RequestUnion(nil), origReqs...)
+	for i := range reqs[:firstUnoptimizedIndex] {
+		inner := reqs[i].GetInner()
+		if iterKey == nil || bytes.Compare(iterKey, inner.Header().Key) > 0 {
+			switch t := inner.(type) {
 			case *roachpb.PutRequest:
-				t.Blind = true
+				shallow := *t
+				shallow.Blind = true
+				reqs[i].MustSetInner(&shallow)
 			case *roachpb.ConditionalPutRequest:
-				t.Blind = true
+				shallow := *t
+				shallow.Blind = true
+				reqs[i].MustSetInner(&shallow)
 			default:
 				log.Fatalf(context.TODO(), "unexpected non-put request: %s", t)
 			}
 		}
 	}
+	return reqs
 }
 
-// TODO(tschottdorf): Reliance on mutating `ba.Txn` should be dealt with.
 func (r *Replica) executeBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -3437,7 +3449,7 @@ func (r *Replica) executeBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(ba.Requests) >= optimizePutThreshold {
-		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
+		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
 	// Update the node clock with the serviced request. This maintains a high
@@ -3448,6 +3460,14 @@ func (r *Replica) executeBatch(
 
 	if err := r.checkBatchRange(ba); err != nil {
 		return nil, ProposalData{}, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
+	}
+
+	// Create a shallow clone of the transaction. We only modify a few
+	// non-pointer fields (BatchIndex, WriteTooOld, Timestamp), so this saves
+	// a few allocs.
+	if ba.Txn != nil {
+		txnShallow := *ba.Txn
+		ba.Txn = &txnShallow
 	}
 
 	var pd ProposalData
