@@ -681,6 +681,74 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	mtc.waitForValues(key, []int64{incAB, incAB, incAB, incAB, incAB})
 }
 
+func TestReplicateAfterRemoveAndSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig()
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	rng1, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.replicateRange(1, 1, 2)
+
+	// Kill store 2.
+	mtc.stopStore(2)
+
+	// Remove store 2 from the range to simulate removal of a dead node.
+	mtc.unreplicateRange(1, 2)
+
+	// Split the range.
+	splitKey := roachpb.Key("m")
+	splitArgs := adminSplitArgs(splitKey, splitKey)
+	if _, err := rng1.AdminSplit(context.Background(), splitArgs, rng1.Desc()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restart store 2.
+	mtc.restartStore(2)
+
+	replicateRange2 := func() error {
+		// Try to up-replicate range 2 to store 2. We can't use replicateRange
+		// because this should fail on the first attempt and then eventually
+		// succeed.
+		const rangeID = 2
+		startKey := mtc.findStartKeyLocked(rangeID)
+
+		var desc roachpb.RangeDescriptor
+		if err := mtc.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+			t.Fatal(err)
+		}
+
+		rep, err := mtc.findMemberStoreLocked(desc).GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return rep.ChangeReplicas(
+			context.Background(),
+			roachpb.ADD_REPLICA,
+			roachpb.ReplicaDescriptor{
+				NodeID:  mtc.stores[2].Ident.NodeID,
+				StoreID: mtc.stores[2].Ident.StoreID,
+			},
+			&desc,
+		)
+	}
+
+	expected := "snapshot intersects existing range"
+	if err := replicateRange2(); !testutils.IsError(err, expected) {
+		t.Fatalf("expected error, but found %v", err)
+	}
+	mtc.stores[2].SetReplicaGCQueueActive(true)
+
+	util.SucceedsSoon(t, replicateRange2)
+}
+
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()

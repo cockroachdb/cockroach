@@ -3491,12 +3491,33 @@ func (s *Store) canApplySnapshotLocked(
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
+		msg := "snapshot intersects existing range"
+		ctx := s.AnnotateCtx(context.TODO())
 		if err != nil {
-			ctx := s.AnnotateCtx(context.TODO())
 			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
+		} else {
+			inactive := func(r *Replica) bool {
+				if r.RaftStatus() == nil {
+					return true
+				}
+				lease, pendingLease := r.getLease()
+				now := s.Clock().Now()
+				return (lease == nil || !lease.Covers(now)) &&
+					(pendingLease == nil || !pendingLease.Covers(now))
+			}
+
+			// If the existing range shows no signs of recent activity, give it a GC
+			// run.
+			if inactive(exReplica) {
+				if _, err := s.replicaGCQueue.Add(exReplica, replicaGCPriorityCandidate); err != nil {
+					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
+				} else {
+					msg += "; initiated GC: "
+				}
+			}
 		}
-		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
+		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
 	}
 
 	placeholder := &ReplicaPlaceholder{
