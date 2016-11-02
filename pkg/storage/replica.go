@@ -294,6 +294,23 @@ type Replica struct {
 		raftLogSize int64
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
+		// minLeaseProposedTS is the minimum acceptable lease.ProposedTS; only
+		// leases proposed after this timestamp can be used for proposing commands.
+		// This is used to protect against several hazards:
+		// - leases held (or even proposed) before a restart cannot be used after a
+		// restart. This is because:
+		// 		a) the command queue is wiped during the restart; there might be
+		// 		writes in flight that are not reflected in the new command queue. So,
+		// 		we need to synchronize all new reads with those old in-flight writes.
+		// 		Forcing acquisition of a new lease essentially flushes all the
+		// 		previous raft commands.
+		// 		b) a lease transfer might have been in progress at the time of the
+		// 		restart. Using the existing lease after the restart would break the
+		// 		transfer proposer's promise to not use the existing lease.
+		// - a lease cannot be used after a transfer is initiated. Moreover, even
+		// lease extension that were in flight at the time of the transfer cannot be
+		// used, if they eventually apply.
+		minLeaseProposedTS hlc.Timestamp
 		// Max bytes before split.
 		maxBytes int64
 		// proposals stores the Raft in-flight commands which
@@ -609,6 +626,13 @@ func (r *Replica) initLocked(
 	// reloading the raft state below, it isn't safe to use the existing raft
 	// group.
 	r.mu.internalRaftGroup = nil
+	// Init the minLeaseProposedTS such that we won't use an existing lease (if
+	// any). This is so that, after a restart, we don't propose under old leases.
+	// If the replica is being created through a split, this value will be
+	// overridden.
+	if !r.store.cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
+		r.mu.minLeaseProposedTS = clock.Now()
+	}
 
 	var err error
 
@@ -798,47 +822,45 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			lease := r.mu.state.Lease
-			if lease.Covers(timestamp) {
-				if !lease.OwnedBy(r.store.StoreID()) {
-					// If lease is currently held by another, redirect to holder.
-					return nil, roachpb.NewError(
-						newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc))
-				}
-				// Check that we're not in the process of transferring the lease away.
-				// If we are transferring the lease away, we can't serve reads or
-				// propose Raft commands - see comments on TransferLease.
+			iAmTheLeaseHolder := lease.OwnedBy(r.store.StoreID())
+			// Check that there's a lease covering the current timestamp and, if there
+			// is, and if we're the lease holder, check that we're not in one of the
+			// situations where we can't use the otherwise valid lease:
+			// - after a process restart we can't serve commands because the command
+			// queue has been wiped through the restart. So commands we'd be serving
+			// now are not synchronized with potential in-flight commands.
+			// - if we are transferring the lease away, we can't serve reads or
+			// propose Raft commands - see comments in AdminTransferLease.
+			if !lease.Covers(timestamp) ||
+				(iAmTheLeaseHolder && lease.ProposedTS != nil &&
+					lease.ProposedTS.Less(r.mu.minLeaseProposedTS)) {
+				// If a transfer is in progress, this will return a NotLeaseHolderError
+				// redirecting to the transfer target.
 				// TODO(andrei): If the lease is being transferred, consider returning a
 				// new error type so the client backs off until the transfer is
 				// completed.
-				repDesc, err := r.getReplicaDescriptorLocked()
-				if err != nil {
-					return nil, roachpb.NewError(err)
-				}
-				if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(
-					repDesc.ReplicaID); ok {
-					return nil, roachpb.NewError(
-						newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
-				}
-
-				// Should we extend the lease?
-				if _, ok := r.mu.pendingLeaseRequest.RequestPending(); !ok &&
-					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.cfg.RangeLeaseRenewalDuration), 0)) {
-					if log.V(2) {
-						log.Warningf(ctx, "extending lease %s at %s", lease, timestamp)
-					}
-					// We had an active lease to begin with, but we want to trigger
-					// a lease extension. We don't need to wait for that extension
-					// to go through and simply ignore the returned channel (which
-					// is buffered).
-					_ = r.requestLeaseLocked(timestamp)
-				}
-				// Return a nil chan to signal that we have a valid lease.
-				return nil, nil
+				log.Eventf(ctx, "request range lease (attempt #%d)", attempt)
+				return r.requestLeaseLocked(timestamp), nil
 			}
-			log.Eventf(ctx, "request range lease (attempt #%d)", attempt)
-
-			// No active lease: Request renewal if a renewal is not already pending.
-			return r.requestLeaseLocked(timestamp), nil
+			if !iAmTheLeaseHolder {
+				// If lease is currently held by another, redirect to holder.
+				return nil, roachpb.NewError(
+					newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc))
+			}
+			// Should we extend the lease?
+			if _, ok := r.mu.pendingLeaseRequest.RequestPending(); !ok &&
+				!timestamp.Less(lease.StartStasis.Add(-int64(r.store.cfg.RangeLeaseRenewalDuration), 0)) {
+				if log.V(2) {
+					log.Warningf(ctx, "extending lease %s at %s", lease, timestamp)
+				}
+				// We had an active lease to begin with, but we want to trigger
+				// a lease extension. We don't need to wait for that extension
+				// to go through and simply ignore the returned channel (which
+				// is buffered).
+				_ = r.requestLeaseLocked(timestamp)
+			}
+			// Return a nil chan to signal that we have a valid lease.
+			return nil, nil
 		}()
 		if pErr != nil {
 			return pErr
@@ -3690,6 +3712,23 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	}
 }
 
+// shouldGossip returns true if this replica should be gossiping. Gossip is
+// inherently inconsistent and asynchronous, we're using the lease as a way to
+// ensure that only one node gossips at a time.
+func (r *Replica) shouldGossip() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lease := r.mu.state.Lease
+	// The minLeaseProposedTS check is here to ensure we stop gossiping after
+	// we've transferred the lease away.
+	if !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) ||
+		(lease.ProposedTS != nil && lease.ProposedTS.Less(r.mu.minLeaseProposedTS)) {
+		// Do not gossip when a range lease is not held.
+		return false
+	}
+	return true
+}
+
 // maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
 // The first call is on NewReplica. Further calls come from the trigger on
 // EndTransaction or range lease acquisition.
@@ -3712,8 +3751,7 @@ func (r *Replica) maybeGossipSystemConfig() {
 
 	ctx := r.AnnotateCtx(context.TODO())
 
-	if lease, _ := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
-		// Do not gossip when a range lease is not held.
+	if !r.shouldGossip() {
 		return
 	}
 
@@ -3757,8 +3795,7 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 		return
 	}
 
-	if lease, _ := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
-		// Do not gossip when a range lease is not held.
+	if !r.shouldGossip() {
 		return
 	}
 
