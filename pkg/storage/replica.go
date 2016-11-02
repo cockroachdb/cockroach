@@ -93,6 +93,8 @@ const (
 // simpler with this being turned off.
 var txnAutoGC = true
 
+var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
+
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary
@@ -2216,6 +2218,29 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		return false, nil
 	}
 	if r.mu.quiescent {
+		// While a replica is quiesced we still advance its logical clock. This is
+		// necessary to avoid a scenario where the leader quiesces and a follower
+		// does not. The follower calls an election but the election fails because
+		// the leader and other follower believe that no time in the current term
+		// has passed. The Raft group is then in a state where one member has a
+		// term that is advanced which will then cause subsequent heartbeats from
+		// the existing leader to be rejected in a way that the leader will step
+		// down. This situation is caused by an interaction between quiescence and
+		// the Raft CheckQuorum feature which relies on the logical clock ticking
+		// at roughly the same rate on all members of the group.
+		//
+		// By ticking the logical clock (incrementing an integer) we avoid this
+		// situation. If one of the followers does not quiesce it will call an
+		// election but the election will succeed. Note that while we expect such
+		// elections from quiesced followers to be extremely rare, it is very
+		// difficult to completely eliminate them so we want to minimize the
+		// disruption when they do occur.
+		//
+		// For more details, see #9372.
+		// TODO(bdarnell): remove this once we have fully switched to PreVote
+		if tickQuiesced {
+			r.mu.internalRaftGroup.TickQuiesced()
+		}
 		return false, nil
 	}
 	if r.maybeQuiesceLocked() {
