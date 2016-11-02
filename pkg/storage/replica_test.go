@@ -6233,3 +6233,57 @@ func TestDeprecatedRequests(t *testing.T) {
 		t.Fatalf("expected %T but got %T", &roachpb.DeprecatedVerifyChecksumResponse{}, reply)
 	}
 }
+
+func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	ctx := tc.store.AnnotateCtx(context.TODO())
+	key := keys.LocalMax
+
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	origTxn := txn.Clone()
+
+	minNewTS := func() hlc.Timestamp {
+		var ba roachpb.BatchRequest
+		scan := scanArgs(key, tc.rng.Desc().EndKey.AsRawKey())
+		ba.Add(&scan)
+
+		resp, pErr := tc.Sender().Send(ctx, ba)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		if !txn.Timestamp.Less(resp.Timestamp) {
+			t.Fatalf("expected txn ts %s < scan TS %s", txn.Timestamp, resp.Timestamp)
+		}
+		return resp.Timestamp
+	}()
+
+	var ba roachpb.BatchRequest
+	ba.Txn = txn
+	txnPut := putArgs(key, []byte("timestamp should be bumped"))
+	ba.Add(&txnPut)
+
+	resp, pErr := tc.Sender().Send(ctx, ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if !reflect.DeepEqual(&origTxn, txn) {
+		t.Fatalf(
+			"original transaction proto was mutated: %s",
+			pretty.Diff(&origTxn, txn),
+		)
+	}
+	if resp.Txn == nil {
+		t.Fatal("no transaction in response")
+	} else if resp.Txn.Timestamp.Less(minNewTS) {
+		t.Fatalf(
+			"expected txn ts bumped at least to %s, but got %s",
+			minNewTS, txn.Timestamp,
+		)
+	}
+}

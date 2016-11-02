@@ -1347,26 +1347,26 @@ func (r *Replica) endCmds(
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
-//
-// TODO(tschottdorf): find a way not to update the batch txn
-//   which should be immutable.
-// TODO(tschottdorf): Things look fishy here. We're updating txn.Timestamp in
-// multiple places, but there's apparently nothing that forces the remainder of
-// request processing to return that updated transaction with a response. In
-// effect, we're running in danger of writing at higher timestamps than the
-// client (and thus the commit!) are aware of. If there's coverage of these
-// code paths, I wonder how it works if not for data races or some brittle
-// code path a stack frame higher up. Should really address that previous
-// TODO.
-func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
+func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bumped bool, _ *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	var origTS hlc.Timestamp
 	if ba.Txn != nil {
 		r.mu.tsCache.ExpandRequests(ba.Txn.Timestamp)
+		origTS = ba.Txn.Timestamp
 	} else {
 		r.mu.tsCache.ExpandRequests(ba.Timestamp)
+		origTS = ba.Timestamp
 	}
+	defer func() {
+		// Let the caller know whether we did anything.
+		if ba.Txn != nil {
+			bumped = origTS != ba.Txn.Timestamp
+		} else {
+			bumped = origTS != ba.Timestamp
+		}
+	}()
 
 	for _, union := range ba.Requests {
 		args := union.GetInner()
@@ -1379,7 +1379,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 				key := keys.TransactionKey(header.Key, ba.GetTxnID())
 				wTS, _, wOK := r.mu.tsCache.GetMaxWrite(key, nil)
 				if wOK {
-					return roachpb.NewError(roachpb.NewTransactionReplayError())
+					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
 					// This is a crucial bit of code. The timestamp cache is
 					// reset with the current time as the low-water
@@ -1389,7 +1389,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 					// If it's really a replay, it won't retry.
 					txn := ba.Txn.Clone()
 					txn.Timestamp.Forward(wTS.Next())
-					return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn)
+					return bumped, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn)
 				}
 				continue
 			}
@@ -1398,7 +1398,12 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			rTS, rTxnID, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
-					ba.Txn.Timestamp.Forward(rTS.Next())
+					nextTS := rTS.Next()
+					if ba.Txn.Timestamp.Less(nextTS) {
+						txn := ba.Txn.Clone()
+						txn.Timestamp.Forward(rTS.Next())
+						ba.Txn = &txn
+					}
 				}
 			} else {
 				ba.Timestamp.Forward(rTS.Next())
@@ -1412,8 +1417,10 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			if ba.Txn != nil {
 				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
-						ba.Txn.Timestamp.Forward(wTS.Next())
-						ba.Txn.WriteTooOld = true
+						txn := ba.Txn.Clone()
+						txn.Timestamp.Forward(wTS.Next())
+						txn.WriteTooOld = true
+						ba.Txn = &txn
 					}
 				}
 			} else {
@@ -1421,7 +1428,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			}
 		}
 	}
-	return nil
+	return bumped, nil
 }
 
 // addAdminCmd executes the command directly. There is no interaction
@@ -1657,8 +1664,35 @@ func (r *Replica) tryAddWriteCmd(
 		// commands which require this command to move its timestamp
 		// forward. Or, in the case of a transactional write, the txn
 		// timestamp and possible write-too-old bool.
-		if pErr := r.applyTimestampCache(&ba); pErr != nil {
+		if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
 			return nil, pErr, false
+		} else if bumped {
+			// There is brittleness built into this system. If we bump the
+			// transaction's timestamp, we must absolutely tell the client in
+			// a response transaction (for otherwise it doesn't know about the
+			// incremented timestamp; it might commit with the old one, which
+			// either resolves intents to a lower timestamp than they were
+			// written at, or discards them; whatever it would be in practice,
+			// there's no way to do "the right thing" at that point).
+			// Response transactions are set far away from this code, but at
+			// the time of writing, they always seem to be set. Since that is
+			// a likely target of future micro-optimization, this assertion
+			// is likely to avoid a future correctness anomaly.
+			defer func() {
+				if br != nil && ba.Txn != nil && br.Txn == nil {
+					txn := ba.Txn.Clone()
+					br.Txn = &txn
+					// TODO(tschottdorf): this actually fails in tests during
+					// AdminSplit transactions. Very bad.
+					//
+					// See #10401.
+					log.Warningf(ctx, "assertion failed: transaction updated by "+
+						"timestamp cache, but transaction returned in response; "+
+						"updated timestamp would have been lost (recovered): "+
+						"%s in batch %s", ba.Txn, ba,
+					)
+				}
+			}()
 		}
 	}
 
