@@ -2235,7 +2235,10 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		// disruption when they do occur.
 		//
 		// For more details, see #9372.
-		r.mu.internalRaftGroup.TickQuiesced()
+		// TODO(bdarnell): remove this once we have fully switched to PreVote
+		if envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true) {
+			r.mu.internalRaftGroup.TickQuiesced()
+		}
 		return false, nil
 	}
 	if r.maybeQuiesceLocked() {
