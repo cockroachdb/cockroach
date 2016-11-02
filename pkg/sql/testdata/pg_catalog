@@ -50,6 +50,7 @@ pg_attribute
 pg_class
 pg_constraint
 pg_database
+pg_description
 pg_indexes
 pg_namespace
 pg_proc
@@ -725,3 +726,10 @@ ORDER BY rolname;
 oid         rolname   rolpassword  rolvaliduntil  rolconfig
 4230608961  root      ********     NULL           {}
 4079356392  testuser  ********     NULL           {}
+
+## pg_catalog.pg_description
+
+query IIIT colnames
+SELECT * FROM pg_catalog.pg_description
+----
+objoid  classoid  objsubid  description
