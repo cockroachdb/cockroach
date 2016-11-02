@@ -38,6 +38,7 @@ PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
+COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
 
 GRPC_GATEWAY_PACKAGE := github.com/grpc-ecosystem/grpc-gateway
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := $(GRPC_GATEWAY_PACKAGE)/third_party/googleapis
@@ -90,12 +91,12 @@ $(REPO_ROOT)/build/yarn.installed: $(REPO_ROOT)/build/package.json
 
 PBJS_ARGS = --path $(ORG_ROOT) --path $(GOGOPROTO_ROOT) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
 
-$(PKG_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS)
+$(PKG_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS) $(COREOS_RAFT_PROTOS)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs -t commonjs $(PBJS_ARGS) >> $@
 
-$(PKG_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS)
+$(PKG_ROOT)/ui/generated/protos.json: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS) $(COREOS_RAFT_PROTOS)
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs $(PBJS_ARGS) > $@
 
 $(PKG_ROOT)/ui/generated/protos.d.ts: $(PKG_ROOT)/ui/generated/protos.json
