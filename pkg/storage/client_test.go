@@ -587,10 +587,10 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	var cfg storage.StoreConfig
 	if m.storeConfig != nil {
 		cfg = *m.storeConfig
+		cfg.Clock = m.clocks[i]
 	} else {
-		cfg, _ = storage.TestStoreConfig()
+		cfg = storage.TestStoreConfigWithClock(m.clocks[i])
 	}
-	cfg.Clock = m.clocks[i]
 	cfg.Transport = m.transports[i]
 	cfg.DB = m.dbs[i]
 	cfg.Gossip = m.gossips[i]

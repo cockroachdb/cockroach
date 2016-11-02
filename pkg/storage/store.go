@@ -124,12 +124,11 @@ func RangeLeaseDurations(
 	return
 }
 
-// TestStoreConfig has some fields initialized with values relevant in tests.
-func TestStoreConfig() (StoreConfig, *hlc.ManualClock) {
-	manual := hlc.NewManualClock(123)
+// TestStoreConfigWithClock has some fields initialized with values relevant in tests.
+func TestStoreConfigWithClock(clock *hlc.Clock) StoreConfig {
 	return StoreConfig{
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
-		Clock:                          hlc.NewClock(manual.UnixNano, time.Nanosecond),
+		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,
 		CoalescedHeartbeatsInterval:    50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
@@ -139,7 +138,15 @@ func TestStoreConfig() (StoreConfig, *hlc.ManualClock) {
 		ConsistencyCheckPanicOnFailure: true,
 		MetricsSampleInterval:          time.Hour,
 		EnableCoalescedHeartbeats:      true,
-	}, manual
+	}
+}
+
+// TestStoreConfig has some fields initialized with values relevant in tests.
+func TestStoreConfig() (StoreConfig, *hlc.ManualClock) {
+	manual := hlc.NewManualClock(123)
+	return TestStoreConfigWithClock(
+		hlc.NewClock(manual.UnixNano, time.Nanosecond),
+	), manual
 }
 
 func newRaftConfig(

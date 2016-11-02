@@ -110,12 +110,11 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	}
 	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
-	cfg, _ := storage.TestStoreConfig()
+	cfg := storage.TestStoreConfigWithClock(ltc.Clock)
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
 	cfg.AmbientCtx = ambient
-	cfg.Clock = ltc.Clock
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
 	cfg.Transport = transport
