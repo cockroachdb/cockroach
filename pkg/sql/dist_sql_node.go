@@ -120,7 +120,7 @@ func (n *distSQLNode) Next() (bool, error) {
 		if n.syncMode {
 			n.flow.RunSync()
 		} else {
-			n.flow.Start()
+			n.flow.Start(func() {})
 		}
 		n.flowStarted = true
 	}
