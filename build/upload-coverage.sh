@@ -45,8 +45,8 @@ iterative_coverpkg() {
 rm -rf "$coverage_dir"
 mkdir -p "$coverage_dir"
 
-# Run "make coverage" on each package.
-for pkg in $(go list ./...); do
+# Run "make coverage" on each package except for those in cmd.
+for pkg in $(go list ./pkg/... | grep -F -v 'pkg/cmd'); do
   echo "Processing $pkg..."
   # Verify package has test files.
   if [ -z "$(go list -f '{{join .TestGoFiles ""}}{{join .XTestGoFiles ""}}' $pkg)" ]; then
