@@ -67,6 +67,8 @@ type LeaseState struct {
 	// table name cache can have references to such leases since releasing a lease
 	// and updating the cache is not atomic.
 	released bool
+
+	testingKnobs LeaseStoreTestingKnobs
 }
 
 func (s *LeaseState) String() string {
@@ -78,9 +80,12 @@ func (s *LeaseState) Expiration() time.Time {
 	return s.expiration.Time
 }
 
-// hasSomeLifeLeft returns true if the lease has at least a minimum of lifetime
-// left until expiration, and thus can be used.
+// hasSomeLifeLeft returns true if the lease has at least a minimum of
+// lifetime left until expiration, and thus can be used.
 func (s *LeaseState) hasSomeLifeLeft(clock *hlc.Clock) bool {
+	if s.testingKnobs.CanUseExpiredLeases {
+		return true
+	}
 	minDesiredExpiration := clock.Now().GoTime().Add(MinLeaseDuration)
 	return s.expiration.After(minDesiredExpiration)
 }
@@ -134,7 +139,7 @@ func (s LeaseStore) Acquire(
 	minVersion sqlbase.DescriptorVersion,
 	minExpirationTime parser.DTimestamp,
 ) (*LeaseState, error) {
-	lease := &LeaseState{}
+	lease := &LeaseState{testingKnobs: s.testingKnobs}
 	expiration := time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration())
 	expiration = expiration.Round(time.Microsecond)
 	if !minExpirationTime.IsZero() && expiration.Before(minExpirationTime.Time) {
@@ -813,6 +818,8 @@ type LeaseStoreTestingKnobs struct {
 	// Called after a lease is removed from the store, with any operation error.
 	// See LeaseRemovalTracker.
 	LeaseReleasedEvent func(lease *LeaseState, err error)
+	// Allow the use of expired leases.
+	CanUseExpiredLeases bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
