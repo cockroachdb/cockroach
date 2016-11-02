@@ -115,12 +115,12 @@ func (db *testSender) Send(
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	rng := db.store.LookupReplica(rs.Key, rs.EndKey)
-	if rng == nil {
+	repl := db.store.LookupReplica(rs.Key, rs.EndKey)
+	if repl == nil {
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
-	ba.RangeID = rng.RangeID
-	repDesc, err := rng.GetReplicaDescriptor()
+	ba.RangeID = repl.RangeID
+	repDesc, err := repl.GetReplicaDescriptor()
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -340,36 +340,36 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error("expected GetRange to fail on missing range")
 	}
 	// Range 1 already exists. Make sure we can fetch it.
-	rng1, err := store.GetReplica(1)
+	repl1, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 	// Create a new range (id=2).
-	rng2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplica(rng2); err != nil {
+	repl2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
+	if err := store.AddReplica(repl2); err != nil {
 		t.Fatal(err)
 	}
 	// Try to add the same range twice
-	err = store.AddReplica(rng2)
+	err = store.AddReplica(repl2)
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err == nil {
+	if err := store.RemoveReplica(repl1, *repl1.Desc(), true); err == nil {
 		t.Fatal("expected error re-removing same range")
 	}
 	// Try to add a range with previously-used (but now removed) ID.
-	rng2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplica(rng2Dup); err == nil {
+	repl2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
+	if err := store.AddReplica(repl2Dup); err == nil {
 		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
-	rng3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
-	if err := store.AddReplica(rng3); err != nil {
+	repl3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
+	if err := store.AddReplica(repl3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -377,17 +377,17 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		start, end roachpb.RKey
 		expRng     *Replica
 	}{
-		{roachpb.RKey("a"), roachpb.RKey("a\x00"), rng2},
-		{roachpb.RKey("a"), roachpb.RKey("b"), rng2},
-		{roachpb.RKey("a\xff\xff"), roachpb.RKey("b"), rng2},
-		{roachpb.RKey("c"), roachpb.RKey("c\x00"), rng3},
-		{roachpb.RKey("c"), roachpb.RKey("d"), rng3},
-		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d"), rng3},
+		{roachpb.RKey("a"), roachpb.RKey("a\x00"), repl2},
+		{roachpb.RKey("a"), roachpb.RKey("b"), repl2},
+		{roachpb.RKey("a\xff\xff"), roachpb.RKey("b"), repl2},
+		{roachpb.RKey("c"), roachpb.RKey("c\x00"), repl3},
+		{roachpb.RKey("c"), roachpb.RKey("d"), repl3},
+		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d"), repl3},
 		{roachpb.RKey("x60\xff\xff"), roachpb.RKey("a"), nil},
 		{roachpb.RKey("x60\xff\xff"), roachpb.RKey("a\x00"), nil},
 		{roachpb.RKey("d"), roachpb.RKey("d"), nil},
 		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d\x00"), nil},
-		{roachpb.RKey("a"), nil, rng2},
+		{roachpb.RKey("a"), nil, repl2},
 		{roachpb.RKey("d"), nil, nil},
 	}
 
@@ -488,31 +488,31 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng1, err := store.GetReplica(1)
+	repl1, err := store.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
-	if err := rng1.withRaftGroup(func(r *raft.RawNode) (bool, error) {
+	if err := repl1.withRaftGroup(func(r *raft.RawNode) (bool, error) {
 		return true, errors.Errorf("unexpectedly created a raft group")
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	rng1.mu.Lock()
-	expErr := rng1.mu.destroyed
-	rng1.mu.Unlock()
+	repl1.mu.Lock()
+	expErr := repl1.mu.destroyed
+	repl1.mu.Unlock()
 
 	if expErr == nil {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	if _, _, err := rng1.propose(
+	if _, _, err := repl1.propose(
 		context.Background(), roachpb.BatchRequest{},
 	); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
@@ -525,19 +525,19 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	defer stopper.Stop()
 
 	// Remove range 1.
-	rng1, err := store.GetReplica(1)
+	repl1, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
-		rng := createReplica(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
-		if err := store.AddReplica(rng); err != nil {
+		repl := createReplica(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
+		if err := store.AddReplica(repl); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -555,13 +555,13 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		}
 		i := 1
 		seen := make(map[roachpb.RangeID]struct{})
-		ranges.Visit(func(rng *Replica) bool {
-			_, ok := seen[rng.RangeID]
+		ranges.Visit(func(repl *Replica) bool {
+			_, ok := seen[repl.RangeID]
 			if ok {
-				t.Fatalf("already saw %d", rng.RangeID)
+				t.Fatalf("already saw %d", repl.RangeID)
 			}
 
-			seen[rng.RangeID] = struct{}{}
+			seen[repl.RangeID] = struct{}{}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
 				t.Fatalf(
 					"expected %d remaining; got %d after seeing %+v",
@@ -588,12 +588,12 @@ func TestHasOverlappingReplica(t *testing.T) {
 		t.Error("expected GetRange to fail on missing range")
 	}
 	// Range 1 already exists. Make sure we can fetch it.
-	rng1, err := store.GetReplica(1)
+	repl1, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -608,8 +608,8 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 
 	for _, desc := range rngDescs {
-		rng := createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
-		if err := store.AddReplica(rng); err != nil {
+		repl := createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
+		if err := store.AddReplica(repl); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -643,16 +643,16 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	defer stopper.Stop()
 
 	// Clobber the existing range so we can test overlaps that aren't KeyMin or KeyMax.
-	rng1, err := store.GetReplica(1)
+	repl1, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
-	rng := createReplica(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
-	if err := store.AddReplica(rng); err != nil {
+	repl := createReplica(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
+	if err := store.AddReplica(repl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1019,11 +1019,11 @@ func TestStoreSendBadRange(t *testing.T) {
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
-	rng := store.LookupReplica(key, nil)
-	if rng == nil {
+	repl := store.LookupReplica(key, nil)
+	if repl == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
-	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc().EndKey, rng.Desc().Replicas)
+	desc, err := store.NewRangeDescriptor(splitKey, repl.Desc().EndKey, repl.Desc().Replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1039,7 +1039,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SplitRange(rng, newRng); err != nil {
+	if err = store.SplitRange(repl, newRng); err != nil {
 		t.Fatal(err)
 	}
 	return newRng
@@ -1052,7 +1052,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	rng2 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey(roachpb.Key("b")), t)
+	repl2 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey(roachpb.Key("b")), t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -1065,7 +1065,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	// fail because it's before the start of the range.
 	args = getArgs([]byte("a"))
 	if _, err := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{
-		RangeID: rng2.RangeID,
+		RangeID: repl2.RangeID,
 	}, &args); err == nil {
 		t.Error("expected key to be out of range")
 	}
@@ -1144,7 +1144,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 
 	baseID := uint32(keys.MaxReservedDescID + 1)
 	testData := []struct {
-		rng         *Replica
+		repl        *Replica
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin, nil),
@@ -1168,7 +1168,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 
 	util.SucceedsSoon(t, func() error {
 		for _, test := range testData {
-			if mb := test.rng.GetMaxBytes(); mb != test.expMaxBytes {
+			if mb := test.repl.GetMaxBytes(); mb != test.expMaxBytes {
 				return errors.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
 			}
 		}
@@ -2008,16 +2008,16 @@ func TestMaybeRemove(t *testing.T) {
 	}
 	store.WaitForInit()
 
-	rng, err := store.GetReplica(1)
+	repl, err := store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(rng, *rng.Desc(), true); err != nil {
+	if err := store.RemoveReplica(repl, *repl.Desc(), true); err != nil {
 		t.Error(err)
 	}
 	// MaybeRemove is called.
 	removedRng := <-fq.maybeRemovedRngs
-	if removedRng != rng.RangeID {
+	if removedRng != repl.RangeID {
 		t.Errorf("Unexpected removed range %v", removedRng)
 	}
 }
@@ -2070,7 +2070,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		b := tc.store.Engine().NewBatch()
 		defer b.Close()
 		var h roachpb.Header
-		if _, _, err := tc.rng.ChangeFrozen(context.Background(), b, nil, h, *fReqVersMismatch); err != nil {
+		if _, _, err := tc.repl.ChangeFrozen(context.Background(), b, nil, h, *fReqVersMismatch); err != nil {
 			t.Fatal(err)
 		}
 		assertFrozen(no) // since we do not commit the above batch
@@ -2231,11 +2231,11 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Clobber the existing range so we can test non-overlapping placeholders.
-	rng1, err := s.GetReplica(1)
+	repl1, err := s.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -2322,17 +2322,17 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	ctx := context.Background()
 
 	// Clobber the existing range so we can test nonoverlapping placeholders.
-	rng1, err := s.GetReplica(1)
+	repl1, err := s.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 
 	// Generate a minimal fake snapshot.
 	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *rng1.Desc(),
+		RangeDescriptor: *repl1.Desc(),
 	}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
@@ -2365,7 +2365,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	if err := s.processRaftRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:        uuid.MakeV4(),
-			RangeDescriptor: *rng1.Desc(),
+			RangeDescriptor: *repl1.Desc(),
 		}); !testutils.IsPError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -2394,16 +2394,16 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	ctx := context.Background()
 
 	// Clobber the existing range so we can test nonoverlapping placeholders.
-	rng1, err := s.GetReplica(1)
+	repl1, err := s.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := writeInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *rng1.Desc(),
+		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
 		raftpb.HardState{}, &roachpb.Lease{},
 	); err != nil {
 		t.Fatal(err)
@@ -2411,7 +2411,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 
 	// Generate a minimal fake snapshot.
 	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *rng1.Desc(),
+		RangeDescriptor: *repl1.Desc(),
 	}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
@@ -2447,7 +2447,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	if err := s.processRaftRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:        uuid.MakeV4(),
-			RangeDescriptor: *rng1.Desc(),
+			RangeDescriptor: *repl1.Desc(),
 		}); err != nil {
 		t.Fatal(err)
 	}

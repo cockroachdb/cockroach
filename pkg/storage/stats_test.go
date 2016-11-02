@@ -44,7 +44,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	ms := tc.rng.GetMVCCStats()
+	ms := tc.repl.GetMVCCStats()
 	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
 		t.Errorf("expected stats %+v; got %+v", exp, ms)
 	}
@@ -71,7 +71,7 @@ func TestRangeStatsInit(t *testing.T) {
 	if err := engine.MVCCSetRangeStats(context.Background(), tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := engine.MVCCGetRangeStats(context.Background(), tc.engine, tc.rng.RangeID)
+	loadMS, err := engine.MVCCGetRangeStats(context.Background(), tc.engine, tc.repl.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}

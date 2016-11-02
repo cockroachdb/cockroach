@@ -85,22 +85,22 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		func() {
 			// Hold lock throughout to reduce chance of random commands leading
 			// to inconsistent state.
-			tc.rng.mu.Lock()
-			defer tc.rng.mu.Unlock()
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
 			ms := enginepb.MVCCStats{KeyBytes: test.bytes}
-			if err := setMVCCStats(context.Background(), tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
+			if err := setMVCCStats(context.Background(), tc.repl.store.Engine(), tc.repl.RangeID, ms); err != nil {
 				t.Fatal(err)
 			}
-			tc.rng.mu.state.Stats = ms
+			tc.repl.mu.state.Stats = ms
 		}()
 
-		copy := *tc.rng.Desc()
+		copy := *tc.repl.Desc()
 		copy.StartKey = test.start
 		copy.EndKey = test.end
-		if err := tc.rng.setDesc(&copy); err != nil {
+		if err := tc.repl.setDesc(&copy); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := splitQ.shouldQueue(context.TODO(), hlc.ZeroTimestamp, tc.rng, cfg)
+		shouldQ, priority := splitQ.shouldQueue(context.TODO(), hlc.ZeroTimestamp, tc.repl, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
