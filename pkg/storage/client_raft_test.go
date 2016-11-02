@@ -623,6 +623,55 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	mtc.waitForValues(key, []int64{incAB, incAB, incAB})
 }
 
+type fakeSnapshotStream struct {
+	nextReq *storage.SnapshotRequest
+	nextErr error
+}
+
+// Recv implements the IncomingSnapshotStream interface.
+func (c fakeSnapshotStream) Recv() (*storage.SnapshotRequest, error) {
+	return c.nextReq, c.nextErr
+}
+
+// Send implements the IncomingSnapshotStream interface.
+func (c fakeSnapshotStream) Send(request *storage.SnapshotResponse) error {
+	return nil
+}
+
+// Context implements the IncomingSnapshotStream interface.
+func (c fakeSnapshotStream) Context() context.Context {
+	return context.Background()
+}
+
+// TestFailedSnapshotFillsReservation tests that failing to finish applying an
+// incoming snapshot still cleans up the outstanding reservation that was made.
+func TestFailedSnapshotFillsReservation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	rng, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := storage.SnapshotRequest_Header{
+		CanDecline:      true,
+		RangeSize:       100,
+		RangeDescriptor: *rng.Desc(),
+	}
+	// Cause this stream to return an error as soon as we ask it for something.
+	// This injects an error into HandleSnapshotStream when we try to send the
+	// "snapshot accepted" message.
+	expectedErr := errors.Errorf("")
+	stream := fakeSnapshotStream{nil, expectedErr}
+	if err := mtc.stores[1].HandleSnapshotStream(&header, stream); err != expectedErr {
+		t.Fatalf("expected error %s, but found %s", expectedErr, err)
+	}
+	if n := mtc.stores[1].ReservationCount(); n != 0 {
+		t.Fatalf("expected 0 reservations, but found %d", n)
+	}
+}
+
 // TestConcurrentRaftSnapshots tests that snapshots still work correctly when
 // Raft requests multiple non-preemptive snapshots at the same time. This
 // situation occurs when two replicas need snapshots at the same time.
