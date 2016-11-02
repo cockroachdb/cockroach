@@ -2469,10 +2469,27 @@ func (s *Store) maybeUpdateTransaction(
 	return txn, nil
 }
 
+// IncomingSnapshotStream is the minimal interface on a GRPC stream required
+// to receive a snapshot.
+type IncomingSnapshotStream interface {
+	Send(*SnapshotResponse) error
+	Recv() (*SnapshotRequest, error)
+	Context() context.Context
+}
+
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
 func (s *Store) HandleSnapshot(
 	header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer,
+) error {
+	return s.HandleSnapshotStream(header, stream)
+}
+
+// HandleSnapshotStream reads an incoming streaming snapshot and applies it if
+// possible. This does the work for HandleSnapshot, on a narrowed stream
+// interface.
+func (s *Store) HandleSnapshotStream(
+	header *SnapshotRequest_Header, stream IncomingSnapshotStream,
 ) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
