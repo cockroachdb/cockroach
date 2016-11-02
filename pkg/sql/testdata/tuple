@@ -1,3 +1,8 @@
+query TT
+SELECT (1, 2, 'hello', NULL, NULL), (true, NULL, (false, 6.6, false))
+----
+(1,2,'hello',,) (true,,(false, 6.6, false))
+
 query BBBBBBBBB
 SELECT
 	(2, 2) < (1, 1),

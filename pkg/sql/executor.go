@@ -1319,6 +1319,15 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 }
 
 func checkResultType(typ parser.Type) error {
+	// Compare all types that cannot rely on == equality.
+	istype := typ.FamilyEqual
+	switch {
+	case istype(parser.TypePlaceholder):
+		return errors.Errorf("could not determine data type of %s", typ)
+	case istype(parser.TypeTuple):
+		return nil
+	}
+	// Compare all types that can rely on == equality.
 	switch typ {
 	case parser.TypeNull:
 	case parser.TypeBool:
@@ -1332,8 +1341,6 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeArray:
-	case parser.TypePlaceholder:
-		return errors.Errorf("could not determine data type of %s", typ)
 	default:
 		return errors.Errorf("unsupported result type: %s", typ)
 	}
