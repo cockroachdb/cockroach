@@ -607,7 +607,7 @@ func (d *DDecimal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { 
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DString) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DUTF8String) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
@@ -619,7 +619,7 @@ func (d *DDate) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { ret
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTimestamp) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DTimestampNoTZ) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
@@ -681,9 +681,9 @@ func typeCheckComparisonOp(
 				left, op, right, err)
 		}
 
-		fn, ok := ops.lookupImpl(retType, TypeTuple)
+		fn, ok := ops.lookupImpl(retType, TTuple(nil))
 		if !ok {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, retType, op, TypeTuple)
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, retType, op, TTuple(nil))
 		}
 
 		typedLeft := typedSubExprs[0]
@@ -699,9 +699,9 @@ func typeCheckComparisonOp(
 		}
 		return typedLeft, rightTuple, fn, nil
 	case leftIsTuple && rightIsTuple:
-		fn, ok := ops.lookupImpl(TypeTuple, TypeTuple)
+		fn, ok := ops.lookupImpl(TTuple(nil), TTuple(nil))
 		if !ok {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, TypeTuple, op, TypeTuple)
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, TTuple(nil), op, TTuple(nil))
 		}
 		// Using non-folded left and right to avoid having to swap later.
 		typedSubExprs, _, err := typeCheckSameTypedTupleExprs(ctx, nil, left, right)
@@ -991,7 +991,7 @@ func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError{expr, TypeTuple, typedExpr.ResolvedType()}
+			return unexpectedTypeError{expr, TTuple(nil), typedExpr.ResolvedType()}
 		}
 	}
 	return nil

@@ -46,7 +46,7 @@ import (
 )
 
 var (
-	errEmptyInputString = errors.New("the input string must not be empty")
+	errEmptyinputString = errors.New("the input string must not be empty")
 	errAbsOfMinInt64    = errors.New("abs of min integer value (-9223372036854775808) not defined")
 	errRoundTooLow      = errors.New("rounding would extend value by more than 2000 decimal digits")
 	errArgTooBig        = errors.New("argument value is too large")
@@ -168,8 +168,8 @@ var Builtins = map[string][]Builtin{
 
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": {
-		stringBuiltin1(func(s string) (Datum, error) {
-			return NewDInt(DInt(utf8.RuneCountInString(s))), nil
+		stringBuiltin1(func(s DString) (Datum, error) {
+			return NewDInt(DInt(utf8.RuneCountInString(s.Contents()))), nil
 		}, TypeInt),
 		bytesBuiltin1(func(s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
@@ -177,8 +177,8 @@ var Builtins = map[string][]Builtin{
 	},
 
 	"octet_length": {
-		stringBuiltin1(func(s string) (Datum, error) {
-			return NewDInt(DInt(len(s))), nil
+		stringBuiltin1(func(s DString) (Datum, error) {
+			return NewDInt(DInt(len(s.Contents()))), nil
 		}, TypeInt),
 		bytesBuiltin1(func(s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
@@ -187,12 +187,14 @@ var Builtins = map[string][]Builtin{
 
 	// TODO(pmattis): What string functions should also support TypeBytes?
 
-	"lower": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(strings.ToLower(s)), nil
+	"lower": {stringBuiltin1(func(s DString) (Datum, error) {
+		// TODO(eisen): locale support.
+		return NewDString(strings.ToLower(s.Contents()), s.Locale()), nil
 	}, TypeString)},
 
-	"upper": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(strings.ToUpper(s)), nil
+	"upper": {stringBuiltin1(func(s DString) (Datum, error) {
+		// TODO(eisen): locale support.
+		return NewDString(strings.ToUpper(s.Contents()), s.Locale()), nil
 	}, TypeString)},
 
 	"substr":    substringImpls,
@@ -205,14 +207,19 @@ var Builtins = map[string][]Builtin{
 			Types:      VariadicType{TypeString},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				if len(args) == 0 {
+					// TODO(eisen): this is a hack. We should rewrite the concat to an
+					// empty string literal so that we can infer the proper locale.
+					return NewDUTF8String(""), nil
+				}
 				var buffer bytes.Buffer
 				for _, d := range args {
 					if d == DNull {
 						continue
 					}
-					buffer.WriteString(string(*d.(*DString)))
+					buffer.WriteString(d.(DString).Contents())
 				}
-				return NewDString(buffer.String()), nil
+				return NewDString(buffer.String(), args[0].(DString).Locale()), nil
 			},
 		},
 	},
@@ -228,7 +235,7 @@ var Builtins = map[string][]Builtin{
 				if args[0] == DNull {
 					return DNull, nil
 				}
-				sep := string(*args[0].(*DString))
+				sep := args[0].(DString).Contents()
 				var buf bytes.Buffer
 				prefix := ""
 				for _, d := range args[1:] {
@@ -239,9 +246,9 @@ var Builtins = map[string][]Builtin{
 					// would break when the 2nd argument is NULL.
 					buf.WriteString(prefix)
 					prefix = sep
-					buf.WriteString(string(*d.(*DString)))
+					buf.WriteString(d.(DString).Contents())
 				}
-				return NewDString(buf.String()), nil
+				return NewDUTF8String(buf.String()), nil
 			},
 		},
 	},
@@ -251,19 +258,19 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString, TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				text := string(*args[0].(*DString))
-				sep := string(*args[1].(*DString))
+				text := args[0].(DString)
+				sep := args[1].(DString)
 				field := int(*args[2].(*DInt))
 
 				if field <= 0 {
 					return DNull, fmt.Errorf("field position %d must be greater than zero", field)
 				}
 
-				splits := strings.Split(text, sep)
+				splits := strings.Split(text.Contents(), sep.Contents())
 				if field > len(splits) {
-					return NewDString(""), nil
+					return NewDString("", text.Locale()), nil
 				}
-				return NewDString(splits[field-1]), nil
+				return NewDString(splits[field-1], text.Locale()), nil
 			},
 		},
 	},
@@ -273,7 +280,7 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (_ Datum, err error) {
-				s := string(*args[0].(*DString))
+				s := args[0].(DString)
 				count := int(*args[1].(*DInt))
 				if count < 0 {
 					count = 0
@@ -286,28 +293,28 @@ var Builtins = map[string][]Builtin{
 						err = fmt.Errorf("%s", r)
 					}
 				}()
-				return NewDString(strings.Repeat(s, count)), nil
+				return NewDString(strings.Repeat(s.Contents(), count), s.Locale()), nil
 			},
 		},
 	},
 
-	"ascii": {stringBuiltin1(func(s string) (Datum, error) {
-		for _, ch := range s {
+	"ascii": {stringBuiltin1(func(s DString) (Datum, error) {
+		for _, ch := range s.Contents() {
 			return NewDInt(DInt(ch)), nil
 		}
-		return nil, errEmptyInputString
+		return nil, errEmptyinputString
 	}, TypeInt)},
 
-	"md5": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(fmt.Sprintf("%x", md5.Sum([]byte(s)))), nil
+	"md5": {stringBuiltin1(func(s DString) (Datum, error) {
+		return NewDUTF8String(fmt.Sprintf("%x", md5.Sum([]byte(s.Contents())))), nil
 	}, TypeString)},
 
-	"sha1": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(fmt.Sprintf("%x", sha1.Sum([]byte(s)))), nil
+	"sha1": {stringBuiltin1(func(s DString) (Datum, error) {
+		return NewDUTF8String(fmt.Sprintf("%x", sha1.Sum([]byte(s.Contents())))), nil
 	}, TypeString)},
 
-	"sha256": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(fmt.Sprintf("%x", sha256.Sum256([]byte(s)))), nil
+	"sha256": {stringBuiltin1(func(s DString) (Datum, error) {
+		return NewDUTF8String(fmt.Sprintf("%x", sha256.Sum256([]byte(s.Contents())))), nil
 	}, TypeString)},
 
 	"to_hex": {
@@ -315,19 +322,19 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return NewDString(fmt.Sprintf("%x", int64(*args[0].(*DInt)))), nil
+				return NewDUTF8String(fmt.Sprintf("%x", int64(*args[0].(*DInt)))), nil
 			},
 		},
 	},
 
 	// The SQL parser coerces POSITION to STRPOS.
-	"strpos": {stringBuiltin2(func(s, substring string) (Datum, error) {
-		index := strings.Index(s, substring)
+	"strpos": {stringBuiltin2(func(s, substring DString) (Datum, error) {
+		index := strings.Index(s.Contents(), substring.Contents())
 		if index < 0 {
 			return NewDInt(0), nil
 		}
 
-		return NewDInt(DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
+		return NewDInt(DInt(utf8.RuneCountInString(s.Contents()[:index]) + 1)), nil
 	}, TypeInt)},
 
 	"overlay": {
@@ -335,8 +342,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString, TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				to := string(*args[1].(*DString))
+				s := args[0].(DString)
+				to := args[1].(DString).Contents()
 				pos := int(*args[2].(*DInt))
 				size := utf8.RuneCountInString(to)
 				return overlay(s, to, pos, size)
@@ -346,8 +353,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString, TypeInt, TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				to := string(*args[1].(*DString))
+				s := args[0].(DString)
+				to := args[1].(DString).Contents()
 				pos := int(*args[2].(*DInt))
 				size := int(*args[3].(*DInt))
 				return overlay(s, to, pos, size)
@@ -357,46 +364,51 @@ var Builtins = map[string][]Builtin{
 
 	// The SQL parser coerces TRIM(...) and TRIM(BOTH ...) to BTRIM(...).
 	"btrim": {
-		stringBuiltin2(func(s, chars string) (Datum, error) {
-			return NewDString(strings.Trim(s, chars)), nil
+		stringBuiltin2(func(s, chars DString) (Datum, error) {
+			return NewDString(strings.Trim(s.Contents(), chars.Contents()), s.Locale()), nil
 		}, TypeString),
-		stringBuiltin1(func(s string) (Datum, error) {
-			return NewDString(strings.TrimSpace(s)), nil
+		stringBuiltin1(func(s DString) (Datum, error) {
+			// TODO(eisen): locale support?
+			return NewDString(strings.TrimSpace(s.Contents()), s.Locale()), nil
 		}, TypeString),
 	},
 
 	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
-		stringBuiltin2(func(s, chars string) (Datum, error) {
-			return NewDString(strings.TrimLeft(s, chars)), nil
+		stringBuiltin2(func(s, chars DString) (Datum, error) {
+			return NewDString(strings.TrimLeft(s.Contents(), chars.Contents()), s.Locale()), nil
 		}, TypeString),
-		stringBuiltin1(func(s string) (Datum, error) {
-			return NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
+		stringBuiltin1(func(s DString) (Datum, error) {
+			// TODO(eisen): locale support?
+			return NewDString(strings.TrimLeftFunc(s.Contents(), unicode.IsSpace), s.Locale()), nil
 		}, TypeString),
 	},
 
 	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
-		stringBuiltin2(func(s, chars string) (Datum, error) {
-			return NewDString(strings.TrimRight(s, chars)), nil
+		stringBuiltin2(func(s, chars DString) (Datum, error) {
+			return NewDString(strings.TrimRight(s.Contents(), chars.Contents()), s.Locale()), nil
 		}, TypeString),
-		stringBuiltin1(func(s string) (Datum, error) {
-			return NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
+		stringBuiltin1(func(s DString) (Datum, error) {
+			// TODO(eisen): locale support?
+			return NewDString(strings.TrimRightFunc(s.Contents(), unicode.IsSpace), s.Locale()), nil
 		}, TypeString),
 	},
 
-	"reverse": {stringBuiltin1(func(s string) (Datum, error) {
-		runes := []rune(s)
+	"reverse": {stringBuiltin1(func(s DString) (Datum, error) {
+		runes := []rune(s.Contents())
 		for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
 			runes[i], runes[j] = runes[j], runes[i]
 		}
-		return NewDString(string(runes)), nil
+		return NewDString(string(runes), s.Locale()), nil
 	}, TypeString)},
 
 	"replace": {stringBuiltin3(
 		"input", "from", "to",
-		func(input, from, to string) (Datum, error) {
-			return NewDString(strings.Replace(input, from, to, -1)), nil
+		func(input, from, to DString) (Datum, error) {
+			return NewDString(
+				strings.Replace(input.Contents(), from.Contents(), to.Contents(), -1),
+				input.Locale()), nil
 		},
 		TypeString,
 		"Replace all occurrences of 'from' with 'to' in 'input'",
@@ -404,21 +416,24 @@ var Builtins = map[string][]Builtin{
 
 	"translate": {stringBuiltin3(
 		"input", "from", "to",
-		func(s, from, to string) (Datum, error) {
+		func(input, from, to DString) (Datum, error) {
 			const deletionRune = utf8.MaxRune + 1
-			translation := make(map[rune]rune, len(from))
-			for _, fromRune := range from {
-				toRune, size := utf8.DecodeRuneInString(to)
+			fromStr := from.Contents()
+			toStr := to.Contents()
+			translation := make(map[rune]rune, len(fromStr))
+			for _, fromRune := range fromStr {
+				toRune, size := utf8.DecodeRuneInString(toStr)
 				if toRune == utf8.RuneError {
 					toRune = deletionRune
 				} else {
-					to = to[size:]
+					toStr = toStr[size:]
 				}
 				translation[fromRune] = toRune
 			}
 
-			runes := make([]rune, 0, len(s))
-			for _, c := range s {
+			inputStr := input.Contents()
+			runes := make([]rune, 0, len(inputStr))
+			for _, c := range inputStr {
 				if t, ok := translation[c]; ok {
 					if t != deletionRune {
 						runes = append(runes, t)
@@ -427,7 +442,7 @@ var Builtins = map[string][]Builtin{
 					runes = append(runes, c)
 				}
 			}
-			return NewDString(string(runes)), nil
+			return NewDString(string(runes), input.Locale()), nil
 		}, TypeString, "")},
 
 	"regexp_extract": {
@@ -435,8 +450,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeString,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				pattern := string(*args[1].(*DString))
+				s := args[0].(DString)
+				pattern := args[1].(DString).Contents()
 				return regexpExtract(ctx, s, pattern, `\`)
 			},
 		},
@@ -447,9 +462,9 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString, TypeString},
 			ReturnType: TypeString,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				pattern := string(*args[1].(*DString))
-				to := string(*args[2].(*DString))
+				s := args[0].(DString)
+				pattern := args[1].(DString).Contents()
+				to := args[2].(DString).Contents()
 				return regexpReplace(ctx, s, pattern, to, "")
 			},
 		},
@@ -457,17 +472,18 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString, TypeString, TypeString},
 			ReturnType: TypeString,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				pattern := string(*args[1].(*DString))
-				to := string(*args[2].(*DString))
-				sqlFlags := string(*args[3].(*DString))
+				s := args[0].(DString)
+				pattern := args[1].(DString).Contents()
+				to := args[2].(DString).Contents()
+				sqlFlags := args[3].(DString).Contents()
 				return regexpReplace(ctx, s, pattern, to, sqlFlags)
 			},
 		},
 	},
 
-	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(strings.Title(strings.ToLower(s))), nil
+	"initcap": {stringBuiltin1(func(s DString) (Datum, error) {
+		// TODO(eisen): locale support?
+		return NewDString(strings.Title(strings.ToLower(s.Contents())), s.Locale()), nil
 	}, TypeString)},
 
 	"left": {
@@ -492,7 +508,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				runes := []rune(string(*args[0].(*DString)))
+				s := args[0].(DString)
+				runes := []rune(s.Contents())
 				n := int(*args[1].(*DInt))
 
 				if n < -len(runes) {
@@ -502,7 +519,7 @@ var Builtins = map[string][]Builtin{
 				} else if n > len(runes) {
 					n = len(runes)
 				}
-				return NewDString(string(runes[:n])), nil
+				return NewDString(string(runes[:n]), s.Locale()), nil
 			},
 		},
 	},
@@ -529,7 +546,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeInt},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				runes := []rune(string(*args[0].(*DString)))
+				s := args[0].(DString)
+				runes := []rune(s.Contents())
 				n := int(*args[1].(*DInt))
 
 				if n < -len(runes) {
@@ -539,7 +557,7 @@ var Builtins = map[string][]Builtin{
 				} else if n > len(runes) {
 					n = len(runes)
 				}
-				return NewDString(string(runes[len(runes)-n:])), nil
+				return NewDString(string(runes[len(runes)-n:]), s.Locale()), nil
 			},
 		},
 	},
@@ -611,13 +629,13 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeTimestamp, TypeString},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				fromTime := args[0].(*DTimestamp).Time
-				format := string(*args[1].(*DString))
-				t, err := timeutil.Strftime(fromTime, format)
+				fromTime := args[0].(DTimestamp).ToTime()
+				format := args[1].(DString)
+				t, err := timeutil.Strftime(fromTime, format.Contents())
 				if err != nil {
 					return nil, err
 				}
-				return NewDString(t), nil
+				return NewDString(t, format.Locale()), nil
 			},
 		},
 		Builtin{
@@ -625,25 +643,25 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				fromTime := time.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
-				format := string(*args[1].(*DString))
-				t, err := timeutil.Strftime(fromTime, format)
+				format := args[1].(DString)
+				t, err := timeutil.Strftime(fromTime, format.Contents())
 				if err != nil {
 					return nil, err
 				}
-				return NewDString(t), nil
+				return NewDString(t, format.Locale()), nil
 			},
 		},
 		Builtin{
 			Types:      ArgTypes{TypeTimestampTZ, TypeString},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				fromTime := args[0].(*DTimestampTZ).Time
-				format := string(*args[1].(*DString))
-				t, err := timeutil.Strftime(fromTime, format)
+				fromTime := args[0].(DTimestamp).ToTime()
+				format := args[1].(DString)
+				t, err := timeutil.Strftime(fromTime, format.Contents())
 				if err != nil {
 					return nil, err
 				}
-				return NewDString(t), nil
+				return NewDString(t, format.Locale()), nil
 			},
 		},
 	},
@@ -653,8 +671,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeTimestampTZ,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				format := string(*args[0].(*DString))
-				toParse := string(*args[1].(*DString))
+				format := args[0].(DString).Contents()
+				toParse := args[1].(DString).Contents()
 				t, err := timeutil.Strptime(toParse, format)
 				if err != nil {
 					return nil, err
@@ -711,7 +729,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeTimestamp,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				return MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
+				return MakeDTimestampNoTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 		},
 	},
@@ -743,7 +761,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeTimestamp,
 			impure:     true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
+				return MakeDTimestampNoTZ(timeutil.Now(), time.Microsecond), nil
 			},
 		},
 	},
@@ -755,8 +773,8 @@ var Builtins = map[string][]Builtin{
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
-				fromTime := *args[1].(*DTimestamp)
-				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				fromTime := args[1].(DTimestamp).ToTime()
+				timeSpan := strings.ToLower(args[0].(DString).Contents())
 				switch timeSpan {
 				case "year", "years":
 					return NewDInt(DInt(fromTime.Year())), nil
@@ -813,7 +831,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
 				fromInterval := *args[1].(*DInterval)
-				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				timeSpan := strings.ToLower(args[0].(DString).Contents())
 				switch timeSpan {
 				case "hour", "hours":
 					return NewDInt(DInt(fromInterval.Nanos / int64(time.Hour))), nil
@@ -930,11 +948,11 @@ var Builtins = map[string][]Builtin{
 				showImplicitSchemas := args[0].(*DBool)
 				if showImplicitSchemas == DBoolTrue {
 					for _, p := range ctx.SearchPath {
-						schemas = append(schemas, NewDString(p))
+						schemas = append(schemas, NewDUTF8String(p))
 					}
 				}
 				if len(ctx.Database) != 0 {
-					schemas = append(schemas, NewDString(ctx.Database))
+					schemas = append(schemas, NewDUTF8String(ctx.Database))
 				}
 				return &schemas, nil
 			},
@@ -1138,7 +1156,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return NewDString(build.GetInfo().Short()), nil
+				return NewDUTF8String(build.GetInfo().Short()), nil
 			},
 		},
 	},
@@ -1155,7 +1173,8 @@ var substringImpls = []Builtin{
 		Types:      ArgTypes{TypeString, TypeInt},
 		ReturnType: TypeString,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			runes := []rune(string(*args[0].(*DString)))
+			dstr := args[0].(DString)
+			runes := []rune(dstr.Contents())
 			// SQL strings are 1-indexed.
 			start := int(*args[1].(*DInt)) - 1
 
@@ -1165,14 +1184,15 @@ var substringImpls = []Builtin{
 				start = len(runes)
 			}
 
-			return NewDString(string(runes[start:])), nil
+			return NewDString(string(runes[start:]), dstr.Locale()), nil
 		},
 	},
 	{
 		Types:      ArgTypes{TypeString, TypeInt, TypeInt},
 		ReturnType: TypeString,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			runes := []rune(string(*args[0].(*DString)))
+			dstr := args[0].(DString)
+			runes := []rune(dstr.Contents())
 			// SQL strings are 1-indexed.
 			start := int(*args[1].(*DInt)) - 1
 			length := int(*args[2].(*DInt))
@@ -1197,15 +1217,15 @@ var substringImpls = []Builtin{
 				start = len(runes)
 			}
 
-			return NewDString(string(runes[start:end])), nil
+			return NewDString(string(runes[start:end]), dstr.Locale()), nil
 		},
 	},
 	{
 		Types:      ArgTypes{TypeString, TypeString},
 		ReturnType: TypeString,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-			s := string(*args[0].(*DString))
-			pattern := string(*args[1].(*DString))
+			s := args[0].(DString)
+			pattern := args[1].(DString).Contents()
 			return regexpExtract(ctx, s, pattern, `\`)
 		},
 	},
@@ -1213,9 +1233,9 @@ var substringImpls = []Builtin{
 		Types:      ArgTypes{TypeString, TypeString, TypeString},
 		ReturnType: TypeString,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-			s := string(*args[0].(*DString))
-			pattern := string(*args[1].(*DString))
-			escape := string(*args[2].(*DString))
+			s := args[0].(DString)
+			pattern := args[1].(DString).Contents()
+			escape := args[2].(DString).Contents()
 			return regexpExtract(ctx, s, pattern, escape)
 		},
 	},
@@ -1257,7 +1277,7 @@ var txnTSImpl = []Builtin{
 		ReturnType: TypeTimestamp,
 		impure:     true,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
+			return ctx.GetTxnTimestampNoTZ(time.Microsecond), nil
 		},
 	},
 }
@@ -1331,35 +1351,35 @@ func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error)) Builtin {
 	}
 }
 
-func stringBuiltin1(f func(string) (Datum, error), returnType Type) Builtin {
+func stringBuiltin1(f func(DString) (Datum, error), returnType Type) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString},
 		ReturnType: returnType,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			return f(string(*args[0].(*DString)))
+			return f(args[0].(DString))
 		},
 	}
 }
 
-func stringBuiltin2(f func(string, string) (Datum, error), returnType Type) Builtin {
+func stringBuiltin2(f func(DString, DString) (Datum, error), returnType Type) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString, TypeString},
 		ReturnType: returnType,
 		category:   categorizeType(TypeString),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			return f(string(*args[0].(*DString)), string(*args[1].(*DString)))
+			return f(args[0].(DString), args[1].(DString))
 		},
 	}
 }
 
 func stringBuiltin3(
-	a, b, c string, f func(string, string, string) (Datum, error), returnType Type, info string,
+	a, b, c string, f func(DString, DString, DString) (Datum, error), returnType Type, info string,
 ) Builtin {
 	return Builtin{
 		Types:      NamedArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
 		ReturnType: returnType,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			return f(string(*args[0].(*DString)), string(*args[1].(*DString)), string(*args[2].(*DString)))
+			return f(args[0].(DString), args[1].(DString), args[2].(DString))
 		},
 		Info: info,
 	}
@@ -1389,21 +1409,21 @@ func (k regexpEscapeKey) pattern() (string, error) {
 	return pattern, nil
 }
 
-func regexpExtract(ctx *EvalContext, s, pattern, escape string) (Datum, error) {
+func regexpExtract(ctx *EvalContext, s DString, pattern, escape string) (Datum, error) {
 	patternRe, err := ctx.ReCache.GetRegexp(regexpEscapeKey{pattern, escape})
 	if err != nil {
 		return nil, err
 	}
 
-	match := patternRe.FindStringSubmatch(s)
+	match := patternRe.FindStringSubmatch(s.Contents())
 	if match == nil {
 		return DNull, nil
 	}
 
 	if len(match) > 1 {
-		return NewDString(match[1]), nil
+		return NewDString(match[1], s.Locale()), nil
 	}
-	return NewDString(match[0]), nil
+	return NewDString(match[0], s.Locale()), nil
 }
 
 type regexpFlagKey struct {
@@ -1417,7 +1437,7 @@ func (k regexpFlagKey) pattern() (string, error) {
 
 var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
 
-func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, error) {
+func regexpReplace(ctx *EvalContext, dstr DString, pattern, to, sqlFlags string) (Datum, error) {
 	patternRe, err := ctx.ReCache.GetRegexp(regexpFlagKey{pattern, sqlFlags})
 	if err != nil {
 		return nil, err
@@ -1430,6 +1450,7 @@ func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, er
 
 	replaceIndex := 0
 	var newString bytes.Buffer
+	s := dstr.Contents()
 
 	// regexp.ReplaceAllStringFunc cannot be used here because it does not provide
 	// access to regexp submatches for expansion in the replacement string.
@@ -1482,7 +1503,7 @@ func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, er
 	// Add the section of s past the final match.
 	newString.WriteString(s[replaceIndex:])
 
-	return NewDString(newString.String()), nil
+	return NewDString(newString.String(), dstr.Locale()), nil
 }
 
 var flagToByte = map[syntax.Flags]byte{
@@ -1544,13 +1565,13 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 	return fmt.Sprintf("(?%s:%s)", bs, pattern), nil
 }
 
-func overlay(s, to string, pos, size int) (Datum, error) {
+func overlay(s DString, to string, pos, size int) (Datum, error) {
 	if pos < 1 {
 		return nil, fmt.Errorf("non-positive substring length not allowed: %d", pos)
 	}
 	pos--
 
-	runes := []rune(s)
+	runes := []rune(s.Contents())
 	if pos > len(runes) {
 		pos = len(runes)
 	}
@@ -1560,7 +1581,7 @@ func overlay(s, to string, pos, size int) (Datum, error) {
 	} else if after > len(runes) {
 		after = len(runes)
 	}
-	return NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
+	return NewDString(string(runes[:pos])+to+string(runes[after:]), s.Locale()), nil
 }
 
 func round(x float64, n int64) (Datum, error) {

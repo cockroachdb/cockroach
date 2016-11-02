@@ -267,7 +267,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 
 	// Add a lease to the planner.
 	d := int64(LeaseDuration)
-	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
+	l1 := &LeaseState{expiration: parser.DTimestampNoTZ{Time: time.Unix(0, mc.UnixNano()+d+1)}}
 	p.leases = append(p.leases, l1)
 	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
@@ -283,7 +283,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	mc.Increment(d + 1)
 
 	// Add another lease.
-	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
+	l2 := &LeaseState{expiration: parser.DTimestampNoTZ{Time: time.Unix(0, mc.UnixNano()+d+1)}}
 	p.leases = append(p.leases, l2)
 	if !p.removeLeaseIfExpiring(l1) {
 		t.Error("expected true with an expiring lease")

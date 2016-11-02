@@ -208,9 +208,9 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 	// Format the result column types.
 	row := parser.DTuple{
 		parser.NewDInt(parser.DInt(level)),
-		parser.NewDString(name),
-		parser.NewDString("result"),
-		parser.NewDString(formatColumns(plan.Columns(), true)),
+		parser.NewDUTF8String(name),
+		parser.NewDUTF8String("result"),
+		parser.NewDUTF8String(formatColumns(plan.Columns(), true)),
 	}
 	if err := v.rows.AddRow(row); err != nil {
 		return err
@@ -225,9 +225,9 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 
 		row := parser.DTuple{
 			parser.NewDInt(parser.DInt(level)),
-			parser.NewDString(name),
-			parser.NewDString(elt),
-			parser.NewDString(desc),
+			parser.NewDUTF8String(name),
+			parser.NewDUTF8String(elt),
+			parser.NewDUTF8String(desc),
 		}
 		err = v.rows.AddRow(row)
 	}
@@ -290,12 +290,12 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) erro
 
 	row := parser.DTuple{
 		parser.NewDInt(parser.DInt(level)),
-		parser.NewDString(name),
-		parser.NewDString(description),
+		parser.NewDUTF8String(name),
+		parser.NewDUTF8String(description),
 	}
 	if verbose {
-		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
-		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
+		row = append(row, parser.NewDUTF8String(formatColumns(plan.Columns(), false)))
+		row = append(row, parser.NewDUTF8String(plan.Ordering().AsString(plan.Columns())))
 	}
 	if err := v.rows.AddRow(row); err != nil {
 		return err
@@ -356,7 +356,7 @@ type debugValues struct {
 func (vals *debugValues) AsRow() parser.DTuple {
 	keyVal := parser.DNull
 	if vals.key != "" {
-		keyVal = parser.NewDString(vals.key)
+		keyVal = parser.NewDUTF8String(vals.key)
 	}
 
 	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
@@ -374,7 +374,7 @@ func (vals *debugValues) AsRow() parser.DTuple {
 	return parser.DTuple{
 		parser.NewDInt(parser.DInt(vals.rowIdx)),
 		keyVal,
-		parser.NewDString(vals.value),
+		parser.NewDUTF8String(vals.value),
 		outputVal,
 	}
 }
@@ -419,14 +419,14 @@ func (n *explainDebugNode) Values() parser.DTuple {
 
 	keyVal := parser.DNull
 	if vals.key != "" {
-		keyVal = parser.NewDString(vals.key)
+		keyVal = parser.NewDUTF8String(vals.key)
 	}
 
 	return parser.DTuple{
 		parser.NewDInt(parser.DInt(vals.rowIdx)),
 		keyVal,
-		parser.NewDString(vals.value),
-		parser.NewDString(vals.output.String()),
+		parser.NewDUTF8String(vals.value),
+		parser.NewDUTF8String(vals.output.String()),
 	}
 }
 

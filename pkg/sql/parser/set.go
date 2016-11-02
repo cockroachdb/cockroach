@@ -82,8 +82,8 @@ func (node *SetTimeZone) Format(buf *bytes.Buffer, f FmtFlags) {
 	default:
 		var s string
 		switch v := node.Value.(type) {
-		case *DString:
-			s = string(*v)
+		case DString:
+			s = v.Contents()
 		case *StrVal:
 			s = v.s
 		}

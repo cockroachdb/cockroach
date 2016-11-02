@@ -189,7 +189,7 @@ func mustParseDDate(t *testing.T, s string) Datum {
 	return d
 }
 func mustParseDTimestamp(t *testing.T, s string) Datum {
-	d, err := ParseDTimestamp(s, time.Millisecond)
+	d, err := ParseDTimestampNoTZ(s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 }
 
 var parseFuncs = map[string]func(*testing.T, string) Datum{
-	"string":      func(t *testing.T, s string) Datum { return NewDString(s) },
+	"string":      func(t *testing.T, s string) Datum { return NewDUTF8String(s) },
 	"bytes":       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
 	"date":        mustParseDDate,
 	"timestamp":   mustParseDTimestamp,

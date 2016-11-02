@@ -84,7 +84,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 	case ColumnType_DATE:
 		return parser.NewDDate(parser.DDate(rng.Intn(10000)))
 	case ColumnType_TIMESTAMP:
-		return &parser.DTimestamp{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &parser.DTimestampNoTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
 		return &parser.DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
 			Days:  rng.Int63n(1000),
@@ -96,7 +96,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
-		return parser.NewDString(string(p))
+		return parser.NewDUTF8String(string(p))
 	case ColumnType_BYTES:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)

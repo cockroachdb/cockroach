@@ -59,7 +59,7 @@ var (
 // LeaseState holds the state for a lease. Exported only for testing.
 type LeaseState struct {
 	sqlbase.TableDescriptor
-	expiration parser.DTimestamp
+	expiration parser.DTimestampNoTZ //TODO(eisen): use time.Time instead.
 	// mu protects refcount and released
 	mu       syncutil.Mutex
 	refcount int
@@ -132,7 +132,7 @@ func (s LeaseStore) Acquire(
 	txn *client.Txn,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
-	minExpirationTime parser.DTimestamp,
+	minExpirationTime parser.DTimestampNoTZ,
 ) (*LeaseState, error) {
 	lease := &LeaseState{}
 	expiration := time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration())
@@ -140,7 +140,7 @@ func (s LeaseStore) Acquire(
 	if !minExpirationTime.IsZero() && expiration.Before(minExpirationTime.Time) {
 		expiration = minExpirationTime.Time
 	}
-	lease.expiration = parser.DTimestamp{Time: expiration}
+	lease.expiration = parser.DTimestampNoTZ{Time: expiration}
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
@@ -448,7 +448,7 @@ func (l *leaseSet) remove(s *LeaseState) {
 }
 
 func (l *leaseSet) find(
-	version sqlbase.DescriptorVersion, expiration parser.DTimestamp,
+	version sqlbase.DescriptorVersion, expiration parser.DTimestampNoTZ,
 ) *LeaseState {
 	if i, match := l.findIndex(version, expiration); match {
 		return l.data[i]
@@ -457,7 +457,7 @@ func (l *leaseSet) find(
 }
 
 func (l *leaseSet) findIndex(
-	version sqlbase.DescriptorVersion, expiration parser.DTimestamp,
+	version sqlbase.DescriptorVersion, expiration parser.DTimestampNoTZ,
 ) (int, bool) {
 	i := sort.Search(len(l.data), func(i int) bool {
 		s := l.data[i]
@@ -587,7 +587,7 @@ func (t *tableState) acquireFromStoreLocked(
 		return nil
 	}
 
-	s, err := t.acquireNodeLease(txn, version, store, parser.DTimestamp{})
+	s, err := t.acquireNodeLease(txn, version, store, parser.DTimestampNoTZ{})
 	if err != nil {
 		return err
 	}
@@ -616,10 +616,10 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 
 	// Set the min expiration time to guarantee that the lease acquired is the
 	// last lease in t.active .
-	minExpirationTime := parser.DTimestamp{}
+	minExpirationTime := parser.DTimestampNoTZ{}
 	newestLease := t.active.findNewest(0)
 	if newestLease != nil {
-		minExpirationTime = parser.DTimestamp{
+		minExpirationTime = parser.DTimestampNoTZ{
 			Time: newestLease.expiration.Add(time.Millisecond)}
 	}
 
@@ -676,7 +676,7 @@ func (t *tableState) acquireNodeLease(
 	txn *client.Txn,
 	minVersion sqlbase.DescriptorVersion,
 	store LeaseStore,
-	minExpirationTime parser.DTimestamp,
+	minExpirationTime parser.DTimestampNoTZ,
 ) (*LeaseState, error) {
 	// Notify when lease has been acquired.
 	t.acquiring = make(chan struct{})

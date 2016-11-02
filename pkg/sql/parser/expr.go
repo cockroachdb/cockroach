@@ -1059,8 +1059,8 @@ func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
-func (node *DString) String() string          { return AsString(node) }
-func (node *DTimestamp) String() string       { return AsString(node) }
+func (node *DUTF8String) String() string      { return AsString(node) }
+func (node *DTimestampNoTZ) String() string   { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }

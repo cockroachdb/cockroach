@@ -82,9 +82,9 @@ CREATE TABLE pg_catalog.pg_am (
 		h.writeStr(cockroachIndexEncoding)
 		return addRow(
 			h.getOid(),
-			parser.NewDString(cockroachIndexEncoding),
+			parser.NewDUTF8String(cockroachIndexEncoding),
 			parser.DNull,
-			parser.NewDString("i"),
+			parser.NewDUTF8String("i"),
 		)
 	},
 }
@@ -111,7 +111,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						// pg_attrdef only expects rows for columns with default values.
 						return nil
 					}
-					defSrc := parser.NewDString(*column.DefaultExpr)
+					defSrc := parser.NewDUTF8String(*column.DefaultExpr)
 					return addRow(
 						h.ColumnOid(db, table, column),      // oid
 						h.TableOid(db, table),               // adrelid
@@ -159,8 +159,8 @@ CREATE TABLE pg_catalog.pg_attribute (
 				addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
 					colTyp := column.Type.ToDatumType()
 					return addRow(
-						attRelID,                            // attrelid
-						parser.NewDString(column.Name),      // attname
+						attRelID, // attrelid
+						parser.NewDUTF8String(column.Name),  // attname
 						typOid(colTyp),                      // atttypid
 						zeroVal,                             // attstattarget
 						typLen(colTyp),                      // attlen
@@ -209,9 +209,9 @@ CREATE TABLE pg_catalog.pg_attribute (
 }
 
 var (
-	relKindTable = parser.NewDString("r")
-	relKindIndex = parser.NewDString("i")
-	relKindView  = parser.NewDString("v")
+	relKindTable = parser.NewDUTF8String("r")
+	relKindIndex = parser.NewDUTF8String("i")
+	relKindView  = parser.NewDUTF8String("v")
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-class.html.
@@ -257,18 +257,18 @@ CREATE TABLE pg_catalog.pg_class (
 					relKind = relKindView
 				}
 				if err := addRow(
-					h.TableOid(db, table),         // oid
-					parser.NewDString(table.Name), // relname
-					h.DBOid(db),                   // relnamespace
-					oidZero,                       // reltype (PG creates a composite type in pg_type for each table)
-					parser.DNull,                  // relowner
-					parser.DNull,                  // relam
-					oidZero,                       // relfilenode
-					oidZero,                       // reltablespace
-					parser.DNull,                  // relpages
-					parser.DNull,                  // reltuples
-					oidZero,                       // relallvisible
-					oidZero,                       // reltoastrelid
+					h.TableOid(db, table),             // oid
+					parser.NewDUTF8String(table.Name), // relname
+					h.DBOid(db),                       // relnamespace
+					oidZero,                           // reltype (PG creates a composite type in pg_type for each table)
+					parser.DNull,                      // relowner
+					parser.DNull,                      // relam
+					oidZero,                           // relfilenode
+					oidZero,                           // reltablespace
+					parser.DNull,                      // relpages
+					parser.DNull,                      // reltuples
+					oidZero,                           // relallvisible
+					oidZero,                           // reltoastrelid
 					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
 					parser.MakeDBool(false),                                 // relisshared
 					parser.MakeDBool(false),                                 // relistemp
@@ -290,22 +290,22 @@ CREATE TABLE pg_catalog.pg_class (
 				// Indexes.
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 					return addRow(
-						h.IndexOid(db, table, index),  // oid
-						parser.NewDString(index.Name), // relname
-						h.DBOid(db),                   // relnamespace
-						oidZero,                       // reltype
-						parser.DNull,                  // relowner
-						parser.DNull,                  // relam
-						oidZero,                       // relfilenode
-						oidZero,                       // reltablespace
-						parser.DNull,                  // relpages
-						parser.DNull,                  // reltuples
-						oidZero,                       // relallvisible
-						oidZero,                       // reltoastrelid
-						parser.MakeDBool(false),       // relhasindex
-						parser.MakeDBool(false),       // relisshared
-						parser.MakeDBool(false),       // relistemp
-						relKindIndex,                  // relkind
+						h.IndexOid(db, table, index),      // oid
+						parser.NewDUTF8String(index.Name), // relname
+						h.DBOid(db),                       // relnamespace
+						oidZero,                           // reltype
+						parser.DNull,                      // relowner
+						parser.DNull,                      // relam
+						oidZero,                           // relfilenode
+						oidZero,                           // reltablespace
+						parser.DNull,                      // relpages
+						parser.DNull,                      // reltuples
+						oidZero,                           // relallvisible
+						oidZero,                           // reltoastrelid
+						parser.MakeDBool(false),           // relhasindex
+						parser.MakeDBool(false),           // relisshared
+						parser.MakeDBool(false),           // relistemp
+						relKindIndex,                      // relkind
 						parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
 						zeroVal,                 // relchecks
 						parser.MakeDBool(false), // relhasoids
@@ -324,22 +324,22 @@ CREATE TABLE pg_catalog.pg_class (
 }
 
 var (
-	conTypeCheck     = parser.NewDString("c")
-	conTypeFK        = parser.NewDString("f")
-	conTypePKey      = parser.NewDString("p")
-	conTypeUnique    = parser.NewDString("u")
-	conTypeTrigger   = parser.NewDString("t")
-	conTypeExclusion = parser.NewDString("x")
+	conTypeCheck     = parser.NewDUTF8String("c")
+	conTypeFK        = parser.NewDUTF8String("f")
+	conTypePKey      = parser.NewDUTF8String("p")
+	conTypeUnique    = parser.NewDUTF8String("u")
+	conTypeTrigger   = parser.NewDUTF8String("t")
+	conTypeExclusion = parser.NewDUTF8String("x")
 
 	// Avoid unused warning for constants.
 	_ = conTypeTrigger
 	_ = conTypeExclusion
 
-	fkActionNone       = parser.NewDString("a")
-	fkActionRestrict   = parser.NewDString("r")
-	fkActionCascade    = parser.NewDString("c")
-	fkActionSetNull    = parser.NewDString("n")
-	fkActionSetDefault = parser.NewDString("d")
+	fkActionNone       = parser.NewDUTF8String("a")
+	fkActionRestrict   = parser.NewDUTF8String("r")
+	fkActionCascade    = parser.NewDUTF8String("c")
+	fkActionSetNull    = parser.NewDUTF8String("n")
+	fkActionSetDefault = parser.NewDUTF8String("d")
 
 	// Avoid unused warning for constants.
 	_ = fkActionRestrict
@@ -347,9 +347,9 @@ var (
 	_ = fkActionSetNull
 	_ = fkActionSetDefault
 
-	fkMatchTypeFull    = parser.NewDString("f")
-	fkMatchTypePartial = parser.NewDString("p")
-	fkMatchTypeSimple  = parser.NewDString("s")
+	fkMatchTypeFull    = parser.NewDUTF8String("f")
+	fkMatchTypePartial = parser.NewDUTF8String("p")
+	fkMatchTypeSimple  = parser.NewDUTF8String("s")
 
 	// Avoid unused warning for constants.
 	_ = fkMatchTypeFull
@@ -455,7 +455,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 						// TODO(nvanbenschoten) We currently do not store the referenced columns for a check
 						// constraint. We should add an array of column indexes to
 						// sqlbase.TableDescriptor_CheckConstraint and use that here.
-						consrc = parser.NewDString(c.Details)
+						consrc = parser.NewDUTF8String(c.Details)
 					}
 
 					if err := addRow(
@@ -509,7 +509,7 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) parser.Datum {
 		buf.WriteString(strconv.Itoa(int(val)))
 	}
 	buf.WriteByte('}')
-	return parser.NewDString(buf.String())
+	return parser.NewDUTF8String(buf.String())
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-indexes.html.
@@ -532,11 +532,11 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
-						parser.NewDString(db.Name),    // schemaname
-						parser.NewDString(table.Name), // tablename
-						parser.NewDString(index.Name), // indexname
-						parser.DNull,                  // tablespace
-						parser.NewDString(def),        // indexdef
+						parser.NewDUTF8String(db.Name),    // schemaname
+						parser.NewDUTF8String(table.Name), // tablename
+						parser.NewDUTF8String(index.Name), // indexname
+						parser.DNull,                      // tablespace
+						parser.NewDUTF8String(def),        // indexdef
 					)
 				})
 			},
@@ -619,21 +619,21 @@ CREATE TABLE pg_catalog.pg_namespace (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				h.DBOid(db),                // oid
-				parser.NewDString(db.Name), // nspname
-				parser.DNull,               // nspowner
-				parser.DNull,               // aclitem
+				h.DBOid(db),                    // oid
+				parser.NewDUTF8String(db.Name), // nspname
+				parser.DNull,                   // nspowner
+				parser.DNull,                   // aclitem
 			)
 		})
 	},
 }
 
 var (
-	proArgModeInOut    = parser.NewDString("b")
-	proArgModeIn       = parser.NewDString("i")
-	proArgModeOut      = parser.NewDString("o")
-	proArgModeTable    = parser.NewDString("t")
-	proArgModeVariadic = parser.NewDString("v")
+	proArgModeInOut    = parser.NewDUTF8String("b")
+	proArgModeIn       = parser.NewDUTF8String("i")
+	proArgModeOut      = parser.NewDUTF8String("o")
+	proArgModeTable    = parser.NewDUTF8String("t")
+	proArgModeVariadic = parser.NewDUTF8String("v")
 
 	// Avoid unused warning for constants.
 	_ = proArgModeInOut
@@ -706,7 +706,7 @@ CREATE TABLE pg_catalog.pg_proc (
 				continue
 			}
 			for _, builtin := range builtins {
-				dName := parser.NewDString(name)
+				dName := parser.NewDUTF8String(name)
 				isAggregate := builtin.Class() == parser.AggregateClass
 				isWindow := builtin.Class() == parser.WindowClass
 
@@ -763,16 +763,16 @@ CREATE TABLE pg_catalog.pg_proc (
 					parser.NewDInt(parser.DInt(builtin.Types.Length())), // pronargs
 					parser.NewDInt(parser.DInt(0)),                      // pronargdefaults
 					retType, // prorettype
-					parser.NewDString(dArgTypeString), // proargtypes
-					parser.DNull,                      // proallargtypes
-					argmodes,                          // proargmodes
-					parser.DNull,                      // proargnames
-					parser.DNull,                      // proargdefaults
-					parser.DNull,                      // protrftypes
-					dName,                             // prosrc
-					parser.DNull,                      // probin
-					parser.DNull,                      // proconfig
-					parser.DNull,                      // proacl
+					parser.NewDUTF8String(dArgTypeString), // proargtypes
+					parser.DNull,                          // proallargtypes
+					argmodes,                              // proargmodes
+					parser.DNull,                          // proargnames
+					parser.DNull,                          // proargdefaults
+					parser.DNull,                          // protrftypes
+					dName,                                 // prosrc
+					parser.DNull,                          // probin
+					parser.DNull,                          // proconfig
+					parser.DNull,                          // proacl
 				)
 				if err != nil {
 					return err
@@ -804,10 +804,10 @@ CREATE TABLE pg_catalog.pg_tables (
 					return nil
 				}
 				return addRow(
-					parser.NewDString(db.Name),    // schemaname
-					parser.NewDString(table.Name), // tablename
-					parser.DNull,                  // tableowner
-					parser.DNull,                  // tablespace
+					parser.NewDUTF8String(db.Name),    // schemaname
+					parser.NewDUTF8String(table.Name), // tablename
+					parser.DNull,                      // tableowner
+					parser.DNull,                      // tablespace
 					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
 					parser.MakeDBool(false),                                 // hasrules
 					parser.MakeDBool(false),                                 // hastriggers
@@ -819,12 +819,12 @@ CREATE TABLE pg_catalog.pg_tables (
 }
 
 var (
-	typTypeBase      = parser.NewDString("b")
-	typTypeComposite = parser.NewDString("c")
-	typTypeDomain    = parser.NewDString("d")
-	typTypeEnum      = parser.NewDString("e")
-	typTypePseudo    = parser.NewDString("p")
-	typTypeRange     = parser.NewDString("r")
+	typTypeBase      = parser.NewDUTF8String("b")
+	typTypeComposite = parser.NewDUTF8String("c")
+	typTypeDomain    = parser.NewDUTF8String("d")
+	typTypeEnum      = parser.NewDUTF8String("e")
+	typTypePseudo    = parser.NewDUTF8String("p")
+	typTypeRange     = parser.NewDUTF8String("r")
 
 	// Avoid unused warning for constants.
 	_ = typTypeComposite
@@ -834,21 +834,21 @@ var (
 	_ = typTypeRange
 
 	// See https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html#CATALOG-TYPCATEGORY-TABLE.
-	typCategoryArray       = parser.NewDString("A")
-	typCategoryBoolean     = parser.NewDString("B")
-	typCategoryComposite   = parser.NewDString("C")
-	typCategoryDateTime    = parser.NewDString("D")
-	typCategoryEnum        = parser.NewDString("E")
-	typCategoryGeometric   = parser.NewDString("G")
-	typCategoryNetworkAddr = parser.NewDString("I")
-	typCategoryNumeric     = parser.NewDString("N")
-	typCategoryPseudo      = parser.NewDString("P")
-	typCategoryRange       = parser.NewDString("R")
-	typCategoryString      = parser.NewDString("S")
-	typCategoryTimespan    = parser.NewDString("T")
-	typCategoryUserDefined = parser.NewDString("U")
-	typCategoryBitString   = parser.NewDString("V")
-	typCategoryUnknown     = parser.NewDString("X")
+	typCategoryArray       = parser.NewDUTF8String("A")
+	typCategoryBoolean     = parser.NewDUTF8String("B")
+	typCategoryComposite   = parser.NewDUTF8String("C")
+	typCategoryDateTime    = parser.NewDUTF8String("D")
+	typCategoryEnum        = parser.NewDUTF8String("E")
+	typCategoryGeometric   = parser.NewDUTF8String("G")
+	typCategoryNetworkAddr = parser.NewDUTF8String("I")
+	typCategoryNumeric     = parser.NewDUTF8String("N")
+	typCategoryPseudo      = parser.NewDUTF8String("P")
+	typCategoryRange       = parser.NewDUTF8String("R")
+	typCategoryString      = parser.NewDUTF8String("S")
+	typCategoryTimespan    = parser.NewDUTF8String("T")
+	typCategoryUserDefined = parser.NewDUTF8String("U")
+	typCategoryBitString   = parser.NewDUTF8String("V")
+	typCategoryUnknown     = parser.NewDUTF8String("X")
 
 	// Avoid unused warning for constants.
 	_ = typCategoryArray
@@ -861,7 +861,7 @@ var (
 	_ = typCategoryBitString
 	_ = typCategoryUnknown
 
-	typDelim = parser.NewDString(",")
+	typDelim = parser.NewDUTF8String(",")
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
@@ -904,20 +904,20 @@ CREATE TABLE pg_catalog.pg_type (
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		for oid, typ := range oidToDatum {
 			if err := addRow(
-				parser.NewDInt(parser.DInt(oid)), // oid
-				parser.NewDString(typ.String()),  // typname
-				parser.DNull,                     // typnamespace
-				parser.DNull,                     // typowner
-				typLen(typ),                      // typlen
-				typByVal(typ),                    // typbyval
-				typTypeBase,                      // typtype
-				typCategory(typ),                 // typcategory
-				parser.MakeDBool(false),          // typispreferred
-				parser.MakeDBool(true),           // typisdefined
-				typDelim,                         // typdelim
-				zeroVal,                          // typrelid
-				zeroVal,                          // typelem
-				zeroVal,                          // typarray
+				parser.NewDInt(parser.DInt(oid)),    // oid
+				parser.NewDUTF8String(typ.String()), // typname
+				parser.DNull,                        // typnamespace
+				parser.DNull,                        // typowner
+				typLen(typ),                         // typlen
+				typByVal(typ),                       // typbyval
+				typTypeBase,                         // typtype
+				typCategory(typ),                    // typcategory
+				parser.MakeDBool(false),             // typispreferred
+				parser.MakeDBool(true),              // typisdefined
+				typDelim,                            // typdelim
+				zeroVal,                             // typrelid
+				zeroVal,                             // typelem
+				zeroVal,                             // typarray
 
 				// regproc references
 				zeroVal, // typinput
@@ -949,7 +949,7 @@ CREATE TABLE pg_catalog.pg_type (
 var (
 	// http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
 	datEncodingUTFId = parser.NewDInt(6)
-	datEncodingEnUTF = parser.NewDString("en_US.utf8")
+	datEncodingEnUTF = parser.NewDUTF8String("en_US.utf8")
 )
 
 // See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html
@@ -976,20 +976,20 @@ CREATE TABLE pg_catalog.pg_database (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				h.DBOid(db),                // oid
-				parser.NewDString(db.Name), // datname
-				parser.DNull,               // datdba
-				datEncodingUTFId,           // encoding
-				datEncodingEnUTF,           // datcollate
-				datEncodingEnUTF,           // datctype
-				parser.MakeDBool(false),    // datistemplate
-				parser.MakeDBool(true),     // datallowconn
-				negOneVal,                  // datconnlimit
-				parser.DNull,               // datlastsysoid
-				parser.DNull,               // datfrozenxid
-				parser.DNull,               // datminmxid
-				parser.DNull,               // dattablespace
-				parser.DNull,               // datacl
+				h.DBOid(db),                    // oid
+				parser.NewDUTF8String(db.Name), // datname
+				parser.DNull,                   // datdba
+				datEncodingUTFId,               // encoding
+				datEncodingEnUTF,               // datcollate
+				datEncodingEnUTF,               // datctype
+				parser.MakeDBool(false),        // datistemplate
+				parser.MakeDBool(true),         // datallowconn
+				negOneVal,                      // datconnlimit
+				parser.DNull,                   // datlastsysoid
+				parser.DNull,                   // datfrozenxid
+				parser.DNull,                   // datminmxid
+				parser.DNull,                   // dattablespace
+				parser.DNull,                   // datacl
 			)
 		})
 	},
@@ -1016,7 +1016,7 @@ func typByVal(typ parser.Type) parser.Datum {
 }
 
 // This mapping should be kept sync with PG's categorization.
-var datumToTypeCategory = map[reflect.Type]*parser.DString{
+var datumToTypeCategory = map[reflect.Type]parser.DString{
 	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
 	reflect.TypeOf(parser.TypeArray):       typCategoryArray,
 	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
@@ -1029,7 +1029,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeString):      typCategoryString,
 	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
+	reflect.TypeOf(parser.TTuple(nil)):     typCategoryPseudo,
 }
 
 func typCategory(typ parser.Type) parser.Datum {
@@ -1061,10 +1061,10 @@ CREATE TABLE pg_catalog.pg_views (
 				// TODO(a-robinson): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					parser.NewDString(db.Name),        // schemaname
-					parser.NewDString(desc.Name),      // viewname
-					parser.DNull,                      // viewowner
-					parser.NewDString(desc.ViewQuery), // definition
+					parser.NewDUTF8String(db.Name),        // schemaname
+					parser.NewDUTF8String(desc.Name),      // viewname
+					parser.DNull,                          // viewowner
+					parser.NewDUTF8String(desc.ViewQuery), // definition
 				)
 			},
 		)

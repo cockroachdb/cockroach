@@ -92,9 +92,7 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 
 	m.tableNames.mu.Lock()
 	for _, lease := range m.tableNames.tables {
-		lease.expiration = parser.DTimestamp{
-			Time: past,
-		}
+		lease.expiration = parser.DTimestampNoTZ{Time: past}
 	}
 	m.tableNames.mu.Unlock()
 }

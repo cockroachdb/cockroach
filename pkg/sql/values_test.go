@@ -90,8 +90,8 @@ func TestValues(t *testing.T) {
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.NewDString(vStr))),
-			asRow(parser.NewDString(vStr)),
+			makeValues(makeTuple(parser.NewDUTF8String(vStr))),
+			asRow(parser.NewDUTF8String(vStr)),
 			true,
 		},
 		{

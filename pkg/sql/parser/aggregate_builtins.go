@@ -143,7 +143,7 @@ func makeAggBuiltins(f func() AggregateFunc, types ...Type) []Builtin {
 }
 
 func countImpls() []Builtin {
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
+	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TTuple(nil)}
 	r := make([]Builtin, len(types))
 	for i := range types {
 		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate)
@@ -234,6 +234,7 @@ func (a *avgAggregate) Result() Datum {
 type concatAggregate struct {
 	forBytes   bool
 	sawNonNull bool
+	collation  string
 	result     bytes.Buffer
 }
 
@@ -248,14 +249,18 @@ func (a *concatAggregate) Add(datum Datum) {
 	if datum == DNull {
 		return
 	}
-	a.sawNonNull = true
 	var arg string
 	if a.forBytes {
 		arg = string(*datum.(*DBytes))
 	} else {
-		arg = string(*datum.(*DString))
+		s := datum.(DString)
+		arg = s.Contents()
+		if !a.sawNonNull {
+			a.collation = s.Locale()
+		}
 	}
 	a.result.WriteString(arg)
+	a.sawNonNull = true
 }
 
 func (a *concatAggregate) Result() Datum {
@@ -266,8 +271,7 @@ func (a *concatAggregate) Result() Datum {
 		res := DBytes(a.result.String())
 		return &res
 	}
-	res := DString(a.result.String())
-	return &res
+	return NewDString(a.result.String(), a.collation)
 }
 
 type boolAndAggregate struct {

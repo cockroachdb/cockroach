@@ -168,15 +168,15 @@ func (n *explainTraceNode) Next() (bool, error) {
 					}
 				}
 				cols := append(parser.DTuple{
-					parser.NewDString(commulativeDuration),
-					parser.NewDString(duration),
+					parser.NewDUTF8String(commulativeDuration),
+					parser.NewDUTF8String(duration),
 					parser.NewDInt(parser.DInt(basePos + i)),
-					parser.NewDString(sp.Operation),
-					parser.NewDString(msg),
+					parser.NewDUTF8String(sp.Operation),
+					parser.NewDUTF8String(msg),
 				}, vals.AsRow()...)
 
 				// Timestamp is added for sorting, but will be removed after sort.
-				n.rows = append(n.rows, append(cols, parser.MakeDTimestamp(entry.Timestamp, time.Nanosecond)))
+				n.rows = append(n.rows, append(cols, parser.MakeDTimestampNoTZ(entry.Timestamp, time.Nanosecond)))
 				n.lastTS, n.lastPos = entry.Timestamp, i
 			}
 		}
