@@ -2987,8 +2987,8 @@ func sendSnapshot(
 	case SnapshotResponse_DECLINED:
 		if header.CanDecline {
 			storePool.throttle(throttleDeclined, storeID)
-			return errors.Errorf("range=%s: remote declined snapshot: %s",
-				header.RangeDescriptor.RangeID, resp.Message)
+			return errors.Errorf("range=%s: remote declined snapshot",
+				header.RangeDescriptor.RangeID)
 		}
 		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
