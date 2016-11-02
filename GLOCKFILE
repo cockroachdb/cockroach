@@ -46,7 +46,7 @@ github.com/cockroachdb/crlfmt f4be2332630e8f33c3262c0d5f0d13d733c8bedf
 github.com/cockroachdb/pq 44a6473ebbc26e3af09fe57bbdf761475c2c9f7c
 github.com/cockroachdb/stress 029c9348806514969d1109a6ae36e521af411ca7
 github.com/codahale/hdrhistogram 3a0bb77429bd3a61596f5e8a3172445844342120
-github.com/coreos/etcd 5c60478953b46e91074a54f5f6683b8afbef8968
+github.com/coreos/etcd 99539ff031fd2e9c590401d5943a595d191552f1
 github.com/cpuguy83/go-md2man a65d4d2de4d5f7c74868dfa9b202a3c8be315aaa
 github.com/docker/distribution d0cdc4802b80609f3064f43e680d8968daa06f2e
 github.com/docker/docker cd0e399e062b45bb0c5e11c7eb4de933b1ad0564
