@@ -462,8 +462,17 @@ type DeleteRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// return the keys that are deleted in the response.
 	ReturnKeys bool `protobuf:"varint,3,opt,name=return_keys,json=returnKeys" json:"return_keys"`
-	// delete values without a corresponding timestamp. This option should be used
-	// with care as this precludes deleting the keys transactionally.
+	// delete "inline" keys which are stored without MVCC timestamps. Note that
+	// an "inline" DeleteRange will fail if it attempts to delete any keys which
+	// contain timestamped (non-inline) values; this option should only be used on
+	// keys which are known to store inline values, such as data in cockroach's
+	// time series system.
+	//
+	// Similarly, attempts to delete keys with inline values will fail unless this
+	// flag is set to true; the setting must match the data being deleted.
+	//
+	// Inline values cannot be deleted transactionally; a DeleteRange with
+	// "inline" set to true will fail if it is executed within a transaction.
 	Inline bool `protobuf:"varint,4,opt,name=inline" json:"inline"`
 }
 
