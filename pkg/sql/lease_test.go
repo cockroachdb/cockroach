@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -38,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -586,20 +584,18 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-// TestTxnObeysLeaseExpiration tests that a transaction is aborted when it tries
-// to use a table descriptor with an expired lease.
+// TestTxnObeysLeaseExpiration tests that a transaction is aborted when it
+// uses a table descriptor with an expired lease.
 func TestTxnObeysLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(vivek): #7031")
-	// Set the lease duration such that it expires quickly.
-	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
-	defer func() {
-		csql.LeaseDuration, csql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
-	}()
-	csql.MinLeaseDuration = 100 * time.Millisecond
-	csql.LeaseDuration = 2 * csql.MinLeaseDuration
-
 	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+				CanUseExpiredLeases: true,
+			},
+		},
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	leaseManager := s.LeaseManager().(*csql.LeaseManager)
@@ -612,39 +608,24 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	// Run a number of sql operations and expire the lease they acquire.
-	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
-	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
-	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `DELETE FROM t.kv WHERE k = 'a'`)
-	runCommandAndExpireLease(t, leaseManager, s.Clock(), sqlDB, `TRUNCATE TABLE t.kv`)
-}
+	// The above INSERT has created a lease on the table; expire the lease.
+	// This lease while expired will still be used by the SQL commands below
+	// because CanUseExpiredLeases is set. The SQL commands will set the
+	// transaction deadline to the lease expiration time (in the past), and
+	// the transaction will eventually fail with a deadline exceeded error.
+	leaseManager.ExpireLeases(s.Clock())
 
-func runCommandAndExpireLease(
-	t *testing.T, leaseManager *csql.LeaseManager, clock *hlc.Clock, sqlDB *gosql.DB, sql string,
-) {
-	// Run a transaction that lets its table lease expire.
-	txn, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
+	testCases := []string{
+		`INSERT INTO t.kv VALUES ('c', 'd')`,
+		`UPDATE t.kv SET v = 'd' WHERE k = 'a'`,
+		`DELETE FROM t.kv WHERE k = 'a'`,
+		`TRUNCATE TABLE t.kv`,
 	}
-	// Use snapshot isolation so that the transaction is pushed without being
-	// restarted.
-	if _, err := txn.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := txn.Exec(sql); err != nil {
-		t.Fatal(err)
-	}
-
-	leaseManager.ExpireLeases(clock)
-
-	// Run another transaction that pushes the above transaction.
-	if _, err := sqlDB.Query("SELECT * FROM t.kv"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Commit and see the aborted txn.
-	if err := txn.Commit(); !testutils.IsError(err, "pq: restart transaction: txn aborted") {
-		t.Fatalf("%s, err = %v", sql, err)
+	for _, testCase := range testCases {
+		t.Run(testCase, func(t *testing.T) {
+			if _, err := sqlDB.Exec(testCase); !testutils.IsError(err, "pq: transaction deadline exceeded") {
+				t.Fatal(err)
+			}
+		})
 	}
 }
