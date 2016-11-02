@@ -49,21 +49,29 @@ import (
 // See NewClock for details.
 type Clock struct {
 	physicalClock func() int64
-	// Clock contains a mutex used to lock the below
-	// fields while methods operate on them.
-	syncutil.Mutex
-	state Timestamp
-	// MaxOffset specifies how far ahead of the physical
-	// clock (and cluster time) the wall time can be.
-	// See SetMaxOffset.
+
+	// The maximal offset of the HLC's wall time from the underlying physical
+	// clock. A well-chosen value is large enough to ignore a reasonable amount
+	// of clock skew but will prevent ill-configured nodes from dramatically
+	// skewing the wall time of the clock into the future.
+	//
+	// RPC heartbeats compare detected clock skews against this value to protect
+	// data consistency.
+	//
+	// TODO(tamird): make this dynamic in the distant future.
 	maxOffset time.Duration
 
-	// monotonicityErrorsCount indicate how often this clock was
-	// observed to jump backwards.
-	monotonicityErrorsCount int32
-	// lastPhysicalTime reports the last measured physical time. This
-	// is used to detect clock jumps.
-	lastPhysicalTime int64
+	mu struct {
+		syncutil.Mutex
+		timestamp Timestamp
+
+		// monotonicityErrorsCount indicate how often this clock was
+		// observed to jump backwards.
+		monotonicityErrorsCount int32
+		// lastPhysicalTime reports the last measured physical time. This
+		// is used to detect clock jumps.
+		lastPhysicalTime int64
+	}
 }
 
 // ManualClock is a convenience type to facilitate
@@ -76,6 +84,9 @@ type ManualClock struct {
 // NewManualClock returns a new instance, initialized with
 // specified timestamp.
 func NewManualClock(nanos int64) *ManualClock {
+	if nanos == 0 {
+		panic("zero clock is forbidden")
+	}
 	return &ManualClock{nanos: nanos}
 }
 
@@ -108,67 +119,34 @@ func UnixNano() int64 {
 // The physical clock is typically given by the wall time
 // of the local machine in unix epoch nanoseconds, using
 // hlc.UnixNano. This is not a requirement.
-func NewClock(physicalClock func() int64) *Clock {
+func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
 	return &Clock{
 		physicalClock: physicalClock,
+		maxOffset:     maxOffset,
 	}
 }
 
-// SetMaxOffset sets the maximal offset of the physical clock from the cluster.
-// It is used to set the max offset a call to Update may cause and to ensure
-// an upperbound on timestamp WallTime in transactions. A well-chosen value is
-// large enough to ignore a reasonable amount of clock skew but will prevent
-// ill-configured nodes from dramatically skewing the wall time of the clock
-// into the future.
+// MaxOffset returns the maximal clock offset to any node in the cluster.
 //
-// A value of zero disables all safety features.
-// The default value for a new instance is zero.
-func (c *Clock) SetMaxOffset(delta time.Duration) {
-	c.Lock()
-	defer c.Unlock()
-	c.maxOffset = delta
-}
-
-// MaxOffset returns the maximal offset allowed.
 // A value of 0 means offset checking is disabled.
-// See SetMaxOffset for details.
 func (c *Clock) MaxOffset() time.Duration {
-	c.Lock()
-	defer c.Unlock()
 	return c.maxOffset
 }
 
-// Timestamp returns a copy of the clock's current timestamp,
-// without performing a clock adjustment.
-func (c *Clock) Timestamp() Timestamp {
-	c.Lock()
-	defer c.Unlock()
-	return c.timestamp()
-}
-
-// timestamp returns the state as a timestamp, without
-// a lock on the clock's state, for internal usage.
-func (c *Clock) timestamp() Timestamp {
-	return Timestamp{
-		WallTime: c.state.WallTime,
-		Logical:  c.state.Logical,
-	}
-}
-
-// getPhysicalClock returns the current physical clock and checks for
+// getPhysicalClockLocked returns the current physical clock and checks for
 // time jumps.
-func (c *Clock) getPhysicalClock() int64 {
+func (c *Clock) getPhysicalClockLocked() int64 {
 	newTime := c.physicalClock()
 
-	if c.lastPhysicalTime != 0 {
-		interval := c.lastPhysicalTime - newTime
+	if c.mu.lastPhysicalTime != 0 {
+		interval := c.mu.lastPhysicalTime - newTime
 		if interval > int64(c.maxOffset/10) {
-			c.monotonicityErrorsCount++
-			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(newTime-c.lastPhysicalTime)/1e9)
+			c.mu.monotonicityErrorsCount++
+			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(newTime-c.mu.lastPhysicalTime)/1e9)
 		}
 	}
 
-	c.lastPhysicalTime = newTime
+	c.mu.lastPhysicalTime = newTime
 	return newTime
 }
 
@@ -178,28 +156,25 @@ func (c *Clock) getPhysicalClock() int64 {
 // of Update, which is passed a timestamp received from
 // another member of the distributed network.
 func (c *Clock) Now() Timestamp {
-	c.Lock()
-	defer c.Unlock()
-
-	physicalClock := c.getPhysicalClock()
-	if c.state.WallTime >= physicalClock {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if physicalClock := c.getPhysicalClockLocked(); c.mu.timestamp.WallTime >= physicalClock {
 		// The wall time is ahead, so the logical clock ticks.
-		c.state.Logical++
+		c.mu.timestamp.Logical++
 	} else {
 		// Use the physical clock, and reset the logical one.
-		c.state.WallTime = physicalClock
-		c.state.Logical = 0
+		c.mu.timestamp.WallTime = physicalClock
+		c.mu.timestamp.Logical = 0
 	}
-	return c.timestamp()
+	return c.mu.timestamp
 }
 
 // PhysicalNow returns the local wall time. It corresponds to the physicalClock
 // provided at instantiation. For a timestamp value, use Now() instead.
 func (c *Clock) PhysicalNow() int64 {
-	c.Lock()
-	defer c.Unlock()
-	wallTime := c.getPhysicalClock()
-	return wallTime
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.getPhysicalClockLocked()
 }
 
 // PhysicalTime returns a time.Time struct using the local wall time.
@@ -213,45 +188,45 @@ func (c *Clock) PhysicalTime() time.Time {
 // associated to the receipt of the event returned.
 // An error may only occur if offset checking is active and
 // the remote timestamp was rejected due to clock offset,
-// in which case the state of the clock will not have been
+// in which case the timestamp of the clock will not have been
 // altered.
 // To timestamp events of local origin, use Now instead.
 func (c *Clock) Update(rt Timestamp) Timestamp {
-	c.Lock()
-	defer c.Unlock()
-	physicalClock := c.getPhysicalClock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	physicalClock := c.getPhysicalClockLocked()
 
-	if physicalClock > c.state.WallTime && physicalClock > rt.WallTime {
+	if physicalClock > c.mu.timestamp.WallTime && physicalClock > rt.WallTime {
 		// Our physical clock is ahead of both wall times. It is used
 		// as the new wall time and the logical clock is reset.
-		c.state.WallTime = physicalClock
-		c.state.Logical = 0
-		return c.timestamp()
+		c.mu.timestamp.WallTime = physicalClock
+		c.mu.timestamp.Logical = 0
+		return c.mu.timestamp
 	}
 
 	// In the remaining cases, our physical clock plays no role
 	// as it is behind the local and remote wall times. Instead,
 	// the logical clock comes into play.
-	if rt.WallTime > c.state.WallTime {
+	if rt.WallTime > c.mu.timestamp.WallTime {
 		offset := time.Duration(rt.WallTime-physicalClock) * time.Nanosecond
 		if c.maxOffset > 0 && offset > c.maxOffset {
 			log.Warningf(context.TODO(), "remote wall time is too far ahead (%s) to be trustworthy - updating anyway", offset)
 		}
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.
-		c.state.WallTime = rt.WallTime
-		c.state.Logical = rt.Logical + 1
-	} else if c.state.WallTime > rt.WallTime {
+		c.mu.timestamp.WallTime = rt.WallTime
+		c.mu.timestamp.Logical = rt.Logical + 1
+	} else if c.mu.timestamp.WallTime > rt.WallTime {
 		// Our wall time is larger, so it remains but we tick
 		// the logical clock.
-		c.state.Logical++
+		c.mu.timestamp.Logical++
 	} else {
 		// Both wall times are equal, and the larger logical
 		// clock is used for the update.
-		if rt.Logical > c.state.Logical {
-			c.state.Logical = rt.Logical
+		if rt.Logical > c.mu.timestamp.Logical {
+			c.mu.timestamp.Logical = rt.Logical
 		}
-		c.state.Logical++
+		c.mu.timestamp.Logical++
 	}
-	return c.timestamp()
+	return c.mu.timestamp
 }

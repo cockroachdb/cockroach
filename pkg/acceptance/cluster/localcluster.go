@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -771,12 +772,12 @@ func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.St
 		SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(l.CertsDir, security.EmbeddedNodeCert),
 		SSLCertKey: filepath.Join(l.CertsDir, security.EmbeddedNodeKey),
-	}, nil, stopper)
-	sender, err := roachClient.NewSender(rpcContext, l.Nodes[i].Addr(DefaultTCP).String())
+	}, hlc.NewClock(hlc.UnixNano, 0), stopper)
+	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(DefaultTCP).String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return roachClient.NewDB(sender), stopper
+	return roachClient.NewDB(roachClient.NewSender(conn)), stopper
 }
 
 // InternalIP returns the IP address used for inter-node communication.

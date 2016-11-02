@@ -15,26 +15,18 @@
 package storage
 
 import (
+	"math"
 	"testing"
-	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// createTestBookie creates a new bookie, stopper and manual clock for testing.
-func createTestBookie(
-	reservationTimeout time.Duration, maxReservations int, maxReservedBytes int64,
-) *bookie {
-	b := newBookie(newStoreMetrics(time.Hour))
-	// Lock the bookie to prevent the main loop from running as we change some
-	// of the bookie's state.
-	b.mu.Lock()
-	defer b.mu.Unlock()
+func createTestBookie(maxReservations int, maxReservedBytes int64) *bookie {
+	b := newBookie(newStoreMetrics(math.MaxInt32))
 	b.maxReservations = maxReservations
 	b.maxReservedBytes = maxReservedBytes
 	// Set a high number for a mocked total available space.
@@ -58,7 +50,7 @@ func verifyBookie(t *testing.T, b *bookie, reservations int, reservedBytes int64
 // correctly.
 func TestBookieReserve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	b := createTestBookie(time.Hour, 5, defaultMaxReservedBytes)
+	b := createTestBookie(5, defaultMaxReservedBytes)
 
 	testCases := []struct {
 		rangeID      int
@@ -164,7 +156,7 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 
 	previousReserved := 10
 
-	b := createTestBookie(time.Hour, previousReserved, defaultMaxReservedBytes)
+	b := createTestBookie(previousReserved, defaultMaxReservedBytes)
 
 	// Load up reservations.
 	for i := 1; i <= previousReserved; i++ {
@@ -204,7 +196,7 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 
 	previousReservedBytes := 10
 
-	b := createTestBookie(time.Hour, previousReservedBytes*2, int64(previousReservedBytes))
+	b := createTestBookie(previousReservedBytes*2, int64(previousReservedBytes))
 
 	// Load up reservations with a size of 1 each.
 	for i := 1; i <= previousReservedBytes; i++ {

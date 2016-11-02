@@ -79,13 +79,13 @@ func TestRangeIterForward(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := DistSenderConfig{
+	g, clock := makeGossip(t, stopper)
+	ds := NewDistSender(DistSenderConfig{
+		Clock:             clock,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
-	}
-	ctx := context.Background()
+	}, g)
 
-	g := makeGossip(t, stopper)
-	ds := NewDistSender(cfg, g)
+	ctx := context.Background()
 
 	ri := NewRangeIterator(ds, false /*reverse*/)
 	i := 0
@@ -107,13 +107,13 @@ func TestRangeIterSeekForward(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := DistSenderConfig{
+	g, clock := makeGossip(t, stopper)
+	ds := NewDistSender(DistSenderConfig{
+		Clock:             clock,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
-	}
-	ctx := context.Background()
+	}, g)
 
-	g := makeGossip(t, stopper)
-	ds := NewDistSender(cfg, g)
+	ctx := context.Background()
 
 	ri := NewRangeIterator(ds, false /*reverse*/)
 	i := 0
@@ -140,13 +140,13 @@ func TestRangeIterReverse(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := DistSenderConfig{
+	g, clock := makeGossip(t, stopper)
+	ds := NewDistSender(DistSenderConfig{
+		Clock:             clock,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
-	}
-	ctx := context.Background()
+	}, g)
 
-	g := makeGossip(t, stopper)
-	ds := NewDistSender(cfg, g)
+	ctx := context.Background()
 
 	ri := NewRangeIterator(ds, true /*reverse*/)
 	i := len(alphaRangeDescriptors) - 1
@@ -168,13 +168,13 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := DistSenderConfig{
+	g, clock := makeGossip(t, stopper)
+	ds := NewDistSender(DistSenderConfig{
+		Clock:             clock,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
-	}
-	ctx := context.Background()
+	}, g)
 
-	g := makeGossip(t, stopper)
-	ds := NewDistSender(cfg, g)
+	ctx := context.Background()
 
 	ri := NewRangeIterator(ds, true /*reverse*/)
 	i := len(alphaRangeDescriptors) - 1

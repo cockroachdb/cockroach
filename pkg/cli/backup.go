@@ -56,7 +56,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 	defer stopper.Stop()
 
-	desc, err := sql.Backup(ctx, *kvDB, base, hlc.NewClock(hlc.UnixNano).Now())
+	desc, err := sql.Backup(ctx, *kvDB, base, hlc.Timestamp{WallTime: hlc.UnixNano()})
 	if err != nil {
 		return err
 	}
