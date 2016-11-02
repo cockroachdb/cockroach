@@ -413,18 +413,18 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	if _, err := client.SendWrapped(context.Background(), rg1(store), &args); err != nil {
 		t.Fatal(err)
 	}
-	rngMerged := store.LookupReplica(aDesc.StartKey, nil)
+	replMerged := store.LookupReplica(aDesc.StartKey, nil)
 
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	msMerged, err := engine.MVCCGetRangeStats(context.Background(), snap, rngMerged.RangeID)
+	msMerged, err := engine.MVCCGetRangeStats(context.Background(), snap, replMerged.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, rngMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }

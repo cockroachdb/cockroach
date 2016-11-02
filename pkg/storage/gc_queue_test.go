@@ -61,11 +61,11 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	if !ok {
 		t.Fatal("config not set")
 	}
-	desc := tc.rng.Desc()
+	desc := tc.repl.Desc()
 	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Errorf(context.Background(), "could not find GC policy for range %s: %s, got zone %+v",
-			tc.rng, err, zone)
+			tc.repl, err, zone)
 		return
 	}
 	policy := zone.GC
@@ -141,14 +141,14 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		func() {
 			// Hold lock throughout to reduce chance of random commands
 			// leading to inconsistent state.
-			tc.rng.mu.Lock()
-			defer tc.rng.mu.Unlock()
-			if err := setMVCCStats(context.Background(), tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+			if err := setMVCCStats(context.Background(), tc.repl.store.Engine(), tc.repl.RangeID, ms); err != nil {
 				t.Fatal(err)
 			}
-			tc.rng.mu.state.Stats = ms
+			tc.repl.mu.state.Stats = ms
 		}()
-		shouldQ, priority := gcQ.shouldQueue(context.TODO(), now, tc.rng, cfg)
+		shouldQ, priority := gcQ.shouldQueue(context.TODO(), now, tc.repl, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
@@ -273,7 +273,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -456,7 +456,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
-	outsideKey := tc.rng.Desc().EndKey.Next().AsRawKey()
+	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
 
 	txns := map[string]roachpb.Transaction{}
@@ -480,7 +480,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			}
 		}
 		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.rng.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -492,7 +492,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -520,7 +520,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 					strKey, expIntents, resolved[strKey])
 			}
 			entry := &roachpb.AbortCacheEntry{}
-			abortExists, err := tc.rng.abortCache.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
+			abortExists, err := tc.repl.abortCache.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -548,11 +548,11 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	batch := tc.engine.NewSnapshot()
 	defer batch.Close()
-	tc.rng.assertState(batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertState(batch) // check that in-mem and on-disk state were updated
 
-	tc.rng.mu.Lock()
-	txnSpanThreshold := tc.rng.mu.state.TxnSpanGCThreshold
-	tc.rng.mu.Unlock()
+	tc.repl.mu.Lock()
+	txnSpanThreshold := tc.repl.mu.state.TxnSpanGCThreshold
+	tc.repl.mu.Unlock()
 
 	// Verify that the new TxnSpanGCThreshold has reached the Replica.
 	if expWT := int64(gcTxnAndAC); txnSpanThreshold.WallTime != expWT {
@@ -604,7 +604,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 

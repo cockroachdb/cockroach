@@ -96,17 +96,17 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 // check must have occurred more than ReplicaGCQueueInactivityThreshold
 // in the past.
 func (q *replicaGCQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, rng *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (bool, float64) {
-	lastCheck, err := rng.getLastReplicaGCTimestamp(ctx)
+	lastCheck, err := repl.getLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		log.Errorf(ctx, "could not read last replica GC timestamp: %s", err)
 		return false, 0
 	}
 
-	lastActivity := hlc.ZeroTimestamp.Add(rng.store.startedAt, 0)
+	lastActivity := hlc.ZeroTimestamp.Add(repl.store.startedAt, 0)
 
-	lease, nextLease := rng.getLease()
+	lease, nextLease := repl.getLease()
 	if lease != nil {
 		lastActivity.Forward(lease.Expiration)
 	}
@@ -115,7 +115,7 @@ func (q *replicaGCQueue) shouldQueue(
 	}
 
 	var isCandidate bool
-	if raftStatus := rng.RaftStatus(); raftStatus != nil {
+	if raftStatus := repl.RaftStatus(); raftStatus != nil {
 		isCandidate = (raftStatus.SoftState.RaftState == raft.StateCandidate)
 	}
 	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isCandidate)
@@ -154,12 +154,12 @@ func replicaGCShouldQueueImpl(
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (q *replicaGCQueue) process(
-	ctx context.Context, now hlc.Timestamp, rng *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) error {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
 	// StartKey (and avoid rng.GetReplica() for the same reason).
-	desc := rng.Desc()
+	desc := repl.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
@@ -183,10 +183,10 @@ func (q *replicaGCQueue) process(
 	}
 
 	replyDesc := reply.Ranges[0]
-	if _, currentMember := replyDesc.GetReplicaDescriptor(rng.store.StoreID()); !currentMember {
+	if _, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		log.VEventf(ctx, 1, "destroying local data")
-		if err := rng.store.RemoveReplica(rng, replyDesc, true); err != nil {
+		if err := repl.store.RemoveReplica(repl, replyDesc, true); err != nil {
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
@@ -195,7 +195,7 @@ func (q *replicaGCQueue) process(
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
 		log.VEventf(ctx, 1, "removing merged range")
-		if err := rng.store.RemoveReplica(rng, replyDesc, false); err != nil {
+		if err := repl.store.RemoveReplica(repl, replyDesc, false); err != nil {
 			return err
 		}
 
@@ -210,7 +210,7 @@ func (q *replicaGCQueue) process(
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
 		log.Event(ctx, "not gc'able")
-		if err := rng.setLastReplicaGCTimestamp(ctx, now); err != nil {
+		if err := repl.setLastReplicaGCTimestamp(ctx, now); err != nil {
 			return err
 		}
 	}
