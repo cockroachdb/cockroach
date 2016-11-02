@@ -2471,9 +2471,7 @@ func (s *Store) maybeUpdateTransaction(
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
-func (s *Store) HandleSnapshot(
-	header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer,
-) error {
+func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 	var capacity *roachpb.StoreCapacity
@@ -2987,8 +2985,12 @@ func sendSnapshot(
 	case SnapshotResponse_DECLINED:
 		if header.CanDecline {
 			storePool.throttle(throttleDeclined, storeID)
+			declinedMsg := "reservation rejected"
+			if len(resp.Message) > 0 {
+				declinedMsg = resp.Message
+			}
 			return errors.Errorf("range=%s: remote declined snapshot: %s",
-				header.RangeDescriptor.RangeID, resp.Message)
+				header.RangeDescriptor.RangeID, declinedMsg)
 		}
 		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
