@@ -331,6 +331,15 @@ message Lease {
 
   // The address of the would-be lease holder.
   optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
+
+  // The current timestamp when this lease has been proposed. Used after a
+  // transfer and after a node restart to enforce that a node only uses leases
+  // proposed after the time of the said transfer or restart.  This is nullable
+  // to help with the rollout (such that a lease applied by some nodes before
+  // the rollout and some nodes after the rollout is serialized the same).
+  // TODO(andrei): Make this non-nullable after the rollout.
+  optional util.hlc.Timestamp proposed_ts  = 5 [(gogoproto.nullable) = true,
+      (gogoproto.customname) = "ProposedTS"];
 }
 
 // AbortCacheEntry contains information about a transaction which has

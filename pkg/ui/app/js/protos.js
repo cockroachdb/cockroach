@@ -1003,6 +1003,16 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
+                                    "name": "proposed_ts",
+                                    "id": 5,
+                                    "options": {
+                                        "(gogoproto.nullable)": true,
+                                        "(gogoproto.customname)": "ProposedTS"
+                                    }
                                 }
                             ]
                         },
