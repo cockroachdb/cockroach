@@ -156,24 +156,27 @@ message MergeJoinerSpec {
   // constraints. The first column of the left ordering is constrained to be
   // equal to the first column in the right ordering and so on. The ordering
   // lengths and directions must match.
-  // In the example above, left_ordering describes C1+,C2- and right_ordering
+  // In the example above, left ordering describes C1+,C2- and right ordering
   // describes C5+,C4-.
   optional Ordering left_ordering = 1 [(gogoproto.nullable) = false];
-  optional Ordering right_ordering = 2 [(gogoproto.nullable) = false];
+  repeated sqlbase.ColumnType.Kind left_types = 2;
+
+  optional Ordering right_ordering = 3 [(gogoproto.nullable) = false];
+  repeated sqlbase.ColumnType.Kind right_types = 4;
 
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables $0 to $(N-1) refer to
   // columns of the left stream and variables $N to $(N+M-1) refer to columns in
   // the right stream.
-  optional Expression expr = 3 [(gogoproto.nullable) = false];
+  optional Expression expr = 5 [(gogoproto.nullable) = false];
 
-  optional JoinType type = 4 [(gogoproto.nullable) = false];
+  optional JoinType type = 6 [(gogoproto.nullable) = false];
 
   // Columns for the output stream. Assuming that the left stream has N columns
   // and the right stream has M columns, column indices 0 to (N-1) refer to left
   // stream columns and indices N to (N+M-1) refer to right stream columns.
-  repeated uint32 output_columns = 5 [packed = true];
+  repeated uint32 output_columns = 7 [packed = true];
 }
 
 // HashJoinerSpec is the specification for a hash join processor. The processor
@@ -275,7 +278,7 @@ message ProcessorCoreUnion {
   optional MergeJoinerSpec mergeJoiner = 8;
   optional HashJoinerSpec hashJoiner = 9;
   // TODO(radu): other "processor core" types will go here.
-  // TODO(irfansharif): add aggregation, join, set operations, etc. from #7587
+  // TODO(irfansharif): add join, set operations, etc. from #7587
 }
 
 message ProcessorSpec {

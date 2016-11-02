@@ -31,6 +31,8 @@ import (
 
 const rowChannelBufSize = 16
 
+type columns []uint32
+
 // RowReceiver is any component of a flow that receives rows from another
 // component. It can be an input synchronizer, a router, or a mailbox.
 type RowReceiver interface {
