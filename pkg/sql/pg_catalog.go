@@ -27,6 +27,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/lib/pq/oid"
@@ -62,6 +63,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogTablesTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
+		pgCatalogRolesTable,
 	},
 }
 
@@ -1069,6 +1071,52 @@ CREATE TABLE pg_catalog.pg_views (
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-roles.html.
+var pgCatalogRolesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_roles (
+	oid INT,
+	rolname STRING,
+	rolsuper BOOL,
+	rolinherit BOOL,
+	rolcreaterole BOOL,
+	rolcreatedb BOOL,
+	rolcatupdate BOOL,
+	rolcanlogin BOOL,
+	rolconnlimit INT,
+	rolpassword STRING,
+	rolvaliduntil TIMESTAMPTZ,
+	rolconfig STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// We intentionally do not check if the user has access to system.user.
+		// Because Postgres allows access to pg_roles by non-privileged users, we
+		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
+		// include sensitive information such as password hashes.
+		h := makeOidHasher()
+		return forEachUser(p,
+			func(username string) error {
+				isRoot := parser.DBool(username == security.RootUser)
+				return addRow(
+					h.UserOid(username),           // oid
+					parser.NewDString(username),   // rolname
+					parser.MakeDBool(isRoot),      // rolsuper
+					parser.MakeDBool(false),       // rolinherit
+					parser.MakeDBool(isRoot),      // rolcreaterole
+					parser.MakeDBool(isRoot),      // rolcreatedb
+					parser.MakeDBool(false),       // rolcatupdate
+					parser.MakeDBool(true),        // rolcanlogin
+					negOneVal,                     // rolconnlimit
+					parser.NewDString("********"), // rolpassword
+					parser.DNull,                  // rolvaliduntil
+					parser.NewDString("{}"),       // rolconfig
+				)
+			},
+		)
+	},
+}
+
 // oidHasher provides a consistent hashing mechanism for object identifiers in
 // pg_catalog tables, allowing for reliable joins across tables.
 //
@@ -1129,6 +1177,7 @@ const (
 	pKeyConstraintTypeTag
 	uniqueConstraintTypeTag
 	functionTypeTag
+	userTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -1252,5 +1301,11 @@ func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DInt
 	h.writeTypeTag(functionTypeTag)
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
+	return h.getOid()
+}
+
+func (h oidHasher) UserOid(username string) *parser.DInt {
+	h.writeTypeTag(userTypeTag)
+	h.writeStr(username)
 	return h.getOid()
 }
