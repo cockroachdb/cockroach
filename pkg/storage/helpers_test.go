@@ -169,6 +169,12 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return s.gcQueue.process(ctx, s.Clock().Now(), repl, cfg)
 }
 
+func (s *Store) ReservationCount() int {
+	s.bookie.mu.Lock()
+	defer s.bookie.mu.Unlock()
+	return len(s.bookie.mu.reservationsByRangeID)
+}
+
 func (r *Replica) RaftLock() {
 	r.raftMu.Lock()
 }

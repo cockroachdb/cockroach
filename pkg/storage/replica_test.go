@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -6219,81 +6218,6 @@ func TestCommandTimeThreshold(t *testing.T) {
 	}, &cpArgs); err != nil {
 		t.Fatalf("could not cput data: %s", err)
 	}
-}
-
-// TestReserveAndApplySnapshot checks to see if a snapshot is correctly applied
-// and that its reservation is removed.
-func TestReserveAndApplySnapshot(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tsc := TestStoreConfig()
-	tc := testContext{}
-	tc.StartWithStoreConfig(t, tsc)
-	defer tc.Stop()
-
-	checkReservations := func(t *testing.T, expected int) {
-		tc.store.bookie.mu.Lock()
-		defer tc.store.bookie.mu.Unlock()
-		if e, a := expected, len(tc.store.bookie.mu.reservationsByRangeID); e != a {
-			t.Fatalf("wrong number of reservations - expected:%d, actual:%d", e, a)
-		}
-	}
-
-	key := roachpb.RKey("a")
-	firstRng := tc.store.LookupReplica(key, nil)
-	snap, err := firstRng.GetSnapshot(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tc.store.metrics.Available.Update(tc.store.bookie.maxReservedBytes)
-
-	// Note that this is an artificial scenario in which we're adding a
-	// reservation for a replica that is already on the range. This test is
-	// designed to test the filling of the reservation specifically and in
-	// normal operation there should not be a reservation for an existing
-	// replica.
-	req := ReservationRequest{
-		StoreRequestHeader: StoreRequestHeader{
-			StoreID: tc.store.StoreID(),
-			NodeID:  tc.store.nodeDesc.NodeID,
-		},
-		RangeID:   firstRng.RangeID,
-		RangeSize: 10,
-	}
-
-	if !tc.store.Reserve(context.Background(), req).Reserved {
-		t.Fatalf("Can't reserve the replica")
-	}
-	checkReservations(t, 1)
-
-	b := firstRng.store.Engine().NewBatch()
-	var alloc bufalloc.ByteAllocator
-	for ; snap.Iter.Valid(); snap.Iter.Next() {
-		var key engine.MVCCKey
-		var value []byte
-		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
-		mvccKey := engine.MVCCKey{
-			Key:       key.Key,
-			Timestamp: key.Timestamp,
-		}
-		if err := b.Put(mvccKey, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Apply a snapshot and check the reservation was filled. Note that this
-	// out-of-band application could be a root cause if this test ever crashes.
-	if err := firstRng.applySnapshot(context.Background(), IncomingSnapshot{
-		SnapUUID:        snap.SnapUUID,
-		RangeDescriptor: *firstRng.Desc(),
-		Batches:         [][]byte{b.Repr()},
-	},
-		snap.RaftSnap, raftpb.HardState{}); err != nil {
-		t.Fatal(err)
-	}
-	firstRng.CloseOutSnap()
-	checkReservations(t, 0)
 }
 
 func TestDeprecatedRequests(t *testing.T) {

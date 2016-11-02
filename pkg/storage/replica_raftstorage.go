@@ -553,9 +553,6 @@ func (r *Replica) applySnapshot(
 ) error {
 	// Extract the updated range descriptor.
 	desc := inSnap.RangeDescriptor
-	// Fill the reservation if there was one for this range, regardless of
-	// whether the application succeeded.
-	defer r.store.bookie.Fill(desc.RangeID)
 
 	r.mu.Lock()
 	replicaID := r.mu.replicaID
