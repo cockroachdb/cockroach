@@ -98,6 +98,9 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 2*runtime.NumCPU())
 
+var enablePreVote = envutil.EnvOrDefaultBool(
+	"COCKROACH_ENABLE_PREVOTE", false)
+
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
 // ticks. If raftElectionTimeoutTicks is 0, uses the value of
@@ -150,7 +153,14 @@ func newRaftConfig(
 		HeartbeatTick: storeCfg.RaftHeartbeatIntervalTicks,
 		Storage:       strg,
 		Logger:        logger,
-		PreVote:       true,
+
+		// TODO(bdarnell): PreVote and CheckQuorum are two ways of
+		// achieving the same thing. PreVote is more compatible with
+		// quiesced ranges, so we want to switch to it once we've worked
+		// out the bugs.
+		PreVote:     enablePreVote,
+		CheckQuorum: !enablePreVote,
+
 		// TODO(bdarnell): make these configurable; evaluate defaults.
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
