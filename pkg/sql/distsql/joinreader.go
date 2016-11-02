@@ -47,14 +47,14 @@ var _ processor = &joinReader{}
 func newJoinReader(
 	flowCtx *FlowCtx, spec *JoinReaderSpec, input RowSource, output RowReceiver,
 ) (*joinReader, error) {
-	jr := &joinReader{
-		input:  input,
-		output: output,
-	}
-
 	if spec.IndexIdx != 0 {
 		// TODO(radu): for now we only support joining with the primary index
 		return nil, errors.Errorf("join with index not implemented")
+	}
+
+	jr := &joinReader{
+		input:  input,
+		output: output,
 	}
 
 	err := jr.readerBase.init(flowCtx, &spec.Table, int(spec.IndexIdx), spec.Filter,
