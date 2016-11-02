@@ -771,13 +771,32 @@ func NewReverseScan(key, endKey Key) Request {
 	}
 }
 
-func (*GetRequest) flags() int                { return isRead | isTxn }
-func (*PutRequest) flags() int                { return isWrite | isTxn | isTxnWrite }
-func (*ConditionalPutRequest) flags() int     { return isRead | isWrite | isTxn | isTxnWrite }
-func (*InitPutRequest) flags() int            { return isRead | isWrite | isTxn | isTxnWrite }
-func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxn | isTxnWrite }
-func (*DeleteRequest) flags() int             { return isWrite | isTxn | isTxnWrite }
-func (*DeleteRangeRequest) flags() int        { return isWrite | isTxn | isTxnWrite | isRange }
+func (*GetRequest) flags() int            { return isRead | isTxn }
+func (*PutRequest) flags() int            { return isWrite | isTxn | isTxnWrite }
+func (*ConditionalPutRequest) flags() int { return isRead | isWrite | isTxn | isTxnWrite }
+func (*InitPutRequest) flags() int        { return isRead | isWrite | isTxn | isTxnWrite }
+func (*IncrementRequest) flags() int      { return isRead | isWrite | isTxn | isTxnWrite }
+func (*DeleteRequest) flags() int         { return isWrite | isTxn | isTxnWrite }
+func (drr *DeleteRangeRequest) flags() int {
+	// DeleteRangeRequest has different properties if the "inline" flag is set.
+	// This flag indicates that the request is deleting inline MVCC values,
+	// which cannot be deleted transactionally - inline DeleteRange will thus
+	// fail if executed as part of a transaction. This alternate flag set
+	// is needed to prevent the command from being automatically wrapped into a
+	// transaction by TxnCoordSender, which can occur if the command spans
+	// multiple ranges.
+	//
+	// TODO(mrtracy): The behavior of DeleteRangeRequest with "inline" set has
+	// likely diverged enough that it should be promoted into its own command.
+	// However, it is complicated to plumb a new command through the system,
+	// while this special case in flags() fixes all current issues succinctly.
+	// This workaround does not preclude us from creating a separate
+	// "DeleteInlineRange" command at a later date.
+	if drr.Inline {
+		return isWrite | isRange | isAlone
+	}
+	return isWrite | isTxn | isTxnWrite | isRange
+}
 func (*ScanRequest) flags() int               { return isRead | isRange | isTxn }
 func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse | isTxn }
 func (*BeginTransactionRequest) flags() int   { return isWrite | isTxn }
