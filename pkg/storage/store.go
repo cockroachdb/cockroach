@@ -2471,9 +2471,7 @@ func (s *Store) maybeUpdateTransaction(
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
-func (s *Store) HandleSnapshot(
-	header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer,
-) error {
+func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 	var capacity *roachpb.StoreCapacity
