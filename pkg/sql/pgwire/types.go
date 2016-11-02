@@ -79,6 +79,13 @@ type pgNumeric struct {
 }
 
 func pgTypeForParserType(t parser.Type) pgType {
+	// Compare all types that cannot rely on == equality.
+	istype := t.FamilyEqual
+	switch {
+	case istype(parser.TypeTuple):
+		return pgType{oid.T_record, -1}
+	}
+	// Compare all types that can rely on == equality.
 	switch t {
 	case parser.TypeNull:
 		return pgType{oid: oid.T_unknown}
@@ -176,6 +183,22 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DInterval:
 		b.writeLengthPrefixedString(v.String())
+
+	case *parser.DTuple:
+		var tb bytes.Buffer
+		tb.WriteString("(")
+		for i, d := range *v {
+			if i > 0 {
+				tb.WriteString(",")
+			}
+			if d == parser.DNull {
+				// Emit nothing on NULL.
+				continue
+			}
+			tb.WriteString(d.String())
+		}
+		tb.WriteString(")")
+		b.writeLengthPrefixedString(tb.String())
 
 	case *parser.DArray:
 		var tb bytes.Buffer
