@@ -136,14 +136,12 @@ func (b *bookie) Reserve(
 			// To update the reservation, fill the original one and add the
 			// new one.
 			if log.V(2) {
-				log.Infof(ctx, "updating existing reservation for rangeID:%d, %+v", req.RangeID,
-					olderReservation)
+				log.Infof(ctx, "[r%d], updating existing reservation", req.RangeID)
 			}
-			b.fillReservationLocked(olderReservation)
+			b.fillReservationLocked(ctx, olderReservation)
 		} else {
 			if log.V(2) {
-				log.Infof(ctx, "there is pre-existing reservation %+v, can't update with %+v",
-					olderReservation, req)
+				log.Infof(ctx, "[r%d] unable to update due to pre-existing reservation", req.RangeID)
 			}
 			return resp
 		}
@@ -152,8 +150,8 @@ func (b *bookie) Reserve(
 	// Do we have too many current reservations?
 	if len(b.mu.reservationsByRangeID) >= b.maxReservations {
 		if log.V(1) {
-			log.Infof(ctx, "could not book reservation %+v, too many reservations already (current:%d, max:%d)",
-				req, len(b.mu.reservationsByRangeID), b.maxReservations)
+			log.Infof(ctx, "[r%d] unable to book reservation, too many reservations (current:%d, max:%d)",
+				req.RangeID, len(b.mu.reservationsByRangeID), b.maxReservations)
 		}
 		return resp
 	}
@@ -165,8 +163,8 @@ func (b *bookie) Reserve(
 	available := b.metrics.Available.Value()
 	if b.mu.size+(req.RangeSize*2) > available {
 		if log.V(1) {
-			log.Infof(ctx, "could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
-				req, req.RangeSize, b.mu.size, available)
+			log.Infof(ctx, "[r%d] unable to book reservation, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
+				req.RangeID, req.RangeSize, b.mu.size, available)
 		}
 		return resp
 	}
@@ -174,8 +172,8 @@ func (b *bookie) Reserve(
 	// Do we have enough reserved space free for the reservation?
 	if b.mu.size+req.RangeSize > b.maxReservedBytes {
 		if log.V(1) {
-			log.Infof(ctx, "could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
-				req, req.RangeSize, b.mu.size, b.maxReservedBytes)
+			log.Infof(ctx, "[r%d] unable to book reservation, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
+				req.RangeID, req.RangeSize, b.mu.size, b.maxReservedBytes)
 		}
 		return resp
 	}
@@ -184,8 +182,8 @@ func (b *bookie) Reserve(
 	for _, rep := range deadReplicas {
 		if req.RangeID == rep.RangeID {
 			if log.V(1) {
-				log.Infof(ctx, "could not book reservation %+v, the replica has been destroyed",
-					req)
+				log.Infof(ctx, "[r%d] unable to book reservation, the replica has been destroyed",
+					req.RangeID)
 			}
 			return ReservationResponse{Reserved: false}
 		}
@@ -205,7 +203,8 @@ func (b *bookie) Reserve(
 	b.metrics.Reserved.Inc(req.RangeSize)
 
 	if log.V(1) {
-		log.Infof(ctx, "new reservation added: %+v", newReservation)
+		log.Infof(ctx, "[r%s] new reservation, size=%d",
+			newReservation.RangeID, newReservation.RangeSize)
 	}
 
 	resp.Reserved = true
@@ -214,7 +213,7 @@ func (b *bookie) Reserve(
 
 // Fill removes a reservation. Returns true when the reservation has been
 // successfully removed.
-func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
+func (b *bookie) Fill(ctx context.Context, rangeID roachpb.RangeID) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -222,20 +221,20 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 	res, ok := b.mu.reservationsByRangeID[rangeID]
 	if !ok {
 		if log.V(2) {
-			log.Infof(context.TODO(), "there is no reservation for rangeID:%d", rangeID)
+			log.Infof(ctx, "[r%d] reservation not found", rangeID)
 		}
 		return false
 	}
 
-	b.fillReservationLocked(res)
+	b.fillReservationLocked(ctx, res)
 	return true
 }
 
 // fillReservationLocked fills a reservation. It requires that the bookie's
 // lock is held. This should only be called internally.
-func (b *bookie) fillReservationLocked(res *reservation) {
+func (b *bookie) fillReservationLocked(ctx context.Context, res *reservation) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "filling reservation: %+v", res)
+		log.Infof(ctx, "[r%d] filling reservation", res.RangeID)
 	}
 
 	// Remove it from reservationsByRangeID. Note that we don't remove it from the
@@ -255,6 +254,7 @@ func (b *bookie) start(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		var timeoutTimer timeutil.Timer
 		defer timeoutTimer.Stop()
+		ctx := context.TODO()
 		for {
 			var timeout time.Duration
 			b.mu.Lock()
@@ -269,9 +269,9 @@ func (b *bookie) start(stopper *stop.Stopper) {
 					expiredReservation := b.mu.queue.dequeue()
 					// Is it an active reservation?
 					if b.mu.reservationsByRangeID[expiredReservation.RangeID] == expiredReservation {
-						b.fillReservationLocked(expiredReservation)
+						b.fillReservationLocked(ctx, expiredReservation)
 					} else if log.V(2) {
-						log.Infof(context.TODO(), "the reservation for rangeID %d has already been filled.",
+						log.Infof(ctx, "[r%d] expired reservation has already been filled",
 							expiredReservation.RangeID)
 					}
 					// Set the timeout to 0 to force another peek.
