@@ -105,6 +105,7 @@ func TestBookieReserve(t *testing.T) {
 		{rangeID: 0, reserve: false, expSuc: true, expOut: 0, expBytes: 0, expReservations: 5},
 	}
 
+	ctx := context.Background()
 	for i, testCase := range testCases {
 		if testCase.reserve {
 			// Try to reserve the range.
@@ -116,7 +117,7 @@ func TestBookieReserve(t *testing.T) {
 				RangeID:   roachpb.RangeID(testCase.rangeID),
 				RangeSize: int64(testCase.rangeID),
 			}
-			if resp := b.Reserve(context.Background(), req, testCase.deadReplicas); resp.Reserved != testCase.expSuc {
+			if resp := b.Reserve(ctx, req, testCase.deadReplicas); resp.Reserved != testCase.expSuc {
 				if testCase.expSuc {
 					t.Errorf("%d: expected a successful reservation, was rejected", i)
 				} else {
@@ -125,7 +126,7 @@ func TestBookieReserve(t *testing.T) {
 			}
 		} else {
 			// Fill the reservation.
-			if filled := b.Fill(roachpb.RangeID(testCase.rangeID)); filled != testCase.expSuc {
+			if filled := b.Fill(ctx, roachpb.RangeID(testCase.rangeID)); filled != testCase.expSuc {
 				if testCase.expSuc {
 					t.Errorf("%d: expected a successful filled reservation, was rejected", i)
 				} else {
@@ -313,7 +314,7 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 10 /*reservations*/, 10 /*queue*/, 10*bytesPerReservation /*bytes*/)
 
 	// Fill reservation 2.
-	if !b.Fill(2) {
+	if !b.Fill(context.Background(), 2) {
 		t.Fatalf("Could not fill reservation 2")
 	}
 	// After filling a reservation, wait a full cycle so that it can be timed
@@ -325,10 +326,10 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 8 /*reservations*/, 9 /*queue*/, 8*bytesPerReservation /*bytes*/)
 
 	// Fill reservations 4 and 6.
-	if !b.Fill(4) {
+	if !b.Fill(context.Background(), 4) {
 		t.Fatalf("Could not fill reservation 4")
 	}
-	if !b.Fill(6) {
+	if !b.Fill(context.Background(), 6) {
 		t.Fatalf("Could not fill reservation 6")
 	}
 	verifyBookie(t, b, 6 /*reservations*/, 9 /*queue*/, 6*bytesPerReservation /*bytes*/)
@@ -383,7 +384,7 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 8 /*reservations*/, 9 /*queue*/, 8*bytesPerReservation /*bytes*/)
 
 	// Fill 1 a second time.
-	if !b.Fill(1) {
+	if !b.Fill(context.Background(), 1) {
 		t.Fatalf("Could not fill reservation 1 (second pass)")
 	}
 	verifyBookie(t, b, 7 /*reservations*/, 9 /*queue*/, 7*bytesPerReservation /*bytes*/)
