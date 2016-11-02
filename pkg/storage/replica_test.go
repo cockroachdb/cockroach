@@ -718,15 +718,22 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	assert := func(actual, min, max int64) {
+	assert := func(actual, min, max int64) error {
 		if actual < min || actual > max {
-			t.Fatal(errors.Errorf(
-				"metrics counters actual=%d, expected=[%d,%d]", actual, min, max))
+			return errors.Errorf(
+				"metrics counters actual=%d, expected=[%d,%d]",
+				actual, min, max,
+			)
 		}
+		return nil
 	}
 	metrics := tc.rng.store.metrics
-	assert(metrics.LeaseRequestSuccessCount.Count(), 1, 1000)
-	assert(metrics.LeaseRequestErrorCount.Count(), 0, 0)
+	if err := assert(metrics.LeaseRequestSuccessCount.Count(), 1, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := assert(metrics.LeaseRequestErrorCount.Count(), 0, 0); err != nil {
+		t.Fatal(err)
+	}
 
 	now := tc.Clock().Now()
 	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
@@ -741,10 +748,14 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000)
-	assert(metrics.LeaseRequestErrorCount.Count(), 0, 0)
+	if err := assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := assert(metrics.LeaseRequestErrorCount.Count(), 0, 0); err != nil {
+		t.Fatal(err)
+	}
 
-	// Make lease request fail by providing an invalid ReplicaDescriptor.
+	// Make lease request fail by requesting overlapping lease from bogus Replica.
 	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
 		Start:       now,
 		StartStasis: now.Add(10, 0),
@@ -754,12 +765,16 @@ func TestReplicaLeaseCounters(t *testing.T) {
 			NodeID:    99,
 			StoreID:   99,
 		},
-	}); err == nil {
-		t.Fatal("lease request did not fail on invalid ReplicaDescriptor")
+	}); !testutils.IsError(err, "cannot replace lease") {
+		t.Fatal(err)
 	}
 
-	assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000)
-	assert(metrics.LeaseRequestErrorCount.Count(), 1, 1000)
+	if err := assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := assert(metrics.LeaseRequestErrorCount.Count(), 1, 1000); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
@@ -1769,6 +1784,8 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 // TestReplicaCommandQueue verifies that reads/writes must wait for
 // pending commands to complete through Raft before being executed on
 // range.
+//
+// TODO(tschottdorf): hacks around #10084 (see usage of propEvalKV).
 func TestReplicaCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Intercept commands with matching command IDs and block them.
@@ -1843,17 +1860,21 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 		// Next, try read for a non-impacted key--should go through immediately.
 		cmd3Done := make(chan struct{})
-		if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-			args := readOrWriteArgs(key2, true)
+		if !propEvalKV {
+			if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+				args := readOrWriteArgs(key2, true)
 
-			_, pErr := tc.SendWrapped(args)
+				_, pErr := tc.SendWrapped(args)
 
-			if pErr != nil {
-				t.Fatalf("test %d: %s", i, pErr)
+				if pErr != nil {
+					t.Fatalf("test %d: %s", i, pErr)
+				}
+				close(cmd3Done)
+			}); err != nil {
+				t.Fatal(err)
 			}
+		} else {
 			close(cmd3Done)
-		}); err != nil {
-			t.Fatal(err)
 		}
 
 		if test.expWait {
@@ -3857,8 +3878,15 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.LastHeartbeat = &test.startTS
 		expTxn.Writing = true
 
+		// TODO(tschottdorf): with proposer-evaluated KV, we are sharing memory
+		// where the other code takes a copy, resulting in this adjustment
+		// being necessary.
+		if propEvalKV {
+			expTxn.BatchIndex = 0
+		}
+
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
-			t.Fatalf("unexpected push txn in trial %d; expected:\n%+v\ngot:\n%+v", i, expTxn, reply.PusheeTxn)
+			t.Fatalf("unexpected push txn in trial %d: %s", i, pretty.Diff(expTxn, reply.PusheeTxn))
 		}
 	}
 }
@@ -5581,6 +5609,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 	key := []byte("acdfg")
 	tc := testContext{}
 	tc.Start(t)
+	defer tc.Stop()
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.GetRequest{
 		Span: roachpb.Span{Key: key},
@@ -5588,7 +5617,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 		t.Fatal(err)
 	}
-	tc.Stop()
+	tc.stopper.Quiesce()
 	_, pErr := tc.rng.addWriteCmd(context.Background(), ba)
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 		t.Fatalf("expected an ambiguous result error; got %v", pErr)
@@ -5939,7 +5968,12 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd := rng.evaluateProposal(context.Background(), makeIDKey(), repDesc, ba)
+			cmd, pErr := rng.evaluateProposal(
+				context.Background(), propEvalKV, makeIDKey(), repDesc, ba,
+			)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
 			rng.mu.Lock()
 			rng.insertProposalLocked(cmd)
 			// We actually propose the command only if we don't
@@ -6012,7 +6046,10 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd := tc.rng.evaluateProposal(ctx, makeIDKey(), repDesc, ba)
+			cmd, pErr := tc.rng.evaluateProposal(ctx, propEvalKV, makeIDKey(), repDesc, ba)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
 
 			tc.rng.mu.Lock()
 			tc.rng.insertProposalLocked(cmd)
@@ -6120,8 +6157,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
-		cmd := r.evaluateProposal(context.Background(),
+		cmd, pErr := r.evaluateProposal(context.Background(), propEvalKV,
 			storagebase.CmdIDKey(id), repDesc, ba)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 
 		dropProposals.Lock()
 		dropProposals.m[cmd] = struct{}{} // silently drop proposals

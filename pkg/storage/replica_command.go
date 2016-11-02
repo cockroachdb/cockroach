@@ -898,7 +898,6 @@ func (r *Replica) runCommitTrigger(
 				return ProposalData{}, err
 			}
 		}
-
 		return pd, nil
 	}
 	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)
@@ -3025,7 +3024,12 @@ func (r *Replica) changeReplicasTrigger(
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
 	cpy.NextReplicaID = change.NextReplicaID
+	// TODO(tschottdorf): duplication of Desc with the trigger below, should
+	// likely remove it from the trigger.
 	pd.State.Desc = &cpy
+	pd.ChangeReplicas = &storagebase.ChangeReplicas{
+		ChangeReplicasTrigger: *change,
+	}
 
 	return pd
 }
