@@ -278,6 +278,43 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	return nil
 }
 
+// addBogusReplicaToRangeDesc modifies the range descriptor to include a second
+// replica. This is useful for tests that want to pretend they're transferring
+// the range lease away, as the lease can only be obtained by Replicas which are
+// part of the range descriptor.
+// This is a workaround, but it's sufficient for the purposes of several tests.
+func (tc *testContext) addBogusReplicaToRangeDesc(
+	ctx context.Context,
+) (roachpb.ReplicaDescriptor, error) {
+	secondReplica := roachpb.ReplicaDescriptor{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+	oldDesc := *tc.repl.Desc()
+	newDesc := oldDesc
+	newDesc.Replicas = append(newDesc.Replicas, secondReplica)
+	newDesc.NextReplicaID = 3
+
+	// Update the "on-disk" replica state, so that it doesn't diverge from what we
+	// have in memory. At the time of this writing, this is not actually required
+	// by the tests using this functionality, but it seems sane to do.
+	ba := client.Batch{
+		Header: roachpb.Header{Timestamp: tc.Clock().Now()},
+	}
+	descKey := keys.RangeDescriptorKey(oldDesc.StartKey)
+	if err := updateRangeDescriptor(&ba, descKey, &oldDesc, newDesc); err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	if err := tc.store.DB().Run(ctx, &ba); err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+
+	tc.repl.setDescWithoutProcessUpdate(&newDesc)
+	tc.repl.assertState(tc.engine)
+	return secondReplica, nil
+}
+
 func newTransaction(
 	name string,
 	baseKey roachpb.Key,
@@ -410,18 +447,10 @@ func TestReplicaReadConsistency(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-
-	// Modify range descriptor to include a second replica; range lease can
-	// only be obtained by Replicas which are part of the range descriptor. This
-	// workaround is sufficient for the purpose of this test.
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	if err != nil {
+		t.Fatal(err)
 	}
-	rngDesc := *tc.repl.Desc()
-	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.repl.setDescWithoutProcessUpdate(&rngDesc)
 
 	gArgs := getArgs(roachpb.Key("a"))
 
@@ -457,11 +486,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 		Start:       start,
 		StartStasis: start.Add(10, 0),
 		Expiration:  start.Add(10, 0),
-		Replica: roachpb.ReplicaDescriptor{ // a different node
-			ReplicaID: 2,
-			NodeID:    2,
-			StoreID:   2,
-		},
+		Replica:     secondReplica,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -489,18 +514,10 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-
-	// Modify range descriptor to include a second replica; range lease can
-	// only be obtained by Replicas which are part of the range descriptor. This
-	// workaround is sufficient for the purpose of this test.
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	if err != nil {
+		t.Fatal(err)
 	}
-	rngDesc := *tc.repl.Desc()
-	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.repl.setDescWithoutProcessUpdate(&rngDesc)
 
 	pArgs := putArgs(roachpb.Key("a"), []byte("asd"))
 
@@ -511,11 +528,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 		Start:       start,
 		StartStasis: start.Add(10, 0),
 		Expiration:  start.Add(10, 0),
-		Replica: roachpb.ReplicaDescriptor{ // a different node
-			ReplicaID: 2,
-			NodeID:    2,
-			StoreID:   2,
-		},
+		Replica:     secondReplica,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -568,18 +581,10 @@ func TestReplicaLease(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-
-	// Modify range descriptor to include a second replica; leader lease can
-	// only be obtained by Replicas which are part of the range descriptor. This
-	// workaround is sufficient for the purpose of this test.
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	if err != nil {
+		t.Fatal(err)
 	}
-	rngDesc := *tc.repl.Desc()
-	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.repl.setDescWithoutProcessUpdate(&rngDesc)
 
 	// Test that leases with invalid times are rejected.
 	// Start leases at a point that avoids overlapping with the existing lease.
@@ -653,18 +658,10 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-
-	// Modify range descriptor to include a second replica; range lease can
-	// only be obtained by Replicas which are part of the range descriptor. This
-	// workaround is sufficient for the purpose of this test.
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	if err != nil {
+		t.Fatal(err)
 	}
-	rngDesc := *tc.repl.Desc()
-	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.repl.setDescWithoutProcessUpdate(&rngDesc)
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	now := tc.Clock().Now()
@@ -672,11 +669,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 		Start:       now,
 		StartStasis: now.Add(10, 0),
 		Expiration:  now.Add(10, 0),
-		Replica: roachpb.ReplicaDescriptor{
-			ReplicaID: 2,
-			NodeID:    2,
-			StoreID:   2,
-		},
+		Replica:     secondReplica,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -784,18 +777,10 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-
-	// Modify range descriptor to include a second replica; range lease can
-	// only be obtained by Replicas which are part of the range descriptor. This
-	// workaround is sufficient for the purpose of this test.
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	if err != nil {
+		t.Fatal(err)
 	}
-	rngDesc := *tc.repl.Desc()
-	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.repl.setDescWithoutProcessUpdate(&rngDesc)
 
 	// Write some arbitrary data in the system config span.
 	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
@@ -823,11 +808,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 		Start:       now,
 		StartStasis: now.Add(10, 0),
 		Expiration:  now.Add(10, 0),
-		Replica: roachpb.ReplicaDescriptor{
-			ReplicaID: 2,
-			NodeID:    2,
-			StoreID:   2,
-		},
+		Replica:     secondReplica,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -880,18 +861,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer tc.Stop()
 	// Disable raft log truncation which confuses this test.
 	tc.store.SetRaftLogQueueActive(false)
-
-	// Modify range descriptor to include a second replica; range lease can
-	// only be obtained by Replicas which are part of the range descriptor. This
-	// workaround is sufficient for the purpose of this test.
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	if err != nil {
+		t.Fatal(err)
 	}
-	rngDesc := *tc.repl.Desc()
-	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.repl.setDescWithoutProcessUpdate(&rngDesc)
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	now := tc.Clock().Now()
@@ -914,11 +887,11 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			start: now.Add(16, 0), expiration: now.Add(25, 0)},
 		// Another Store attempts to get the lease, but overlaps. If the
 		// previous lease expiration had worked, this would have too.
-		{storeID: tc.store.StoreID() + 1,
+		{storeID: secondReplica.StoreID,
 			start: now.Add(29, 0), expiration: now.Add(50, 0),
 			expErr: "overlaps previous"},
 		// The other store tries again, this time without the overlap.
-		{storeID: tc.store.StoreID() + 1,
+		{storeID: secondReplica.StoreID,
 			start: now.Add(31, 0), expiration: now.Add(50, 0),
 			// The cache now moves to this other store, and we can't query that.
 			expLowWater: 0},
