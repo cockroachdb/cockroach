@@ -947,12 +947,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
 
 	// Add the bookie to the store.
-	s.bookie = newBookie(
-		s.cfg.Clock,
-		s.stopper,
-		s.metrics,
-		envutil.EnvOrDefaultDuration("COCKROACH_RESERVATION_TIMEOUT", ttlStoreGossip),
-	)
+	s.bookie = newBookie(s.metrics)
 
 	// Read the store ident if not already initialized. "NodeID != 0" implies
 	// the store has already been initialized.
@@ -2491,7 +2486,7 @@ func (s *Store) HandleSnapshot(
 
 	if header.CanDecline {
 		// Check the bookie to see if we can apply the snapshot.
-		resp := s.Reserve(ctx, ReservationRequest{
+		resp := s.reserve(ctx, reservationRequest{
 			StoreRequestHeader: StoreRequestHeader{
 				NodeID:  s.nodeDesc.NodeID,
 				StoreID: s.StoreID(),
@@ -3774,8 +3769,8 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 	return
 }
 
-// Reserve requests a reservation from the store's bookie.
-func (s *Store) Reserve(ctx context.Context, req ReservationRequest) ReservationResponse {
+// reserve requests a reservation from the store's bookie.
+func (s *Store) reserve(ctx context.Context, req reservationRequest) reservationResponse {
 	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
 }
 
