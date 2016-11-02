@@ -58,11 +58,19 @@ const (
 	raftIdleTimeout = time.Minute
 )
 
-// RaftMessageResponseStream is a subset of the
+// RaftMessageResponseStream is the subset of the
 // MultiRaft_RaftMessageServer interface that is needed for sending responses.
 type RaftMessageResponseStream interface {
 	Context() context.Context
 	Send(*RaftMessageResponse) error
+}
+
+// SnapshotResponseStream is the subset of the
+// MultiRaft_RaftSnapshotServer interface that is needed for sending responses.
+type SnapshotResponseStream interface {
+	Context() context.Context
+	Send(*SnapshotResponse) error
+	Recv() (*SnapshotRequest, error)
 }
 
 // RaftMessageHandler is the interface that must be implemented by
@@ -82,7 +90,7 @@ type RaftMessageHandler interface {
 
 	// HandleSnapshot is called for each new incoming snapshot stream, after
 	// parsing the initial SnapshotRequest_Header on the stream.
-	HandleSnapshot(header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer) error
+	HandleSnapshot(header *SnapshotRequest_Header, respStream SnapshotResponseStream) error
 }
 
 // NodeAddressResolver is the function used by RaftTransport to map node IDs to
