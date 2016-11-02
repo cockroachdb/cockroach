@@ -6258,7 +6258,7 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	ctx := tc.store.AnnotateCtx(context.TODO())
 	key := keys.LocalMax
 
-	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 	origTxn := txn.Clone()
 
 	minNewTS := func() hlc.Timestamp {
