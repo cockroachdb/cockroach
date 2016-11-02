@@ -2371,7 +2371,7 @@ func (r *Replica) AdminSplit(
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, desc, leftDesc); err != nil {
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
@@ -2409,7 +2409,7 @@ func (r *Replica) AdminSplit(
 
 		// Create range descriptor for right hand side of the split.
 		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
+		if err := updateRangeDescriptor(b, rightDescKey, nil, *rightDesc); err != nil {
 			return err
 		}
 
@@ -2843,7 +2843,7 @@ func (r *Replica) AdminMerge(
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, updatedLeftDesc); err != nil {
 				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
@@ -3244,7 +3244,7 @@ func (r *Replica) ChangeReplicas(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, desc, updatedDesc); err != nil {
 				return err
 			}
 
@@ -3332,6 +3332,8 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // range descriptor. This is a last line of defense; other mechanisms should
 // prevent rogue replicas from getting this far (see #768).
 //
+// oldDesc can be nil, meaning that the key is expected to not exist.
+//
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
@@ -3339,8 +3341,10 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // and load it automatically instead of reconstructing individual
 // changes.
 func updateRangeDescriptor(
-	b *client.Batch, descKey roachpb.Key, oldDesc,
-	newDesc *roachpb.RangeDescriptor,
+	b *client.Batch,
+	descKey roachpb.Key,
+	oldDesc *roachpb.RangeDescriptor,
+	newDesc roachpb.RangeDescriptor,
 ) error {
 	if err := newDesc.Validate(); err != nil {
 		return err
@@ -3356,7 +3360,7 @@ func updateRangeDescriptor(
 		}
 		oldValue = oldBytes
 	}
-	newValue, err := protoutil.Marshal(newDesc)
+	newValue, err := protoutil.Marshal(&newDesc)
 	if err != nil {
 		return err
 	}
