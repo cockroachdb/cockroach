@@ -36,8 +36,9 @@ const errOffsetGreaterThanMaxOffset = "fewer than half the known nodes are withi
 // not update the offset for an addr.
 func TestUpdateOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	monitor := newRemoteClockMonitor(
-		context.TODO(), hlc.NewClock(hlc.NewManualClock(123).UnixNano), time.Hour)
+
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
+	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
 
 	const key = "addr"
 
@@ -100,8 +101,7 @@ func TestUpdateOffset(t *testing.T) {
 func TestVerifyClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(50 * time.Nanosecond)
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 50*time.Nanosecond)
 	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
 
 	for idx, tc := range []struct {
@@ -166,8 +166,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(20 * time.Nanosecond)
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 20*time.Nanosecond)
 	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": {

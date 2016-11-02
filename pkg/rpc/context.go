@@ -114,16 +114,15 @@ type Context struct {
 func NewContext(
 	ambient log.AmbientContext, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
 ) *Context {
+	if hlcClock == nil {
+		panic("nil clock is forbidden")
+	}
 	ctx := &Context{
-		Config: baseCtx,
-	}
-	if hlcClock != nil {
-		ctx.localClock = hlcClock
-	} else {
-		ctx.localClock = hlc.NewClock(hlc.UnixNano)
-	}
-	ctx.breakerClock = breakerClock{
-		clock: ctx.localClock,
+		Config:     baseCtx,
+		localClock: hlcClock,
+		breakerClock: breakerClock{
+			clock: hlcClock,
+		},
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))

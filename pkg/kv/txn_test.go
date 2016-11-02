@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
 )
@@ -388,12 +389,17 @@ func disableOwnNodeCertain(t *testing.T, tc *localtestcluster.LocalTestCluster) 
 // that node's clock for its new timestamp.
 func TestUncertaintyRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
-	disableOwnNodeCertain(t, s)
-	defer s.Stop()
+
 	const maxOffset = 250 * time.Millisecond
-	s.Clock.SetMaxOffset(maxOffset)
-	s.Manual.Set(maxOffset.Nanoseconds() + 1)
+	dbCtx := client.DefaultDBContext()
+	s := &localtestcluster.LocalTestCluster{
+		Clock:     hlc.NewClock(hlc.UnixNano, maxOffset),
+		DBContext: &dbCtx,
+	}
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	defer s.Stop()
+	disableOwnNodeCertain(t, s)
+	s.Manual.Increment(s.Clock.MaxOffset().Nanoseconds() + 1)
 
 	var key = roachpb.Key("a")
 
@@ -438,13 +444,18 @@ func TestUncertaintyRestart(t *testing.T) {
 // timestamp) is free from uncertainty. See roachpb.Transaction for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
-	disableOwnNodeCertain(t, s)
+
+	dbCtx := client.DefaultDBContext()
+	s := &localtestcluster.LocalTestCluster{
+		// Large offset so that any value in the future is an uncertain read. Also
+		// makes sure that the values we write in the future below don't actually
+		// wind up in the past.
+		Clock:     hlc.NewClock(hlc.UnixNano, 50*time.Second),
+		DBContext: &dbCtx,
+	}
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	defer s.Stop()
-	// Large offset so that any value in the future is an uncertain read.
-	// Also makes sure that the values we write in the future below don't
-	// actually wind up in the past.
-	s.Clock.SetMaxOffset(50 * time.Second)
+	disableOwnNodeCertain(t, s)
 
 	offsetNS := int64(100)
 	keySlow := roachpb.Key("slow")
@@ -480,7 +491,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		txn.Proto.ResetObservedTimestamps()
 
 		// The server's clock suddenly jumps ahead of keyFast's timestamp.
-		s.Manual.Set(2*offsetNS + 1)
+		s.Manual.Increment(2*offsetNS + 1)
 
 		// Now read slowKey first. It should read at 0, catch an uncertainty error,
 		// and get keySlow's timestamp in that error, but upgrade it to the larger
@@ -590,7 +601,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 	// Delay for longer than the cache window.
-	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
+	s.Manual.Increment((storage.MinTSCacheWindow + time.Second).Nanoseconds())
 	err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -674,7 +685,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		s.Manual.Set(time.Second.Nanoseconds())
+		s.Manual.Increment(time.Second.Nanoseconds())
 		// Split range by keyB.
 		if err := s.DB.AdminSplit(context.TODO(), splitKey); err != nil {
 			t.Fatal(err)

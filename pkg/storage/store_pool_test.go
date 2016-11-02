@@ -59,8 +59,8 @@ func createTestStorePool(
 	timeUntilStoreDead time.Duration,
 ) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool) {
 	stopper := stop.NewStopper()
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
+	mc := hlc.NewManualClock(123)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())

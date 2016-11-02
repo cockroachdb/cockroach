@@ -57,7 +57,7 @@ func TestHeartbeatCB(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	clock := hlc.NewClock(time.Unix(0, 20).UnixNano)
+	clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
 	serverCtx := newNodeTestContext(clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
@@ -96,7 +96,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	defer stopper.Stop()
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newNodeTestContext(clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
@@ -202,7 +202,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	defer stopper.Stop()
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newNodeTestContext(clock, stopper)
 	// newTestServer with a custom listener.
@@ -325,7 +325,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	defer stopper.Stop()
 
 	serverTime := time.Unix(0, 20)
-	serverClock := hlc.NewClock(serverTime.UnixNano)
+	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
 	serverCtx := newNodeTestContext(serverClock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
@@ -337,8 +337,7 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	// Create a client clock that is behind the server clock.
 	clientAdvancing := AdvancingClock{time: time.Unix(0, 10)}
-	clientClock := hlc.NewClock(clientAdvancing.UnixNano)
-	clientClock.SetMaxOffset(time.Millisecond)
+	clientClock := hlc.NewClock(clientAdvancing.UnixNano, time.Nanosecond)
 	clientCtx := newNodeTestContext(clientClock, stopper)
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.getAdvancementInterval()
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
@@ -381,7 +380,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	defer stopper.Stop()
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newNodeTestContext(clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
@@ -467,11 +466,6 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	}
 
 	start := time.Date(2012, 12, 07, 0, 0, 0, 0, time.UTC)
-	offsetClock := func(offset time.Duration) *hlc.Clock {
-		return hlc.NewClock(func() int64 {
-			return start.Add(offset).UnixNano()
-		})
-	}
 
 	nodeCtxs := []nodeContext{
 		{offset: 0},
@@ -482,10 +476,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	}
 
 	for i := range nodeCtxs {
-		clock := offsetClock(nodeCtxs[i].offset)
+		clock := hlc.NewClock(start.Add(nodeCtxs[i].offset).UnixNano, maxOffset)
 		nodeCtxs[i].errChan = make(chan error, 1)
-
-		clock.SetMaxOffset(maxOffset)
 		nodeCtxs[i].ctx = newNodeTestContext(clock, stopper)
 		nodeCtxs[i].ctx.HeartbeatInterval = maxOffset
 

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -117,12 +116,12 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if !txn.Proto.Writing {
 		t.Fatal("txn is not marked as writing")
 	}
-	ts := atomic.LoadInt64(&txnMeta.lastUpdateNanos)
+	ts := txnMeta.getLastUpdate()
 
 	// Advance time and send another put request. Lock the coordinator
 	// to prevent a data race.
 	sender.Lock()
-	s.Manual.Set(1)
+	s.Manual.Increment(1)
 	sender.Unlock()
 	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
@@ -131,8 +130,10 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(sender.txns))
 	}
 	txnMeta = sender.txns[txnID]
-	if lu := atomic.LoadInt64(&txnMeta.lastUpdateNanos); ts >= lu || lu != s.Manual.UnixNano() {
-		t.Errorf("expected last update time to advance; got %d", lu)
+	if lu := txnMeta.getLastUpdate(); ts >= lu {
+		t.Errorf("expected last update time to advance past %d; got %d", ts, lu)
+	} else if un := s.Manual.UnixNano(); lu != un {
+		t.Errorf("expected last update time to equal %d; got %d", un, lu)
 	}
 }
 
@@ -179,7 +180,7 @@ func TestTxnInitialTimestamp(t *testing.T) {
 	txn := client.NewTxn(context.Background(), *s.DB)
 
 	// Request a specific timestamp.
-	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
+	refTimestamp := s.Clock.Now().Add(42, 69)
 	txn.Proto.OrigTimestamp = refTimestamp
 
 	// Put request will create a new transaction.
@@ -625,7 +626,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	// Now, advance clock past the default client timeout.
 	// Locking the TxnCoordSender to prevent a data race.
 	sender.Lock()
-	s.Manual.Set(defaultClientTimeout.Nanoseconds() + 1)
+	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
 	sender.Unlock()
 
 	txnID := *txn.Proto.ID
@@ -664,7 +665,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	// Now, advance clock past the default client timeout.
 	// Locking the TxnCoordSender to prevent a data race.
 	sender.Lock()
-	s.Manual.Set(defaultClientTimeout.Nanoseconds() + 1)
+	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
 	sender.Unlock()
 
 	txnID := *txn.Proto.ID
@@ -791,8 +792,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		stopper := stop.NewStopper()
 
 		manual := hlc.NewManualClock(origTS.WallTime)
-		clock := hlc.NewClock(manual.UnixNano)
-		clock.SetMaxOffset(20)
+		clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
 		senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			var reply *roachpb.BatchResponse
@@ -936,9 +936,8 @@ func TestTxnMultipleCoord(t *testing.T) {
 func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(20)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
 	senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
@@ -976,9 +975,8 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(20)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
 	testCases := []struct {
 		roachpb.Error
@@ -1060,8 +1058,8 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
 	var expectedIntents []roachpb.Span
 

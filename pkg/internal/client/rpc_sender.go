@@ -18,9 +18,9 @@ package client
 
 import (
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
 type sender struct {
@@ -33,12 +33,8 @@ type sender struct {
 //
 // This must not be used by server.Server or any of its components, only by
 // clients talking to a Cockroach cluster through the external interface.
-func NewSender(ctx *rpc.Context, target string) (Sender, error) {
-	conn, err := ctx.GRPCDial(target)
-	if err != nil {
-		return nil, err
-	}
-	return sender{roachpb.NewExternalClient(conn)}, nil
+func NewSender(conn *grpc.ClientConn) Sender {
+	return sender{roachpb.NewExternalClient(conn)}
 }
 
 // Send implements the Sender interface.

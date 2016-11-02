@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -120,32 +119,32 @@ func (ss *notifyingSender) Send(
 	return br, pErr
 }
 
-func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
-	return createTestClientForUser(t, stopper, addr, security.NodeUser, client.DefaultDBContext())
+func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
+	return createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
 }
 
 func createTestClientForUser(
-	t *testing.T, stopper *stop.Stopper, addr, user string, dbCtx client.DBContext,
+	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
 ) *client.DB {
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
 		User:       user,
 		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
 		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
-	}, nil, stopper)
-	sender, err := client.NewSender(rpcContext, addr)
+	}, s.Clock(), s.Stopper())
+	conn, err := rpcContext.GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDBWithContext(sender, dbCtx)
+	return client.NewDBWithContext(client.NewSender(conn), dbCtx)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
 func createTestNotifyClient(
-	t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority,
+	t *testing.T, s serverutils.TestServerInterface, priority roachpb.UserPriority,
 ) (*client.DB, *notifyingSender) {
-	db := createTestClient(t, stopper, addr)
+	db := createTestClient(t, s)
 	sender := &notifyingSender{wrapped: db.GetSender()}
 	dbCtx := client.DefaultDBContext()
 	dbCtx.UserPriority = priority
@@ -217,7 +216,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 			txnPri = 2
 		}
 
-		db, sender := createTestNotifyClient(t, s.Stopper(), s.ServingAddr(), -clientPri)
+		db, sender := createTestNotifyClient(t, s, -clientPri)
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
@@ -315,7 +314,7 @@ func TestClientRunTransaction(t *testing.T) {
 	defer s.Stopper().Stop()
 	dbCtx := client.DefaultDBContext()
 	dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
-	db := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser, dbCtx)
+	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -375,7 +374,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	zoneConfig := config.ZoneConfig{
 		NumReplicas:   2,
@@ -404,7 +403,7 @@ func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	value := []byte("value")
 	if err := db.Put(context.TODO(), testUser+"/key", value); err != nil {
@@ -426,7 +425,7 @@ func TestClientPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	value := []byte("value")
 	if err := db.PutInline(context.TODO(), testUser+"/key", value); err != nil {
@@ -453,7 +452,7 @@ func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	if err := db.Put(context.TODO(), testUser+"/a", []byte{}); err != nil {
 		t.Error(err)
@@ -482,7 +481,7 @@ func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 	ctx := context.TODO()
 
 	keys := []roachpb.Key{}
@@ -738,7 +737,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
@@ -758,10 +757,8 @@ func TestClientPermissions(t *testing.T) {
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(),
-		security.NodeUser, client.DefaultDBContext())
-	rootClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(),
-		security.RootUser, client.DefaultDBContext())
+	nodeClient := createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
+	rootClient := createTestClientForUser(t, s, security.RootUser, client.DefaultDBContext())
 
 	testCases := []struct {
 		path    string
@@ -859,7 +856,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	if err := db.Put(context.TODO(), "k", "v"); err != nil {
 		t.Fatal(err)
@@ -882,7 +879,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	db := createTestClient(t, s)
 
 	keys := []roachpb.Key{}
 	b := &client.Batch{}

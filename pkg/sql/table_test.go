@@ -255,8 +255,8 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := planner{session: &Session{context: context.Background()}}
-	mc := hlc.NewManualClock(0)
-	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano)}}
+	mc := hlc.NewManualClock(123)
+	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano, time.Nanosecond)}}
 	p.leases = make([]*LeaseState, 0)
 	txn := client.Txn{Context: context.Background()}
 	p.setTxn(&txn)
