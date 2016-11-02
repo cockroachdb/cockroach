@@ -334,7 +334,8 @@ func TestGCQueueProcess(t *testing.T) {
 func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc, manual := TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
 	now := manual.UnixNano()

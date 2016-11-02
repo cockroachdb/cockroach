@@ -134,8 +134,8 @@ func (tc *testContext) Clock() *hlc.Clock {
 // Start initializes the test context with a single range covering the
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB) {
-	cfg, manualClock := TestStoreConfig()
-	tc.manualClock = manualClock
+	tc.manualClock = hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	tc.StartWithStoreConfig(t, cfg)
 }
 
@@ -1760,7 +1760,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
@@ -1883,7 +1883,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
@@ -1956,7 +1956,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
@@ -3043,7 +3043,7 @@ func TestRaftReplayProtection(t *testing.T) {
 func TestRaftReplayProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
-	cfg, _ := TestStoreConfig()
+	cfg := TestStoreConfig(nil)
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, cfg)
 	defer tc.Stop()
@@ -3245,7 +3245,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
@@ -3350,7 +3350,7 @@ func setupResolutionTest(
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.TestingCommandFilter =
@@ -3455,7 +3455,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
@@ -3530,7 +3530,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var seen int32
 	key := roachpb.Key("zresolveme")
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
@@ -4664,7 +4664,7 @@ func TestAppliedIndex(t *testing.T) {
 func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
@@ -5743,7 +5743,7 @@ func TestDiffRange(t *testing.T) {
 func TestSyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
@@ -5769,7 +5769,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := testContext{}
-	cfg, _ := TestStoreConfig()
+	cfg := TestStoreConfig(nil)
 	// Disable ticks to avoid automatic reproposals after a timeout, which
 	// would pass this test.
 	cfg.RaftTickInterval = math.MaxInt32
@@ -6046,7 +6046,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tc testContext
-	cfg, _ := TestStoreConfig()
+	cfg := TestStoreConfig(nil)
 	// Disable ticks which would interfere with the manual ticking in this test.
 	cfg.RaftTickInterval = math.MaxInt32
 	tc.StartWithStoreConfig(t, cfg)
@@ -6240,7 +6240,7 @@ func TestCommandTimeThreshold(t *testing.T) {
 func TestReserveAndApplySnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()

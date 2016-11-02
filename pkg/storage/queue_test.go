@@ -281,7 +281,7 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
@@ -530,7 +530,7 @@ func (*testError) purgatoryErrorMarker() {
 // the purgatory channel causes the replicas to be reprocessed.
 func TestBaseQueuePurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc, _ := TestStoreConfig()
+	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()

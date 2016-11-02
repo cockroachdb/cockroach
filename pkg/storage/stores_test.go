@@ -131,7 +131,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	cfg, _ := TestStoreConfig()
+	cfg := TestStoreConfig(nil)
 	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
 	// Create two new stores with ranges we care about.
@@ -229,7 +229,8 @@ var storeIDAlloc roachpb.StoreID
 // createStores creates a slice of count stores.
 func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	cfg, manualClock := TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
 	// Create two stores with ranges we care about.
@@ -244,7 +245,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 		stores = append(stores, s)
 	}
 
-	return manualClock, stores, ls, stopper
+	return manual, stores, ls, stopper
 }
 
 // TestStoresGossipStorage verifies reading and writing of bootstrap info.

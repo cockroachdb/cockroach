@@ -65,7 +65,7 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg, _ := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 
 	rangeID := roachpb.RangeID(1)
@@ -162,7 +162,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg, _ := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer eng.Close()
 
@@ -299,7 +299,7 @@ func TestReplicateRange(t *testing.T) {
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	// Disable periodic gossip activities. The periodic gossiping of the first
 	// range can cause spurious lease transfers which cause this test to fail.
 	sc.TestingKnobs.DisablePeriodicGossips = true
@@ -398,7 +398,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
@@ -696,7 +696,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 	}
 	for _, c := range testCases {
 		func() {
-			sc, _ := storage.TestStoreConfig()
+			sc := storage.TestStoreConfig(nil)
 			sc.TestingKnobs = c
 			// Disable periodic gossip tasks which can move the range 1 lease
 			// unexpectedly.
@@ -807,7 +807,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	const numReplicas = 3
 	const extraStores = 3
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	var corrupt struct {
 		syncutil.Mutex
 		store *storage.Store
@@ -1196,7 +1196,7 @@ func TestReplicateRestartAfterTruncation(t *testing.T) {
 }
 
 func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReAdd bool) {
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	// Don't timeout raft leaders or range leases (see the relation between
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
@@ -1282,7 +1282,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 }
 
 func testReplicaAddRemove(t *testing.T, addFirst bool) {
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	// We're gonna want to validate the state of the store before and after the
 	// replica GC queue does its work, so we disable the replica gc queue here
 	// and run it manually when we're ready.
@@ -1887,7 +1887,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 	storage.RebalanceThreshold = 0
 
 	// Start multiTestContext with replica rebalancing enabled.
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.AllocatorOptions = storage.AllocatorOptions{
 		AllowRebalance: true,
 		Deterministic:  true,
@@ -2213,7 +2213,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 4)
@@ -2271,7 +2271,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 func TestReplicaLazyLoad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.RaftTickInterval = time.Millisecond // safe because there is only a single node
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
@@ -2380,7 +2380,7 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 func TestRemoveRangeWithoutGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 2)
@@ -2472,7 +2472,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 func TestCheckInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 	// Store 0 will report a diff with inconsistent key "e".
 	diffKey := []byte("e")
@@ -2556,7 +2556,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numStores = 3
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	// Suppress timeout-based elections (which also includes a previous
 	// leader stepping down due to a quorum check). Running tests on a
 	// heavily loaded CPU is enough to reach the raft election timeout
@@ -2657,7 +2657,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 func TestRaftBlockedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
@@ -2712,7 +2712,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 func TestRangeQuiescence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc, _ := storage.TestStoreConfig()
+	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := &multiTestContext{storeConfig: &sc}

@@ -63,7 +63,7 @@ import (
 func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
 ) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
-	cfg := storage.StoreConfig{}
+	cfg := storage.TestStoreConfig(nil)
 
 	stopper := stop.NewStopper()
 	nodeRPCContext := rpc.NewContext(log.AmbientContext{}, nodeTestBaseContext, cfg.Clock, stopper)

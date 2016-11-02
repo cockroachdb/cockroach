@@ -83,7 +83,8 @@ func rg1(s *storage.Store) client.Sender {
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
-	cfg, manual := storage.TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	store, stopper := createTestStoreWithConfig(t, cfg)
 	return store, stopper, manual
 }
@@ -589,7 +590,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 		cfg = *m.storeConfig
 		cfg.Clock = m.clocks[i]
 	} else {
-		cfg = storage.TestStoreConfigWithClock(m.clocks[i])
+		cfg = storage.TestStoreConfig(m.clocks[i])
 	}
 	cfg.Transport = m.transports[i]
 	cfg.DB = m.dbs[i]

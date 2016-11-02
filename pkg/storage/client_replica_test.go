@@ -187,7 +187,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	cfg, manualClock := storage.TestStoreConfig()
+	manual := hlc.NewManualClock(123)
+	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
@@ -279,7 +280,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Advance the clock and send a get operation with higher
 	// priority to trigger the txn restart.
-	manualClock.Increment(100)
+	manual.Increment(100)
 
 	priority := roachpb.UserPriority(-math.MaxInt32)
 	requestHeader := roachpb.Span{
@@ -300,7 +301,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// we use TestingCommandFilter so that a get operation is not
 	// processed after the write intent is resolved (to prevent the
 	// timestamp cache from being updated).
-	manualClock.Increment(100)
+	manual.Increment(100)
 
 	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Timestamp:    cfg.Clock.Now(),
@@ -317,7 +318,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeCfg, _ := storage.TestStoreConfig()
+	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	store, stopper := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
@@ -452,7 +453,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg, _ := storage.TestStoreConfig()
+	cfg := storage.TestStoreConfig(nil)
 	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
 	cfg.TestingKnobs.TestingCommandFilter =
