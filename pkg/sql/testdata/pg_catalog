@@ -50,6 +50,7 @@ pg_attribute
 pg_class
 pg_constraint
 pg_database
+pg_description
 pg_indexes
 pg_namespace
 pg_proc
@@ -704,3 +705,10 @@ WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
 least    2283         1         2283        2283         v
+
+## pg_catalog.pg_description
+
+query IIIT colnames
+SELECT * FROM pg_catalog.pg_description
+----
+objoid  classoid  objsubid  description
