@@ -201,11 +201,17 @@ CREATE INDEX foo on t.kv (v);
 
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	const chunkSize = 200
 	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	numRows := 2*sql.IndexBackfillChunkSize + 1
+	numRows := 2*chunkSize + 1
 	createKVTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -272,11 +278,17 @@ CREATE INDEX intlv_idx ON intlv (k, n) INTERLEAVE IN PARENT kv (k);
 
 func TestDropIndexInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	const chunkSize = 200
 	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	numRows := 2*sql.IndexBackfillChunkSize + 1
+	numRows := 2*chunkSize + 1
 	createKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
