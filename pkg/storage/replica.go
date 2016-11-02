@@ -93,6 +93,8 @@ const (
 // simpler with this being turned off.
 var txnAutoGC = true
 
+var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
+
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary
@@ -2235,7 +2237,10 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		// disruption when they do occur.
 		//
 		// For more details, see #9372.
-		r.mu.internalRaftGroup.TickQuiesced()
+		// TODO(bdarnell): remove this once we have fully switched to PreVote
+		if tickQuiesced {
+			r.mu.internalRaftGroup.TickQuiesced()
+		}
 		return false, nil
 	}
 	if r.maybeQuiesceLocked() {
