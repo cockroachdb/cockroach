@@ -79,7 +79,7 @@ func (s channelServer) HandleRaftResponse(ctx context.Context, resp *storage.Raf
 }
 
 func (s channelServer) HandleSnapshot(
-	header *storage.SnapshotRequest_Header, stream storage.MultiRaft_RaftSnapshotServer,
+	header *storage.SnapshotRequest_Header, stream storage.SnapshotResponseStream,
 ) error {
 	panic("unexpected HandleSnapshot")
 }
