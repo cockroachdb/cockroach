@@ -662,6 +662,62 @@ func TestRangeTransferLease(t *testing.T) {
 	wg.Wait()
 }
 
+// Test that leases held before a restart are not used after the restart.
+// See replica.mu.minLeaseProposedTS for the reasons why this isn't allowed.
+func TestLeaseNotUsedAfterRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	var leaseAcquisitionTrap atomic.Value
+	// Disable the split queue so that no ranges are split. This makes it easy
+	// below to trap any lease request and infer that it refers to the range we're
+	// interested in.
+	sc.TestingKnobs.DisableSplitQueue = true
+	sc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp) {
+		val := leaseAcquisitionTrap.Load()
+		if val == nil {
+			return
+		}
+		trapCallback := val.(func(ts hlc.Timestamp))
+		if trapCallback != nil {
+			trapCallback(ts)
+		}
+	}
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+
+	// Send a read, to acquire a lease.
+	getArgs := getArgs([]byte("a"))
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &getArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restart the mtc. Before we do that, we're installing a callback used to
+	// assert that a new lease has been requested. The callback is installed
+	// before the restart, as the lease might be requested at any time and for
+	// many reasons by background processes, even before we send the read below.
+	leaseAcquisitionCh := make(chan error)
+	var once sync.Once
+	leaseAcquisitionTrap.Store(func(_ hlc.Timestamp) {
+		once.Do(func() {
+			close(leaseAcquisitionCh)
+		})
+	})
+	mtc.restart()
+
+	// Send another read and check that the pre-existing lease has not been used.
+	// Concretely, we check that a new lease is requested.
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &getArgs); err != nil {
+		t.Fatal(err)
+	}
+	// Check that the Send above triggered a lease acquisition.
+	select {
+	case <-leaseAcquisitionCh:
+	case <-time.After(time.Second):
+		t.Fatalf("read did not acquire a new lease")
+	}
+}
+
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads.
 // The test relies on two things:
