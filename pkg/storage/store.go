@@ -948,8 +948,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Add the bookie to the store.
 	s.bookie = newBookie(
-		s.cfg.Clock,
-		s.stopper,
 		s.metrics,
 		envutil.EnvOrDefaultDuration("COCKROACH_RESERVATION_TIMEOUT", ttlStoreGossip),
 	)
