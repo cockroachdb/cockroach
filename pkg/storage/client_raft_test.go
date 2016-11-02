@@ -727,6 +727,84 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	mtc.waitForValues(key, []int64{incAB, incAB, incAB, incAB, incAB})
 }
 
+// Test a scenario where a replica is removed from a down node, the associated
+// range is split, the node restarts and we try to replicate the RHS of the
+// split range back to the restarted node.
+func TestReplicateAfterRemoveAndSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	// Disable the replica GC queue so that it doesn't accidentally pick up the
+	// removed replica and GC it. We'll explicitly enable it later in the test.
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	rep1, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.replicateRange(1, 1, 2)
+
+	// Kill store 2.
+	mtc.stopStore(2)
+
+	// Remove store 2 from the range to simulate removal of a dead node.
+	mtc.unreplicateRange(1, 2)
+
+	// Split the range.
+	splitKey := roachpb.Key("m")
+	splitArgs := adminSplitArgs(splitKey, splitKey)
+	if _, err := rep1.AdminSplit(context.Background(), splitArgs, rep1.Desc()); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.expireLeases()
+
+	// Restart store 2.
+	mtc.restartStore(2)
+
+	replicateRHS := func() error {
+		// Try to up-replicate the RHS of the split to store 2. We can't use
+		// replicateRange because this should fail on the first attempt and then
+		// eventually succeed.
+		startKey := roachpb.RKey(splitKey)
+
+		var desc roachpb.RangeDescriptor
+		if err := mtc.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+			t.Fatal(err)
+		}
+
+		rep2, err := mtc.findMemberStoreLocked(desc).GetReplica(desc.RangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return rep2.ChangeReplicas(
+			context.Background(),
+			roachpb.ADD_REPLICA,
+			roachpb.ReplicaDescriptor{
+				NodeID:  mtc.stores[2].Ident.NodeID,
+				StoreID: mtc.stores[2].Ident.StoreID,
+			},
+			&desc,
+		)
+	}
+
+	expected := "snapshot intersects existing range"
+	if err := replicateRHS(); !testutils.IsError(err, expected) {
+		t.Fatalf("unexpected error %v", err)
+	}
+
+	// Enable the replica GC queue so that the next attempt to replicate the RHS
+	// to store 2 will cause the obsolete replica to be GC'd allowing a
+	// subsequent replication to succeed.
+	mtc.stores[2].SetReplicaGCQueueActive(true)
+
+	util.SucceedsSoon(t, replicateRHS)
+}
+
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
