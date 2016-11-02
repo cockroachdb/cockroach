@@ -35,27 +35,27 @@ const (
 	// TODO(vivek): Replace these constants with a runtime budget for the
 	// operation chunk involved.
 
-	// ColumnTruncateAndBackfillChunkSize is the maximum number of columns
+	// columnTruncateAndBackfillChunkSize is the maximum number of columns
 	// processed per chunk during column truncate or backfill.
-	ColumnTruncateAndBackfillChunkSize = 200
+	columnTruncateAndBackfillChunkSize = 200
 
-	// IndexTruncateChunkSize is the maximum number of index entries truncated
+	// indexTruncateChunkSize is the maximum number of index entries truncated
 	// per chunk during an index truncation. This value is larger than the
 	// other chunk constants because the operation involves only running a
 	// DeleteRange().
-	IndexTruncateChunkSize = 600
+	indexTruncateChunkSize = 600
 
-	// IndexBackfillChunkSize is the maximum number index entries backfilled
+	// indexBackfillChunkSize is the maximum number index entries backfilled
 	// per chunk during an index backfill. The index backfill involves a table
 	// scan, and a number of individual ops presented in a batch. This value
 	// is smaller than ColumnTruncateAndBackfillChunkSize, because it involves
 	// a number of individual index row updates that can be scattered over
 	// many ranges.
-	IndexBackfillChunkSize = 100
+	indexBackfillChunkSize = 100
 
-	// CheckpointInterval is the interval after which a checkpoint of the
+	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
-	CheckpointInterval = 10 * time.Second
+	checkpointInterval = 10 * time.Second
 )
 
 func makeColIDtoRowIndex(
@@ -257,7 +257,7 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	mutationIdx int,
 	lastCheckpoint *time.Time,
 ) error {
-	checkpointInterval := CheckpointInterval
+	checkpointInterval := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
 		checkpointInterval = sc.testingKnobs.WriteCheckpointInterval
 	}
@@ -308,7 +308,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		}
 
 		// Run through the entire table key space adding and deleting columns.
-		chunkSize := sc.getChunkSize(ColumnTruncateAndBackfillChunkSize)
+		chunkSize := sc.getChunkSize(columnTruncateAndBackfillChunkSize)
 		// Evaluate default values.
 		updateCols := append(added, dropped...)
 		updateValues := make(parser.DTuple, len(updateCols))
@@ -498,7 +498,7 @@ func (sc *SchemaChanger) truncateIndexes(
 	dropped []sqlbase.IndexDescriptor,
 	mutationIdx int,
 ) error {
-	chunkSize := sc.getChunkSize(IndexTruncateChunkSize)
+	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
 		chunkSize = sc.testingKnobs.BackfillChunkSize
 	}
@@ -580,7 +580,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	// Backfill the index entries for all the rows.
-	chunkSize := sc.getChunkSize(IndexBackfillChunkSize)
+	chunkSize := sc.getChunkSize(indexBackfillChunkSize)
 	lastCheckpoint := timeutil.Now()
 	for row, done := int64(0), false; !done; row += chunkSize {
 		// First extend the schema change lease.

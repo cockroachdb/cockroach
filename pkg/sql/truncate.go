@@ -32,7 +32,7 @@ import (
 
 // TableTruncateChunkSize is the maximum number of keys deleted per chunk
 // during a table truncation.
-const TableTruncateChunkSize = IndexTruncateChunkSize
+const TableTruncateChunkSize = indexTruncateChunkSize
 
 // Truncate deletes all rows from a table.
 // Privileges: DROP on table.
