@@ -19,6 +19,7 @@ package sql
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -715,6 +716,40 @@ func forEachColumnInIndex(
 			if err := fn(column); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func forEachUser(p *planner, fn func(username string) error) error {
+	query := `SELECT username FROM system.users`
+	plan, err := p.query(query)
+	if err != nil {
+		return nil
+	}
+	defer plan.Close()
+	if err := plan.Start(); err != nil {
+		return err
+	}
+
+	// TODO(cuongdo/asubiotto): Get rid of root user special-casing if/when a row
+	// for "root" exists in system.user.
+	if err := fn(security.RootUser); err != nil {
+		return err
+	}
+
+	for {
+		next, err := plan.Next()
+		if err != nil {
+			return err
+		}
+		if !next {
+			break
+		}
+		row := plan.Values()
+		username := row[0].(*parser.DString)
+		if err := fn(string(*username)); err != nil {
+			return err
 		}
 	}
 	return nil
