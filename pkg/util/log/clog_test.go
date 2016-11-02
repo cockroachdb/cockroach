@@ -483,7 +483,7 @@ func TestRollover(t *testing.T) {
 		err = e
 	}
 	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = 1024
+	MaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
 	info, ok := logging.file[Severity_INFO].(*syncBuffer)
