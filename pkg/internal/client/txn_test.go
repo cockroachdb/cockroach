@@ -720,9 +720,10 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 
 	mc := hlc.NewManualClock(100)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	var execOpt TxnExecOptions
+	execOpt := TxnExecOptions{
+		Clock: clock,
+	}
 	refTimestamp := clock.Now()
-	execOpt.Clock = clock
 
 	txnClosure := func(txn *Txn, opt *TxnExecOptions) error {
 		// Ensure the KV transaction is created.
