@@ -2505,6 +2505,7 @@ func (s *Store) HandleSnapshot(
 				StoreCapacity: capacity,
 			})
 		}
+		defer s.bookie.Fill(ctx, header.RangeDescriptor.RangeID)
 	}
 
 	// Check to see if the snapshot can be applied but don't attempt to add

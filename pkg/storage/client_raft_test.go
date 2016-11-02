@@ -1990,6 +1990,9 @@ func TestStoreRangeRebalance(t *testing.T) {
 		generated += m.RangeSnapshotsGenerated.Count()
 		normalApplied += m.RangeSnapshotsNormalApplied.Count()
 		preemptiveApplied += m.RangeSnapshotsPreemptiveApplied.Count()
+		if n := s.ReservationCount(); n != 0 {
+			t.Fatalf("expected 0 reservations, but found %d", n)
+		}
 	}
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")
