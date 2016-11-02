@@ -53,7 +53,7 @@ GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
+GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 UI_SOURCES := $(PKG_ROOT)/ui/app/js/protos.js $(PKG_ROOT)/ui/generated/protos.json $(PKG_ROOT)/ui/generated/protos.d.ts
