@@ -167,36 +167,53 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 // maintenance queue runs correctly on a test server.
 func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	tsrv := s.(*server.TestServer)
 	tsdb := tsrv.TsDB()
 
 	// Populate time series data into the server. One time series, with one
-	// datapoint at the current time and one datapoint older than the pruning
+	// datapoint at the current time and two datapoints older than the pruning
 	// threshold. Datapoint timestamps are set to the midpoint of sample duration
 	// periods; this simplifies verification.
 	seriesName := "test.metric"
+	sourceName := "source1"
 	now := tsrv.Clock().PhysicalNow()
-	pastThreshold := now - (ts.Resolution10s.PruneThreshold() * 2)
+	nearPast := now - (ts.Resolution10s.PruneThreshold() * 2)
+	farPast := now - (ts.Resolution10s.PruneThreshold() * 4)
 	sampleDuration := ts.Resolution10s.SampleDuration()
 	datapoints := []tspb.TimeSeriesDatapoint{
 		{
-			TimestampNanos: pastThreshold - pastThreshold%sampleDuration + sampleDuration/2,
+			TimestampNanos: farPast - farPast%sampleDuration + sampleDuration/2,
+			Value:          100.0,
+		},
+		{
+			TimestampNanos: nearPast - (nearPast)%sampleDuration + sampleDuration/2,
 			Value:          200.0,
 		},
 		{
 			TimestampNanos: now - now%sampleDuration + sampleDuration/2,
-			Value:          100.0,
+			Value:          300.0,
 		},
 	}
 	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:       seriesName,
-			Source:     "source1",
+			Source:     sourceName,
 			Datapoints: datapoints,
 		},
 	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// generate a split key at a timestamp halfway between near past and far past.
+	splitKey := ts.MakeDataKey(
+		seriesName, sourceName, ts.Resolution10s, farPast+(nearPast-farPast)/2,
+	)
+
+	// Force a range split in between near past and far past. This guarantees
+	// that the pruning operation will issue a DeleteRange which spans ranges.
+	if err := db.AdminSplit(context.TODO(), splitKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -237,7 +254,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if a, e := actualDatapoints, datapoints[1:]; !reflect.DeepEqual(a, e) {
+		if a, e := actualDatapoints, datapoints[2:]; !reflect.DeepEqual(a, e) {
 			return fmt.Errorf("got datapoints %v, expected %v, diff: %s", a, e, pretty.Diff(a, e))
 		}
 		return nil
