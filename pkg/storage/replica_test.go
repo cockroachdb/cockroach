@@ -6287,3 +6287,35 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 		)
 	}
 }
+
+func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	ctx := tc.rng.AnnotateCtx(context.TODO())
+	key := keys.LocalMax
+
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	origTxn := txn.Clone()
+
+	var ba roachpb.BatchRequest
+	ba.Txn = txn
+	ba.Timestamp = txn.Timestamp
+	txnPut := putArgs(key, []byte("foo"))
+	// Add two puts (the second one gets BatchIndex 1, which was a failure mode
+	// observed when this test was written and the failure fixed). Originally
+	// observed in #10137, where this became relevant (before that, evaluation
+	// happened downstream of Raft, so a serialization pass always took place).
+	ba.Add(&txnPut)
+	ba.Add(&txnPut)
+
+	if _, _, _, _, pErr := tc.rng.executeWriteBatch(ctx, makeIDKey(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+	if !reflect.DeepEqual(&origTxn, txn) {
+		t.Fatalf("transaction was mutated during evaluation: %s", pretty.Diff(&origTxn, txn))
+	}
+}

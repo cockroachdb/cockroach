@@ -3411,7 +3411,6 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 	}
 }
 
-// TODO(tschottdorf): Reliance on mutating `ba.Txn` should be dealt with.
 func (r *Replica) executeBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -3420,6 +3419,10 @@ func (r *Replica) executeBatch(
 	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	br := ba.CreateReply()
+	if ba.Txn != nil {
+		txnShallow := *ba.Txn // intentionally not a clone; only modify BatchIndex
+		ba.Txn = &txnShallow
+	}
 
 	r.mu.Lock()
 	threshold := r.mu.state.GCThreshold
