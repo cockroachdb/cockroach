@@ -1703,6 +1703,15 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::roachpb::ReplicaDescriptor* release_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
+  // optional .cockroach.util.hlc.Timestamp proposed_ts = 5;
+  bool has_proposed_ts() const;
+  void clear_proposed_ts();
+  static const int kProposedTsFieldNumber = 5;
+  const ::cockroach::util::hlc::Timestamp& proposed_ts() const;
+  ::cockroach::util::hlc::Timestamp* mutable_proposed_ts();
+  ::cockroach::util::hlc::Timestamp* release_proposed_ts();
+  void set_allocated_proposed_ts(::cockroach::util::hlc::Timestamp* proposed_ts);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Lease)
  private:
   inline void set_has_start();
@@ -1713,6 +1722,8 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   inline void clear_has_expiration();
   inline void set_has_replica();
   inline void clear_has_replica();
+  inline void set_has_proposed_ts();
+  inline void clear_has_proposed_ts();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -1723,6 +1734,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::util::hlc::Timestamp* start_stasis_;
   ::cockroach::util::hlc::Timestamp* expiration_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
+  ::cockroach::util::hlc::Timestamp* proposed_ts_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2fdata_2eproto_impl();
   #else
@@ -3617,6 +3629,54 @@ inline void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
     clear_has_replica();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
+}
+
+// optional .cockroach.util.hlc.Timestamp proposed_ts = 5;
+inline bool Lease::has_proposed_ts() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void Lease::set_has_proposed_ts() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void Lease::clear_has_proposed_ts() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void Lease::clear_proposed_ts() {
+  if (proposed_ts_ != NULL) proposed_ts_->::cockroach::util::hlc::Timestamp::Clear();
+  clear_has_proposed_ts();
+}
+inline const ::cockroach::util::hlc::Timestamp& Lease::proposed_ts() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.proposed_ts)
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  return proposed_ts_ != NULL ? *proposed_ts_ : *default_instance().proposed_ts_;
+#else
+  return proposed_ts_ != NULL ? *proposed_ts_ : *default_instance_->proposed_ts_;
+#endif
+}
+inline ::cockroach::util::hlc::Timestamp* Lease::mutable_proposed_ts() {
+  set_has_proposed_ts();
+  if (proposed_ts_ == NULL) {
+    proposed_ts_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.proposed_ts)
+  return proposed_ts_;
+}
+inline ::cockroach::util::hlc::Timestamp* Lease::release_proposed_ts() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.proposed_ts)
+  clear_has_proposed_ts();
+  ::cockroach::util::hlc::Timestamp* temp = proposed_ts_;
+  proposed_ts_ = NULL;
+  return temp;
+}
+inline void Lease::set_allocated_proposed_ts(::cockroach::util::hlc::Timestamp* proposed_ts) {
+  delete proposed_ts_;
+  proposed_ts_ = proposed_ts;
+  if (proposed_ts) {
+    set_has_proposed_ts();
+  } else {
+    clear_has_proposed_ts();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.proposed_ts)
 }
 
 // -------------------------------------------------------------------

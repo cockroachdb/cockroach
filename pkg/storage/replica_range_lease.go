@@ -102,11 +102,13 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Key: startKey,
 	}
 	var leaseReq roachpb.Request
+	now := replica.store.Clock().Now()
 	reqLease := roachpb.Lease{
 		Start:       timestamp,
 		StartStasis: startStasis,
 		Expiration:  expiration,
 		Replica:     nextLeaseHolder,
+		ProposedTs:  &now,
 	}
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
@@ -130,6 +132,13 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			log.Infof(ctx, "sending lease request %v", leaseReq)
 		}
 		_, pErr := replica.Send(ctx, ba)
+		// We reset our state below regardless of whether we've gotten an error or
+		// not, but note that an error is ambiguous - there's no guarantee that the
+		// transfer will not still apply. That's OK, however, as the "in transfer"
+		// state maintained by the pendingLeaseRequest is not relied on for
+		// correctness, and reseting the state is beneficial as it'll allow the
+		// replica to attempt to transfer again or extend the existing lease in the
+		// future.
 
 		// Send result of lease to all waiter channels.
 		replica.mu.Lock()
@@ -178,6 +187,10 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 // TransferInProgress returns the next lease, if the replica is in the process
 // of transferring away its range lease. This next lease indicates the next
 // lease holder. The second return val is true if a transfer is in progress.
+// Note that the return values are best-effort and shouldn't be relied upon for
+// correctness: if a previous transfer has returned an error, TransferInProgress
+// will return `false`, but that doesn't necessarily mean that the transfer
+// cannot still apply.
 //
 // It is assumed that the replica owning this pendingLeaseRequest owns the
 // LeaderLease.
@@ -198,9 +211,12 @@ func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) (r
 // there's already a request in progress, we join in waiting for the results of
 // that request. Unless an error is returned, the obtained lease will be valid
 // for a time interval containing the requested timestamp.
-// If a transfer is in progress, a NotLeaderError directing to the recipient is
+// If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
 // sent on the returned chan.
 func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Error {
+	if r.store.TestingKnobs().LeaseRequestEvent != nil {
+		r.store.TestingKnobs().LeaseRequestEvent(timestamp)
+	}
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
@@ -239,10 +255,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 // The method waits for any in-progress lease extension to be done, and it also
 // blocks until the transfer is done. If a transfer is already in progress,
 // this method joins in waiting for it to complete if it's transferring to the
-// same replica. Otherwise, a NotLeaderError is returned.
-//
-// TODO(andrei): figure out how to persist the "not serving" state across node
-// restarts.
+// same replica. Otherwise, a NotLeaseHolderError is returned.
 func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
@@ -285,6 +298,8 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		}
 		// No extension in progress; start a transfer.
 		nextLeaseBegin := r.store.Clock().Now()
+		// Stop using the current lease.
+		r.mu.minLeaseProposedTs = nextLeaseBegin
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			r, nextLeaseHolder, nextLeaseBegin,
 			desc.StartKey.AsRawKey(), true /* transfer */)
