@@ -801,11 +801,12 @@ func (tc *TxnCoordSender) updateState(
 
 	switch t := pErr.GetDetail().(type) {
 	case *roachpb.TransactionStatusError:
-		// Likely already committed or more obscure errors such as epoch or
-		// timestamp regressions; consider txn dead.
-		if txn := pErr.GetTxn(); txn != nil {
-			defer tc.cleanupTxnLocked(ctx, *txn)
-		}
+		// An obscure error such as an epoch or timestamp regressions, or a
+		// txn deadline exceeded error. The expectation here is that a higher
+		// layer (SQL) will call Txn.CleanupOnError() which calls Rollback()
+		// which will cleanup the transaction and its intents. Therefore do
+		// not call cleanTxnLocked() here and leave the transaction in the
+		// PENDING state.
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:

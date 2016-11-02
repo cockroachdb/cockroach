@@ -463,7 +463,11 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				assertTransactionAbortedError(t, err)
+				if statusError, ok := err.(*roachpb.TransactionStatusError); !ok {
+					t.Fatalf("expected TransactionStatusError but got %T: %s", err, err)
+				} else if expected := "transaction deadline exceeded"; statusError.Msg != expected {
+					t.Fatalf("expected %s, got %s", expected, statusError.Msg)
+				}
 			case 2:
 				// Equal deadline.
 				if err != nil {
