@@ -2520,7 +2520,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	_, err = s.canApplySnapshot(&header.RangeDescriptor)
+	_, err = s.canApplySnapshot(ctx, &header.RangeDescriptor)
 	if err != nil {
 		return sendSnapError(
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.RangeDescriptor.RangeID),
@@ -2706,7 +2706,7 @@ func (s *Store) processRaftRequest(
 		if earlyReturn := func() bool {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(&inSnap.RangeDescriptor)
+			placeholder, err := s.canApplySnapshotLocked(ctx, &inSnap.RangeDescriptor)
 			if err != nil {
 				// If the storage cannot accept the snapshot, drop it before
 				// passing it to RawNode.Step, since our error handling
@@ -3471,15 +3471,15 @@ func (s *Store) tryGetOrCreateReplica(
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
 func (s *Store) canApplySnapshot(
-	rangeDescriptor *roachpb.RangeDescriptor,
+	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
 ) (*ReplicaPlaceholder, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.canApplySnapshotLocked(rangeDescriptor)
+	return s.canApplySnapshotLocked(ctx, rangeDescriptor)
 }
 
 func (s *Store) canApplySnapshotLocked(
-	rangeDescriptor *roachpb.RangeDescriptor,
+	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
 ) (*ReplicaPlaceholder, error) {
 	if r, ok := s.mu.replicas[rangeDescriptor.RangeID]; ok && r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot through.
@@ -3497,12 +3497,32 @@ func (s *Store) canApplySnapshotLocked(
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
+		msg := "snapshot intersects existing range"
 		if err != nil {
-			ctx := s.AnnotateCtx(context.TODO())
 			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
+		} else {
+			inactive := func(r *Replica) bool {
+				if r.RaftStatus() == nil {
+					return true
+				}
+				lease, pendingLease := r.getLease()
+				now := s.Clock().Now()
+				return (lease == nil || !lease.Covers(now)) &&
+					(pendingLease == nil || !pendingLease.Covers(now))
+			}
+
+			// If the existing range shows no signs of recent activity, give it a GC
+			// run.
+			if inactive(exReplica) {
+				if _, err := s.replicaGCQueue.Add(exReplica, replicaGCPriorityCandidate); err != nil {
+					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
+				} else {
+					msg += "; initiated GC:"
+				}
+			}
 		}
-		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
+		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
 	}
 
 	placeholder := &ReplicaPlaceholder{
