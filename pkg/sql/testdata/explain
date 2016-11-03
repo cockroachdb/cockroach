@@ -173,14 +173,15 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 query ITT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-0 virtual table SHOW COLUMNS FROM foo
-1 values 4 columns, 2 rows
+0  virtual table  SHOW COLUMNS FROM foo
+1  values         4 columns, 1 row
 
 query ITT
 EXPLAIN SHOW GRANTS ON foo
 ----
-0 virtual table SHOW GRANTS
-1 values 3 columns, 1 row
+0  virtual table  SHOW GRANTS
+1  sort           +"Table",+"User",+Privileges
+2  values         3 columns, 1 row
 
 query ITT
 EXPLAIN SHOW INDEX FROM foo

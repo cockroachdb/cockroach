@@ -241,7 +241,7 @@ data_types  c            DECIMAL
 data_types  d            STRING
 data_types  e            BYTES
 data_types  f            TIMESTAMP
-data_types  g            TIMESTAMPTZ
+data_types  g            TIMESTAMP WITH TIME ZONE
 
 statement ok
 DROP TABLE data_types

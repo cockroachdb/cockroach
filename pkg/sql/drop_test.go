@@ -508,15 +508,8 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	if !rows.Next() {
-		t.Fatal("table invisible through SHOW TABLES")
-	}
-	var val string
-	if err := rows.Scan(&val); err != nil {
-		t.Errorf("row scan failed: %s", err)
-	}
-	if val != "t (dropped)" {
-		t.Fatalf("table = %s", val)
+	if rows.Next() {
+		t.Fatal("table should be invisible through SHOW TABLES")
 	}
 
 	// Check that CREATE TABLE with the same name returns a proper error.
