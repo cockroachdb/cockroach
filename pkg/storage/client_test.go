@@ -44,7 +44,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -155,6 +154,7 @@ func createTestStoreWithEngine(
 		rpcContext,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
+		/* deterministic */ false,
 	)
 	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -404,12 +404,7 @@ func (m *multiTestContext) initGossipNetwork() {
 	m.gossipStores()
 	util.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
-			_, alive, _ := m.storePools[i].GetStoreList(
-				config.Constraints{},
-				roachpb.RangeID(0),
-				/* deterministic */ false,
-			)
-			if alive != len(m.stores) {
+			if _, alive, _ := m.storePools[i].GetStoreList(roachpb.RangeID(0)); alive != len(m.stores) {
 				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
 					m.stores[i].Ident.NodeID, alive, len(m.stores))
 			}
@@ -631,6 +626,7 @@ func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
 		m.rpcContext,
 		m.timeUntilStoreDead,
 		stopper,
+		/* deterministic */ false,
 	)
 }
 
