@@ -19,43 +19,33 @@ package distsql
 import (
 	"sync"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// TODO(irfansharif): Document this.
-// TODO(irfansharif): It's trivial to use the grace hash join algorithm by using
-// hashrouters and hash joiners to parallelize hash joins. We would begin by
-// 'partitioning' both tables via a hash function. Given the 'partitions' are
-// formed by hashing on the join key any join output tuples must belong to the
-// same 'partition', each 'partition' would then undergo the standard build and
-// probe hash join algorithm, the computation of the partial joins is
-// parallelizable.
+// bucket here is the set of rows for a given group key (comprised of
+// columns specified by the join constraints), 'seen' is used to determine if
+// there was a matching group (with the same group key) in the opposite stream.
 type bucket struct {
 	rows sqlbase.EncDatumRows
 	seen bool
 }
 
+// HashJoiner performs hash join, it has two input streams and one output.
+//
+// It works by reading the entire left stream and putting it in a hash
+// table. Thus, there is no guarantee on the ordering of results that stem only
+// from the left input (in the case of LEFT OUTER, FULL OUTER). However, it is
+// guaranteed that results that involve the right stream preserve the ordering;
+// i.e. all results that stem from right row (i) precede results that stem from
+// right row (i+1).
 type hashJoiner struct {
-	left        RowSource
-	right       RowSource
-	output      RowReceiver
-	ctx         context.Context
-	joinType    joinType
-	filter      exprHelper
+	joinerBase
+
 	leftEqCols  columns
 	rightEqCols columns
-	outputCols  columns
 	buckets     map[string]bucket
-
-	emptyRight  sqlbase.EncDatumRow
-	emptyLeft   sqlbase.EncDatumRow
-	combinedRow sqlbase.EncDatumRow
-	rowAlloc    sqlbase.EncDatumRowAlloc
 	datumAlloc  sqlbase.DatumAlloc
 }
 
@@ -65,27 +55,13 @@ func newHashJoiner(
 	flowCtx *FlowCtx, spec *HashJoinerSpec, inputs []RowSource, output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
-		left:        inputs[0],
-		right:       inputs[1],
-		output:      output,
-		ctx:         log.WithLogTag(flowCtx.Context, "Hash Joiner", nil),
 		leftEqCols:  columns(spec.LeftEqColumns),
 		rightEqCols: columns(spec.RightEqColumns),
-		outputCols:  columns(spec.OutputColumns),
-		joinType:    joinType(spec.Type),
 		buckets:     make(map[string]bucket),
-		emptyLeft:   make(sqlbase.EncDatumRow, len(spec.LeftTypes)),
-		emptyRight:  make(sqlbase.EncDatumRow, len(spec.RightTypes)),
 	}
 
-	for i := range h.emptyLeft {
-		h.emptyLeft[i].Datum = parser.DNull
-	}
-	for i := range h.emptyRight {
-		h.emptyRight[i].Datum = parser.DNull
-	}
-
-	err := h.filter.init(spec.Expr, append(spec.LeftTypes, spec.RightTypes...), flowCtx.evalCtx)
+	err := h.joinerBase.init(flowCtx, inputs, output, spec.OutputColumns,
+		spec.Type, spec.LeftTypes, spec.RightTypes, spec.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -117,10 +93,13 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 	}
 }
 
+// buildPhase constructs our internal hash map of rows seen, this is done
+// entirely from the left stream with the encoding/group key generated using the
+// left equality columns.
 func (h *hashJoiner) buildPhase() error {
 	var scratch []byte
 	for {
-		lrow, err := h.left.NextRow()
+		lrow, err := h.inputs[0].NextRow()
 		if err != nil || lrow == nil {
 			return err
 		}
@@ -129,19 +108,24 @@ func (h *hashJoiner) buildPhase() error {
 		if err != nil {
 			return err
 		}
+
 		b, _ := h.buckets[string(encoded)]
 		b.rows = append(b.rows, lrow)
 		h.buckets[string(encoded)] = b
 
 		scratch = encoded[:0]
 	}
-	return nil
 }
 
+// probePhase uses our constructed hash map of rows seen from the left stream,
+// we probe the map for each row retrieved from the right stream outputting the
+// merging of the two rows if matched. Behaviour for outer joins also behave as
+// expected, i.e. for RIGHT OUTER joins if no corresponding left row is seen an
+// empty DNull row is emitted instead.
 func (h *hashJoiner) probePhase() error {
 	var scratch []byte
 	for {
-		rrow, err := h.right.NextRow()
+		rrow, err := h.inputs[1].NextRow()
 		if err != nil {
 			return err
 		}
@@ -156,22 +140,22 @@ func (h *hashJoiner) probePhase() error {
 
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			r, err := h.render(nil, rrow)
+			row, err := h.render(nil, rrow)
 			if err != nil {
 				return err
 			}
-			if !h.output.PushRow(r) {
+			if !h.output.PushRow(row) {
 				return nil
 			}
 		} else {
 			b.seen = true
 			h.buckets[string(encoded)] = b
 			for _, lrow := range b.rows {
-				r, err := h.render(lrow, rrow)
+				row, err := h.render(lrow, rrow)
 				if err != nil {
 					return err
 				}
-				if r != nil && !h.output.PushRow(r) {
+				if row != nil && !h.output.PushRow(row) {
 					return nil
 				}
 			}
@@ -186,11 +170,11 @@ func (h *hashJoiner) probePhase() error {
 	for _, b := range h.buckets {
 		if !b.seen {
 			for _, lrow := range b.rows {
-				r, err := h.render(lrow, nil)
+				row, err := h.render(lrow, nil)
 				if err != nil {
 					return err
 				}
-				if r != nil && !h.output.PushRow(r) {
+				if row != nil && !h.output.PushRow(row) {
 					return nil
 				}
 			}
@@ -213,43 +197,4 @@ func (h *hashJoiner) encode(
 		}
 	}
 	return appendTo, nil
-}
-
-// render evaluates the provided filter and constructs a row with columns from
-// both rows as specified by the provided output columns. We expect left or
-// right to be nil if there was no explicit "join" match, the filter is then
-// evaluated on a combinedRow with null values for the columns of the nil row.
-func (h *hashJoiner) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	switch h.joinType {
-	case innerJoin:
-		if lrow == nil || rrow == nil {
-			return nil, nil
-		}
-	case fullOuter:
-		if lrow == nil {
-			lrow = h.emptyLeft
-		} else if rrow == nil {
-			rrow = h.emptyRight
-		}
-	case leftOuter:
-		if rrow == nil {
-			rrow = h.emptyRight
-		}
-	case rightOuter:
-		if lrow == nil {
-			lrow = h.emptyLeft
-		}
-	}
-	h.combinedRow = append(h.combinedRow[:0], lrow...)
-	h.combinedRow = append(h.combinedRow, rrow...)
-	res, err := h.filter.evalFilter(h.combinedRow)
-	if !res || err != nil {
-		return nil, err
-	}
-
-	row := h.rowAlloc.AllocRow(len(h.outputCols))
-	for i, col := range h.outputCols {
-		row[i] = h.combinedRow[col]
-	}
-	return row, nil
 }
