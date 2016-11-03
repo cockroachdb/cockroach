@@ -20,9 +20,6 @@ import (
 	"errors"
 	"sync"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -33,18 +30,9 @@ import (
 //
 // It is guaranteed that the results preserve this ordering.
 type mergeJoiner struct {
-	inputs     []RowSource
-	output     RowReceiver
-	joinType   joinType
-	filter     exprHelper
-	outputCols columns
+	joinerBase
 
-	ctx          context.Context
-	combinedRow  sqlbase.EncDatumRow
-	rowAlloc     sqlbase.EncDatumRowAlloc
 	streamMerger streamMerger
-	emptyRight   sqlbase.EncDatumRow
-	emptyLeft    sqlbase.EncDatumRow
 }
 
 var _ processor = &mergeJoiner{}
@@ -58,35 +46,18 @@ func newMergeJoiner(
 		}
 	}
 
-	m := &mergeJoiner{
-		inputs:     inputs,
-		output:     output,
-		ctx:        log.WithLogTag(flowCtx.Context, "Merge Joiner", nil),
-		outputCols: columns(spec.OutputColumns),
-		joinType:   joinType(spec.Type),
-		filter:     exprHelper{},
-		emptyLeft:  make(sqlbase.EncDatumRow, len(spec.LeftTypes)),
-		emptyRight: make(sqlbase.EncDatumRow, len(spec.RightTypes)),
+	m := &mergeJoiner{}
+	err := m.joinerBase.init(flowCtx, nil, output, spec.OutputColumns,
+		spec.Type, spec.LeftTypes, spec.RightTypes, spec.Expr)
+	if err != nil {
+		return nil, err
 	}
 
-	for i := range m.emptyLeft {
-		m.emptyLeft[i].Datum = parser.DNull
-	}
-	for i := range m.emptyRight {
-		m.emptyRight[i].Datum = parser.DNull
-	}
-
-	var err error
 	m.streamMerger, err = makeStreamMerger(
 		[]sqlbase.ColumnOrdering{
 			convertToColumnOrdering(spec.LeftOrdering),
 			convertToColumnOrdering(spec.RightOrdering),
 		}, inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.filter.init(spec.Expr, append(spec.LeftTypes, spec.RightTypes...), flowCtx.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,43 +100,4 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 			}
 		}
 	}
-}
-
-// render evaluates the provided filter and constructs a row with columns from
-// both rows as specified by the provided output columns. We expect left or
-// right to be nil if there was no explicit "join" match, the filter is then
-// evaluated on a combinedRow with null values for the columns of the nil row.
-func (m *mergeJoiner) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	switch m.joinType {
-	case innerJoin:
-		if lrow == nil || rrow == nil {
-			return nil, nil
-		}
-	case fullOuter:
-		if lrow == nil {
-			lrow = m.emptyLeft
-		} else if rrow == nil {
-			rrow = m.emptyRight
-		}
-	case leftOuter:
-		if rrow == nil {
-			rrow = m.emptyRight
-		}
-	case rightOuter:
-		if lrow == nil {
-			lrow = m.emptyLeft
-		}
-	}
-	m.combinedRow = append(m.combinedRow[:0], lrow...)
-	m.combinedRow = append(m.combinedRow, rrow...)
-	res, err := m.filter.evalFilter(m.combinedRow)
-	if !res || err != nil {
-		return nil, err
-	}
-
-	row := m.rowAlloc.AllocRow(len(m.outputCols))
-	for i, col := range m.outputCols {
-		row[i] = m.combinedRow[col]
-	}
-	return row, nil
 }
