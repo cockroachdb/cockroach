@@ -656,6 +656,13 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int32 range_count() const;
   void set_range_count(::google::protobuf::int32 value);
 
+  // optional int32 lease_count = 4;
+  bool has_lease_count() const;
+  void clear_lease_count();
+  static const int kLeaseCountFieldNumber = 4;
+  ::google::protobuf::int32 lease_count() const;
+  void set_lease_count(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreCapacity)
  private:
   inline void set_has_capacity();
@@ -664,6 +671,8 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   inline void clear_has_available();
   inline void set_has_range_count();
   inline void clear_has_range_count();
+  inline void set_has_lease_count();
+  inline void clear_has_lease_count();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -673,6 +682,7 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int64 capacity_;
   ::google::protobuf::int64 available_;
   ::google::protobuf::int32 range_count_;
+  ::google::protobuf::int32 lease_count_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2fmetadata_2eproto_impl();
   #else
@@ -1796,6 +1806,30 @@ inline void StoreCapacity::set_range_count(::google::protobuf::int32 value) {
   set_has_range_count();
   range_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.range_count)
+}
+
+// optional int32 lease_count = 4;
+inline bool StoreCapacity::has_lease_count() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void StoreCapacity::set_has_lease_count() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void StoreCapacity::clear_has_lease_count() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void StoreCapacity::clear_lease_count() {
+  lease_count_ = 0;
+  clear_has_lease_count();
+}
+inline ::google::protobuf::int32 StoreCapacity::lease_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.lease_count)
+  return lease_count_;
+}
+inline void StoreCapacity::set_lease_count(::google::protobuf::int32 value) {
+  set_has_lease_count();
+  lease_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.lease_count)
 }
 
 // -------------------------------------------------------------------
