@@ -140,6 +140,9 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		}
 	}
 
+	db, dbStopper := c.NewClient(t, 0)
+	defer dbStopper.Stop()
+
 	// The cluster should now be fully operational (at least after waiting
 	// a little bit) since each node tries to unfreeze everything when it
 	// starts.
@@ -151,17 +154,6 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 			}
 			t.Fatal(err)
 		}
-
-		// TODO(tschottdorf): moving the client creation outside of the retry
-		// loop will break the test with the following message:
-		//
-		//   client/rpc_sender.go:61: roachpb.Batch RPC failed as client
-		//   connection was closed
-		//
-		// Perhaps the cluster updates the address too late after restarting
-		// the node.
-		db, dbStopper := c.NewClient(t, 0)
-		defer dbStopper.Stop()
 
 		if _, err := db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			t.Fatal(err)

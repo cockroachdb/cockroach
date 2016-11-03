@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -164,40 +165,48 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		waitTime = shortWaitTime
 	}
 
+	dbs := make([]*client.DB, num)
+	for i := range dbs {
+		var dbStopper *stop.Stopper
+		dbs[i], dbStopper = c.NewClient(t, i)
+		defer dbStopper.Stop()
+	}
+
+	ctx := context.Background()
+
 	for timeutil.Now().Before(deadline) {
-		log.Infof(context.Background(), "waiting for initial gossip connections")
+		log.Infof(ctx, "waiting for initial gossip connections")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)
 		checkGossip(t, c, waitTime, hasSentinel)
 
-		log.Infof(context.Background(), "killing all nodes")
+		log.Infof(ctx, "killing all nodes")
 		for i := 0; i < num; i++ {
 			if err := c.Kill(i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		log.Infof(context.Background(), "restarting all nodes")
+		log.Infof(ctx, "restarting all nodes")
 		for i := 0; i < num; i++ {
 			if err := c.Restart(i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		log.Infof(context.Background(), "waiting for gossip to be connected")
+		log.Infof(ctx, "waiting for gossip to be connected")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)
 		checkGossip(t, c, waitTime, hasSentinel)
 
-		for i := 0; i < num; i++ {
-			db, dbStopper := c.NewClient(t, i)
+		for i, db := range dbs {
 			if i == 0 {
-				if err := db.Del(context.Background(), "count"); err != nil {
+				if err := db.Del(ctx, "count"); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var kv client.KeyValue
-			if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := db.Txn(ctx, func(txn *client.Txn) error {
 				var err error
 				kv, err = txn.Inc("count", 1)
 				return err
@@ -206,7 +215,6 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 			} else if v := kv.ValueInt(); v != int64(i+1) {
 				t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
 			}
-			dbStopper.Stop()
 		}
 	}
 }
