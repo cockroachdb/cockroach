@@ -224,3 +224,7 @@ func GetGCQueueTxnCleanupThreshold() time.Duration {
 func (nl *NodeLiveness) StopHeartbeat() {
 	close(nl.stopHeartbeat)
 }
+
+func ProposerEvaluatedKVEnabled() bool {
+	return propEvalKV
+}
