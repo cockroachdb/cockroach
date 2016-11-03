@@ -3091,8 +3091,9 @@ func sendSnapshot(
 	// NB: wait for EOF which ensures that all processing on the server side has
 	// completed (such as defers that might be run after the previous message was
 	// received).
-	if _, err := stream.Recv(); err != io.EOF {
-		return errors.Errorf("range=%s: expected EOF, got %v", header.RangeDescriptor.RangeID, err)
+	if unexpectedResp, err := stream.Recv(); err != io.EOF {
+		return errors.Errorf("range=%s: expected EOF, got resp=%v err=%v",
+			header.RangeDescriptor.RangeID, unexpectedResp, err)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
