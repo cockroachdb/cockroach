@@ -117,142 +117,142 @@ func init() {
 	proto.RegisterType((*FileInfo)(nil), "cockroach.util.log.FileInfo")
 	proto.RegisterEnum("cockroach.util.log.Severity", Severity_name, Severity_value)
 }
-func (m *Entry) Marshal() (data []byte, err error) {
+func (m *Entry) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Entry) MarshalTo(data []byte) (int, error) {
+func (m *Entry) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Severity != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintLog(data, i, uint64(m.Severity))
+		i = encodeVarintLog(dAtA, i, uint64(m.Severity))
 	}
 	if m.Time != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintLog(data, i, uint64(m.Time))
+		i = encodeVarintLog(dAtA, i, uint64(m.Time))
 	}
 	if len(m.File) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintLog(data, i, uint64(len(m.File)))
-		i += copy(data[i:], m.File)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.File)))
+		i += copy(dAtA[i:], m.File)
 	}
 	if m.Line != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintLog(data, i, uint64(m.Line))
+		i = encodeVarintLog(dAtA, i, uint64(m.Line))
 	}
 	if len(m.Message) > 0 {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Message)))
-		i += copy(data[i:], m.Message)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.Message)))
+		i += copy(dAtA[i:], m.Message)
 	}
 	if m.Goroutine != 0 {
-		data[i] = 0x30
+		dAtA[i] = 0x30
 		i++
-		i = encodeVarintLog(data, i, uint64(m.Goroutine))
+		i = encodeVarintLog(dAtA, i, uint64(m.Goroutine))
 	}
 	return i, nil
 }
 
-func (m *FileDetails) Marshal() (data []byte, err error) {
+func (m *FileDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *FileDetails) MarshalTo(data []byte) (int, error) {
+func (m *FileDetails) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Program) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Program)))
-		i += copy(data[i:], m.Program)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.Program)))
+		i += copy(dAtA[i:], m.Program)
 	}
 	if len(m.Host) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Host)))
-		i += copy(data[i:], m.Host)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.Host)))
+		i += copy(dAtA[i:], m.Host)
 	}
 	if len(m.UserName) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintLog(data, i, uint64(len(m.UserName)))
-		i += copy(data[i:], m.UserName)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.UserName)))
+		i += copy(dAtA[i:], m.UserName)
 	}
 	if m.Severity != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintLog(data, i, uint64(m.Severity))
+		i = encodeVarintLog(dAtA, i, uint64(m.Severity))
 	}
 	if m.Time != 0 {
-		data[i] = 0x28
+		dAtA[i] = 0x28
 		i++
-		i = encodeVarintLog(data, i, uint64(m.Time))
+		i = encodeVarintLog(dAtA, i, uint64(m.Time))
 	}
 	if m.PID != 0 {
-		data[i] = 0x30
+		dAtA[i] = 0x30
 		i++
-		i = encodeVarintLog(data, i, uint64(m.PID))
+		i = encodeVarintLog(dAtA, i, uint64(m.PID))
 	}
 	return i, nil
 }
 
-func (m *FileInfo) Marshal() (data []byte, err error) {
+func (m *FileInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *FileInfo) MarshalTo(data []byte) (int, error) {
+func (m *FileInfo) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Name) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintLog(data, i, uint64(len(m.Name)))
-		i += copy(data[i:], m.Name)
+		i = encodeVarintLog(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
 	}
 	if m.SizeBytes != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintLog(data, i, uint64(m.SizeBytes))
+		i = encodeVarintLog(dAtA, i, uint64(m.SizeBytes))
 	}
 	if m.ModTimeNanos != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintLog(data, i, uint64(m.ModTimeNanos))
+		i = encodeVarintLog(dAtA, i, uint64(m.ModTimeNanos))
 	}
-	data[i] = 0x22
+	dAtA[i] = 0x22
 	i++
-	i = encodeVarintLog(data, i, uint64(m.Details.Size()))
-	n1, err := m.Details.MarshalTo(data[i:])
+	i = encodeVarintLog(dAtA, i, uint64(m.Details.Size()))
+	n1, err := m.Details.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -260,31 +260,31 @@ func (m *FileInfo) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Log(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Log(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Log(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Log(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintLog(data []byte, offset int, v uint64) int {
+func encodeVarintLog(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *Entry) Size() (n int) {
@@ -371,8 +371,8 @@ func sovLog(x uint64) (n int) {
 func sozLog(x uint64) (n int) {
 	return sovLog(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *Entry) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Entry) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -384,7 +384,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -412,7 +412,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Severity |= (Severity(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -431,7 +431,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Time |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -450,7 +450,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -465,7 +465,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.File = string(data[iNdEx:postIndex])
+			m.File = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
@@ -479,7 +479,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Line |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -498,7 +498,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -513,7 +513,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Message = string(data[iNdEx:postIndex])
+			m.Message = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 6:
 			if wireType != 0 {
@@ -527,7 +527,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Goroutine |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -536,7 +536,7 @@ func (m *Entry) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipLog(data[iNdEx:])
+			skippy, err := skipLog(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -555,8 +555,8 @@ func (m *Entry) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileDetails) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileDetails) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -568,7 +568,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -596,7 +596,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -611,7 +611,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Program = string(data[iNdEx:postIndex])
+			m.Program = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -625,7 +625,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -640,7 +640,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Host = string(data[iNdEx:postIndex])
+			m.Host = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -654,7 +654,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -669,7 +669,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.UserName = string(data[iNdEx:postIndex])
+			m.UserName = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
@@ -683,7 +683,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Severity |= (Severity(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -702,7 +702,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Time |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -721,7 +721,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.PID |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -730,7 +730,7 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipLog(data[iNdEx:])
+			skippy, err := skipLog(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -749,8 +749,8 @@ func (m *FileDetails) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *FileInfo) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *FileInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -762,7 +762,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -790,7 +790,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -805,7 +805,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -819,7 +819,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.SizeBytes |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -838,7 +838,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ModTimeNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -857,7 +857,7 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -871,13 +871,13 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Details.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Details.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipLog(data[iNdEx:])
+			skippy, err := skipLog(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -896,8 +896,8 @@ func (m *FileInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipLog(data []byte) (n int, err error) {
-	l := len(data)
+func skipLog(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -908,7 +908,7 @@ func skipLog(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -926,7 +926,7 @@ func skipLog(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -943,7 +943,7 @@ func skipLog(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -966,7 +966,7 @@ func skipLog(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -977,7 +977,7 @@ func skipLog(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipLog(data[start:])
+				next, err := skipLog(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

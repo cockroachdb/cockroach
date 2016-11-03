@@ -314,43 +314,43 @@ var _DistSQL_serviceDesc = grpc.ServiceDesc{
 	Metadata: fileDescriptorApi,
 }
 
-func (m *SetupFlowRequest) Marshal() (data []byte, err error) {
+func (m *SetupFlowRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *SetupFlowRequest) MarshalTo(data []byte) (int, error) {
+func (m *SetupFlowRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-	n1, err := m.Txn.MarshalTo(data[i:])
+	i = encodeVarintApi(dAtA, i, uint64(m.Txn.Size()))
+	n1, err := m.Txn.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
 	if m.TraceContext != nil {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintApi(data, i, uint64(m.TraceContext.Size()))
-		n2, err := m.TraceContext.MarshalTo(data[i:])
+		i = encodeVarintApi(dAtA, i, uint64(m.TraceContext.Size()))
+		n2, err := m.TraceContext.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n2
 	}
-	data[i] = 0x1a
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintApi(data, i, uint64(m.Flow.Size()))
-	n3, err := m.Flow.MarshalTo(data[i:])
+	i = encodeVarintApi(dAtA, i, uint64(m.Flow.Size()))
+	n3, err := m.Flow.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -358,26 +358,26 @@ func (m *SetupFlowRequest) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *SimpleResponse) Marshal() (data []byte, err error) {
+func (m *SimpleResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *SimpleResponse) MarshalTo(data []byte) (int, error) {
+func (m *SimpleResponse) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Error != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintApi(data, i, uint64(m.Error.Size()))
-		n4, err := m.Error.MarshalTo(data[i:])
+		i = encodeVarintApi(dAtA, i, uint64(m.Error.Size()))
+		n4, err := m.Error.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -386,31 +386,31 @@ func (m *SimpleResponse) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Api(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Api(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Api(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Api(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintApi(data []byte, offset int, v uint64) int {
+func encodeVarintApi(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *SetupFlowRequest) Size() (n int) {
@@ -450,8 +450,8 @@ func sovApi(x uint64) (n int) {
 func sozApi(x uint64) (n int) {
 	return sovApi(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *SetupFlowRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *SetupFlowRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -463,7 +463,7 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -491,7 +491,7 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -505,7 +505,7 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Txn.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -521,7 +521,7 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -538,7 +538,7 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 			if m.TraceContext == nil {
 				m.TraceContext = &cockroach_util_tracing.SpanContextCarrier{}
 			}
-			if err := m.TraceContext.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.TraceContext.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -554,7 +554,7 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -568,13 +568,13 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Flow.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Flow.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipApi(data[iNdEx:])
+			skippy, err := skipApi(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -593,8 +593,8 @@ func (m *SetupFlowRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *SimpleResponse) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *SimpleResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -606,7 +606,7 @@ func (m *SimpleResponse) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -634,7 +634,7 @@ func (m *SimpleResponse) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -651,13 +651,13 @@ func (m *SimpleResponse) Unmarshal(data []byte) error {
 			if m.Error == nil {
 				m.Error = &cockroach_roachpb2.Error{}
 			}
-			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Error.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipApi(data[iNdEx:])
+			skippy, err := skipApi(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -676,8 +676,8 @@ func (m *SimpleResponse) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipApi(data []byte) (n int, err error) {
-	l := len(data)
+func skipApi(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -688,7 +688,7 @@ func skipApi(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -706,7 +706,7 @@ func skipApi(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -723,7 +723,7 @@ func skipApi(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -746,7 +746,7 @@ func skipApi(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -757,7 +757,7 @@ func skipApi(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipApi(data[start:])
+				next, err := skipApi(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
