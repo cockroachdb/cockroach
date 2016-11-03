@@ -14,9 +14,9 @@ query T colnames
 SHOW DATABASES
 ----
 Database
+a
 information_schema
 pg_catalog
-a
 system
 test
 
@@ -68,8 +68,6 @@ CREATE DATABASE c
 query T
 SHOW DATABASES
 ----
-information_schema
-pg_catalog
 a
 b
 b2
@@ -78,6 +76,8 @@ b4
 b5
 b6
 c
+information_schema
+pg_catalog
 system
 test
 
@@ -116,10 +116,10 @@ query T colnames
 SHOW DATABASES
 ----
 Database
-information_schema
-pg_catalog
 a
 c
+information_schema
+pg_catalog
 system
 test
 

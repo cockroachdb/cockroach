@@ -4,9 +4,9 @@ CREATE DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+foo-bar
 information_schema
 pg_catalog
-foo-bar
 system
 test
 
@@ -27,9 +27,9 @@ CREATE DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+foo bar
 information_schema
 pg_catalog
-foo bar
 system
 test
 
@@ -123,10 +123,10 @@ SELECT * FROM d2.v4
 query T
 SHOW DATABASES
 ----
-information_schema
-pg_catalog
 d1
 d2
+information_schema
+pg_catalog
 system
 test
 
@@ -136,9 +136,9 @@ DROP DATABASE d1
 query T
 SHOW DATABASES
 ----
+d2
 information_schema
 pg_catalog
-d2
 system
 test
 

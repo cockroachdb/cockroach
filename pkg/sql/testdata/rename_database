@@ -91,9 +91,7 @@ SHOW DATABASES
 ----
 information_schema
 pg_catalog
-system
 t
-u
 
 user root
 

@@ -60,10 +60,9 @@ SELECT rowid FROM t WHERE a = 10
 query TTBT
 SHOW COLUMNS FROM t
 ----
-a INT true NULL
-b INT true NULL
-rowid INT false unique_rowid()
-c STRING true NULL
+a  INT     true  NULL
+b  INT     true  NULL
+c  STRING  true  NULL
 
 statement ok
 CREATE INDEX a_idx ON t (a)
