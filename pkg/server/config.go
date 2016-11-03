@@ -51,7 +51,7 @@ const (
 	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
-	defaultScanMaxIdleTime          = 5 * time.Second
+	defaultScanMaxIdleTime          = 200 * time.Millisecond
 	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
