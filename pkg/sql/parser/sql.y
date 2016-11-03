@@ -3310,7 +3310,10 @@ a_expr:
   {
     $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
   }
-| a_expr COLLATE any_name { return unimplemented(sqllex) }
+| a_expr COLLATE any_name
+  {
+    $$.val = &CollateExpr{Expr: $1.expr(), Locale: $3.unresolvedName().String()}
+  }
 | a_expr AT TIME ZONE a_expr %prec AT { return unimplemented(sqllex) }
   // These operators must be called out explicitly in order to make use of
   // bison's automatic operator-precedence handling. All other operator names
