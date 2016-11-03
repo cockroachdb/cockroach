@@ -2479,8 +2479,10 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 	var capacity *roachpb.StoreCapacity
+	fillReservation := func() {}
 
 	sendSnapError := func(err error) error {
+		fillReservation()
 		return stream.Send(&SnapshotResponse{
 			Status:        SnapshotResponse_ERROR,
 			Message:       err.Error(),
@@ -2512,7 +2514,17 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 				StoreCapacity: capacity,
 			})
 		}
-		defer s.bookie.Fill(ctx, header.RangeDescriptor.RangeID)
+		// We need to fill the reservation before return ERROR or APPLIED, but we
+		// also want to make sure we fill the reservation on all other code paths
+		// out of this function. And reservations should be filled only once.
+		var filled bool
+		fillReservation = func() {
+			if !filled {
+				filled = true
+				s.bookie.Fill(ctx, header.RangeDescriptor.RangeID)
+			}
+		}
+		defer fillReservation()
 	}
 
 	// Check to see if the snapshot can be applied but don't attempt to add
@@ -2564,6 +2576,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
+			fillReservation()
 			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED, StoreCapacity: capacity})
 		}
 	}
