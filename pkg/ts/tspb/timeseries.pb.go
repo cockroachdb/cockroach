@@ -373,59 +373,59 @@ var _TimeSeries_serviceDesc = grpc.ServiceDesc{
 	Metadata: fileDescriptorTimeseries,
 }
 
-func (m *TimeSeriesDatapoint) Marshal() (data []byte, err error) {
+func (m *TimeSeriesDatapoint) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (int, error) {
+func (m *TimeSeriesDatapoint) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.TimestampNanos))
-	data[i] = 0x11
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.TimestampNanos))
+	dAtA[i] = 0x11
 	i++
-	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(float64(m.Value))))
+	i = encodeFixed64Timeseries(dAtA, i, uint64(math.Float64bits(float64(m.Value))))
 	return i, nil
 }
 
-func (m *TimeSeriesData) Marshal() (data []byte, err error) {
+func (m *TimeSeriesData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TimeSeriesData) MarshalTo(data []byte) (int, error) {
+func (m *TimeSeriesData) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x12
+	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Source)))
-	i += copy(data[i:], m.Source)
+	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Source)))
+	i += copy(dAtA[i:], m.Source)
 	if len(m.Datapoints) > 0 {
 		for _, msg := range m.Datapoints {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -435,118 +435,118 @@ func (m *TimeSeriesData) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Query) Marshal() (data []byte, err error) {
+func (m *Query) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Query) MarshalTo(data []byte) (int, error) {
+func (m *Query) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
+	i = encodeVarintTimeseries(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
 	if m.Downsampler != nil {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintTimeseries(data, i, uint64(*m.Downsampler))
+		i = encodeVarintTimeseries(dAtA, i, uint64(*m.Downsampler))
 	}
 	if m.SourceAggregator != nil {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintTimeseries(data, i, uint64(*m.SourceAggregator))
+		i = encodeVarintTimeseries(dAtA, i, uint64(*m.SourceAggregator))
 	}
 	if m.Derivative != nil {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintTimeseries(data, i, uint64(*m.Derivative))
+		i = encodeVarintTimeseries(dAtA, i, uint64(*m.Derivative))
 	}
 	if len(m.Sources) > 0 {
 		for _, s := range m.Sources {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	return i, nil
 }
 
-func (m *TimeSeriesQueryRequest) Marshal() (data []byte, err error) {
+func (m *TimeSeriesQueryRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TimeSeriesQueryRequest) MarshalTo(data []byte) (int, error) {
+func (m *TimeSeriesQueryRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.StartNanos))
-	data[i] = 0x10
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.StartNanos))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.EndNanos))
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.EndNanos))
 	if len(m.Queries) > 0 {
 		for _, msg := range m.Queries {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	data[i] = 0x20
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.SampleNanos))
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.SampleNanos))
 	return i, nil
 }
 
-func (m *TimeSeriesQueryResponse) Marshal() (data []byte, err error) {
+func (m *TimeSeriesQueryResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TimeSeriesQueryResponse) MarshalTo(data []byte) (int, error) {
+func (m *TimeSeriesQueryResponse) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Results) > 0 {
 		for _, msg := range m.Results {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -556,35 +556,35 @@ func (m *TimeSeriesQueryResponse) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *TimeSeriesQueryResponse_Result) Marshal() (data []byte, err error) {
+func (m *TimeSeriesQueryResponse_Result) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TimeSeriesQueryResponse_Result) MarshalTo(data []byte) (int, error) {
+func (m *TimeSeriesQueryResponse_Result) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintTimeseries(data, i, uint64(m.Query.Size()))
-	n1, err := m.Query.MarshalTo(data[i:])
+	i = encodeVarintTimeseries(dAtA, i, uint64(m.Query.Size()))
+	n1, err := m.Query.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
 	if len(m.Datapoints) > 0 {
 		for _, msg := range m.Datapoints {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintTimeseries(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintTimeseries(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -594,31 +594,31 @@ func (m *TimeSeriesQueryResponse_Result) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Timeseries(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Timeseries(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Timeseries(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Timeseries(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintTimeseries(data []byte, offset int, v uint64) int {
+func encodeVarintTimeseries(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *TimeSeriesDatapoint) Size() (n int) {
@@ -722,8 +722,8 @@ func sovTimeseries(x uint64) (n int) {
 func sozTimeseries(x uint64) (n int) {
 	return sovTimeseries(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TimeSeriesDatapoint) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -735,7 +735,7 @@ func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -763,7 +763,7 @@ func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.TimestampNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -779,18 +779,18 @@ func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			iNdEx += 8
-			v = uint64(data[iNdEx-8])
-			v |= uint64(data[iNdEx-7]) << 8
-			v |= uint64(data[iNdEx-6]) << 16
-			v |= uint64(data[iNdEx-5]) << 24
-			v |= uint64(data[iNdEx-4]) << 32
-			v |= uint64(data[iNdEx-3]) << 40
-			v |= uint64(data[iNdEx-2]) << 48
-			v |= uint64(data[iNdEx-1]) << 56
+			v = uint64(dAtA[iNdEx-8])
+			v |= uint64(dAtA[iNdEx-7]) << 8
+			v |= uint64(dAtA[iNdEx-6]) << 16
+			v |= uint64(dAtA[iNdEx-5]) << 24
+			v |= uint64(dAtA[iNdEx-4]) << 32
+			v |= uint64(dAtA[iNdEx-3]) << 40
+			v |= uint64(dAtA[iNdEx-2]) << 48
+			v |= uint64(dAtA[iNdEx-1]) << 56
 			m.Value = float64(math.Float64frombits(v))
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTimeseries(data[iNdEx:])
+			skippy, err := skipTimeseries(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -809,8 +809,8 @@ func (m *TimeSeriesDatapoint) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TimeSeriesData) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -822,7 +822,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -850,7 +850,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -865,7 +865,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -879,7 +879,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -894,7 +894,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Source = string(data[iNdEx:postIndex])
+			m.Source = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -908,7 +908,7 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -923,13 +923,13 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Datapoints = append(m.Datapoints, TimeSeriesDatapoint{})
-			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTimeseries(data[iNdEx:])
+			skippy, err := skipTimeseries(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -948,8 +948,8 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Query) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Query) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -961,7 +961,7 @@ func (m *Query) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -989,7 +989,7 @@ func (m *Query) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1004,7 +1004,7 @@ func (m *Query) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -1018,7 +1018,7 @@ func (m *Query) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (TimeSeriesQueryAggregator(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1038,7 +1038,7 @@ func (m *Query) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (TimeSeriesQueryAggregator(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1058,7 +1058,7 @@ func (m *Query) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (TimeSeriesQueryDerivative(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1078,7 +1078,7 @@ func (m *Query) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1093,11 +1093,11 @@ func (m *Query) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Sources = append(m.Sources, string(data[iNdEx:postIndex]))
+			m.Sources = append(m.Sources, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTimeseries(data[iNdEx:])
+			skippy, err := skipTimeseries(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1116,8 +1116,8 @@ func (m *Query) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1129,7 +1129,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1157,7 +1157,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.StartNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1176,7 +1176,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.EndNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1195,7 +1195,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1210,7 +1210,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Queries = append(m.Queries, Query{})
-			if err := m.Queries[len(m.Queries)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Queries[len(m.Queries)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1226,7 +1226,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.SampleNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1235,7 +1235,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTimeseries(data[iNdEx:])
+			skippy, err := skipTimeseries(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1254,8 +1254,8 @@ func (m *TimeSeriesQueryRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TimeSeriesQueryResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1267,7 +1267,7 @@ func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1295,7 +1295,7 @@ func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1310,13 +1310,13 @@ func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Results = append(m.Results, TimeSeriesQueryResponse_Result{})
-			if err := m.Results[len(m.Results)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Results[len(m.Results)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTimeseries(data[iNdEx:])
+			skippy, err := skipTimeseries(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1335,8 +1335,8 @@ func (m *TimeSeriesQueryResponse) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1348,7 +1348,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1376,7 +1376,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1390,7 +1390,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Query.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Query.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1406,7 +1406,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1421,13 +1421,13 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Datapoints = append(m.Datapoints, TimeSeriesDatapoint{})
-			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Datapoints[len(m.Datapoints)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTimeseries(data[iNdEx:])
+			skippy, err := skipTimeseries(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1446,8 +1446,8 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipTimeseries(data []byte) (n int, err error) {
-	l := len(data)
+func skipTimeseries(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -1458,7 +1458,7 @@ func skipTimeseries(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1476,7 +1476,7 @@ func skipTimeseries(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -1493,7 +1493,7 @@ func skipTimeseries(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1516,7 +1516,7 @@ func skipTimeseries(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1527,7 +1527,7 @@ func skipTimeseries(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipTimeseries(data[start:])
+				next, err := skipTimeseries(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

@@ -166,120 +166,120 @@ var _Heartbeat_serviceDesc = grpc.ServiceDesc{
 	Metadata: fileDescriptorHeartbeat,
 }
 
-func (m *RemoteOffset) Marshal() (data []byte, err error) {
+func (m *RemoteOffset) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *RemoteOffset) MarshalTo(data []byte) (int, error) {
+func (m *RemoteOffset) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.Offset))
-	data[i] = 0x10
+	i = encodeVarintHeartbeat(dAtA, i, uint64(m.Offset))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.Uncertainty))
-	data[i] = 0x18
+	i = encodeVarintHeartbeat(dAtA, i, uint64(m.Uncertainty))
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.MeasuredAt))
+	i = encodeVarintHeartbeat(dAtA, i, uint64(m.MeasuredAt))
 	return i, nil
 }
 
-func (m *PingRequest) Marshal() (data []byte, err error) {
+func (m *PingRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *PingRequest) MarshalTo(data []byte) (int, error) {
+func (m *PingRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Ping)))
-	i += copy(data[i:], m.Ping)
-	data[i] = 0x12
+	i = encodeVarintHeartbeat(dAtA, i, uint64(len(m.Ping)))
+	i += copy(dAtA[i:], m.Ping)
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.Offset.Size()))
-	n1, err := m.Offset.MarshalTo(data[i:])
+	i = encodeVarintHeartbeat(dAtA, i, uint64(m.Offset.Size()))
+	n1, err := m.Offset.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
-	data[i] = 0x1a
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
-	i += copy(data[i:], m.Addr)
-	data[i] = 0x20
+	i = encodeVarintHeartbeat(dAtA, i, uint64(len(m.Addr)))
+	i += copy(dAtA[i:], m.Addr)
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.MaxOffsetNanos))
+	i = encodeVarintHeartbeat(dAtA, i, uint64(m.MaxOffsetNanos))
 	return i, nil
 }
 
-func (m *PingResponse) Marshal() (data []byte, err error) {
+func (m *PingResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *PingResponse) MarshalTo(data []byte) (int, error) {
+func (m *PingResponse) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Pong)))
-	i += copy(data[i:], m.Pong)
-	data[i] = 0x10
+	i = encodeVarintHeartbeat(dAtA, i, uint64(len(m.Pong)))
+	i += copy(dAtA[i:], m.Pong)
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintHeartbeat(data, i, uint64(m.ServerTime))
+	i = encodeVarintHeartbeat(dAtA, i, uint64(m.ServerTime))
 	return i, nil
 }
 
-func encodeFixed64Heartbeat(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Heartbeat(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Heartbeat(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Heartbeat(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintHeartbeat(data []byte, offset int, v uint64) int {
+func encodeVarintHeartbeat(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *RemoteOffset) Size() (n int) {
@@ -326,8 +326,8 @@ func sovHeartbeat(x uint64) (n int) {
 func sozHeartbeat(x uint64) (n int) {
 	return sovHeartbeat(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *RemoteOffset) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *RemoteOffset) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -339,7 +339,7 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -367,7 +367,7 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Offset |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -386,7 +386,7 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Uncertainty |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -405,7 +405,7 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.MeasuredAt |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -414,7 +414,7 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipHeartbeat(data[iNdEx:])
+			skippy, err := skipHeartbeat(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -433,8 +433,8 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PingRequest) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PingRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -446,7 +446,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -474,7 +474,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -489,7 +489,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ping = string(data[iNdEx:postIndex])
+			m.Ping = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -503,7 +503,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -517,7 +517,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Offset.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Offset.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -533,7 +533,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -548,7 +548,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Addr = string(data[iNdEx:postIndex])
+			m.Addr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
@@ -562,7 +562,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.MaxOffsetNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -571,7 +571,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipHeartbeat(data[iNdEx:])
+			skippy, err := skipHeartbeat(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -590,8 +590,8 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *PingResponse) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *PingResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -603,7 +603,7 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -631,7 +631,7 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -646,7 +646,7 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Pong = string(data[iNdEx:postIndex])
+			m.Pong = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -660,7 +660,7 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ServerTime |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -669,7 +669,7 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipHeartbeat(data[iNdEx:])
+			skippy, err := skipHeartbeat(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -688,8 +688,8 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipHeartbeat(data []byte) (n int, err error) {
-	l := len(data)
+func skipHeartbeat(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -700,7 +700,7 @@ func skipHeartbeat(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -718,7 +718,7 @@ func skipHeartbeat(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -735,7 +735,7 @@ func skipHeartbeat(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -758,7 +758,7 @@ func skipHeartbeat(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -769,7 +769,7 @@ func skipHeartbeat(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipHeartbeat(data[start:])
+				next, err := skipHeartbeat(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

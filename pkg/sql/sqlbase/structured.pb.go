@@ -1122,190 +1122,190 @@ func init() {
 	proto.RegisterEnum("cockroach.sql.sqlbase.DescriptorMutation_Direction", DescriptorMutation_Direction_name, DescriptorMutation_Direction_value)
 	proto.RegisterEnum("cockroach.sql.sqlbase.TableDescriptor_State", TableDescriptor_State_name, TableDescriptor_State_value)
 }
-func (m *ColumnType) Marshal() (data []byte, err error) {
+func (m *ColumnType) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *ColumnType) MarshalTo(data []byte) (int, error) {
+func (m *ColumnType) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Kind))
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(m.Kind))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Width))
-	data[i] = 0x18
+	i = encodeVarintStructured(dAtA, i, uint64(m.Width))
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Precision))
+	i = encodeVarintStructured(dAtA, i, uint64(m.Precision))
 	return i, nil
 }
 
-func (m *ForeignKeyReference) Marshal() (data []byte, err error) {
+func (m *ForeignKeyReference) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *ForeignKeyReference) MarshalTo(data []byte) (int, error) {
+func (m *ForeignKeyReference) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Table))
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(m.Table))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Index))
-	data[i] = 0x1a
+	i = encodeVarintStructured(dAtA, i, uint64(m.Index))
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x20
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Validity))
+	i = encodeVarintStructured(dAtA, i, uint64(m.Validity))
 	return i, nil
 }
 
-func (m *ColumnDescriptor) Marshal() (data []byte, err error) {
+func (m *ColumnDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *ColumnDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	data[i] = 0x1a
+	i = encodeVarintStructured(dAtA, i, uint64(m.ID))
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Type.Size()))
-	n1, err := m.Type.MarshalTo(data[i:])
+	i = encodeVarintStructured(dAtA, i, uint64(m.Type.Size()))
+	n1, err := m.Type.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
-	data[i] = 0x20
+	dAtA[i] = 0x20
 	i++
 	if m.Nullable {
-		data[i] = 1
+		dAtA[i] = 1
 	} else {
-		data[i] = 0
+		dAtA[i] = 0
 	}
 	i++
 	if m.DefaultExpr != nil {
-		data[i] = 0x2a
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintStructured(data, i, uint64(len(*m.DefaultExpr)))
-		i += copy(data[i:], *m.DefaultExpr)
+		i = encodeVarintStructured(dAtA, i, uint64(len(*m.DefaultExpr)))
+		i += copy(dAtA[i:], *m.DefaultExpr)
 	}
-	data[i] = 0x30
+	dAtA[i] = 0x30
 	i++
 	if m.Hidden {
-		data[i] = 1
+		dAtA[i] = 1
 	} else {
-		data[i] = 0
+		dAtA[i] = 0
 	}
 	i++
 	return i, nil
 }
 
-func (m *ColumnFamilyDescriptor) Marshal() (data []byte, err error) {
+func (m *ColumnFamilyDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *ColumnFamilyDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *ColumnFamilyDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
+	i = encodeVarintStructured(dAtA, i, uint64(m.ID))
 	if len(m.ColumnNames) > 0 {
 		for _, s := range m.ColumnNames {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.ColumnIDs) > 0 {
 		for _, num := range m.ColumnIDs {
-			data[i] = 0x20
+			dAtA[i] = 0x20
 			i++
-			i = encodeVarintStructured(data, i, uint64(num))
+			i = encodeVarintStructured(dAtA, i, uint64(num))
 		}
 	}
-	data[i] = 0x28
+	dAtA[i] = 0x28
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.DefaultColumnID))
+	i = encodeVarintStructured(dAtA, i, uint64(m.DefaultColumnID))
 	return i, nil
 }
 
-func (m *InterleaveDescriptor) Marshal() (data []byte, err error) {
+func (m *InterleaveDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *InterleaveDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *InterleaveDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ancestors) > 0 {
 		for _, msg := range m.Ancestors {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1315,148 +1315,148 @@ func (m *InterleaveDescriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *InterleaveDescriptor_Ancestor) Marshal() (data []byte, err error) {
+func (m *InterleaveDescriptor_Ancestor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *InterleaveDescriptor_Ancestor) MarshalTo(data []byte) (int, error) {
+func (m *InterleaveDescriptor_Ancestor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.TableID))
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(m.TableID))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.IndexID))
-	data[i] = 0x18
+	i = encodeVarintStructured(dAtA, i, uint64(m.IndexID))
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.SharedPrefixLen))
+	i = encodeVarintStructured(dAtA, i, uint64(m.SharedPrefixLen))
 	return i, nil
 }
 
-func (m *IndexDescriptor) Marshal() (data []byte, err error) {
+func (m *IndexDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *IndexDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	data[i] = 0x18
+	i = encodeVarintStructured(dAtA, i, uint64(m.ID))
+	dAtA[i] = 0x18
 	i++
 	if m.Unique {
-		data[i] = 1
+		dAtA[i] = 1
 	} else {
-		data[i] = 0
+		dAtA[i] = 0
 	}
 	i++
 	if len(m.ColumnNames) > 0 {
 		for _, s := range m.ColumnNames {
-			data[i] = 0x22
+			dAtA[i] = 0x22
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.StoreColumnNames) > 0 {
 		for _, s := range m.StoreColumnNames {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			data[i] = uint8(l)
+			dAtA[i] = uint8(l)
 			i++
-			i += copy(data[i:], s)
+			i += copy(dAtA[i:], s)
 		}
 	}
 	if len(m.ColumnIDs) > 0 {
 		for _, num := range m.ColumnIDs {
-			data[i] = 0x30
+			dAtA[i] = 0x30
 			i++
-			i = encodeVarintStructured(data, i, uint64(num))
+			i = encodeVarintStructured(dAtA, i, uint64(num))
 		}
 	}
 	if len(m.ImplicitColumnIDs) > 0 {
 		for _, num := range m.ImplicitColumnIDs {
-			data[i] = 0x38
+			dAtA[i] = 0x38
 			i++
-			i = encodeVarintStructured(data, i, uint64(num))
+			i = encodeVarintStructured(dAtA, i, uint64(num))
 		}
 	}
 	if len(m.ColumnDirections) > 0 {
 		for _, num := range m.ColumnDirections {
-			data[i] = 0x40
+			dAtA[i] = 0x40
 			i++
-			i = encodeVarintStructured(data, i, uint64(num))
+			i = encodeVarintStructured(dAtA, i, uint64(num))
 		}
 	}
-	data[i] = 0x4a
+	dAtA[i] = 0x4a
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ForeignKey.Size()))
-	n2, err := m.ForeignKey.MarshalTo(data[i:])
+	i = encodeVarintStructured(dAtA, i, uint64(m.ForeignKey.Size()))
+	n2, err := m.ForeignKey.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
 	if len(m.ReferencedBy) > 0 {
 		for _, msg := range m.ReferencedBy {
-			data[i] = 0x52
+			dAtA[i] = 0x52
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	data[i] = 0x5a
+	dAtA[i] = 0x5a
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Interleave.Size()))
-	n3, err := m.Interleave.MarshalTo(data[i:])
+	i = encodeVarintStructured(dAtA, i, uint64(m.Interleave.Size()))
+	n3, err := m.Interleave.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
 	if len(m.InterleavedBy) > 0 {
 		for _, msg := range m.InterleavedBy {
-			data[i] = 0x62
+			dAtA[i] = 0x62
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1466,41 +1466,41 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *DescriptorMutation) Marshal() (data []byte, err error) {
+func (m *DescriptorMutation) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DescriptorMutation) MarshalTo(data []byte) (int, error) {
+func (m *DescriptorMutation) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Descriptor_ != nil {
-		nn4, err := m.Descriptor_.MarshalTo(data[i:])
+		nn4, err := m.Descriptor_.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += nn4
 	}
-	data[i] = 0x18
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.State))
-	data[i] = 0x20
+	i = encodeVarintStructured(dAtA, i, uint64(m.State))
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Direction))
-	data[i] = 0x28
+	i = encodeVarintStructured(dAtA, i, uint64(m.Direction))
+	dAtA[i] = 0x28
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.MutationID))
-	data[i] = 0x32
+	i = encodeVarintStructured(dAtA, i, uint64(m.MutationID))
+	dAtA[i] = 0x32
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ResumeSpan.Size()))
-	n5, err := m.ResumeSpan.MarshalTo(data[i:])
+	i = encodeVarintStructured(dAtA, i, uint64(m.ResumeSpan.Size()))
+	n5, err := m.ResumeSpan.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1508,13 +1508,13 @@ func (m *DescriptorMutation) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *DescriptorMutation_Column) MarshalTo(data []byte) (int, error) {
+func (m *DescriptorMutation_Column) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.Column != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Column.Size()))
-		n6, err := m.Column.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Column.Size()))
+		n6, err := m.Column.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1522,13 +1522,13 @@ func (m *DescriptorMutation_Column) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *DescriptorMutation_Index) MarshalTo(data []byte) (int, error) {
+func (m *DescriptorMutation_Index) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.Index != nil {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Index.Size()))
-		n7, err := m.Index.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Index.Size()))
+		n7, err := m.Index.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1536,93 +1536,93 @@ func (m *DescriptorMutation_Index) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *TableDescriptor) Marshal() (data []byte, err error) {
+func (m *TableDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *TableDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x18
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	data[i] = 0x20
+	i = encodeVarintStructured(dAtA, i, uint64(m.ID))
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ParentID))
-	data[i] = 0x28
+	i = encodeVarintStructured(dAtA, i, uint64(m.ParentID))
+	dAtA[i] = 0x28
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Version))
-	data[i] = 0x30
+	i = encodeVarintStructured(dAtA, i, uint64(m.Version))
+	dAtA[i] = 0x30
 	i++
 	if m.UpVersion {
-		data[i] = 1
+		dAtA[i] = 1
 	} else {
-		data[i] = 0
+		dAtA[i] = 0
 	}
 	i++
-	data[i] = 0x3a
+	dAtA[i] = 0x3a
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ModificationTime.Size()))
-	n8, err := m.ModificationTime.MarshalTo(data[i:])
+	i = encodeVarintStructured(dAtA, i, uint64(m.ModificationTime.Size()))
+	n8, err := m.ModificationTime.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n8
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
-			data[i] = 0x42
+			dAtA[i] = 0x42
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	data[i] = 0x48
+	dAtA[i] = 0x48
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
-	data[i] = 0x52
+	i = encodeVarintStructured(dAtA, i, uint64(m.NextColumnID))
+	dAtA[i] = 0x52
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
-	n9, err := m.PrimaryIndex.MarshalTo(data[i:])
+	i = encodeVarintStructured(dAtA, i, uint64(m.PrimaryIndex.Size()))
+	n9, err := m.PrimaryIndex.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n9
 	if len(m.Indexes) > 0 {
 		for _, msg := range m.Indexes {
-			data[i] = 0x5a
+			dAtA[i] = 0x5a
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	data[i] = 0x60
+	dAtA[i] = 0x60
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
+	i = encodeVarintStructured(dAtA, i, uint64(m.NextIndexID))
 	if m.Privileges != nil {
-		data[i] = 0x6a
+		dAtA[i] = 0x6a
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n10, err := m.Privileges.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Privileges.Size()))
+		n10, err := m.Privileges.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1630,10 +1630,10 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Mutations) > 0 {
 		for _, msg := range m.Mutations {
-			data[i] = 0x72
+			dAtA[i] = 0x72
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1641,38 +1641,38 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if m.Lease != nil {
-		data[i] = 0x7a
+		dAtA[i] = 0x7a
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Lease.Size()))
-		n11, err := m.Lease.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Lease.Size()))
+		n11, err := m.Lease.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n11
 	}
-	data[i] = 0x80
+	dAtA[i] = 0x80
 	i++
-	data[i] = 0x1
+	dAtA[i] = 0x1
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextMutationID))
-	data[i] = 0x88
+	i = encodeVarintStructured(dAtA, i, uint64(m.NextMutationID))
+	dAtA[i] = 0x88
 	i++
-	data[i] = 0x1
+	dAtA[i] = 0x1
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.FormatVersion))
-	data[i] = 0x98
+	i = encodeVarintStructured(dAtA, i, uint64(m.FormatVersion))
+	dAtA[i] = 0x98
 	i++
-	data[i] = 0x1
+	dAtA[i] = 0x1
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.State))
+	i = encodeVarintStructured(dAtA, i, uint64(m.State))
 	if len(m.Checks) > 0 {
 		for _, msg := range m.Checks {
-			data[i] = 0xa2
+			dAtA[i] = 0xa2
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1681,12 +1681,12 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Renames) > 0 {
 		for _, msg := range m.Renames {
-			data[i] = 0xaa
+			dAtA[i] = 0xaa
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1695,46 +1695,46 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Families) > 0 {
 		for _, msg := range m.Families {
-			data[i] = 0xb2
+			dAtA[i] = 0xb2
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	data[i] = 0xb8
+	dAtA[i] = 0xb8
 	i++
-	data[i] = 0x1
+	dAtA[i] = 0x1
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NextFamilyID))
-	data[i] = 0xc2
+	i = encodeVarintStructured(dAtA, i, uint64(m.NextFamilyID))
+	dAtA[i] = 0xc2
 	i++
-	data[i] = 0x1
+	dAtA[i] = 0x1
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.ViewQuery)))
-	i += copy(data[i:], m.ViewQuery)
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.ViewQuery)))
+	i += copy(dAtA[i:], m.ViewQuery)
 	if len(m.DependsOn) > 0 {
 		for _, num := range m.DependsOn {
-			data[i] = 0xc8
+			dAtA[i] = 0xc8
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
-			i = encodeVarintStructured(data, i, uint64(num))
+			i = encodeVarintStructured(dAtA, i, uint64(num))
 		}
 	}
 	if len(m.DependedOnBy) > 0 {
 		for _, msg := range m.DependedOnBy {
-			data[i] = 0xd2
+			dAtA[i] = 0xd2
 			i++
-			data[i] = 0x1
+			dAtA[i] = 0x1
 			i++
-			i = encodeVarintStructured(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStructured(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1744,142 +1744,142 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *TableDescriptor_SchemaChangeLease) Marshal() (data []byte, err error) {
+func (m *TableDescriptor_SchemaChangeLease) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TableDescriptor_SchemaChangeLease) MarshalTo(data []byte) (int, error) {
+func (m *TableDescriptor_SchemaChangeLease) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.NodeID))
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(m.NodeID))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ExpirationTime))
+	i = encodeVarintStructured(dAtA, i, uint64(m.ExpirationTime))
 	return i, nil
 }
 
-func (m *TableDescriptor_CheckConstraint) Marshal() (data []byte, err error) {
+func (m *TableDescriptor_CheckConstraint) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TableDescriptor_CheckConstraint) MarshalTo(data []byte) (int, error) {
+func (m *TableDescriptor_CheckConstraint) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Expr)))
-	i += copy(data[i:], m.Expr)
-	data[i] = 0x12
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Expr)))
+	i += copy(dAtA[i:], m.Expr)
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x18
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.Validity))
+	i = encodeVarintStructured(dAtA, i, uint64(m.Validity))
 	return i, nil
 }
 
-func (m *TableDescriptor_RenameInfo) Marshal() (data []byte, err error) {
+func (m *TableDescriptor_RenameInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TableDescriptor_RenameInfo) MarshalTo(data []byte) (int, error) {
+func (m *TableDescriptor_RenameInfo) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.OldParentID))
-	data[i] = 0x12
+	i = encodeVarintStructured(dAtA, i, uint64(m.OldParentID))
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.OldName)))
-	i += copy(data[i:], m.OldName)
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.OldName)))
+	i += copy(dAtA[i:], m.OldName)
 	return i, nil
 }
 
-func (m *TableDescriptor_Reference) Marshal() (data []byte, err error) {
+func (m *TableDescriptor_Reference) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *TableDescriptor_Reference) MarshalTo(data []byte) (int, error) {
+func (m *TableDescriptor_Reference) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(m.ID))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.IndexID))
+	i = encodeVarintStructured(dAtA, i, uint64(m.IndexID))
 	if len(m.ColumnIDs) > 0 {
 		for _, num := range m.ColumnIDs {
-			data[i] = 0x18
+			dAtA[i] = 0x18
 			i++
-			i = encodeVarintStructured(data, i, uint64(num))
+			i = encodeVarintStructured(dAtA, i, uint64(num))
 		}
 	}
 	return i, nil
 }
 
-func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
+func (m *DatabaseDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *DatabaseDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	data[i] = 0x10
+	i = encodeVarintStructured(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintStructured(data, i, uint64(m.ID))
+	i = encodeVarintStructured(dAtA, i, uint64(m.ID))
 	if m.Privileges != nil {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n12, err := m.Privileges.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Privileges.Size()))
+		n12, err := m.Privileges.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1888,23 +1888,23 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Descriptor) Marshal() (data []byte, err error) {
+func (m *Descriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Descriptor) MarshalTo(data []byte) (int, error) {
+func (m *Descriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Union != nil {
-		nn13, err := m.Union.MarshalTo(data[i:])
+		nn13, err := m.Union.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1913,13 +1913,13 @@ func (m *Descriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Descriptor_Table) MarshalTo(data []byte) (int, error) {
+func (m *Descriptor_Table) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.Table != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
-		n14, err := m.Table.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Table.Size()))
+		n14, err := m.Table.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1927,13 +1927,13 @@ func (m *Descriptor_Table) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *Descriptor_Database) MarshalTo(data []byte) (int, error) {
+func (m *Descriptor_Database) MarshalTo(dAtA []byte) (int, error) {
 	i := 0
 	if m.Database != nil {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintStructured(data, i, uint64(m.Database.Size()))
-		n15, err := m.Database.MarshalTo(data[i:])
+		i = encodeVarintStructured(dAtA, i, uint64(m.Database.Size()))
+		n15, err := m.Database.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1941,31 +1941,31 @@ func (m *Descriptor_Database) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
-func encodeFixed64Structured(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Structured(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Structured(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Structured(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintStructured(data []byte, offset int, v uint64) int {
+func encodeVarintStructured(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *ColumnType) Size() (n int) {
@@ -2306,8 +2306,8 @@ func sovStructured(x uint64) (n int) {
 func sozStructured(x uint64) (n int) {
 	return sovStructured(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *ColumnType) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *ColumnType) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2319,7 +2319,7 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2347,7 +2347,7 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Kind |= (ColumnType_Kind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2366,7 +2366,7 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Width |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2385,7 +2385,7 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Precision |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2394,7 +2394,7 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2413,8 +2413,8 @@ func (m *ColumnType) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *ForeignKeyReference) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *ForeignKeyReference) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2426,7 +2426,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2454,7 +2454,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Table |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2473,7 +2473,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Index |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2492,7 +2492,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2507,7 +2507,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
@@ -2521,7 +2521,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Validity |= (ConstraintValidity(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2530,7 +2530,7 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2549,8 +2549,8 @@ func (m *ForeignKeyReference) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *ColumnDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *ColumnDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2562,7 +2562,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2590,7 +2590,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2605,7 +2605,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -2619,7 +2619,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ID |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2638,7 +2638,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2652,7 +2652,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Type.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Type.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2668,7 +2668,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2688,7 +2688,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2703,7 +2703,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			s := string(data[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
 			m.DefaultExpr = &s
 			iNdEx = postIndex
 		case 6:
@@ -2718,7 +2718,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2728,7 +2728,7 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			m.Hidden = bool(v != 0)
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2747,8 +2747,8 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *ColumnFamilyDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2760,7 +2760,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2788,7 +2788,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2803,7 +2803,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -2817,7 +2817,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ID |= (FamilyID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2836,7 +2836,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2851,7 +2851,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ColumnNames = append(m.ColumnNames, string(data[iNdEx:postIndex]))
+			m.ColumnNames = append(m.ColumnNames, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
@@ -2865,7 +2865,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2885,7 +2885,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.DefaultColumnID |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2894,7 +2894,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2913,8 +2913,8 @@ func (m *ColumnFamilyDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *InterleaveDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *InterleaveDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2926,7 +2926,7 @@ func (m *InterleaveDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2954,7 +2954,7 @@ func (m *InterleaveDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2969,13 +2969,13 @@ func (m *InterleaveDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Ancestors = append(m.Ancestors, InterleaveDescriptor_Ancestor{})
-			if err := m.Ancestors[len(m.Ancestors)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Ancestors[len(m.Ancestors)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2994,8 +2994,8 @@ func (m *InterleaveDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *InterleaveDescriptor_Ancestor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3007,7 +3007,7 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3035,7 +3035,7 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.TableID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3054,7 +3054,7 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.IndexID |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3073,7 +3073,7 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.SharedPrefixLen |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3082,7 +3082,7 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3101,8 +3101,8 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *IndexDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3114,7 +3114,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3142,7 +3142,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3157,7 +3157,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -3171,7 +3171,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ID |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3190,7 +3190,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3210,7 +3210,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3225,7 +3225,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ColumnNames = append(m.ColumnNames, string(data[iNdEx:postIndex]))
+			m.ColumnNames = append(m.ColumnNames, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -3239,7 +3239,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3254,7 +3254,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.StoreColumnNames = append(m.StoreColumnNames, string(data[iNdEx:postIndex]))
+			m.StoreColumnNames = append(m.StoreColumnNames, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 6:
 			if wireType != 0 {
@@ -3268,7 +3268,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3288,7 +3288,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3308,7 +3308,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (IndexDescriptor_Direction(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3328,7 +3328,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3342,7 +3342,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ForeignKey.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ForeignKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3358,7 +3358,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3373,7 +3373,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.ReferencedBy = append(m.ReferencedBy, ForeignKeyReference{})
-			if err := m.ReferencedBy[len(m.ReferencedBy)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ReferencedBy[len(m.ReferencedBy)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3389,7 +3389,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3403,7 +3403,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Interleave.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Interleave.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3419,7 +3419,7 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3434,13 +3434,13 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.InterleavedBy = append(m.InterleavedBy, ForeignKeyReference{})
-			if err := m.InterleavedBy[len(m.InterleavedBy)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.InterleavedBy[len(m.InterleavedBy)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3459,8 +3459,8 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DescriptorMutation) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DescriptorMutation) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3472,7 +3472,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3500,7 +3500,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3515,7 +3515,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &ColumnDescriptor{}
-			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Descriptor_ = &DescriptorMutation_Column{v}
@@ -3532,7 +3532,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3547,7 +3547,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &IndexDescriptor{}
-			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Descriptor_ = &DescriptorMutation_Index{v}
@@ -3564,7 +3564,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.State |= (DescriptorMutation_State(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3583,7 +3583,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Direction |= (DescriptorMutation_Direction(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3602,7 +3602,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.MutationID |= (MutationID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3621,7 +3621,7 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3635,13 +3635,13 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ResumeSpan.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ResumeSpan.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -3660,8 +3660,8 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TableDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TableDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -3673,7 +3673,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -3701,7 +3701,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3716,7 +3716,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
@@ -3730,7 +3730,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3749,7 +3749,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ParentID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3768,7 +3768,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Version |= (DescriptorVersion(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3787,7 +3787,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3807,7 +3807,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3821,7 +3821,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ModificationTime.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ModificationTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3837,7 +3837,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3852,7 +3852,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Columns = append(m.Columns, ColumnDescriptor{})
-			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3868,7 +3868,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NextColumnID |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3887,7 +3887,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3901,7 +3901,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.PrimaryIndex.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.PrimaryIndex.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3917,7 +3917,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3932,7 +3932,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Indexes = append(m.Indexes, IndexDescriptor{})
-			if err := m.Indexes[len(m.Indexes)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Indexes[len(m.Indexes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3948,7 +3948,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NextIndexID |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3967,7 +3967,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -3984,7 +3984,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if m.Privileges == nil {
 				m.Privileges = &PrivilegeDescriptor{}
 			}
-			if err := m.Privileges.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Privileges.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4000,7 +4000,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4015,7 +4015,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Mutations = append(m.Mutations, DescriptorMutation{})
-			if err := m.Mutations[len(m.Mutations)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Mutations[len(m.Mutations)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4031,7 +4031,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4048,7 +4048,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if m.Lease == nil {
 				m.Lease = &TableDescriptor_SchemaChangeLease{}
 			}
-			if err := m.Lease.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Lease.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4064,7 +4064,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NextMutationID |= (MutationID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4083,7 +4083,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.FormatVersion |= (FormatVersion(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4102,7 +4102,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.State |= (TableDescriptor_State(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4121,7 +4121,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4136,7 +4136,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Checks = append(m.Checks, &TableDescriptor_CheckConstraint{})
-			if err := m.Checks[len(m.Checks)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Checks[len(m.Checks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4152,7 +4152,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4167,7 +4167,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Renames = append(m.Renames, TableDescriptor_RenameInfo{})
-			if err := m.Renames[len(m.Renames)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Renames[len(m.Renames)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4183,7 +4183,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4198,7 +4198,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Families = append(m.Families, ColumnFamilyDescriptor{})
-			if err := m.Families[len(m.Families)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Families[len(m.Families)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4214,7 +4214,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NextFamilyID |= (FamilyID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4233,7 +4233,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4248,7 +4248,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ViewQuery = string(data[iNdEx:postIndex])
+			m.ViewQuery = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 25:
 			if wireType != 0 {
@@ -4262,7 +4262,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4282,7 +4282,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4297,13 +4297,13 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.DependedOnBy = append(m.DependedOnBy, TableDescriptor_Reference{})
-			if err := m.DependedOnBy[len(m.DependedOnBy)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.DependedOnBy[len(m.DependedOnBy)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4322,8 +4322,8 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TableDescriptor_SchemaChangeLease) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4335,7 +4335,7 @@ func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4363,7 +4363,7 @@ func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4382,7 +4382,7 @@ func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ExpirationTime |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4391,7 +4391,7 @@ func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4410,8 +4410,8 @@ func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TableDescriptor_CheckConstraint) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4423,7 +4423,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4451,7 +4451,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4466,7 +4466,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Expr = string(data[iNdEx:postIndex])
+			m.Expr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -4480,7 +4480,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4495,7 +4495,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
@@ -4509,7 +4509,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Validity |= (ConstraintValidity(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4518,7 +4518,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4537,8 +4537,8 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TableDescriptor_RenameInfo) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TableDescriptor_RenameInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4550,7 +4550,7 @@ func (m *TableDescriptor_RenameInfo) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4578,7 +4578,7 @@ func (m *TableDescriptor_RenameInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.OldParentID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4597,7 +4597,7 @@ func (m *TableDescriptor_RenameInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4612,11 +4612,11 @@ func (m *TableDescriptor_RenameInfo) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OldName = string(data[iNdEx:postIndex])
+			m.OldName = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4635,8 +4635,8 @@ func (m *TableDescriptor_RenameInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *TableDescriptor_Reference) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4648,7 +4648,7 @@ func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4676,7 +4676,7 @@ func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4695,7 +4695,7 @@ func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.IndexID |= (IndexID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4714,7 +4714,7 @@ func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (ColumnID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4724,7 +4724,7 @@ func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
 			m.ColumnIDs = append(m.ColumnIDs, v)
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4743,8 +4743,8 @@ func (m *TableDescriptor_Reference) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DatabaseDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4756,7 +4756,7 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4784,7 +4784,7 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4799,7 +4799,7 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -4813,7 +4813,7 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ID |= (ID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4832,7 +4832,7 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4849,13 +4849,13 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			if m.Privileges == nil {
 				m.Privileges = &PrivilegeDescriptor{}
 			}
-			if err := m.Privileges.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Privileges.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4874,8 +4874,8 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Descriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Descriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -4887,7 +4887,7 @@ func (m *Descriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -4915,7 +4915,7 @@ func (m *Descriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4930,7 +4930,7 @@ func (m *Descriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &TableDescriptor{}
-			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Union = &Descriptor_Table{v}
@@ -4947,7 +4947,7 @@ func (m *Descriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -4962,14 +4962,14 @@ func (m *Descriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &DatabaseDescriptor{}
-			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Union = &Descriptor_Database{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStructured(data[iNdEx:])
+			skippy, err := skipStructured(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -4988,8 +4988,8 @@ func (m *Descriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipStructured(data []byte) (n int, err error) {
-	l := len(data)
+func skipStructured(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -5000,7 +5000,7 @@ func skipStructured(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -5018,7 +5018,7 @@ func skipStructured(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -5035,7 +5035,7 @@ func skipStructured(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -5058,7 +5058,7 @@ func skipStructured(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -5069,7 +5069,7 @@ func skipStructured(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipStructured(data[start:])
+				next, err := skipStructured(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

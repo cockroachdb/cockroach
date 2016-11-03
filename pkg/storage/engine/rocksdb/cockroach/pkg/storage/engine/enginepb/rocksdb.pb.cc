@@ -20,45 +20,58 @@ namespace engine {
 namespace enginepb {
 
 void protobuf_ShutdownFile_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto() {
-  delete SSTUserProperties::default_instance_;
-  delete SSTUserPropertiesCollection::default_instance_;
+  SSTUserProperties_default_instance_.Shutdown();
+  SSTUserPropertiesCollection_default_instance_.Shutdown();
 }
 
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+void protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_impl() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  ::cockroach::util::hlc::protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
+  ::google::protobuf::internal::GetEmptyString();
+  SSTUserProperties_default_instance_.DefaultConstruct();
+  ::google::protobuf::internal::GetEmptyString();
+  SSTUserPropertiesCollection_default_instance_.DefaultConstruct();
+  SSTUserProperties_default_instance_.get_mutable()->InitAsDefaultInstance();
+  SSTUserPropertiesCollection_default_instance_.get_mutable()->InitAsDefaultInstance();
+}
+
+GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_once_);
+void protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto() {
+  ::google::protobuf::GoogleOnceInit(&protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_once_,
+                 &protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_impl);
+}
 void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#else
-void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto() GOOGLE_ATTRIBUTE_COLD;
-void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto() {
-  static bool already_here = false;
-  if (already_here) return;
-  already_here = true;
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-#endif
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
   ::cockroach::util::hlc::protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
-  SSTUserProperties::default_instance_ = new SSTUserProperties();
-  SSTUserPropertiesCollection::default_instance_ = new SSTUserPropertiesCollection();
-  SSTUserProperties::default_instance_->InitAsDefaultInstance();
-  SSTUserPropertiesCollection::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto);
 }
 
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_once_);
 void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto() {
   ::google::protobuf::GoogleOnceInit(&protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_once_,
                  &protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_impl);
 }
-#else
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 // Force AddDescriptors() to be called at static initialization time.
 struct StaticDescriptorInitializer_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto {
   StaticDescriptorInitializer_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto() {
     protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
   }
 } static_descriptor_initializer_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto_;
-#endif
+#endif  // GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+
+namespace {
+
+static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD GOOGLE_ATTRIBUTE_NORETURN;
+static void MergeFromFail(int line) {
+  ::google::protobuf::internal::MergeFromFail(__FILE__, line);
+}
+
+}  // namespace
+
 
 // ===================================================================
 
@@ -70,41 +83,31 @@ const int SSTUserProperties::kTsMaxFieldNumber;
 
 SSTUserProperties::SSTUserProperties()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.SSTUserProperties)
 }
 
 void SSTUserProperties::InitAsDefaultInstance() {
-  _is_default_instance_ = true;
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   ts_min_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-#else
-  ts_min_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
-#endif
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   ts_max_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-#else
-  ts_max_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
-#endif
 }
 
 SSTUserProperties::SSTUserProperties(const SSTUserProperties& from)
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.SSTUserProperties)
 }
 
 void SSTUserProperties::SharedCtor() {
-    _is_default_instance_ = false;
-  ::google::protobuf::internal::GetEmptyString();
-  _cached_size_ = 0;
   path_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ts_min_ = NULL;
   ts_max_ = NULL;
+  _cached_size_ = 0;
 }
 
 SSTUserProperties::~SSTUserProperties() {
@@ -114,11 +117,7 @@ SSTUserProperties::~SSTUserProperties() {
 
 void SSTUserProperties::SharedDtor() {
   path_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
+  if (this != &SSTUserProperties_default_instance_.get()) {
     delete ts_min_;
     delete ts_max_;
   }
@@ -130,15 +129,11 @@ void SSTUserProperties::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const SSTUserProperties& SSTUserProperties::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
+  return *internal_default_instance();
 }
 
-SSTUserProperties* SSTUserProperties::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<SSTUserProperties> SSTUserProperties_default_instance_;
 
 SSTUserProperties* SSTUserProperties::New(::google::protobuf::Arena* arena) const {
   SSTUserProperties* n = new SSTUserProperties;
@@ -258,9 +253,9 @@ void SSTUserProperties::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.SSTUserProperties)
 }
 
-int SSTUserProperties::ByteSize() const {
+size_t SSTUserProperties::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.SSTUserProperties)
-  int total_size = 0;
+  size_t total_size = 0;
 
   // optional string path = 1;
   if (this->path().size() > 0) {
@@ -283,8 +278,9 @@ int SSTUserProperties::ByteSize() const {
         *this->ts_max_);
   }
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -296,9 +292,15 @@ void SSTUserProperties::CheckTypeAndMergeFrom(
 
 void SSTUserProperties::MergeFrom(const SSTUserProperties& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.SSTUserProperties)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void SSTUserProperties::UnsafeMergeFrom(const SSTUserProperties& from) {
+  GOOGLE_DCHECK(&from != this);
   if (from.path().size() > 0) {
 
     path_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.path_);
@@ -315,7 +317,7 @@ void SSTUserProperties::CopyFrom(const SSTUserProperties& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.SSTUserProperties)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool SSTUserProperties::IsInitialized() const {
@@ -346,37 +348,37 @@ void SSTUserProperties::InternalSwap(SSTUserProperties* other) {
 void SSTUserProperties::clear_path() {
   path_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- const ::std::string& SSTUserProperties::path() const {
+const ::std::string& SSTUserProperties::path() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.SSTUserProperties.path)
   return path_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void SSTUserProperties::set_path(const ::std::string& value) {
+void SSTUserProperties::set_path(const ::std::string& value) {
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.SSTUserProperties.path)
 }
- void SSTUserProperties::set_path(const char* value) {
+void SSTUserProperties::set_path(const char* value) {
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.SSTUserProperties.path)
 }
- void SSTUserProperties::set_path(const char* value, size_t size) {
+void SSTUserProperties::set_path(const char* value, size_t size) {
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.SSTUserProperties.path)
 }
- ::std::string* SSTUserProperties::mutable_path() {
+::std::string* SSTUserProperties::mutable_path() {
   
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.SSTUserProperties.path)
   return path_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* SSTUserProperties::release_path() {
+::std::string* SSTUserProperties::release_path() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.SSTUserProperties.path)
   
   return path_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void SSTUserProperties::set_allocated_path(::std::string* path) {
+void SSTUserProperties::set_allocated_path(::std::string* path) {
   if (path != NULL) {
     
   } else {
@@ -388,7 +390,7 @@ void SSTUserProperties::clear_path() {
 
 // optional .cockroach.util.hlc.Timestamp ts_min = 2;
 bool SSTUserProperties::has_ts_min() const {
-  return !_is_default_instance_ && ts_min_ != NULL;
+  return this != internal_default_instance() && ts_min_ != NULL;
 }
 void SSTUserProperties::clear_ts_min() {
   if (GetArenaNoVirtual() == NULL && ts_min_ != NULL) delete ts_min_;
@@ -396,11 +398,8 @@ void SSTUserProperties::clear_ts_min() {
 }
 const ::cockroach::util::hlc::Timestamp& SSTUserProperties::ts_min() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.SSTUserProperties.ts_min)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return ts_min_ != NULL ? *ts_min_ : *default_instance().ts_min_;
-#else
-  return ts_min_ != NULL ? *ts_min_ : *default_instance_->ts_min_;
-#endif
+  return ts_min_ != NULL ? *ts_min_
+                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 ::cockroach::util::hlc::Timestamp* SSTUserProperties::mutable_ts_min() {
   
@@ -430,7 +429,7 @@ void SSTUserProperties::set_allocated_ts_min(::cockroach::util::hlc::Timestamp* 
 
 // optional .cockroach.util.hlc.Timestamp ts_max = 3;
 bool SSTUserProperties::has_ts_max() const {
-  return !_is_default_instance_ && ts_max_ != NULL;
+  return this != internal_default_instance() && ts_max_ != NULL;
 }
 void SSTUserProperties::clear_ts_max() {
   if (GetArenaNoVirtual() == NULL && ts_max_ != NULL) delete ts_max_;
@@ -438,11 +437,8 @@ void SSTUserProperties::clear_ts_max() {
 }
 const ::cockroach::util::hlc::Timestamp& SSTUserProperties::ts_max() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.SSTUserProperties.ts_max)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return ts_max_ != NULL ? *ts_max_ : *default_instance().ts_max_;
-#else
-  return ts_max_ != NULL ? *ts_max_ : *default_instance_->ts_max_;
-#endif
+  return ts_max_ != NULL ? *ts_max_
+                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 ::cockroach::util::hlc::Timestamp* SSTUserProperties::mutable_ts_max() {
   
@@ -470,6 +466,9 @@ void SSTUserProperties::set_allocated_ts_max(::cockroach::util::hlc::Timestamp* 
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.SSTUserProperties.ts_max)
 }
 
+inline const SSTUserProperties* SSTUserProperties::internal_default_instance() {
+  return &SSTUserProperties_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
@@ -481,27 +480,25 @@ const int SSTUserPropertiesCollection::kErrorFieldNumber;
 
 SSTUserPropertiesCollection::SSTUserPropertiesCollection()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
 }
 
 void SSTUserPropertiesCollection::InitAsDefaultInstance() {
-  _is_default_instance_ = true;
 }
 
 SSTUserPropertiesCollection::SSTUserPropertiesCollection(const SSTUserPropertiesCollection& from)
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
 }
 
 void SSTUserPropertiesCollection::SharedCtor() {
-    _is_default_instance_ = false;
-  ::google::protobuf::internal::GetEmptyString();
-  _cached_size_ = 0;
   error_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  _cached_size_ = 0;
 }
 
 SSTUserPropertiesCollection::~SSTUserPropertiesCollection() {
@@ -511,12 +508,6 @@ SSTUserPropertiesCollection::~SSTUserPropertiesCollection() {
 
 void SSTUserPropertiesCollection::SharedDtor() {
   error_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
-  }
 }
 
 void SSTUserPropertiesCollection::SetCachedSize(int size) const {
@@ -525,15 +516,11 @@ void SSTUserPropertiesCollection::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const SSTUserPropertiesCollection& SSTUserPropertiesCollection::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto();
+  return *internal_default_instance();
 }
 
-SSTUserPropertiesCollection* SSTUserPropertiesCollection::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<SSTUserPropertiesCollection> SSTUserPropertiesCollection_default_instance_;
 
 SSTUserPropertiesCollection* SSTUserPropertiesCollection::New(::google::protobuf::Arena* arena) const {
   SSTUserPropertiesCollection* n = new SSTUserPropertiesCollection;
@@ -635,9 +622,9 @@ void SSTUserPropertiesCollection::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
 }
 
-int SSTUserPropertiesCollection::ByteSize() const {
+size_t SSTUserPropertiesCollection::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
-  int total_size = 0;
+  size_t total_size = 0;
 
   // optional string error = 2;
   if (this->error().size() > 0) {
@@ -647,15 +634,19 @@ int SSTUserPropertiesCollection::ByteSize() const {
   }
 
   // repeated .cockroach.storage.engine.enginepb.SSTUserProperties sst = 1;
-  total_size += 1 * this->sst_size();
-  for (int i = 0; i < this->sst_size(); i++) {
-    total_size +=
-      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-        this->sst(i));
+  {
+    unsigned int count = this->sst_size();
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->sst(i));
+    }
   }
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -667,9 +658,15 @@ void SSTUserPropertiesCollection::CheckTypeAndMergeFrom(
 
 void SSTUserPropertiesCollection::MergeFrom(const SSTUserPropertiesCollection& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void SSTUserPropertiesCollection::UnsafeMergeFrom(const SSTUserPropertiesCollection& from) {
+  GOOGLE_DCHECK(&from != this);
   sst_.MergeFrom(from.sst_);
   if (from.error().size() > 0) {
 
@@ -681,7 +678,7 @@ void SSTUserPropertiesCollection::CopyFrom(const SSTUserPropertiesCollection& fr
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool SSTUserPropertiesCollection::IsInitialized() const {
@@ -741,37 +738,37 @@ SSTUserPropertiesCollection::sst() const {
 void SSTUserPropertiesCollection::clear_error() {
   error_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- const ::std::string& SSTUserPropertiesCollection::error() const {
+const ::std::string& SSTUserPropertiesCollection::error() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
   return error_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void SSTUserPropertiesCollection::set_error(const ::std::string& value) {
+void SSTUserPropertiesCollection::set_error(const ::std::string& value) {
   
   error_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
 }
- void SSTUserPropertiesCollection::set_error(const char* value) {
+void SSTUserPropertiesCollection::set_error(const char* value) {
   
   error_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
 }
- void SSTUserPropertiesCollection::set_error(const char* value, size_t size) {
+void SSTUserPropertiesCollection::set_error(const char* value, size_t size) {
   
   error_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
 }
- ::std::string* SSTUserPropertiesCollection::mutable_error() {
+::std::string* SSTUserPropertiesCollection::mutable_error() {
   
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
   return error_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* SSTUserPropertiesCollection::release_error() {
+::std::string* SSTUserPropertiesCollection::release_error() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
   
   return error_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void SSTUserPropertiesCollection::set_allocated_error(::std::string* error) {
+void SSTUserPropertiesCollection::set_allocated_error(::std::string* error) {
   if (error != NULL) {
     
   } else {
@@ -781,6 +778,9 @@ void SSTUserPropertiesCollection::clear_error() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
 }
 
+inline const SSTUserPropertiesCollection* SSTUserPropertiesCollection::internal_default_instance() {
+  return &SSTUserPropertiesCollection_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // @@protoc_insertion_point(namespace_scope)

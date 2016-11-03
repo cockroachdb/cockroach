@@ -65,25 +65,25 @@ func init() {
 	proto.RegisterType((*StoreStatus)(nil), "cockroach.server.status.StoreStatus")
 	proto.RegisterType((*NodeStatus)(nil), "cockroach.server.status.NodeStatus")
 }
-func (m *StoreStatus) Marshal() (data []byte, err error) {
+func (m *StoreStatus) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *StoreStatus) MarshalTo(data []byte) (int, error) {
+func (m *StoreStatus) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStatus(data, i, uint64(m.Desc.Size()))
-	n1, err := m.Desc.MarshalTo(data[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(m.Desc.Size()))
+	n1, err := m.Desc.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -95,60 +95,60 @@ func (m *StoreStatus) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Strings(keysForMetrics)
 		for _, k := range keysForMetrics {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
 			v := m.Metrics[string(k)]
 			mapSize := 1 + len(k) + sovStatus(uint64(len(k))) + 1 + 8
-			i = encodeVarintStatus(data, i, uint64(mapSize))
-			data[i] = 0xa
+			i = encodeVarintStatus(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintStatus(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x11
+			i = encodeVarintStatus(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x11
 			i++
-			i = encodeFixed64Status(data, i, uint64(math.Float64bits(float64(v))))
+			i = encodeFixed64Status(dAtA, i, uint64(math.Float64bits(float64(v))))
 		}
 	}
 	return i, nil
 }
 
-func (m *NodeStatus) Marshal() (data []byte, err error) {
+func (m *NodeStatus) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *NodeStatus) MarshalTo(data []byte) (int, error) {
+func (m *NodeStatus) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStatus(data, i, uint64(m.Desc.Size()))
-	n2, err := m.Desc.MarshalTo(data[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(m.Desc.Size()))
+	n2, err := m.Desc.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintStatus(data, i, uint64(m.BuildInfo.Size()))
-	n3, err := m.BuildInfo.MarshalTo(data[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(m.BuildInfo.Size()))
+	n3, err := m.BuildInfo.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
-	data[i] = 0x18
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintStatus(data, i, uint64(m.StartedAt))
-	data[i] = 0x20
+	i = encodeVarintStatus(dAtA, i, uint64(m.StartedAt))
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintStatus(data, i, uint64(m.UpdatedAt))
+	i = encodeVarintStatus(dAtA, i, uint64(m.UpdatedAt))
 	if len(m.Metrics) > 0 {
 		keysForMetrics := make([]string, 0, len(m.Metrics))
 		for k := range m.Metrics {
@@ -156,26 +156,26 @@ func (m *NodeStatus) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Strings(keysForMetrics)
 		for _, k := range keysForMetrics {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			v := m.Metrics[string(k)]
 			mapSize := 1 + len(k) + sovStatus(uint64(len(k))) + 1 + 8
-			i = encodeVarintStatus(data, i, uint64(mapSize))
-			data[i] = 0xa
+			i = encodeVarintStatus(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintStatus(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x11
+			i = encodeVarintStatus(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x11
 			i++
-			i = encodeFixed64Status(data, i, uint64(math.Float64bits(float64(v))))
+			i = encodeFixed64Status(dAtA, i, uint64(math.Float64bits(float64(v))))
 		}
 	}
 	if len(m.StoreStatuses) > 0 {
 		for _, msg := range m.StoreStatuses {
-			data[i] = 0x32
+			dAtA[i] = 0x32
 			i++
-			i = encodeVarintStatus(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintStatus(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -185,31 +185,31 @@ func (m *NodeStatus) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Status(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Status(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Status(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Status(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintStatus(data []byte, offset int, v uint64) int {
+func encodeVarintStatus(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *StoreStatus) Size() (n int) {
@@ -267,8 +267,8 @@ func sovStatus(x uint64) (n int) {
 func sozStatus(x uint64) (n int) {
 	return sovStatus(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *StoreStatus) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *StoreStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -280,7 +280,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -308,7 +308,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -322,7 +322,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Desc.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Desc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -338,7 +338,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -360,7 +360,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -375,7 +375,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -390,7 +390,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
 			if m.Metrics == nil {
 				m.Metrics = make(map[string]float64)
@@ -404,7 +404,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -416,14 +416,14 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 					return io.ErrUnexpectedEOF
 				}
 				iNdEx += 8
-				mapvaluetemp = uint64(data[iNdEx-8])
-				mapvaluetemp |= uint64(data[iNdEx-7]) << 8
-				mapvaluetemp |= uint64(data[iNdEx-6]) << 16
-				mapvaluetemp |= uint64(data[iNdEx-5]) << 24
-				mapvaluetemp |= uint64(data[iNdEx-4]) << 32
-				mapvaluetemp |= uint64(data[iNdEx-3]) << 40
-				mapvaluetemp |= uint64(data[iNdEx-2]) << 48
-				mapvaluetemp |= uint64(data[iNdEx-1]) << 56
+				mapvaluetemp = uint64(dAtA[iNdEx-8])
+				mapvaluetemp |= uint64(dAtA[iNdEx-7]) << 8
+				mapvaluetemp |= uint64(dAtA[iNdEx-6]) << 16
+				mapvaluetemp |= uint64(dAtA[iNdEx-5]) << 24
+				mapvaluetemp |= uint64(dAtA[iNdEx-4]) << 32
+				mapvaluetemp |= uint64(dAtA[iNdEx-3]) << 40
+				mapvaluetemp |= uint64(dAtA[iNdEx-2]) << 48
+				mapvaluetemp |= uint64(dAtA[iNdEx-1]) << 56
 				mapvalue := math.Float64frombits(mapvaluetemp)
 				m.Metrics[mapkey] = mapvalue
 			} else {
@@ -433,7 +433,7 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStatus(data[iNdEx:])
+			skippy, err := skipStatus(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -452,8 +452,8 @@ func (m *StoreStatus) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *NodeStatus) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *NodeStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -465,7 +465,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -493,7 +493,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -507,7 +507,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Desc.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Desc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -523,7 +523,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -537,7 +537,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.BuildInfo.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.BuildInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -553,7 +553,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.StartedAt |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -572,7 +572,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.UpdatedAt |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -591,7 +591,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -613,7 +613,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -628,7 +628,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -643,7 +643,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
 			if m.Metrics == nil {
 				m.Metrics = make(map[string]float64)
@@ -657,7 +657,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -669,14 +669,14 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 					return io.ErrUnexpectedEOF
 				}
 				iNdEx += 8
-				mapvaluetemp = uint64(data[iNdEx-8])
-				mapvaluetemp |= uint64(data[iNdEx-7]) << 8
-				mapvaluetemp |= uint64(data[iNdEx-6]) << 16
-				mapvaluetemp |= uint64(data[iNdEx-5]) << 24
-				mapvaluetemp |= uint64(data[iNdEx-4]) << 32
-				mapvaluetemp |= uint64(data[iNdEx-3]) << 40
-				mapvaluetemp |= uint64(data[iNdEx-2]) << 48
-				mapvaluetemp |= uint64(data[iNdEx-1]) << 56
+				mapvaluetemp = uint64(dAtA[iNdEx-8])
+				mapvaluetemp |= uint64(dAtA[iNdEx-7]) << 8
+				mapvaluetemp |= uint64(dAtA[iNdEx-6]) << 16
+				mapvaluetemp |= uint64(dAtA[iNdEx-5]) << 24
+				mapvaluetemp |= uint64(dAtA[iNdEx-4]) << 32
+				mapvaluetemp |= uint64(dAtA[iNdEx-3]) << 40
+				mapvaluetemp |= uint64(dAtA[iNdEx-2]) << 48
+				mapvaluetemp |= uint64(dAtA[iNdEx-1]) << 56
 				mapvalue := math.Float64frombits(mapvaluetemp)
 				m.Metrics[mapkey] = mapvalue
 			} else {
@@ -696,7 +696,7 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -711,13 +711,13 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.StoreStatuses = append(m.StoreStatuses, StoreStatus{})
-			if err := m.StoreStatuses[len(m.StoreStatuses)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.StoreStatuses[len(m.StoreStatuses)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipStatus(data[iNdEx:])
+			skippy, err := skipStatus(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -736,8 +736,8 @@ func (m *NodeStatus) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipStatus(data []byte) (n int, err error) {
-	l := len(data)
+func skipStatus(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -748,7 +748,7 @@ func skipStatus(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -766,7 +766,7 @@ func skipStatus(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -783,7 +783,7 @@ func skipStatus(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -806,7 +806,7 @@ func skipStatus(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -817,7 +817,7 @@ func skipStatus(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipStatus(data[start:])
+				next, err := skipStatus(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

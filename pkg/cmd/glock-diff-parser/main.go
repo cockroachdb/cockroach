@@ -82,10 +82,11 @@ func main() {
 			fields := strings.Fields(line[1:])
 			pkgName := fields[0]
 			for orig, replacement := range map[string]string{
-				"golang.org/x":           "github.com/golang",
-				"honnef.co/go/":          "github.com/dominikh/go-",
-				"google.golang.org/grpc": "github.com/grpc/grpc-go",
-				"gopkg.in/inf.v0":        "github.com/go-inf/inf",
+				"golang.org/x":                "github.com/golang",
+				"google.golang.org/appengine": "github.com/golang/appengine",
+				"google.golang.org/grpc":      "github.com/grpc/grpc-go",
+				"gopkg.in/inf.v0":             "github.com/go-inf/inf",
+				"honnef.co/go/":               "github.com/dominikh/go-",
 			} {
 				pkgName = strings.Replace(pkgName, orig, replacement, 1)
 			}

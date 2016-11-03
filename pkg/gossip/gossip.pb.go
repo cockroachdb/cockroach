@@ -246,37 +246,37 @@ var _Gossip_serviceDesc = grpc.ServiceDesc{
 	Metadata: fileDescriptorGossip,
 }
 
-func (m *BootstrapInfo) Marshal() (data []byte, err error) {
+func (m *BootstrapInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *BootstrapInfo) MarshalTo(data []byte) (int, error) {
+func (m *BootstrapInfo) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Addresses) > 0 {
 		for _, msg := range m.Addresses {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintGossip(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintGossip(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
 			i += n
 		}
 	}
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintGossip(data, i, uint64(m.Timestamp.Size()))
-	n1, err := m.Timestamp.MarshalTo(data[i:])
+	i = encodeVarintGossip(dAtA, i, uint64(m.Timestamp.Size()))
+	n1, err := m.Timestamp.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -284,30 +284,30 @@ func (m *BootstrapInfo) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Request) Marshal() (data []byte, err error) {
+func (m *Request) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Request) MarshalTo(data []byte) (int, error) {
+func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.NodeID != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.NodeID))
+		i = encodeVarintGossip(dAtA, i, uint64(m.NodeID))
 	}
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n2, err := m.Addr.MarshalTo(data[i:])
+	i = encodeVarintGossip(dAtA, i, uint64(m.Addr.Size()))
+	n2, err := m.Addr.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -319,17 +319,17 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Int32s(keysForHighWaterStamps)
 		for _, k := range keysForHighWaterStamps {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
 			v := m.HighWaterStamps[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(k)]
 			mapSize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
-			i = encodeVarintGossip(data, i, uint64(mapSize))
-			data[i] = 0x8
+			i = encodeVarintGossip(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0x8
 			i++
-			i = encodeVarintGossip(data, i, uint64(k))
-			data[i] = 0x10
+			i = encodeVarintGossip(dAtA, i, uint64(k))
+			dAtA[i] = 0x10
 			i++
-			i = encodeVarintGossip(data, i, uint64(v))
+			i = encodeVarintGossip(dAtA, i, uint64(v))
 		}
 	}
 	if len(m.Delta) > 0 {
@@ -339,7 +339,7 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Strings(keysForDelta)
 		for _, k := range keysForDelta {
-			data[i] = 0x22
+			dAtA[i] = 0x22
 			i++
 			v := m.Delta[string(k)]
 			msgSize := 0
@@ -348,16 +348,16 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 				msgSize += 1 + sovGossip(uint64(msgSize))
 			}
 			mapSize := 1 + len(k) + sovGossip(uint64(len(k))) + msgSize
-			i = encodeVarintGossip(data, i, uint64(mapSize))
-			data[i] = 0xa
+			i = encodeVarintGossip(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintGossip(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
+			i = encodeVarintGossip(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
 			if v != nil {
-				data[i] = 0x12
+				dAtA[i] = 0x12
 				i++
-				i = encodeVarintGossip(data, i, uint64(v.Size()))
-				n3, err := v.MarshalTo(data[i:])
+				i = encodeVarintGossip(dAtA, i, uint64(v.Size()))
+				n3, err := v.MarshalTo(dAtA[i:])
 				if err != nil {
 					return 0, err
 				}
@@ -368,48 +368,48 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Response) Marshal() (data []byte, err error) {
+func (m *Response) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Response) MarshalTo(data []byte) (int, error) {
+func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.NodeID != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.NodeID))
+		i = encodeVarintGossip(dAtA, i, uint64(m.NodeID))
 	}
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n4, err := m.Addr.MarshalTo(data[i:])
+	i = encodeVarintGossip(dAtA, i, uint64(m.Addr.Size()))
+	n4, err := m.Addr.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n4
 	if m.AlternateAddr != nil {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.AlternateAddr.Size()))
-		n5, err := m.AlternateAddr.MarshalTo(data[i:])
+		i = encodeVarintGossip(dAtA, i, uint64(m.AlternateAddr.Size()))
+		n5, err := m.AlternateAddr.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n5
 	}
 	if m.AlternateNodeID != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.AlternateNodeID))
+		i = encodeVarintGossip(dAtA, i, uint64(m.AlternateNodeID))
 	}
 	if len(m.Delta) > 0 {
 		keysForDelta := make([]string, 0, len(m.Delta))
@@ -418,7 +418,7 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Strings(keysForDelta)
 		for _, k := range keysForDelta {
-			data[i] = 0x2a
+			dAtA[i] = 0x2a
 			i++
 			v := m.Delta[string(k)]
 			msgSize := 0
@@ -427,16 +427,16 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 				msgSize += 1 + sovGossip(uint64(msgSize))
 			}
 			mapSize := 1 + len(k) + sovGossip(uint64(len(k))) + msgSize
-			i = encodeVarintGossip(data, i, uint64(mapSize))
-			data[i] = 0xa
+			i = encodeVarintGossip(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintGossip(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
+			i = encodeVarintGossip(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
 			if v != nil {
-				data[i] = 0x12
+				dAtA[i] = 0x12
 				i++
-				i = encodeVarintGossip(data, i, uint64(v.Size()))
-				n6, err := v.MarshalTo(data[i:])
+				i = encodeVarintGossip(dAtA, i, uint64(v.Size()))
+				n6, err := v.MarshalTo(dAtA[i:])
 				if err != nil {
 					return 0, err
 				}
@@ -451,33 +451,33 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Int32s(keysForHighWaterStamps)
 		for _, k := range keysForHighWaterStamps {
-			data[i] = 0x32
+			dAtA[i] = 0x32
 			i++
 			v := m.HighWaterStamps[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(k)]
 			mapSize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
-			i = encodeVarintGossip(data, i, uint64(mapSize))
-			data[i] = 0x8
+			i = encodeVarintGossip(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0x8
 			i++
-			i = encodeVarintGossip(data, i, uint64(k))
-			data[i] = 0x10
+			i = encodeVarintGossip(dAtA, i, uint64(k))
+			dAtA[i] = 0x10
 			i++
-			i = encodeVarintGossip(data, i, uint64(v))
+			i = encodeVarintGossip(dAtA, i, uint64(v))
 		}
 	}
 	return i, nil
 }
 
-func (m *InfoStatus) Marshal() (data []byte, err error) {
+func (m *InfoStatus) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *InfoStatus) MarshalTo(data []byte) (int, error) {
+func (m *InfoStatus) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -489,7 +489,7 @@ func (m *InfoStatus) MarshalTo(data []byte) (int, error) {
 		}
 		github_com_gogo_protobuf_sortkeys.Strings(keysForInfos)
 		for _, k := range keysForInfos {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
 			v := m.Infos[string(k)]
 			msgSize := 0
@@ -498,15 +498,15 @@ func (m *InfoStatus) MarshalTo(data []byte) (int, error) {
 				msgSize += 1 + sovGossip(uint64(msgSize))
 			}
 			mapSize := 1 + len(k) + sovGossip(uint64(len(k))) + msgSize
-			i = encodeVarintGossip(data, i, uint64(mapSize))
-			data[i] = 0xa
+			i = encodeVarintGossip(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintGossip(data, i, uint64(len(k)))
-			i += copy(data[i:], k)
-			data[i] = 0x12
+			i = encodeVarintGossip(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintGossip(data, i, uint64((&v).Size()))
-			n7, err := (&v).MarshalTo(data[i:])
+			i = encodeVarintGossip(dAtA, i, uint64((&v).Size()))
+			n7, err := (&v).MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -516,82 +516,82 @@ func (m *InfoStatus) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Info) Marshal() (data []byte, err error) {
+func (m *Info) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Info) MarshalTo(data []byte) (int, error) {
+func (m *Info) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintGossip(data, i, uint64(m.Value.Size()))
-	n8, err := m.Value.MarshalTo(data[i:])
+	i = encodeVarintGossip(dAtA, i, uint64(m.Value.Size()))
+	n8, err := m.Value.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n8
 	if m.OrigStamp != 0 {
-		data[i] = 0x10
+		dAtA[i] = 0x10
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.OrigStamp))
+		i = encodeVarintGossip(dAtA, i, uint64(m.OrigStamp))
 	}
 	if m.TTLStamp != 0 {
-		data[i] = 0x18
+		dAtA[i] = 0x18
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.TTLStamp))
+		i = encodeVarintGossip(dAtA, i, uint64(m.TTLStamp))
 	}
 	if m.Hops != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.Hops))
+		i = encodeVarintGossip(dAtA, i, uint64(m.Hops))
 	}
 	if m.NodeID != 0 {
-		data[i] = 0x28
+		dAtA[i] = 0x28
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.NodeID))
+		i = encodeVarintGossip(dAtA, i, uint64(m.NodeID))
 	}
 	if m.PeerID != 0 {
-		data[i] = 0x30
+		dAtA[i] = 0x30
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.PeerID))
+		i = encodeVarintGossip(dAtA, i, uint64(m.PeerID))
 	}
 	return i, nil
 }
 
-func encodeFixed64Gossip(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Gossip(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Gossip(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Gossip(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintGossip(data []byte, offset int, v uint64) int {
+func encodeVarintGossip(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *BootstrapInfo) Size() (n int) {
@@ -730,8 +730,8 @@ func sovGossip(x uint64) (n int) {
 func sozGossip(x uint64) (n int) {
 	return sovGossip(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *BootstrapInfo) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *BootstrapInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -743,7 +743,7 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -771,7 +771,7 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -786,7 +786,7 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Addresses = append(m.Addresses, cockroach_util.UnresolvedAddr{})
-			if err := m.Addresses[len(m.Addresses)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Addresses[len(m.Addresses)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -802,7 +802,7 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -816,13 +816,13 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipGossip(data[iNdEx:])
+			skippy, err := skipGossip(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -841,8 +841,8 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Request) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Request) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -854,7 +854,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -882,7 +882,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -901,7 +901,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -915,7 +915,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Addr.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Addr.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -931,7 +931,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -953,7 +953,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -968,7 +968,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				mapkey |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -987,7 +987,7 @@ func (m *Request) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1002,7 +1002,7 @@ func (m *Request) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					mapvalue |= (int64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1027,7 +1027,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1049,7 +1049,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1064,7 +1064,7 @@ func (m *Request) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1079,7 +1079,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
 			if m.Delta == nil {
 				m.Delta = make(map[string]*Info)
@@ -1093,7 +1093,7 @@ func (m *Request) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1108,7 +1108,7 @@ func (m *Request) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					mapmsglen |= (int(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1126,7 +1126,7 @@ func (m *Request) Unmarshal(data []byte) error {
 					return io.ErrUnexpectedEOF
 				}
 				mapvalue := &Info{}
-				if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
 					return err
 				}
 				iNdEx = postmsgIndex
@@ -1138,7 +1138,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipGossip(data[iNdEx:])
+			skippy, err := skipGossip(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1157,8 +1157,8 @@ func (m *Request) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Response) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Response) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1170,7 +1170,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1198,7 +1198,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1217,7 +1217,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1231,7 +1231,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Addr.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Addr.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1247,7 +1247,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1264,7 +1264,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			if m.AlternateAddr == nil {
 				m.AlternateAddr = &cockroach_util.UnresolvedAddr{}
 			}
-			if err := m.AlternateAddr.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.AlternateAddr.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1280,7 +1280,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.AlternateNodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1299,7 +1299,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1321,7 +1321,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1336,7 +1336,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1351,7 +1351,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
 			if m.Delta == nil {
 				m.Delta = make(map[string]*Info)
@@ -1365,7 +1365,7 @@ func (m *Response) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1380,7 +1380,7 @@ func (m *Response) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					mapmsglen |= (int(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1398,7 +1398,7 @@ func (m *Response) Unmarshal(data []byte) error {
 					return io.ErrUnexpectedEOF
 				}
 				mapvalue := &Info{}
-				if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
 					return err
 				}
 				iNdEx = postmsgIndex
@@ -1420,7 +1420,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1442,7 +1442,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1457,7 +1457,7 @@ func (m *Response) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				mapkey |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1476,7 +1476,7 @@ func (m *Response) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1491,7 +1491,7 @@ func (m *Response) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					mapvalue |= (int64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1506,7 +1506,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipGossip(data[iNdEx:])
+			skippy, err := skipGossip(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1525,8 +1525,8 @@ func (m *Response) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *InfoStatus) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *InfoStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1538,7 +1538,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1566,7 +1566,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1588,7 +1588,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				keykey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1603,7 +1603,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLenmapkey |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1618,7 +1618,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 			if postStringIndexmapkey > l {
 				return io.ErrUnexpectedEOF
 			}
-			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
 			iNdEx = postStringIndexmapkey
 			if m.Infos == nil {
 				m.Infos = make(map[string]Info)
@@ -1632,7 +1632,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					valuekey |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1647,7 +1647,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 					if iNdEx >= l {
 						return io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					mapmsglen |= (int(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1665,7 +1665,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 					return io.ErrUnexpectedEOF
 				}
 				mapvalue := &Info{}
-				if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+				if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
 					return err
 				}
 				iNdEx = postmsgIndex
@@ -1677,7 +1677,7 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipGossip(data[iNdEx:])
+			skippy, err := skipGossip(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1696,8 +1696,8 @@ func (m *InfoStatus) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Info) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Info) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1709,7 +1709,7 @@ func (m *Info) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1737,7 +1737,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1751,7 +1751,7 @@ func (m *Info) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Value.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Value.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1767,7 +1767,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.OrigStamp |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1786,7 +1786,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.TTLStamp |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1805,7 +1805,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Hops |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1824,7 +1824,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1843,7 +1843,7 @@ func (m *Info) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.PeerID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1852,7 +1852,7 @@ func (m *Info) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipGossip(data[iNdEx:])
+			skippy, err := skipGossip(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1871,8 +1871,8 @@ func (m *Info) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipGossip(data []byte) (n int, err error) {
-	l := len(data)
+func skipGossip(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -1883,7 +1883,7 @@ func skipGossip(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1901,7 +1901,7 @@ func skipGossip(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -1918,7 +1918,7 @@ func skipGossip(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1941,7 +1941,7 @@ func skipGossip(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1952,7 +1952,7 @@ func skipGossip(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipGossip(data[start:])
+				next, err := skipGossip(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

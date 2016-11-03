@@ -18,44 +18,56 @@ namespace cockroach {
 namespace roachpb {
 
 void protobuf_ShutdownFile_cockroach_2fpkg_2froachpb_2finternal_2eproto() {
-  delete InternalTimeSeriesData::default_instance_;
-  delete InternalTimeSeriesSample::default_instance_;
+  InternalTimeSeriesData_default_instance_.Shutdown();
+  InternalTimeSeriesSample_default_instance_.Shutdown();
 }
 
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+void protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto_impl() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  ::google::protobuf::internal::GetEmptyString();
+  InternalTimeSeriesData_default_instance_.DefaultConstruct();
+  ::google::protobuf::internal::GetEmptyString();
+  InternalTimeSeriesSample_default_instance_.DefaultConstruct();
+  InternalTimeSeriesData_default_instance_.get_mutable()->InitAsDefaultInstance();
+  InternalTimeSeriesSample_default_instance_.get_mutable()->InitAsDefaultInstance();
+}
+
+GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto_once_);
+void protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto() {
+  ::google::protobuf::GoogleOnceInit(&protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto_once_,
+                 &protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto_impl);
+}
 void protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#else
-void protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto() GOOGLE_ATTRIBUTE_COLD;
-void protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto() {
-  static bool already_here = false;
-  if (already_here) return;
-  already_here = true;
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-#endif
-  InternalTimeSeriesData::default_instance_ = new InternalTimeSeriesData();
-  InternalTimeSeriesSample::default_instance_ = new InternalTimeSeriesSample();
-  InternalTimeSeriesData::default_instance_->InitAsDefaultInstance();
-  InternalTimeSeriesSample::default_instance_->InitAsDefaultInstance();
+  protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fpkg_2froachpb_2finternal_2eproto);
 }
 
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto_once_);
 void protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto() {
   ::google::protobuf::GoogleOnceInit(&protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto_once_,
                  &protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto_impl);
 }
-#else
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 // Force AddDescriptors() to be called at static initialization time.
 struct StaticDescriptorInitializer_cockroach_2fpkg_2froachpb_2finternal_2eproto {
   StaticDescriptorInitializer_cockroach_2fpkg_2froachpb_2finternal_2eproto() {
     protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto();
   }
 } static_descriptor_initializer_cockroach_2fpkg_2froachpb_2finternal_2eproto_;
-#endif
+#endif  // GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+
+namespace {
+
+static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD GOOGLE_ATTRIBUTE_NORETURN;
+static void MergeFromFail(int line) {
+  ::google::protobuf::internal::MergeFromFail(__FILE__, line);
+}
+
+}  // namespace
+
 
 // ===================================================================
 
@@ -72,6 +84,7 @@ const int InternalTimeSeriesData::kSamplesFieldNumber;
 
 InternalTimeSeriesData::InternalTimeSeriesData()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.roachpb.InternalTimeSeriesData)
 }
@@ -83,18 +96,16 @@ InternalTimeSeriesData::InternalTimeSeriesData(const InternalTimeSeriesData& fro
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.InternalTimeSeriesData)
 }
 
 void InternalTimeSeriesData::SharedCtor() {
-  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  start_timestamp_nanos_ = GOOGLE_LONGLONG(0);
-  sample_duration_nanos_ = GOOGLE_LONGLONG(0);
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  ::memset(&start_timestamp_nanos_, 0, reinterpret_cast<char*>(&sample_duration_nanos_) -
+    reinterpret_cast<char*>(&start_timestamp_nanos_) + sizeof(sample_duration_nanos_));
 }
 
 InternalTimeSeriesData::~InternalTimeSeriesData() {
@@ -105,12 +116,6 @@ InternalTimeSeriesData::~InternalTimeSeriesData() {
 void InternalTimeSeriesData::SharedDtor() {
   _unknown_fields_.DestroyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
-  }
 }
 
 void InternalTimeSeriesData::SetCachedSize(int size) const {
@@ -119,15 +124,11 @@ void InternalTimeSeriesData::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const InternalTimeSeriesData& InternalTimeSeriesData::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto();
+  return *internal_default_instance();
 }
 
-InternalTimeSeriesData* InternalTimeSeriesData::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<InternalTimeSeriesData> InternalTimeSeriesData_default_instance_;
 
 InternalTimeSeriesData* InternalTimeSeriesData::New(::google::protobuf::Arena* arena) const {
   InternalTimeSeriesData* n = new InternalTimeSeriesData;
@@ -151,7 +152,7 @@ void InternalTimeSeriesData::Clear() {
 #endif
 
 #define ZR_(first, last) do {\
-  ::memset(&first, 0,\
+  ::memset(&(first), 0,\
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
@@ -161,7 +162,7 @@ void InternalTimeSeriesData::Clear() {
 #undef ZR_
 
   samples_.Clear();
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  _has_bits_.Clear();
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -171,7 +172,7 @@ bool InternalTimeSeriesData::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      ::google::protobuf::internal::NewPermanentCallback(
+      ::google::protobuf::NewPermanentCallback(
           &MutableUnknownFieldsForInternalTimeSeriesData, this));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
@@ -184,10 +185,10 @@ bool InternalTimeSeriesData::MergePartialFromCodedStream(
       // optional int64 start_timestamp_nanos = 1;
       case 1: {
         if (tag == 8) {
+          set_has_start_timestamp_nanos();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &start_timestamp_nanos_)));
-          set_has_start_timestamp_nanos();
         } else {
           goto handle_unusual;
         }
@@ -199,10 +200,10 @@ bool InternalTimeSeriesData::MergePartialFromCodedStream(
       case 2: {
         if (tag == 16) {
          parse_sample_duration_nanos:
+          set_has_sample_duration_nanos();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &sample_duration_nanos_)));
-          set_has_sample_duration_nanos();
         } else {
           goto handle_unusual;
         }
@@ -273,9 +274,9 @@ void InternalTimeSeriesData::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.InternalTimeSeriesData)
 }
 
-int InternalTimeSeriesData::ByteSize() const {
+size_t InternalTimeSeriesData::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.InternalTimeSeriesData)
-  int total_size = 0;
+  size_t total_size = 0;
 
   if (_has_bits_[0 / 32] & 3u) {
     // optional int64 start_timestamp_nanos = 1;
@@ -294,17 +295,21 @@ int InternalTimeSeriesData::ByteSize() const {
 
   }
   // repeated .cockroach.roachpb.InternalTimeSeriesSample samples = 3;
-  total_size += 1 * this->samples_size();
-  for (int i = 0; i < this->samples_size(); i++) {
-    total_size +=
-      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-        this->samples(i));
+  {
+    unsigned int count = this->samples_size();
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->samples(i));
+    }
   }
 
   total_size += unknown_fields().size();
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -316,9 +321,15 @@ void InternalTimeSeriesData::CheckTypeAndMergeFrom(
 
 void InternalTimeSeriesData::MergeFrom(const InternalTimeSeriesData& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalTimeSeriesData)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void InternalTimeSeriesData::UnsafeMergeFrom(const InternalTimeSeriesData& from) {
+  GOOGLE_DCHECK(&from != this);
   samples_.MergeFrom(from.samples_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_start_timestamp_nanos()) {
@@ -337,7 +348,7 @@ void InternalTimeSeriesData::CopyFrom(const InternalTimeSeriesData& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.InternalTimeSeriesData)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool InternalTimeSeriesData::IsInitialized() const {
@@ -379,11 +390,11 @@ void InternalTimeSeriesData::clear_start_timestamp_nanos() {
   start_timestamp_nanos_ = GOOGLE_LONGLONG(0);
   clear_has_start_timestamp_nanos();
 }
- ::google::protobuf::int64 InternalTimeSeriesData::start_timestamp_nanos() const {
+::google::protobuf::int64 InternalTimeSeriesData::start_timestamp_nanos() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.start_timestamp_nanos)
   return start_timestamp_nanos_;
 }
- void InternalTimeSeriesData::set_start_timestamp_nanos(::google::protobuf::int64 value) {
+void InternalTimeSeriesData::set_start_timestamp_nanos(::google::protobuf::int64 value) {
   set_has_start_timestamp_nanos();
   start_timestamp_nanos_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.start_timestamp_nanos)
@@ -403,11 +414,11 @@ void InternalTimeSeriesData::clear_sample_duration_nanos() {
   sample_duration_nanos_ = GOOGLE_LONGLONG(0);
   clear_has_sample_duration_nanos();
 }
- ::google::protobuf::int64 InternalTimeSeriesData::sample_duration_nanos() const {
+::google::protobuf::int64 InternalTimeSeriesData::sample_duration_nanos() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.sample_duration_nanos)
   return sample_duration_nanos_;
 }
- void InternalTimeSeriesData::set_sample_duration_nanos(::google::protobuf::int64 value) {
+void InternalTimeSeriesData::set_sample_duration_nanos(::google::protobuf::int64 value) {
   set_has_sample_duration_nanos();
   sample_duration_nanos_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesData.sample_duration_nanos)
@@ -443,6 +454,9 @@ InternalTimeSeriesData::samples() const {
   return samples_;
 }
 
+inline const InternalTimeSeriesData* InternalTimeSeriesData::internal_default_instance() {
+  return &InternalTimeSeriesData_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
@@ -462,6 +476,7 @@ const int InternalTimeSeriesSample::kMinFieldNumber;
 
 InternalTimeSeriesSample::InternalTimeSeriesSample()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.roachpb.InternalTimeSeriesSample)
 }
@@ -473,21 +488,16 @@ InternalTimeSeriesSample::InternalTimeSeriesSample(const InternalTimeSeriesSampl
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.InternalTimeSeriesSample)
 }
 
 void InternalTimeSeriesSample::SharedCtor() {
-  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  offset_ = 0;
-  sum_ = 0;
-  count_ = 0u;
-  max_ = 0;
-  min_ = 0;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  ::memset(&sum_, 0, reinterpret_cast<char*>(&min_) -
+    reinterpret_cast<char*>(&sum_) + sizeof(min_));
 }
 
 InternalTimeSeriesSample::~InternalTimeSeriesSample() {
@@ -498,12 +508,6 @@ InternalTimeSeriesSample::~InternalTimeSeriesSample() {
 void InternalTimeSeriesSample::SharedDtor() {
   _unknown_fields_.DestroyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
-  }
 }
 
 void InternalTimeSeriesSample::SetCachedSize(int size) const {
@@ -512,15 +516,11 @@ void InternalTimeSeriesSample::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const InternalTimeSeriesSample& InternalTimeSeriesSample::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2froachpb_2finternal_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2finternal_2eproto();
+  return *internal_default_instance();
 }
 
-InternalTimeSeriesSample* InternalTimeSeriesSample::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<InternalTimeSeriesSample> InternalTimeSeriesSample_default_instance_;
 
 InternalTimeSeriesSample* InternalTimeSeriesSample::New(::google::protobuf::Arena* arena) const {
   InternalTimeSeriesSample* n = new InternalTimeSeriesSample;
@@ -544,18 +544,16 @@ void InternalTimeSeriesSample::Clear() {
 #endif
 
 #define ZR_(first, last) do {\
-  ::memset(&first, 0,\
+  ::memset(&(first), 0,\
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  if (_has_bits_[0 / 32] & 31u) {
-    ZR_(sum_, min_);
-  }
+  ZR_(sum_, min_);
 
 #undef ZR_HELPER_
 #undef ZR_
 
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  _has_bits_.Clear();
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -565,7 +563,7 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      ::google::protobuf::internal::NewPermanentCallback(
+      ::google::protobuf::NewPermanentCallback(
           &MutableUnknownFieldsForInternalTimeSeriesSample, this));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
@@ -578,10 +576,10 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
       // optional int32 offset = 1;
       case 1: {
         if (tag == 8) {
+          set_has_offset();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
                  input, &offset_)));
-          set_has_offset();
         } else {
           goto handle_unusual;
         }
@@ -593,10 +591,10 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
       case 6: {
         if (tag == 48) {
          parse_count:
+          set_has_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
                  input, &count_)));
-          set_has_count();
         } else {
           goto handle_unusual;
         }
@@ -608,10 +606,10 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
       case 7: {
         if (tag == 57) {
          parse_sum:
+          set_has_sum();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
                  input, &sum_)));
-          set_has_sum();
         } else {
           goto handle_unusual;
         }
@@ -623,10 +621,10 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
       case 8: {
         if (tag == 65) {
          parse_max:
+          set_has_max();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
                  input, &max_)));
-          set_has_max();
         } else {
           goto handle_unusual;
         }
@@ -638,10 +636,10 @@ bool InternalTimeSeriesSample::MergePartialFromCodedStream(
       case 9: {
         if (tag == 73) {
          parse_min:
+          set_has_min();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
                  input, &min_)));
-          set_has_min();
         } else {
           goto handle_unusual;
         }
@@ -704,9 +702,9 @@ void InternalTimeSeriesSample::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.InternalTimeSeriesSample)
 }
 
-int InternalTimeSeriesSample::ByteSize() const {
+size_t InternalTimeSeriesSample::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.InternalTimeSeriesSample)
-  int total_size = 0;
+  size_t total_size = 0;
 
   if (_has_bits_[0 / 32] & 31u) {
     // optional int32 offset = 1;
@@ -741,8 +739,9 @@ int InternalTimeSeriesSample::ByteSize() const {
   }
   total_size += unknown_fields().size();
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -754,9 +753,15 @@ void InternalTimeSeriesSample::CheckTypeAndMergeFrom(
 
 void InternalTimeSeriesSample::MergeFrom(const InternalTimeSeriesSample& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalTimeSeriesSample)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void InternalTimeSeriesSample::UnsafeMergeFrom(const InternalTimeSeriesSample& from) {
+  GOOGLE_DCHECK(&from != this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_offset()) {
       set_offset(from.offset());
@@ -783,7 +788,7 @@ void InternalTimeSeriesSample::CopyFrom(const InternalTimeSeriesSample& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.InternalTimeSeriesSample)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool InternalTimeSeriesSample::IsInitialized() const {
@@ -827,11 +832,11 @@ void InternalTimeSeriesSample::clear_offset() {
   offset_ = 0;
   clear_has_offset();
 }
- ::google::protobuf::int32 InternalTimeSeriesSample::offset() const {
+::google::protobuf::int32 InternalTimeSeriesSample::offset() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.offset)
   return offset_;
 }
- void InternalTimeSeriesSample::set_offset(::google::protobuf::int32 value) {
+void InternalTimeSeriesSample::set_offset(::google::protobuf::int32 value) {
   set_has_offset();
   offset_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.offset)
@@ -851,11 +856,11 @@ void InternalTimeSeriesSample::clear_sum() {
   sum_ = 0;
   clear_has_sum();
 }
- double InternalTimeSeriesSample::sum() const {
+double InternalTimeSeriesSample::sum() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.sum)
   return sum_;
 }
- void InternalTimeSeriesSample::set_sum(double value) {
+void InternalTimeSeriesSample::set_sum(double value) {
   set_has_sum();
   sum_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.sum)
@@ -875,11 +880,11 @@ void InternalTimeSeriesSample::clear_count() {
   count_ = 0u;
   clear_has_count();
 }
- ::google::protobuf::uint32 InternalTimeSeriesSample::count() const {
+::google::protobuf::uint32 InternalTimeSeriesSample::count() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.count)
   return count_;
 }
- void InternalTimeSeriesSample::set_count(::google::protobuf::uint32 value) {
+void InternalTimeSeriesSample::set_count(::google::protobuf::uint32 value) {
   set_has_count();
   count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.count)
@@ -899,11 +904,11 @@ void InternalTimeSeriesSample::clear_max() {
   max_ = 0;
   clear_has_max();
 }
- double InternalTimeSeriesSample::max() const {
+double InternalTimeSeriesSample::max() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.max)
   return max_;
 }
- void InternalTimeSeriesSample::set_max(double value) {
+void InternalTimeSeriesSample::set_max(double value) {
   set_has_max();
   max_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.max)
@@ -923,16 +928,19 @@ void InternalTimeSeriesSample::clear_min() {
   min_ = 0;
   clear_has_min();
 }
- double InternalTimeSeriesSample::min() const {
+double InternalTimeSeriesSample::min() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.min)
   return min_;
 }
- void InternalTimeSeriesSample::set_min(double value) {
+void InternalTimeSeriesSample::set_min(double value) {
   set_has_min();
   min_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.min)
 }
 
+inline const InternalTimeSeriesSample* InternalTimeSeriesSample::internal_default_instance() {
+  return &InternalTimeSeriesSample_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // @@protoc_insertion_point(namespace_scope)

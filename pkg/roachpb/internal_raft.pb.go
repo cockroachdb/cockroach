@@ -46,7 +46,7 @@ func (*RaftTombstone) Descriptor() ([]byte, []int) { return fileDescriptorIntern
 type RaftSnapshotData struct {
 	// The latest RangeDescriptor
 	RangeDescriptor RangeDescriptor             `protobuf:"bytes,1,opt,name=range_descriptor,json=rangeDescriptor" json:"range_descriptor"`
-	KV              []RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep,name=KV,json=kV" json:"KV"`
+	KV              []RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep,name=KV" json:"KV"`
 	// These are really raftpb.Entry, but we model them as raw bytes to avoid
 	// roundtripping through memory.
 	LogEntries [][]byte `protobuf:"bytes,3,rep,name=log_entries,json=logEntries" json:"log_entries,omitempty"`
@@ -76,80 +76,80 @@ func init() {
 	proto.RegisterType((*RaftSnapshotData)(nil), "cockroach.roachpb.RaftSnapshotData")
 	proto.RegisterType((*RaftSnapshotData_KeyValue)(nil), "cockroach.roachpb.RaftSnapshotData.KeyValue")
 }
-func (m *RaftTruncatedState) Marshal() (data []byte, err error) {
+func (m *RaftTruncatedState) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *RaftTruncatedState) MarshalTo(data []byte) (int, error) {
+func (m *RaftTruncatedState) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintInternalRaft(data, i, uint64(m.Index))
-	data[i] = 0x10
+	i = encodeVarintInternalRaft(dAtA, i, uint64(m.Index))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintInternalRaft(data, i, uint64(m.Term))
+	i = encodeVarintInternalRaft(dAtA, i, uint64(m.Term))
 	return i, nil
 }
 
-func (m *RaftTombstone) Marshal() (data []byte, err error) {
+func (m *RaftTombstone) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *RaftTombstone) MarshalTo(data []byte) (int, error) {
+func (m *RaftTombstone) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintInternalRaft(data, i, uint64(m.NextReplicaID))
+	i = encodeVarintInternalRaft(dAtA, i, uint64(m.NextReplicaID))
 	return i, nil
 }
 
-func (m *RaftSnapshotData) Marshal() (data []byte, err error) {
+func (m *RaftSnapshotData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *RaftSnapshotData) MarshalTo(data []byte) (int, error) {
+func (m *RaftSnapshotData) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintInternalRaft(data, i, uint64(m.RangeDescriptor.Size()))
-	n1, err := m.RangeDescriptor.MarshalTo(data[i:])
+	i = encodeVarintInternalRaft(dAtA, i, uint64(m.RangeDescriptor.Size()))
+	n1, err := m.RangeDescriptor.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
 	if len(m.KV) > 0 {
 		for _, msg := range m.KV {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintInternalRaft(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintInternalRaft(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -158,46 +158,46 @@ func (m *RaftSnapshotData) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.LogEntries) > 0 {
 		for _, b := range m.LogEntries {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintInternalRaft(data, i, uint64(len(b)))
-			i += copy(data[i:], b)
+			i = encodeVarintInternalRaft(dAtA, i, uint64(len(b)))
+			i += copy(dAtA[i:], b)
 		}
 	}
 	return i, nil
 }
 
-func (m *RaftSnapshotData_KeyValue) Marshal() (data []byte, err error) {
+func (m *RaftSnapshotData_KeyValue) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (int, error) {
+func (m *RaftSnapshotData_KeyValue) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Key != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintInternalRaft(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
+		i = encodeVarintInternalRaft(dAtA, i, uint64(len(m.Key)))
+		i += copy(dAtA[i:], m.Key)
 	}
 	if m.Value != nil {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintInternalRaft(data, i, uint64(len(m.Value)))
-		i += copy(data[i:], m.Value)
+		i = encodeVarintInternalRaft(dAtA, i, uint64(len(m.Value)))
+		i += copy(dAtA[i:], m.Value)
 	}
-	data[i] = 0x1a
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintInternalRaft(data, i, uint64(m.Timestamp.Size()))
-	n2, err := m.Timestamp.MarshalTo(data[i:])
+	i = encodeVarintInternalRaft(dAtA, i, uint64(m.Timestamp.Size()))
+	n2, err := m.Timestamp.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -205,31 +205,31 @@ func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64InternalRaft(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64InternalRaft(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32InternalRaft(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32InternalRaft(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintInternalRaft(data []byte, offset int, v uint64) int {
+func encodeVarintInternalRaft(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func NewPopulatedRaftTruncatedState(r randyInternalRaft, easy bool) *RaftTruncatedState {
@@ -267,7 +267,7 @@ func randStringInternalRaft(r randyInternalRaft) string {
 	}
 	return string(tmps)
 }
-func randUnrecognizedInternalRaft(r randyInternalRaft, maxFieldNumber int) (data []byte) {
+func randUnrecognizedInternalRaft(r randyInternalRaft, maxFieldNumber int) (dAtA []byte) {
 	l := r.Intn(5)
 	for i := 0; i < l; i++ {
 		wire := r.Intn(4)
@@ -275,43 +275,43 @@ func randUnrecognizedInternalRaft(r randyInternalRaft, maxFieldNumber int) (data
 			wire = 5
 		}
 		fieldNumber := maxFieldNumber + r.Intn(100)
-		data = randFieldInternalRaft(data, r, fieldNumber, wire)
+		dAtA = randFieldInternalRaft(dAtA, r, fieldNumber, wire)
 	}
-	return data
+	return dAtA
 }
-func randFieldInternalRaft(data []byte, r randyInternalRaft, fieldNumber int, wire int) []byte {
+func randFieldInternalRaft(dAtA []byte, r randyInternalRaft, fieldNumber int, wire int) []byte {
 	key := uint32(fieldNumber)<<3 | uint32(wire)
 	switch wire {
 	case 0:
-		data = encodeVarintPopulateInternalRaft(data, uint64(key))
+		dAtA = encodeVarintPopulateInternalRaft(dAtA, uint64(key))
 		v2 := r.Int63()
 		if r.Intn(2) == 0 {
 			v2 *= -1
 		}
-		data = encodeVarintPopulateInternalRaft(data, uint64(v2))
+		dAtA = encodeVarintPopulateInternalRaft(dAtA, uint64(v2))
 	case 1:
-		data = encodeVarintPopulateInternalRaft(data, uint64(key))
-		data = append(data, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
+		dAtA = encodeVarintPopulateInternalRaft(dAtA, uint64(key))
+		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
 	case 2:
-		data = encodeVarintPopulateInternalRaft(data, uint64(key))
+		dAtA = encodeVarintPopulateInternalRaft(dAtA, uint64(key))
 		ll := r.Intn(100)
-		data = encodeVarintPopulateInternalRaft(data, uint64(ll))
+		dAtA = encodeVarintPopulateInternalRaft(dAtA, uint64(ll))
 		for j := 0; j < ll; j++ {
-			data = append(data, byte(r.Intn(256)))
+			dAtA = append(dAtA, byte(r.Intn(256)))
 		}
 	default:
-		data = encodeVarintPopulateInternalRaft(data, uint64(key))
-		data = append(data, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
+		dAtA = encodeVarintPopulateInternalRaft(dAtA, uint64(key))
+		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
 	}
-	return data
+	return dAtA
 }
-func encodeVarintPopulateInternalRaft(data []byte, v uint64) []byte {
+func encodeVarintPopulateInternalRaft(dAtA []byte, v uint64) []byte {
 	for v >= 1<<7 {
-		data = append(data, uint8(uint64(v)&0x7f|0x80))
+		dAtA = append(dAtA, uint8(uint64(v)&0x7f|0x80))
 		v >>= 7
 	}
-	data = append(data, uint8(v))
-	return data
+	dAtA = append(dAtA, uint8(v))
+	return dAtA
 }
 func (m *RaftTruncatedState) Size() (n int) {
 	var l int
@@ -377,8 +377,8 @@ func sovInternalRaft(x uint64) (n int) {
 func sozInternalRaft(x uint64) (n int) {
 	return sovInternalRaft(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *RaftTruncatedState) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *RaftTruncatedState) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -390,7 +390,7 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -418,7 +418,7 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Index |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -437,7 +437,7 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Term |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -446,7 +446,7 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipInternalRaft(data[iNdEx:])
+			skippy, err := skipInternalRaft(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -465,8 +465,8 @@ func (m *RaftTruncatedState) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *RaftTombstone) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *RaftTombstone) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -478,7 +478,7 @@ func (m *RaftTombstone) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -506,7 +506,7 @@ func (m *RaftTombstone) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.NextReplicaID |= (ReplicaID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -515,7 +515,7 @@ func (m *RaftTombstone) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipInternalRaft(data[iNdEx:])
+			skippy, err := skipInternalRaft(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -534,8 +534,8 @@ func (m *RaftTombstone) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *RaftSnapshotData) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *RaftSnapshotData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -547,7 +547,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -575,7 +575,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -589,7 +589,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RangeDescriptor.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.RangeDescriptor.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -605,7 +605,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -620,7 +620,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.KV = append(m.KV, RaftSnapshotData_KeyValue{})
-			if err := m.KV[len(m.KV)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.KV[len(m.KV)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -636,7 +636,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -651,11 +651,11 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.LogEntries = append(m.LogEntries, make([]byte, postIndex-iNdEx))
-			copy(m.LogEntries[len(m.LogEntries)-1], data[iNdEx:postIndex])
+			copy(m.LogEntries[len(m.LogEntries)-1], dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipInternalRaft(data[iNdEx:])
+			skippy, err := skipInternalRaft(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -674,8 +674,8 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *RaftSnapshotData_KeyValue) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -687,7 +687,7 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -715,7 +715,7 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -729,7 +729,7 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
 			if m.Key == nil {
 				m.Key = []byte{}
 			}
@@ -746,7 +746,7 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -760,7 +760,7 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = append(m.Value[:0], data[iNdEx:postIndex]...)
+			m.Value = append(m.Value[:0], dAtA[iNdEx:postIndex]...)
 			if m.Value == nil {
 				m.Value = []byte{}
 			}
@@ -777,7 +777,7 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -791,13 +791,13 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipInternalRaft(data[iNdEx:])
+			skippy, err := skipInternalRaft(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -816,8 +816,8 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipInternalRaft(data []byte) (n int, err error) {
-	l := len(data)
+func skipInternalRaft(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -828,7 +828,7 @@ func skipInternalRaft(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -846,7 +846,7 @@ func skipInternalRaft(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -863,7 +863,7 @@ func skipInternalRaft(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -886,7 +886,7 @@ func skipInternalRaft(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -897,7 +897,7 @@ func skipInternalRaft(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipInternalRaft(data[start:])
+				next, err := skipInternalRaft(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
@@ -947,12 +947,12 @@ var fileDescriptorInternalRaft = []byte{
 	0x20, 0x19, 0x8f, 0x21, 0x88, 0xa0, 0x08, 0x65, 0x92, 0xa3, 0x90, 0xea, 0x0b, 0xdd, 0x4b, 0xc7,
 	0xbd, 0x77, 0xab, 0xae, 0x5f, 0x49, 0xa7, 0x7b, 0x65, 0xd3, 0xe0, 0x5c, 0x1e, 0xc3, 0xf4, 0x0d,
 	0xd1, 0x67, 0x0b, 0x53, 0x1f, 0x19, 0xe3, 0xee, 0xe5, 0x8b, 0x93, 0x31, 0xc7, 0x5b, 0xb8, 0x33,
-	0xb8, 0x5d, 0xb0, 0x74, 0x0d, 0x13, 0xd2, 0xd4, 0xd2, 0x67, 0x0b, 0x5f, 0x5f, 0x2d, 0xa8, 0x4d,
+	0xb8, 0x5d, 0xb0, 0x74, 0x0d, 0x13, 0xd2, 0xd4, 0xd2, 0x67, 0x0b, 0x5f, 0x9f, 0x2d, 0xa8, 0x4d,
 	0xba, 0xa9, 0x88, 0x03, 0xe0, 0x28, 0x13, 0x28, 0x4c, 0x63, 0x64, 0x8c, 0x7b, 0x3e, 0x49, 0x45,
 	0xfc, 0xba, 0x46, 0x86, 0x6b, 0xf2, 0xf0, 0xce, 0x4c, 0x07, 0xc4, 0x58, 0xc1, 0xad, 0x5a, 0xbf,
 	0xe7, 0x57, 0x23, 0xbd, 0x20, 0x9d, 0xcf, 0x15, 0xa5, 0x2e, 0xbc, 0xe7, 0xd7, 0x07, 0xfa, 0x8a,
 	0x9c, 0xed, 0x7f, 0xb0, 0x69, 0xa8, 0xb2, 0x8f, 0x0f, 0xb6, 0xac, 0x5e, 0x81, 0xbb, 0x4c, 0x43,
 	0xf7, 0xea, 0x4e, 0xd4, 0xf4, 0xfc, 0xef, 0x9a, 0x3c, 0xd9, 0xfe, 0xb6, 0x5a, 0xdb, 0xd2, 0xd2,
 	0x7e, 0x94, 0x96, 0xf6, 0xb3, 0xb4, 0xb4, 0x5f, 0xa5, 0xa5, 0x7d, 0xf9, 0x63, 0xb5, 0x3e, 0x3e,
-	0x68, 0x4a, 0xfe, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xf9, 0x70, 0x80, 0x1f, 0xc0, 0x02, 0x00, 0x00,
+	0x68, 0x4a, 0xfe, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xdb, 0x00, 0x49, 0x9c, 0xc0, 0x02, 0x00, 0x00,
 }

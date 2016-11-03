@@ -20,50 +20,54 @@ namespace engine {
 namespace enginepb {
 
 void protobuf_ShutdownFile_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
-  delete TxnMeta::default_instance_;
-  delete MVCCMetadata::default_instance_;
-  delete MVCCStats::default_instance_;
+  TxnMeta_default_instance_.Shutdown();
+  MVCCMetadata_default_instance_.Shutdown();
+  MVCCStats_default_instance_.Shutdown();
 }
 
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+void protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_impl() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  ::cockroach::util::hlc::protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
+  ::google::protobuf::internal::GetEmptyString();
+  TxnMeta_default_instance_.DefaultConstruct();
+  ::google::protobuf::internal::GetEmptyString();
+  MVCCMetadata_default_instance_.DefaultConstruct();
+  ::google::protobuf::internal::GetEmptyString();
+  MVCCStats_default_instance_.DefaultConstruct();
+  TxnMeta_default_instance_.get_mutable()->InitAsDefaultInstance();
+  MVCCMetadata_default_instance_.get_mutable()->InitAsDefaultInstance();
+  MVCCStats_default_instance_.get_mutable()->InitAsDefaultInstance();
+}
+
+GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_once_);
+void protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
+  ::google::protobuf::GoogleOnceInit(&protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_once_,
+                 &protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_impl);
+}
 void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#else
-void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() GOOGLE_ATTRIBUTE_COLD;
-void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
-  static bool already_here = false;
-  if (already_here) return;
-  already_here = true;
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-#endif
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
   ::cockroach::util::hlc::protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
-  TxnMeta::default_instance_ = new TxnMeta();
-  MVCCMetadata::default_instance_ = new MVCCMetadata();
-  MVCCStats::default_instance_ = new MVCCStats();
-  TxnMeta::default_instance_->InitAsDefaultInstance();
-  MVCCMetadata::default_instance_->InitAsDefaultInstance();
-  MVCCStats::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto);
 }
 
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_once_);
 void protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
   ::google::protobuf::GoogleOnceInit(&protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_once_,
                  &protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_impl);
 }
-#else
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 // Force AddDescriptors() to be called at static initialization time.
 struct StaticDescriptorInitializer_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto {
   StaticDescriptorInitializer_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
     protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
   }
 } static_descriptor_initializer_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_;
-#endif
+#endif  // GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 bool IsolationType_IsValid(int value) {
-  switch(value) {
+  switch (value) {
     case 0:
     case 1:
       return true;
@@ -71,6 +75,16 @@ bool IsolationType_IsValid(int value) {
       return false;
   }
 }
+
+
+namespace {
+
+static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD GOOGLE_ATTRIBUTE_NORETURN;
+static void MergeFromFail(int line) {
+  ::google::protobuf::internal::MergeFromFail(__FILE__, line);
+}
+
+}  // namespace
 
 
 // ===================================================================
@@ -93,41 +107,33 @@ const int TxnMeta::kBatchIndexFieldNumber;
 
 TxnMeta::TxnMeta()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.TxnMeta)
 }
 
 void TxnMeta::InitAsDefaultInstance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-#else
-  timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
-#endif
 }
 
 TxnMeta::TxnMeta(const TxnMeta& from)
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.TxnMeta)
 }
 
 void TxnMeta::SharedCtor() {
-  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  isolation_ = 0;
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  epoch_ = 0u;
   timestamp_ = NULL;
-  priority_ = 0;
-  sequence_ = 0;
-  batch_index_ = 0;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  ::memset(&isolation_, 0, reinterpret_cast<char*>(&batch_index_) -
+    reinterpret_cast<char*>(&isolation_) + sizeof(batch_index_));
 }
 
 TxnMeta::~TxnMeta() {
@@ -140,11 +146,7 @@ void TxnMeta::SharedDtor() {
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
+  if (this != &TxnMeta_default_instance_.get()) {
     delete timestamp_;
   }
 }
@@ -155,15 +157,11 @@ void TxnMeta::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const TxnMeta& TxnMeta::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
+  return *internal_default_instance();
 }
 
-TxnMeta* TxnMeta::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<TxnMeta> TxnMeta_default_instance_;
 
 TxnMeta* TxnMeta::New(::google::protobuf::Arena* arena) const {
   TxnMeta* n = new TxnMeta;
@@ -187,13 +185,12 @@ void TxnMeta::Clear() {
 #endif
 
 #define ZR_(first, last) do {\
-  ::memset(&first, 0,\
+  ::memset(&(first), 0,\
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
   if (_has_bits_[0 / 32] & 255u) {
-    ZR_(isolation_, epoch_);
-    ZR_(priority_, batch_index_);
+    ZR_(isolation_, batch_index_);
     if (has_id()) {
       id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
@@ -208,7 +205,7 @@ void TxnMeta::Clear() {
 #undef ZR_HELPER_
 #undef ZR_
 
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  _has_bits_.Clear();
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -218,7 +215,7 @@ bool TxnMeta::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      ::google::protobuf::internal::NewPermanentCallback(
+      ::google::protobuf::NewPermanentCallback(
           &MutableUnknownFieldsForTxnMeta, this));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
@@ -278,10 +275,10 @@ bool TxnMeta::MergePartialFromCodedStream(
       case 4: {
         if (tag == 32) {
          parse_epoch:
+          set_has_epoch();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
                  input, &epoch_)));
-          set_has_epoch();
         } else {
           goto handle_unusual;
         }
@@ -306,10 +303,10 @@ bool TxnMeta::MergePartialFromCodedStream(
       case 6: {
         if (tag == 48) {
          parse_priority:
+          set_has_priority();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
                  input, &priority_)));
-          set_has_priority();
         } else {
           goto handle_unusual;
         }
@@ -321,10 +318,10 @@ bool TxnMeta::MergePartialFromCodedStream(
       case 7: {
         if (tag == 56) {
          parse_sequence:
+          set_has_sequence();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
                  input, &sequence_)));
-          set_has_sequence();
         } else {
           goto handle_unusual;
         }
@@ -336,10 +333,10 @@ bool TxnMeta::MergePartialFromCodedStream(
       case 8: {
         if (tag == 64) {
          parse_batch_index:
+          set_has_batch_index();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
                  input, &batch_index_)));
-          set_has_batch_index();
         } else {
           goto handle_unusual;
         }
@@ -421,9 +418,9 @@ void TxnMeta::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.TxnMeta)
 }
 
-int TxnMeta::ByteSize() const {
+size_t TxnMeta::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.TxnMeta)
-  int total_size = 0;
+  size_t total_size = 0;
 
   if (_has_bits_[0 / 32] & 255u) {
     // optional bytes id = 1;
@@ -484,8 +481,9 @@ int TxnMeta::ByteSize() const {
   }
   total_size += unknown_fields().size();
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -497,9 +495,15 @@ void TxnMeta::CheckTypeAndMergeFrom(
 
 void TxnMeta::MergeFrom(const TxnMeta& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.TxnMeta)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void TxnMeta::UnsafeMergeFrom(const TxnMeta& from) {
+  GOOGLE_DCHECK(&from != this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_id()) {
       set_has_id();
@@ -537,7 +541,7 @@ void TxnMeta::CopyFrom(const TxnMeta& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.TxnMeta)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool TxnMeta::IsInitialized() const {
@@ -584,37 +588,37 @@ void TxnMeta::clear_id() {
   id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_id();
 }
- const ::std::string& TxnMeta::id() const {
+const ::std::string& TxnMeta::id() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.id)
   return id_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void TxnMeta::set_id(const ::std::string& value) {
+void TxnMeta::set_id(const ::std::string& value) {
   set_has_id();
   id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
- void TxnMeta::set_id(const char* value) {
+void TxnMeta::set_id(const char* value) {
   set_has_id();
   id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
- void TxnMeta::set_id(const void* value, size_t size) {
+void TxnMeta::set_id(const void* value, size_t size) {
   set_has_id();
   id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.TxnMeta.id)
 }
- ::std::string* TxnMeta::mutable_id() {
+::std::string* TxnMeta::mutable_id() {
   set_has_id();
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.id)
   return id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* TxnMeta::release_id() {
+::std::string* TxnMeta::release_id() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.id)
   clear_has_id();
   return id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void TxnMeta::set_allocated_id(::std::string* id) {
+void TxnMeta::set_allocated_id(::std::string* id) {
   if (id != NULL) {
     set_has_id();
   } else {
@@ -638,11 +642,11 @@ void TxnMeta::clear_isolation() {
   isolation_ = 0;
   clear_has_isolation();
 }
- ::cockroach::storage::engine::enginepb::IsolationType TxnMeta::isolation() const {
+::cockroach::storage::engine::enginepb::IsolationType TxnMeta::isolation() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.isolation)
   return static_cast< ::cockroach::storage::engine::enginepb::IsolationType >(isolation_);
 }
- void TxnMeta::set_isolation(::cockroach::storage::engine::enginepb::IsolationType value) {
+void TxnMeta::set_isolation(::cockroach::storage::engine::enginepb::IsolationType value) {
   assert(::cockroach::storage::engine::enginepb::IsolationType_IsValid(value));
   set_has_isolation();
   isolation_ = value;
@@ -663,37 +667,37 @@ void TxnMeta::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_key();
 }
- const ::std::string& TxnMeta::key() const {
+const ::std::string& TxnMeta::key() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.key)
   return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void TxnMeta::set_key(const ::std::string& value) {
+void TxnMeta::set_key(const ::std::string& value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
- void TxnMeta::set_key(const char* value) {
+void TxnMeta::set_key(const char* value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
- void TxnMeta::set_key(const void* value, size_t size) {
+void TxnMeta::set_key(const void* value, size_t size) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
- ::std::string* TxnMeta::mutable_key() {
+::std::string* TxnMeta::mutable_key() {
   set_has_key();
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* TxnMeta::release_key() {
+::std::string* TxnMeta::release_key() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void TxnMeta::set_allocated_key(::std::string* key) {
+void TxnMeta::set_allocated_key(::std::string* key) {
   if (key != NULL) {
     set_has_key();
   } else {
@@ -717,11 +721,11 @@ void TxnMeta::clear_epoch() {
   epoch_ = 0u;
   clear_has_epoch();
 }
- ::google::protobuf::uint32 TxnMeta::epoch() const {
+::google::protobuf::uint32 TxnMeta::epoch() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.epoch)
   return epoch_;
 }
- void TxnMeta::set_epoch(::google::protobuf::uint32 value) {
+void TxnMeta::set_epoch(::google::protobuf::uint32 value) {
   set_has_epoch();
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.epoch)
@@ -743,11 +747,8 @@ void TxnMeta::clear_timestamp() {
 }
 const ::cockroach::util::hlc::Timestamp& TxnMeta::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return timestamp_ != NULL ? *timestamp_ : *default_instance().timestamp_;
-#else
-  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
-#endif
+  return timestamp_ != NULL ? *timestamp_
+                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_timestamp() {
   set_has_timestamp();
@@ -789,11 +790,11 @@ void TxnMeta::clear_priority() {
   priority_ = 0;
   clear_has_priority();
 }
- ::google::protobuf::int32 TxnMeta::priority() const {
+::google::protobuf::int32 TxnMeta::priority() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.priority)
   return priority_;
 }
- void TxnMeta::set_priority(::google::protobuf::int32 value) {
+void TxnMeta::set_priority(::google::protobuf::int32 value) {
   set_has_priority();
   priority_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.priority)
@@ -813,11 +814,11 @@ void TxnMeta::clear_sequence() {
   sequence_ = 0;
   clear_has_sequence();
 }
- ::google::protobuf::int32 TxnMeta::sequence() const {
+::google::protobuf::int32 TxnMeta::sequence() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.sequence)
   return sequence_;
 }
- void TxnMeta::set_sequence(::google::protobuf::int32 value) {
+void TxnMeta::set_sequence(::google::protobuf::int32 value) {
   set_has_sequence();
   sequence_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.sequence)
@@ -837,16 +838,19 @@ void TxnMeta::clear_batch_index() {
   batch_index_ = 0;
   clear_has_batch_index();
 }
- ::google::protobuf::int32 TxnMeta::batch_index() const {
+::google::protobuf::int32 TxnMeta::batch_index() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
   return batch_index_;
 }
- void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
+void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
   set_has_batch_index();
   batch_index_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
 }
 
+inline const TxnMeta* TxnMeta::internal_default_instance() {
+  return &TxnMeta_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
@@ -868,52 +872,38 @@ const int MVCCMetadata::kMergeTimestampFieldNumber;
 
 MVCCMetadata::MVCCMetadata()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.MVCCMetadata)
 }
 
 void MVCCMetadata::InitAsDefaultInstance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
       ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
-#else
-  txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(&::cockroach::storage::engine::enginepb::TxnMeta::default_instance());
-#endif
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-#else
-  timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
-#endif
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   merge_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-#else
-  merge_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(&::cockroach::util::hlc::Timestamp::default_instance());
-#endif
 }
 
 MVCCMetadata::MVCCMetadata(const MVCCMetadata& from)
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.MVCCMetadata)
 }
 
 void MVCCMetadata::SharedCtor() {
-  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  raw_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   txn_ = NULL;
   timestamp_ = NULL;
-  deleted_ = false;
-  key_bytes_ = GOOGLE_LONGLONG(0);
-  val_bytes_ = GOOGLE_LONGLONG(0);
-  raw_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   merge_timestamp_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  ::memset(&key_bytes_, 0, reinterpret_cast<char*>(&deleted_) -
+    reinterpret_cast<char*>(&key_bytes_) + sizeof(deleted_));
 }
 
 MVCCMetadata::~MVCCMetadata() {
@@ -925,11 +915,7 @@ void MVCCMetadata::SharedDtor() {
   _unknown_fields_.DestroyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   raw_bytes_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
+  if (this != &MVCCMetadata_default_instance_.get()) {
     delete txn_;
     delete timestamp_;
     delete merge_timestamp_;
@@ -942,15 +928,11 @@ void MVCCMetadata::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const MVCCMetadata& MVCCMetadata::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
+  return *internal_default_instance();
 }
 
-MVCCMetadata* MVCCMetadata::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<MVCCMetadata> MVCCMetadata_default_instance_;
 
 MVCCMetadata* MVCCMetadata::New(::google::protobuf::Arena* arena) const {
   MVCCMetadata* n = new MVCCMetadata;
@@ -974,19 +956,18 @@ void MVCCMetadata::Clear() {
 #endif
 
 #define ZR_(first, last) do {\
-  ::memset(&first, 0,\
+  ::memset(&(first), 0,\
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
   if (_has_bits_[0 / 32] & 127u) {
-    ZR_(key_bytes_, val_bytes_);
+    ZR_(key_bytes_, deleted_);
     if (has_txn()) {
       if (txn_ != NULL) txn_->::cockroach::storage::engine::enginepb::TxnMeta::Clear();
     }
     if (has_timestamp()) {
       if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
     }
-    deleted_ = false;
     if (has_raw_bytes()) {
       raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
@@ -998,7 +979,7 @@ void MVCCMetadata::Clear() {
 #undef ZR_HELPER_
 #undef ZR_
 
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  _has_bits_.Clear();
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -1008,7 +989,7 @@ bool MVCCMetadata::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      ::google::protobuf::internal::NewPermanentCallback(
+      ::google::protobuf::NewPermanentCallback(
           &MutableUnknownFieldsForMVCCMetadata, this));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
@@ -1047,10 +1028,10 @@ bool MVCCMetadata::MergePartialFromCodedStream(
       case 3: {
         if (tag == 24) {
          parse_deleted:
+          set_has_deleted();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
                  input, &deleted_)));
-          set_has_deleted();
         } else {
           goto handle_unusual;
         }
@@ -1062,10 +1043,10 @@ bool MVCCMetadata::MergePartialFromCodedStream(
       case 4: {
         if (tag == 32) {
          parse_key_bytes:
+          set_has_key_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &key_bytes_)));
-          set_has_key_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1077,10 +1058,10 @@ bool MVCCMetadata::MergePartialFromCodedStream(
       case 5: {
         if (tag == 40) {
          parse_val_bytes:
+          set_has_val_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &val_bytes_)));
-          set_has_val_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1183,9 +1164,9 @@ void MVCCMetadata::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCMetadata)
 }
 
-int MVCCMetadata::ByteSize() const {
+size_t MVCCMetadata::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.MVCCMetadata)
-  int total_size = 0;
+  size_t total_size = 0;
 
   if (_has_bits_[0 / 32] & 127u) {
     // optional .cockroach.storage.engine.enginepb.TxnMeta txn = 1;
@@ -1238,8 +1219,9 @@ int MVCCMetadata::ByteSize() const {
   }
   total_size += unknown_fields().size();
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -1251,9 +1233,15 @@ void MVCCMetadata::CheckTypeAndMergeFrom(
 
 void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.MVCCMetadata)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void MVCCMetadata::UnsafeMergeFrom(const MVCCMetadata& from) {
+  GOOGLE_DCHECK(&from != this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_txn()) {
       mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
@@ -1287,7 +1275,7 @@ void MVCCMetadata::CopyFrom(const MVCCMetadata& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.MVCCMetadata)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool MVCCMetadata::IsInitialized() const {
@@ -1335,11 +1323,8 @@ void MVCCMetadata::clear_txn() {
 }
 const ::cockroach::storage::engine::enginepb::TxnMeta& MVCCMetadata::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.txn)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return txn_ != NULL ? *txn_ : *default_instance().txn_;
-#else
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-#endif
+  return txn_ != NULL ? *txn_
+                         : *::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance();
 }
 ::cockroach::storage::engine::enginepb::TxnMeta* MVCCMetadata::mutable_txn() {
   set_has_txn();
@@ -1383,11 +1368,8 @@ void MVCCMetadata::clear_timestamp() {
 }
 const ::cockroach::util::hlc::Timestamp& MVCCMetadata::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return timestamp_ != NULL ? *timestamp_ : *default_instance().timestamp_;
-#else
-  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
-#endif
+  return timestamp_ != NULL ? *timestamp_
+                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 ::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_timestamp() {
   set_has_timestamp();
@@ -1429,11 +1411,11 @@ void MVCCMetadata::clear_deleted() {
   deleted_ = false;
   clear_has_deleted();
 }
- bool MVCCMetadata::deleted() const {
+bool MVCCMetadata::deleted() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.deleted)
   return deleted_;
 }
- void MVCCMetadata::set_deleted(bool value) {
+void MVCCMetadata::set_deleted(bool value) {
   set_has_deleted();
   deleted_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.deleted)
@@ -1453,11 +1435,11 @@ void MVCCMetadata::clear_key_bytes() {
   key_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_key_bytes();
 }
- ::google::protobuf::int64 MVCCMetadata::key_bytes() const {
+::google::protobuf::int64 MVCCMetadata::key_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.key_bytes)
   return key_bytes_;
 }
- void MVCCMetadata::set_key_bytes(::google::protobuf::int64 value) {
+void MVCCMetadata::set_key_bytes(::google::protobuf::int64 value) {
   set_has_key_bytes();
   key_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.key_bytes)
@@ -1477,11 +1459,11 @@ void MVCCMetadata::clear_val_bytes() {
   val_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_val_bytes();
 }
- ::google::protobuf::int64 MVCCMetadata::val_bytes() const {
+::google::protobuf::int64 MVCCMetadata::val_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.val_bytes)
   return val_bytes_;
 }
- void MVCCMetadata::set_val_bytes(::google::protobuf::int64 value) {
+void MVCCMetadata::set_val_bytes(::google::protobuf::int64 value) {
   set_has_val_bytes();
   val_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.val_bytes)
@@ -1501,37 +1483,37 @@ void MVCCMetadata::clear_raw_bytes() {
   raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_raw_bytes();
 }
- const ::std::string& MVCCMetadata::raw_bytes() const {
+const ::std::string& MVCCMetadata::raw_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
   return raw_bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void MVCCMetadata::set_raw_bytes(const ::std::string& value) {
+void MVCCMetadata::set_raw_bytes(const ::std::string& value) {
   set_has_raw_bytes();
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
- void MVCCMetadata::set_raw_bytes(const char* value) {
+void MVCCMetadata::set_raw_bytes(const char* value) {
   set_has_raw_bytes();
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
- void MVCCMetadata::set_raw_bytes(const void* value, size_t size) {
+void MVCCMetadata::set_raw_bytes(const void* value, size_t size) {
   set_has_raw_bytes();
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
- ::std::string* MVCCMetadata::mutable_raw_bytes() {
+::std::string* MVCCMetadata::mutable_raw_bytes() {
   set_has_raw_bytes();
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
   return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::std::string* MVCCMetadata::release_raw_bytes() {
+::std::string* MVCCMetadata::release_raw_bytes() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
   clear_has_raw_bytes();
   return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
+void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
   if (raw_bytes != NULL) {
     set_has_raw_bytes();
   } else {
@@ -1557,11 +1539,8 @@ void MVCCMetadata::clear_merge_timestamp() {
 }
 const ::cockroach::util::hlc::Timestamp& MVCCMetadata::merge_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return merge_timestamp_ != NULL ? *merge_timestamp_ : *default_instance().merge_timestamp_;
-#else
-  return merge_timestamp_ != NULL ? *merge_timestamp_ : *default_instance_->merge_timestamp_;
-#endif
+  return merge_timestamp_ != NULL ? *merge_timestamp_
+                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 ::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_merge_timestamp() {
   set_has_merge_timestamp();
@@ -1589,6 +1568,9 @@ void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::Timesta
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
 }
 
+inline const MVCCMetadata* MVCCMetadata::internal_default_instance() {
+  return &MVCCMetadata_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
@@ -1617,6 +1599,7 @@ const int MVCCStats::kSysCountFieldNumber;
 
 MVCCStats::MVCCStats()
   : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
+  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.MVCCStats)
 }
@@ -1628,30 +1611,16 @@ MVCCStats::MVCCStats(const MVCCStats& from)
   : ::google::protobuf::MessageLite(),
     _arena_ptr_(NULL) {
   SharedCtor();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.MVCCStats)
 }
 
 void MVCCStats::SharedCtor() {
-  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  contains_estimates_ = false;
-  last_update_nanos_ = GOOGLE_LONGLONG(0);
-  intent_age_ = GOOGLE_LONGLONG(0);
-  gc_bytes_age_ = GOOGLE_LONGLONG(0);
-  live_bytes_ = GOOGLE_LONGLONG(0);
-  live_count_ = GOOGLE_LONGLONG(0);
-  key_bytes_ = GOOGLE_LONGLONG(0);
-  key_count_ = GOOGLE_LONGLONG(0);
-  val_bytes_ = GOOGLE_LONGLONG(0);
-  val_count_ = GOOGLE_LONGLONG(0);
-  intent_bytes_ = GOOGLE_LONGLONG(0);
-  intent_count_ = GOOGLE_LONGLONG(0);
-  sys_bytes_ = GOOGLE_LONGLONG(0);
-  sys_count_ = GOOGLE_LONGLONG(0);
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  ::memset(&last_update_nanos_, 0, reinterpret_cast<char*>(&contains_estimates_) -
+    reinterpret_cast<char*>(&last_update_nanos_) + sizeof(contains_estimates_));
 }
 
 MVCCStats::~MVCCStats() {
@@ -1662,12 +1631,6 @@ MVCCStats::~MVCCStats() {
 void MVCCStats::SharedDtor() {
   _unknown_fields_.DestroyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  if (this != &default_instance()) {
-  #else
-  if (this != default_instance_) {
-  #endif
-  }
 }
 
 void MVCCStats::SetCachedSize(int size) const {
@@ -1676,15 +1639,11 @@ void MVCCStats::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const MVCCStats& MVCCStats::default_instance() {
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
-#else
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
-#endif
-  return *default_instance_;
+  protobuf_InitDefaults_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto();
+  return *internal_default_instance();
 }
 
-MVCCStats* MVCCStats::default_instance_ = NULL;
+::google::protobuf::internal::ExplicitlyConstructed<MVCCStats> MVCCStats_default_instance_;
 
 MVCCStats* MVCCStats::New(::google::protobuf::Arena* arena) const {
   MVCCStats* n = new MVCCStats;
@@ -1708,7 +1667,7 @@ void MVCCStats::Clear() {
 #endif
 
 #define ZR_(first, last) do {\
-  ::memset(&first, 0,\
+  ::memset(&(first), 0,\
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
@@ -1716,14 +1675,12 @@ void MVCCStats::Clear() {
     ZR_(last_update_nanos_, key_count_);
     contains_estimates_ = false;
   }
-  if (_has_bits_[8 / 32] & 16128u) {
-    ZR_(val_bytes_, sys_count_);
-  }
+  ZR_(val_bytes_, sys_count_);
 
 #undef ZR_HELPER_
 #undef ZR_
 
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  _has_bits_.Clear();
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -1733,7 +1690,7 @@ bool MVCCStats::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      ::google::protobuf::internal::NewPermanentCallback(
+      ::google::protobuf::NewPermanentCallback(
           &MutableUnknownFieldsForMVCCStats, this));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
@@ -1746,10 +1703,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       // optional sfixed64 last_update_nanos = 1;
       case 1: {
         if (tag == 9) {
+          set_has_last_update_nanos();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &last_update_nanos_)));
-          set_has_last_update_nanos();
         } else {
           goto handle_unusual;
         }
@@ -1761,10 +1718,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 2: {
         if (tag == 17) {
          parse_intent_age:
+          set_has_intent_age();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &intent_age_)));
-          set_has_intent_age();
         } else {
           goto handle_unusual;
         }
@@ -1776,10 +1733,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 3: {
         if (tag == 25) {
          parse_gc_bytes_age:
+          set_has_gc_bytes_age();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &gc_bytes_age_)));
-          set_has_gc_bytes_age();
         } else {
           goto handle_unusual;
         }
@@ -1791,10 +1748,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 4: {
         if (tag == 33) {
          parse_live_bytes:
+          set_has_live_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &live_bytes_)));
-          set_has_live_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1806,10 +1763,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 5: {
         if (tag == 41) {
          parse_live_count:
+          set_has_live_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &live_count_)));
-          set_has_live_count();
         } else {
           goto handle_unusual;
         }
@@ -1821,10 +1778,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 6: {
         if (tag == 49) {
          parse_key_bytes:
+          set_has_key_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &key_bytes_)));
-          set_has_key_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1836,10 +1793,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 7: {
         if (tag == 57) {
          parse_key_count:
+          set_has_key_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &key_count_)));
-          set_has_key_count();
         } else {
           goto handle_unusual;
         }
@@ -1851,10 +1808,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 8: {
         if (tag == 65) {
          parse_val_bytes:
+          set_has_val_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &val_bytes_)));
-          set_has_val_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1866,10 +1823,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 9: {
         if (tag == 73) {
          parse_val_count:
+          set_has_val_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &val_count_)));
-          set_has_val_count();
         } else {
           goto handle_unusual;
         }
@@ -1881,10 +1838,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 10: {
         if (tag == 81) {
          parse_intent_bytes:
+          set_has_intent_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &intent_bytes_)));
-          set_has_intent_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1896,10 +1853,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 11: {
         if (tag == 89) {
          parse_intent_count:
+          set_has_intent_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &intent_count_)));
-          set_has_intent_count();
         } else {
           goto handle_unusual;
         }
@@ -1911,10 +1868,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 12: {
         if (tag == 97) {
          parse_sys_bytes:
+          set_has_sys_bytes();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &sys_bytes_)));
-          set_has_sys_bytes();
         } else {
           goto handle_unusual;
         }
@@ -1926,10 +1883,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 13: {
         if (tag == 105) {
          parse_sys_count:
+          set_has_sys_count();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &sys_count_)));
-          set_has_sys_count();
         } else {
           goto handle_unusual;
         }
@@ -1941,10 +1898,10 @@ bool MVCCStats::MergePartialFromCodedStream(
       case 14: {
         if (tag == 112) {
          parse_contains_estimates:
+          set_has_contains_estimates();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
                  input, &contains_estimates_)));
-          set_has_contains_estimates();
         } else {
           goto handle_unusual;
         }
@@ -2052,9 +2009,9 @@ void MVCCStats::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCStats)
 }
 
-int MVCCStats::ByteSize() const {
+size_t MVCCStats::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.MVCCStats)
-  int total_size = 0;
+  size_t total_size = 0;
 
   if (_has_bits_[0 / 32] & 255u) {
     // optional bool contains_estimates = 14;
@@ -2132,8 +2089,9 @@ int MVCCStats::ByteSize() const {
   }
   total_size += unknown_fields().size();
 
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
+  _cached_size_ = cached_size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
@@ -2145,9 +2103,15 @@ void MVCCStats::CheckTypeAndMergeFrom(
 
 void MVCCStats::MergeFrom(const MVCCStats& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.MVCCStats)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) {
-    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  if (GOOGLE_PREDICT_TRUE(&from != this)) {
+    UnsafeMergeFrom(from);
+  } else {
+    MergeFromFail(__LINE__);
   }
+}
+
+void MVCCStats::UnsafeMergeFrom(const MVCCStats& from) {
+  GOOGLE_DCHECK(&from != this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_contains_estimates()) {
       set_contains_estimates(from.contains_estimates());
@@ -2203,7 +2167,7 @@ void MVCCStats::CopyFrom(const MVCCStats& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.MVCCStats)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  UnsafeMergeFrom(from);
 }
 
 bool MVCCStats::IsInitialized() const {
@@ -2256,11 +2220,11 @@ void MVCCStats::clear_contains_estimates() {
   contains_estimates_ = false;
   clear_has_contains_estimates();
 }
- bool MVCCStats::contains_estimates() const {
+bool MVCCStats::contains_estimates() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.contains_estimates)
   return contains_estimates_;
 }
- void MVCCStats::set_contains_estimates(bool value) {
+void MVCCStats::set_contains_estimates(bool value) {
   set_has_contains_estimates();
   contains_estimates_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.contains_estimates)
@@ -2280,11 +2244,11 @@ void MVCCStats::clear_last_update_nanos() {
   last_update_nanos_ = GOOGLE_LONGLONG(0);
   clear_has_last_update_nanos();
 }
- ::google::protobuf::int64 MVCCStats::last_update_nanos() const {
+::google::protobuf::int64 MVCCStats::last_update_nanos() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.last_update_nanos)
   return last_update_nanos_;
 }
- void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
+void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
   set_has_last_update_nanos();
   last_update_nanos_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.last_update_nanos)
@@ -2304,11 +2268,11 @@ void MVCCStats::clear_intent_age() {
   intent_age_ = GOOGLE_LONGLONG(0);
   clear_has_intent_age();
 }
- ::google::protobuf::int64 MVCCStats::intent_age() const {
+::google::protobuf::int64 MVCCStats::intent_age() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.intent_age)
   return intent_age_;
 }
- void MVCCStats::set_intent_age(::google::protobuf::int64 value) {
+void MVCCStats::set_intent_age(::google::protobuf::int64 value) {
   set_has_intent_age();
   intent_age_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.intent_age)
@@ -2328,11 +2292,11 @@ void MVCCStats::clear_gc_bytes_age() {
   gc_bytes_age_ = GOOGLE_LONGLONG(0);
   clear_has_gc_bytes_age();
 }
- ::google::protobuf::int64 MVCCStats::gc_bytes_age() const {
+::google::protobuf::int64 MVCCStats::gc_bytes_age() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.gc_bytes_age)
   return gc_bytes_age_;
 }
- void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
+void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
   set_has_gc_bytes_age();
   gc_bytes_age_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.gc_bytes_age)
@@ -2352,11 +2316,11 @@ void MVCCStats::clear_live_bytes() {
   live_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_live_bytes();
 }
- ::google::protobuf::int64 MVCCStats::live_bytes() const {
+::google::protobuf::int64 MVCCStats::live_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.live_bytes)
   return live_bytes_;
 }
- void MVCCStats::set_live_bytes(::google::protobuf::int64 value) {
+void MVCCStats::set_live_bytes(::google::protobuf::int64 value) {
   set_has_live_bytes();
   live_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.live_bytes)
@@ -2376,11 +2340,11 @@ void MVCCStats::clear_live_count() {
   live_count_ = GOOGLE_LONGLONG(0);
   clear_has_live_count();
 }
- ::google::protobuf::int64 MVCCStats::live_count() const {
+::google::protobuf::int64 MVCCStats::live_count() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.live_count)
   return live_count_;
 }
- void MVCCStats::set_live_count(::google::protobuf::int64 value) {
+void MVCCStats::set_live_count(::google::protobuf::int64 value) {
   set_has_live_count();
   live_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.live_count)
@@ -2400,11 +2364,11 @@ void MVCCStats::clear_key_bytes() {
   key_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_key_bytes();
 }
- ::google::protobuf::int64 MVCCStats::key_bytes() const {
+::google::protobuf::int64 MVCCStats::key_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.key_bytes)
   return key_bytes_;
 }
- void MVCCStats::set_key_bytes(::google::protobuf::int64 value) {
+void MVCCStats::set_key_bytes(::google::protobuf::int64 value) {
   set_has_key_bytes();
   key_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.key_bytes)
@@ -2424,11 +2388,11 @@ void MVCCStats::clear_key_count() {
   key_count_ = GOOGLE_LONGLONG(0);
   clear_has_key_count();
 }
- ::google::protobuf::int64 MVCCStats::key_count() const {
+::google::protobuf::int64 MVCCStats::key_count() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.key_count)
   return key_count_;
 }
- void MVCCStats::set_key_count(::google::protobuf::int64 value) {
+void MVCCStats::set_key_count(::google::protobuf::int64 value) {
   set_has_key_count();
   key_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.key_count)
@@ -2448,11 +2412,11 @@ void MVCCStats::clear_val_bytes() {
   val_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_val_bytes();
 }
- ::google::protobuf::int64 MVCCStats::val_bytes() const {
+::google::protobuf::int64 MVCCStats::val_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.val_bytes)
   return val_bytes_;
 }
- void MVCCStats::set_val_bytes(::google::protobuf::int64 value) {
+void MVCCStats::set_val_bytes(::google::protobuf::int64 value) {
   set_has_val_bytes();
   val_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.val_bytes)
@@ -2472,11 +2436,11 @@ void MVCCStats::clear_val_count() {
   val_count_ = GOOGLE_LONGLONG(0);
   clear_has_val_count();
 }
- ::google::protobuf::int64 MVCCStats::val_count() const {
+::google::protobuf::int64 MVCCStats::val_count() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.val_count)
   return val_count_;
 }
- void MVCCStats::set_val_count(::google::protobuf::int64 value) {
+void MVCCStats::set_val_count(::google::protobuf::int64 value) {
   set_has_val_count();
   val_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.val_count)
@@ -2496,11 +2460,11 @@ void MVCCStats::clear_intent_bytes() {
   intent_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_intent_bytes();
 }
- ::google::protobuf::int64 MVCCStats::intent_bytes() const {
+::google::protobuf::int64 MVCCStats::intent_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.intent_bytes)
   return intent_bytes_;
 }
- void MVCCStats::set_intent_bytes(::google::protobuf::int64 value) {
+void MVCCStats::set_intent_bytes(::google::protobuf::int64 value) {
   set_has_intent_bytes();
   intent_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.intent_bytes)
@@ -2520,11 +2484,11 @@ void MVCCStats::clear_intent_count() {
   intent_count_ = GOOGLE_LONGLONG(0);
   clear_has_intent_count();
 }
- ::google::protobuf::int64 MVCCStats::intent_count() const {
+::google::protobuf::int64 MVCCStats::intent_count() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.intent_count)
   return intent_count_;
 }
- void MVCCStats::set_intent_count(::google::protobuf::int64 value) {
+void MVCCStats::set_intent_count(::google::protobuf::int64 value) {
   set_has_intent_count();
   intent_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.intent_count)
@@ -2544,11 +2508,11 @@ void MVCCStats::clear_sys_bytes() {
   sys_bytes_ = GOOGLE_LONGLONG(0);
   clear_has_sys_bytes();
 }
- ::google::protobuf::int64 MVCCStats::sys_bytes() const {
+::google::protobuf::int64 MVCCStats::sys_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.sys_bytes)
   return sys_bytes_;
 }
- void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
+void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
   set_has_sys_bytes();
   sys_bytes_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.sys_bytes)
@@ -2568,16 +2532,19 @@ void MVCCStats::clear_sys_count() {
   sys_count_ = GOOGLE_LONGLONG(0);
   clear_has_sys_count();
 }
- ::google::protobuf::int64 MVCCStats::sys_count() const {
+::google::protobuf::int64 MVCCStats::sys_count() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.sys_count)
   return sys_count_;
 }
- void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
+void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
   set_has_sys_count();
   sys_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.sys_count)
 }
 
+inline const MVCCStats* MVCCStats::internal_default_instance() {
+  return &MVCCStats_default_instance_.get();
+}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // @@protoc_insertion_point(namespace_scope)
