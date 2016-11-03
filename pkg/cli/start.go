@@ -332,7 +332,7 @@ func runStart(_ *cobra.Command, args []string) error {
 		s.PeriodicallyCheckForUpdates()
 	}
 
-	pgURL, err := serverCfg.PGURL(url.User(connUser))
+	pgURL, err := serverCfg.PGURL(url.UserPassword(connUser, connPassword))
 	if err != nil {
 		return err
 	}
