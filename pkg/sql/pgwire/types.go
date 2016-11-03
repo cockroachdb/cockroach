@@ -82,6 +82,8 @@ func pgTypeForParserType(t parser.Type) pgType {
 	// Compare all types that cannot rely on == equality.
 	istype := t.FamilyEqual
 	switch {
+	case istype(parser.TypeCollatedString):
+		return pgType{oid.T_text, -1}
 	case istype(parser.TypeTuple):
 		return pgType{oid.T_record, -1}
 	}
@@ -164,6 +166,9 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
+
+	case *parser.DCollatedString:
+		b.writeLengthPrefixedString(v.Contents)
 
 	case *parser.DDate:
 		t := time.Unix(int64(*v)*secondsInDay, 0)
@@ -312,6 +317,9 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
+
+	case *parser.DCollatedString:
+		b.writeLengthPrefixedString(v.Contents)
 
 	case *parser.DTimestamp:
 		b.putInt32(8)

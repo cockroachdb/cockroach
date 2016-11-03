@@ -1042,6 +1042,23 @@ func (node *AnnotateTypeExpr) annotationType() Type {
 	return typ
 }
 
+// CollateExpr represents an (expr COLLATE locale) expression.
+type CollateExpr struct {
+	Expr   Expr
+	Locale string
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CollateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Expr)
+	buf.WriteString(" COLLATE ")
+	buf.WriteString(node.Locale)
+}
+
+var _ TypedExpr = &CollateExpr{}
+
 func (node *AliasedTableExpr) String() string { return AsString(node) }
 func (node *ParenTableExpr) String() string   { return AsString(node) }
 func (node *JoinTableExpr) String() string    { return AsString(node) }
@@ -1051,6 +1068,7 @@ func (node *BinaryExpr) String() string       { return AsString(node) }
 func (node *CaseExpr) String() string         { return AsString(node) }
 func (node *CastExpr) String() string         { return AsString(node) }
 func (node *CoalesceExpr) String() string     { return AsString(node) }
+func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
@@ -1060,6 +1078,7 @@ func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }
+func (node *DCollatedString) String() string  { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }

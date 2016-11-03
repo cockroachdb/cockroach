@@ -62,6 +62,9 @@ var (
 	TypeDecimal Type = tDecimal{}
 	// TypeString is the type of a DString. Can be compared with ==.
 	TypeString Type = tString{}
+	// TypeCollatedString is the type family of a DString. CANNOT be compared with
+	// ==.
+	TypeCollatedString Type = TCollatedString{}
 	// TypeBytes is the type of a DBytes. Can be compared with ==.
 	TypeBytes Type = tBytes{}
 	// TypeDate is the type of a DDate. Can be compared with ==.
@@ -126,6 +129,33 @@ func (tString) String() string              { return "string" }
 func (tString) Equal(other Type) bool       { return other == TypeString }
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+
+// TCollatedString is the type of strings with a locale.
+type TCollatedString struct {
+	Locale string
+}
+
+// String implements the fmt.Stringer interface.
+func (t TCollatedString) String() string {
+	return fmt.Sprintf("collatedstring{%s}", t.Locale)
+}
+
+// Equal implements the Type interface.
+func (t TCollatedString) Equal(other Type) bool {
+	u, ok := other.(TCollatedString)
+	return ok && t.Locale == u.Locale
+}
+
+// FamilyEqual implements the Type interface.
+func (TCollatedString) FamilyEqual(other Type) bool {
+	_, ok := other.(TCollatedString)
+	return ok
+}
+
+// Size implements the Type interface.
+func (TCollatedString) Size() (uintptr, bool) {
+	return unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize
+}
 
 type tBytes struct{}
 

@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/language"
+
 	"github.com/pkg/errors"
 )
 
@@ -232,6 +234,26 @@ func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedEx
 	expr.Expr = subExpr
 	expr.typ = subExpr.ResolvedType()
 	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+	_, err := language.Parse(expr.Locale)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid locale %s", expr.Locale)
+	}
+	subExpr, err := expr.Expr.TypeCheck(ctx, TypeString)
+	if err != nil {
+		return nil, err
+	}
+	switch t := subExpr.ResolvedType().(type) {
+	case tString, TCollatedString:
+		expr.Expr = subExpr
+		expr.typ = TCollatedString{expr.Locale}
+		return expr, nil
+	default:
+		return nil, fmt.Errorf("incompatible type for COLLATE: %s", t)
+	}
 }
 
 // TypeCheck implements the Expr interface.
@@ -611,6 +633,10 @@ func (d *DString) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { r
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DCollatedString) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DBytes) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
@@ -738,7 +764,7 @@ func typeCheckComparisonOp(
 		}
 	}
 
-	if fn == nil {
+	if fn == nil || (leftReturn.FamilyEqual(TypeCollatedString) && !leftReturn.Equal(rightReturn)) {
 		return nil, nil, CmpOp{},
 			fmt.Errorf(unsupportedCompErrFmtWithTypes, leftReturn, op, rightReturn)
 	}
