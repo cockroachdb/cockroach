@@ -294,6 +294,13 @@ type Replica struct {
 		raftLogSize int64
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
+		// leaseResetAfterStart starts up false and is set whenever a new lease
+		// (with any owner) has been applied. It is used to prevent a node from
+		// using leases it thinks it owns immediately after a restart. Such leases
+		// can't be used because the command queue has been wiped in the restart, so
+		// reads might return incorrect results, as they don't synchronize with
+		// in-flight writes.
+		leaseResetAfterStart bool
 		// Max bytes before split.
 		maxBytes int64
 		// proposals stores the Raft in-flight commands which
@@ -798,8 +805,10 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			lease := r.mu.state.Lease
-			if lease.Covers(timestamp) {
-				if !lease.OwnedBy(r.store.StoreID()) {
+			iAmTheLeaseHolder := lease.OwnedBy(r.store.StoreID())
+			// Is the lease valid (i.e. usable by this node or another node)?
+			if lease.Covers(timestamp) && (!iAmTheLeaseHolder || r.mu.leaseResetAfterStart) {
+				if !iAmTheLeaseHolder {
 					// If lease is currently held by another, redirect to holder.
 					return nil, roachpb.NewError(
 						newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc))
@@ -2970,6 +2979,10 @@ func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roach
 	if err != nil {
 		return nil
 	}
+	// We've just created this replica, so it's lease is usable.
+	rightRng.mu.Lock()
+	rightRng.mu.leaseResetAfterStart = true
+	rightRng.mu.Unlock()
 
 	// It would be nice to assert that rightRng is not initialized
 	// here. Unfortunately, due to reproposals and retries we might be executing
@@ -3710,12 +3723,17 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
-	ctx := r.AnnotateCtx(context.TODO())
-
-	if lease, _ := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
+	r.mu.Lock()
+	lease := r.mu.state.Lease
+	leaseReset := r.mu.leaseResetAfterStart
+	r.mu.Unlock()
+	if !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) ||
+		!leaseReset {
 		// Do not gossip when a range lease is not held.
 		return
 	}
+
+	ctx := r.AnnotateCtx(context.TODO())
 
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	kvs, hash, err := r.loadSystemConfigSpan()
@@ -3757,7 +3775,12 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 		return
 	}
 
-	if lease, _ := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
+	r.mu.Lock()
+	lease := r.mu.state.Lease
+	leaseReset := r.mu.leaseResetAfterStart
+	r.mu.Unlock()
+	if !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) ||
+		!leaseReset {
 		// Do not gossip when a range lease is not held.
 		return
 	}

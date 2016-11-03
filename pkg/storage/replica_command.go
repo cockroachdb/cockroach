@@ -1771,6 +1771,7 @@ func (r *Replica) applyNewLeaseLocked(
 	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
 		return reply, newFailedLeaseTrigger(), err
 	}
+	r.mu.leaseResetAfterStart = true
 
 	var pd ProposalData
 	// If we didn't block concurrent reads here, there'd be a chance that
