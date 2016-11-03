@@ -19,7 +19,6 @@ package acceptance
 import (
 	gosql "database/sql"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -36,11 +35,15 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/namesgenerator"
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -326,7 +329,19 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 			c.AssertAndStop(t)
 		}
 	}()
-	if !*flagRemote {
+	if *flagRemote {
+		f := farmer(t, "")
+		c = f
+		if err := f.Resize(*flagNodes); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.WaitReady(5 * time.Minute); err != nil {
+			if destroyErr := f.Destroy(t); destroyErr != nil {
+				t.Fatalf("could not destroy cluster after error %s: %s", err, destroyErr)
+			}
+			t.Fatalf("cluster not ready in time: %s", err)
+		}
+	} else {
 		logDir := *flagLogDir
 		if logDir != "" {
 			logDir = func(d string) string {
@@ -342,24 +357,55 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 		l := cluster.CreateLocal(cfg, logDir, *flagPrivileged, stopper)
 		l.Start()
 		c = l
-		checkRangeReplication(t, l, 20*time.Second)
-		completed = true
-		return l
 	}
-	f := farmer(t, "")
-	c = f
-	if err := f.Resize(*flagNodes); err != nil {
-		t.Fatal(err)
+	wantedReplicas := 3
+	if numNodes := c.NumNodes(); numNodes < wantedReplicas {
+		wantedReplicas = numNodes
 	}
-	if err := f.WaitReady(5 * time.Minute); err != nil {
-		if destroyErr := f.Destroy(t); destroyErr != nil {
-			t.Fatalf("could not destroy cluster after error %v: %v", err, destroyErr)
-		}
-		t.Fatalf("cluster not ready in time: %v", err)
+
+	// Looks silly, but we actually start zero-node clusters in the
+	// reference tests.
+	if wantedReplicas > 0 {
+		ctx := context.TODO()
+
+		log.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
+
+		util.SucceedsSoon(t, func() error {
+			select {
+			case <-stopper:
+				t.Fatal("interrupted")
+			case <-time.After(time.Second):
+			}
+
+			// Reconnect on every iteration; gRPC will eagerly tank the connection
+			// on transport errors. Always talk to node 0 because it's guaranteed
+			// to exist.
+			client, dbStopper := c.NewClient(t, 0)
+			defer dbStopper.Stop()
+
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+
+			var desc roachpb.RangeDescriptor
+			if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
+				return err
+			}
+			foundReplicas := len(desc.Replicas)
+
+			if log.V(1) {
+				log.Infof(ctx, "found %d replicas", foundReplicas)
+			}
+
+			if foundReplicas < wantedReplicas {
+				return errors.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
+			}
+			return nil
+		})
 	}
-	checkRangeReplication(t, f, 20*time.Second)
+
 	completed = true
-	return f
+	return c
 }
 
 // SkipUnlessLocal calls t.Skip if not running against a local cluster.
