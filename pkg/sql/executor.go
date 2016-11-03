@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"go/constant"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1375,56 +1376,53 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	if sc.From == nil || sc.From.AsOf.Expr == nil {
 		return nil, nil
 	}
-	te, err := sc.From.AsOf.Expr.TypeCheck(nil, parser.TypeString)
-	if err != nil {
-		return nil, err
-	}
-	d, err := te.Eval(&planMaker.evalCtx)
-	if err != nil {
-		return nil, err
-	}
 	var ts hlc.Timestamp
-	switch d := d.(type) {
-	case *parser.DString:
+	switch d := sc.From.AsOf.Expr.(type) {
+	case *parser.StrVal:
 		// Allow nanosecond precision because the timestamp is only used by the
 		// system and won't be returned to the user over pgwire.
-		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
+		dm, err := d.ResolveAsType(&planMaker.semaCtx, parser.TypeTimestamp)
 		if err != nil {
 			return nil, err
 		}
+		dt, _ := dm.(*parser.DTimestamp)
 		ts.WallTime = dt.Time.UnixNano()
-	case *parser.DInt:
-		ts.WallTime = int64(*d)
-	case *parser.DDecimal:
-		// Format the decimal into a string and split on `.` to extract the nanosecond
-		// walltime and logical tick parts.
-		s := d.String()
-		parts := strings.SplitN(s, ".", 2)
-		nanos, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
-		}
-		var logical int64
-		if len(parts) > 1 {
-			// logicalLength is the number of decimal digits expected in the
-			// logical part to the right of the decimal. See the implementation of
-			// cluster_logical_timestamp().
-			const logicalLength = 10
-			p := parts[1]
-			if lp := len(p); lp > logicalLength {
-				return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
-			} else if lp < logicalLength {
-				p += strings.Repeat("0", logicalLength-lp)
+	case *parser.NumVal:
+		if d.Kind() == constant.Int {
+			di, err := d.ResolveAsType(&planMaker.semaCtx, parser.TypeInt)
+			if err != nil {
+				return nil, err
 			}
-			logical, err = strconv.ParseInt(p, 10, 32)
+			i, _ := di.(*parser.DInt)
+			ts.WallTime = int64(*i)
+		} else {
+			parts := strings.SplitN(d.OrigString, ".", 2)
+			nanos, err := strconv.ParseInt(parts[0], 10, 64)
 			if err != nil {
 				return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
 			}
+			var logical int64
+			if len(parts) > 1 {
+				// logicalLength is the number of decimal digits expected in the
+				// logical part to the right of the decimal. See the implementation of
+				// cluster_logical_timestamp().
+				const logicalLength = 10
+				p := parts[1]
+				if lp := len(p); lp > logicalLength {
+					return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+				} else if lp < logicalLength {
+					p += strings.Repeat("0", logicalLength-lp)
+				}
+				logical, err = strconv.ParseInt(p, 10, 32)
+				if err != nil {
+					return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+				}
+			}
+			ts.WallTime = nanos
+			ts.Logical = int32(logical)
 		}
-		ts.WallTime = nanos
-		ts.Logical = int32(logical)
 	default:
-		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
+		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.String(), d)
 	}
 	if max.Less(ts) {
 		return nil, fmt.Errorf("cannot specify timestamp in the future")
