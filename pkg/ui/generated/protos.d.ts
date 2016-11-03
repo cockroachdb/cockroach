@@ -799,6 +799,15 @@ getRangeCount?() : number;
 
 
 
+lease_count?: number;
+		
+
+getLeaseCount?() : number;
+		setLeaseCount?(leaseCount : number): void;
+		
+
+
+
 }
 
 	export interface StoreCapacityMessage extends StoreCapacity {
