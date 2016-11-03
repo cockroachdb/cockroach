@@ -112,9 +112,23 @@ func (cl continuousLoadTest) startLoad(f *terrafarm.Farmer) error {
 // the test cluster.
 func (cl continuousLoadTest) Run(t *testing.T) {
 	f := farmer(t, cl.Prefix+cl.shortTestTimeout())
-	ctx, err := WithClusterTimeout(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	ctx := context.Background()
+	{
+		// createDestroyInterval is set based on occasional observed teardown times
+		// of 6-7 minutes.
+		const createDestroyInterval = 10 * time.Minute
+		if fl := flag.Lookup("test.timeout"); fl != nil {
+			testTimeout, err := time.ParseDuration(fl.Value.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if createDestroyInterval >= testTimeout {
+				t.Fatalf("test.timeout must be greater than create/destroy interval %s", createDestroyInterval)
+			}
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, testTimeout-createDestroyInterval)
+			defer cancel()
+		}
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		log.Infof(ctx, "load test will end at %s", deadline)
