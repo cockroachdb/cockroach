@@ -174,6 +174,8 @@ groups.
 
 ![SQL - NoSQL - NewSQL Capabilities](docs/media/sql-nosql-newsql.png?raw=true)
 
+test
+
 
 [0]: http://rocksdb.org/
 [1]: https://github.com/google/leveldb
