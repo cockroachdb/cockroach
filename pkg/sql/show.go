@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -45,6 +45,14 @@ var varNames = func() []string {
 	sort.Strings(res)
 	return res
 }()
+
+var (
+	checkSchema = `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME=$1 LIMIT 1`
+	checkTable  = `SELECT TABLE_SCHEMA FROM information_schema.tables WHERE TABLE_SCHEMA=$1
+					AND TABLE_NAME=$2 LIMIT 1`
+	checkTablePrivilege = `SELECT TABLE_NAME FROM information_schema.table_privileges
+							WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2 AND GRANTEE=$3 LIMIT 1`
+)
 
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
@@ -109,14 +117,6 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		return nil, err
 	}
 
-	desc, err := p.mustGetTableDesc(tn)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.anyPrivilege(desc); err != nil {
-		return nil, err
-	}
-
 	columns := ResultColumns{
 		{Name: "Field", Typ: parser.TypeString},
 		{Name: "Type", Typ: parser.TypeString},
@@ -128,20 +128,61 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		name:    "SHOW COLUMNS FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
+			const getColumns = `SELECT COLUMN_NAME AS "Field", DATA_TYPE AS "Type", (IS_NULLABLE!='NO') AS "Null",` +
+				` COLUMN_DEFAULT AS "Default" FROM information_schema.columns WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2` +
+				` ORDER BY ORDINAL_POSITION;`
+			originUser := p.session.User
+			defer func() { p.session.User = originUser }()
+			p.session.User = security.RootUser
+			{
+				// Check if the database is exists by using the security.RootUser.
+				values, err := p.queryRow(checkSchema, tn.Database())
+				if err != nil {
+					return nil, err
+				}
+				if len(values) == 0 {
+					return nil, sqlbase.NewUndefinedDatabaseError(tn.Database())
+				}
+			}
 
-			for i, col := range desc.Columns {
-				defaultExpr := parser.DNull
-				if e := desc.Columns[i].DefaultExpr; e != nil {
-					defaultExpr = parser.NewDString(*e)
+			{
+				// Check if the table is exists by using the security.RootUser.
+				values, err := p.queryRow(checkTable, tn.Database(), tn.Table())
+				if err != nil {
+					return nil, err
 				}
-				newRow := parser.DTuple{
-					parser.NewDString(desc.Columns[i].Name),
-					parser.NewDString(col.Type.SQLString()),
-					parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
-					defaultExpr,
+				if len(values) == 0 {
+					return nil, sqlbase.NewUndefinedTableError(tn.String())
 				}
-				if err := v.rows.AddRow(newRow); err != nil {
+			}
+
+			// Check if the user has been granted.
+			// Skip the checking if the table is a virtual table.
+			p.session.User = originUser
+			{
+				virDesc, err := p.session.virtualSchemas.getVirtualTableDesc(tn)
+				if err != nil {
+					return nil, err
+				}
+
+				if virDesc == nil {
+					values, err := p.queryRow(checkTablePrivilege, tn.Database(), tn.Table(), p.session.User)
+					if err != nil {
+						return nil, err
+					}
+					if len(values) == 0 {
+						return nil, fmt.Errorf("user %s has no privileges on table %s", p.session.User, tn.String())
+					}
+				}
+			}
+			// Get columns of table from information_schema.columns.
+			rows, err := p.queryRows(getColumns, tn.Database(), tn.Table())
+			if err != nil {
+				return nil, err
+			}
+			v := p.newContainerValuesNode(columns, 0)
+			for _, r := range rows {
+				if err := v.rows.AddRow(r); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -381,44 +422,13 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
-	// TODO(pmattis): This could be implemented as:
-	//
-	//   SELECT id FROM system.namespace WHERE parentID = 0
-
-	columns := ResultColumns{{Name: "Database", Typ: parser.TypeString}}
-
-	return &delayedNode{
-		p:       p,
-		name:    "SHOW DATABASES",
-		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
-			prefix := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "")
-			sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
-			if err != nil {
-				return nil, err
-			}
-			v := p.newContainerValuesNode(columns, 0)
-			for _, db := range p.session.virtualSchemas.orderedNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-			for _, row := range sr {
-				_, name, err := encoding.DecodeUnsafeStringAscending(
-					bytes.TrimPrefix(row.Key, prefix), nil)
-				if err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-			return v, nil
-		},
-	}, nil
+	const getDatabases = `SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata
+							ORDER BY "Database";`
+	stmt, err := parser.ParseOneTraditional(getDatabases)
+	if err != nil {
+		return nil, err
+	}
+	return p.newPlan(stmt, nil, true)
 }
 
 // ShowGrants returns grant details for the specified objects and users.
@@ -429,10 +439,6 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
 		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
-	}
-	descriptors, err := p.getDescriptorsFromTargetList(*n.Targets)
-	if err != nil {
-		return nil, err
 	}
 
 	objectType := "Database"
@@ -451,35 +457,117 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		name:    "SHOW GRANTS",
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
+			const schemaGrants = `SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User",
+									PRIVILEGE_TYPE AS "Privileges" FROM information_schema.schema_privileges
+									WHERE TABLE_SCHEMA=$1`
+			const tableGrants = `SELECT TABLE_NAME, GRANTEE, PRIVILEGE_TYPE FROM information_schema.table_privileges
+									WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2`
+			originUser := p.session.User
+			defer func() { p.session.User = originUser }()
 			v := p.newContainerValuesNode(columns, 0)
-			var wantedUsers map[string]struct{}
-			if len(n.Grantees) != 0 {
-				wantedUsers = make(map[string]struct{})
-			}
-			for _, u := range n.Grantees {
-				wantedUsers[string(u)] = struct{}{}
+
+			// Check if the target is exists.
+			fn := func(sql string, args ...interface{}) (bool, error) {
+				p.session.User = security.RootUser
+				values, err := p.queryRow(sql, args...)
+				if err != nil {
+					return false, err
+				}
+
+				if len(values) > 0 {
+					return true, nil
+				}
+				return false, nil
 			}
 
-			for _, descriptor := range descriptors {
-				userPrivileges := descriptor.GetPrivileges().Show()
-				for _, userPriv := range userPrivileges {
-					if wantedUsers != nil {
-						if _, ok := wantedUsers[userPriv.User]; !ok {
-							continue
+			// Queries the grants of target and filters the grants by grantee if grantee is specified.
+			appendGrants := func(sql string, args ...interface{}) error {
+				p.session.User = originUser
+				rows, err := p.queryRows(sql, args...)
+				if err != nil {
+					return err
+				}
+				for _, r := range rows {
+					if n.Grantees != nil {
+						for _, g := range n.Grantees.ToStrings() {
+							if string(*r[1].(*parser.DString)) != g {
+								continue
+							}
+							if err := v.rows.AddRow(r); err != nil {
+								return err
+							}
 						}
+					} else if err := v.rows.AddRow(r); err != nil {
+						return err
 					}
-					newRow := parser.DTuple{
-						parser.NewDString(descriptor.GetName()),
-						parser.NewDString(userPriv.User),
-						parser.NewDString(userPriv.PrivilegeString()),
+				}
+				return nil
+			}
+
+			// Get grants of database from information_schema.schema_privileges
+			// if the type of target is database.
+			if n.Targets.Databases != nil {
+				for _, db := range n.Targets.Databases.ToStrings() {
+					isExist, err := fn(checkSchema, db)
+					if err != nil {
+						v.rows.Close()
+						return nil, err
 					}
-					if err := v.rows.AddRow(newRow); err != nil {
+					if !isExist {
+						v.rows.Close()
+						return nil, sqlbase.NewUndefinedDatabaseError(db)
+					}
+					if err := appendGrants(schemaGrants, db); err != nil {
 						v.rows.Close()
 						return nil, err
 					}
 				}
 			}
-			return v, nil
+
+			// Get grants of table from information_schema.table_privileges
+			// if the type of target is table.
+			if n.Targets.Tables != nil {
+				for _, tableTarget := range n.Targets.Tables {
+					tableGlob, err := tableTarget.NormalizeTablePattern()
+					if err != nil {
+						v.rows.Close()
+						return nil, err
+					}
+					tables, err := p.expandTableGlob(tableGlob)
+					if err != nil {
+						v.rows.Close()
+						return nil, err
+					}
+					for i := range tables {
+						isExist, err := fn(checkTable, tables[i].Database(), tables[i].Table())
+						if err != nil {
+							v.rows.Close()
+							return nil, err
+						}
+						if !isExist {
+							v.rows.Close()
+							return nil, sqlbase.NewUndefinedTableError(tables[i].String())
+						}
+						if err := appendGrants(tableGrants, tables[i].Database(), tables[i].Table()); err != nil {
+							v.rows.Close()
+							return nil, err
+						}
+					}
+				}
+			}
+
+			// Sort the result by target name, user name and privileges.
+			sort := &sortNode{
+				ctx: p.ctx(),
+				p:   p,
+				ordering: sqlbase.ColumnOrdering{
+					{ColIdx: 0, Direction: encoding.Ascending},
+					{ColIdx: 1, Direction: encoding.Ascending},
+					{ColIdx: 2, Direction: encoding.Ascending},
+				},
+				columns: v.columns,
+			}
+			return &selectTopNode{source: v, sort: sort}, nil
 		},
 	}, nil
 }
@@ -638,11 +726,6 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
 func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
-	// TODO(pmattis): This could be implemented as:
-	//
-	//   SELECT name FROM system.namespace
-	//     WHERE parentID = (SELECT id FROM system.namespace
-	//                       WHERE parentID = 0 AND name = <database>)
 	name := p.session.Database
 	if n.Database != "" {
 		name = string(n.Database)
@@ -657,34 +740,34 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		name:    "SHOW TABLES FROM " + name,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			dbDesc, err := p.mustGetDatabaseDesc(name)
+			originUser := p.session.User
+			defer func() { p.session.User = originUser }()
+
+			// Check if the database is exists by using the security.RootUser.
+			p.session.User = security.RootUser
+			values, err := p.queryRow(checkSchema, name)
 			if err != nil {
 				return nil, err
 			}
+			if len(values) == 0 {
+				return nil, sqlbase.NewUndefinedDatabaseError(name)
+			}
 
-			tableNames, err := p.getTableNames(dbDesc)
+			// Get the tables of database from information_schema.tables.
+			const getTables = `SELECT TABLE_NAME FROM information_schema.tables
+							WHERE tables.TABLE_SCHEMA=$1 ORDER BY tables.TABLE_NAME`
+			p.session.User = originUser
+			rows, err := p.queryRows(getTables, name)
 			if err != nil {
 				return nil, err
 			}
-
-			v := p.newContainerValuesNode(columns, len(tableNames))
-			for _, name := range tableNames {
-				tableName := name.Table()
-				// Check to see if the table has been dropped.
-				if _, err := p.mustGetTableOrViewDesc(&name); err != nil {
-					if err == errTableDropped {
-						tableName += " (dropped)"
-					} else {
-						return nil, err
-					}
-				}
-
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(tableName)}); err != nil {
-					v.rows.Close()
+			v := p.newContainerValuesNode(columns, 0)
+			for _, r := range rows {
+				if err := v.rows.AddRow(r); err != nil {
+					v.Close()
 					return nil, err
 				}
 			}
-
 			return v, nil
 		},
 	}, nil

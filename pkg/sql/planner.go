@@ -119,6 +119,9 @@ type queryRunner interface {
 	// expected and returns that row.
 	queryRow(sql string, args ...interface{}) (parser.DTuple, error)
 
+	// queryRow executes a SQL query string where multiple result rows are returned.
+	queryRows(sql string, args ...interface{}) ([]parser.DTuple, error)
+
 	// exec executes a SQL query string and returns the number of rows
 	// affected.
 	exec(sql string, args ...interface{}) (int, error)
@@ -288,6 +291,35 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 		return nil, errors.Errorf("%s: unexpected multiple results", sql)
 	}
 	return values, nil
+}
+
+// queryRows implements the queryRunner interface.
+func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, error) {
+	plan, err := p.query(sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer plan.Close()
+	if err := plan.Start(); err != nil {
+		return nil, err
+	}
+
+	var rows []parser.DTuple
+	for {
+		next, err := plan.Next()
+		if err != nil {
+			return nil, err
+		}
+		if !next {
+			break
+		}
+		var values []parser.Datum
+		for _, v := range plan.Values() {
+			values = append(values, v)
+		}
+		rows = append(rows, values)
+	}
+	return rows, nil
 }
 
 // exec implements the queryRunner interface.

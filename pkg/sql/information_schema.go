@@ -107,19 +107,19 @@ CREATE TABLE information_schema.columns (
 				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 					visible++
 					return addRow(
-						defString,                                    // table_catalog
-						parser.NewDString(db.Name),                   // table_schema
-						parser.NewDString(table.Name),                // table_name
-						parser.NewDString(column.Name),               // column_name
-						parser.NewDInt(parser.DInt(visible)),         // ordinal_position, 1-indexed
-						dStringPtrOrNull(column.DefaultExpr),         // column_default
-						yesOrNoDatum(column.Nullable),                // is_nullable
-						parser.NewDString(column.Type.Kind.String()), // data_type
-						characterMaximumLength(column.Type),          // character_maximum_length
-						characterOctetLength(column.Type),            // character_octet_length
-						numericPrecision(column.Type),                // numeric_precision
-						numericScale(column.Type),                    // numeric_scale
-						datetimePrecision(column.Type),               // datetime_precision
+						defString,                                  // table_catalog
+						parser.NewDString(db.Name),                 // table_schema
+						parser.NewDString(table.Name),              // table_name
+						parser.NewDString(column.Name),             // column_name
+						parser.NewDInt(parser.DInt(visible)),       // ordinal_position, 1-indexed
+						dStringPtrOrNull(column.DefaultExpr),       // column_default
+						yesOrNoDatum(column.Nullable),              // is_nullable
+						parser.NewDString(column.Type.SQLString()), // data_type
+						characterMaximumLength(column.Type),        // character_maximum_length
+						characterOctetLength(column.Type),          // character_octet_length
+						numericPrecision(column.Type),              // numeric_precision
+						numericScale(column.Type),                  // numeric_scale
+						datetimePrecision(column.Type),             // datetime_precision
 					)
 				})
 			},
