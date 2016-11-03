@@ -61,10 +61,11 @@ var pgCatalog = virtualSchema{
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogProcTable,
+		pgCatalogRolesTable,
+		pgCatalogSettingsTable,
 		pgCatalogTablesTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
-		pgCatalogRolesTable,
 	},
 }
 
@@ -849,6 +850,111 @@ CREATE TABLE pg_catalog.pg_proc (
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-roles.html.
+var pgCatalogRolesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_roles (
+	oid INT,
+	rolname STRING,
+	rolsuper BOOL,
+	rolinherit BOOL,
+	rolcreaterole BOOL,
+	rolcreatedb BOOL,
+	rolcatupdate BOOL,
+	rolcanlogin BOOL,
+	rolconnlimit INT,
+	rolpassword STRING,
+	rolvaliduntil TIMESTAMPTZ,
+	rolconfig STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// We intentionally do not check if the user has access to system.user.
+		// Because Postgres allows access to pg_roles by non-privileged users, we
+		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
+		// include sensitive information such as password hashes.
+		h := makeOidHasher()
+		return forEachUser(p,
+			func(username string) error {
+				isRoot := parser.DBool(username == security.RootUser)
+				return addRow(
+					h.UserOid(username),           // oid
+					parser.NewDString(username),   // rolname
+					parser.MakeDBool(isRoot),      // rolsuper
+					parser.MakeDBool(false),       // rolinherit
+					parser.MakeDBool(isRoot),      // rolcreaterole
+					parser.MakeDBool(isRoot),      // rolcreatedb
+					parser.MakeDBool(false),       // rolcatupdate
+					parser.MakeDBool(true),        // rolcanlogin
+					negOneVal,                     // rolconnlimit
+					parser.NewDString("********"), // rolpassword
+					parser.DNull,                  // rolvaliduntil
+					parser.NewDString("{}"),       // rolconfig
+				)
+			},
+		)
+	},
+}
+
+var (
+	varTypeString   = parser.NewDString("string")
+	settingsCtxUser = parser.NewDString("user")
+)
+
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-settings.html.
+var pgCatalogSettingsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_settings (
+    name STRING,
+    setting STRING,
+    unit STRING,
+    category STRING,
+    short_desc STRING,
+    extra_desc STRING,
+    context STRING,
+    vartype STRING,
+    source STRING,
+    min_val STRING,
+    max_val STRING,
+    enumvals STRING,
+    boot_val STRING,
+    reset_val STRING,
+    sourcefile STRING,
+    sourceline int,
+    pending_restart BOOL  
+);    
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		for _, vName := range varNames {
+			gen := varGen[vName]
+			value := gen(p)
+			valueDatum := parser.NewDString(value)
+			if err := addRow(
+				parser.NewDString(vName), // name
+				valueDatum,               // setting
+				parser.DNull,             // unit
+				parser.DNull,             // category
+				parser.DNull,             // short_desc
+				parser.DNull,             // extra_desc
+				settingsCtxUser,          // context
+				varTypeString,            // vartype
+				parser.DNull,             // source
+				parser.DNull,             // min_val
+				parser.DNull,             // max_val
+				parser.DNull,             // enumvals
+				valueDatum,               // boot_val
+				valueDatum,               // reset_val
+				parser.DNull,             // sourcefile
+				parser.DNull,             // sourceline
+				parser.MakeDBool(false),  // pending_restart
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-tables.html.
 var pgCatalogTablesTable = virtualSchemaTable{
 	schema: `
@@ -1082,52 +1188,6 @@ CREATE TABLE pg_catalog.pg_views (
 					parser.NewDString(desc.Name),      // viewname
 					parser.DNull,                      // viewowner
 					parser.NewDString(desc.ViewQuery), // definition
-				)
-			},
-		)
-	},
-}
-
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-roles.html.
-var pgCatalogRolesTable = virtualSchemaTable{
-	schema: `
-CREATE TABLE pg_catalog.pg_roles (
-	oid INT,
-	rolname STRING,
-	rolsuper BOOL,
-	rolinherit BOOL,
-	rolcreaterole BOOL,
-	rolcreatedb BOOL,
-	rolcatupdate BOOL,
-	rolcanlogin BOOL,
-	rolconnlimit INT,
-	rolpassword STRING,
-	rolvaliduntil TIMESTAMPTZ,
-	rolconfig STRING
-);
-`,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
-		// We intentionally do not check if the user has access to system.user.
-		// Because Postgres allows access to pg_roles by non-privileged users, we
-		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
-		// include sensitive information such as password hashes.
-		h := makeOidHasher()
-		return forEachUser(p,
-			func(username string) error {
-				isRoot := parser.DBool(username == security.RootUser)
-				return addRow(
-					h.UserOid(username),           // oid
-					parser.NewDString(username),   // rolname
-					parser.MakeDBool(isRoot),      // rolsuper
-					parser.MakeDBool(false),       // rolinherit
-					parser.MakeDBool(isRoot),      // rolcreaterole
-					parser.MakeDBool(isRoot),      // rolcreatedb
-					parser.MakeDBool(false),       // rolcatupdate
-					parser.MakeDBool(true),        // rolcanlogin
-					negOneVal,                     // rolconnlimit
-					parser.NewDString("********"), // rolpassword
-					parser.DNull,                  // rolvaliduntil
-					parser.NewDString("{}"),       // rolconfig
 				)
 			},
 		)
