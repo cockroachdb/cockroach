@@ -45,18 +45,17 @@ func TestEncDatum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	y := &EncDatum{}
-	y.SetEncoded(ColumnType_INT, DatumEncoding_ASCENDING_KEY, encoded)
+	y := CreateEncDatumFromEncoded(ColumnType_INT, DatumEncoding_ASCENDING_KEY, encoded)
 
 	if y.IsUnset() {
-		t.Errorf("unset after SetEncoded()")
+		t.Errorf("unset after CreateEncDatumFromEncoded")
 	}
 	if enc, ok := y.Encoding(); !ok {
-		t.Error("no encoding after SetEncoded")
+		t.Error("no encoding after CreateEncDatumFromEncoded")
 	} else if enc != DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	err = y.Decode(a)
+	err = y.EnsureDecoded(a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,18 +73,22 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	x.SetEncoded(ColumnType_INT, DatumEncoding_DESCENDING_KEY, enc2)
-	if enc, ok := x.Encoding(); !ok {
+	z := CreateEncDatumFromEncoded(ColumnType_INT, DatumEncoding_DESCENDING_KEY, enc2)
+	if enc, ok := z.Encoding(); !ok {
 		t.Error("no encoding")
 	} else if enc != DatumEncoding_DESCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	err = x.Decode(a)
+	err = z.EnsureDecoded(a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(x.Datum); cmp != 0 {
+	if cmp := y.Datum.Compare(z.Datum); cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	}
+	y.UnsetDatum()
+	if !y.IsUnset() {
+		t.Error("not unset after UnsetDatum()")
 	}
 }
 
@@ -108,13 +111,11 @@ func checkEncDatumCmp(
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec1 := &EncDatum{}
-	dec1.SetEncoded(v1.Type, enc1, buf1)
+	dec1 := CreateEncDatumFromEncoded(v1.Type, enc1, buf1)
 
-	dec2 := &EncDatum{}
-	dec2.SetEncoded(v2.Type, enc2, buf2)
+	dec2 := CreateEncDatumFromEncoded(v2.Type, enc2, buf2)
 
-	if val, err := dec1.Compare(a, dec2); err != nil {
+	if val, err := dec1.Compare(a, &dec2); err != nil {
 		t.Fatal(err)
 	} else if val != expectedCmp {
 		t.Errorf("comparing %s (%s), %s (%s) resulted in %d, expected %d",
@@ -205,11 +206,11 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				t.Fatal("buffer ended early")
 			}
 			var decoded EncDatum
-			b, err = decoded.SetFromBuffer(ed[i].Type, enc[i], b)
+			decoded, b, err = CreateEncDatumFromBuffer(ed[i].Type, enc[i], b)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = decoded.Decode(&alloc)
+			err = decoded.EnsureDecoded(&alloc)
 			if err != nil {
 				t.Fatal(err)
 			}

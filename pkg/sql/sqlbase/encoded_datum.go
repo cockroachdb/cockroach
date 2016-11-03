@@ -48,7 +48,7 @@ func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
 		if a == nil {
 			a = &DatumAlloc{}
 		}
-		err := ed.Decode(a)
+		err := ed.EnsureDecoded(a)
 		if err != nil {
 			return fmt.Sprintf("<error: %v>", err)
 		}
@@ -60,43 +60,46 @@ func (ed *EncDatum) String() string {
 	return ed.stringWithAlloc(nil)
 }
 
-// SetEncoded initializes the EncDatum with the given encoded value. The encoded
-// value is stored as a shallow copy, so the caller must make sure the slice is
-// not modified for the lifetime of the EncDatum.
-func (ed *EncDatum) SetEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byte) {
+// CreateEncDatumFromEncoded initializes an EncDatum with the given encoded
+// value. The encoded value is stored as a shallow copy, so the caller must
+// make sure the slice is not modified for the lifetime of the EncDatum.
+// SetEncoded wipes the underlying Datum.
+func CreateEncDatumFromEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byte) EncDatum {
 	if len(val) == 0 {
 		panic("empty encoded value")
 	}
+	ed := EncDatum{}
 	ed.Type = typ
 	ed.encoding = enc
 	ed.encoded = val
 	ed.Datum = nil
+	return ed
 }
 
-// SetFromBuffer initializes the EncDatum with an encoding that is possibly
-// followed by other data. Similar to SetEncoded, except that this function
-// figures out where the encoding stops and returns a slice for the rest of the
-// buffer.
-func (ed *EncDatum) SetFromBuffer(
+// CreateEncDatumFromBuffer initializes an EncDatum with an encoding that is
+// possibly followed by other data. Similar to CreateEncDatumFromEncoded,
+// except that this function figures out where the encoding stops and returns a
+// slice for the rest of the buffer.
+func CreateEncDatumFromBuffer(
 	typ ColumnType_Kind, enc DatumEncoding, buf []byte,
-) (remaining []byte, err error) {
+) (EncDatum, []byte, error) {
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
 		encLen, err := encoding.PeekLength(buf)
 		if err != nil {
-			return nil, err
+			return EncDatum{}, nil, err
 		}
-		ed.SetEncoded(typ, enc, buf[:encLen])
-		return buf[encLen:], nil
+		ed := CreateEncDatumFromEncoded(typ, enc, buf[:encLen])
+		return ed, buf[encLen:], nil
 	case DatumEncoding_VALUE:
 		typeOffset, encLen, err := encoding.PeekValueLength(buf)
 		if err != nil {
-			return nil, err
+			return EncDatum{}, nil, err
 		}
-		ed.SetEncoded(typ, enc, buf[typeOffset:encLen])
-		return buf[encLen:], nil
+		ed := CreateEncDatumFromEncoded(typ, enc, buf[typeOffset:encLen])
+		return ed, buf[encLen:], nil
 	default:
-		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
+		panic(fmt.Sprintf("unknown encoding %s", enc))
 	}
 }
 
@@ -114,13 +117,20 @@ func (ed *EncDatum) SetDatum(typ ColumnType_Kind, d parser.Datum) {
 	ed.Datum = d
 }
 
+// UnsetDatum ensures subsequent IsUnset() calls return false.
+func (ed *EncDatum) UnsetDatum() {
+	ed.encoded = nil
+	ed.Datum = nil
+	ed.encoding = 0
+}
+
 // IsUnset returns true if SetEncoded or SetDatum were not called.
 func (ed *EncDatum) IsUnset() bool {
 	return ed.encoded == nil && ed.Datum == nil
 }
 
-// Decode ensures that Datum is set (decoding if necessary).
-func (ed *EncDatum) Decode(a *DatumAlloc) error {
+// EnsureDecoded ensures that the Datum field is set (decoding if it is not).
+func (ed *EncDatum) EnsureDecoded(a *DatumAlloc) error {
 	if ed.Datum != nil {
 		return nil
 	}
@@ -166,7 +176,7 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 		// We already have an encoding that matches
 		return append(appendTo, ed.encoded...), nil
 	}
-	if err := ed.Decode(a); err != nil {
+	if err := ed.EnsureDecoded(a); err != nil {
 		return nil, err
 	}
 	switch enc {
@@ -196,10 +206,10 @@ func (ed *EncDatum) Compare(a *DatumAlloc, rhs *EncDatum) (int, error) {
 			return bytes.Compare(rhs.encoded, ed.encoded), nil
 		}
 	}
-	if err := ed.Decode(a); err != nil {
+	if err := ed.EnsureDecoded(a); err != nil {
 		return 0, err
 	}
-	if err := rhs.Decode(a); err != nil {
+	if err := rhs.EnsureDecoded(a); err != nil {
 		return 0, err
 	}
 	return ed.Datum.Compare(rhs.Datum), nil
@@ -225,10 +235,19 @@ func (r EncDatumRow) String() string {
 	return b.String()
 }
 
-// DatumToEncDatum converts a parser.Datum to an EncDatum.
-func DatumToEncDatum(datum parser.Datum) (EncDatum, error) {
-	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
+// DatumToEncDatum converts a parser.Datum to an EncDatum. If it cannot parse
+// the Datum's type and a default type is given, it uses the default type.
+func DatumToEncDatum(typ *ColumnType_Kind, datum parser.Datum) (EncDatum, error) {
+	datumType := strings.ToUpper(datum.ResolvedType().String())
+	var dType int32
+	dType, ok := ColumnType_Kind_value[datumType]
 	if !ok {
+		if typ != nil {
+			return EncDatum{
+				Type:  *typ,
+				Datum: datum,
+			}, nil
+		}
 		return EncDatum{}, errors.Errorf(
 			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
 	}
@@ -245,11 +264,35 @@ func DTupleToEncDatumRow(row EncDatumRow, tuple parser.DTuple) error {
 			"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
 	}
 	for i, datum := range tuple {
-		encDatum, err := DatumToEncDatum(datum)
+		dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
+		if !ok {
+			return errors.Errorf(
+				"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
+		}
+		encDatum := EncDatum{}
+		encDatum.SetDatum(ColumnType_Kind(dType), datum)
+		row[i] = encDatum
+	}
+	return nil
+}
+
+// EncDatumRowToDTuple converts a given EncDatumRow to a DTuple.
+func EncDatumRowToDTuple(tuple parser.DTuple, row EncDatumRow) error {
+	if len(row) != len(tuple) {
+		return errors.Errorf(
+			"Length mismatch (%d and %d) between tuple and row", len(tuple), len(row))
+	}
+	for i, encDatum := range row {
+		if encDatum.IsUnset() {
+			tuple[i] = parser.DNull
+			continue
+		}
+		var da DatumAlloc
+		err := encDatum.EnsureDecoded(&da)
 		if err != nil {
 			return err
 		}
-		row[i] = encDatum
+		tuple[i] = encDatum.Datum
 	}
 	return nil
 }

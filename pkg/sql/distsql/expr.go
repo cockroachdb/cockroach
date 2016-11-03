@@ -111,7 +111,7 @@ func (eh *exprHelper) IndexedVarResolvedType(idx int) parser.Type {
 
 // IndexedVarEval is part of the parser.IndexedVarContainer interface.
 func (eh *exprHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
-	err := eh.row[idx].Decode(&eh.datumAlloc)
+	err := eh.row[idx].EnsureDecoded(&eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}

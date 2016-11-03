@@ -80,7 +80,7 @@ type RowFetcher struct {
 	implicitValTypes []parser.Type  // the implicit value types for unique indexes
 	implicitVals     []parser.Datum // the implicit values for unique indexes
 	indexKey         []byte         // the index key of the current row
-	row              parser.DTuple
+	row              EncDatumRow
 	prettyValueBuf   bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
@@ -110,7 +110,7 @@ func (rf *RowFetcher) Init(
 	rf.isSecondaryIndex = isSecondaryIndex
 	rf.cols = cols
 	rf.valNeededForCol = valNeededForCol
-	rf.row = make([]parser.Datum, len(rf.cols))
+	rf.row = make([]EncDatum, len(rf.cols))
 
 	var indexColumnIDs []ColumnID
 	indexColumnIDs, rf.indexColumnDirs = index.FullColumnIDs()
@@ -269,12 +269,16 @@ func (rf *RowFetcher) ProcessKV(
 		// Reset the row to nil; it will get filled in with the column
 		// values as we decode the key-value pairs for the row.
 		for i := range rf.row {
-			rf.row[i] = nil
+			rf.row[i].UnsetDatum()
 		}
 
 		// Fill in the column values that are part of the index key.
 		for i, v := range rf.keyVals {
-			rf.row[rf.indexColIdx[i]] = v
+			encD, err := DatumToEncDatum(&rf.cols[i].Type.Kind, v)
+			if err != nil {
+				return "", "", err
+			}
+			rf.row[rf.indexColIdx[i]] = encD
 		}
 	}
 
@@ -309,7 +313,9 @@ func (rf *RowFetcher) ProcessKV(
 			}
 			for i, id := range rf.index.ImplicitColumnIDs {
 				if idx, ok := rf.colIdxMap[id]; ok && rf.valNeededForCol[idx] {
-					rf.row[idx] = rf.implicitVals[i]
+					encDatum := EncDatum{}
+					encDatum.SetDatum(rf.cols[idx].Type.Kind, rf.implicitVals[i])
+					rf.row[idx] = encDatum
 				}
 			}
 			if debugStrings {
@@ -367,10 +373,12 @@ func (rf *RowFetcher) processValueSingle(
 		if debugStrings {
 			prettyValue = value.String()
 		}
-		if rf.row[idx] != nil {
+		if !rf.row[idx].IsUnset() {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
-		rf.row[idx] = value
+		encDatum := EncDatum{}
+		encDatum.SetDatum(rf.cols[idx].Type.Kind, value)
+		rf.row[idx] = encDatum
 		if log.V(3) {
 			log.Infof(context.TODO(), "Scan %s -> %v", kv.Key, value)
 		}
@@ -440,10 +448,12 @@ func (rf *RowFetcher) processValueTuple(
 		if debugStrings {
 			fmt.Fprintf(&rf.prettyValueBuf, "/%v", value)
 		}
-		if rf.row[idx] != nil {
+		if !rf.row[idx].IsUnset() {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
-		rf.row[idx] = value
+		encDatum := EncDatum{}
+		encDatum.SetDatum(rf.cols[idx].Type.Kind, value)
+		rf.row[idx] = encDatum
 		if log.V(3) {
 			log.Infof(context.TODO(), "Scan %d -> %v", idx, value)
 		}
@@ -455,13 +465,12 @@ func (rf *RowFetcher) processValueTuple(
 	return prettyKey, prettyValue, nil
 }
 
-// NextRow processes keys until we complete one row, which is returned as a
-// DTuple. The row contains one value per table column, regardless of the index
-// used; values that are not needed (as per valNeededForCol) are nil.
-//
-// The DTuple should not be modified and is only valid until the next call. When
-// there are no more rows, the DTuple is nil.
-func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
+// NextRow processes keys until we complete one row, which is returned as an
+// EncDatumRow. The row contains one value per table column, regardless of the
+// index used; values that are not needed (as per valNeededForCol) are nil. The
+// EncDatumRow should not be modified and is only valid until the next call.
+// When there are no more rows, the EncDatumRow is nil.
+func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -488,10 +497,28 @@ func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
 	}
 }
 
+// NextRowDecoded calls NextRow and decodes the EncDatumRow into a
+// parser.DTuple.
+func (rf *RowFetcher) NextRowDecoded() (parser.DTuple, error) {
+	encRow, err := rf.NextRow()
+	if err != nil {
+		return nil, err
+	}
+	if encRow == nil {
+		return nil, nil
+	}
+	tuple := make(parser.DTuple, len(encRow))
+	err = EncDatumRowToDTuple(tuple, encRow)
+	if err != nil {
+		return nil, err
+	}
+	return tuple, nil
+}
+
 // NextKeyDebug processes one key at a time and returns a pretty printed key and
 // value. If we completed a row, the row is returned as well (see nextRow). If
 // there are no more keys, prettyKey is "".
-func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row parser.DTuple, err error) {
+func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row EncDatumRow, err error) {
 	if rf.kvEnd {
 		return "", "", nil, nil
 	}
@@ -513,11 +540,13 @@ func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row 
 func (rf *RowFetcher) finalizeRow() {
 	// Fill in any missing values with NULLs
 	for i, col := range rf.cols {
-		if rf.valNeededForCol[i] && rf.row[i] == nil {
+		if rf.valNeededForCol[i] && rf.row[i].IsUnset() {
 			if !col.Nullable {
 				panic("Non-nullable column with no value!")
 			}
-			rf.row[i] = parser.DNull
+			newNilDatum := EncDatum{}
+			newNilDatum.SetDatum(col.Type.Kind, parser.DNull)
+			rf.row[i] = newNilDatum
 		}
 	}
 }
