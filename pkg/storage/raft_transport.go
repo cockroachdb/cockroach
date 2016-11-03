@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"sort"
 	"sync/atomic"
@@ -601,7 +602,7 @@ func (c snapshotClientWithBreaker) Send(m *SnapshotRequest) error {
 
 func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
 	m, err := c.MultiRaft_RaftSnapshotClient.Recv()
-	if err != nil {
+	if err != nil && err != io.EOF {
 		c.breaker.Fail()
 	}
 	return m, err
