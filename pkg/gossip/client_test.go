@@ -164,7 +164,7 @@ func gossipSucceedsSoon(
 		select {
 		case client := <-disconnected:
 			// If the client wasn't able to connect, restart it.
-			client.start(gossip[client], disconnected, rpcContext, stopper, gossip[client].NodeID.Get(), rpcContext.NewBreaker())
+			client.start(gossip[client], disconnected, rpcContext, stopper, rpcContext.NewBreaker())
 		default:
 		}
 
@@ -300,7 +300,7 @@ func TestClientNodeID(t *testing.T) {
 			return
 		case <-disconnected:
 			// The client hasn't been started or failed to start, loop and try again.
-			c.start(local, disconnected, rpcContext, stopper, localNodeID, rpcContext.NewBreaker())
+			c.start(local, disconnected, rpcContext, stopper, rpcContext.NewBreaker())
 		}
 	}
 }
@@ -322,7 +322,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	// startClient requires locks are held, so acquire here.
 	local.mu.Lock()
 	lAddr := local.mu.is.NodeAddr
-	local.startClient(&lAddr, local.NodeID.Get())
+	local.startClient(&lAddr)
 	local.mu.Unlock()
 	local.manage()
 	util.SucceedsSoon(t, func() error {
@@ -348,8 +348,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
 	lAddr := local.mu.is.NodeAddr
-	local.startClient(&rAddr, remote.NodeID.Get())
-	remote.startClient(&lAddr, local.NodeID.Get())
+	local.startClient(&rAddr)
+	remote.startClient(&lAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
@@ -387,8 +387,8 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
-	local.startClient(&rAddr, remote.NodeID.Get())
-	local.startClient(&rAddr, remote.NodeID.Get())
+	local.startClient(&rAddr)
+	local.startClient(&rAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
