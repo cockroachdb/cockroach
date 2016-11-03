@@ -19,6 +19,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"runtime"
@@ -3086,6 +3087,12 @@ func sendSnapshot(
 	resp, err = stream.Recv()
 	if err != nil {
 		return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", header.RangeDescriptor.RangeID)
+	}
+	// NB: wait for EOF which ensures that all processing on the server side has
+	// completed (such as defers that might be run after the previous message was
+	// received).
+	if _, err := stream.Recv(); err != io.EOF {
+		return errors.Errorf("range=%s: expected EOF, got %v", header.RangeDescriptor.RangeID, err)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
