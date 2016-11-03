@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -100,7 +101,8 @@ func (c *Cluster) Start(db string, numWorkers int, args, env []string) {
 		User:     security.NodeUser,
 		Insecure: true,
 	}
-	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx, nil, c.stopper)
+	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond), c.stopper)
 
 	for i := range c.Nodes {
 		c.Nodes[i] = c.makeNode(i, args, env)
