@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -118,6 +119,13 @@ type queryRunner interface {
 	// queryRow executes a SQL query string where exactly 1 result row is
 	// expected and returns that row.
 	queryRow(sql string, args ...interface{}) (parser.DTuple, error)
+
+	// queryRow executes a SQL query string where multiple result rows are returned.
+	queryRows(sql string, args ...interface{}) ([]parser.DTuple, error)
+
+	// queryRowsAsRoot executes a SQL query string using security.RootUser
+	// and multiple result rows are returned.
+	queryRowsAsRoot(sql string, args ...interface{}) ([]parser.DTuple, error)
 
 	// exec executes a SQL query string and returns the number of rows
 	// affected.
@@ -268,6 +276,22 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 
 // queryRow implements the queryRunner interface.
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+	rows, err := p.queryRows(sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, nil
+	case 1:
+		return rows[0], nil
+	default:
+		return nil, errors.Errorf("%s: unexpected multiple results", sql)
+	}
+}
+
+// queryRows implements the queryRunner interface.
+func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -279,15 +303,34 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	if next, err := plan.Next(); !next {
 		return nil, err
 	}
-	values := plan.Values()
-	next, err := plan.Next()
-	if err != nil {
-		return nil, err
+
+	var rows []parser.DTuple
+	for {
+		if values := plan.Values(); values != nil {
+			var val []parser.Datum
+			for _, v := range values {
+				val = append(val, v)
+			}
+			rows = append(rows, val)
+		}
+
+		next, err := plan.Next()
+		if err != nil {
+			return nil, err
+		}
+		if !next {
+			break
+		}
 	}
-	if next {
-		return nil, errors.Errorf("%s: unexpected multiple results", sql)
-	}
-	return values, nil
+	return rows, nil
+}
+
+// queryRows implements the queryRunner interface.
+func (p *planner) queryRowsAsRoot(sql string, args ...interface{}) ([]parser.DTuple, error) {
+	currentUser := p.session.User
+	defer func() { p.session.User = currentUser }()
+	p.session.User = security.RootUser
+	return p.queryRows(sql, args...)
 }
 
 // exec implements the queryRunner interface.

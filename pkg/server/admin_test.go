@@ -278,23 +278,32 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if a, e := len(details.Grants), 2; a != e {
+	if a, e := len(details.Grants), 3; a != e {
 		t.Fatalf("# of grants %d != expected %d", a, e)
 	}
 
+	userGrants := make(map[string][]string)
 	for _, grant := range details.Grants {
 		switch grant.User {
-		case security.RootUser:
-			if !reflect.DeepEqual(grant.Privileges, []string{"ALL"}) {
-				t.Fatalf("privileges %v != expected %v", details.Grants[0].Privileges, privileges)
-			}
-		case testuser:
-			sort.Strings(grant.Privileges)
-			if !reflect.DeepEqual(grant.Privileges, privileges) {
-				t.Fatalf("privileges %v != expected %v", grant.Privileges, privileges)
-			}
+		case security.RootUser, testuser:
+			userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 		default:
 			t.Fatalf("unknown grant to user %s", grant.User)
+		}
+	}
+	for u, p := range userGrants {
+		switch u {
+		case security.RootUser:
+			if !reflect.DeepEqual(p, []string{"ALL"}) {
+				t.Fatalf("privileges %v != expected %v", p, privileges)
+			}
+		case testuser:
+			sort.Strings(p)
+			if !reflect.DeepEqual(p, privileges) {
+				t.Fatalf("privileges %v != expected %v", p, privileges)
+			}
+		default:
+			t.Fatalf("unknown grant to user %s", u)
 		}
 	}
 
@@ -424,7 +433,6 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
 		{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
 		{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
-		{Name: "rowid", Type: "INT", Nullable: false, DefaultValue: "unique_rowid()"},
 	}
 	testutils.SortStructs(expColumns, "Name")
 	testutils.SortStructs(resp.Columns, "Name")
@@ -441,7 +449,9 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	// Verify grants.
 	expGrants := []serverpb.TableDetailsResponse_Grant{
 		{User: security.RootUser, Privileges: []string{"ALL"}},
-		{User: "app", Privileges: []string{"DELETE", "SELECT", "UPDATE"}},
+		{User: "app", Privileges: []string{"DELETE"}},
+		{User: "app", Privileges: []string{"SELECT"}},
+		{User: "app", Privileges: []string{"UPDATE"}},
 		{User: "readonly", Privileges: []string{"SELECT"}},
 	}
 	testutils.SortStructs(expGrants, "User")
