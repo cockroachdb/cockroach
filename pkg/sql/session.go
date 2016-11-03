@@ -398,6 +398,8 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	if _, ok := err.(*roachpb.RetryableTxnError); !ok || !ts.willBeRetried() {
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)
+		// This call rolls back a PENDING transaction and cleans up all its
+		// intents.
 		ts.txn.CleanupOnError(err)
 		ts.resetStateAndTxn(Aborted)
 	} else {
