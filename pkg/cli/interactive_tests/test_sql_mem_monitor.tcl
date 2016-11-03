@@ -68,7 +68,12 @@ send "select * from columns as a, columns as b, columns as c, columns as d limit
 
 # Check that the query crashed the server
 set spawn_id $shell_spawn_id
-eexpect "out of memory"
+# Error is either "out of memory" (Go) or "cannot allocate memory" (C++)
+expect {
+    "out of memory" {}
+    "cannot allocate memory" {}
+    timeout {exit 1}
+}
 eexpect ":/# "
 
 # Check that the client got a bad connection error
