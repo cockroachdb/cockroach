@@ -492,26 +492,3 @@ func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 func testDockerOneShot(t *testing.T, name string, cmd []string) error {
 	return testDocker(t, 0, name, cmd)
 }
-
-// WithClusterTimeout returns a copy of the given parent Context with a timeout
-// that's less than the `test.timeout` flag, allowing time for test cluster
-// creation and destruction to occur.
-func WithClusterTimeout(parent context.Context) (context.Context, error) {
-	// createDestroyInterval is set based on occasional observed teardown times of 6-7
-	// minutes.
-	const createDestroyInterval = 10 * time.Minute
-	fl := flag.Lookup("test.timeout")
-	if fl == nil {
-		return parent, nil
-	}
-	testTimeout, err := time.ParseDuration(fl.Value.String())
-	if err != nil {
-		return nil, err
-	}
-	if createDestroyInterval >= testTimeout {
-		return nil, fmt.Errorf("test.timeout must be greater than create/destroy interval %s",
-			createDestroyInterval)
-	}
-	ctx, _ := context.WithTimeout(parent, testTimeout-createDestroyInterval)
-	return ctx, nil
-}
