@@ -28,6 +28,11 @@ STATIC :=
 PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
+# STYLE_TESTS can be set in the environment to restrict the tests run
+# during `make check`. For example, to skip the slower TestGoImports
+# subtest, use:
+#   export STYLE_TESTS='Test([^G]|.[^o]|..[^i]|...[^m])'
+STYLE_TESTS  ?= $(TESTS)
 TESTTIMEOUT  := 2m
 RACETIMEOUT  := 10m
 BENCHTIMEOUT := 5m
@@ -163,7 +168,7 @@ dupl:
 .PHONY: check
 check: TAGS += check
 check:
-	$(GO) test ./build -v -tags '$(TAGS)' -run 'TestStyle/$(TESTS)'
+	$(GO) test ./build -v -tags '$(TAGS)' -run 'TestStyle/$(STYLE_TESTS)'
 
 .PHONY: clean
 clean:
