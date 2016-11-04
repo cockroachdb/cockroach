@@ -102,7 +102,7 @@ func (c *Cluster) Start(db string, numWorkers int, args, env []string) {
 		Insecure: true,
 	}
 	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond), c.stopper)
+		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
 
 	for i := range c.Nodes {
 		c.Nodes[i] = c.makeNode(i, args, env)
