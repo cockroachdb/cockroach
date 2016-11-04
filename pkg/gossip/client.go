@@ -79,7 +79,6 @@ func (c *client) start(
 	disconnected chan *client,
 	rpcCtx *rpc.Context,
 	stopper *stop.Stopper,
-	nodeID roachpb.NodeID,
 	breaker *circuit.Breaker,
 ) {
 	stopper.RunWorker(func() {
@@ -117,20 +116,20 @@ func (c *client) start(
 			return c.requestGossip(g, stream)
 		}, 0); err != nil {
 			if consecFailures == 0 {
-				log.Warningf(ctx, "node %d: failed to start gossip client: %s", nodeID, err)
+				log.Warningf(ctx, "failed to start gossip client to %s: %s", c.addr, err)
 			}
 			return
 		}
 
 		// Start gossiping.
-		log.Infof(ctx, "node %d: started gossip client to %s", nodeID, c.addr)
+		log.Infof(ctx, "started gossip client to %s", c.addr)
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.Lock()
 				if c.peerID != 0 {
-					log.Infof(ctx, "node %d: closing client to node %d (%s): %s", nodeID, c.peerID, c.addr, err)
+					log.Infof(ctx, "closing client to node %d (%s): %s", c.peerID, c.addr, err)
 				} else {
-					log.Infof(ctx, "node %d: closing client to %s: %s", nodeID, c.addr, err)
+					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
 				g.mu.Unlock()
 			}

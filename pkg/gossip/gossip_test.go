@@ -104,7 +104,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 
 	local.mu.Lock()
 	peer := startGossip(2, stopper, t, metric.NewRegistry())
-	local.startClient(&peer.mu.is.NodeAddr, peer.NodeID.Get())
+	local.startClient(&peer.mu.is.NodeAddr)
 	local.mu.Unlock()
 
 	// Race gossiping against LogStatus.
@@ -201,7 +201,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		for {
 			localAddr := local.GetNodeAddr()
 			c := newClient(log.AmbientContext{}, localAddr, makeMetrics())
-			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.NodeID.Get(), peer.rpcContext.NewBreaker())
+			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.rpcContext.NewBreaker())
 
 			disconnectedClient := <-disconnectedCh
 			if disconnectedClient != c {
@@ -232,7 +232,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Lock()
 	for i := 0; i < minPeers; i++ {
 		peer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
-		local.startClient(peer.GetNodeAddr(), peer.NodeID.Get())
+		local.startClient(peer.GetNodeAddr())
 	}
 	local.mu.Unlock()
 
@@ -281,7 +281,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	peerAddr := peer.GetNodeAddr()
 	peerAddrStr := peerAddr.String()
 
-	local.startClient(peerAddr, peerNodeID)
+	local.startClient(peerAddr)
 
 	util.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
