@@ -89,84 +89,84 @@ func init() {
 	proto.RegisterType((*BackupRangeDescriptor)(nil), "cockroach.sql.sqlbase.BackupRangeDescriptor")
 	proto.RegisterType((*BackupDescriptor)(nil), "cockroach.sql.sqlbase.BackupDescriptor")
 }
-func (m *BackupRangeDescriptor) Marshal() (data []byte, err error) {
+func (m *BackupRangeDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *BackupRangeDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *BackupRangeDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Path) > 0 {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintBackup(data, i, uint64(len(m.Path)))
-		i += copy(data[i:], m.Path)
+		i = encodeVarintBackup(dAtA, i, uint64(len(m.Path)))
+		i += copy(dAtA[i:], m.Path)
 	}
 	if len(m.StartKey) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintBackup(data, i, uint64(len(m.StartKey)))
-		i += copy(data[i:], m.StartKey)
+		i = encodeVarintBackup(dAtA, i, uint64(len(m.StartKey)))
+		i += copy(dAtA[i:], m.StartKey)
 	}
 	if len(m.EndKey) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintBackup(data, i, uint64(len(m.EndKey)))
-		i += copy(data[i:], m.EndKey)
+		i = encodeVarintBackup(dAtA, i, uint64(len(m.EndKey)))
+		i += copy(dAtA[i:], m.EndKey)
 	}
-	data[i] = 0x22
+	dAtA[i] = 0x22
 	i++
-	i = encodeVarintBackup(data, i, uint64(m.StartTime.Size()))
-	n1, err := m.StartTime.MarshalTo(data[i:])
+	i = encodeVarintBackup(dAtA, i, uint64(m.StartTime.Size()))
+	n1, err := m.StartTime.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
 	if m.CRC != 0 {
-		data[i] = 0x28
+		dAtA[i] = 0x28
 		i++
-		i = encodeVarintBackup(data, i, uint64(m.CRC))
+		i = encodeVarintBackup(dAtA, i, uint64(m.CRC))
 	}
 	return i, nil
 }
 
-func (m *BackupDescriptor) Marshal() (data []byte, err error) {
+func (m *BackupDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *BackupDescriptor) MarshalTo(data []byte) (int, error) {
+func (m *BackupDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintBackup(data, i, uint64(m.EndTime.Size()))
-	n2, err := m.EndTime.MarshalTo(data[i:])
+	i = encodeVarintBackup(dAtA, i, uint64(m.EndTime.Size()))
+	n2, err := m.EndTime.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
 	if len(m.Ranges) > 0 {
 		for _, msg := range m.Ranges {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintBackup(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintBackup(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -175,10 +175,10 @@ func (m *BackupDescriptor) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.SQL) > 0 {
 		for _, msg := range m.SQL {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintBackup(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintBackup(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -186,38 +186,38 @@ func (m *BackupDescriptor) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if m.DataSize != 0 {
-		data[i] = 0x20
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintBackup(data, i, uint64(m.DataSize))
+		i = encodeVarintBackup(dAtA, i, uint64(m.DataSize))
 	}
 	return i, nil
 }
 
-func encodeFixed64Backup(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Backup(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Backup(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Backup(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintBackup(data []byte, offset int, v uint64) int {
+func encodeVarintBackup(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *BackupRangeDescriptor) Size() (n int) {
@@ -279,8 +279,8 @@ func sovBackup(x uint64) (n int) {
 func sozBackup(x uint64) (n int) {
 	return sovBackup(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *BackupRangeDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -292,7 +292,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -320,7 +320,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -335,7 +335,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Path = string(data[iNdEx:postIndex])
+			m.Path = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -349,7 +349,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -363,7 +363,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.StartKey = append(m.StartKey[:0], data[iNdEx:postIndex]...)
+			m.StartKey = append(m.StartKey[:0], dAtA[iNdEx:postIndex]...)
 			if m.StartKey == nil {
 				m.StartKey = []byte{}
 			}
@@ -380,7 +380,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -394,7 +394,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EndKey = append(m.EndKey[:0], data[iNdEx:postIndex]...)
+			m.EndKey = append(m.EndKey[:0], dAtA[iNdEx:postIndex]...)
 			if m.EndKey == nil {
 				m.EndKey = []byte{}
 			}
@@ -411,7 +411,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -425,7 +425,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.StartTime.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.StartTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -441,7 +441,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.CRC |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -450,7 +450,7 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipBackup(data[iNdEx:])
+			skippy, err := skipBackup(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -469,8 +469,8 @@ func (m *BackupRangeDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *BackupDescriptor) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *BackupDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -482,7 +482,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -510,7 +510,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -524,7 +524,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.EndTime.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.EndTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -540,7 +540,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -555,7 +555,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Ranges = append(m.Ranges, BackupRangeDescriptor{})
-			if err := m.Ranges[len(m.Ranges)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Ranges[len(m.Ranges)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -571,7 +571,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -586,7 +586,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.SQL = append(m.SQL, Descriptor{})
-			if err := m.SQL[len(m.SQL)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.SQL[len(m.SQL)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -602,7 +602,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.DataSize |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -611,7 +611,7 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipBackup(data[iNdEx:])
+			skippy, err := skipBackup(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -630,8 +630,8 @@ func (m *BackupDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipBackup(data []byte) (n int, err error) {
-	l := len(data)
+func skipBackup(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -642,7 +642,7 @@ func skipBackup(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -660,7 +660,7 @@ func skipBackup(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -677,7 +677,7 @@ func skipBackup(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -700,7 +700,7 @@ func skipBackup(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -711,7 +711,7 @@ func skipBackup(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipBackup(data[start:])
+				next, err := skipBackup(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
