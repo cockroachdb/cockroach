@@ -313,6 +313,7 @@ func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, c
 	for _, cfg := range cfgs {
 		func() {
 			cluster := StartCluster(t, cfg)
+			log.Infof(context.Background(), "cluster started successfully")
 			defer cluster.AssertAndStop(t)
 			testFunc(t, cluster, cfg)
 		}()
@@ -383,18 +384,17 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 			client, dbStopper := c.NewClient(t, 0)
 			defer dbStopper.Stop()
 
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+			ctxWithTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
 			var desc roachpb.RangeDescriptor
-			if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
+			if err := client.GetProto(ctxWithTimeout, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
 				return err
 			}
 			foundReplicas := len(desc.Replicas)
 
 			if log.V(1) {
-				log.Infof(ctx, "found %d replicas", foundReplicas)
+				log.Infof(ctxWithTimeout, "found %d replicas", foundReplicas)
 			}
 
 			if foundReplicas < wantedReplicas {
