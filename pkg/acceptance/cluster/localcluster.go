@@ -41,6 +41,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	roachClient "github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -651,9 +653,15 @@ func (l *LocalCluster) Start() {
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
+	var wg sync.WaitGroup
+	wg.Add(len(l.Nodes))
 	for _, node := range l.Nodes {
-		l.startNode(node)
+		go func(node *testNode) {
+			l.startNode(node)
+			wg.Done()
+		}(node)
 	}
+	wg.Wait()
 }
 
 // Assert drains the Events channel and compares the actual events with those
