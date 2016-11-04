@@ -49,6 +49,9 @@ func newLoop(name string, x *inf.Dec, s inf.Scale, itersPerBit int) *loop {
 	if incrPrec > 0 {
 		bits += int(float64(incrPrec) * digitsToBitsRatio)
 	}
+	if scaleBits := int(float64(s) * digitsToBitsRatio); scaleBits > bits {
+		bits = scaleBits
+	}
 	l := &loop{
 		name:          name,
 		maxIterations: 10 + uint64(itersPerBit*bits),
