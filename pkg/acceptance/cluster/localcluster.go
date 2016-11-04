@@ -41,6 +41,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	roachClient "github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -406,6 +408,8 @@ func (l *LocalCluster) initCluster() {
 	maybePanic(c.Wait())
 }
 
+// createRoach creates the docker container for a testNode. It may be called in
+// parallel to start many nodes at once, and thus should remain threadsafe.
 func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string, cmd ...string) {
 	l.panicOnStop()
 
@@ -476,6 +480,8 @@ func (l *LocalCluster) createNodeCerts() {
 		keyLen, nodes))
 }
 
+// startNode starts a Docker container to run testNode. It may be called in
+// parallel to start many nodes at once, and thus should remain threadsafe.
 func (l *LocalCluster) startNode(node *testNode) {
 	cmd := []string{
 		"start",
@@ -651,9 +657,15 @@ func (l *LocalCluster) Start() {
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
+	var wg sync.WaitGroup
+	wg.Add(len(l.Nodes))
 	for _, node := range l.Nodes {
-		l.startNode(node)
+		go func(node *testNode) {
+			l.startNode(node)
+			wg.Done()
+		}(node)
 	}
+	wg.Wait()
 }
 
 // Assert drains the Events channel and compares the actual events with those
