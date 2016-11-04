@@ -96,7 +96,13 @@ var txnAutoGC = true
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
 // Whether to enable experimental support for proposer-evaluated KV.
-var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
+var propEvalKV = func() bool {
+	enabled := envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
+	if enabled {
+		log.Warningf(context.Background(), "running with experimental support for proposer-evaluated KV, see #10431")
+	}
+	return enabled
+}()
 
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
