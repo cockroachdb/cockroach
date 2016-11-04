@@ -1251,9 +1251,9 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = s.stopper.ShouldStop()
 	for loop := retry.Start(retryOptions); loop.Next(); {
-		rng := s.LookupReplica(roachpb.RKeyMin, nil)
-		if rng != nil {
-			pErr := rng.maybeGossipFirstRange(ctx)
+		repl := s.LookupReplica(roachpb.RKeyMin, nil)
+		if repl != nil {
+			pErr := repl.maybeGossipFirstRange(ctx)
 			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || nlErr.LeaseHolder != nil {
 				return pErr.GoError()
 			}
@@ -1269,8 +1269,8 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 // Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
 func (s *Store) maybeGossipSystemData(ctx context.Context) error {
 	for _, span := range keys.GossipedSystemSpans {
-		rng := s.LookupReplica(roachpb.RKey(span.Key), nil)
-		if rng == nil {
+		repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
+		if repl == nil {
 			// This store has no range with this configuration.
 			continue
 		}
@@ -1278,7 +1278,7 @@ func (s *Store) maybeGossipSystemData(ctx context.Context) error {
 		// gossip. If an unexpected error occurs (i.e. nobody else seems to
 		// have an active lease but we still failed to obtain it), return
 		// that error.
-		if _, pErr := rng.getLeaseForGossip(ctx); pErr != nil {
+		if _, pErr := repl.getLeaseForGossip(ctx); pErr != nil {
 			return pErr.GoError()
 		}
 	}
@@ -1441,8 +1441,8 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 
 // getReplicaLocked fetches a replica by RangeID. The store's lock must be held.
 func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
-	if rng, ok := s.mu.replicas[rangeID]; ok {
-		return rng, nil
+	if repl, ok := s.mu.replicas[rangeID]; ok {
+		return repl, nil
 	}
 	return nil, roachpb.NewRangeNotFoundError(rangeID)
 }
@@ -1456,15 +1456,15 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var rng *Replica
-	s.visitReplicasLocked(start, roachpb.RKeyMax, func(repl *Replica) bool {
-		rng = repl
+	var repl *Replica
+	s.visitReplicasLocked(start, roachpb.RKeyMax, func(replIter *Replica) bool {
+		repl = replIter
 		return false
 	})
-	if rng == nil || !rng.Desc().ContainsKeyRange(start, end) {
+	if repl == nil || !repl.Desc().ContainsKeyRange(start, end) {
 		return nil
 	}
-	return rng
+	return repl
 }
 
 // getOverlappingKeyRangeLocked returns a KeyRange from the Store overlapping the given
@@ -1861,22 +1861,22 @@ func (s *Store) maybeMergeTimestampCaches(
 // replicasByKey btree. Returns an error if a replica with
 // the same Range ID or a KeyRange that overlaps has already been added to
 // this store. addReplicaInternalLocked requires that the store lock is held.
-func (s *Store) addReplicaInternalLocked(rng *Replica) error {
-	if !rng.IsInitialized() {
-		return errors.Errorf("attempted to add uninitialized range %s", rng)
+func (s *Store) addReplicaInternalLocked(repl *Replica) error {
+	if !repl.IsInitialized() {
+		return errors.Errorf("attempted to add uninitialized range %s", repl)
 	}
 
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
-	if err := s.addReplicaToRangeMapLocked(rng); err != nil {
+	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		return err
 	}
 
-	if exRange := s.getOverlappingKeyRangeLocked(rng.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, rng, exRange.Desc())
+	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
+		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, repl, exRange.Desc())
 	}
 
-	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
+	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 		return errors.Errorf("%s: cannot addReplicaInternalLocked; range for key %v already exists in replicasByKey btree", s,
 			exRngItem.(KeyRange).endKey())
 	}
@@ -1906,11 +1906,11 @@ func (s *Store) removePlaceholder(rngID roachpb.RangeID) bool {
 }
 
 func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
-	rng, ok := s.mu.replicaPlaceholders[rngID]
+	repl, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
 		return false
 	}
-	switch exRng := s.mu.replicasByKey.Delete(rng).(type) {
+	switch exRng := s.mu.replicasByKey.Delete(repl).(type) {
 	case *ReplicaPlaceholder:
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
@@ -1926,11 +1926,11 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
 // addReplicaToRangeMapLocked requires that the store lock is held.
-func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
-	if _, ok := s.mu.replicas[rng.RangeID]; ok {
-		return errors.Errorf("%s: replica already exists", rng)
+func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
+	if _, ok := s.mu.replicas[repl.RangeID]; ok {
+		return errors.Errorf("%s: replica already exists", repl)
 	}
-	s.mu.replicas[rng.RangeID] = rng
+	s.mu.replicas[repl.RangeID] = repl
 	return nil
 }
 
@@ -2026,20 +2026,20 @@ func (s *Store) removeReplicaImpl(
 // the updated descriptor. Since the latter update requires acquiring the store
 // lock (which cannot always safely be done by replicas), this function call
 // should be deferred until it is safe to acquire the store lock.
-func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
+func (s *Store) processRangeDescriptorUpdate(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.processRangeDescriptorUpdateLocked(rng)
+	return s.processRangeDescriptorUpdateLocked(repl)
 }
 
 // processRangeDescriptorUpdateLocked requires that Store.mu and Replica.raftMu
 // are locked.
-func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
-	if !rng.IsInitialized() {
-		return errors.Errorf("attempted to process uninitialized range %s", rng)
+func (s *Store) processRangeDescriptorUpdateLocked(repl *Replica) error {
+	if !repl.IsInitialized() {
+		return errors.Errorf("attempted to process uninitialized range %s", repl)
 	}
 
-	rangeID := rng.RangeID
+	rangeID := repl.RangeID
 
 	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
@@ -2047,10 +2047,10 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if exRange := s.getOverlappingKeyRangeLocked(rng.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot processRangeDescriptorUpdate; range %s has overlapping range %s", s, rng, exRange.Desc())
+	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
+		return errors.Errorf("%s: cannot processRangeDescriptorUpdate; range %s has overlapping range %s", s, repl, exRange.Desc())
 	}
-	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
+	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
 			(exRngItem.(*Replica)).endKey())
 	}
@@ -2312,7 +2312,7 @@ func (s *Store) Send(
 		}
 		return r.Next()
 	}
-	var rng *Replica
+	var repl *Replica
 
 	// Add the command to the range for execution; exit retry loop on success.
 	s.mu.Lock()
@@ -2321,15 +2321,15 @@ func (s *Store) Send(
 	for r := retry.Start(retryOpts); next(&r); {
 		// Get range and add command to the range for execution.
 		var err error
-		rng, err = s.GetReplica(ba.RangeID)
+		repl, err = s.GetReplica(ba.RangeID)
 		if err != nil {
 			pErr = roachpb.NewError(err)
 			return nil, pErr
 		}
-		if !rng.IsInitialized() {
-			rng.mu.Lock()
-			replicaID := rng.mu.replicaID
-			rng.mu.Unlock()
+		if !repl.IsInitialized() {
+			repl.mu.Lock()
+			replicaID := repl.mu.replicaID
+			repl.mu.Unlock()
 
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
@@ -2340,18 +2340,18 @@ func (s *Store) Send(
 			// leader.
 			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
 				RangeID:     ba.RangeID,
-				LeaseHolder: rng.creatingReplica,
+				LeaseHolder: repl.creatingReplica,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
 				Replica: roachpb.ReplicaDescriptor{
-					NodeID:    rng.store.nodeDesc.NodeID,
-					StoreID:   rng.store.StoreID(),
+					NodeID:    repl.store.nodeDesc.NodeID,
+					StoreID:   repl.store.StoreID(),
 					ReplicaID: replicaID,
 				},
 			})
 		}
-		rng.assert5725(ba)
-		br, pErr = rng.Send(ctx, ba)
+		repl.assert5725(ba)
+		br, pErr = repl.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
 		}
@@ -2410,7 +2410,7 @@ func (s *Store) Send(
 			}
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
-			rng.assert5725(ba)
+			repl.assert5725(ba)
 			if ba.Txn != nil {
 				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Txn, now)
 				if pErr != nil {

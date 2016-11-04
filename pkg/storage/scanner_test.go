@@ -54,23 +54,23 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			EndKey:   roachpb.RKey(fmt.Sprintf("%03d", i+1)),
 		}
 		// Initialize the range stat so the scanner can use it.
-		rng := &Replica{
+		repl := &Replica{
 			RangeID: desc.RangeID,
 		}
-		rng.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
-		rng.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
-		rng.mu.state.Stats = enginepb.MVCCStats{
+		repl.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+		repl.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+		repl.mu.state.Stats = enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
 			KeyCount:  1,
 			LiveCount: 1,
 		}
 
-		if err := rng.setDesc(desc); err != nil {
+		if err := repl.setDesc(desc); err != nil {
 			t.Fatal(err)
 		}
-		if exRngItem := rs.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
-			t.Fatalf("failed to insert range %s", rng)
+		if exRngItem := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
+			t.Fatalf("failed to insert range %s", repl)
 		}
 	}
 	return rs
@@ -103,11 +103,11 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 	endKey := roachpb.Key(fmt.Sprintf("%03d", index+1))
 	rs.Lock()
 	defer rs.Unlock()
-	rng := rs.replicasByKey.Delete((rangeBTreeKey)(endKey))
-	if rng == nil {
+	repl := rs.replicasByKey.Delete((rangeBTreeKey)(endKey))
+	if repl == nil {
 		t.Fatalf("failed to delete range of end key %s", endKey)
 	}
-	return rng.(*Replica)
+	return repl.(*Replica)
 }
 
 // Test implementation of a range queue which adds range to an
@@ -148,11 +148,11 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(rng *Replica, now hlc.Timestamp) {
+func (tq *testQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
-	if index := tq.indexOf(rng.RangeID); index == -1 {
-		tq.ranges = append(tq.ranges, rng)
+	if index := tq.indexOf(repl.RangeID); index == -1 {
+		tq.ranges = append(tq.ranges, repl)
 	}
 }
 

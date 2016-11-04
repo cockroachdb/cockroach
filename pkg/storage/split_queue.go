@@ -68,9 +68,9 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, rng *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	desc := rng.Desc()
+	desc := repl.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
@@ -85,7 +85,7 @@ func (sq *splitQueue) shouldQueue(
 		return
 	}
 
-	if ratio := float64(rng.GetMVCCStats().Total()) / float64(zone.RangeMaxBytes); ratio > 1 {
+	if ratio := float64(repl.GetMVCCStats().Total()) / float64(zone.RangeMaxBytes); ratio > 1 {
 		priority += ratio
 		shouldQ = true
 	}

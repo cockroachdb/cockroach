@@ -135,11 +135,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer tc.Stop()
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	repl1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -287,11 +287,11 @@ func TestBaseQueueProcess(t *testing.T) {
 	defer tc.Stop()
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	repl1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -415,11 +415,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := s.GetReplica(1)
+	repl1, err := s.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -547,11 +547,11 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	}
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	repl1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 

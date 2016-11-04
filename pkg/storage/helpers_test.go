@@ -35,10 +35,10 @@ import (
 
 // AddReplica adds the replica to the store's replica map and to the sorted
 // replicasByKey slice. To be used only by unittests.
-func (s *Store) AddReplica(rng *Replica) error {
+func (s *Store) AddReplica(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.addReplicaInternalLocked(rng); err != nil {
+	if err := s.addReplicaInternalLocked(repl); err != nil {
 		return err
 	}
 	s.metrics.ReplicaCount.Inc(1)
