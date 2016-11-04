@@ -682,6 +682,94 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	}
 }
 
+func TestAllocatorTransferLeaseTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator(true)
+	defer stopper.Stop()
+
+	// 3 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	makeReplicaDescs := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		var res []roachpb.ReplicaDescriptor
+		for _, id := range storeIDs {
+			res = append(res, roachpb.ReplicaDescriptor{
+				StoreID: id,
+			})
+		}
+		return res
+	}
+
+	testCases := []struct {
+		existing    []roachpb.ReplicaDescriptor
+		leaseholder roachpb.StoreID
+		check       bool
+		expected    roachpb.StoreID
+	}{
+		// No existing lease holder, nothing to do.
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 0, check: true, expected: 0},
+		// Store 1 is not a lease transfer source.
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 1, check: true, expected: 0},
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 1, check: false, expected: 0},
+		// Store 2 is not a lease transfer source.
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 2, check: true, expected: 0},
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 2, check: false, expected: 1},
+		// Store 3 is a lease transfer source.
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 3, check: true, expected: 1},
+		{existing: makeReplicaDescs(1, 2, 3), leaseholder: 3, check: false, expected: 1},
+	}
+	for i, c := range testCases {
+		target := a.TransferLeaseTarget(config.Constraints{}, c.existing, c.leaseholder, 0, c.check)
+		if c.expected != target.StoreID {
+			t.Fatalf("%d: expected %d, but found %d", i, c.expected, target.StoreID)
+		}
+	}
+}
+
+func TestAllocatorTransferLeaseSource(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator(true)
+	defer stopper.Stop()
+
+	// 3 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		leaseholder roachpb.StoreID
+		expected    bool
+	}{
+		{leaseholder: 1, expected: false},
+		{leaseholder: 2, expected: false},
+		{leaseholder: 3, expected: true},
+	}
+	for i, c := range testCases {
+		result := a.TransferLeaseSource(config.Constraints{}, c.leaseholder, 0)
+		if c.expected != result {
+			t.Fatalf("%d: expected %v, but found %v", i, c.expected, result)
+		}
+	}
+}
+
 // TestAllocatorRemoveTarget verifies that the replica chosen by RemoveTarget is
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {

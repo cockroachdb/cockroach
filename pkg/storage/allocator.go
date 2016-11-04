@@ -20,6 +20,7 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 
 	"golang.org/x/net/context"
@@ -328,6 +329,83 @@ func (a Allocator) RebalanceTarget(
 		existingNodes[repl.NodeID] = struct{}{}
 	}
 	return a.improve(sl, existingNodes)
+}
+
+// TransferLeaseTarget returns a suitable replica to transfer the range lease
+// to from the provided list. It excludes the current lease holder replica.
+func (a *Allocator) TransferLeaseTarget(
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	checkTransferLeaseSource bool,
+) roachpb.ReplicaDescriptor {
+	if !a.options.AllowRebalance {
+		return roachpb.ReplicaDescriptor{}
+	}
+
+	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl = sl.filter(constraints)
+
+	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
+	if !ok {
+		return roachpb.ReplicaDescriptor{}
+	}
+	if checkTransferLeaseSource && !transferLeaseSource(sl, source) {
+		return roachpb.ReplicaDescriptor{}
+	}
+
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing)-1)
+	for _, repl := range existing {
+		if leaseStoreID == repl.StoreID {
+			continue
+		}
+		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+		if !ok {
+			continue
+		}
+		if float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {
+			candidates = append(candidates, repl)
+		}
+	}
+	if len(candidates) == 0 {
+		return roachpb.ReplicaDescriptor{}
+	}
+	a.randGen.Lock()
+	defer a.randGen.Unlock()
+	return candidates[a.randGen.Intn(len(candidates))]
+}
+
+// TransferLeaseSource returns true if the specified store is overfull with
+// respect to the other stores matching the specified attributes.
+func (a *Allocator) TransferLeaseSource(
+	constraints config.Constraints, leaseStoreID roachpb.StoreID, rangeID roachpb.RangeID,
+) bool {
+	if !a.options.AllowRebalance {
+		return false
+	}
+
+	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
+	if !ok {
+		return false
+	}
+	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl = sl.filter(constraints)
+	if log.V(3) {
+		log.Infof(context.TODO(), "transfer-lease-source (lease-holder=%d):\n%s", leaseStoreID, sl)
+	}
+	return transferLeaseSource(sl, source)
+}
+
+func transferLeaseSource(sl StoreList, candidate roachpb.StoreDescriptor) bool {
+	// Allow lease transfer if we're above the overfull threshold, which is
+	// mean*(1+rebalanceThreshold).
+	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + RebalanceThreshold)))
+	minOverfullThreshold := int32(math.Ceil(sl.candidateLeases.mean + 5))
+	if overfullLeaseThreshold < minOverfullThreshold {
+		overfullLeaseThreshold = minOverfullThreshold
+	}
+	return candidate.Capacity.LeaseCount > overfullLeaseThreshold
 }
 
 // selectGood attempts to select a store from the supplied store list that it
