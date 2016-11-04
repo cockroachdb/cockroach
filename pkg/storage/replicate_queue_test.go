@@ -47,15 +47,14 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		}
 	}()
 
-	// TODO(peter): Bump this to 10 nodes. Doing so is flaky until we have lease
-	// rebalancing because store 1 can hold on to too many replicas. Consider:
+	// TODO(peter): Flaky when this is set to 10. Track down why. Some of the
+	// errors are scary:
 	//
-	//   [15 4 2 3 3 5 5 0 5 5]
-	//
-	// Store 1 is holding all of the leases so we can't rebalance away from
-	// it. Every other store has within the ceil(average-replicas) threshold. So
-	// there are no rebalancing opportunities for store 8.
-	tc := testcluster.StartTestCluster(t, 5,
+	//   replicate_queue_test.go:71: /Table/53/0: lookup range unexpected error:
+	//   replica corruption (processed=true): range does not match splits:
+	//   (/Table/51-/Table/52) + (/Table/52-/Max) != [n5,s5,r7/2:/Table/5{1-2}]
+	const numNodes = 5
+	tc := testcluster.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
 	defer tc.Stopper().Stop()
@@ -65,7 +64,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	// the 10 nodes in the cluster the average is 4.5 replicas per node. Note
 	// that we don't expect to achieve that perfect balance as rebalancing
 	// targets a threshold around the average.
-	for i := 0; i < 10; i++ {
+	const newRanges = 10
+	for i := 0; i < newRanges; i++ {
 		tableID := keys.MaxReservedDescID + i + 1
 		splitKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableID)))
 		for {
@@ -94,12 +94,16 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		return counts
 	}
 
+	// TODO(peter): Track down why this is flaky.
+	// numRanges := newRanges + server.ExpectedInitialRangeCount()
+	// numReplicas := numRanges * 3
+	// minThreshold := 0.9
+	// minReplicas := int(math.Floor(minThreshold * (float64(numReplicas) / numNodes)))
+	const minReplicas = 1
 	util.SucceedsSoon(t, func() error {
 		counts := countReplicas()
 		for _, c := range counts {
-			// TODO(peter): This is a weak check for rebalancing. When lease
-			// rebalancing is in place we can make this somewhat more robust.
-			if c == 0 {
+			if c < minReplicas {
 				err := errors.Errorf("not balanced: %d", counts)
 				log.Info(context.Background(), err)
 				return err
