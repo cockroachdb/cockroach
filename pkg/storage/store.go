@@ -102,6 +102,8 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
 
+var enableRuleSolver = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RULE_SOLVER", false)
+
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
 // ticks. If raftElectionTimeoutTicks is 0, uses the value of
@@ -733,6 +735,8 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RangeLeaseRenewalDuration == 0 {
 		sc.RangeLeaseRenewalDuration = rangeLeaseRenewalDuration
 	}
+
+	sc.AllocatorOptions.UseRuleSolver = enableRuleSolver
 }
 
 // NewStore returns a new instance of a store.
