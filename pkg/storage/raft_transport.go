@@ -355,7 +355,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 			if !ok {
 				return errors.Errorf(
 					"unable to accept Raft message from %+v: no handler registered for %+v",
-					rmr.ToReplica, rmr.FromReplica)
+					rmr.FromReplica, rmr.ToReplica)
 			}
 
 			return handler.HandleSnapshot(req.Header, stream)
