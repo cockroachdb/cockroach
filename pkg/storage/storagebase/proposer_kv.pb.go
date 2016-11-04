@@ -134,33 +134,33 @@ func init() {
 	proto.RegisterType((*Merge)(nil), "cockroach.storage.storagebase.Merge")
 	proto.RegisterType((*ReplicatedProposalData)(nil), "cockroach.storage.storagebase.ReplicatedProposalData")
 }
-func (m *Split) Marshal() (data []byte, err error) {
+func (m *Split) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Split) MarshalTo(data []byte) (int, error) {
+func (m *Split) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.SplitTrigger.Size()))
-	n1, err := m.SplitTrigger.MarshalTo(data[i:])
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.SplitTrigger.Size()))
+	n1, err := m.SplitTrigger.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.RHSDelta.Size()))
-	n2, err := m.RHSDelta.MarshalTo(data[i:])
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.RHSDelta.Size()))
+	n2, err := m.RHSDelta.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -168,25 +168,25 @@ func (m *Split) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Merge) Marshal() (data []byte, err error) {
+func (m *Merge) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Merge) MarshalTo(data []byte) (int, error) {
+func (m *Merge) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.MergeTrigger.Size()))
-	n3, err := m.MergeTrigger.MarshalTo(data[i:])
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.MergeTrigger.Size()))
+	n3, err := m.MergeTrigger.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -194,106 +194,106 @@ func (m *Merge) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *ReplicatedProposalData) Marshal() (data []byte, err error) {
+func (m *ReplicatedProposalData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
+func (m *ReplicatedProposalData) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.RangeID))
-	data[i] = 0x12
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.RangeID))
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.OriginReplica.Size()))
-	n4, err := m.OriginReplica.MarshalTo(data[i:])
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.OriginReplica.Size()))
+	n4, err := m.OriginReplica.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n4
 	if m.Cmd != nil {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintProposerKv(data, i, uint64(m.Cmd.Size()))
-		n5, err := m.Cmd.MarshalTo(data[i:])
+		i = encodeVarintProposerKv(dAtA, i, uint64(m.Cmd.Size()))
+		n5, err := m.Cmd.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n5
 	}
-	data[i] = 0x20
+	dAtA[i] = 0x20
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.MaxLeaseIndex))
-	data[i] = 0x88
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.MaxLeaseIndex))
+	dAtA[i] = 0x88
 	i++
-	data[i] = 0xf1
+	dAtA[i] = 0xf1
 	i++
-	data[i] = 0x4
+	dAtA[i] = 0x4
 	i++
 	if m.BlockReads {
-		data[i] = 1
+		dAtA[i] = 1
 	} else {
-		data[i] = 0
+		dAtA[i] = 0
 	}
 	i++
-	data[i] = 0x92
+	dAtA[i] = 0x92
 	i++
-	data[i] = 0xf1
+	dAtA[i] = 0xf1
 	i++
-	data[i] = 0x4
+	dAtA[i] = 0x4
 	i++
-	i = encodeVarintProposerKv(data, i, uint64(m.State.Size()))
-	n6, err := m.State.MarshalTo(data[i:])
+	i = encodeVarintProposerKv(dAtA, i, uint64(m.State.Size()))
+	n6, err := m.State.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n6
 	if m.Split != nil {
-		data[i] = 0x9a
+		dAtA[i] = 0x9a
 		i++
-		data[i] = 0xf1
+		dAtA[i] = 0xf1
 		i++
-		data[i] = 0x4
+		dAtA[i] = 0x4
 		i++
-		i = encodeVarintProposerKv(data, i, uint64(m.Split.Size()))
-		n7, err := m.Split.MarshalTo(data[i:])
+		i = encodeVarintProposerKv(dAtA, i, uint64(m.Split.Size()))
+		n7, err := m.Split.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n7
 	}
 	if m.Merge != nil {
-		data[i] = 0xa2
+		dAtA[i] = 0xa2
 		i++
-		data[i] = 0xf1
+		dAtA[i] = 0xf1
 		i++
-		data[i] = 0x4
+		dAtA[i] = 0x4
 		i++
-		i = encodeVarintProposerKv(data, i, uint64(m.Merge.Size()))
-		n8, err := m.Merge.MarshalTo(data[i:])
+		i = encodeVarintProposerKv(dAtA, i, uint64(m.Merge.Size()))
+		n8, err := m.Merge.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n8
 	}
 	if m.ComputeChecksum != nil {
-		data[i] = 0xaa
+		dAtA[i] = 0xaa
 		i++
-		data[i] = 0xf1
+		dAtA[i] = 0xf1
 		i++
-		data[i] = 0x4
+		dAtA[i] = 0x4
 		i++
-		i = encodeVarintProposerKv(data, i, uint64(m.ComputeChecksum.Size()))
-		n9, err := m.ComputeChecksum.MarshalTo(data[i:])
+		i = encodeVarintProposerKv(dAtA, i, uint64(m.ComputeChecksum.Size()))
+		n9, err := m.ComputeChecksum.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -302,31 +302,31 @@ func (m *ReplicatedProposalData) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64ProposerKv(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64ProposerKv(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32ProposerKv(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32ProposerKv(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintProposerKv(data []byte, offset int, v uint64) int {
+func encodeVarintProposerKv(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *Split) Size() (n int) {
@@ -389,8 +389,8 @@ func sovProposerKv(x uint64) (n int) {
 func sozProposerKv(x uint64) (n int) {
 	return sovProposerKv(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *Split) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Split) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -402,7 +402,7 @@ func (m *Split) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -430,7 +430,7 @@ func (m *Split) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -444,7 +444,7 @@ func (m *Split) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.SplitTrigger.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.SplitTrigger.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -460,7 +460,7 @@ func (m *Split) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -474,13 +474,13 @@ func (m *Split) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.RHSDelta.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.RHSDelta.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipProposerKv(data[iNdEx:])
+			skippy, err := skipProposerKv(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -499,8 +499,8 @@ func (m *Split) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Merge) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Merge) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -512,7 +512,7 @@ func (m *Merge) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -540,7 +540,7 @@ func (m *Merge) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -554,13 +554,13 @@ func (m *Merge) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.MergeTrigger.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.MergeTrigger.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipProposerKv(data[iNdEx:])
+			skippy, err := skipProposerKv(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -579,8 +579,8 @@ func (m *Merge) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *ReplicatedProposalData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -592,7 +592,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -620,7 +620,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -639,7 +639,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -653,7 +653,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.OriginReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.OriginReplica.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -669,7 +669,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -686,7 +686,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if m.Cmd == nil {
 				m.Cmd = &cockroach_roachpb3.BatchRequest{}
 			}
-			if err := m.Cmd.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Cmd.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -702,7 +702,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.MaxLeaseIndex |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -721,7 +721,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -741,7 +741,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -755,7 +755,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.State.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.State.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -771,7 +771,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -788,7 +788,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if m.Split == nil {
 				m.Split = &Split{}
 			}
-			if err := m.Split.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Split.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -804,7 +804,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -821,7 +821,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if m.Merge == nil {
 				m.Merge = &Merge{}
 			}
-			if err := m.Merge.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Merge.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -837,7 +837,7 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -854,13 +854,13 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 			if m.ComputeChecksum == nil {
 				m.ComputeChecksum = &cockroach_roachpb3.ComputeChecksumRequest{}
 			}
-			if err := m.ComputeChecksum.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ComputeChecksum.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipProposerKv(data[iNdEx:])
+			skippy, err := skipProposerKv(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -879,8 +879,8 @@ func (m *ReplicatedProposalData) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipProposerKv(data []byte) (n int, err error) {
-	l := len(data)
+func skipProposerKv(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -891,7 +891,7 @@ func skipProposerKv(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -909,7 +909,7 @@ func skipProposerKv(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -926,7 +926,7 @@ func skipProposerKv(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -949,7 +949,7 @@ func skipProposerKv(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -960,7 +960,7 @@ func skipProposerKv(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipProposerKv(data[start:])
+				next, err := skipProposerKv(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

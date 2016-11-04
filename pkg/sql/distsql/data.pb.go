@@ -311,53 +311,53 @@ func init() {
 	proto.RegisterEnum("cockroach.sql.distsql.InputSyncSpec_Type", InputSyncSpec_Type_name, InputSyncSpec_Type_value)
 	proto.RegisterEnum("cockroach.sql.distsql.OutputRouterSpec_Type", OutputRouterSpec_Type_name, OutputRouterSpec_Type_value)
 }
-func (m *Expression) Marshal() (data []byte, err error) {
+func (m *Expression) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Expression) MarshalTo(data []byte) (int, error) {
+func (m *Expression) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintData(data, i, uint64(len(m.Version)))
-	i += copy(data[i:], m.Version)
-	data[i] = 0x12
+	i = encodeVarintData(dAtA, i, uint64(len(m.Version)))
+	i += copy(dAtA[i:], m.Version)
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(len(m.Expr)))
-	i += copy(data[i:], m.Expr)
+	i = encodeVarintData(dAtA, i, uint64(len(m.Expr)))
+	i += copy(dAtA[i:], m.Expr)
 	return i, nil
 }
 
-func (m *Ordering) Marshal() (data []byte, err error) {
+func (m *Ordering) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Ordering) MarshalTo(data []byte) (int, error) {
+func (m *Ordering) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintData(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintData(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -367,83 +367,83 @@ func (m *Ordering) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Ordering_Column) Marshal() (data []byte, err error) {
+func (m *Ordering_Column) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *Ordering_Column) MarshalTo(data []byte) (int, error) {
+func (m *Ordering_Column) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintData(data, i, uint64(m.ColIdx))
-	data[i] = 0x10
+	i = encodeVarintData(dAtA, i, uint64(m.ColIdx))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintData(data, i, uint64(m.Direction))
+	i = encodeVarintData(dAtA, i, uint64(m.Direction))
 	return i, nil
 }
 
-func (m *MailboxSpec) Marshal() (data []byte, err error) {
+func (m *MailboxSpec) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *MailboxSpec) MarshalTo(data []byte) (int, error) {
+func (m *MailboxSpec) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
 	if m.SimpleResponse {
-		data[i] = 1
+		dAtA[i] = 1
 	} else {
-		data[i] = 0
+		dAtA[i] = 0
 	}
 	i++
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(len(m.TargetAddr)))
-	i += copy(data[i:], m.TargetAddr)
+	i = encodeVarintData(dAtA, i, uint64(len(m.TargetAddr)))
+	i += copy(dAtA[i:], m.TargetAddr)
 	return i, nil
 }
 
-func (m *StreamEndpointSpec) Marshal() (data []byte, err error) {
+func (m *StreamEndpointSpec) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *StreamEndpointSpec) MarshalTo(data []byte) (int, error) {
+func (m *StreamEndpointSpec) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintData(data, i, uint64(m.StreamID))
+	i = encodeVarintData(dAtA, i, uint64(m.StreamID))
 	if m.Mailbox != nil {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintData(data, i, uint64(m.Mailbox.Size()))
-		n1, err := m.Mailbox.MarshalTo(data[i:])
+		i = encodeVarintData(dAtA, i, uint64(m.Mailbox.Size()))
+		n1, err := m.Mailbox.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -452,38 +452,38 @@ func (m *StreamEndpointSpec) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *InputSyncSpec) Marshal() (data []byte, err error) {
+func (m *InputSyncSpec) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *InputSyncSpec) MarshalTo(data []byte) (int, error) {
+func (m *InputSyncSpec) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintData(data, i, uint64(m.Type))
-	data[i] = 0x12
+	i = encodeVarintData(dAtA, i, uint64(m.Type))
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Ordering.Size()))
-	n2, err := m.Ordering.MarshalTo(data[i:])
+	i = encodeVarintData(dAtA, i, uint64(m.Ordering.Size()))
+	n2, err := m.Ordering.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
 	if len(m.Streams) > 0 {
 		for _, msg := range m.Streams {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintData(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintData(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -493,30 +493,30 @@ func (m *InputSyncSpec) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *OutputRouterSpec) Marshal() (data []byte, err error) {
+func (m *OutputRouterSpec) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *OutputRouterSpec) MarshalTo(data []byte) (int, error) {
+func (m *OutputRouterSpec) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintData(data, i, uint64(m.Type))
+	i = encodeVarintData(dAtA, i, uint64(m.Type))
 	if len(m.Streams) > 0 {
 		for _, msg := range m.Streams {
-			data[i] = 0x12
+			dAtA[i] = 0x12
 			i++
-			i = encodeVarintData(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintData(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -525,70 +525,70 @@ func (m *OutputRouterSpec) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.HashColumns) > 0 {
 		for _, num := range m.HashColumns {
-			data[i] = 0x18
+			dAtA[i] = 0x18
 			i++
-			i = encodeVarintData(data, i, uint64(num))
+			i = encodeVarintData(dAtA, i, uint64(num))
 		}
 	}
 	return i, nil
 }
 
-func (m *DatumInfo) Marshal() (data []byte, err error) {
+func (m *DatumInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DatumInfo) MarshalTo(data []byte) (int, error) {
+func (m *DatumInfo) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	dAtA[i] = 0x8
 	i++
-	i = encodeVarintData(data, i, uint64(m.Encoding))
-	data[i] = 0x10
+	i = encodeVarintData(dAtA, i, uint64(m.Encoding))
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintData(data, i, uint64(m.Type))
+	i = encodeVarintData(dAtA, i, uint64(m.Type))
 	return i, nil
 }
 
-func (m *StreamHeader) Marshal() (data []byte, err error) {
+func (m *StreamHeader) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *StreamHeader) MarshalTo(data []byte) (int, error) {
+func (m *StreamHeader) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
+	dAtA[i] = 0xa
 	i++
-	i = encodeVarintData(data, i, uint64(m.FlowID.Size()))
-	n3, err := m.FlowID.MarshalTo(data[i:])
+	i = encodeVarintData(dAtA, i, uint64(m.FlowID.Size()))
+	n3, err := m.FlowID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n3
-	data[i] = 0x10
+	dAtA[i] = 0x10
 	i++
-	i = encodeVarintData(data, i, uint64(m.StreamID))
+	i = encodeVarintData(dAtA, i, uint64(m.StreamID))
 	if len(m.Info) > 0 {
 		for _, msg := range m.Info {
-			data[i] = 0x1a
+			dAtA[i] = 0x1a
 			i++
-			i = encodeVarintData(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
+			i = encodeVarintData(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -598,50 +598,50 @@ func (m *StreamHeader) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *StreamData) Marshal() (data []byte, err error) {
+func (m *StreamData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *StreamData) MarshalTo(data []byte) (int, error) {
+func (m *StreamData) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.RawBytes != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(len(m.RawBytes)))
-		i += copy(data[i:], m.RawBytes)
+		i = encodeVarintData(dAtA, i, uint64(len(m.RawBytes)))
+		i += copy(dAtA[i:], m.RawBytes)
 	}
 	return i, nil
 }
 
-func (m *StreamTrailer) Marshal() (data []byte, err error) {
+func (m *StreamTrailer) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *StreamTrailer) MarshalTo(data []byte) (int, error) {
+func (m *StreamTrailer) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Error != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(m.Error.Size()))
-		n4, err := m.Error.MarshalTo(data[i:])
+		i = encodeVarintData(dAtA, i, uint64(m.Error.Size()))
+		n4, err := m.Error.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -650,44 +650,44 @@ func (m *StreamTrailer) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *StreamMessage) Marshal() (data []byte, err error) {
+func (m *StreamMessage) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *StreamMessage) MarshalTo(data []byte) (int, error) {
+func (m *StreamMessage) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Header != nil {
-		data[i] = 0xa
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(m.Header.Size()))
-		n5, err := m.Header.MarshalTo(data[i:])
+		i = encodeVarintData(dAtA, i, uint64(m.Header.Size()))
+		n5, err := m.Header.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n5
 	}
-	data[i] = 0x12
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Data.Size()))
-	n6, err := m.Data.MarshalTo(data[i:])
+	i = encodeVarintData(dAtA, i, uint64(m.Data.Size()))
+	n6, err := m.Data.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n6
 	if m.Trailer != nil {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintData(data, i, uint64(m.Trailer.Size()))
-		n7, err := m.Trailer.MarshalTo(data[i:])
+		i = encodeVarintData(dAtA, i, uint64(m.Trailer.Size()))
+		n7, err := m.Trailer.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -696,31 +696,31 @@ func (m *StreamMessage) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Data(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Data(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Data(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Data(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintData(data []byte, offset int, v uint64) int {
+func encodeVarintData(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *Expression) Size() (n int) {
@@ -878,8 +878,8 @@ func sovData(x uint64) (n int) {
 func sozData(x uint64) (n int) {
 	return sovData(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *Expression) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Expression) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -891,7 +891,7 @@ func (m *Expression) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -919,7 +919,7 @@ func (m *Expression) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -934,7 +934,7 @@ func (m *Expression) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Version = string(data[iNdEx:postIndex])
+			m.Version = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -948,7 +948,7 @@ func (m *Expression) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -963,11 +963,11 @@ func (m *Expression) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Expr = string(data[iNdEx:postIndex])
+			m.Expr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -986,8 +986,8 @@ func (m *Expression) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Ordering) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Ordering) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -999,7 +999,7 @@ func (m *Ordering) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1027,7 +1027,7 @@ func (m *Ordering) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1042,13 +1042,13 @@ func (m *Ordering) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Columns = append(m.Columns, Ordering_Column{})
-			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1067,8 +1067,8 @@ func (m *Ordering) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Ordering_Column) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *Ordering_Column) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1080,7 +1080,7 @@ func (m *Ordering_Column) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1108,7 +1108,7 @@ func (m *Ordering_Column) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.ColIdx |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1127,7 +1127,7 @@ func (m *Ordering_Column) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Direction |= (Ordering_Column_Direction(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1136,7 +1136,7 @@ func (m *Ordering_Column) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1155,8 +1155,8 @@ func (m *Ordering_Column) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *MailboxSpec) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *MailboxSpec) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1168,7 +1168,7 @@ func (m *MailboxSpec) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1196,7 +1196,7 @@ func (m *MailboxSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1216,7 +1216,7 @@ func (m *MailboxSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1231,11 +1231,11 @@ func (m *MailboxSpec) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TargetAddr = string(data[iNdEx:postIndex])
+			m.TargetAddr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1254,8 +1254,8 @@ func (m *MailboxSpec) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *StreamEndpointSpec) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *StreamEndpointSpec) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1267,7 +1267,7 @@ func (m *StreamEndpointSpec) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1295,7 +1295,7 @@ func (m *StreamEndpointSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.StreamID |= (StreamID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1314,7 +1314,7 @@ func (m *StreamEndpointSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1331,13 +1331,13 @@ func (m *StreamEndpointSpec) Unmarshal(data []byte) error {
 			if m.Mailbox == nil {
 				m.Mailbox = &MailboxSpec{}
 			}
-			if err := m.Mailbox.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Mailbox.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1356,8 +1356,8 @@ func (m *StreamEndpointSpec) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *InputSyncSpec) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *InputSyncSpec) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1369,7 +1369,7 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1397,7 +1397,7 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Type |= (InputSyncSpec_Type(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1416,7 +1416,7 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1430,7 +1430,7 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Ordering.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Ordering.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1446,7 +1446,7 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1461,13 +1461,13 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Streams = append(m.Streams, StreamEndpointSpec{})
-			if err := m.Streams[len(m.Streams)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Streams[len(m.Streams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1486,8 +1486,8 @@ func (m *InputSyncSpec) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *OutputRouterSpec) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *OutputRouterSpec) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1499,7 +1499,7 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1527,7 +1527,7 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Type |= (OutputRouterSpec_Type(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1546,7 +1546,7 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1561,7 +1561,7 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Streams = append(m.Streams, StreamEndpointSpec{})
-			if err := m.Streams[len(m.Streams)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Streams[len(m.Streams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1577,7 +1577,7 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				v |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1587,7 +1587,7 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 			m.HashColumns = append(m.HashColumns, v)
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1606,8 +1606,8 @@ func (m *OutputRouterSpec) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DatumInfo) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DatumInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1619,7 +1619,7 @@ func (m *DatumInfo) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1647,7 +1647,7 @@ func (m *DatumInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Encoding |= (cockroach_sql_sqlbase2.DatumEncoding(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1666,7 +1666,7 @@ func (m *DatumInfo) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.Type |= (cockroach_sql_sqlbase1.ColumnType_Kind(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1675,7 +1675,7 @@ func (m *DatumInfo) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1694,8 +1694,8 @@ func (m *DatumInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *StreamHeader) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *StreamHeader) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1707,7 +1707,7 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1735,7 +1735,7 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1749,7 +1749,7 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.FlowID.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.FlowID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1765,7 +1765,7 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.StreamID |= (StreamID(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1784,7 +1784,7 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1799,13 +1799,13 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Info = append(m.Info, DatumInfo{})
-			if err := m.Info[len(m.Info)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Info[len(m.Info)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1824,8 +1824,8 @@ func (m *StreamHeader) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *StreamData) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *StreamData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1837,7 +1837,7 @@ func (m *StreamData) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1865,7 +1865,7 @@ func (m *StreamData) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1879,14 +1879,14 @@ func (m *StreamData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RawBytes = append(m.RawBytes[:0], data[iNdEx:postIndex]...)
+			m.RawBytes = append(m.RawBytes[:0], dAtA[iNdEx:postIndex]...)
 			if m.RawBytes == nil {
 				m.RawBytes = []byte{}
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1905,8 +1905,8 @@ func (m *StreamData) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *StreamTrailer) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *StreamTrailer) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1918,7 +1918,7 @@ func (m *StreamTrailer) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1946,7 +1946,7 @@ func (m *StreamTrailer) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1963,13 +1963,13 @@ func (m *StreamTrailer) Unmarshal(data []byte) error {
 			if m.Error == nil {
 				m.Error = &cockroach_roachpb2.Error{}
 			}
-			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Error.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1988,8 +1988,8 @@ func (m *StreamTrailer) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *StreamMessage) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *StreamMessage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2001,7 +2001,7 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2029,7 +2029,7 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2046,7 +2046,7 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 			if m.Header == nil {
 				m.Header = &StreamHeader{}
 			}
-			if err := m.Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Header.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2062,7 +2062,7 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2076,7 +2076,7 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Data.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2092,7 +2092,7 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2109,13 +2109,13 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 			if m.Trailer == nil {
 				m.Trailer = &StreamTrailer{}
 			}
-			if err := m.Trailer.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.Trailer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
+			skippy, err := skipData(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2134,8 +2134,8 @@ func (m *StreamMessage) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipData(data []byte) (n int, err error) {
-	l := len(data)
+func skipData(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -2146,7 +2146,7 @@ func skipData(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2164,7 +2164,7 @@ func skipData(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -2181,7 +2181,7 @@ func skipData(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2204,7 +2204,7 @@ func skipData(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -2215,7 +2215,7 @@ func skipData(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipData(data[start:])
+				next, err := skipData(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}

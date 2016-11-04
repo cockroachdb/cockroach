@@ -312,7 +312,7 @@ func (cli resilientDockerClient) ContainerCreate(
 	hostConfig *container.HostConfig,
 	networkingConfig *network.NetworkingConfig,
 	containerName string,
-) (types.ContainerCreateResponse, error) {
+) (container.ContainerCreateCreatedBody, error) {
 	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
 		log.Infof(ctx, "unable to create container %s: %v", containerName, err)
@@ -322,7 +322,7 @@ func (cli resilientDockerClient) ContainerCreate(
 		})
 		if cerr != nil {
 			log.Infof(ctx, "unable to list containers: %v", cerr)
-			return types.ContainerCreateResponse{}, err
+			return container.ContainerCreateCreatedBody{}, err
 		}
 		for _, c := range containers {
 			for _, n := range c.Names {
@@ -338,7 +338,7 @@ func (cli resilientDockerClient) ContainerCreate(
 				}
 				if rerr := cli.ContainerRemove(ctx, c.ID, options); rerr != nil {
 					log.Infof(ctx, "unable to remove container: %v", rerr)
-					return types.ContainerCreateResponse{}, err
+					return container.ContainerCreateCreatedBody{}, err
 				}
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 			}
@@ -413,8 +413,8 @@ func (cli retryingDockerClient) ContainerCreate(
 	hostConfig *container.HostConfig,
 	networkingConfig *network.NetworkingConfig,
 	containerName string,
-) (types.ContainerCreateResponse, error) {
-	var ret types.ContainerCreateResponse
+) (container.ContainerCreateCreatedBody, error) {
+	var ret container.ContainerCreateCreatedBody
 	err := retry(ctx, cli.attempts, cli.timeout,
 		"ContainerCreate", matchNone,
 		func(timeoutCtx context.Context) error {
@@ -452,8 +452,8 @@ func (cli retryingDockerClient) ContainerKill(ctx context.Context, container, si
 		})
 }
 
-func (cli retryingDockerClient) ContainerWait(ctx context.Context, container string) (int, error) {
-	var ret int
+func (cli retryingDockerClient) ContainerWait(ctx context.Context, container string) (int64, error) {
+	var ret int64
 	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
@@ -465,8 +465,8 @@ func (cli retryingDockerClient) ContainerWait(ctx context.Context, container str
 
 func (cli retryingDockerClient) ImageList(
 	ctx context.Context, options types.ImageListOptions,
-) ([]types.Image, error) {
-	var ret []types.Image
+) ([]types.ImageSummary, error) {
+	var ret []types.ImageSummary
 	return ret, retry(ctx, cli.attempts, cli.timeout, "ImageList", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
