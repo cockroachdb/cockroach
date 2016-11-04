@@ -40,6 +40,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/google/go-github/github"
 )
 
@@ -165,6 +166,7 @@ func main() {
 				target,
 				fmt.Sprintf("PKG=./%s", name),
 				fmt.Sprintf("TESTS=%s", tests),
+				fmt.Sprintf("COCKROACH_PROPOSER_EVALUATED_KV=%t", envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)),
 				fmt.Sprintf("TESTFLAGS=-test.bench %s", benchmarks),
 				fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 			)
