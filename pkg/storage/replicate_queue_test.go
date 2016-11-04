@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"math"
 	"os"
 	"testing"
 
@@ -47,15 +48,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		}
 	}()
 
-	// TODO(peter): Bump this to 10 nodes. Doing so is flaky until we have lease
-	// rebalancing because store 1 can hold on to too many replicas. Consider:
-	//
-	//   [15 4 2 3 3 5 5 0 5 5]
-	//
-	// Store 1 is holding all of the leases so we can't rebalance away from
-	// it. Every other store has within the ceil(average-replicas) threshold. So
-	// there are no rebalancing opportunities for store 8.
-	tc := testcluster.StartTestCluster(t, 5,
+	const numNodes = 10
+	tc := testcluster.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
 	defer tc.Stopper().Stop()
@@ -94,12 +88,14 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		return counts
 	}
 
+	const numRanges = 15
+	const numReplicas = numRanges * 3
+	const minThreshold = 0.9
+	minReplicas := int(math.Floor(minThreshold * (numReplicas / numNodes)))
 	util.SucceedsSoon(t, func() error {
 		counts := countReplicas()
 		for _, c := range counts {
-			// TODO(peter): This is a weak check for rebalancing. When lease
-			// rebalancing is in place we can make this somewhat more robust.
-			if c == 0 {
+			if c < minReplicas {
 				err := errors.Errorf("not balanced: %d", counts)
 				log.Info(context.Background(), err)
 				return err
