@@ -24,11 +24,11 @@ import (
 )
 
 func runReferenceTestWithScript(t *testing.T, script string) {
-	if err := testDockerOneShot(t, "reference", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
+	if err := testDockerOneShot(t, "reference", []string{"stat", cluster.CockroachBinaryInContainer}, []string{} /* empty env */); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
-	if err := testDockerOneShot(t, "reference", []string{"/bin/bash", "-c", script}); err != nil {
+	if err := testDockerOneShot(t, "reference", []string{"/bin/bash", "-c", script}, []string{} /* empty env */); err != nil {
 		t.Error(err)
 	}
 }
