@@ -34,6 +34,14 @@ type FilterArgs struct {
 	Hdr   roachpb.Header
 }
 
+// ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
+type ApplyFilterArgs struct {
+	ReplicatedProposalData
+	CmdID   CmdIDKey
+	RangeID roachpb.RangeID
+	StoreID roachpb.StoreID
+}
+
 // InRaftCmd returns true if the filter is running in the context of a Raft
 // command (it could be running outside of one, for example for a read).
 func (f *FilterArgs) InRaftCmd() bool {
@@ -45,7 +53,16 @@ func (f *FilterArgs) InRaftCmd() bool {
 // nil to continue with regular processing or non-nil to terminate processing
 // with the returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results each time.
+//
+// TODO(tschottdorf): clean this up. Tests which use this all need to be
+// refactored to use explicitly a proposal-intercepting filter (not written
+// yet, but it's basically this one here when proposer-evaluated KV is on) or
+// a ReplicaApplyFilter (see below).
 type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
+
+// A ReplicaApplyFilter can be used in testing to influence the error returned
+// from proposals after they apply.
+type ReplicaApplyFilter func(args ApplyFilterArgs) *roachpb.Error
 
 // ReplicaResponseFilter is used in unittests to modify the outbound
 // response returned to a waiting client after a replica command has

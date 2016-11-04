@@ -750,12 +750,18 @@ func (hv *historyVerifier) runHistory(
 	var wg sync.WaitGroup
 	wg.Add(len(txnMap))
 	retryErrs := make(chan *retryError, len(txnMap))
+	errs := make(chan error, 1) // only populated while buffer available
 
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
 			if err := hv.runTxn(i, priorities[i], isolations[i], txnCmds, db, t); err != nil {
 				if re, ok := err.(*retryError); !ok {
-					t.Errorf("(%s): unexpected failure: %s", cmds, err)
+					reportErr := errors.Wrapf(err, "(%s): unexpected failure", cmds)
+					select {
+					case errs <- reportErr:
+					default:
+						t.Error(reportErr)
+					}
 				} else {
 					retryErrs <- re
 				}
@@ -765,7 +771,13 @@ func (hv *historyVerifier) runHistory(
 	}
 	wg.Wait()
 
-	// If we received a retry error, propagate the first one now.
+	// For serious errors, report the first one.
+	select {
+	case err := <-errs:
+		return err
+	default:
+	}
+	// In the absence of serious errors, report the first retry error, if any.
 	select {
 	case re := <-retryErrs:
 		return re

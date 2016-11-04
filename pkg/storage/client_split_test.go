@@ -1082,6 +1082,9 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 // non-atomically with respect to the reads (and in particular their update of
 // the timestamp cache), then some of them may not be reflected in the
 // timestamp cache of the new range, in which case this test would fail.
+//
+// TODO(tschottdorf): hacks around #10084, see usage of
+// ProposerEvaluatedKVEnabled() within.
 func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	splitKey := roachpb.Key("a")
@@ -1091,6 +1094,11 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 	}
 
 	getContinues := make(chan struct{})
+	if storage.ProposerEvaluatedKVEnabled() {
+		// TODO(tschottdorf): because of command queue hack (would deadlock
+		// otherwise); see #10084.
+		close(getContinues)
+	}
 	var getStarted sync.WaitGroup
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
@@ -1101,7 +1109,9 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 				if st == nil || !st.LeftDesc.EndKey.Equal(splitKey) {
 					return nil
 				}
-				close(getContinues)
+				if !storage.ProposerEvaluatedKVEnabled() {
+					close(getContinues)
+				}
 			} else if filterArgs.Req.Method() == roachpb.Get &&
 				bytes.HasPrefix(filterArgs.Req.Header().Key, splitKey.Next()) {
 				getStarted.Done()
