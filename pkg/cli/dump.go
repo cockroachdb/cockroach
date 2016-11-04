@@ -25,9 +25,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // dumpCmd dumps SQL tables.
@@ -182,7 +183,6 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	defer func() { _ = rows.Close() }()
 	coltypes := make(map[string]string)
 	var colnames bytes.Buffer
 	for rows.Next() {
@@ -209,45 +209,9 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		return tableMetadata{}, err
 	}
 
-	// Primary index is always the first index returned by SHOW INDEX.
-	rows, err = conn.Query(fmt.Sprintf("SHOW INDEX FROM %s", tableName), nil)
+	pkName, numIdxCols, idxColNames, err := fetchPKInfo(conn, tableName.String())
 	if err != nil {
 		return tableMetadata{}, err
-	}
-
-	var numIndexCols int
-	var primaryIndex string
-	var idxColNames bytes.Buffer
-	// Find the primary index columns.
-	for rows.Next() {
-		vals := rows.ScanRaw()
-		b, ok := vals[1].(string)
-		if !ok {
-			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[1])
-		}
-		if primaryIndex == "" {
-			primaryIndex = b
-		} else if primaryIndex != b {
-			break
-		}
-		b, ok = vals[4].(string)
-		if !ok {
-			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[4])
-		}
-		if idxColNames.Len() > 0 {
-			idxColNames.WriteString(", ")
-		}
-		parser.Name(b).Format(&idxColNames, parser.FmtSimple)
-		numIndexCols++
-	}
-	if err := rows.Err(); err != nil {
-		return tableMetadata{}, err
-	}
-	if err := rows.Close(); err != nil {
-		return tableMetadata{}, err
-	}
-	if numIndexCols == 0 {
-		return tableMetadata{}, fmt.Errorf("no primary key index found")
 	}
 
 	vals, err := conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName), nil)
@@ -258,13 +222,64 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 
 	return tableMetadata{
 		name:         &parser.TableName{DatabaseName: dbName, TableName: tableName},
-		primaryIndex: primaryIndex,
-		numIndexCols: numIndexCols,
-		idxColNames:  idxColNames.String(),
+		primaryIndex: pkName,
+		numIndexCols: numIdxCols,
+		idxColNames:  idxColNames,
 		columnNames:  colnames.String(),
 		columnTypes:  coltypes,
 		createStmt:   create,
 	}, nil
+}
+
+// fetchPKInfo returns the name of the PK index, the number of columns in it and
+// the list of col names of the PK as a comma-separated string.
+func fetchPKInfo(conn *sqlConn, tablename string) (_ string, _ int, _ string, retErr error) {
+	// Primary index is always the first index returned by SHOW INDEX.
+	rows, err := conn.Query(fmt.Sprintf("SHOW INDEX FROM %s", tablename), nil)
+	if err != nil {
+		return "", 0, "", err
+	}
+	defer func() {
+		err = rows.Close()
+		if retErr == nil {
+			retErr = err
+		}
+	}()
+	var primaryIndex string
+	numIdxCols := 0
+	var idxColNames bytes.Buffer
+	// Find the primary index columns.
+	for rows.Next() {
+		vals := rows.ScanRaw()
+		numIdxCols++
+		b, ok := vals[1].(string)
+		if !ok {
+			return "", 0, "", fmt.Errorf("unexpected value: %T", vals[1])
+		}
+		if primaryIndex == "" {
+			primaryIndex = b
+		} else if primaryIndex != b {
+			break
+		}
+		b, ok = vals[4].(string)
+		if !ok {
+			return "", 0, "", fmt.Errorf("unexpected value: %T", vals[4])
+		}
+		if idxColNames.Len() > 0 {
+			idxColNames.WriteString(", ")
+		}
+		parser.Name(b).Format(&idxColNames, parser.FmtSimple)
+	}
+	if err := rows.Err(); err != nil {
+		return "", 0, "", err
+	}
+	if err := rows.Close(); err != nil {
+		return "", 0, "", err
+	}
+	if numIdxCols == 0 {
+		return "", 0, "", fmt.Errorf("no primary key index found")
+	}
+	return primaryIndex, numIdxCols, idxColNames.String(), nil
 }
 
 // dumpCreateTable dumps the CREATE statement of the specified table to w.
@@ -273,7 +288,6 @@ func dumpCreateTable(w io.Writer, md tableMetadata) error {
 		return err
 	}
 	if _, err := w.Write([]byte(";\n")); err != nil {
-		return err
 	}
 	return nil
 }
@@ -284,98 +298,126 @@ const limit = 100
 // dumpTableData dumps the data of the specified table to w.
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
 	// Build the SELECT query.
-	var sbuf bytes.Buffer
-	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME %s",
+	var selectBuf bytes.Buffer
+	fmt.Fprintf(&selectBuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME %s",
 		md.idxColNames, md.columnNames, md.name, parser.Name(md.primaryIndex), clusterTS)
 
-	var wbuf bytes.Buffer
-	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", md.idxColNames)
+	var whereBuf bytes.Buffer
+	fmt.Fprintf(&whereBuf, " WHERE ROW (%s) > ROW (", md.idxColNames)
 	for i := 0; i < md.numIndexCols; i++ {
 		if i > 0 {
-			wbuf.WriteString(", ")
+			whereBuf.WriteString(", ")
 		}
-		fmt.Fprintf(&wbuf, "$%d", i+1)
+		fmt.Fprintf(&whereBuf, "$%d", i+1)
 	}
-	wbuf.WriteString(")")
+	whereBuf.WriteString(")")
 	// No WHERE clause first time, so add a place to inject it.
-	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
-	bs := sbuf.String()
+	fmt.Fprintf(&selectBuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
+	selectTemplate := selectBuf.String()
+	queryWithoutWhere := fmt.Sprintf(selectTemplate, "")
+	queryWithWhere := fmt.Sprintf(selectTemplate, whereBuf.String())
 
 	// pk holds the last values of the fetched primary keys
 	var pk []driver.Value
-	q := fmt.Sprintf(bs, "")
+	first := true
 	for {
+		var q string
+		if first {
+			first = false
+			q = queryWithoutWhere
+		} else {
+			q = queryWithWhere
+		}
 		rows, err := conn.Query(q, pk)
 		if err != nil {
 			return err
 		}
-		cols := rows.Columns()
-		pkcols := cols[:md.numIndexCols]
-		cols = cols[md.numIndexCols:]
-		inserts := make([][]string, 0, limit)
-		i := 0
-		for i < limit && rows.Next() {
-			vals := rows.ScanRaw()
-			if pk == nil {
-				q = fmt.Sprintf(bs, wbuf.String())
-			}
-			pk = vals[:md.numIndexCols]
-			vals = vals[md.numIndexCols:]
-			ivals := make([]string, len(vals))
-			// Values need to be correctly encoded for INSERT statements in a text file.
-			for si, sv := range vals {
-				switch t := sv.(type) {
-				case nil:
-					ivals[si] = "NULL"
-				case bool:
-					ivals[si] = parser.MakeDBool(parser.DBool(t)).String()
-				case int64:
-					ivals[si] = parser.NewDInt(parser.DInt(t)).String()
-				case float64:
-					ivals[si] = parser.NewDFloat(parser.DFloat(t)).String()
-				case string:
-					ivals[si] = parser.NewDString(t).String()
-				case []byte:
-					switch ct := md.columnTypes[cols[si]]; ct {
-					case "INTERVAL":
-						ivals[si] = fmt.Sprintf("'%s'", t)
-					case "BYTES":
-						ivals[si] = parser.NewDBytes(parser.DBytes(t)).String()
-					default:
-						// STRING and DECIMAL types can have optional length
-						// suffixes, so only examine the prefix of the type.
-						if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
-							ivals[si] = parser.NewDString(string(t)).String()
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
-							ivals[si] = string(t)
-						} else {
-							panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
-						}
-					}
-				case time.Time:
-					var d parser.Datum
-					ct := md.columnTypes[cols[si]]
-					switch ct {
-					case "DATE":
-						d = parser.NewDDateFromTime(t, time.UTC)
-					case "TIMESTAMP":
-						d = parser.MakeDTimestamp(t, time.Nanosecond)
-					case "TIMESTAMP WITH TIME ZONE":
-						d = parser.MakeDTimestampTZ(t, time.Nanosecond)
-					default:
-						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
-					}
-					ivals[si] = fmt.Sprintf("%s", d)
-				default:
-					panic(errors.Errorf("unknown field type: %T (%s)", t, cols[si]))
-				}
-			}
-			inserts = append(inserts, ivals)
-			i++
+		pk, err = dumpBatch(w, rows, md, limit)
+		if err != nil {
+			return err
 		}
-		if i != limit {
-			if err := rows.Err(); err != nil {
-				return err
+		if pk == nil {
+			break
+		}
+	}
+	return nil
+}
+
+// dumpBatch generates an INSERT statements into `tablename` containing values
+// for all the rows in `rows`. It returns the values corresponding to the PK of
+// the last row, so that the next iteration can resume from there.
+//
+// batchSize is the number of rows expected. If the actual rows are less, then the
+// return value is nil, to indicate that no further iterations are necessary.
+//
+// rows will be closed.
+func dumpBatch(
+	w io.Writer, rows *sqlRows, md tableMetadata, batchSize int,
+) (_ []driver.Value, retErr error) {
+	defer func() {
+		err := rows.Close()
+		if retErr == nil {
+			retErr = err
+		}
+	}()
+
+	cols := rows.Columns()
+	pkcols := cols[:md.numIndexCols]
+	cols = cols[md.numIndexCols:]
+	inserts := make([][]string, 0, batchSize)
+	var pk []driver.Value
+	i := 0
+	for rows.Next() {
+		vals := rows.ScanRaw()
+		pk = vals[:md.numIndexCols]
+		vals = vals[md.numIndexCols:]
+		ivals := make([]string, len(vals))
+		// Values need to be correctly encoded for INSERT statements in a text file.
+		for si, sv := range vals {
+			switch t := sv.(type) {
+			case nil:
+				ivals[si] = "NULL"
+			case bool:
+				ivals[si] = parser.MakeDBool(parser.DBool(t)).String()
+			case int64:
+				ivals[si] = parser.NewDInt(parser.DInt(t)).String()
+			case float64:
+				ivals[si] = parser.NewDFloat(parser.DFloat(t)).String()
+			case string:
+				ivals[si] = parser.NewDString(t).String()
+			case []byte:
+				switch ct := md.columnTypes[cols[si]]; ct {
+				case "INTERVAL":
+					ivals[si] = fmt.Sprintf("'%s'", t)
+				case "BYTES":
+					ivals[si] = parser.NewDBytes(parser.DBytes(t)).String()
+				default:
+					// STRING and DECIMAL types can have optional length
+					// suffixes, so only examine the prefix of the type.
+					if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
+						ivals[si] = parser.NewDString(string(t)).String()
+					} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
+						ivals[si] = string(t)
+					} else {
+						panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
+					}
+				}
+			case time.Time:
+				var d parser.Datum
+				ct := md.columnTypes[cols[si]]
+				switch ct {
+				case "DATE":
+					d = parser.NewDDateFromTime(t, time.UTC)
+				case "TIMESTAMP":
+					d = parser.MakeDTimestamp(t, time.Nanosecond)
+				case "TIMESTAMP WITH TIME ZONE":
+					d = parser.MakeDTimestampTZ(t, time.Nanosecond)
+				default:
+					panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
+				}
+				ivals[si] = fmt.Sprintf("%s", d)
+			default:
+				panic(errors.Errorf("unknown field type: %T (%s)", t, cols[si]))
 			}
 		}
 		for si, sv := range pk {
@@ -383,33 +425,37 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 			if ok && strings.HasPrefix(md.columnTypes[pkcols[si]], "STRING") {
 				// Primary key strings need to be converted to a go string, but not SQL
 				// encoded since they aren't being written to a text file.
-				pk[si] = string(b)
+				pkcols[si] = string(b)
 			}
 		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		if i == 0 {
-			break
-		}
-		fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
-		for idx, values := range inserts {
-			if idx > 0 {
-				fmt.Fprint(w, ",")
-			}
-			fmt.Fprint(w, "\n\t(")
-			for vi, v := range values {
-				if vi > 0 {
-					fmt.Fprint(w, ", ")
-				}
-				fmt.Fprint(w, v)
-			}
-			fmt.Fprint(w, ")")
-		}
-		fmt.Fprintln(w, ";")
-		if i < limit {
-			break
-		}
+		inserts = append(inserts, ivals)
+		i++
 	}
-	return nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if i == 0 {
+		// Signal no more rows.
+		return nil, nil
+	}
+	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
+	for idx, values := range inserts {
+		if idx > 0 {
+			fmt.Fprint(w, ",")
+		}
+		fmt.Fprint(w, "\n\t(")
+		for vi, v := range values {
+			if vi > 0 {
+				fmt.Fprint(w, ", ")
+			}
+			fmt.Fprint(w, v)
+		}
+		fmt.Fprint(w, ")")
+	}
+	fmt.Fprintln(w, ";")
+	if i < batchSize {
+		// Signal no more rows.
+		return nil, nil
+	}
+	return pk, nil
 }
