@@ -20,6 +20,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/abourget/teamcity"
 	"github.com/kisielk/gotool"
@@ -27,9 +28,30 @@ import (
 
 var buildTypeID = flag.String("build", "Cockroach_Nightlies_Stress", "the TeamCity build ID to start")
 var branchName = flag.String("branch", "", "the VCS branch to build")
+var addParams = flag.String("add-params", "", "comma-separated list of key=value build parameters to add")
+var pkgs = flag.String("pkgs", "github.com/cockroachdb/cockroach/...", "packages to invoke the build for (using env.PKG); empty for invoking a single build without env.PKG")
 
 const teamcityAPIUserEnv = "TC_API_USER"
 const teamcityAPIPasswordEnv = "TC_API_PASSWORD"
+
+func makeAddParams() map[string]string {
+	sl := strings.Split(*addParams, ",")
+	for i := range sl {
+		sl[i] = strings.TrimSpace(sl[i])
+	}
+	m := map[string]string{}
+	for _, kv := range sl {
+		if kv == "" {
+			continue
+		}
+		matches := strings.SplitN(kv, "=", 2)
+		if len(matches) != 2 {
+			log.Fatalf("unable to parse '%s'", kv)
+		}
+		m[matches[0]] = matches[1]
+	}
+	return m
+}
 
 func main() {
 	flag.Parse()
@@ -42,15 +64,30 @@ func main() {
 	if !ok {
 		log.Fatalf("teamcity API password environment variable %s is not set", teamcityAPIPasswordEnv)
 	}
-	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/..."})
+	importPaths := []string{""}
+	if len(*pkgs) > 0 {
+		importPaths = gotool.ImportPaths([]string{*pkgs})
+	}
 
 	client := teamcity.New("teamcity.cockroachdb.com", username, password)
 	for _, params := range []map[string]string{
+		// TODO(tamird): also run a regular build?
 		{"env.GOFLAGS": "-race"},
 		{"env.TAGS": "deadlock"},
 	} {
+		for key, val := range makeAddParams() {
+			_, ok := params[key]
+			if ok {
+				log.Fatalf("cannot overwrite existing param %s", key)
+			}
+			params[key] = val
+		}
 		for _, importPath := range importPaths {
-			params["env.PKG"] = importPath
+			if importPath == "" {
+				delete(params, "env.PKG")
+			} else {
+				params["env.PKG"] = importPath
+			}
 			build, err := client.QueueBuild(*buildTypeID, *branchName, params)
 			if err != nil {
 				log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, err)
