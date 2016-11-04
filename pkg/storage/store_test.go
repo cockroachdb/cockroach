@@ -1342,9 +1342,14 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	}
 }
 
-// TestStoreResolveWriteIntentPushOnRead verifies that resolving a
-// write intent for a read will push the timestamp. On failure to
-// push, verify a write intent error is returned with !Resolvable.
+// TestStoreResolveWriteIntentPushOnRead verifies that resolving a write intent
+// for a read will push the timestamp. On failure to push, verify a write
+// intent error is returned with !Resolvable.
+//
+// TODO(tschottdorf): this test (but likely a lot of others) always need to
+// manually update the transaction for each received response, or they behave
+// like real clients aren't allowed to (for instance, dropping WriteTooOld
+// flags or timestamp bumps).
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := TestStoreConfig(nil)
@@ -1369,6 +1374,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
 		pushee := newTransaction("test", key, 1, test.pusheeIso, store.cfg.Clock)
+
 		if test.resolvable {
 			pushee.Priority = 1
 			pusher.Priority = 2 // Pusher will win.
@@ -1376,18 +1382,28 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			pushee.Priority = 2
 			pusher.Priority = 1 // Pusher will lose.
 		}
-
 		// First, write original value.
-		args := putArgs(key, []byte("value1"))
-		if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &args); pErr != nil {
-			t.Fatal(pErr)
+		{
+			args := putArgs(key, []byte("value1"))
+			if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &args); pErr != nil {
+				t.Fatal(pErr)
+			}
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		_, btH := beginTxnArgs(key, pushee)
-		args.Value.SetBytes([]byte("value2"))
-		if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), btH, &args); pErr != nil {
-			t.Fatal(pErr)
+		{
+			_, btH := beginTxnArgs(key, pushee)
+			args := putArgs(key, []byte("value2"))
+			if reply, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), btH, &args); pErr != nil {
+				t.Fatal(pErr)
+			} else {
+				pushee.Update(reply.(*roachpb.PutResponse).Txn)
+				if pushee.WriteTooOld {
+					// See test comment for the TODO mentioned below.
+					t.Logf("%d: unsetting WriteTooOld flag as a hack to keep this test passing; should address the TODO", i)
+					pushee.WriteTooOld = false
+				}
+			}
 		}
 
 		// Now, try to read value using the pusher's txn.
@@ -1417,7 +1433,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			minExpTS.Logical++
 			if test.pusheeIso == enginepb.SNAPSHOT {
 				if cErr != nil {
-					t.Errorf("unexpected error on commit: %s", cErr)
+					t.Fatalf("unexpected error on commit: %s", cErr)
 				}
 				etReply := reply.(*roachpb.EndTransactionResponse)
 				if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Timestamp.Less(minExpTS) {
