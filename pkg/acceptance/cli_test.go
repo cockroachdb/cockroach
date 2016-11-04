@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/docker/docker/api/types/container"
 )
 
 const testGlob = "../cli/interactive_tests/test*.tcl"
@@ -34,7 +35,11 @@ var cmdBase = []string{
 }
 
 func TestDockerCLI(t *testing.T) {
-	if err := testDockerOneShot(t, "cli_test", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
+	containerConfig := container.Config{
+		Image: postgresTestImage,
+		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
+	}
+	if err := testDockerOneShot(t, "cli_test", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
@@ -56,7 +61,8 @@ func TestDockerCLI(t *testing.T) {
 				cmd = append(cmd, "-d")
 			}
 			cmd = append(cmd, "-f", testPath, cluster.CockroachBinaryInContainer)
-			if err := testDockerOneShot(t, "cli_test", cmd); err != nil {
+			containerConfig.Cmd = cmd
+			if err := testDockerOneShot(t, "cli_test", containerConfig); err != nil {
 				t.Error(err)
 			}
 		})
