@@ -682,6 +682,95 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	}
 }
 
+func TestAllocatorTransferLeaseTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator(true)
+	defer stopper.Stop()
+
+	// 3 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	existing := []roachpb.ReplicaDescriptor{
+		{StoreID: 1},
+		{StoreID: 2},
+		{StoreID: 3},
+	}
+
+	testCases := []struct {
+		existing    []roachpb.ReplicaDescriptor
+		leaseholder roachpb.StoreID
+		check       bool
+		expected    roachpb.StoreID
+	}{
+		// No existing lease holder, nothing to do.
+		{existing: existing, leaseholder: 0, check: true, expected: 0},
+		// Store 1 is not a lease transfer source.
+		{existing: existing, leaseholder: 1, check: true, expected: 0},
+		{existing: existing, leaseholder: 1, check: false, expected: 0},
+		// Store 2 is not a lease transfer source.
+		{existing: existing, leaseholder: 2, check: true, expected: 0},
+		{existing: existing, leaseholder: 2, check: false, expected: 1},
+		// Store 3 is a lease transfer source.
+		{existing: existing, leaseholder: 3, check: true, expected: 1},
+		{existing: existing, leaseholder: 3, check: false, expected: 1},
+	}
+	for i, c := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			target := a.TransferLeaseTarget(config.Constraints{},
+				c.existing, c.leaseholder, 0, c.check)
+			if c.expected != target.StoreID {
+				t.Fatalf("%d: expected %d, but found %d", i, c.expected, target.StoreID)
+			}
+		})
+	}
+}
+
+func TestAllocatorShouldTransferLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator(true)
+	defer stopper.Stop()
+
+	// 3 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		leaseholder roachpb.StoreID
+		expected    bool
+	}{
+		{leaseholder: 1, expected: false},
+		{leaseholder: 2, expected: false},
+		{leaseholder: 3, expected: true},
+	}
+	for i, c := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			result := a.ShouldTransferLease(config.Constraints{}, c.leaseholder, 0)
+			if c.expected != result {
+				t.Fatalf("%d: expected %v, but found %v", i, c.expected, result)
+			}
+		})
+	}
+}
+
 // TestAllocatorRemoveTarget verifies that the replica chosen by RemoveTarget is
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {
@@ -740,29 +829,11 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	// Exclude store 2 as a removal target so that only store 3 is a candidate.
-	targetRepl, err := a.RemoveTarget(replicas, stores[1].StoreID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := targetRepl, replicas[2]; a != e {
-		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
-	}
-
-	// Now exclude store 3 so that only store 2 is a candidate.
-	targetRepl, err = a.RemoveTarget(replicas, stores[2].StoreID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := targetRepl, replicas[1]; a != e {
-		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
-	}
-
 	var counts [4]int
 	for i := 0; i < 100; i++ {
-		// Exclude store 1 as a removal target. We should see stores 2 and 3
-		// randomly selected as the removal target.
-		targetRepl, err := a.RemoveTarget(replicas, stores[0].StoreID)
+		// Stores 2 and 3 are overfull, so we should see them randomly selected as
+		// the removal target.
+		targetRepl, err := a.RemoveTarget(replicas)
 		if err != nil {
 			t.Fatal(err)
 		}

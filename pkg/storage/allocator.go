@@ -20,6 +20,7 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 
 	"golang.org/x/net/context"
@@ -235,16 +236,16 @@ func (a *Allocator) AllocateTarget(
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
-// set. It attempts to consider which of the provided replicas would be the best
-// candidate for removal. It also will exclude any replica that belongs to the
-// range lease holder's store ID.
+// set. It first attempts to randomly select a target from the set of stores
+// that have greater than the average number of replicas. Failing that, it
+// falls back to selecting a random target from any of the existing replicas.
 //
 // TODO(mrtracy): removeTarget eventually needs to accept the attributes from
 // the zone config associated with the provided replicas. This will allow it to
 // make correct decisions in the case of ranges with heterogeneous replica
 // requirements (i.e. multiple data centers).
 func (a Allocator) RemoveTarget(
-	existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID,
+	existing []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
 		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
@@ -253,9 +254,6 @@ func (a Allocator) RemoveTarget(
 	// Retrieve store descriptors for the provided replicas from the StorePool.
 	var descriptors []roachpb.StoreDescriptor
 	for _, exist := range existing {
-		if exist.StoreID == leaseStoreID {
-			continue
-		}
 		if desc, ok := a.storePool.getStoreDescriptor(exist.StoreID); ok {
 			descriptors = append(descriptors, desc)
 		}
@@ -328,6 +326,84 @@ func (a Allocator) RebalanceTarget(
 		existingNodes[repl.NodeID] = struct{}{}
 	}
 	return a.improve(sl, existingNodes)
+}
+
+// TransferLeaseTarget returns a suitable replica to transfer the range lease
+// to from the provided list. It excludes the current lease holder replica.
+func (a *Allocator) TransferLeaseTarget(
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	checkTransferLeaseSource bool,
+) roachpb.ReplicaDescriptor {
+	if !a.options.AllowRebalance {
+		return roachpb.ReplicaDescriptor{}
+	}
+
+	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl = sl.filter(constraints)
+
+	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
+	if !ok {
+		return roachpb.ReplicaDescriptor{}
+	}
+	if checkTransferLeaseSource && !shouldTransferLease(sl, source) {
+		return roachpb.ReplicaDescriptor{}
+	}
+
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing)-1)
+	for _, repl := range existing {
+		if leaseStoreID == repl.StoreID {
+			continue
+		}
+		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+		if !ok {
+			continue
+		}
+		if float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {
+			candidates = append(candidates, repl)
+		}
+	}
+	if len(candidates) == 0 {
+		return roachpb.ReplicaDescriptor{}
+	}
+	a.randGen.Lock()
+	defer a.randGen.Unlock()
+	return candidates[a.randGen.Intn(len(candidates))]
+}
+
+// ShouldTransferLease returns true if the specified store is overfull in terms
+// of leases with respect to the other stores matching the specified
+// attributes.
+func (a *Allocator) ShouldTransferLease(
+	constraints config.Constraints, leaseStoreID roachpb.StoreID, rangeID roachpb.RangeID,
+) bool {
+	if !a.options.AllowRebalance {
+		return false
+	}
+
+	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
+	if !ok {
+		return false
+	}
+	sl, _, _ := a.storePool.getStoreList(rangeID)
+	sl = sl.filter(constraints)
+	if log.V(3) {
+		log.Infof(context.TODO(), "transfer-lease-source (lease-holder=%d):\n%s", leaseStoreID, sl)
+	}
+	return shouldTransferLease(sl, source)
+}
+
+func shouldTransferLease(sl StoreList, candidate roachpb.StoreDescriptor) bool {
+	// Allow lease transfer if we're above the overfull threshold, which is
+	// mean*(1+rebalanceThreshold).
+	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + RebalanceThreshold)))
+	minOverfullThreshold := int32(math.Ceil(sl.candidateLeases.mean + 5))
+	if overfullLeaseThreshold < minOverfullThreshold {
+		overfullLeaseThreshold = minOverfullThreshold
+	}
+	return candidate.Capacity.LeaseCount > overfullLeaseThreshold
 }
 
 // selectGood attempts to select a store from the supplied store list that it
