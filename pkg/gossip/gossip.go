@@ -902,7 +902,7 @@ func (g *Gossip) bootstrap() {
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
 					if addr := g.getNextBootstrapAddress(); addr != nil {
-						g.startClient(addr, g.NodeID.Get())
+						g.startClient(addr)
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
 						for addr := range g.bootstrapping {
@@ -1023,7 +1023,7 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 		} else {
 			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
-			g.startClient(nodeAddr, g.NodeID.Get())
+			g.startClient(nodeAddr)
 		}
 	}
 }
@@ -1035,7 +1035,7 @@ func (g *Gossip) doDisconnected(c *client) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr, g.NodeID.Get())
+		g.startClient(c.forwardAddr)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
@@ -1104,7 +1104,7 @@ func (g *Gossip) signalConnectedLocked() {
 // startClient launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
+func (g *Gossip) startClient(addr net.Addr) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
@@ -1116,7 +1116,7 @@ func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
 	log.Eventf(ctx, "starting new client to %s", addr)
 	c := newClient(g.server.AmbientContext, addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
-	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID, breaker)
+	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
 }
 
 // removeClient removes the specified client. Called when a client
