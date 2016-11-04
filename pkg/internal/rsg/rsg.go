@@ -212,5 +212,5 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))
 		}
 	}
-	return fmt.Sprint(v)
+	return fmt.Sprintf("%v::%s", v, typ.String())
 }
