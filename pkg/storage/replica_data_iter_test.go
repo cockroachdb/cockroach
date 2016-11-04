@@ -121,10 +121,10 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	// Adjust the range descriptor to avoid existing data such as meta
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
-	newDesc := *tc.rng.Desc()
+	newDesc := *tc.repl.Desc()
 	newDesc.RangeID = 125125125
 
-	iter := NewReplicaDataIterator(&newDesc, tc.rng.store.Engine(), false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&newDesc, tc.repl.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Errorf("unexpected: %s", iter.Key())
@@ -150,10 +150,10 @@ func TestReplicaDataIterator(t *testing.T) {
 	defer tc.Stop()
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
-	newDesc := *tc.rng.Desc()
+	newDesc := *tc.repl.Desc()
 	newDesc.StartKey = roachpb.RKey("b")
 	newDesc.EndKey = roachpb.RKey("c")
-	if err := tc.rng.setDesc(&newDesc); err != nil {
+	if err := tc.repl.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
 	// Create two more ranges, one before the test range and one after.
@@ -168,11 +168,11 @@ func TestReplicaDataIterator(t *testing.T) {
 
 	// Create range data for all three ranges.
 	preKeys := createRangeData(t, preRng)
-	curKeys := createRangeData(t, tc.rng)
+	curKeys := createRangeData(t, tc.repl)
 	postKeys := createRangeData(t, postRng)
 
 	// Verify the contents of the "b"-"c" range.
-	iter := NewReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	i := 0
 	for ; iter.Valid(); iter.Next() {
@@ -194,8 +194,8 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 
 	// Verify that the replicated-only iterator ignores unreplicated keys.
-	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(tc.rng.RangeID)
-	iter = NewReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), true /* replicatedOnly */)
+	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(tc.repl.RangeID)
+	iter = NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), true /* replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := iter.Error(); err != nil {
@@ -207,15 +207,15 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 
 	// Destroy range and verify that its data has been completely cleared.
-	if err := tc.store.removeReplicaImpl(tc.rng, *tc.rng.Desc(), true); err != nil {
+	if err := tc.store.removeReplicaImpl(tc.repl, *tc.repl.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
-	iter = NewReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
+	iter = NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	if iter.Valid() {
 		// If the range is destroyed, only a tombstone key should be there.
 		k1 := iter.Key().Key
-		if tombstoneKey := keys.RaftTombstoneKey(tc.rng.RangeID); !bytes.Equal(k1, tombstoneKey) {
+		if tombstoneKey := keys.RaftTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
 			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
 		}
 
