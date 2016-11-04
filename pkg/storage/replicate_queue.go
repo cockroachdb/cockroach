@@ -114,11 +114,23 @@ func (rq *replicateQueue) shouldQueue(
 		}
 		return true, priority
 	}
-	// See if there is a rebalancing opportunity present.
-	leaseStoreID := repl.store.StoreID()
-	if lease, _ := repl.getLease(); lease != nil {
+
+	// If we hold the lease check to see if we should transfer for it.
+	var leaseStoreID roachpb.StoreID
+	if lease, _ := repl.getLease(); lease != nil && lease.Covers(now) {
 		leaseStoreID = lease.Replica.StoreID
+		if rq.allocator.ShouldTransferLease(
+			zone.Constraints, leaseStoreID, desc.RangeID) {
+			if log.V(2) {
+				log.Infof(ctx, "%s lease transfer needed, enqueuing", repl)
+			}
+			return true, 0
+		}
 	}
+
+	// Check for a rebalancing opportunity. Note that leaseStoreID will be 0 if
+	// the range doesn't currently have a lease which will allow the current
+	// replica to be considered a rebalancing source.
 	target, err := rq.allocator.RebalanceTarget(
 		zone.Constraints,
 		desc.Replicas,
@@ -182,23 +194,46 @@ func (rq *replicateQueue) process(
 		}
 	case AllocatorRemove:
 		log.Event(ctx, "removing a replica")
-		// We require the lease in order to process replicas, so
-		// repl.store.StoreID() corresponds to the lease-holder's store ID.
+		// If the lease holder (our local store) is an overfull store (in terms of
+		// leases) allow transferring the lease away.
+		leaseHolderStoreID := repl.store.StoreID()
+		if rq.allocator.ShouldTransferLease(zone.Constraints, leaseHolderStoreID, desc.RangeID) {
+			leaseHolderStoreID = 0
+		}
 		removeReplica, err := rq.allocator.RemoveTarget(
 			zone.Constraints,
 			desc.Replicas,
-			repl.store.StoreID(),
+			leaseHolderStoreID,
 		)
 		if err != nil {
 			return err
 		}
-		log.VEventf(ctx, 1, "removing replica %+v due to over-replication", removeReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
-			return err
-		}
-		// Do not requeue if we removed ourselves.
 		if removeReplica.StoreID == repl.store.StoreID() {
-			return nil
+			// The local replica was selected as the removal target, but that replica
+			// is the leaseholder, so transfer the lease instead. We don't check that
+			// the current store has too many leases in this case under the
+			// assumption that replica balance is a greater concern. Also note that
+			// AllocatorRemove action takes preference over AllocatorNoop
+			// (rebalancing) which is where lease transfer would otherwise occur. We
+			// need to be able to transfer leases in AllocatorRemove in order to get
+			// out of situations where this store is overfull and yet holds all the
+			// leases.
+			target := rq.allocator.TransferLeaseTarget(
+				zone.Constraints, desc.Replicas, repl.store.StoreID(), desc.RangeID,
+				false /* checkTransferLeaseSource */)
+			if target != (roachpb.ReplicaDescriptor{}) {
+				log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+				if err := repl.AdminTransferLease(target.StoreID); err != nil {
+					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+				}
+				// Do not requeue as we transferred our lease away.
+				return nil
+			}
+		} else {
+			log.VEventf(ctx, 1, "removing replica %+v due to over-replication", removeReplica)
+			if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
+				return err
+			}
 		}
 	case AllocatorRemoveDead:
 		log.Event(ctx, "removing a dead replica")
@@ -214,12 +249,24 @@ func (rq *replicateQueue) process(
 			return err
 		}
 	case AllocatorNoop:
-		log.Event(ctx, "considering a rebalance")
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		//
+		log.Event(ctx, "considering a rebalance")
+
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
+		target := rq.allocator.TransferLeaseTarget(
+			zone.Constraints, desc.Replicas, repl.store.StoreID(), desc.RangeID,
+			true /* checkTransferLeaseSource */)
+		if target.StoreID != 0 {
+			log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+			if err := repl.AdminTransferLease(target.StoreID); err != nil {
+				return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+			}
+			// Do not requeue as we transferred our lease away.
+			return nil
+		}
+
 		rebalanceStore, err := rq.allocator.RebalanceTarget(
 			zone.Constraints,
 			desc.Replicas,
