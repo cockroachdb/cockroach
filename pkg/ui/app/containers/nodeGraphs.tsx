@@ -1,8 +1,9 @@
 import * as React from "react";
 import * as d3 from "d3";
-import { IInjectedProps } from "react-router";
+import { IInjectedProps, IRouter } from "react-router";
+import { connect } from "react-redux";
 
-import { nodeIDAttr } from "./../util/constants";
+import { nodeQueryString } from "./../util/constants";
 
 import GraphGroup from "../components/graphGroup";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
@@ -13,19 +14,27 @@ import { NanoToMilli } from "../util/convert";
 /**
  * Renders the main content of the help us page.
  */
-export default class extends React.Component<IInjectedProps, {}> {
+class NodeGraphs extends React.Component<IInjectedProps, {}> {
   static displayTimeScale = true;
+
+  // Magic to add react router to the context.
+  // See https://github.com/ReactTraining/react-router/issues/975
+  static contextTypes = {
+    router: React.PropTypes.object.isRequired,
+  };
+  context: { router?: IRouter & IInjectedProps; };
 
   render() {
     let sources: string[];
-    let node = this.props.params[nodeIDAttr];
+    let node = (this.context.router.location.query as any)[nodeQueryString];
     sources = node ? [node] : null;
     let specifier = node ? `on node ${node}` : "across all nodes";
 
     return <div className="section node">
       <div className="charts">
-        <h2>Activity</h2>
-          <GraphGroup groupId="node.activity">
+        <GraphGroup groupId="node.activity" default>
+          <h2>Activity</h2>
+
           <LineGraph title="SQL Connections" sources={sources} tooltip={`The total number of active SQL connections ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.conns" title="Client Connections" />
@@ -77,8 +86,8 @@ export default class extends React.Component<IInjectedProps, {}> {
             </LineGraph>
 
           </GraphGroup>
-        <h2>SQL Queries</h2>
-          <GraphGroup groupId="node.queries">
+        <GraphGroup groupId="node.queries">
+          <h2>SQL Queries</h2>
             <LineGraph title="Reads" sources={sources} tooltip={`The average number of SELECT statements per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
@@ -108,9 +117,9 @@ export default class extends React.Component<IInjectedProps, {}> {
             </LineGraph>
 
           </GraphGroup>
-        <h2>System Resources</h2>
-          <GraphGroup groupId="node.resources">
 
+          <GraphGroup groupId="node.resources">
+            <h2>System Resources</h2>
             <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
                 <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
@@ -153,9 +162,9 @@ export default class extends React.Component<IInjectedProps, {}> {
             </LineGraph>
 
           </GraphGroup>
-        <h2>Advanced Internals</h2>
-          <GraphGroup groupId="node.internals">
 
+          <GraphGroup groupId="node.internals">
+            <h2>Advanced Internals</h2>
             <StackedAreaGraph title="Key/Value Transactions" sources={sources}>
               <Axis label="transactions/sec" format={ d3.format(".1f") }>
                 <Metric name="cr.node.txn.commits-count" title="Commits" nonNegativeRate />
@@ -424,3 +433,5 @@ export default class extends React.Component<IInjectedProps, {}> {
     </div>;
   }
 }
+
+export default connect()(NodeGraphs);

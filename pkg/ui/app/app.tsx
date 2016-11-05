@@ -32,6 +32,7 @@
 
 import "nvd3/build/nv.d3.min.css!";
 import "build/app.css!";
+import "react-select/dist/react-select.css!";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -42,15 +43,12 @@ import { tableNameAttr, databaseNameAttr, nodeIDAttr} from "./util/constants";
 
 import { store, history } from "./redux/state";
 import Layout from "./containers/layout";
-import Cluster from "./containers/cluster";
-import ClusterOverview from "./containers/clusterOverview";
-import ClusterEvents from "./containers/clusterEvents";
 import { DatabaseTablesList, DatabaseGrantsList } from "./containers/databases/databases";
 import TableDetails from "./containers/databases/tableDetails";
 import HelpUs from "./containers/helpus";
 import Nodes from "./containers/nodes";
-import NodesOverview from "./containers/nodesOverview";
 import Node from "./containers/node";
+import NodesOverview from "./containers/nodesOverview";
 import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
@@ -72,14 +70,16 @@ ReactDOM.render(
     <Router history={history}>
       <Route path="/" component={Layout}>
         <IndexRedirect to="cluster" />
-        <Route path="cluster" component={ Cluster }>
-          <IndexRoute component={ ClusterOverview } />
-          <Route path="events" component={ ClusterEvents } />
+        <Route path="cluster" component={ Nodes }> {/* /cluster */}
+          <IndexRedirect to="dashboard" />
+          <Route path="dashboard" component={NodeGraphs} > {/* /cluster/dashboard */}
+            <Route path={ `:${nodeIDAttr}` } /> {/* /cluster/dashboard/:nodeIDAttr: */}
+          </Route>
         </Route>
-        <Route path="nodes" component={ Nodes }>
+        <Route path="nodes" >
           <IndexRedirect to="overview" />
           <Route path="overview" component={ NodesOverview } />
-          <Route path="graphs" component={ NodeGraphs } />
+          <Route path="graphs" component={NodeGraphs} />
         </Route>
         <Route path="nodes">
           // This path has to match the "nodes" route for the purpose of
