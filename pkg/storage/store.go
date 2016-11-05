@@ -2427,8 +2427,8 @@ func (s *Store) Send(
 	// context was canceled or timed out. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional
 	// cases and the original error otherwise.
-	if ctx.Err() != nil {
-		return nil, roachpb.NewError(ctx.Err())
+	if err := ctx.Err(); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	log.Event(ctx, "store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {

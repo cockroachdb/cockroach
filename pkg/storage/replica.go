@@ -1243,6 +1243,22 @@ func (r *Replica) beginCmds(
 		// a large read-only span but also a write (see #10084).
 		readOnly := ba.IsReadOnly()
 
+		// Check for context cancellation before inserting into the
+		// command queue (and check again afterward). Once we're in the
+		// command queue we're committed to waiting on our prerequisites
+		// (which costs a goroutine, and slightly increases the cost of
+		// other commands that might wait on our keys), so it's good to
+		// bail out early if we can.
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			errStr := fmt.Sprintf("%s before command queue: %s", err, ba)
+			log.Warning(ctx, errStr)
+			log.ErrEvent(ctx, errStr)
+			return nil, err
+		default:
+		}
+
 		r.cmdQMu.Lock()
 		chans := r.cmdQMu.global.getWait(readOnly, spansGlobal...)
 		chans = append(chans, r.cmdQMu.global.getWait(readOnly, spansLocal...)...)
