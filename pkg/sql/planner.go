@@ -233,7 +233,9 @@ func (p *planner) resetContexts() {
 }
 
 // runShowTransactionState returns the state of current transaction.
-func (p *planner) runShowTransactionState(txnState *txnState, implicitTxn bool) (Result, error) {
+func (p *planner) runShowTransactionState(
+	ctx context.Context, txnState *txnState, implicitTxn bool,
+) (Result, error) {
 	var result Result
 	result.PGTag = (*parser.Show)(nil).StatementTag()
 	result.Type = (*parser.Show)(nil).StatementType()
@@ -243,8 +245,10 @@ func (p *planner) runShowTransactionState(txnState *txnState, implicitTxn bool) 
 	if implicitTxn {
 		state = NoTxn
 	}
-	if _, err := result.Rows.AddRow(parser.Datums{parser.NewDString(state.String())}); err != nil {
-		result.Rows.Close()
+	if _, err := result.Rows.AddRow(
+		ctx, parser.Datums{parser.NewDString(state.String())},
+	); err != nil {
+		result.Rows.Close(ctx)
 		return result, err
 	}
 	return result, nil
