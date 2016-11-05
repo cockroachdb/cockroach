@@ -1822,98 +1822,124 @@ func TestReplicaCommandQueue(t *testing.T) {
 	tooLong := 5 * time.Second
 
 	for _, test := range testCases {
-		readWriteLabels := map[bool]string{true: "read", false: "write"}
-		testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
-			readWriteLabels[test.cmd2Read])
-		t.Run(testName,
-			func(t *testing.T) {
-				key1 := roachpb.Key(fmt.Sprintf("key1-%s", testName))
-				key2 := roachpb.Key(fmt.Sprintf("key2-%s", testName))
-				// Asynchronously put a value to the rng with blocking enabled.
-				cmd1Done := make(chan struct{})
-				if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-					args := readOrWriteArgs(key1, test.cmd1Read)
+		for _, addNoop := range []bool{false, true} {
+			readWriteLabels := map[bool]string{true: "read", false: "write"}
+			testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
+				readWriteLabels[test.cmd2Read])
+			if addNoop {
+				testName += "-noop"
+			}
+			t.Run(testName,
+				func(t *testing.T) {
 
-					_, pErr := tc.SendWrappedWith(roachpb.Header{
-						UserPriority: 42,
-					}, args)
+					sendWithHeader := func(header roachpb.Header, args roachpb.Request) *roachpb.Error {
+						ba := roachpb.BatchRequest{}
+						ba.Header = header
+						ba.Add(args)
 
-					if pErr != nil {
-						t.Fatal(pErr)
-					}
-					close(cmd1Done)
-				}); err != nil {
-					t.Fatal(err)
-				}
-				// Wait for cmd1 to get into the command queue.
-				<-blockingStart
-
-				// First, try a command for same key as cmd1 to verify it blocks.
-				cmd2Done := make(chan struct{})
-				if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-					args := readOrWriteArgs(key1, test.cmd2Read)
-
-					_, pErr := tc.SendWrapped(args)
-
-					if pErr != nil {
-						t.Fatal(pErr)
-					}
-					close(cmd2Done)
-				}); err != nil {
-					t.Fatal(err)
-				}
-
-				// Next, try read for a non-impacted key--should go through immediately.
-				cmd3Done := make(chan struct{})
-				if !propEvalKV {
-					if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-						args := readOrWriteArgs(key2, true)
-
-						_, pErr := tc.SendWrapped(args)
-
-						if pErr != nil {
-							t.Fatal(pErr)
+						if addNoop {
+							ba.Add(&roachpb.NoopRequest{})
 						}
-						close(cmd3Done)
+
+						_, pErr := tc.Sender().Send(context.Background(), ba)
+						return pErr
+					}
+
+					key1 := roachpb.Key(fmt.Sprintf("key1-%s", testName))
+					key2 := roachpb.Key(fmt.Sprintf("key2-%s", testName))
+					// Asynchronously put a value to the rng with blocking enabled.
+					cmd1Done := make(chan *roachpb.Error, 1)
+					if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+						args := readOrWriteArgs(key1, test.cmd1Read)
+
+						pErr := sendWithHeader(roachpb.Header{
+							UserPriority: 42,
+						}, args)
+
+						cmd1Done <- pErr
 					}); err != nil {
 						t.Fatal(err)
 					}
-				} else {
-					close(cmd3Done)
-				}
-
-				if test.expWait {
-					// Verify cmd3 finishes but not cmd2.
+					// Wait for cmd1 to get into the command queue.
 					select {
-					case <-cmd2Done:
-						t.Fatal("should not have been able to execute cmd2")
-					case <-cmd3Done:
-						// success.
-					case <-cmd1Done:
-						t.Fatal("should not have been able execute cmd1 while blocked")
+					case <-blockingStart:
 					case <-time.After(tooLong):
-						t.Fatalf("waited %s for cmd3 of key2", tooLong)
+						t.Fatalf("waited %s for cmd1 to enter command queue", tooLong)
 					}
-				} else {
-					select {
-					case <-cmd2Done:
-						// success.
-					case <-cmd1Done:
-						t.Fatal("should not have been able to execute cmd1 while blocked")
-					case <-time.After(tooLong):
-						t.Fatalf("waited %s for cmd2 of key1", tooLong)
-					}
-					<-cmd3Done
-				}
 
-				blockingDone <- struct{}{}
-				select {
-				case <-cmd2Done:
-					// success.
-				case <-time.After(tooLong):
-					t.Fatalf("waited %s for cmd2 of key1", tooLong)
-				}
-			})
+					// First, try a command for same key as cmd1 to verify it blocks.
+					cmd2Done := make(chan *roachpb.Error, 1)
+					if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+						args := readOrWriteArgs(key1, test.cmd2Read)
+
+						pErr := sendWithHeader(roachpb.Header{}, args)
+
+						cmd2Done <- pErr
+					}); err != nil {
+						t.Fatal(err)
+					}
+
+					// Next, try read for a non-impacted key--should go through immediately.
+					cmd3Done := make(chan *roachpb.Error, 1)
+					if !propEvalKV {
+						if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+							args := readOrWriteArgs(key2, true)
+
+							pErr := sendWithHeader(roachpb.Header{}, args)
+
+							cmd3Done <- pErr
+						}); err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						close(cmd3Done)
+					}
+
+					if test.expWait {
+						// Verify cmd3 finishes but not cmd2.
+						select {
+						case pErr := <-cmd2Done:
+							t.Fatalf("should not have been able to execute cmd2 (pErr: %v)", pErr)
+						case pErr := <-cmd3Done:
+							if pErr != nil {
+								t.Fatalf("cmd3 failed: %s", pErr)
+							}
+							// success.
+						case pErr := <-cmd1Done:
+							t.Fatalf("should not have been able execute cmd1 while blocked (pErr: %v)", pErr)
+						case <-time.After(tooLong):
+							t.Fatalf("waited %s for cmd3 of key2", tooLong)
+						}
+					} else {
+						select {
+						case pErr := <-cmd2Done:
+							if pErr != nil {
+								t.Fatalf("cmd2 failed: %s", pErr)
+							}
+							// success.
+						case pErr := <-cmd1Done:
+							t.Fatalf("should not have been able to execute cmd1 while blocked (pErr: %v)", pErr)
+						case <-time.After(tooLong):
+							t.Fatalf("waited %s for cmd2 of key1", tooLong)
+						}
+						<-cmd3Done
+					}
+
+					blockingDone <- struct{}{}
+					// Wait for cmd2 now if it didn't finish above.
+					if test.expWait {
+						select {
+						case pErr := <-cmd2Done:
+							if pErr != nil {
+								t.Fatalf("cmd2 failed: %s", pErr)
+							}
+							// success.
+						case <-time.After(tooLong):
+							t.Fatalf("waited %s for cmd2 of key1", tooLong)
+						}
+					}
+				})
+		}
 	}
 }
 
