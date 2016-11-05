@@ -86,6 +86,8 @@ type planner struct {
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
 // makePlanner creates a new planner instance, referencing a dummy session.
+// finishInternalPlanner() needs to be called to properly close the returned
+// planner.
 func makeInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
 ) *planner {
@@ -133,6 +135,13 @@ func makeInternalPlanner(
 }
 
 func finishInternalPlanner(p *planner) {
+	// If we're panicking, don't bother stopping the MemoryMonitors (everything
+	// below). We're likely in a state where not all memory has been properly
+	// released to the monitors, so Stop() would panic again and add confusion to
+	// stack traces.
+	if r := recover(); r != nil {
+		panic(r)
+	}
 	p.session.TxnState.mon.Stop(p.session.context)
 	p.session.sessionMon.Stop(p.session.context)
 	p.session.mon.Stop(p.session.context)
