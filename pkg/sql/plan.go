@@ -220,6 +220,9 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	if err != nil {
 		return nil, err
 	}
+	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		return nil, err
+	}
 	if err := plan.expandPlan(); err != nil {
 		return nil, err
 	}
