@@ -40,11 +40,13 @@ export default class extends React.Component<{}, {}> {
     return <div id="header">
       <header>
         <ul className="nav">
-          <IconLink to="/" icon={Icons.cockroachIcon} className="cockroach" />
-          <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster"/>
+          <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster" />
           <IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
           <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
           <IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
+        </ul>
+        <ul className="nav bottom">
+          <IconLink to="/" icon={Icons.cockroachIcon} className="cockroach" />
         </ul>
       </header>
     </div>;

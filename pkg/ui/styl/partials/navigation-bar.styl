@@ -23,11 +23,11 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 // ---- Navigation ----
 $navbar-bg            = white
 $navbar-border        = $secondary-gray-1
-$main-nav-inactive    = $main-gray
-$main-nav-active-bg   = $main-navy
-$main-nav-active-font = white
-$main-nav-active-icon = $main-green
-$main-nav-hover       = $main-dark-gray
+$main-nav-inactive    = $secondary-gray-17
+$main-nav-active-bg   = $secondary-gray-4
+$main-nav-active-font = $secondary-blue-3
+$main-nav-active-icon = $secondary-blue-3
+$main-nav-hover       = $secondary-blue-3
 $subnav-active-color  = $secondary-green-1
 $subnav-text-color    = $secondary-slate-gray
 $subnav-hover-color   = $main-dark-gray
@@ -35,13 +35,14 @@ $subnav-hover-color   = $main-dark-gray
 $subnav-underline-height = 3px
 
 #header
-  position absolute
+  position fixed
   top 0
   left 0
+  bottom 0
+  min-height 350px
   z-index 1
   width $nav-width
   modular-font-size '1'
-  min-height 100%
   background-color $navbar-bg
   border-right 1px solid $navbar-border
   margin 0
@@ -51,6 +52,11 @@ $subnav-underline-height = 3px
 header
   ul.nav
     width 100%
+
+    &.bottom
+      position absolute
+      bottom 0
+
     li
       width 100%
       padding 0
@@ -70,6 +76,9 @@ header
         &.active, &.active:hover
           color $main-nav-active-font
           background-color $main-nav-active-bg
+          position relative
+          right -1px
+          border-right 2px solid $main-nav-active-bg
 
           path
             fill $main-nav-active-icon
@@ -135,6 +144,12 @@ header
         display inline-block
         margin-right 3rem
         height $subnav-height
+
+        &.title
+
+        &.selector
+          padding-right 0
+          margin-right 3em
 
         &.active, &.active:hover
           color $subnav-active-color

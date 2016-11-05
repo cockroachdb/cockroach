@@ -26,7 +26,7 @@ class HelpusBanner extends React.Component<HelpusBannerProps, {}> {
   }
 
   dismiss = () => {
-    setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+    this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
     if (this.props.attributesLoaded) {
       let attributes = this.props.attributes || new OptInAttributes();
       attributes.dismissed = attributes.dismissed ? attributes.dismissed + 1 : 1;
