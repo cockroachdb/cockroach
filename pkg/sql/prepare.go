@@ -19,6 +19,8 @@ package sql
 import (
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -80,12 +82,12 @@ func (ps PreparedStatements) New(
 	// statement name. When we start storing the prepared query plan
 	// during prepare, this should be tallied up to the monitor as well.
 	sz := int64(uintptr(len(query)+len(name)) + unsafe.Sizeof(*stmt))
-	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(sz); err != nil {
+	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(ps.session.Ctx(), sz); err != nil {
 		return nil, err
 	}
 
 	if prevStmt, ok := ps.Get(name); ok {
-		prevStmt.memAcc.Wsession(ps.session).Close()
+		prevStmt.memAcc.Wsession(ps.session).Close(ps.session.Ctx())
 	}
 
 	ps.stmts[name] = stmt
@@ -94,17 +96,17 @@ func (ps PreparedStatements) New(
 
 // Delete removes the PreparedStatement with the provided name from the PreparedStatements.
 // The method returns whether a statement with that name was found and removed.
-func (ps PreparedStatements) Delete(name string) bool {
+func (ps PreparedStatements) Delete(ctx context.Context, name string) bool {
 	if stmt, ok := ps.Get(name); ok {
 		if ps.session.PreparedPortals.portals != nil {
 			for portalName := range stmt.portalNames {
 				if portal, ok := ps.session.PreparedPortals.Get(name); ok {
 					delete(ps.session.PreparedPortals.portals, portalName)
-					portal.memAcc.Wsession(ps.session).Close()
+					portal.memAcc.Wsession(ps.session).Close(ctx)
 				}
 			}
 		}
-		stmt.memAcc.Wsession(ps.session).Close()
+		stmt.memAcc.Wsession(ps.session).Close(ctx)
 		delete(ps.stmts, name)
 		return true
 	}
@@ -112,19 +114,19 @@ func (ps PreparedStatements) Delete(name string) bool {
 }
 
 // closeAll de-registers all statements and portals from the monitor.
-func (ps PreparedStatements) closeAll(s *Session) {
+func (ps PreparedStatements) closeAll(ctx context.Context, s *Session) {
 	for _, stmt := range ps.stmts {
-		stmt.memAcc.Wsession(s).Close()
+		stmt.memAcc.Wsession(s).Close(ctx)
 	}
 	for _, portal := range s.PreparedPortals.portals {
-		portal.memAcc.Wsession(s).Close()
+		portal.memAcc.Wsession(s).Close(ctx)
 	}
 }
 
 // ClearStatementsAndPortals de-registers all statements and
 // portals. Afterwards none can be added any more.
-func (s *Session) ClearStatementsAndPortals() {
-	s.PreparedStatements.closeAll(s)
+func (s *Session) ClearStatementsAndPortals(ctx context.Context) {
+	s.PreparedStatements.closeAll(ctx, s)
 	s.PreparedStatements.stmts = nil
 	s.PreparedPortals.portals = nil
 }
@@ -133,8 +135,8 @@ func (s *Session) ClearStatementsAndPortals() {
 // remove all PreparedPortals from the session's PreparedPortals.
 // This is used by the "delete" message in the pgwire protocol; after DeleteAll
 // statements and portals can be added again.
-func (ps *PreparedStatements) DeleteAll() {
-	ps.closeAll(ps.session)
+func (ps *PreparedStatements) DeleteAll(ctx context.Context) {
+	ps.closeAll(ctx, ps.session)
 	ps.stmts = make(map[string]*PreparedStatement)
 	ps.session.PreparedPortals.portals = make(map[string]*PreparedPortal)
 }
@@ -178,21 +180,21 @@ func (pp PreparedPortals) Exists(name string) bool {
 // New creates a new PreparedPortal with the provided name and corresponding
 // PreparedStatement, binding the statement using the given QueryArguments.
 func (pp PreparedPortals) New(
-	name string, stmt *PreparedStatement, qargs parser.QueryArguments,
+	ctx context.Context, name string, stmt *PreparedStatement, qargs parser.QueryArguments,
 ) (*PreparedPortal, error) {
 	portal := &PreparedPortal{
 		Stmt:  stmt,
 		Qargs: qargs,
 	}
 	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
-	if err := portal.memAcc.Wsession(pp.session).OpenAndInit(sz); err != nil {
+	if err := portal.memAcc.Wsession(pp.session).OpenAndInit(ctx, sz); err != nil {
 		return nil, err
 	}
 
 	stmt.portalNames[name] = struct{}{}
 
 	if prevPortal, ok := pp.Get(name); ok {
-		prevPortal.memAcc.Wsession(pp.session).Close()
+		prevPortal.memAcc.Wsession(pp.session).Close(ctx)
 	}
 
 	pp.portals[name] = portal
@@ -201,10 +203,10 @@ func (pp PreparedPortals) New(
 
 // Delete removes the PreparedPortal with the provided name from the PreparedPortals.
 // The method returns whether a portal with that name was found and removed.
-func (pp PreparedPortals) Delete(name string) bool {
+func (pp PreparedPortals) Delete(ctx context.Context, name string) bool {
 	if portal, ok := pp.Get(name); ok {
 		delete(portal.Stmt.portalNames, name)
-		portal.memAcc.Wsession(pp.session).Close()
+		portal.memAcc.Wsession(pp.session).Close(ctx)
 		delete(pp.portals, name)
 		return true
 	}

@@ -152,13 +152,13 @@ func queryInfoSchema(
 			return err
 		}
 		for _, r := range rows {
-			if _, err := v.rows.AddRow(r); err != nil {
+			if _, err := v.rows.AddRow(ctx, r); err != nil {
 				return err
 			}
 		}
 		return nil
 	}); err != nil {
-		v.rows.Close()
+		v.rows.Close(ctx)
 		return nil, err
 	}
 	return v, nil
@@ -196,9 +196,9 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 					gen := varGen[vName]
 					value := gen(p)
 					if _, err := v.rows.AddRow(
-						parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
+						p.ctx(), parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
-						v.rows.Close()
+						v.rows.Close(p.ctx())
 						return nil, err
 					}
 				}
@@ -207,8 +207,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// check above.
 				gen := varGen[name]
 				value := gen(p)
-				if _, err := v.rows.AddRow(parser.Datums{parser.NewDString(value)}); err != nil {
-					v.rows.Close()
+				if _, err := v.rows.AddRow(p.ctx(), parser.Datums{parser.NewDString(value)}); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -330,15 +330,15 @@ func (p *planner) ShowCreateTable(ctx context.Context, n *parser.ShowCreateTable
 
 			s, err := p.showCreateTable(ctx, tn.TableName, desc)
 			if err != nil {
-				v.rows.Close()
+				v.rows.Close(p.ctx())
 				return nil, err
 			}
 
-			if _, err := v.rows.AddRow(parser.Datums{
+			if _, err := v.rows.AddRow(p.ctx(), parser.Datums{
 				parser.NewDString(tn.String()),
 				parser.NewDString(s),
 			}); err != nil {
-				v.rows.Close()
+				v.rows.Close(p.ctx())
 				return nil, err
 			}
 			return v, nil
@@ -529,11 +529,11 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
-			if _, err := v.rows.AddRow(parser.Datums{
+			if _, err := v.rows.AddRow(p.ctx(), parser.Datums{
 				parser.NewDString(n.View.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
-				v.rows.Close()
+				v.rows.Close(p.ctx())
 				return nil, err
 			}
 			return v, nil
@@ -588,7 +588,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 					return err
 				}
 				for _, r := range rows {
-					if _, err := v.rows.AddRow(r); err != nil {
+					if _, err := v.rows.AddRow(ctx, r); err != nil {
 						return err
 					}
 				}
@@ -604,7 +604,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 				paramSeq := 1
 				for _, db := range n.Targets.Databases.ToStrings() {
 					if err := checkDBExists(ctx, p, db); err != nil {
-						v.rows.Close()
+						v.rows.Close(ctx)
 						return nil, err
 					}
 
@@ -625,7 +625,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 					schemaGrants = fmt.Sprintf(`%s AND GRANTEE IN(%s)`, schemaGrants, strings.Join(paramHolders, ","))
 				}
 				if err := queryFn(schemaGrants, params...); err != nil {
-					v.rows.Close()
+					v.rows.Close(ctx)
 					return nil, err
 				}
 			}
@@ -640,17 +640,17 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 				for _, tableTarget := range n.Targets.Tables {
 					tableGlob, err := tableTarget.NormalizeTablePattern()
 					if err != nil {
-						v.rows.Close()
+						v.rows.Close(ctx)
 						return nil, err
 					}
 					tables, err := p.expandTableGlob(tableGlob)
 					if err != nil {
-						v.rows.Close()
+						v.rows.Close(ctx)
 						return nil, err
 					}
 					for i := range tables {
 						if err := checkTableExists(ctx, p, &tables[i]); err != nil {
-							v.rows.Close()
+							v.rows.Close(ctx)
 							return nil, err
 						}
 
@@ -673,7 +673,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 					tableGrants = fmt.Sprintf(`%s AND GRANTEE IN(%s)`, tableGrants, strings.Join(paramHolders, ","))
 				}
 				if err := queryFn(tableGrants, params...); err != nil {
-					v.rows.Close()
+					v.rows.Close(ctx)
 					return nil, err
 				}
 			}
@@ -806,7 +806,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *parser.ShowConstraints
 					columnsDatum,
 					detailsDatum,
 				}
-				if _, err := v.rows.AddRow(newRow); err != nil {
+				if _, err := v.rows.AddRow(ctx, newRow); err != nil {
 					v.Close(ctx)
 					return nil, err
 				}
@@ -898,7 +898,7 @@ func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
 					parser.NewDString(f.Category()),
 					parser.NewDString(f.Info),
 				}
-				if _, err := v.rows.AddRow(row); err != nil {
+				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)
 					return nil, err
 				}

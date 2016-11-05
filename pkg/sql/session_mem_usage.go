@@ -45,25 +45,21 @@ type WrappableMemoryAccount struct {
 	acc mon.MemoryAccount
 }
 
-// Wsession captures the current session monitor pointer and session
-// logging context so they can be provided transparently to the other
-// Account APIs below.
+// Wsession captures the current session monitor pointer so it can be provided
+// transparently to the other Account APIs below.
 func (w *WrappableMemoryAccount) Wsession(s *Session) WrappedMemoryAccount {
 	return WrappedMemoryAccount{
 		acc: &w.acc,
 		mon: &s.sessionMon,
-		ctx: s.context,
 	}
 }
 
-// Wtxn captures the current txn-specific monitor pointer and session
-// logging context so they can be provided transparently to the other
-// Account APIs below.
+// Wtxn captures the current txn-specific monitor pointer so it can be provided
+// transparently to the other Account APIs below.
 func (w *WrappableMemoryAccount) Wtxn(s *Session) WrappedMemoryAccount {
 	return WrappedMemoryAccount{
 		acc: &w.acc,
 		mon: &s.TxnState.mon,
-		ctx: s.TxnState.Ctx,
 	}
 }
 
@@ -72,32 +68,31 @@ func (w *WrappableMemoryAccount) Wtxn(s *Session) WrappedMemoryAccount {
 type WrappedMemoryAccount struct {
 	acc *mon.MemoryAccount
 	mon *mon.MemoryMonitor
-	ctx context.Context
 }
 
 // OpenAndInit interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) OpenAndInit(initialAllocation int64) error {
-	return w.mon.OpenAndInitAccount(w.ctx, w.acc, initialAllocation)
+func (w WrappedMemoryAccount) OpenAndInit(ctx context.Context, initialAllocation int64) error {
+	return w.mon.OpenAndInitAccount(ctx, w.acc, initialAllocation)
 }
 
 // Grow interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) Grow(extraSize int64) error {
-	return w.mon.GrowAccount(w.ctx, w.acc, extraSize)
+func (w WrappedMemoryAccount) Grow(ctx context.Context, extraSize int64) error {
+	return w.mon.GrowAccount(ctx, w.acc, extraSize)
 }
 
 // Close interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) Close() {
-	w.mon.CloseAccount(w.ctx, w.acc)
+func (w WrappedMemoryAccount) Close(ctx context.Context) {
+	w.mon.CloseAccount(ctx, w.acc)
 }
 
 // Clear interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) Clear() {
-	w.mon.ClearAccount(w.ctx, w.acc)
+func (w WrappedMemoryAccount) Clear(ctx context.Context) {
+	w.mon.ClearAccount(ctx, w.acc)
 }
 
 // ResizeItem interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) ResizeItem(oldSize, newSize int64) error {
-	return w.mon.ResizeItem(w.ctx, w.acc, oldSize, newSize)
+func (w WrappedMemoryAccount) ResizeItem(ctx context.Context, oldSize, newSize int64) error {
+	return w.mon.ResizeItem(ctx, w.acc, oldSize, newSize)
 }
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
@@ -148,9 +143,9 @@ func (s *Session) deriveAndStartMonitors() {
 }
 
 func (s *Session) makeBoundAccount() mon.BoundAccount {
-	return s.sessionMon.MakeBoundAccount(s.context)
+	return s.sessionMon.MakeBoundAccount()
 }
 
 func (ts *txnState) makeBoundAccount() mon.BoundAccount {
-	return ts.mon.MakeBoundAccount(ts.Ctx)
+	return ts.mon.MakeBoundAccount()
 }

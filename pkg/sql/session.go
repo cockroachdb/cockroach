@@ -175,7 +175,7 @@ func (s *Session) Finish(e *Executor) {
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
 
-	s.ClearStatementsAndPortals()
+	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
 	s.mon.Stop(s.context)
 
