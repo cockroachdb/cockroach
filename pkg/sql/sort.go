@@ -363,7 +363,7 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 			// The plan we wrap is already a values node. Just sort it.
 			v.ordering = n.ordering
 			n.sortStrategy = newSortAllStrategy(v)
-			n.sortStrategy.Finish()
+			n.sortStrategy.Finish(ctx)
 			n.needSort = false
 			break
 		} else if n.sortStrategy == nil {
@@ -382,7 +382,7 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		if !next {
-			n.sortStrategy.Finish()
+			n.sortStrategy.Finish(ctx)
 			n.valueIter = n.sortStrategy
 			n.needSort = false
 			break
@@ -397,7 +397,7 @@ func (n *sortNode) Next(ctx context.Context) (bool, error) {
 		}
 
 		values := n.plan.Values()
-		if err := n.sortStrategy.Add(values); err != nil {
+		if err := n.sortStrategy.Add(ctx, values); err != nil {
 			return false, err
 		}
 
@@ -446,12 +446,12 @@ type sortingStrategy interface {
 	// Add adds a single value to the sortingStrategy. It guarantees that
 	// if it decided to store the provided value, that it will make a deep
 	// copy of it.
-	Add(parser.Datums) error
+	Add(context.Context, parser.Datums) error
 	// Finish terminates the sorting strategy, allowing for postprocessing
 	// after all values have been provided to the strategy. The method should
 	// not be called more than once, and should only be called after all Add
 	// calls have occurred.
-	Finish()
+	Finish(context.Context)
 }
 
 // sortAllStrategy reads in all values into the wrapped valuesNode and
@@ -469,12 +469,12 @@ func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *sortAllStrategy) Add(values parser.Datums) error {
-	_, err := ss.vNode.rows.AddRow(values)
+func (ss *sortAllStrategy) Add(ctx context.Context, values parser.Datums) error {
+	_, err := ss.vNode.rows.AddRow(ctx, values)
 	return err
 }
 
-func (ss *sortAllStrategy) Finish() {
+func (ss *sortAllStrategy) Finish(_ context.Context) {
 	ss.vNode.SortAll()
 }
 
@@ -516,12 +516,12 @@ func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *iterativeSortStrategy) Add(values parser.Datums) error {
-	_, err := ss.vNode.rows.AddRow(values)
+func (ss *iterativeSortStrategy) Add(ctx context.Context, values parser.Datums) error {
+	_, err := ss.vNode.rows.AddRow(ctx, values)
 	return err
 }
 
-func (ss *iterativeSortStrategy) Finish() {
+func (ss *iterativeSortStrategy) Finish(_ context.Context) {
 	ss.vNode.InitMinHeap()
 }
 
@@ -581,7 +581,7 @@ func newSortTopKStrategy(vNode *valuesNode, topK int64) sortingStrategy {
 	return ss
 }
 
-func (ss *sortTopKStrategy) Add(values parser.Datums) error {
+func (ss *sortTopKStrategy) Add(ctx context.Context, values parser.Datums) error {
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
@@ -592,7 +592,7 @@ func (ss *sortTopKStrategy) Add(values parser.Datums) error {
 		// Once the heap is full, only replace the top
 		// value if a new value is less than it. If so
 		// replace and fix the heap.
-		if err := ss.vNode.rows.Replace(0, values); err != nil {
+		if err := ss.vNode.rows.Replace(ctx, 0, values); err != nil {
 			return err
 		}
 		heap.Fix(ss.vNode, 0)
@@ -600,7 +600,7 @@ func (ss *sortTopKStrategy) Add(values parser.Datums) error {
 	return nil
 }
 
-func (ss *sortTopKStrategy) Finish() {
+func (ss *sortTopKStrategy) Finish(_ context.Context) {
 	// Pop all values in the heap, resulting in the inverted ordering
 	// being sorted in reverse. Therefore, the slice is ordered correctly
 	// in-place.

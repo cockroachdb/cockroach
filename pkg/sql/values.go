@@ -31,6 +31,7 @@ import (
 
 type valuesNode struct {
 	n        *parser.ValuesClause
+	ctx      context.Context
 	p        *planner
 	columns  ResultColumns
 	ordering sqlbase.ColumnOrdering
@@ -52,6 +53,7 @@ type valuesNode struct {
 
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
+		ctx:     p.ctx(),
 		columns: columns,
 		rows:    NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
 	}
@@ -61,6 +63,7 @@ func (p *planner) ValuesClause(
 	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
+		ctx:          p.ctx(),
 		p:            p,
 		n:            n,
 		desiredTypes: desiredTypes,
@@ -142,7 +145,7 @@ func (n *valuesNode) Start(_ context.Context) error {
 				}
 			}
 		}
-		if _, err := n.rows.AddRow(row); err != nil {
+		if _, err := n.rows.AddRow(n.p.ctx(), row); err != nil {
 			return err
 		}
 	}
@@ -184,7 +187,7 @@ func (n *valuesNode) Next(_ context.Context) (bool, error) {
 
 func (n *valuesNode) Close(_ context.Context) {
 	if n.rows != nil {
-		n.rows.Close()
+		n.rows.Close(n.ctx)
 		n.rows = nil
 	}
 }
@@ -234,7 +237,7 @@ var _ heap.Interface = (*valuesNode)(nil)
 
 // Push implements the heap.Interface interface.
 func (n *valuesNode) Push(x interface{}) {
-	_, n.err = n.rows.AddRow(n.tmpValues)
+	_, n.err = n.rows.AddRow(n.ctx, n.tmpValues)
 }
 
 // PushValues pushes the given Datums value into the heap representation

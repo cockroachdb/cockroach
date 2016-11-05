@@ -149,14 +149,14 @@ type StatementResults struct {
 }
 
 // Close ensures that the resources claimed by the results are released.
-func (s *StatementResults) Close() {
-	s.ResultList.Close()
+func (s *StatementResults) Close(ctx context.Context) {
+	s.ResultList.Close(ctx)
 }
 
 // Close ensures that the resources claimed by the results are released.
-func (rl ResultList) Close() {
+func (rl ResultList) Close(ctx context.Context) {
 	for _, r := range rl {
-		r.Close()
+		r.Close(ctx)
 	}
 }
 
@@ -181,11 +181,11 @@ type Result struct {
 }
 
 // Close ensures that the resources claimed by the result are released.
-func (r *Result) Close() {
+func (r *Result) Close(ctx context.Context) {
 	// The Rows pointer may be nil if the statement returned no rows or
 	// if an error occurred.
 	if r.Rows != nil {
-		r.Rows.Close()
+		r.Rows.Close(ctx)
 	}
 }
 
@@ -550,7 +550,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	}
 
 	if session.planner.copyFrom != nil {
-		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
+		stmts, err = session.planner.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
@@ -650,7 +650,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			var err error
 			if results != nil {
 				// Some results were produced by a previous attempt. Discard them.
-				ResultList(results).Close()
+				ResultList(results).Close(session.Ctx())
 			}
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
 
@@ -893,7 +893,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		// Run SHOW TRANSACTION STATUS in a separate code path so it is
 		// always guaranteed to execute regardless of the current transaction state.
 		if _, ok := stmt.(*parser.ShowTransactionStatus); ok {
-			res, err = planMaker.runShowTransactionState(txnState, implicitTxn)
+			res, err = planMaker.runShowTransactionState(ctx, txnState, implicitTxn)
 		} else {
 			switch txnState.State {
 			case Open:
@@ -1152,9 +1152,11 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{}, err
 	case *parser.Deallocate:
 		if s.Name == "" {
-			planMaker.session.PreparedStatements.DeleteAll()
+			planMaker.session.PreparedStatements.DeleteAll(session.Ctx())
 		} else {
-			if found := planMaker.session.PreparedStatements.Delete(string(s.Name)); !found {
+			if found := planMaker.session.PreparedStatements.Delete(
+				session.Ctx(), string(s.Name),
+			); !found {
 				err := fmt.Errorf("prepared statement %s does not exist", s.Name)
 				txnState.updateStateAndCleanupOnErr(err, e)
 				return Result{}, err
@@ -1167,7 +1169,7 @@ func (e *Executor) execStmtInOpenTxn(
 	result, err := e.execStmt(stmt, planMaker, autoCommit, isAutomaticRetry, tStart)
 	if err != nil {
 		if result.Rows != nil {
-			result.Rows.Close()
+			result.Rows.Close(session.Ctx())
 			result.Rows = nil
 		}
 		if traceSQL {
@@ -1271,7 +1273,7 @@ func commitSQLTransaction(
 // runs it.
 func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	recv := distSQLReceiver{rows: result.Rows}
+	recv := makeDistSQLReceiver(planMaker.session.Ctx(), result.Rows)
 	err := e.distSQLPlanner.PlanAndRun(planMaker.session.Ctx(), planMaker.txn, tree, &recv)
 	if err != nil {
 		return err
@@ -1311,7 +1313,7 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 					return err
 				}
 			}
-			if _, err := result.Rows.AddRow(values); err != nil {
+			if _, err := result.Rows.AddRow(planMaker.ctx(), values); err != nil {
 				return err
 			}
 		}

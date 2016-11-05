@@ -79,7 +79,7 @@ func doExpandPlan(
 		n.plan.MarkDebug(explainDebug)
 
 	case *explainDistSQLNode:
-		n.plan, err = doExpandPlan(p, noParams, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
