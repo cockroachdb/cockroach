@@ -1151,11 +1151,12 @@ func (d *DTuple) Compare(other Datum) int {
 // HasPrev implements the Datum interface.
 func (d *DTuple) HasPrev() bool {
 	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasPrev() {
-			return true
+		if !(*d)[i].HasPrev() {
+			return false
 		}
+		break
 	}
-	return false
+	return len(*d) > 0
 }
 
 // Prev implements the Datum interface.
@@ -1168,17 +1169,18 @@ func (d *DTuple) Prev() Datum {
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
+	panic("Prev() cannot be computed on a tuple whose datum does not support it")
 }
 
 // HasNext implements the Datum interface.
 func (d *DTuple) HasNext() bool {
 	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasNext() {
-			return true
+		if !(*d)[i].HasNext() {
+			return false
 		}
+		break
 	}
-	return false
+	return len(*d) > 0
 }
 
 // Next implements the Datum interface.
@@ -1191,23 +1193,27 @@ func (d *DTuple) Next() Datum {
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
+	panic("Next() cannot be computed on a tuple whose datum does not support it")
 }
 
 // IsMax implements the Datum interface.
-func (*DTuple) IsMax() bool {
-	// Unimplemented for DTuple. Seems possible to provide an implementation
-	// which called IsMax for each of the elements, but currently this isn't
-	// needed.
-	return false
+func (d *DTuple) IsMax() bool {
+	for _, v := range *d {
+		if !v.IsMax() {
+			return false
+		}
+	}
+	return true
 }
 
 // IsMin implements the Datum interface.
-func (*DTuple) IsMin() bool {
-	// Unimplemented for DTuple. Seems possible to provide an implementation
-	// which called IsMin for each of the elements, but currently this isn't
-	// needed.
-	return false
+func (d *DTuple) IsMin() bool {
+	for _, v := range *d {
+		if !v.IsMin() {
+			return false
+		}
+	}
+	return true
 }
 
 // Format implements the NodeFormatter interface.
