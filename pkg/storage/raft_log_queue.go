@@ -142,18 +142,25 @@ func computeTruncatableIndex(
 		// the target size. If the raft log is greater than the target size we
 		// always truncate to the quorum commit index.
 		truncatableIndex = getBehindIndex(raftStatus)
-		// The pending snapshot index acts as a placeholder for a replica that is
-		// about to be added to the range. We don't want to truncate the log in a
-		// way that will require that new replica to be caught up via a Raft
-		// snapshot.
-		if pendingSnapshotIndex > 0 && truncatableIndex > pendingSnapshotIndex {
-			truncatableIndex = pendingSnapshotIndex
-		}
-		if truncatableIndex < firstIndex {
-			truncatableIndex = firstIndex
-		}
 	}
 
+	// The pending snapshot index acts as a placeholder for a replica that is
+	// about to be added to the range. We don't want to truncate the log in a
+	// way that will require that new replica to be caught up via a Raft
+	// snapshot.
+	//
+	// TODO(peter): We only need to preserve the pending snapshot index in cases
+	// where adding the new replica can knock the range out of quorum. For
+	// example, if the range currently has 1 replica and we're adding a 2nd, the
+	// range will be unable to make forward progress until the 2nd replica is
+	// brought up to date. Snapshots are throttled and not always available while
+	// Raft log replays are.
+	if pendingSnapshotIndex > 0 && truncatableIndex > pendingSnapshotIndex {
+		truncatableIndex = pendingSnapshotIndex
+	}
+	if truncatableIndex < firstIndex {
+		truncatableIndex = firstIndex
+	}
 	// Never truncate past the quorum committed index.
 	if truncatableIndex > raftStatus.Commit {
 		truncatableIndex = raftStatus.Commit

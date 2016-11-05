@@ -87,6 +87,9 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 0, 3},
 		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 0, 3},
 		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 0, 3},
+		// Don't truncate past the pending snapshot index
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 1, 1},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 2, 2},
 		// Never truncate past raftStatus.Commit.
 		{[]uint64{4, 5, 6}, 3, 100, 4, 0, 3},
 	}
