@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,6 +32,7 @@ import (
 
 type valuesNode struct {
 	n        *parser.ValuesClause
+	ctx      context.Context
 	p        *planner
 	columns  ResultColumns
 	ordering sqlbase.ColumnOrdering
@@ -46,6 +49,7 @@ type valuesNode struct {
 
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
+		ctx:     p.ctx(),
 		columns: columns,
 		rows:    p.NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
 	}
@@ -55,6 +59,7 @@ func (p *planner) ValuesClause(
 	n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
+		ctx:          p.ctx(),
 		p:            p,
 		n:            n,
 		desiredTypes: desiredTypes,
@@ -158,7 +163,7 @@ func (n *valuesNode) Start() error {
 				return err
 			}
 		}
-		if err := n.rows.AddRow(row); err != nil {
+		if err := n.rows.AddRow(n.p.ctx(), row); err != nil {
 			return err
 		}
 	}
@@ -200,7 +205,7 @@ func (n *valuesNode) Next() (bool, error) {
 
 func (n *valuesNode) Close() {
 	if n.rows != nil {
-		n.rows.Close()
+		n.rows.Close(n.ctx)
 		n.rows = nil
 	}
 }
@@ -250,7 +255,7 @@ var _ heap.Interface = (*valuesNode)(nil)
 
 // Push implements the heap.Interface interface.
 func (n *valuesNode) Push(x interface{}) {
-	n.err = n.rows.AddRow(n.tmpValues)
+	n.err = n.rows.AddRow(n.ctx, n.tmpValues)
 }
 
 // PushValues pushes the given DTuple value into the heap representation

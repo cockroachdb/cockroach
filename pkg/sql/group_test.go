@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -50,7 +51,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	for _, d := range testData {
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, d.expr, sel)
-		group := &groupNode{planner: p}
+		group := &groupNode{planner: p, ctx: context.TODO()}
 		_, err := extractAggregatesVisitor{n: group}.extract(expr)
 		if err != nil {
 			t.Fatal(err)

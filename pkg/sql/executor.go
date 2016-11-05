@@ -106,14 +106,14 @@ type StatementResults struct {
 }
 
 // Close ensures that the resources claimed by the results are released.
-func (s *StatementResults) Close() {
-	s.ResultList.Close()
+func (s *StatementResults) Close(ctx context.Context) {
+	s.ResultList.Close(ctx)
 }
 
 // Close ensures that the resources claimed by the results are released.
-func (rl ResultList) Close() {
+func (rl ResultList) Close(ctx context.Context) {
 	for _, r := range rl {
-		r.Close()
+		r.Close(ctx)
 	}
 }
 
@@ -138,11 +138,11 @@ type Result struct {
 }
 
 // Close ensures that the resources claimed by the result are released.
-func (r *Result) Close() {
+func (r *Result) Close(ctx context.Context) {
 	// The Rows pointer may be nil if the statement returned no rows or
 	// if an error occurred.
 	if r.Rows != nil {
-		r.Rows.Close()
+		r.Rows.Close(ctx)
 	}
 }
 
@@ -574,7 +574,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			var err error
 			if results != nil {
 				// Some results were produced by a previous attempt. Discard them.
-				ResultList(results).Close()
+				ResultList(results).Close(session.Ctx())
 			}
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
 
@@ -1045,7 +1045,7 @@ func (e *Executor) execStmtInOpenTxn(
 	result, err := e.execStmt(stmt, planMaker, autoCommit)
 	if err != nil {
 		if result.Rows != nil {
-			result.Rows.Close()
+			result.Rows.Close(session.Ctx())
 			result.Rows = nil
 		}
 		if traceSQL {
@@ -1221,7 +1221,7 @@ func (e *Executor) execStmt(
 				}
 				row = append(row, val)
 			}
-			if err := result.Rows.AddRow(row); err != nil {
+			if err := result.Rows.AddRow(planMaker.session.Ctx(), row); err != nil {
 				return result, err
 			}
 		}

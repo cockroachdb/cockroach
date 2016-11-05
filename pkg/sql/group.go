@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -91,7 +93,8 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 
 	group := &groupNode{
 		planner: p,
-		values:  valuesNode{columns: s.columns},
+		ctx:     p.ctx(),
+		values:  valuesNode{columns: s.columns, ctx: p.ctx()},
 		render:  s.render,
 	}
 
@@ -168,6 +171,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
 	planner *planner
+	ctx     context.Context
 
 	// The "wrapped" node (which returns ungrouped results).
 	plan planNode
@@ -361,7 +365,7 @@ func (n *groupNode) computeAggregates() error {
 			row = append(row, res)
 		}
 
-		if err := n.values.rows.AddRow(row); err != nil {
+		if err := n.values.rows.AddRow(n.ctx, row); err != nil {
 			return err
 		}
 	}

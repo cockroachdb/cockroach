@@ -20,10 +20,12 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
 )
 
 type joinType int
@@ -38,6 +40,8 @@ const (
 // left/right outer join.
 type joinNode struct {
 	joinType joinType
+
+	ctx context.Context
 
 	// The data sources.
 	left    planDataSource
@@ -518,6 +522,7 @@ func (p *planner) makeJoin(
 	return planDataSource{
 		info: info,
 		plan: &joinNode{
+			ctx:       p.ctx(),
 			joinType:  typ,
 			left:      left,
 			right:     right,
@@ -623,7 +628,7 @@ func (n *joinNode) Start() error {
 			row := n.right.plan.Values()
 			newRow := make([]parser.Datum, len(row))
 			copy(newRow, row)
-			if err := n.rightRows.rows.AddRow(newRow); err != nil {
+			if err := n.rightRows.rows.AddRow(n.ctx, newRow); err != nil {
 				return err
 			}
 		}
