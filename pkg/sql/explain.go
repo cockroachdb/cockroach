@@ -113,6 +113,9 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			expanded: expanded,
 			results:  p.newContainerValuesNode(columns, 0),
 		}
+		// We want to show placeholder types, so ensure no values
+		// are missing.
+		p.semaCtx.Placeholders.FillUnassigned()
 		return node, nil
 
 	case explainPlan:

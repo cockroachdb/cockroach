@@ -16,7 +16,13 @@
 
 package parser
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util"
+)
 
 // PlaceholderTypes relates placeholder names to their resolved type.
 type PlaceholderTypes map[string]Type
@@ -51,6 +57,34 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo) {
 	} else {
 		p.Clear()
 	}
+}
+
+// FillUnassigned sets all unsassigned placeholders to NULL.
+func (p *PlaceholderInfo) FillUnassigned() {
+	for pn := range p.Types {
+		if _, ok := p.Values[pn]; !ok {
+			p.Values[pn] = DNull
+		}
+	}
+}
+
+// AssertAllAssigned ensures that all placeholders that are used also
+// have a value assigned.
+func (p *PlaceholderInfo) AssertAllAssigned() error {
+	var missing []string
+	for pn := range p.Types {
+		if _, ok := p.Values[pn]; !ok {
+			missing = append(missing, "$"+pn)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return fmt.Errorf("no value provided for placeholder%s: %s",
+			util.Pluralize(int64(len(missing))),
+			strings.Join(missing, ", "),
+		)
+	}
+	return nil
 }
 
 // Type returns the known type of a placeholder.
