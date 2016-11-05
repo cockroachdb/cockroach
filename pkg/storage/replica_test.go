@@ -2069,11 +2069,18 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	cmd1Done := startBlockingCmd(context.Background(), key1)
 	<-blockingStart
 
-	// Put a cancelled blocking command in the command queue. This command will
-	// block on the previous command, but will not itself reach the filter since
-	// its context is cancelled.
+	// Start a command that is already cancelled. It will return immediately.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		done := startBlockingCmd(ctx, key1, key2)
+		if pErr := <-done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+			t.Fatalf("unexpected error %v", pErr)
+		}
+	}
+
+	// Start a second command which will wait for the first.
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
 	cmd2Done := startBlockingCmd(ctx, key1, key2)
 
 	// Wait until both commands are in the command queue.
@@ -2087,16 +2094,18 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		return nil
 	})
 
-	// If this deadlocks, the command has unexpectedly begun executing and was
-	// trapped in the command filter. Indeed, the absence of such a deadlock is
-	// what's being tested here.
-	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+	// Cancel the second command, then finish the first to unblock it.
+	cancel()
+	blockingDone <- struct{}{}
+	if pErr := <-cmd1Done; pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// Finish the previous command, allowing the test to shut down.
-	blockingDone <- struct{}{}
-	if pErr := <-cmd1Done; pErr != nil {
+	// The second command should finish with a context cancellation
+	// error instead of executing. If it had started executing, it would
+	// be caught in the command filter and we'd time out reading from
+	// the channel.
+	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
 		t.Fatal(pErr)
 	}
 }
