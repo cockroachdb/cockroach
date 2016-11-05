@@ -371,6 +371,13 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(3.1).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
 			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
 		},
+		"SELECT CASE 40+2 WHEN 42 THEN 51 ELSE $1::INT END": {
+			baseTest.Error(
+				"pq: no value provided for placeholder: $1",
+			).PreparedError(
+				"sql: statement expects 1 inputs; got 0",
+			),
+		},
 		"SELECT $1::int > $2::float": {
 			baseTest.SetArgs(2, 1).Results(true),
 			baseTest.SetArgs("2", 1).Results(true),
@@ -520,7 +527,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
 			baseTest.SetArgs(10, 5).Results(10),
 			baseTest.Error(
-				"pq: no value provided for placeholder: $1",
+				"pq: no value provided for placeholders: $1, $2",
 			).PreparedError(
 				"sql: statement expects 2 inputs; got 0",
 			),
