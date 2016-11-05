@@ -58,8 +58,8 @@ func (*copyNode) Values() parser.Datums              { return nil }
 func (*copyNode) MarkDebug(_ explainMode)            {}
 func (*copyNode) Next(context.Context) (bool, error) { return false, nil }
 
-func (n *copyNode) Close(context.Context) {
-	n.rowsMemAcc.Wsession(n.p.session).Close()
+func (n *copyNode) Close(ctx context.Context) {
+	n.rowsMemAcc.Wsession(n.p.session).Close(ctx)
 }
 
 func (*copyNode) DebugValues() debugValues {
@@ -138,7 +138,9 @@ var (
 // sent in a message, there's no guarantee that data contains a complete row
 // (or even a complete datum). It is thus valid to have no new rows added
 // to the internal state after this call.
-func (p *planner) ProcessCopyData(data string, msg copyMsg) (parser.StatementList, error) {
+func (p *planner) ProcessCopyData(
+	ctx context.Context, data string, msg copyMsg,
+) (parser.StatementList, error) {
 	cf := p.copyFrom
 	buf := cf.buf
 
@@ -149,7 +151,7 @@ func (p *planner) ProcessCopyData(data string, msg copyMsg) (parser.StatementLis
 		var err error
 		// If there's a line in the buffer without \n at EOL, add it here.
 		if buf.Len() > 0 {
-			err = cf.addRow(buf.Bytes())
+			err = cf.addRow(ctx, buf.Bytes())
 		}
 		return parser.StatementList{CopyDataBlock{Done: true}}, err
 	default:
@@ -174,14 +176,14 @@ func (p *planner) ProcessCopyData(data string, msg copyMsg) (parser.StatementLis
 		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 			break
 		}
-		if err := cf.addRow(line); err != nil {
+		if err := cf.addRow(ctx, line); err != nil {
 			return nil, err
 		}
 	}
 	return parser.StatementList{CopyDataBlock{}}, nil
 }
 
-func (n *copyNode) addRow(line []byte) error {
+func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 	var err error
 	parts := bytes.Split(line, fieldDelim)
 	if len(parts) != len(n.resultColumns) {
@@ -243,14 +245,14 @@ func (n *copyNode) addRow(line []byte) error {
 		}
 
 		sz := d.Size()
-		if err := acc.Grow(int64(sz)); err != nil {
+		if err := acc.Grow(ctx, int64(sz)); err != nil {
 			return err
 		}
 
 		exprs[i] = d
 	}
 	tuple := &parser.Tuple{Exprs: exprs}
-	if err := acc.Grow(int64(unsafe.Sizeof(*tuple))); err != nil {
+	if err := acc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
 		return err
 	}
 
@@ -368,7 +370,7 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock, autoCommit bool
 	vc := &parser.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
-	cf.rowsMemAcc.Wsession(p.session).Clear()
+	cf.rowsMemAcc.Wsession(p.session).Clear(ctx)
 
 	in := parser.Insert{
 		Table:   cf.table,

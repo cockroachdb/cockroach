@@ -124,7 +124,7 @@ func (e virtualTableEntry) getPlanInfo(ctx context.Context) (ResultColumns, node
 						col.Name, col.Typ, datum.ResolvedType()))
 				}
 			}
-			_, err := v.rows.AddRow(datums)
+			_, err := v.rows.AddRow(p.ctx(), datums)
 			return err
 		})
 		if err != nil {

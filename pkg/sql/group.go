@@ -109,6 +109,7 @@ func (p *planner) groupBy(
 
 	group := &groupNode{
 		planner:            p,
+		ctx:                p.ctx(),
 		values:             valuesNode{columns: s.columns},
 		render:             s.render,
 		filterToRenderIdxs: make(map[int]int),
@@ -248,6 +249,7 @@ func (p *planner) groupBy(
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
 	planner *planner
+	ctx     context.Context
 
 	// The "wrapped" node (which returns ungrouped results).
 	plan planNode
@@ -379,7 +381,7 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 				continue
 			}
 
-			if err := n.funcs[i].add(n.planner.session, bucket, value); err != nil {
+			if err := n.funcs[i].add(ctx, n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -429,7 +431,7 @@ func (n *groupNode) computeAggregates() error {
 			}
 		}
 
-		if _, err := n.values.rows.AddRow(row); err != nil {
+		if _, err := n.values.rows.AddRow(n.ctx, row); err != nil {
 			return err
 		}
 	}
@@ -439,7 +441,7 @@ func (n *groupNode) computeAggregates() error {
 func (n *groupNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	for _, f := range n.funcs {
-		f.close(n.planner.session)
+		f.close(ctx, n.planner.session)
 	}
 	n.values.Close(ctx)
 	n.buckets = nil
@@ -690,16 +692,18 @@ func (n *groupNode) newAggregateFuncHolder(
 	return res
 }
 
-func (a *aggregateFuncHolder) close(s *Session) {
+func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
 	a.buckets = nil
 	a.seen = nil
 	a.group = nil
-	a.bucketsMemAcc.Wtxn(s).Close()
+	a.bucketsMemAcc.Wtxn(s).Close(ctx)
 }
 
 // add accumulates one more value for a particular bucket into an aggregation
 // function.
-func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
+func (a *aggregateFuncHolder) add(
+	ctx context.Context, s *Session, bucket []byte, d parser.Datum,
+) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
@@ -712,7 +716,7 @@ func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) err
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.Wtxn(s).Grow(int64(len(encoded))); err != nil {
+		if err := a.bucketsMemAcc.Wtxn(s).Grow(ctx, int64(len(encoded))); err != nil {
 			return err
 		}
 		a.seen[string(encoded)] = struct{}{}

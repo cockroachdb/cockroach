@@ -126,7 +126,7 @@ func (p *planner) populateExplain(
 				row = append(row, emptyString, emptyString)
 			}
 		}
-		if _, err := v.rows.AddRow(row); err != nil {
+		if _, err := v.rows.AddRow(ctx, row); err != nil {
 			e.err = err
 		}
 	}
