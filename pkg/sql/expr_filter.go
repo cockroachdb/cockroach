@@ -1,5 +1,4 @@
 // Copyright 2016 The Cockroach Authors.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -72,8 +71,9 @@ func (v *varConvertVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pa
 	}
 
 	if varExpr, ok := expr.(parser.VariableExpr); ok {
-		// Ignore sub-queries
-		if _, isSubquery := expr.(*subquery); isSubquery {
+		// Ignore sub-queries and placeholders
+		switch expr.(type) {
+		case *subquery, *parser.Placeholder:
 			return false, expr
 		}
 
