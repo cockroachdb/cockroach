@@ -79,6 +79,16 @@ type Datum interface {
 	// type can hold.
 	IsMin() bool
 
+	// max() returns the upper value, if one exists. Only defined if
+	// hasMax() is true.
+	max() Datum
+	hasMax() bool
+
+	// min() returns the lower value, if one exists. Only defined if
+	// hasMin() is true.
+	min() Datum
+	hasMin() bool
+
 	// Size returns a lower bound on the total size of the receiver in bytes,
 	// including memory that is pointed at (even if shared between Datum
 	// instances) but excluding allocation overhead.
@@ -195,6 +205,26 @@ func (d *DBool) IsMin() bool {
 	return !bool(*d)
 }
 
+// hasMin implements the Datum interface.
+func (d *DBool) hasMin() bool {
+	return true
+}
+
+// min implements the Datum interface.
+func (d *DBool) min() Datum {
+	return DBoolFalse
+}
+
+// hasMax implements the Datum interface.
+func (d *DBool) hasMax() bool {
+	return true
+}
+
+// max implements the Datum interface.
+func (d *DBool) max() Datum {
+	return DBoolTrue
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(strconv.FormatBool(bool(*d)))
@@ -276,9 +306,32 @@ func (d *DInt) IsMax() bool {
 	return *d == math.MaxInt64
 }
 
+var dMaxInt = NewDInt(math.MaxInt64)
+var dMinInt = NewDInt(math.MinInt64)
+
+// max implements the Datum interface.
+func (d *DInt) max() Datum {
+	return dMaxInt
+}
+
+// hasMax implements the Datum interface.
+func (d *DInt) hasMax() bool {
+	return true
+}
+
 // IsMin implements the Datum interface.
 func (d *DInt) IsMin() bool {
 	return *d == math.MinInt64
+}
+
+// min implements the Datum interface.
+func (d *DInt) min() Datum {
+	return dMinInt
+}
+
+// hasMin implements the Datum interface.
+func (d *DInt) hasMin() bool {
+	return true
 }
 
 // Format implements the NodeFormatter interface.
@@ -374,6 +427,29 @@ func (d *DFloat) IsMax() bool {
 	return *d >= math.MaxFloat64
 }
 
+var dMaxFloat = NewDFloat(DFloat(math.MaxInt64))
+var dMinFloat = NewDFloat(DFloat(math.MinInt64))
+
+// max implements the Datum interface.
+func (d *DFloat) max() Datum {
+	return dMaxFloat
+}
+
+// hasMax implements the Datum interface.
+func (d *DFloat) hasMax() bool {
+	return true
+}
+
+// min implements the Datum interface.
+func (d *DFloat) min() Datum {
+	return dMinFloat
+}
+
+// hasMax implements the Datum interface.
+func (d *DFloat) hasMin() bool {
+	return true
+}
+
 // IsMin implements the Datum interface.
 func (d *DFloat) IsMin() bool {
 	// Using <= accounts for -inf as well.
@@ -463,6 +539,26 @@ func (*DDecimal) IsMin() bool {
 	return false
 }
 
+// hasMax implements the Datum interface.
+func (d *DDecimal) hasMax() bool {
+	return false
+}
+
+// max implements the Datum interface.
+func (d *DDecimal) max() Datum {
+	panic(makeUnsupportedMethodMessage(d, "max"))
+}
+
+// hasMin implements the Datum interface.
+func (d *DDecimal) hasMin() bool {
+	return false
+}
+
+// min implements the Datum interface.
+func (d *DDecimal) min() Datum {
+	panic(makeUnsupportedMethodMessage(d, "min"))
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.Dec.String())
@@ -538,6 +634,28 @@ func (d *DString) IsMin() bool {
 	return len(*d) == 0
 }
 
+// hasMin implements the Datum interface.
+func (d *DString) hasMin() bool {
+	return true
+}
+
+var dEmptyString = NewDString("")
+
+// min implements the Datum interface.
+func (d *DString) min() Datum {
+	return dEmptyString
+}
+
+// hasMax implements the Datum interface.
+func (d *DString) hasMax() bool {
+	return false
+}
+
+// max implements the Datum interface.
+func (d *DString) max() Datum {
+	panic(makeUnsupportedMethodMessage(d, "max"))
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLString(buf, string(*d))
@@ -610,6 +728,28 @@ func (*DBytes) IsMax() bool {
 // IsMin implements the Datum interface.
 func (d *DBytes) IsMin() bool {
 	return len(*d) == 0
+}
+
+// hasMin implements the Datum interface.
+func (d *DBytes) hasMin() bool {
+	return true
+}
+
+var dEmptyBytes = NewDBytes(DBytes(""))
+
+// min implements the Datum interface.
+func (d *DBytes) min() Datum {
+	return dEmptyBytes
+}
+
+// hasMax implements the Datum interface.
+func (d *DBytes) hasMax() bool {
+	return false
+}
+
+// max implements the Datum interface.
+func (d *DBytes) max() Datum {
+	panic(makeUnsupportedMethodMessage(d, "max"))
 }
 
 // Format implements the NodeFormatter interface.
@@ -725,6 +865,29 @@ func (d *DDate) IsMax() bool {
 // IsMin implements the Datum interface.
 func (d *DDate) IsMin() bool {
 	return *d == math.MinInt64
+}
+
+var dMaxDate = NewDDate(math.MaxInt64)
+var dMinDate = NewDDate(math.MinInt64)
+
+// max implements the Datum interface.
+func (d *DDate) max() Datum {
+	return dMaxDate
+}
+
+// hasMax implements the Datum interface.
+func (d *DDate) hasMax() bool {
+	return true
+}
+
+// min implements the Datum interface.
+func (d *DDate) min() Datum {
+	return dMinDate
+}
+
+// hasMin implements the Datum interface.
+func (d *DDate) hasMin() bool {
+	return true
 }
 
 // Format implements the NodeFormatter interface.
@@ -872,6 +1035,28 @@ func (d *DTimestamp) IsMin() bool {
 	return d.Before(d.Add(-1))
 }
 
+// hasMin implements the Datum interface.
+func (d *DTimestamp) hasMin() bool {
+	// TODO(knz) figure a good way to find a minimum.
+	return false
+}
+
+// min implements the Datum interface.
+func (d *DTimestamp) min() Datum {
+	panic(makeUnsupportedMethodMessage(d, "min"))
+}
+
+// hasMax implements the Datum interface.
+func (d *DTimestamp) hasMax() bool {
+	// TODO(knz) figure a good way to find a minimum.
+	return false
+}
+
+// max implements the Datum interface.
+func (d *DTimestamp) max() Datum {
+	panic(makeUnsupportedMethodMessage(d, "max"))
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
@@ -958,6 +1143,28 @@ func (d *DTimestampTZ) IsMax() bool {
 func (d *DTimestampTZ) IsMin() bool {
 	// Subtracting 1 underflows to a larger value.
 	return d.Before(d.Add(-1))
+}
+
+// hasMin implements the Datum interface.
+func (d *DTimestampTZ) hasMin() bool {
+	// TODO(knz) figure a good way to find a minimum.
+	return false
+}
+
+// min implements the Datum interface.
+func (d *DTimestampTZ) min() Datum {
+	panic(makeUnsupportedMethodMessage(d, "min"))
+}
+
+// hasMax implements the Datum interface.
+func (d *DTimestampTZ) hasMax() bool {
+	// TODO(knz) figure a good way to find a minimum.
+	return false
+}
+
+// max implements the Datum interface.
+func (d *DTimestampTZ) max() Datum {
+	panic(makeUnsupportedMethodMessage(d, "max"))
 }
 
 // Format implements the NodeFormatter interface.
@@ -1093,6 +1300,39 @@ func (d *DInterval) IsMin() bool {
 	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
 }
 
+var dMaxInterval = &DInterval{
+	duration.Duration{
+		Months: math.MaxInt64,
+		Days:   math.MaxInt64,
+		Nanos:  math.MaxInt64,
+	}}
+var dMinInterval = &DInterval{
+	duration.Duration{
+		Months: math.MinInt64,
+		Days:   math.MinInt64,
+		Nanos:  math.MinInt64,
+	}}
+
+// max implements the Datum interface.
+func (d *DInterval) max() Datum {
+	return dMaxInterval
+}
+
+// hasMax implements the Datum interface.
+func (d *DInterval) hasMax() bool {
+	return true
+}
+
+// min implements the Datum interface.
+func (d *DInterval) min() Datum {
+	return dMinInterval
+}
+
+// hasMax implements the Datum interface.
+func (d *DInterval) hasMin() bool {
+	return true
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.Months != 0 || d.Days != 0 {
@@ -1150,64 +1390,138 @@ func (d *DTuple) Compare(other Datum) int {
 
 // HasPrev implements the Datum interface.
 func (d *DTuple) HasPrev() bool {
-	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasPrev() {
-			return true
+	// Note: (a:decimal, b:int, c:int) has a prev value; that's (a, b,
+	// c-1). With an exception if c is MinInt64, in which case the prev
+	// value is (a, b-1, max()). However, (a:int, b:decimal) does not
+	// have a prev value, because decimal doesn't have one.
+	//
+	// In general, a tuple has a prev value if and only if it ends with
+	// zero or more values that are a minimum and a maximum value of the
+	// same type exists, and the first element before that has a prev
+	// value.
+	var i int
+	for i = len(*d) - 1; i > 0; i-- {
+		if (*d)[i].IsMin() && (*d)[i].hasMax() {
+			continue
 		}
+		break
 	}
-	return false
+	return i >= 0 && (*d)[i].HasPrev()
 }
 
 // Prev implements the Datum interface.
 func (d *DTuple) Prev() Datum {
+	// See the comment at the start of HasPrev().
 	n := make(DTuple, len(*d))
 	copy(n, *d)
 	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].IsMin() && n[i].hasMax() {
+			n[i] = n[i].max()
+			continue
+		}
 		if n[i].HasPrev() {
 			n[i] = n[i].Prev()
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
 func (d *DTuple) HasNext() bool {
-	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasNext() {
-			return true
+	// Note: (a:decimal, b:int, c:int) has a next value; that's (a, b,
+	// c+1). With an exception if c is MaxInt64, in which case the next
+	// value is (a, b+1, min()). However, (a:int, b:decimal) does not
+	// have a next value, because decimal doesn't have one.
+	//
+	// In general, a tuple has a next value if and only if it ends with
+	// zero or more values that are a maximum and a minimum value of the
+	// same type exists, and the first element before that has a next
+	// value.
+	var i int
+	for i = len(*d) - 1; i > 0; i-- {
+		if (*d)[i].IsMax() && (*d)[i].hasMin() {
+			continue
 		}
+		break
 	}
-	return false
+	return i >= 0 && (*d)[i].HasNext()
 }
 
 // Next implements the Datum interface.
 func (d *DTuple) Next() Datum {
+	// See the comment at the start of HasNext().
 	n := make(DTuple, len(*d))
 	copy(n, *d)
 	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].IsMax() && n[i].hasMin() {
+			n[i] = n[i].min()
+			continue
+		}
 		if n[i].HasNext() {
 			n[i] = n[i].Next()
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
+	panic(makeUnsupportedMethodMessage(d, "Next"))
+}
+
+// hasMax implements the Datum interface.
+func (d *DTuple) hasMax() bool {
+	for _, v := range *d {
+		if !v.hasMax() {
+			return false
+		}
+	}
+	return len(*d) > 0
+}
+
+// max implements the Datum interface.
+func (d *DTuple) max() Datum {
+	res := make(DTuple, len(*d))
+	for i, v := range *d {
+		res[i] = v.max()
+	}
+	return &res
+}
+
+// hasMin implements the Datum interface.
+func (d *DTuple) hasMin() bool {
+	for _, v := range *d {
+		if !v.hasMin() {
+			return false
+		}
+	}
+	return len(*d) > 0
+}
+
+// min implements the Datum interface.
+func (d *DTuple) min() Datum {
+	res := make(DTuple, len(*d))
+	for i, v := range *d {
+		res[i] = v.min()
+	}
+	return &res
 }
 
 // IsMax implements the Datum interface.
-func (*DTuple) IsMax() bool {
-	// Unimplemented for DTuple. Seems possible to provide an implementation
-	// which called IsMax for each of the elements, but currently this isn't
-	// needed.
-	return false
+func (d *DTuple) IsMax() bool {
+	for _, v := range *d {
+		if !v.IsMax() {
+			return false
+		}
+	}
+	return true
 }
 
 // IsMin implements the Datum interface.
-func (*DTuple) IsMin() bool {
-	// Unimplemented for DTuple. Seems possible to provide an implementation
-	// which called IsMin for each of the elements, but currently this isn't
-	// needed.
-	return false
+func (d *DTuple) IsMin() bool {
+	for _, v := range *d {
+		if !v.IsMin() {
+			return false
+		}
+	}
+	return true
 }
 
 // Format implements the NodeFormatter interface.
@@ -1330,6 +1644,26 @@ func (dNull) IsMin() bool {
 	return true
 }
 
+// max implements the Datum interface.
+func (dNull) max() Datum {
+	return DNull
+}
+
+// hasMax implements the Datum interface.
+func (dNull) hasMax() bool {
+	return true
+}
+
+// min implements the Datum interface.
+func (dNull) min() Datum {
+	return DNull
+}
+
+// hasMin implements the Datum interface.
+func (dNull) hasMin() bool {
+	return true
+}
+
 // Format implements the NodeFormatter interface.
 func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("NULL")
@@ -1383,64 +1717,138 @@ func (d *DArray) Compare(other Datum) int {
 
 // HasPrev implements the Datum interface.
 func (d *DArray) HasPrev() bool {
-	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasPrev() {
-			return true
+	// Note: (a:decimal, b:int, c:int) has a prev value; that's (a, b,
+	// c-1). With an exception if c is MinInt64, in which case the prev
+	// value is (a, b-1, max()). However, (a:int, b:decimal) does not
+	// have a prev value, because decimal doesn't have one.
+	//
+	// In general, a tuple has a prev value if and only if it ends with
+	// zero or more values that are a minimum and a maximum value of the
+	// same type exists, and the first element before that has a prev
+	// value.
+	var i int
+	for i = len(*d) - 1; i > 0; i-- {
+		if (*d)[i].IsMin() && (*d)[i].hasMax() {
+			continue
 		}
+		break
 	}
-	return false
+	return i >= 0 && (*d)[i].HasPrev()
 }
 
 // Prev implements the Datum interface.
 func (d *DArray) Prev() Datum {
+	// See the comment at the start of HasPrev().
 	n := make(DArray, len(*d))
 	copy(n, *d)
 	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].IsMin() && n[i].hasMax() {
+			n[i] = n[i].max()
+			continue
+		}
 		if n[i].HasPrev() {
 			n[i] = n[i].Prev()
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
 func (d *DArray) HasNext() bool {
-	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasNext() {
-			return true
+	// Note: (a:decimal, b:int, c:int) has a next value; that's (a, b,
+	// c+1). With an exception if c is MaxInt64, in which case the next
+	// value is (a, b+1, min()). However, (a:int, b:decimal) does not
+	// have a next value, because decimal doesn't have one.
+	//
+	// In general, a tuple has a next value if and only if it ends with
+	// zero or more values that are a maximum and a minimum value of the
+	// same type exists, and the first element before that has a next
+	// value.
+	var i int
+	for i = len(*d) - 1; i > 0; i-- {
+		if (*d)[i].IsMax() && (*d)[i].hasMin() {
+			continue
 		}
+		break
 	}
-	return false
+	return i >= 0 && (*d)[i].HasNext()
 }
 
 // Next implements the Datum interface.
 func (d *DArray) Next() Datum {
+	// See the comment at the start of HasNext().
 	n := make(DArray, len(*d))
 	copy(n, *d)
 	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].IsMax() && n[i].hasMin() {
+			n[i] = n[i].min()
+			continue
+		}
 		if n[i].HasNext() {
 			n[i] = n[i].Next()
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
+	panic(makeUnsupportedMethodMessage(d, "Next"))
+}
+
+// hasMax implements the Datum interface.
+func (d *DArray) hasMax() bool {
+	for _, v := range *d {
+		if !v.hasMax() {
+			return false
+		}
+	}
+	return len(*d) > 0
+}
+
+// max implements the Datum interface.
+func (d *DArray) max() Datum {
+	res := make(DArray, len(*d))
+	for i, v := range *d {
+		res[i] = v.max()
+	}
+	return &res
+}
+
+// hasMin implements the Datum interface.
+func (d *DArray) hasMin() bool {
+	for _, v := range *d {
+		if !v.hasMin() {
+			return false
+		}
+	}
+	return len(*d) > 0
+}
+
+// min implements the Datum interface.
+func (d *DArray) min() Datum {
+	res := make(DArray, len(*d))
+	for i, v := range *d {
+		res[i] = v.min()
+	}
+	return &res
 }
 
 // IsMax implements the Datum interface.
-func (*DArray) IsMax() bool {
-	// Unimplemented for DArray. Seems possible to provide an implementation
-	// which called IsMax for each of the elements, but currently this isn't
-	// needed.
-	return false
+func (d *DArray) IsMax() bool {
+	for _, v := range *d {
+		if !v.IsMax() {
+			return false
+		}
+	}
+	return true
 }
 
 // IsMin implements the Datum interface.
-func (*DArray) IsMin() bool {
-	// Unimplemented for DArray. Seems possible to provide an implementation
-	// which called IsMin for each of the elements, but currently this isn't
-	// needed.
-	return false
+func (d *DArray) IsMin() bool {
+	for _, v := range *d {
+		if !v.IsMin() {
+			return false
+		}
+	}
+	return true
 }
 
 // Format implements the NodeFormatter interface.
