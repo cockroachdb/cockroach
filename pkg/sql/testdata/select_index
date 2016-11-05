@@ -320,3 +320,29 @@ query ITT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
 0 scan abcd@abcd /1/4-/1/5 /2/9-/2/10
+
+statement ok
+CREATE TABLE ab (
+  s STRING,
+  i INT
+); INSERT INTO ab VALUES ('a', 1), ('b', 1), ('c', 1);
+
+query IT
+SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
+----
+1 a
+1 b
+
+statement ok
+CREATE INDEX baz ON ab (i, s)
+
+query IT
+SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
+----
+1 a
+1 b
+
+query ITT
+EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
+----
+0 scan ab@baz /#-/1/"c"
