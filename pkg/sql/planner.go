@@ -235,6 +235,12 @@ func makeInternalPlanner(
 }
 
 func finishInternalPlanner(p *planner) {
+	// If we're panicking, don't bother stopping the MemoryMonitors. We're likely
+	// in a state where not all memory has been properly release to the monitors,
+	// so Stop() would panic again and add confusion to stack traces.
+	if r := recover(); r != nil {
+		panic(r)
+	}
 	p.session.TxnState.mon.Stop(p.session.context)
 	p.session.sessionMon.Stop(p.session.context)
 	p.session.mon.Stop(p.session.context)
