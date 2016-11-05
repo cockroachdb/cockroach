@@ -144,20 +144,24 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 
 // Postgres Units.
 var postgresUnitMap = map[string]duration.Duration{
-	"second":  {Nanos: time.Second.Nanoseconds()},
-	"seconds": {Nanos: time.Second.Nanoseconds()},
-	"minute":  {Nanos: time.Minute.Nanoseconds()},
-	"minutes": {Nanos: time.Minute.Nanoseconds()},
-	"hour":    {Nanos: time.Hour.Nanoseconds()},
-	"hours":   {Nanos: time.Hour.Nanoseconds()},
-	"day":     {Days: 1},
-	"days":    {Days: 1},
-	"week":    {Days: 7},
-	"weeks":   {Days: 7},
-	"month":   {Months: 1},
-	"months":  {Months: 1},
-	"year":    {Months: 12},
-	"years":   {Months: 12},
+	"nanosecond":   {Nanos: time.Nanosecond.Nanoseconds()},
+	"nanoseconds":  {Nanos: time.Nanosecond.Nanoseconds()},
+	"microsecond":  {Nanos: time.Microsecond.Nanoseconds()},
+	"microseconds": {Nanos: time.Microsecond.Nanoseconds()},
+	"second":       {Nanos: time.Second.Nanoseconds()},
+	"seconds":      {Nanos: time.Second.Nanoseconds()},
+	"minute":       {Nanos: time.Minute.Nanoseconds()},
+	"minutes":      {Nanos: time.Minute.Nanoseconds()},
+	"hour":         {Nanos: time.Hour.Nanoseconds()},
+	"hours":        {Nanos: time.Hour.Nanoseconds()},
+	"day":          {Days: 1},
+	"days":         {Days: 1},
+	"week":         {Days: 7},
+	"weeks":        {Days: 7},
+	"month":        {Months: 1},
+	"months":       {Months: 1},
+	"year":         {Months: 12},
+	"years":        {Months: 12},
 }
 
 // Parses a duration in the "traditional" Postgres format.

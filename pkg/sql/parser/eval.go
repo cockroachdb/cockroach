@@ -131,6 +131,17 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 				return dd, nil
 			},
 		},
+		UnaryOp{
+			Typ:        TypeInterval,
+			ReturnType: TypeInterval,
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				i := d.(*DInterval).Duration
+				i.Nanos = -i.Nanos
+				i.Days = -i.Days
+				i.Months = -i.Months
+				return &DInterval{Duration: i}, nil
+			},
+		},
 	},
 
 	UnaryComplement: {
