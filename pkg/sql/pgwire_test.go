@@ -302,6 +302,11 @@ type preparedQueryTest struct {
 	results [][]interface{}
 	others  int
 	error   string
+	// preparedError determines the error to expect upon stmt.Query()
+	// (executing a prepared statement), as opposed to db.Query()
+	// (direct query without prepare). If left empty, error above is
+	// used for both.
+	preparedError string
 }
 
 func (p preparedQueryTest) SetArgs(v ...interface{}) preparedQueryTest {
@@ -321,6 +326,11 @@ func (p preparedQueryTest) Others(o int) preparedQueryTest {
 
 func (p preparedQueryTest) Error(err string) preparedQueryTest {
 	p.error = err
+	return p
+}
+
+func (p preparedQueryTest) PreparedError(err string) preparedQueryTest {
+	p.preparedError = err
 	return p
 }
 
@@ -509,6 +519,11 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
 			baseTest.SetArgs(10, 5).Results(10),
+			baseTest.Error(
+				"pq: no value provided for placeholder: $1",
+			).PreparedError(
+				"sql: statement expects 2 inputs; got 0",
+			),
 		},
 		"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) LIMIT $1 OFFSET $2": {
 			baseTest.SetArgs(1, 0).Results(1),
@@ -570,7 +585,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	}
 	defer db.Close()
 
-	runTests := func(query string, tests []preparedQueryTest, queryFunc func(...interface{}) (*gosql.Rows, error)) {
+	runTests := func(query string, tests []preparedQueryTest, prepared bool, queryFunc func(...interface{}) (*gosql.Rows, error)) {
 		for _, test := range tests {
 			if testing.Verbose() || log.V(1) {
 				log.Infof(context.Background(), "query: %s", query)
@@ -579,10 +594,16 @@ func TestPGPreparedQuery(t *testing.T) {
 			if err != nil {
 				if test.error == "" {
 					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
-				} else if err.Error() != test.error {
-					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
+				} else {
+					expectedErr := test.error
+					if prepared && test.preparedError != "" {
+						expectedErr = test.preparedError
+					}
+					if err.Error() != expectedErr {
+						t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, expectedErr, err)
+					}
+					continue
 				}
-				continue
 			}
 			defer rows.Close()
 
@@ -656,7 +677,7 @@ CREATE TABLE d.str (s STRING, b BYTES);`
 	}
 
 	for query, tests := range queryTests {
-		runTests(query, tests, func(args ...interface{}) (*gosql.Rows, error) {
+		runTests(query, tests, false, func(args ...interface{}) (*gosql.Rows, error) {
 			return db.Query(query, args...)
 		})
 	}
@@ -668,7 +689,7 @@ CREATE TABLE d.str (s STRING, b BYTES);`
 			func() {
 				defer stmt.Close()
 
-				runTests(query, tests, stmt.Query)
+				runTests(query, tests, true, stmt.Query)
 			}()
 		}
 	}
