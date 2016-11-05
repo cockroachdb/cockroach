@@ -22,10 +22,12 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type explainMode int
@@ -109,6 +111,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			{Name: "Description", Typ: parser.TypeString},
 		}
 		node := &explainTypesNode{
+			ctx:      p.ctx(),
 			plan:     plan,
 			expanded: expanded,
 			results:  p.newContainerValuesNode(columns, 0),
@@ -127,6 +130,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		}
 
 		node := &explainPlanNode{
+			ctx:     p.ctx(),
 			verbose: verbose,
 			plan:    plan,
 			results: p.newContainerValuesNode(columns, 0),
@@ -142,6 +146,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 }
 
 type explainTypesNode struct {
+	ctx      context.Context
 	plan     planNode
 	expanded bool
 	results  *valuesNode
@@ -174,7 +179,7 @@ func (e *explainTypesNode) expandPlan() error {
 }
 
 func (e *explainTypesNode) Start() error {
-	return populateTypes(e.results, e.plan, 0)
+	return populateTypes(e.ctx, e.results, e.plan, 0)
 }
 
 func (e *explainTypesNode) Close() {
@@ -202,7 +207,7 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 	return buf.String()
 }
 
-func populateTypes(v *valuesNode, plan planNode, level int) error {
+func populateTypes(ctx context.Context, v *valuesNode, plan planNode, level int) error {
 	name, _, children := plan.ExplainPlan(true)
 
 	// Format the result column types.
@@ -212,7 +217,7 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 		parser.NewDString("result"),
 		parser.NewDString(formatColumns(plan.Columns(), true)),
 	}
-	if err := v.rows.AddRow(row); err != nil {
+	if err := v.rows.AddRow(ctx, row); err != nil {
 		return err
 	}
 
@@ -229,7 +234,7 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 			parser.NewDString(elt),
 			parser.NewDString(desc),
 		}
-		err = v.rows.AddRow(row)
+		err = v.rows.AddRow(ctx, row)
 	}
 	plan.ExplainTypes(regType)
 
@@ -239,7 +244,7 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 
 	// Recurse into sub-nodes.
 	for _, child := range children {
-		if err := populateTypes(v, child, level+1); err != nil {
+		if err := populateTypes(ctx, v, child, level+1); err != nil {
 			return err
 		}
 	}
@@ -249,6 +254,7 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 
 type explainPlanNode struct {
 	verbose bool
+	ctx     context.Context
 	plan    planNode
 	results *valuesNode
 }
@@ -277,7 +283,7 @@ func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 func (e *explainPlanNode) Start() error {
-	return populateExplain(e.verbose, e.results, e.plan, 0)
+	return populateExplain(e.ctx, e.verbose, e.results, e.plan, 0)
 }
 
 func (e *explainPlanNode) Close() {
@@ -285,7 +291,9 @@ func (e *explainPlanNode) Close() {
 	e.results.Close()
 }
 
-func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) error {
+func populateExplain(
+	ctx context.Context, verbose bool, v *valuesNode, plan planNode, level int,
+) error {
 	name, description, children := plan.ExplainPlan(verbose)
 
 	row := parser.DTuple{
@@ -297,12 +305,12 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) erro
 		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
 		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
 	}
-	if err := v.rows.AddRow(row); err != nil {
+	if err := v.rows.AddRow(ctx, row); err != nil {
 		return err
 	}
 
 	for _, child := range children {
-		if err := populateExplain(verbose, v, child, level+1); err != nil {
+		if err := populateExplain(ctx, verbose, v, child, level+1); err != nil {
 			return err
 		}
 	}

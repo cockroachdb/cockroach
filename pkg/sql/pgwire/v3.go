@@ -744,7 +744,7 @@ func (c *v3Conn) executeStatements(
 	// Note: sql.Executor gets its Context from c.session.context, which
 	// has been bound by v3Conn.setupSession().
 	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
-	defer results.Close()
+	defer results.Close(ctx)
 
 	tracing.AnnotateTrace()
 	if results.Empty {

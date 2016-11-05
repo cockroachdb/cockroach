@@ -19,6 +19,8 @@ package sql
 import (
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
@@ -93,10 +95,10 @@ func (p *planner) NewRowContainer(
 }
 
 // Close releases the memory associated with the RowContainer.
-func (c *RowContainer) Close() {
+func (c *RowContainer) Close(ctx context.Context) {
 	c.rows = nil
 	c.varSizedColumns = nil
-	c.memAcc.Close()
+	c.memAcc.Close(ctx)
 }
 
 // rowSize computes the size of a single row.
@@ -110,8 +112,8 @@ func (c *RowContainer) rowSize(row parser.DTuple) int64 {
 
 // AddRow attempts to insert a new row in the RowContainer.
 // Returns an error if the allocation was denied by the MemoryMonitor.
-func (c *RowContainer) AddRow(row parser.DTuple) error {
-	if err := c.memAcc.Grow(c.rowSize(row)); err != nil {
+func (c *RowContainer) AddRow(ctx context.Context, row parser.DTuple) error {
+	if err := c.memAcc.Grow(ctx, c.rowSize(row)); err != nil {
 		return err
 	}
 	c.rows = append(c.rows, row)
@@ -160,14 +162,14 @@ func (c *RowContainer) ResetLen(l int) {
 // Replace substitutes one row for another. This does query the
 // MemoryMonitor to determine whether the new row fits the
 // allowance.
-func (c *RowContainer) Replace(i int, newRow parser.DTuple) error {
+func (c *RowContainer) Replace(ctx context.Context, i int, newRow parser.DTuple) error {
 	newSz := c.rowSize(newRow)
 	oldSz := int64(0)
 	if c.rows[i] != nil {
 		oldSz = c.rowSize(c.rows[i])
 	}
 	if newSz != oldSz {
-		if err := c.memAcc.ResizeItem(oldSz, newSz); err != nil {
+		if err := c.memAcc.ResizeItem(ctx, oldSz, newSz); err != nil {
 			return err
 		}
 	}

@@ -77,9 +77,9 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				for _, vName := range varNames {
 					gen := varGen[vName]
 					value := gen(p)
-					if err := v.rows.AddRow(parser.DTuple{parser.NewDString(vName),
+					if err := v.rows.AddRow(p.ctx(), parser.DTuple{parser.NewDString(vName),
 						parser.NewDString(value)}); err != nil {
-						v.rows.Close()
+						v.rows.Close(p.ctx())
 						return nil, err
 					}
 				}
@@ -88,8 +88,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// check above.
 				gen := varGen[name]
 				value := gen(p)
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
-					v.rows.Close()
+				if err := v.rows.AddRow(p.ctx(), parser.DTuple{parser.NewDString(value)}); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -141,8 +141,8 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 					parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
 					defaultExpr,
 				}
-				if err := v.rows.AddRow(newRow); err != nil {
-					v.rows.Close()
+				if err := v.rows.AddRow(p.ctx(), newRow); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -233,7 +233,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 				}
 				interleave, err := p.showCreateInterleave(&idx)
 				if err != nil {
-					v.rows.Close()
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 				fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
@@ -269,16 +269,16 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 
 			interleave, err := p.showCreateInterleave(&desc.PrimaryIndex)
 			if err != nil {
-				v.rows.Close()
+				v.rows.Close(p.ctx())
 				return nil, err
 			}
 			buf.WriteString(interleave)
 
-			if err := v.rows.AddRow(parser.DTuple{
+			if err := v.rows.AddRow(p.ctx(), parser.DTuple{
 				parser.NewDString(n.Table.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
-				v.rows.Close()
+				v.rows.Close(p.ctx())
 				return nil, err
 			}
 			return v, nil
@@ -364,11 +364,11 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
-			if err := v.rows.AddRow(parser.DTuple{
+			if err := v.rows.AddRow(p.ctx(), parser.DTuple{
 				parser.NewDString(n.View.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
-				v.rows.Close()
+				v.rows.Close(p.ctx())
 				return nil, err
 			}
 			return v, nil
@@ -399,8 +399,8 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 			}
 			v := p.newContainerValuesNode(columns, 0)
 			for _, db := range p.session.virtualSchemas.orderedNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
-					v.rows.Close()
+				if err := v.rows.AddRow(p.ctx(), parser.DTuple{parser.NewDString(db)}); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -408,11 +408,11 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 				_, name, err := encoding.DecodeUnsafeStringAscending(
 					bytes.TrimPrefix(row.Key, prefix), nil)
 				if err != nil {
-					v.rows.Close()
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
-					v.rows.Close()
+				if err := v.rows.AddRow(p.ctx(), parser.DTuple{parser.NewDString(name)}); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -473,8 +473,8 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 						parser.NewDString(userPriv.User),
 						parser.NewDString(userPriv.PrivilegeString()),
 					}
-					if err := v.rows.AddRow(newRow); err != nil {
-						v.rows.Close()
+					if err := v.rows.AddRow(p.ctx(), newRow); err != nil {
+						v.rows.Close(p.ctx())
 						return nil, err
 					}
 				}
@@ -530,21 +530,21 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 					parser.NewDString(direction),
 					parser.MakeDBool(parser.DBool(isStored)),
 				}
-				return v.rows.AddRow(newRow)
+				return v.rows.AddRow(p.ctx(), newRow)
 			}
 
 			for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 				sequence := 1
 				for i, col := range index.ColumnNames {
 					if err := appendRow(index, col, sequence, index.ColumnDirections[i].String(), false); err != nil {
-						v.rows.Close()
+						v.rows.Close(p.ctx())
 						return nil, err
 					}
 					sequence++
 				}
 				for _, col := range index.StoreColumnNames {
 					if err := appendRow(index, col, sequence, "N/A", true); err != nil {
-						v.rows.Close()
+						v.rows.Close(p.ctx())
 						return nil, err
 					}
 					sequence++
@@ -612,8 +612,8 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 					columnsDatum,
 					detailsDatum,
 				}
-				if err := v.rows.AddRow(newRow); err != nil {
-					v.Close()
+				if err := v.rows.AddRow(p.ctx(), newRow); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -679,8 +679,8 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 					}
 				}
 
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(tableName)}); err != nil {
-					v.rows.Close()
+				if err := v.rows.AddRow(p.ctx(), parser.DTuple{parser.NewDString(tableName)}); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}
@@ -730,8 +730,8 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 					parser.NewDString(f.Category()),
 					parser.NewDString(f.Info),
 				}
-				if err := v.rows.AddRow(row); err != nil {
-					v.Close()
+				if err := v.rows.AddRow(p.ctx(), row); err != nil {
+					v.rows.Close(p.ctx())
 					return nil, err
 				}
 			}

@@ -73,7 +73,7 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 
 	window := &windowNode{
 		planner:      p,
-		values:       valuesNode{columns: s.columns},
+		values:       valuesNode{columns: s.columns, ctx: p.ctx()},
 		windowRender: make([]parser.TypedExpr, len(s.render)),
 	}
 
@@ -445,15 +445,15 @@ func (n *windowNode) Next() (bool, error) {
 		renderEnd := n.wrappedRenderVals.NumCols()
 		windowDefEnd := renderEnd + n.wrappedWindowDefVals.NumCols()
 		renderVals := valuesCopy[:renderEnd]
-		if err := n.wrappedRenderVals.AddRow(renderVals); err != nil {
+		if err := n.wrappedRenderVals.AddRow(n.planner.ctx(), renderVals); err != nil {
 			return false, err
 		}
 		windowDefVals := valuesCopy[renderEnd:windowDefEnd]
-		if err := n.wrappedWindowDefVals.AddRow(windowDefVals); err != nil {
+		if err := n.wrappedWindowDefVals.AddRow(n.planner.ctx(), windowDefVals); err != nil {
 			return false, err
 		}
 		indexedVarVals := valuesCopy[windowDefEnd:]
-		if err := n.wrappedIndexedVarVals.AddRow(indexedVarVals); err != nil {
+		if err := n.wrappedIndexedVarVals.AddRow(n.planner.ctx(), indexedVarVals); err != nil {
 			return false, err
 		}
 
@@ -674,7 +674,7 @@ func (n *windowNode) computeWindows() error {
 	}
 
 	// Done using window definition values, release memory.
-	n.wrappedWindowDefVals.Close()
+	n.wrappedWindowDefVals.Close(n.planner.ctx())
 	n.wrappedWindowDefVals = nil
 
 	return nil
@@ -734,16 +734,16 @@ func (n *windowNode) populateValues() error {
 			}
 		}
 
-		if err := n.values.rows.AddRow(curRow); err != nil {
+		if err := n.values.rows.AddRow(n.planner.ctx(), curRow); err != nil {
 			return err
 		}
 	}
 
 	// Done using the output of computeWindows, release memory and clear
 	// accounts.
-	n.wrappedRenderVals.Close()
+	n.wrappedRenderVals.Close(n.planner.ctx())
 	n.wrappedRenderVals = nil
-	n.wrappedIndexedVarVals.Close()
+	n.wrappedIndexedVarVals.Close(n.planner.ctx())
 	n.wrappedIndexedVarVals = nil
 	n.windowValues = nil
 	acc.Close()
@@ -783,15 +783,15 @@ func (*windowNode) SetLimitHint(_ int64, _ bool) {}
 func (n *windowNode) Close() {
 	n.plan.Close()
 	if n.wrappedRenderVals != nil {
-		n.wrappedRenderVals.Close()
+		n.wrappedRenderVals.Close(n.planner.ctx())
 		n.wrappedRenderVals = nil
 	}
 	if n.wrappedWindowDefVals != nil {
-		n.wrappedWindowDefVals.Close()
+		n.wrappedWindowDefVals.Close(n.planner.ctx())
 		n.wrappedWindowDefVals = nil
 	}
 	if n.wrappedIndexedVarVals != nil {
-		n.wrappedIndexedVarVals.Close()
+		n.wrappedIndexedVarVals.Close(n.planner.ctx())
 		n.wrappedIndexedVarVals = nil
 	}
 	if n.windowValues != nil {

@@ -300,8 +300,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		// authentication has completed successfully, so as to prevent a DoS
 		// attack: many open-but-unauthenticated connections that exhaust
 		// the memory available to connections already open.
-		acc := s.connMonitor.MakeBoundAccount(ctx)
-		if err := acc.Grow(baseSQLMemoryBudget); err != nil {
+		acc := s.connMonitor.MakeBoundAccount()
+		if err := acc.Grow(ctx, baseSQLMemoryBudget); err != nil {
 			return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
 				baseSQLMemoryBudget, err)
 		}
