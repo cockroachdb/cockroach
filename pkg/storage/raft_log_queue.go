@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"sort"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -136,12 +137,19 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 func computeTruncatableIndex(
 	raftStatus *raft.Status, raftLogSize, targetSize int64, firstIndex, pendingSnapshotIndex uint64,
 ) uint64 {
-	truncatableIndex := raftStatus.Commit
+	quorumIndex := getQuorumIndex(raftStatus, pendingSnapshotIndex)
+	truncatableIndex := quorumIndex
+
 	if raftLogSize <= targetSize {
 		// Only truncate to one of the behind indexes if the raft log is less than
 		// the target size. If the raft log is greater than the target size we
 		// always truncate to the quorum commit index.
-		truncatableIndex = getBehindIndex(raftStatus)
+		for _, progress := range raftStatus.Progress {
+			index := progress.Match
+			if truncatableIndex > index {
+				truncatableIndex = index
+			}
+		}
 		// The pending snapshot index acts as a placeholder for a replica that is
 		// about to be added to the range. We don't want to truncate the log in a
 		// way that will require that new replica to be caught up via a Raft
@@ -149,29 +157,34 @@ func computeTruncatableIndex(
 		if pendingSnapshotIndex > 0 && truncatableIndex > pendingSnapshotIndex {
 			truncatableIndex = pendingSnapshotIndex
 		}
-		if truncatableIndex < firstIndex {
-			truncatableIndex = firstIndex
-		}
 	}
 
-	// Never truncate past the quorum committed index.
-	if truncatableIndex > raftStatus.Commit {
-		truncatableIndex = raftStatus.Commit
+	if truncatableIndex < firstIndex {
+		truncatableIndex = firstIndex
+	}
+	// Never truncate past the quorum commit index (this can only occur if
+	// firstIndex > quorumIndex).
+	if truncatableIndex > quorumIndex {
+		truncatableIndex = quorumIndex
 	}
 	return truncatableIndex
 }
 
-// getBehindIndex returns the raft log index of the oldest node or the quorum
-// commit index if all nodes are caught up.
-func getBehindIndex(raftStatus *raft.Status) uint64 {
-	behind := raftStatus.Commit
+// getQuorumIndex returns the index which a quorum of the nodes have
+// committed. The pendingSnapshotIndex indicates the index of a pending
+// snapshot which is considered part of the Raft group even though it hasn't
+// been added yet.
+func getQuorumIndex(raftStatus *raft.Status, pendingSnapshotIndex uint64) uint64 {
+	match := make([]uint64, 0, len(raftStatus.Progress)+1)
 	for _, progress := range raftStatus.Progress {
-		index := progress.Match
-		if behind > index {
-			behind = index
-		}
+		match = append(match, progress.Match)
 	}
-	return behind
+	if pendingSnapshotIndex != 0 {
+		match = append(match, pendingSnapshotIndex)
+	}
+	sort.Sort(uint64Slice(match))
+	quorum := computeQuorum(len(match))
+	return match[len(match)-quorum]
 }
 
 // shouldQueue determines whether a range should be queued for truncating. This
@@ -224,3 +237,17 @@ func (*raftLogQueue) timer() time.Duration {
 func (*raftLogQueue) purgatoryChan() <-chan struct{} {
 	return nil
 }
+
+var _ sort.Interface = uint64Slice(nil)
+
+// uint64Slice implements sort.Interface
+type uint64Slice []uint64
+
+// Len implements sort.Interface
+func (a uint64Slice) Len() int { return len(a) }
+
+// Swap implements sort.Interface
+func (a uint64Slice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+// Less implements sort.Interface
+func (a uint64Slice) Less(i, j int) bool { return a[i] < a[j] }
