@@ -22,7 +22,7 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 
 $topbar-border      = $secondary-gray-1
 $last-updated-color = $secondary-gray-2
-$subnav-background  = $secondary-gray-3
+$subnav-background  = $secondary-gray-4
 
 *
   margin 0
@@ -121,32 +121,33 @@ body
       border 1px solid $secondary-gray-8
       margin 40px 0
 
-input
-  border-radius 5px
-  border 1px solid $secondary-gray-1
-  padding 15px
-  font-size 12px
-  font-family Lato-Medium
-  margin-bottom 25px
-
-  &:not([type=checkbox])
-    width 47%
-    margin-right 3%
-    height 40px
-
-  &[type=checkbox]
-    display inline
-    margin-right 15px
-    padding-bottom 0
+.section
+  input
+    border-radius 5px
+    border 1px solid $secondary-gray-1
+    padding 15px
+    font-size 12px
+    font-family Lato-Medium
     margin-bottom 25px
 
-  &.show-required
-    &:invalid
-      border-color $secondary-red-2
-    &:invalid + span.status:after
-        content "Required"
-    &:invalid + * + span.icon:after
-      content "\26A0"
+    &:not([type=checkbox])
+      width 47%
+      margin-right 3%
+      height 40px
+
+    &[type=checkbox]
+      display inline
+      margin-right 15px
+      padding-bottom 0
+      margin-bottom 25px
+
+    &.show-required
+      &:invalid
+        border-color $secondary-red-2
+      &:invalid + span.status:after
+          content "Required"
+      &:invalid + * + span.icon:after
+        content "\26A0"
 
 span.status
   position absolute
@@ -278,9 +279,9 @@ button
   background-color $subnav-background
   text-transform uppercase
   letter-spacing 2.17px
-  border-bottom 1px solid $secondary-gray-1
   height $subnav-height
-  position absolute
+  position fixed
+  left $nav-width
   top $top-bar-height
   right 0
   width 100%
@@ -335,13 +336,15 @@ a.toggle
   text-align center
   line-height 73px
   color white
-  position relative
+  position absolute
+  z-index 10
 
   &.expanded
     height 73px
 
   &.hidden
     height 0
+    visibility hidden
 
   &.disconnected
     background-color $secondary-salmon
@@ -634,8 +637,8 @@ div.charts
   position relative
 
 .timescale-selector
-  right auto
-  left 0
+  right 0
+  left auto
   top auto
   white-space nowrap
   padding 15px 25px
@@ -718,7 +721,7 @@ pre.sql
 
     .summary-item
       margin-bottom 12px
-      
+
     .summary-title
       font-size 12px
 

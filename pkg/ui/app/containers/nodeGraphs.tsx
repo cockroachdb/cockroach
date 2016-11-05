@@ -1,8 +1,5 @@
 import * as React from "react";
 import * as d3 from "d3";
-import { IInjectedProps } from "react-router";
-
-import { nodeIDAttr } from "./../util/constants";
 
 import GraphGroup from "../components/graphGroup";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
@@ -10,22 +7,25 @@ import { StackedAreaGraph } from "../components/stackedgraph";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
 
+interface NodeGraphsOwnProps {
+  groupId: string;
+  nodeIds: string[];
+}
+
 /**
  * Renders the main content of the help us page.
  */
-export default class extends React.Component<IInjectedProps, {}> {
+export default class NodeGraphs extends React.Component<NodeGraphsOwnProps, {}> {
   static displayTimeScale = true;
-
   render() {
-    let sources: string[];
-    let node = this.props.params[nodeIDAttr];
-    sources = node ? [node] : null;
-    let specifier = node ? `on node ${node}` : "across all nodes";
+    let sources: string[] = this.props.nodeIds || null;
+    let specifier = (sources && sources.length === 1) ? `on node ${sources[0]}` : "across all nodes";
 
     return <div className="section node">
       <div className="charts">
-        <h2>Activity</h2>
-          <GraphGroup groupId="node.activity">
+        <GraphGroup groupId="node.activity" hide={this.props.groupId !== "node.activity"}>
+          <h2>Activity</h2>
+
           <LineGraph title="SQL Connections" sources={sources} tooltip={`The total number of active SQL connections ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.conns" title="Client Connections" />
@@ -72,13 +72,13 @@ export default class extends React.Component<IInjectedProps, {}> {
             <LineGraph title="GC Pause Time" sources={sources} tooltip={`The ${sources ? "average and maximum" : ""} amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
               <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
                 <Metric name="cr.node.sys.gc.pause.ns" title={`${sources ? "" : "Avg "}Time`} aggregateAvg nonNegativeRate />
-                { node ? null : <Metric name="cr.node.sys.gc.pause.ns" title="Max Time" aggregateMax nonNegativeRate /> }
+                { (sources && sources[0]) ? null : <Metric name="cr.node.sys.gc.pause.ns" title="Max Time" aggregateMax nonNegativeRate /> }
               </Axis>
             </LineGraph>
 
           </GraphGroup>
-        <h2>SQL Queries</h2>
-          <GraphGroup groupId="node.queries">
+        <GraphGroup groupId="node.queries" hide={this.props.groupId !== "node.queries"}>
+          <h2>SQL Queries</h2>
             <LineGraph title="Reads" sources={sources} tooltip={`The average number of SELECT statements per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
@@ -108,9 +108,9 @@ export default class extends React.Component<IInjectedProps, {}> {
             </LineGraph>
 
           </GraphGroup>
-        <h2>System Resources</h2>
-          <GraphGroup groupId="node.resources">
 
+          <GraphGroup groupId="node.resources" hide={this.props.groupId !== "node.resources"}>
+            <h2>System Resources</h2>
             <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
                 <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
@@ -153,9 +153,9 @@ export default class extends React.Component<IInjectedProps, {}> {
             </LineGraph>
 
           </GraphGroup>
-        <h2>Advanced Internals</h2>
-          <GraphGroup groupId="node.internals">
 
+          <GraphGroup groupId="node.internals" hide={this.props.groupId !== "node.internals"}>
+            <h2>Advanced Internals</h2>
             <StackedAreaGraph title="Key/Value Transactions" sources={sources}>
               <Axis label="transactions/sec" format={ d3.format(".1f") }>
                 <Metric name="cr.node.txn.commits-count" title="Commits" nonNegativeRate />
