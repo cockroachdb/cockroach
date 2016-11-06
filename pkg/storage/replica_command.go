@@ -3163,53 +3163,64 @@ func (r *Replica) ChangeReplicas(
 		// raft operations. Racing with the replica GC queue can still partially
 		// negate the benefits of pre-emptive snapshots, but that is a recoverable
 		// degradation, not a catastrophic failure.
-		snap, err := r.GetSnapshot(ctx)
-		r.mu.Lock()
-		r.mu.outSnap.claimed = true
-		r.mu.Unlock()
-		defer r.CloseOutSnap()
-		log.Event(ctx, "generated snapshot")
-		if err != nil {
-			return errors.Wrapf(err, "%s: change replicas failed", r)
-		}
+		//
+		// NB: A closure is used here so that we can release the snapshot as soon
+		// as it has been applied on the remote and before the ChangeReplica
+		// operation is processed. This is important to allow other ranges to make
+		// progress which might be required for this ChangeReplicas operation to
+		// complete. See #10409.
+		if err := func() error {
+			snap, err := r.GetSnapshot(ctx)
+			r.mu.Lock()
+			r.mu.outSnap.claimed = true
+			r.mu.Unlock()
+			defer r.CloseOutSnap()
+			log.Event(ctx, "generated snapshot")
+			if err != nil {
+				return errors.Wrapf(err, "%s: change replicas failed", r)
+			}
 
-		fromRepDesc, err := r.GetReplicaDescriptor()
-		if err != nil {
-			return errors.Wrapf(err, "%s: change replicas failed", r)
-		}
+			fromRepDesc, err := r.GetReplicaDescriptor()
+			if err != nil {
+				return errors.Wrapf(err, "%s: change replicas failed", r)
+			}
 
-		if repDesc.ReplicaID != 0 {
-			return errors.Errorf(
-				"must not specify a ReplicaID (%d) for new Replica",
-				repDesc.ReplicaID,
-			)
-		}
+			if repDesc.ReplicaID != 0 {
+				return errors.Errorf(
+					"must not specify a ReplicaID (%d) for new Replica",
+					repDesc.ReplicaID,
+				)
+			}
 
-		if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
-			return err
-		}
+			if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
+				return err
+			}
 
-		req := SnapshotRequest_Header{
-			RangeDescriptor: updatedDesc,
-			RaftMessageRequest: RaftMessageRequest{
-				RangeID:     r.RangeID,
-				FromReplica: fromRepDesc,
-				ToReplica:   repDesc,
-				Message: raftpb.Message{
-					Type:     raftpb.MsgSnap,
-					To:       0, // special cased ReplicaID for preemptive snapshots
-					From:     uint64(fromRepDesc.ReplicaID),
-					Term:     snap.RaftSnap.Metadata.Term,
-					Snapshot: snap.RaftSnap,
+			req := SnapshotRequest_Header{
+				RangeDescriptor: updatedDesc,
+				RaftMessageRequest: RaftMessageRequest{
+					RangeID:     r.RangeID,
+					FromReplica: fromRepDesc,
+					ToReplica:   repDesc,
+					Message: raftpb.Message{
+						Type:     raftpb.MsgSnap,
+						To:       0, // special cased ReplicaID for preemptive snapshots
+						From:     uint64(fromRepDesc.ReplicaID),
+						Term:     snap.RaftSnap.Metadata.Term,
+						Snapshot: snap.RaftSnap,
+					},
 				},
-			},
-			RangeSize: r.GetMVCCStats().Total(),
-			// Recipients can choose to decline preemptive snapshots.
-			CanDecline: true,
-		}
-		if err := r.store.cfg.Transport.SendSnapshot(
-			ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
-			return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
+				RangeSize: r.GetMVCCStats().Total(),
+				// Recipients can choose to decline preemptive snapshots.
+				CanDecline: true,
+			}
+			if err := r.store.cfg.Transport.SendSnapshot(
+				ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
+				return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
+			}
+			return nil
+		}(); err != nil {
+			return err
 		}
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
