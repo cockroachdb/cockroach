@@ -1214,7 +1214,11 @@ func (r *Replica) beginCmds(
 		var spansLocal []roachpb.Span
 
 		for _, union := range ba.Requests {
-			header := union.GetInner().Header()
+			inner := union.GetInner()
+			if _, ok := inner.(*roachpb.NoopRequest); ok {
+				continue
+			}
+			header := inner.Header()
 			if keys.IsLocal(header.Key) {
 				spansLocal = append(spansLocal, header)
 			} else {

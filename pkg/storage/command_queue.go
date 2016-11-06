@@ -19,6 +19,7 @@ package storage
 import (
 	"container/heap"
 	"fmt"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -118,6 +119,24 @@ func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 		coveringOptimization: coveringOptimization,
 	}
 	return cq
+}
+
+// String dumps the contents of the command queue for testing.
+func (cq *CommandQueue) String() string {
+	var keys []string
+	count := 0
+	cq.tree.Do(func(i interval.Interface) bool {
+		c := i.(*cmd)
+		keys = append(keys, fmt.Sprintf("%s-%s", roachpb.Key(c.key.Start), roachpb.Key(c.key.End)))
+
+		count++
+		if count > 10 {
+			keys = append(keys, "...")
+			return true
+		}
+		return false
+	})
+	return strings.Join(keys, ",")
 }
 
 // prepareSpans ensures the spans all have an end key. Note that this function
