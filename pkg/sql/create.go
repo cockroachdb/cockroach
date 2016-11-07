@@ -680,6 +680,31 @@ func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create table", "", nil
 }
 
+type indexMatch bool
+
+const (
+	matchExact  indexMatch = true
+	matchPrefix indexMatch = false
+)
+
+// Referenced cols must be unique, thus referenced indexes must match exactly.
+// Referencing cols have no uniqueness requirement and thus may match a strict
+// prefix of an index.
+func matchesIndex(
+	cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact indexMatch,
+) bool {
+	if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
+		return false
+	}
+
+	for i := range cols {
+		if cols[i].ID != idx.ColumnIDs[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
@@ -759,30 +784,6 @@ func (p *planner) resolveFK(
 		}
 	}
 
-	type indexMatch bool
-	const (
-		matchExact  indexMatch = true
-		matchPrefix indexMatch = false
-	)
-
-	// Referenced cols must be unique, thus referenced indexes must match exactly.
-	// Referencing cols have no uniqueness requirement and thus may match a strict
-	// prefix of an index.
-	matchesIndex := func(
-		cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact indexMatch,
-	) bool {
-		if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
-			return false
-		}
-
-		for i := range cols {
-			if cols[i].ID != idx.ColumnIDs[i] {
-				return false
-			}
-		}
-		return true
-	}
-
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = fmt.Sprintf("fk_%s_ref_%s", d.FromCols[0], target.Name)
@@ -818,21 +819,67 @@ func (p *planner) resolveFK(
 		}
 		tbl.PrimaryIndex.ForeignKey = ref
 		backref.Index = tbl.PrimaryIndex.ID
-		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
-		return nil
-	}
-	for i := range tbl.Indexes {
-		if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
-			if tbl.Indexes[i].ForeignKey.IsSet() {
-				return fmt.Errorf("columns cannot be used by multiple foreign key constraints")
+	} else {
+		found := false
+		for i := range tbl.Indexes {
+			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
+				if tbl.Indexes[i].ForeignKey.IsSet() {
+					return fmt.Errorf("columns cannot be used by multiple foreign key constraints")
+				}
+				tbl.Indexes[i].ForeignKey = ref
+				backref.Index = tbl.Indexes[i].ID
+				found = true
+				break
 			}
-			tbl.Indexes[i].ForeignKey = ref
-			backref.Index = tbl.Indexes[i].ID
-			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
-			return nil
+		}
+		if !found {
+			added, err := addIndexForFK(tbl, srcCols, constraintName, ref)
+			if err != nil {
+				return err
+			}
+			backref.Index = added
 		}
 	}
-	return fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
+	targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
+	return nil
+}
+
+// Adds an index to a table descriptor (that is in the process of being created)
+// that will support using `srcCols` as the referencing (src) side of an FK.
+func addIndexForFK(
+	tbl *sqlbase.TableDescriptor,
+	srcCols []sqlbase.ColumnDescriptor,
+	constraintName string,
+	ref sqlbase.ForeignKeyReference,
+) (sqlbase.IndexID, error) {
+	// No existing index for the referencing columns found, so we add one.
+	idx := sqlbase.IndexDescriptor{
+		Name:             fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
+		ColumnNames:      make([]string, len(srcCols)),
+		ColumnDirections: make([]sqlbase.IndexDescriptor_Direction, len(srcCols)),
+		ForeignKey:       ref,
+	}
+	for i, c := range srcCols {
+		idx.ColumnDirections[i] = sqlbase.IndexDescriptor_ASC
+		idx.ColumnNames[i] = c.Name
+	}
+	if err := tbl.AddIndex(idx, false); err != nil {
+		return 0, err
+	}
+	if err := tbl.AllocateIDs(); err != nil {
+		return 0, err
+	}
+
+	added := tbl.Indexes[len(tbl.Indexes)-1]
+
+	// Since we just added the index, we can assume it is the last one rather than
+	// searching all the indexes again. That said, we sanity check that it matches
+	// in case a refactor ever violates that assumption.
+	if !matchesIndex(srcCols, added, matchPrefix) {
+		panic("no matching index and auto-generated index failed to match")
+	}
+
+	return added.ID, nil
 }
 
 // colNames converts a []colDesc to a human-readable string for use in error messages.
