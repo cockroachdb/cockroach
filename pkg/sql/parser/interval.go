@@ -19,6 +19,8 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -104,6 +106,65 @@ var isoTimeUnitMap = map[string]duration.Duration{
 	"H": {Nanos: time.Hour.Nanoseconds()},
 }
 
+const errInvalidSQLDuration = "interval: invalid SQL stardard duration %s"
+
+// Parse dash separated date string to interval.
+// We parse sql stardard string to interval by two steps.
+// Parsing the date part and parsing the time part.
+// See the following links for exampels:
+//  - http://www.postgresql.org/docs/9.1/static/datatype-datetime.html#DATATYPE-INTERVAL-INPUT-EXAMPLES
+func dateToDuration(s string) (duration.Duration, error) {
+	var d duration.Duration
+	if len(s) == 0 {
+		return d, fmt.Errorf(errInvalidSQLDuration, s)
+	}
+	parts := strings.Split(s, "-")
+	var v int
+	var err error
+	switch len(parts) {
+	case 1:
+		v, err = strconv.Atoi(parts[0])
+		if err != nil {
+			return d, fmt.Errorf(errInvalidSQLDuration, s)
+		}
+		d = d.Add(duration.Duration{Days: 1}.Mul(int64(v)))
+	case 2:
+		v, err = strconv.Atoi(parts[0])
+		if err != nil {
+			return d, fmt.Errorf(errInvalidSQLDuration, s)
+		}
+		d = d.Add(duration.Duration{Months: 12}.Mul(int64(v)))
+
+		v, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return d, fmt.Errorf(errInvalidSQLDuration, s)
+		}
+		d = d.Add(duration.Duration{Months: 1}.Mul(int64(v)))
+	case 3:
+		v, err = strconv.Atoi(parts[0])
+		if err != nil {
+			return d, fmt.Errorf(errInvalidSQLDuration, s)
+		}
+		d = d.Add(duration.Duration{Months: 12}.Mul(int64(v)))
+
+		v, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return d, fmt.Errorf(errInvalidSQLDuration, s)
+		}
+		d = d.Add(duration.Duration{Months: 1}.Mul(int64(v)))
+
+		v, err = strconv.Atoi(parts[2])
+		if err != nil {
+			return d, fmt.Errorf(errInvalidSQLDuration, s)
+		}
+		d = d.Add(duration.Duration{Days: 1}.Mul(int64(v)))
+
+	default:
+		return d, fmt.Errorf(errInvalidSQLDuration, s)
+	}
+	return d, nil
+}
+
 // Parses an ISO8601 (with designators) string.
 // See the following links for examples:
 //  - http://www.postgresql.org/docs/9.1/static/datatype-datetime.html#DATATYPE-INTERVAL-INPUT-EXAMPLES
@@ -171,10 +232,11 @@ func postgresToDuration(s string) (duration.Duration, error) {
 		l.consumeSpaces()
 		if unit, ok := postgresUnitMap[u]; ok {
 			d = d.Add(unit.Mul(v))
-		} else {
+		} else if u != "" {
 			return d, fmt.Errorf("interval: unknown unit %s in postgres duration %s", u, s)
+		} else {
+			return d, fmt.Errorf("interval: missing unit in postgres duration %s", s)
 		}
 	}
-
 	return d, nil
 }
