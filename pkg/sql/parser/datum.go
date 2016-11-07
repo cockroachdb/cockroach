@@ -979,6 +979,7 @@ type DInterval struct {
 // string, or an error if parsing is unsuccessful.
 func ParseDInterval(s string) (*DInterval, error) {
 	// At this time the only supported interval formats are:
+	// - SQL stardard.
 	// - Postgres compatible.
 	// - iso8601 format (with designators only), see interval.go for
 	//   sources of documentation.
@@ -997,6 +998,27 @@ func ParseDInterval(s string) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
+	} else if ((s[0] != '-') && strings.ContainsRune(s, '-')) || (strings.ContainsRune(s, ' ') && strings.ContainsRune(s, ':')) {
+		// No leading by '-' but containing '-', for example '1-2'
+		// Or, Containing both space and ':', for example '3 4:05:06'
+		parts := strings.Split(s, " ")
+		dur, err := dateToDuration(parts[0])
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval, err)
+		}
+		switch len(parts) {
+		case 1:
+			return &DInterval{Duration: dur}, nil
+		case 2:
+			ret, err := ParseDInterval(parts[1])
+			if err != nil {
+				return nil, makeParseError(s, TypeInterval, err)
+			}
+			ret = &DInterval{ret.Add(dur)}
+			return ret, nil
+		default:
+			return nil, makeParseError(s, TypeInterval, fmt.Errorf("unknown format"))
+		}
 	} else if strings.ContainsRune(s, ' ') {
 		// If it has a space, then we're most likely a postgres string,
 		// as neither iso8601 nor golang permit spaces.
