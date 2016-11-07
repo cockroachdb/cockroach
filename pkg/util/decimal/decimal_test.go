@@ -76,7 +76,7 @@ type decimalTwoArgsTestCase struct {
 
 func testDecimalSingleArgFunc(
 	t *testing.T,
-	f func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec,
+	f func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error),
 	s inf.Scale,
 	tests []decimalOneArgTestCase,
 ) {
@@ -86,20 +86,26 @@ func testDecimalSingleArgFunc(
 		exp.SetString(tc.expected)
 
 		// Test allocated return value.
-		z := f(nil, x, s)
+		z, err := f(nil, x, s)
+		if err != nil {
+			if tc.expected != err.Error() {
+				t.Errorf("%d: expected error %s, got %s", i, tc.expected, err)
+			}
+			continue
+		}
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test provided decimal mutation.
 		z.SetString("0.0")
-		f(z, x, s)
+		_, _ = f(z, x, s)
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test same arg mutation.
-		f(x, x, s)
+		_, _ = f(x, x, s)
 		if exp.Cmp(x) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, x)
 		}
@@ -107,9 +113,25 @@ func testDecimalSingleArgFunc(
 	}
 }
 
+func nilErrorSingle(
+	f func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec,
+) func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error) {
+	return func(a, b *inf.Dec, s inf.Scale) (*inf.Dec, error) {
+		return f(a, b, s), nil
+	}
+}
+
+func nilErrorDouble(
+	f func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) *inf.Dec,
+) func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error) {
+	return func(a, b, c *inf.Dec, s inf.Scale) (*inf.Dec, error) {
+		return f(a, b, c, s), nil
+	}
+}
+
 func testDecimalDoubleArgFunc(
 	t *testing.T,
-	f func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) *inf.Dec,
+	f func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error),
 	s inf.Scale,
 	tests []decimalTwoArgsTestCase,
 ) {
@@ -125,7 +147,13 @@ func testDecimalDoubleArgFunc(
 		}
 
 		// Test allocated return value.
-		z := f(nil, x, y, s)
+		z, err := f(nil, x, y, s)
+		if err != nil {
+			if tc.expected != err.Error() {
+				t.Errorf("%d: expected error %s, got %s", i, tc.expected, err)
+			}
+			continue
+		}
 		if z == nil {
 			if tc.expected != "nil" {
 				t.Errorf("%d: expected %s, got nil", i, tc.expected)
@@ -136,7 +164,7 @@ func testDecimalDoubleArgFunc(
 			continue
 		}
 		if _, ok := exp.SetString(tc.expected); !ok {
-			t.Errorf("could not set decimal: %s", tc.expected)
+			t.Errorf("%d: could not set decimal: %s", i, tc.expected)
 			continue
 		}
 		if exp.Cmp(z) != 0 {
@@ -145,20 +173,20 @@ func testDecimalDoubleArgFunc(
 
 		// Test provided decimal mutation.
 		z.SetString("0.0")
-		f(z, x, y, s)
+		_, _ = f(z, x, y, s)
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test first arg mutation.
-		f(x, x, y, s)
+		_, _ = f(x, x, y, s)
 		if exp.Cmp(x) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, x)
 		}
 		x.SetString(tc.input1)
 
 		// Test second arg mutation.
-		f(y, x, y, s)
+		_, _ = f(y, x, y, s)
 		if exp.Cmp(y) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, y)
 		}
@@ -166,7 +194,7 @@ func testDecimalDoubleArgFunc(
 
 		// Test both arg mutation, if possible.
 		if tc.input1 == tc.input2 {
-			f(x, x, x, s)
+			_, _ = f(x, x, x, s)
 			if exp.Cmp(x) != 0 {
 				t.Errorf("%d: expected %s, got %s", i, exp, x)
 			}
@@ -189,7 +217,7 @@ func TestDecimalMod(t *testing.T) {
 	modWithScale := func(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
 		return Mod(z, x, y)
 	}
-	testDecimalDoubleArgFunc(t, modWithScale, 0, tests)
+	testDecimalDoubleArgFunc(t, nilErrorDouble(modWithScale), 0, tests)
 }
 
 func BenchmarkDecimalMod(b *testing.B) {
@@ -227,7 +255,7 @@ func TestDecimalSqrt(t *testing.T) {
 		{"24544.95034", "156.6682812186308502"},
 		{"1234567898765432112.2763812", "1111111110.0000000055243715"},
 	}
-	testDecimalSingleArgFunc(t, Sqrt, 16, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Sqrt), 16, tests)
 }
 
 func TestDecimalSqrtDoubleScale(t *testing.T) {
@@ -244,7 +272,7 @@ func TestDecimalSqrtDoubleScale(t *testing.T) {
 		{"24544.95034", "156.66828121863085021083671472749063"},
 		{"1234567898765432112.2763812", "1111111110.00000000552437154552437153179097"},
 	}
-	testDecimalSingleArgFunc(t, Sqrt, 32, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Sqrt), 32, tests)
 }
 
 func BenchmarkDecimalSqrt(b *testing.B) {
@@ -277,7 +305,7 @@ func TestDecimalCbrt(t *testing.T) {
 		{"1000", "10.0"},
 		{"1234567898765432112.2763812", "1072765.9821799668569064"},
 	}
-	testDecimalSingleArgFunc(t, Cbrt, 16, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Cbrt), 16, tests)
 }
 
 func TestDecimalCbrtDoubleScale(t *testing.T) {
@@ -295,7 +323,7 @@ func TestDecimalCbrtDoubleScale(t *testing.T) {
 		{"1000", "10.0"},
 		{"1234567898765432112.2763812", "1072765.98217996685690644770246374397146"},
 	}
-	testDecimalSingleArgFunc(t, Cbrt, 32, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Cbrt), 32, tests)
 }
 
 func BenchmarkDecimalCbrt(b *testing.B) {
@@ -329,7 +357,7 @@ func TestDecimalLog(t *testing.T) {
 		{"10000000000000000000000000000000000000000000000", "105.9189142777261015"},
 		{"1000002350000002340000000345354700000000764000009", "110.5240868137114339"},
 	}
-	testDecimalSingleArgFunc(t, Log, 16, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Log), 16, tests)
 }
 
 func TestDecimalLogDoubleScale(t *testing.T) {
@@ -348,7 +376,7 @@ func TestDecimalLogDoubleScale(t *testing.T) {
 		{"10000000000000000000000000000000000000000000000", "105.91891427772610146482760691548075"},
 		{"1000002350000002340000000345354700000000764000009", "110.52408681371143392718404189196936"},
 	}
-	testDecimalSingleArgFunc(t, Log, 32, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Log), 32, tests)
 }
 
 func TestDecimalLog10(t *testing.T) {
@@ -361,7 +389,7 @@ func TestDecimalLog10(t *testing.T) {
 		{"1000", "3"},
 		{"1234567898765432112.2763812", "18.0915149802527613"},
 	}
-	testDecimalSingleArgFunc(t, Log10, 16, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Log10), 16, tests)
 }
 
 func TestDecimalLog10DoubleScale(t *testing.T) {
@@ -374,7 +402,7 @@ func TestDecimalLog10DoubleScale(t *testing.T) {
 		{"1000", "3"},
 		{"1234567898765432112.2763812", "18.09151498025276129089765759457130"},
 	}
-	testDecimalSingleArgFunc(t, Log10, 32, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Log10), 32, tests)
 }
 
 func TestDecimalLogN(t *testing.T) {
@@ -389,7 +417,7 @@ func TestDecimalLogN(t *testing.T) {
 		{"1234567898765432112.2763812", strE, "41.6572527032084749"},
 		{"1234567898765432112.2763812", "10", "18.0915149802527613"},
 	}
-	testDecimalDoubleArgFunc(t, LogN, 16, tests)
+	testDecimalDoubleArgFunc(t, nilErrorDouble(LogN), 16, tests)
 }
 
 func TestDecimalLogNDoubleScale(t *testing.T) {
@@ -404,7 +432,7 @@ func TestDecimalLogNDoubleScale(t *testing.T) {
 		{"1234567898765432112.2763812", strE, "41.65725270320847492372271693721825"},
 		{"1234567898765432112.2763812", "10", "18.09151498025276129089765759457130"},
 	}
-	testDecimalDoubleArgFunc(t, LogN, 32, tests)
+	testDecimalDoubleArgFunc(t, nilErrorDouble(LogN), 32, tests)
 }
 
 func BenchmarkDecimalLog(b *testing.B) {
@@ -442,7 +470,7 @@ func TestDecimalExp(t *testing.T) {
 		{"41.6572527032084749", "1234567898765432082.9890763978113354"},
 		{"312.345", "4463853675713824294922499817029570039071067102402155066185430427302882199695129254111120181064791178979160372068542599780002019509758173.2401488061929997"},
 	}
-	testDecimalSingleArgFunc(t, Exp, 16, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Exp), 16, tests)
 }
 
 func TestDecimalExpDoubleScale(t *testing.T) {
@@ -465,7 +493,7 @@ func TestDecimalExpDoubleScale(t *testing.T) {
 		{"41.6572527032084749", "1234567898765432082.98907639781133543894457806069743"},
 		{"312.345", "4463853675713824294922499817029570039071067102402155066185430427302882199695129254111120181064791178979160372068542599780002019509758173.24014880619299965312338408024449"},
 	}
-	testDecimalSingleArgFunc(t, Exp, 32, tests)
+	testDecimalSingleArgFunc(t, nilErrorSingle(Exp), 32, tests)
 }
 
 func BenchmarkDecimalExp(b *testing.B) {
@@ -499,20 +527,16 @@ func TestDecimalPow(t *testing.T) {
 		{"-9223372036854775807123.1", "2", "85070591730234615849667701979706147052698553.61"},
 		{"9223372036854775807123.1", "3", "784637716923335095255678472236230098075796571287653754351907705219.391"},
 		{"-9223372036854775807123.1", "3", "-784637716923335095255678472236230098075796571287653754351907705219.391"},
-		{"0", "-1", "nil"},
+		{"0", "-1", "zero raised to a negative power is undefined"},
 		{"0", "0", "1"},
 		{"0", "2", "0"},
-		{"-1", "-.1", "nil"},
+		{"-1", "-.1", "a negative number raised to a non-integer power yields a complex result"},
+		{"0.00000458966308373723", "-31962622854859143", "argument too large"},
+		{"0.00000458966", "-123415", "argument too large"},
+		{"2", "-38", "argument too large"},
+		{"10000000000", "500", "argument too large"},
 	}
-	testDecimalDoubleArgFunc(t, powTest, 16, tests)
-}
-
-func powTest(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
-	r, err := Pow(z, x, y, s)
-	if err != nil {
-		return nil
-	}
-	return r
+	testDecimalDoubleArgFunc(t, Pow, 16, tests)
 }
 
 func TestDecimalPowDoubleScale(t *testing.T) {
@@ -530,8 +554,12 @@ func TestDecimalPowDoubleScale(t *testing.T) {
 		{"-9223372036854775807123.1", "2", "85070591730234615849667701979706147052698553.61"},
 		{"9223372036854775807123.1", "3", "784637716923335095255678472236230098075796571287653754351907705219.391"},
 		{"-9223372036854775807123.1", "3", "-784637716923335095255678472236230098075796571287653754351907705219.391"},
+		{"0.00000458966308373723", "-31962622854859143", "argument too large"},
+		{"0.00000458966", "-123415", "argument too large"},
+		{"2", "-38", "0.000000000004"},
+		{"10000000000", "500", "argument too large"},
 	}
-	testDecimalDoubleArgFunc(t, powTest, 32, tests)
+	testDecimalDoubleArgFunc(t, Pow, 32, tests)
 }
 
 func BenchmarkDecimalPow(b *testing.B) {

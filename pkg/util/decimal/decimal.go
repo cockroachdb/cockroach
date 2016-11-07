@@ -423,7 +423,12 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 var (
 	errPowZeroNegative  = errors.New("zero raised to a negative power is undefined")
 	errPowNegNonInteger = errors.New("a negative number raised to a non-integer power yields a complex result")
+	errArgumentTooLarge = errors.New("argument too large")
 )
+
+// maxPrecision is the number of decimal digits (sum of before and after the
+// decimal point) that should return errArgumentTooLarge for any computation.
+const maxPrecision = 1000
 
 // Pow computes (x^y) as e^(y ln x) to the specified scale and stores the
 // result in z, which is also the return value. If y is not an integer and
@@ -479,7 +484,10 @@ func Pow(z, x, y *inf.Dec, s inf.Scale) (*inf.Dec, error) {
 	yu := float64(new(inf.Dec).Round(y, 0, inf.RoundUp).UnscaledBig().Int64())
 
 	// exponent precision = s + <the number of digits before decimal point in x> * y
-	es := s + inf.Scale(int32(numDigits*yu))
+	es := s + inf.Scale(numDigits*yu)
+	if es < 0 || es > maxPrecision {
+		return nil, errArgumentTooLarge
+	}
 
 	tmp = new(inf.Dec).Abs(x)
 	Log(tmp, tmp, es)
