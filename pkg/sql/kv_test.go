@@ -21,17 +21,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -58,15 +54,11 @@ func newKVNative(b *testing.B) kvInterface {
 	enableTracing := tracing.Disable()
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 
-	// TestServer.DB() returns the TxnCoordSender wrapped client. But that isn't
-	// a fair comparison with SQL as we want these client requests to be sent
-	// over the network.
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		User:       security.NodeUser,
-		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		SSLCert:    filepath.Join(security.EmbeddedCertsDir, "node.crt"),
-		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, "node.key"),
-	}, nil, s.Stopper())
+	// TestServer.KVClient() returns the TxnCoordSender wrapped client. But that
+	// isn't a fair comparison with SQL as we want these client requests to be
+	// sent over the network.
+	rpcContext := s.RPCContext()
+
 	conn, err := rpcContext.GRPCDial(s.ServingAddr())
 	if err != nil {
 		b.Fatal(err)
