@@ -654,7 +654,7 @@ func (rs rollbackStrategy) SQLCommand() string {
 // errors.
 // This function needs to be called from tests that set
 // server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
-func exec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx) bool) {
+func retryExec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx) bool) {
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -775,7 +775,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 			commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
 			// This is the magic. Run the txn closure until all the retries are exhausted.
-			exec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
+			retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
 				return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
 			})
 			checkRestarts(t, tc.magicVals)
