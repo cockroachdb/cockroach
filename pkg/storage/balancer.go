@@ -152,9 +152,9 @@ func (rcb rangeCountBalancer) improve(sl StoreList, excluded nodeIDSet) *roachpb
 	return candidate
 }
 
-// RebalanceThreshold is the minimum ratio of a store's range surplus to the
+// rebalanceThreshold is the minimum ratio of a store's range surplus to the
 // mean range count that permits rebalances away from that store.
-var RebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
+var rebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
 
 func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
@@ -164,7 +164,7 @@ func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl Stor
 
 	// Rebalance if we're above the rebalance target, which is
 	// mean*(1+RebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + RebalanceThreshold)))
+	target := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
 	rangeCountAboveTarget := store.Capacity.RangeCount > target
 
 	// Rebalance if the candidate store has a range count above the mean, and
@@ -172,7 +172,7 @@ func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl Stor
 	// than mean*(1-RebalanceThreshold).
 	var rebalanceToUnderfullStore bool
 	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
-		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - RebalanceThreshold)))
+		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - rebalanceThreshold)))
 		for _, desc := range sl.stores {
 			if desc.Capacity.RangeCount < underfullThreshold {
 				rebalanceToUnderfullStore = true

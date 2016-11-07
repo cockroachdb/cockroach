@@ -28,7 +28,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -2039,103 +2038,27 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 }
 
 // TestStoreRangeRebalance verifies that the replication queue will take
-// rebalancing opportunities and add a new replica on another store.
+// up-replicate a range when possible.
 func TestStoreRangeRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// TODO(peter,bram): clean up this test so this isn't required and unexport
-	// storage.RebalanceThreshold.
-	defer func(threshold float64) {
-		storage.RebalanceThreshold = threshold
-	}(storage.RebalanceThreshold)
-	storage.RebalanceThreshold = 0
 
 	// Start multiTestContext with replica rebalancing enabled.
 	sc := storage.TestStoreConfig(nil)
 	sc.AllocatorOptions = storage.AllocatorOptions{AllowRebalance: true}
 	mtc := &multiTestContext{storeConfig: &sc}
-
-	mtc.Start(t, 6)
+	mtc.Start(t, 3)
 	defer mtc.Stop()
-
-	splitKey := roachpb.Key("split")
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &splitArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	// The setup for this test is to have two ranges like so:
-	// s1:r1, s2:r1r2, s3:r1, s4:r2, s5:r2, s6:-
-	// and to rebalance range 1 away from store 2 to store 6:
-	// s1:r1, s2:r2, s3:r1, s4:r2, s5:r2, s6:r1
-
-	replica1 := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-	mtc.replicateRange(replica1.Desc().RangeID, 1, 2)
-
-	replica2Key := roachpb.RKey(splitKey)
-	replica2 := mtc.stores[0].LookupReplica(replica2Key, nil)
-	mtc.replicateRange(replica2.Desc().RangeID, 1, 3, 4)
-	mtc.unreplicateRange(replica2.Desc().RangeID, 0)
-
-	countReplicas := func() map[roachpb.StoreID]int {
-		counts := make(map[roachpb.StoreID]int)
-		rangeDescA := getRangeMetadata(roachpb.RKeyMin, mtc, t)
-		for _, repl := range rangeDescA.Replicas {
-			counts[repl.StoreID]++
-		}
-		rangeDescB := getRangeMetadata(replica2Key, mtc, t)
-		for _, repl := range rangeDescB.Replicas {
-			counts[repl.StoreID]++
-		}
-		return counts
-	}
-
-	// Check the initial conditions.
-	expectedStart := map[roachpb.StoreID]int{
-		roachpb.StoreID(1): 1,
-		roachpb.StoreID(2): 2,
-		roachpb.StoreID(3): 1,
-		roachpb.StoreID(4): 1,
-		roachpb.StoreID(5): 1,
-	}
-	actualStart := countReplicas()
-	if !reflect.DeepEqual(expectedStart, actualStart) {
-		t.Fatalf("replicas are not distributed as expected %s", pretty.Diff(expectedStart, actualStart))
-	}
-
-	expected := map[roachpb.StoreID]int{
-		roachpb.StoreID(1): 1,
-		roachpb.StoreID(2): 1,
-		roachpb.StoreID(3): 1,
-		roachpb.StoreID(4): 1,
-		roachpb.StoreID(5): 1,
-		roachpb.StoreID(6): 1,
-	}
 
 	mtc.initGossipNetwork()
 	util.SucceedsSoon(t, func() error {
-		// As of this writing, replicas which hold their range's lease cannot
-		// be removed; forcefully transfer the lease for range 1 to another
-		// store to allow store 2's replica to be removed.
-		if err := mtc.transferLease(replica1.RangeID, mtc.stores[0]); err != nil {
-			t.Fatal(err)
-		}
-
-		// It takes at least two passes to achieve the final result. In the
-		// first pass, we add the replica to store 6. In the second pass, we
-		// remove the replica from store 2. Note that it can also take some time
-		// for the snapshot to arrive.
+		mtc.gossipStores()
 		mtc.stores[0].ForceReplicationScanAndProcess()
 
-		// Gossip the stores so that the store pools are up to date. Note that
-		// there might be a delay between the call below and the asynchronous
-		// update of the store pools.
-		mtc.gossipStores()
-
 		// Exit when all stores have a single replica.
-		actual := countReplicas()
-		if !reflect.DeepEqual(expected, actual) {
-			return errors.Errorf("replicas are not distributed as expected %s", pretty.Diff(expected, actual))
+		const expected = 3
+		desc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
+		if actual := len(desc.Replicas); actual != expected {
+			return errors.Errorf("expected %d replicas, but found %d", expected, actual)
 		}
 		return nil
 	})
