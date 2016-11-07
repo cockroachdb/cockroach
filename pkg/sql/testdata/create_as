@@ -73,3 +73,10 @@ cups 10
 
 statement error pq: table "something" does not exist
 SELECT * FROM something LIMIT 1
+
+# Check for memory leak (#10466)
+statement ok
+CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
+
+statement error pq: relation "foo" already exists
+CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
