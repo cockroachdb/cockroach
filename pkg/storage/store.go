@@ -2318,7 +2318,7 @@ func (s *Store) Send(
 	s.mu.Lock()
 	retryOpts := s.cfg.RangeRetryOptions
 	s.mu.Unlock()
-	for r := retry.Start(retryOpts); next(&r); {
+	for r := retry.StartWithCtx(ctx, retryOpts); next(&r); {
 		// Get range and add command to the range for execution.
 		var err error
 		repl, err = s.GetReplica(ba.RangeID)
@@ -2423,9 +2423,13 @@ func (s *Store) Send(
 		return nil, pErr
 	}
 
-	// By default, retries are indefinite. However, some unittests set a
-	// maximum retry count; return txn retry error for transactional cases
-	// and the original error otherwise.
+	// By default, retries are infinite and we'll only get here if the
+	// context was canceled or timed out. However, some unittests set a
+	// maximum retry count; return txn retry error for transactional
+	// cases and the original error otherwise.
+	if err := ctx.Err(); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	log.Event(ctx, "store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {
 		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
