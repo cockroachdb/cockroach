@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 )
@@ -30,38 +31,23 @@ type joinAlgorithm int
 
 const (
 	joinTypeInner joinType = iota
-	joinTypeOuterLeft
-	joinTypeOuterFull
+	joinTypeLeftOuter
+	joinTypeFullOuter
 )
 
 const (
 	nestedLoopJoin joinAlgorithm = iota
 	hashJoin
-	mergeJoin
 )
 
-// commonColumns returns the names of columns common on the
-// right and left sides, for use by NATURAL JOIN.
-func commonColumns(left, right *dataSourceInfo) parser.NameList {
-	var res parser.NameList
-	for _, cLeft := range left.sourceColumns {
-		if cLeft.hidden {
-			continue
-		}
-		for _, cRight := range right.sourceColumns {
-			if cRight.hidden {
-				continue
-			}
-
-			if parser.ReNormalizeName(cLeft.Name) == parser.ReNormalizeName(cRight.Name) {
-				res = append(res, parser.Name(cLeft.Name))
-			}
-		}
-	}
-	return res
+// bucket here is the set of rows for a given group key (comprised of
+// columns specified by the join constraints), 'seen' is used to determine if
+// there was a matching group (with the same group key) in the opposite stream.
+type bucket struct {
+	rows *RowContainer
+	seen bool
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
@@ -87,20 +73,28 @@ type joinNode struct {
 	rightRows *valuesNode
 
 	// rightMatched remembers which of the right rows have matched in a
-	// full outer join.
-	// TODO(irfansharif): Not applicable for Hash Joins.
+	// full outer join. Not applicable for Hash Joins.
 	rightMatched []bool
 
 	// rightIdx indicates the current right row.
-	// In a full outer join, the value becomes negative during
-	// the last pass searching for unmatched right rows.
-	// TODO(irfansharif): Not applicable for Hash Joins.
+	// In a full outer join, the value becomes negative during the last pass
+	// searching for unmatched right rows. Not applicable for Hash Joins.
 	rightIdx int
 
 	// passedFilter turns to true when the current left row has matched
-	// at least one right row.
-	// TODO(irfansharif): Not applicable for Hash Joins.
+	// at least one right row. Not applicable for Hash Joins.
 	passedFilter bool
+
+	// TODO(irfansharif): Re-write nested loop joins to use the internal buffer
+	// instead and avoid all the tricky state management in the outer loop.
+
+	// buffer is our intermediate row store where we effectively 'stash' a batch
+	// of results at once, this is then used for subsequent calls to Next() and
+	// Values().
+	buffer *RowBuffer
+
+	buckets map[string]bucket
+	acc     mon.BoundAccount
 
 	// emptyRight contain tuples of NULL values to use on the
 	// right for outer joins when the filter fails.
@@ -117,6 +111,102 @@ type joinNode struct {
 	// doneReadingRight is used by debugNext() and DebugValues() when
 	// explain == explainDebug.
 	doneReadingRight bool
+}
+
+// makeJoin constructs a planDataSource for a JOIN node.
+// The tableInfo field from the left node is taken over (overwritten)
+// by the new node.
+func (p *planner) makeJoin(
+	astJoinType string, left planDataSource, right planDataSource, cond parser.JoinCond,
+) (planDataSource, error) {
+	leftInfo, rightInfo := left.info, right.info
+
+	swapped := false
+	var typ joinType
+	switch astJoinType {
+	case "JOIN", "INNER JOIN", "CROSS JOIN":
+		typ = joinTypeInner
+	case "LEFT JOIN":
+		typ = joinTypeLeftOuter
+	case "RIGHT JOIN":
+		left, right = right, left // swap
+		typ = joinTypeLeftOuter
+		swapped = true
+	case "FULL JOIN":
+		typ = joinTypeFullOuter
+	default:
+		return planDataSource{}, errors.Errorf("unsupported JOIN type %T", astJoinType)
+	}
+
+	// Check that the same table name is not used on both sides.
+	for alias := range right.info.sourceAliases {
+		if _, ok := left.info.sourceAliases[alias]; ok {
+			t := alias.Table()
+			if t == "" {
+				return planDataSource{}, errors.New(
+					"cannot join columns from multiple anonymous sources (missing AS clause)")
+			}
+			return planDataSource{}, fmt.Errorf(
+				"cannot join columns from the same source name %q (missing AS clause)", t)
+		}
+	}
+
+	// TODO(irfansharif): How do we choose which algorithm to use? Right
+	// now we simply default to hash joins if using NATURAL JOIN or
+	// USING, nested loop joins for ON predicates.
+	var (
+		info      *dataSourceInfo
+		pred      joinPredicate
+		algorithm joinAlgorithm
+		err       error
+	)
+
+	if cond == nil {
+		pred = &crossPredicate{}
+		info, err = concatDataSourceInfos(leftInfo, rightInfo)
+	} else {
+		switch t := cond.(type) {
+		case *parser.OnJoinCond:
+			pred, info, err = p.makeOnPredicate(leftInfo, rightInfo, t.Expr)
+			algorithm = nestedLoopJoin
+		case parser.NaturalJoinCond:
+			cols := commonColumns(leftInfo, rightInfo)
+			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, cols)
+			algorithm = hashJoin
+		case *parser.UsingJoinCond:
+			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, t.Cols)
+			algorithm = hashJoin
+		}
+	}
+	if err != nil {
+		return planDataSource{}, err
+	}
+
+	n := &joinNode{
+		left:          left,
+		right:         right,
+		joinType:      typ,
+		joinAlgorithm: algorithm,
+		pred:          pred,
+		columns:       info.sourceColumns,
+		swapped:       swapped,
+	}
+
+	if algorithm == nestedLoopJoin {
+		n.rightRows = p.newContainerValuesNode(right.plan.Columns(), 0)
+	} else if algorithm == hashJoin {
+		acc := p.session.TxnState.makeBoundAccount()
+		n.acc = acc
+		n.buffer = &RowBuffer{
+			rows: NewRowContainer(acc, n.Columns(), 0),
+		}
+		n.buckets = make(map[string]bucket)
+	}
+
+	return planDataSource{
+		info: info,
+		plan: n,
+	}, nil
 }
 
 // ExplainTypes implements the planNode interface.
@@ -148,13 +238,13 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 			jType = "CROSS"
 		}
 		buf.WriteString(jType)
-	case joinTypeOuterLeft:
+	case joinTypeLeftOuter:
 		if !n.swapped {
 			buf.WriteString("LEFT OUTER")
 		} else {
 			buf.WriteString("RIGHT OUTER")
 		}
-	case joinTypeOuterFull:
+	case joinTypeFullOuter:
 		buf.WriteString("FULL OUTER")
 	}
 
@@ -187,7 +277,6 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 	n.right.plan.MarkDebug(mode)
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
 // Start implements the planNode interface.
 func (n *joinNode) Start() error {
 	if err := n.pred.start(); err != nil {
@@ -202,53 +291,82 @@ func (n *joinNode) Start() error {
 	}
 
 	if n.explain != explainDebug {
-		// Load all the rows from the right side in memory.
-		for {
-			hasRow, err := n.right.plan.Next()
-			if err != nil {
-				return err
+		if n.joinAlgorithm == nestedLoopJoin {
+			// Load all the rows from the right side in memory.
+			for {
+				hasRow, err := n.right.plan.Next()
+				if err != nil {
+					return err
+				}
+				if !hasRow {
+					break
+				}
+				row := n.right.plan.Values()
+				if err := n.rightRows.rows.AddRow(row); err != nil {
+					return err
+				}
 			}
-			if !hasRow {
-				break
+			if n.rightRows.Len() == 0 {
+				n.rightRows.Close()
+				n.rightRows = nil
 			}
-			row := n.right.plan.Values()
-			newRow := make([]parser.Datum, len(row))
-			copy(newRow, row)
-			if err := n.rightRows.rows.AddRow(newRow); err != nil {
-				return err
+		} else if n.joinAlgorithm == hashJoin {
+			var scratch []byte
+			// Load all the rows from the right side and build our hashmap.
+			for {
+				hasRow, err := n.right.plan.Next()
+				if err != nil {
+					return err
+				}
+				if !hasRow {
+					break
+				}
+				row := n.right.plan.Values()
+				encoded, _, err := n.pred.encode(scratch, row, "right")
+				if err != nil {
+					return err
+				}
+
+				b, ok := n.buckets[string(encoded)]
+				if !ok {
+					b.rows = NewRowContainer(n.acc, n.right.plan.Columns(), 0)
+				}
+
+				copy := append(parser.DTuple(nil), row...)
+				if err := b.rows.AddRow(copy); err != nil {
+					return nil
+				}
+				n.buckets[string(encoded)] = b
+
+				scratch = encoded[:0]
 			}
-		}
-		if n.rightRows.Len() == 0 {
-			n.rightRows.Close()
-			n.rightRows = nil
 		}
 	}
 
 	// Pre-allocate the space for output rows.
 	n.output = make(parser.DTuple, len(n.columns))
 
-	// If needed, pre-allocate a left row of NULL tuples for when the
+	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
-	if n.joinType == joinTypeOuterLeft || n.joinType == joinTypeOuterFull {
+	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
 		n.emptyRight = make(parser.DTuple, len(n.right.plan.Columns()))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
 		}
-	}
-	// If needed, allocate an array of booleans to remember which
-	// right rows have matched.
-	if n.joinType == joinTypeOuterFull && n.rightRows != nil {
-		n.rightMatched = make([]bool, n.rightRows.rows.Len())
 		n.emptyLeft = make(parser.DTuple, len(n.left.plan.Columns()))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
 		}
 	}
+	// If needed, allocate an array of booleans to remember which
+	// right rows have matched.
+	if n.joinAlgorithm == nestedLoopJoin && n.joinType == joinTypeFullOuter && n.rightRows != nil {
+		n.rightMatched = make([]bool, n.rightRows.rows.Len())
+	}
 
 	return nil
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
 func (n *joinNode) debugNext() (bool, error) {
 	if !n.doneReadingRight {
 		hasRightRow, err := n.right.plan.Next()
@@ -264,18 +382,27 @@ func (n *joinNode) debugNext() (bool, error) {
 	return n.left.plan.Next()
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
 // Next implements the planNode interface.
-func (n *joinNode) Next() (bool, error) {
+func (n *joinNode) Next() (res bool, err error) {
 	if n.explain == explainDebug {
 		return n.debugNext()
 	}
+	if n.joinAlgorithm == nestedLoopJoin {
+		return n.nestedLoopJoinNext()
+	}
+	if n.joinAlgorithm == hashJoin {
+		return n.hashJoinNext()
+	}
 
+	return false, errors.New("unsupported JOIN algorithm")
+}
+
+func (n *joinNode) nestedLoopJoinNext() (bool, error) {
 	var leftRow, rightRow parser.DTuple
 	var nRightRows int
 
 	if n.rightRows == nil {
-		if n.joinType != joinTypeOuterLeft && n.joinType != joinTypeOuterFull {
+		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
 			// No rows on right; don't even try.
 			return false, nil
 		}
@@ -328,7 +455,7 @@ func (n *joinNode) Next() (bool, error) {
 
 		if curRightIdx >= nRightRows {
 			n.rightIdx = 0
-			if (n.joinType == joinTypeOuterLeft || n.joinType == joinTypeOuterFull) && !n.passedFilter {
+			if (n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter) && !n.passedFilter {
 				// If nothing was emitted in the previous batch of right rows,
 				// insert a tuple of NULLs on the right.
 				rightRow = n.emptyRight
@@ -373,13 +500,150 @@ func (n *joinNode) Next() (bool, error) {
 	return true, nil
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
-// Values implements the planNode interface.
-func (n *joinNode) Values() parser.DTuple {
-	return n.output
+// TODO(irfansharif): Currently hash joins are implemented only for USING and
+// NATURAL, predicate extraction for ON ignored.
+func (n *joinNode) hashJoinNext() (bool, error) {
+	if len(n.buckets) == 0 {
+		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
+			// No rows on right; don't even try.
+			return false, nil
+		}
+	}
+
+	// If results available from from previously computed results, we just
+	// return true.
+	if n.buffer.Next() {
+		return true, nil
+	}
+
+	// Compute next batch of matching rows.
+	var scratch []byte
+	for {
+		leftHasRow, err := n.left.plan.Next()
+		if err != nil {
+			return false, nil
+		}
+		if !leftHasRow {
+			break
+		}
+
+		lrow := n.left.plan.Values()
+		encoded, containsNull, err := n.pred.encode(scratch, lrow, "left")
+		if err != nil {
+			return false, err
+		}
+
+		// We make the explicit check for whether or not lrow contained a NULL
+		// tuple. The reasoning here is because of the way we expect NULL
+		// equality checks to behave (i.e. NULL != NULL) and the fact that we
+		// use the encoding of any given row as key into our bucket. Thus if we
+		// encountered a NULL row when building the hashmap we have to store in
+		// order to use it for RIGHT OUTER joins but if we encounter another
+		// NULL row when going through the left stream (probing phase), matching
+		// this with the first NULL row would be incorrect.
+		//
+		// If we have have the following:
+		// CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (NULL);
+		//     |  x   |
+		//     ------
+		//    | NULL |
+		//
+		// For the following query:
+		// SELECT * FROM t AS a FULL OUTER JOIN t AS b USING(x);
+		//
+		// We expect:
+		//     |  x   |
+		//     ------
+		//    | NULL |
+		//    | NULL |
+		if containsNull {
+			if n.joinType == joinTypeInner {
+				scratch = encoded[:0]
+				continue
+			}
+			// We append an empty right row to the left row, adding the result
+			// to our buffer for the subsequent call to Next().
+			n.pred.prepareRow(n.output, lrow, n.emptyRight)
+			if err := n.buffer.AddRow(n.output); err != nil {
+				return false, err
+			}
+			return n.buffer.Next(), nil
+		}
+
+		b, ok := n.buckets[string(encoded)]
+		if !ok {
+			if n.joinType == joinTypeInner {
+				scratch = encoded[:0]
+				continue
+			}
+			// Given we didn't find a matching right row we append an empty
+			// right row to the left row, adding the result to our buffer for
+			// the subsequent call to Next().
+			n.pred.prepareRow(n.output, lrow, n.emptyRight)
+			if err := n.buffer.AddRow(n.output); err != nil {
+				return false, err
+			}
+			return n.buffer.Next(), nil
+		}
+
+		b.seen = true
+		n.buckets[string(encoded)] = b
+		// We iterate through all the rows in the bucket attempting to match the
+		// filter, if the filter passes we add it to the buffer.
+		for i := 0; i < b.rows.Len(); i++ {
+			rrow := b.rows.At(i)
+			passesFilter, err := n.pred.eval(n.output, lrow, rrow)
+			if err != nil {
+				return false, err
+			}
+
+			if !passesFilter {
+				scratch = encoded[:0]
+				continue
+			}
+
+			n.pred.prepareRow(n.output, lrow, rrow)
+			if err := n.buffer.AddRow(n.output); err != nil {
+				return false, err
+			}
+		}
+		// If any of the joined rows matched the filter we return true, else we
+		// try for the next lrow.
+		if n.buffer.Next() {
+			return true, nil
+		}
+	}
+
+	// no more lrows, we go through the unmatched rows in the internal hashmap.
+	if n.joinType != joinTypeFullOuter {
+		return false, nil
+	}
+
+	for k, b := range n.buckets {
+		if !b.seen {
+			b.seen = true
+			for i := 0; i < b.rows.Len(); i++ {
+				rrow := b.rows.At(i)
+				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
+				if err := n.buffer.AddRow(n.output); err != nil {
+					return false, err
+				}
+			}
+			n.buckets[k] = b
+		}
+	}
+
+	return n.buffer.Next(), nil
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
+// Values implements the planNode interface.
+func (n *joinNode) Values() parser.DTuple {
+	if n.joinAlgorithm == nestedLoopJoin {
+		return n.output
+	}
+	return n.buffer.Values() // n.joinAlgorithm == hashJoin
+}
+
 // DebugValues implements the planNode interface.
 func (n *joinNode) DebugValues() debugValues {
 	var res debugValues
@@ -394,88 +658,46 @@ func (n *joinNode) DebugValues() debugValues {
 	return res
 }
 
-// TODO(irfansharif): Feature flag to toggle between Hash Join/Nested Loop Join.
 // Close implements the planNode interface.
 func (n *joinNode) Close() {
-	if n.rightRows != nil {
-		n.rightRows.Close()
-		n.rightRows = nil
+	if n.joinAlgorithm == nestedLoopJoin {
+		if n.rightRows != nil {
+			n.rightRows.Close()
+			n.rightRows = nil
+		}
+		n.rightMatched = nil
 	}
-	n.rightMatched = nil
+	if n.joinAlgorithm == hashJoin {
+		n.buffer.Close()
+		n.buffer = nil
+		for _, b := range n.buckets {
+			if b.rows != nil {
+				b.rows.Close()
+				b.rows = nil
+			}
+		}
+	}
 	n.right.plan.Close()
 	n.left.plan.Close()
 }
 
-// makeJoin constructs a planDataSource for a JOIN node.
-// The tableInfo field from the left node is taken over (overwritten)
-// by the new node.
-func (p *planner) makeJoin(
-	astJoinType string, left planDataSource, right planDataSource, cond parser.JoinCond,
-) (planDataSource, error) {
-	leftInfo, rightInfo := left.info, right.info
-
-	swapped := false
-	var typ joinType
-	switch astJoinType {
-	case "JOIN", "INNER JOIN", "CROSS JOIN":
-		typ = joinTypeInner
-	case "LEFT JOIN":
-		typ = joinTypeOuterLeft
-	case "RIGHT JOIN":
-		left, right = right, left // swap
-		typ = joinTypeOuterLeft
-		swapped = true
-	case "FULL JOIN":
-		typ = joinTypeOuterFull
-	default:
-		return planDataSource{}, errors.Errorf("unsupported JOIN type %T", astJoinType)
-	}
-
-	// Check that the same table name is not used on both sides.
-	for alias := range right.info.sourceAliases {
-		if _, ok := left.info.sourceAliases[alias]; ok {
-			t := alias.Table()
-			if t == "" {
-				return planDataSource{}, errors.New(
-					"cannot join columns from multiple anonymous sources (missing AS clause)")
+// commonColumns returns the names of columns common on the
+// right and left sides, for use by NATURAL JOIN.
+func commonColumns(left, right *dataSourceInfo) parser.NameList {
+	var res parser.NameList
+	for _, cLeft := range left.sourceColumns {
+		if cLeft.hidden {
+			continue
+		}
+		for _, cRight := range right.sourceColumns {
+			if cRight.hidden {
+				continue
 			}
-			return planDataSource{}, fmt.Errorf(
-				"cannot join columns from the same source name %q (missing AS clause)", t)
+
+			if parser.ReNormalizeName(cLeft.Name) == parser.ReNormalizeName(cRight.Name) {
+				res = append(res, parser.Name(cLeft.Name))
+			}
 		}
 	}
-
-	var info *dataSourceInfo
-	var pred joinPredicate
-	var err error
-	if cond == nil {
-		pred = &crossPredicate{}
-		info, err = concatDataSourceInfos(leftInfo, rightInfo)
-	} else {
-		switch t := cond.(type) {
-		case *parser.OnJoinCond:
-			pred, info, err = p.makeOnPredicate(leftInfo, rightInfo, t.Expr)
-		case parser.NaturalJoinCond:
-			cols := commonColumns(leftInfo, rightInfo)
-			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, cols)
-		case *parser.UsingJoinCond:
-			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, t.Cols)
-		}
-	}
-	if err != nil {
-		return planDataSource{}, err
-	}
-
-	return planDataSource{
-		info: info,
-		plan: &joinNode{
-			joinType:      typ,
-			joinAlgorithm: hashJoin,
-			left:          left,
-			right:         right,
-			pred:          pred,
-			columns:       info.sourceColumns,
-			swapped:       swapped,
-			rightRows:     p.newContainerValuesNode(right.plan.Columns(), 0),
-		},
-	}, nil
+	return res
 }
