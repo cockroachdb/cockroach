@@ -2994,22 +2994,13 @@ func (r *Replica) changeReplicasTrigger(
 	ctx context.Context, batch engine.Batch, change *roachpb.ChangeReplicasTrigger,
 ) ProposalData {
 	var pd ProposalData
-	// If we're removing the current replica, add it to the range GC queue.
-	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
-		// This wants to run as late as possible, maximizing the chances
-		// that the other nodes have finished this command as well (since
-		// processing the removal from the queue looks up the Range at the
-		// lease holder, being too early here turns this into a no-op).
-		pd.addToReplicaGCQueue = true
-	} else {
-		// After a successful replica addition or removal check to see if the
-		// range needs to be split. Splitting usually takes precedence over
-		// replication via configuration of the split and replicate queues, but
-		// if the split occurs concurrently with the replicas change the split
-		// can fail and won't retry until the next scanner cycle. Re-queuing
-		// the replica here removes that latency.
-		pd.maybeAddToSplitQueue = true
-	}
+	// After a successful replica addition or removal check to see if the
+	// range needs to be split. Splitting usually takes precedence over
+	// replication via configuration of the split and replicate queues, but
+	// if the split occurs concurrently with the replicas change the split
+	// can fail and won't retry until the next scanner cycle. Re-queuing
+	// the replica here removes that latency.
+	pd.maybeAddToSplitQueue = true
 
 	// Gossip the first range whenever the range descriptor changes. We also
 	// gossip the first range whenever the lease holder changes, but that might
