@@ -2029,6 +2029,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
+				log.Infof(context.Background(), "starting to block %s", filterArgs.Req)
 				blockingStart <- struct{}{}
 				<-blockingDone
 			}
@@ -2081,7 +2082,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 
 	// Start a third command which will wait for the first.
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd2Done := startBlockingCmd(ctx, key1, key2)
+	cmd3Done := startBlockingCmd(ctx, key1, key2)
 
 	// Wait until both commands are in the command queue.
 	util.SucceedsSoon(t, func() error {
@@ -2094,18 +2095,16 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		return nil
 	})
 
-	// Cancel the third command, then finish the first to unblock it.
+	// Cancel the third command; it will finish even though it is still
+	// blocked by the command queue.
 	cancel()
-	blockingDone <- struct{}{}
-	if pErr := <-cmd1Done; pErr != nil {
+	if pErr := <-cmd3Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
 		t.Fatal(pErr)
 	}
 
-	// The third command should finish with a context cancellation
-	// error instead of executing. If it had started executing, it would
-	// be caught in the command filter and we'd time out reading from
-	// the channel.
-	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+	// Now unblock the first command to allow the test to clean up.
+	blockingDone <- struct{}{}
+	if pErr := <-cmd1Done; pErr != nil {
 		t.Fatal(pErr)
 	}
 }
