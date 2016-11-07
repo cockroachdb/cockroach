@@ -1053,36 +1053,6 @@ func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Repli
 	return raftLeaderRepl
 }
 
-// transferLease moves the lease for the specified rangeID to the destination
-// store. The destination store must have a replica of the range on it.
-func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, destStore *storage.Store) error {
-	destReplica, err := destStore.GetReplica(rangeID)
-	if err != nil {
-		return err
-	}
-	origLeasePtr, _ := destReplica.GetLease()
-	if origLeasePtr == nil {
-		return errors.Errorf("could not get lease ptr from replica %s", destReplica)
-	}
-	originalStoreID := origLeasePtr.Replica.StoreID
-
-	// Get the replica that currently holds the lease.
-	var origStore *storage.Store
-	for _, store := range m.stores {
-		if store.Ident.StoreID == originalStoreID {
-			origStore = store
-			break
-		}
-	}
-
-	origRepl, err := origStore.GetReplica(destReplica.RangeID)
-	if err != nil {
-		return err
-	}
-
-	return origRepl.AdminTransferLease(destStore.Ident.StoreID)
-}
-
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
 func getArgs(key roachpb.Key) roachpb.GetRequest {
