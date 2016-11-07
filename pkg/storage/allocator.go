@@ -40,8 +40,8 @@ const (
 	maxFractionUsedThreshold = 0.95
 
 	// priorities for various repair operations.
-	removeDeadReplicaPriority  float64 = 10000
-	addMissingReplicaPriority  float64 = 1000
+	addMissingReplicaPriority  float64 = 10000
+	removeDeadReplicaPriority  float64 = 1000
 	removeExtraReplicaPriority float64 = 100
 )
 

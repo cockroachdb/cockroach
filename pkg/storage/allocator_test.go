@@ -799,6 +799,64 @@ func TestAllocatorComputeAction(t *testing.T) {
 		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
+		// Needs Three replicas, have two
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+		},
+		// Needs Five replicas, have four.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   5,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+		},
 		// Needs three replicas, two are on dead stores.
 		{
 			zone: config.ZoneConfig{
@@ -924,64 +982,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 				},
 			},
 			expectedAction: AllocatorRemoveDead,
-		},
-		// Needs Three replicas, have two
-		{
-			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   2,
-						NodeID:    2,
-						ReplicaID: 2,
-					},
-				},
-			},
-			expectedAction: AllocatorAdd,
-		},
-		// Needs Five replicas, have four.
-		{
-			zone: config.ZoneConfig{
-				NumReplicas:   5,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   2,
-						NodeID:    2,
-						ReplicaID: 2,
-					},
-					{
-						StoreID:   3,
-						NodeID:    3,
-						ReplicaID: 3,
-					},
-					{
-						StoreID:   4,
-						NodeID:    4,
-						ReplicaID: 4,
-					},
-				},
-			},
-			expectedAction: AllocatorAdd,
 		},
 		// Need three replicas, have four.
 		{
