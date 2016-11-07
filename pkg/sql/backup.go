@@ -29,6 +29,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
@@ -389,17 +391,30 @@ func restoreTable(
 			// should be possible to remove it from the one txn this is all currently
 			// run under. If we do that, make sure this data gets cleaned up on errors.
 			wg.Add(1)
-			go func(r sqlbase.BackupRangeDescriptor) {
-				if err := db.Txn(ctx, func(txn *client.Txn) error {
-					return Ingest(ctx, txn, r.Path, r.CRC, intersectBegin, intersectEnd, newTableID)
-				}); err != nil {
-					log.Error(ctx, err)
-					result.Lock()
-					defer result.Unlock()
-					if result.firstErr != nil {
-						result.firstErr = err
+			go func(desc sqlbase.BackupRangeDescriptor) {
+				for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+					err := db.Txn(ctx, func(txn *client.Txn) error {
+						return Ingest(ctx, txn, desc.Path, desc.CRC, intersectBegin, intersectEnd, newTableID)
+					})
+					if _, ok := err.(*client.AutoCommitError); ok {
+						log.Errorf(ctx, "auto commit error during ingest: %s", err)
+						// TODO(dan): Ingest currently does not rely on the
+						// range being empty, but the plan is that it will. When
+						// that change happens, this will have to delete any
+						// partially ingested data or something.
+						continue
 					}
-					result.numErrs++
+
+					if err != nil {
+						log.Errorf(ctx, "%T %s", err, err)
+						result.Lock()
+						defer result.Unlock()
+						if result.firstErr != nil {
+							result.firstErr = err
+						}
+						result.numErrs++
+					}
+					break
 				}
 				wg.Done()
 			}(rangeDesc)
