@@ -112,9 +112,24 @@ func (cl continuousLoadTest) startLoad(f *terrafarm.Farmer) error {
 // the test cluster.
 func (cl continuousLoadTest) Run(t *testing.T) {
 	f := farmer(t, cl.Prefix+cl.shortTestTimeout())
-	ctx, err := WithClusterTimeout(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	ctx := context.Background()
+	// If the timeout flag was set, calculate an appropriate lower timeout by
+	// subtracting expected cluster creation and teardown times to allow for
+	// proper shutdown at the end of the test.
+	if fl := flag.Lookup("test.timeout"); fl != nil {
+		timeout, err := time.ParseDuration(fl.Value.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// We've empirically observed 6-7 minute teardown times. We set aside a
+		// larger duration to account for outliers and setup time.
+		if setupTeardownDuration := 10 * time.Minute; timeout <= setupTeardownDuration {
+			t.Fatalf("test.timeout must be greater than create/destroy interval %s", setupTeardownDuration)
+		} else {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, timeout-setupTeardownDuration)
+			defer cancel()
+		}
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		log.Infof(ctx, "load test will end at %s", deadline)
