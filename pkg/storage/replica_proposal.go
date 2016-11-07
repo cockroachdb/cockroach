@@ -82,9 +82,6 @@ type LocalProposalData struct {
 	// The downstream-of-Raft logic does not exist at time of writing.
 	leaseMetricsResult *bool
 
-	// TODO(tschottdorf): there is no need to ever have these actions below
-	// taken on the followers, correct?
-
 	// When set (in which case we better be the first range), call
 	// gossipFirstRange if the Replica holds the lease.
 	gossipFirstRange bool
@@ -92,8 +89,6 @@ type LocalProposalData struct {
 	maybeGossipSystemConfig bool
 	// Call maybeAddToSplitQueue.
 	maybeAddToSplitQueue bool
-	// Call maybeAddToReplicaGCQueue.
-	addToReplicaGCQueue bool
 	// Call maybeGossipNodeLiveness with the specified Span, if set.
 	maybeGossipNodeLiveness *roachpb.Span
 }
@@ -238,7 +233,6 @@ func (p *ProposalData) MergeAndDestroy(q ProposalData) error {
 	coalesceBool(&p.gossipFirstRange, &q.gossipFirstRange)
 	coalesceBool(&p.maybeGossipSystemConfig, &q.maybeGossipSystemConfig)
 	coalesceBool(&p.maybeAddToSplitQueue, &q.maybeAddToSplitQueue)
-	coalesceBool(&p.addToReplicaGCQueue, &q.addToReplicaGCQueue)
 
 	if (q != ProposalData{}) {
 		log.Fatalf(context.TODO(), "unhandled ProposalData: %s", pretty.Diff(q, ProposalData{}))
@@ -512,6 +506,20 @@ func (r *Replica) handleReplicatedProposalData(
 			)
 		}
 		rpd.State.Desc = nil
+	}
+
+	if change := rpd.ChangeReplicas; change != nil {
+		if change.ChangeType == roachpb.REMOVE_REPLICA &&
+			r.store.StoreID() == change.Replica.StoreID {
+			// This wants to run as late as possible, maximizing the chances
+			// that the other nodes have finished this command as well (since
+			// processing the removal from the queue looks up the Range at the
+			// lease holder, being too early here turns this into a no-op).
+			if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
+				// Log the error; the range should still be GC'd eventually.
+				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
+			}
+		}
 		rpd.ChangeReplicas = nil
 	}
 
@@ -629,14 +637,6 @@ func (r *Replica) handleLocalProposalData(
 			log.Infof(ctx, "unable to gossip first range: %s", err)
 		}
 		lpd.gossipFirstRange = false
-	}
-
-	if lpd.addToReplicaGCQueue {
-		if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
-			// Log the error; the range should still be GC'd eventually.
-			log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-		}
-		lpd.addToReplicaGCQueue = false
 	}
 
 	if lpd.maybeAddToSplitQueue {
