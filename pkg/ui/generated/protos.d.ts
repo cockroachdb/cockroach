@@ -1753,6 +1753,15 @@ getReplica?() : ReplicaDescriptor;
 
 
 
+proposed_ts?: util.hlc.Timestamp;
+		
+
+getProposedTs?() : util.hlc.Timestamp;
+		setProposedTs?(proposedTs : util.hlc.Timestamp): void;
+		
+
+
+
 }
 
 	export interface LeaseMessage extends Lease {

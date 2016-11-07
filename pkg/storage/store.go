@@ -645,6 +645,15 @@ type StoreTestingKnobs struct {
 	// should get rid of such practices once we make TestServer take a
 	// ManualClock.
 	DisableMaxOffsetCheck bool
+	// DontPreventUseOfOldLeaseOnStart disables the initialization of
+	// replica.mu.minLeaseProposedTS on replica.Init(). This has the effect of
+	// allowing the replica to use the lease that it had in a previous life (in
+	// case the tests persisted the engine used in said previous life).
+	DontPreventUseOfOldLeaseOnStart bool
+	// LeaseRequestEvent, if set, is called when replica.requestLeaseLocked() is
+	// called to acquire a new lease. This can be used to assert that a request
+	// triggers a lease acquisition.
+	LeaseRequestEvent func(ts hlc.Timestamp)
 	// LeaseTransferBlockedOnExtensionEvent, if set, is called when
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
@@ -1678,12 +1687,15 @@ func splitPostApply(
 		log.Fatal(ctx, err)
 	}
 
-	// Copy the timestamp cache into the RHS range.
+	// Finish initialization of the RHS.
 	r.mu.Lock()
 	rightRng.mu.Lock()
+	// Copy the timestamp cache from the LHS.
 	// TODO(andrei): We should truncate the entries in both LHS and RHS' timestamp
 	// caches to the respective spans of these new ranges.
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
+	// Copy the minLeaseProposedTS from the LHS.
+	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Event(ctx, "copied timestamp cache")

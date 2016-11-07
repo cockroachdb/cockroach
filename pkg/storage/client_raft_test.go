@@ -303,6 +303,9 @@ func TestRestoreReplicas(t *testing.T) {
 	// Disable periodic gossip activities. The periodic gossiping of the first
 	// range can cause spurious lease transfers which cause this test to fail.
 	sc.TestingKnobs.DisablePeriodicGossips = true
+	// Allow a replica to use the lease it had before a restart; we don't want
+	// this test to deal with needing to acquire new leases after the restart.
+	sc.TestingKnobs.DontPreventUseOfOldLeaseOnStart = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
