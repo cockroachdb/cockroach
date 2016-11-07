@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	osexec "os/exec"
 	"testing"
 	"time"
 
@@ -84,6 +85,9 @@ func runPgbenchQueryParallel(b *testing.B, db *gosql.DB) {
 }
 
 func execPgbench(b *testing.B, pgUrl url.URL) {
+	if _, err := osexec.LookPath("pgbench"); err != nil {
+		b.Skip("pgbench is not available on PATH")
+	}
 	c, err := pgbench.SetupExec(pgUrl, "bench", 20000, b.N)
 	if err != nil {
 		b.Fatal(err)
