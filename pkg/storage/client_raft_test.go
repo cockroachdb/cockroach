@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2299,12 +2300,27 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	finishWG.Wait()
 }
 
+type disruptiveElectionTestHandler chan *roachpb.Error
+
+func (d disruptiveElectionTestHandler) HandleRaftRequest(ctx context.Context, req *storage.RaftMessageRequest, respStream storage.RaftMessageResponseStream) *roachpb.Error {
+	panic("unimplemented")
+}
+
+func (d disruptiveElectionTestHandler) HandleRaftResponse(ctx context.Context, resp *storage.RaftMessageResponse) {
+	switch val := resp.Union.GetValue().(type) {
+	case *roachpb.Error:
+		d <- val
+	default:
+		log.Fatalf(ctx, "unexpected response type %T", val)
+	}
+}
+
+func (d disruptiveElectionTestHandler) HandleSnapshot(_ *storage.SnapshotRequest_Header, _ storage.SnapshotResponseStream) error {
+	panic("unimplemented")
+}
+
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// The change to error reporting means that we can no longer trap
-	// transport errors separately from error messages and send them to
-	// errChan.
-	t.Skip("TODO(bdarnell): flaky (#8308), and needs update for change to raft transport error reporting")
 
 	mtc := startMultiTestContext(t, 4)
 	defer mtc.Stop()
@@ -2315,12 +2331,42 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	mtc.unreplicateRange(rangeID, 0)
 	mtc.expireLeases()
 
-	// Write on the second node, to ensure that the other nodes have
+	// Ensure that we have a stable lease and raft leader so we can tell if the
+	// removed node causes a disruption. This is a three-step process.
+
+	// 1. Write on the second node, to ensure that a lease has been
 	// established a lease after the first node's removal.
-	incArgs := incrementArgs([]byte("a"), 5)
+	key := roachpb.Key("a")
+	value := int64(5)
+	incArgs := incrementArgs(key, value)
 	if _, err := client.SendWrapped(context.Background(), mtc.distSenders[1], &incArgs); err != nil {
 		t.Fatal(err)
 	}
+
+	// 2. Wait for all nodes to process the increment (and therefore the
+	// new lease).
+	mtc.waitForValues(key, []int64{0, value, value, value})
+
+	// 3. Wait for the lease holder to obtain raft leadership too.
+	util.SucceedsSoon(t, func() error {
+		req := &roachpb.LeaseInfoRequest{
+			Span: roachpb.Span{
+				Key: roachpb.KeyMin,
+			},
+		}
+		reply, pErr := client.SendWrapped(context.Background(), mtc.distSenders[1], req)
+		if pErr != nil {
+			return pErr.GoError()
+		}
+		leaseReplica := reply.(*roachpb.LeaseInfoResponse).Lease.Replica.ReplicaID
+		leadReplica := roachpb.ReplicaID(mtc.stores[1].RaftStatus(rangeID).Lead)
+		if leaseReplica != leadReplica {
+			return errors.Errorf("leaseReplica %s does not match leadReplica %s",
+				leaseReplica, leadReplica)
+		}
+
+		return nil
+	})
 
 	// Save the current term, which is the latest among the live stores.
 	findTerm := func() uint64 {
@@ -2338,6 +2384,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		t.Fatalf("expected non-zero term")
 	}
 
+	// replica0 is the one that  has been removed; replica1 is a current
+	// member of the group.
 	replica0 := roachpb.ReplicaDescriptor{
 		ReplicaID: roachpb.ReplicaID(mtc.stores[0].StoreID()),
 		NodeID:    roachpb.NodeID(mtc.stores[0].StoreID()),
@@ -2348,9 +2396,20 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[1].StoreID()),
 		StoreID:   mtc.stores[1].StoreID(),
 	}
+
+	// Create a new transport for store 0. Error responses are passed
+	// back along the same grpc stream so it's ok that there are two
+	// (this one and the one actually used by the store).
+	transport0 := storage.NewRaftTransport(log.AmbientContext{},
+		storage.GossipAddressResolver(mtc.gossips[0]),
+		nil, /* grpcServer */
+		mtc.rpcContext,
+	)
+	errChan := disruptiveElectionTestHandler(make(chan *roachpb.Error, 1))
+	transport0.Listen(mtc.stores[0].StoreID(), errChan)
+
 	// Simulate an election triggered by the removed node.
-	errChan := make(chan error)
-	mtc.transports[0].SendAsync(&storage.RaftMessageRequest{
+	transport0.SendAsync(&storage.RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -2362,8 +2421,15 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		},
 	})
 
-	if err := <-errChan; !testutils.IsError(err, "sender replica too old, discarding message") {
-		t.Fatalf("got unexpected error: %v", err)
+	select {
+	case pErr := <-errChan:
+		switch pErr.GetDetail().(type) {
+		case *roachpb.ReplicaTooOldError:
+		default:
+			t.Fatalf("unexpected error type %T", pErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("did not get expected error")
 	}
 
 	// The message should have been discarded without triggering an
