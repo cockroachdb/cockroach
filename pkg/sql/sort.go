@@ -570,11 +570,10 @@ func (ss *sortTopKStrategy) Finish() {
 	// Pop all values in the heap, resulting in the inverted ordering
 	// being sorted in reverse. Therefore, the slice is ordered correctly
 	// in-place.
-	origLen := ss.vNode.Len()
 	for ss.vNode.Len() > 0 {
 		heap.Pop(ss.vNode)
 	}
-	ss.vNode.rows.ResetLen(origLen)
+	ss.vNode.ResetLen()
 }
 
 func (ss *sortTopKStrategy) Next() (bool, error) {
