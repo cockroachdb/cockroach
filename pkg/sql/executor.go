@@ -1190,38 +1190,19 @@ func (e *Executor) execStmt(
 				return result, err
 			}
 		}
-		result.Rows = planMaker.NewRowContainer(
-			planMaker.session.makeBoundAccount(),
-			result.Columns, 0)
-
-		// valuesAlloc is used to allocate the backing storage for the
-		// result row slices in chunks.
-		var valuesAlloc []parser.Datum
-		const maxChunkSize = 64 // Arbitrary, could use tuning.
-		chunkSize := 4          // Arbitrary as well.
+		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
 
 		next, err := plan.Next()
 		for ; next; next, err = plan.Next() {
 			// The plan.Values DTuple needs to be copied on each iteration.
 			values := plan.Values()
 
-			n := len(values)
-			if len(valuesAlloc) < n {
-				valuesAlloc = make(parser.DTuple, len(result.Columns)*chunkSize)
-				if chunkSize < maxChunkSize {
-					chunkSize *= 2
-				}
-			}
-			row := valuesAlloc[:0:n]
-			valuesAlloc = valuesAlloc[n:]
-
 			for _, val := range values {
 				if err := checkResultType(val.ResolvedType()); err != nil {
 					return result, err
 				}
-				row = append(row, val)
 			}
-			if err := result.Rows.AddRow(row); err != nil {
+			if err := result.Rows.AddRow(values); err != nil {
 				return result, err
 			}
 		}

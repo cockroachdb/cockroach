@@ -291,16 +291,24 @@ func (n *insertNode) Next() (bool, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
 	// default expressions.
-	for i := len(rowVals); i < len(n.insertCols); i++ {
-		if n.defaultExprs == nil {
-			rowVals = append(rowVals, parser.DNull)
-			continue
+
+	if len(rowVals) < len(n.insertCols) {
+		// It's not cool to append to the slice returned by a node; make a copy.
+		oldVals := rowVals
+		rowVals = make(parser.DTuple, len(n.insertCols))
+		copy(rowVals, oldVals)
+
+		for i := len(oldVals); i < len(n.insertCols); i++ {
+			if n.defaultExprs == nil {
+				rowVals[i] = parser.DNull
+				continue
+			}
+			d, err := n.defaultExprs[i].Eval(&n.p.evalCtx)
+			if err != nil {
+				return false, err
+			}
+			rowVals[i] = d
 		}
-		d, err := n.defaultExprs[i].Eval(&n.p.evalCtx)
-		if err != nil {
-			return false, err
-		}
-		rowVals = append(rowVals, d)
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.

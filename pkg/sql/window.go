@@ -91,9 +91,9 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	indexedVarCols := s.columns[len(renderCols)+len(windowDefCols):]
 
 	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = p.NewRowContainer(acc, renderCols, 0)
-	window.wrappedWindowDefVals = p.NewRowContainer(acc, windowDefCols, 0)
-	window.wrappedIndexedVarVals = p.NewRowContainer(acc, indexedVarCols, 0)
+	window.wrappedRenderVals = NewRowContainer(acc, renderCols, 0)
+	window.wrappedWindowDefVals = NewRowContainer(acc, windowDefCols, 0)
+	window.wrappedIndexedVarVals = NewRowContainer(acc, indexedVarCols, 0)
 	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
@@ -436,23 +436,21 @@ func (n *windowNode) Next() (bool, error) {
 			return true, nil
 		}
 
-		// Make a copy of the provided values and split into wrappedRenderVals,
-		// wrappedRenderVals, and wrappedIndexedVarVals.
+		// Split the values into wrappedRenderVals, wrappedRenderVals, and
+		// wrappedIndexedVarVals.
 		values := n.plan.Values()
-		valuesCopy := make(parser.DTuple, len(values))
-		copy(valuesCopy, values)
 
 		renderEnd := n.wrappedRenderVals.NumCols()
 		windowDefEnd := renderEnd + n.wrappedWindowDefVals.NumCols()
-		renderVals := valuesCopy[:renderEnd]
+		renderVals := values[:renderEnd]
 		if err := n.wrappedRenderVals.AddRow(renderVals); err != nil {
 			return false, err
 		}
-		windowDefVals := valuesCopy[renderEnd:windowDefEnd]
+		windowDefVals := values[renderEnd:windowDefEnd]
 		if err := n.wrappedWindowDefVals.AddRow(windowDefVals); err != nil {
 			return false, err
 		}
-		indexedVarVals := valuesCopy[windowDefEnd:]
+		indexedVarVals := values[windowDefEnd:]
 		if err := n.wrappedIndexedVarVals.AddRow(indexedVarVals); err != nil {
 			return false, err
 		}
@@ -685,30 +683,22 @@ func (n *windowNode) computeWindows() error {
 func (n *windowNode) populateValues() error {
 	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
-	n.values.rows = n.planner.NewRowContainer(
+	n.values.rows = NewRowContainer(
 		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
 	)
 
-	rowWidth := len(n.windowRender)
-
-	sz := int64(uintptr(rowCount*rowWidth) * unsafe.Sizeof(parser.DTuple{}))
-	if err := acc.Grow(sz); err != nil {
-		return err
-	}
-
-	rowsAlloc := make(parser.DTuple, rowCount*rowWidth)
+	row := make(parser.DTuple, len(n.windowRender))
 	for i := 0; i < rowCount; i++ {
 		wrappedRow := n.wrappedRenderVals.At(i)
-		curRow := rowsAlloc[i*rowWidth : (i+1)*rowWidth]
 
 		n.curRowIdx = i // Point all windowFuncHolders to the correct row values.
 		curColIdx := 0
 		curFnIdx := 0
-		for j := 0; j < rowWidth; j++ {
+		for j := range row {
 			if curWindowRender := n.windowRender[j]; curWindowRender == nil {
 				// If the windowRender at this index is nil, propagate the datum
 				// directly from the wrapped planNode. It wasn't changed by windowNode.
-				curRow[j] = wrappedRow[curColIdx]
+				row[j] = wrappedRow[curColIdx]
 				curColIdx++
 			} else {
 				// If the windowRender is not nil, ignore 0 or more columns from the wrapped
@@ -730,11 +720,11 @@ func (n *windowNode) populateValues() error {
 				if err != nil {
 					return err
 				}
-				curRow[j] = res
+				row[j] = res
 			}
 		}
 
-		if err := n.values.rows.AddRow(curRow); err != nil {
+		if err := n.values.rows.AddRow(row); err != nil {
 			return err
 		}
 	}

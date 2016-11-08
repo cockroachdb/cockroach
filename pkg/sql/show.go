@@ -77,8 +77,9 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				for _, vName := range varNames {
 					gen := varGen[vName]
 					value := gen(p)
-					if err := v.rows.AddRow(parser.DTuple{parser.NewDString(vName),
-						parser.NewDString(value)}); err != nil {
+					if err := v.rows.AddRow(
+						parser.DTuple{parser.NewDString(vName), parser.NewDString(value)},
+					); err != nil {
 						v.rows.Close()
 						return nil, err
 					}

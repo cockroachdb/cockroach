@@ -621,9 +621,7 @@ func (n *joinNode) Start() error {
 				break
 			}
 			row := n.right.plan.Values()
-			newRow := make([]parser.Datum, len(row))
-			copy(newRow, row)
-			if err := n.rightRows.rows.AddRow(newRow); err != nil {
+			if err := n.rightRows.rows.AddRow(row); err != nil {
 				return err
 			}
 		}
