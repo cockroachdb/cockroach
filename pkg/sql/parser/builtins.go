@@ -838,6 +838,38 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"to_uuid": {
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeBytes,
+			category:   categoryIDGeneration,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				s := string(*args[0].(*DString))
+				uv, err := uuid.FromString(s)
+				if err != nil {
+					return nil, err
+				}
+				return NewDBytes(DBytes(uv.GetBytes())), nil
+			},
+		},
+	},
+
+	"from_uuid": {
+		Builtin{
+			Types:      ArgTypes{TypeBytes},
+			ReturnType: TypeString,
+			category:   categoryIDGeneration,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				bytes := []byte(*args[0].(*DBytes))
+				uv, err := uuid.FromBytes(bytes)
+				if err != nil {
+					return nil, err
+				}
+				return NewDString(uv.String()), nil
+			},
+		},
+	},
+
 	// Math functions
 
 	"abs": {

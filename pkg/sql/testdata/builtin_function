@@ -1146,3 +1146,22 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 ----
 NULL
 
+query TTTT
+SELECT TO_UUID('63616665-6630-3064-6465-616462656566'),
+       TO_UUID('{63616665-6630-3064-6465-616462656566}'),
+       TO_UUID('urn:uuid:63616665-6630-3064-6465-616462656566'),
+       FROM_UUID(b'cafef00ddeadbeef')
+----
+cafef00ddeadbeef cafef00ddeadbeef cafef00ddeadbeef 63616665-6630-3064-6465-616462656566
+
+query error uuid: UUID string too short
+SELECT TO_UUID('63616665-6630-3064-6465')
+
+query error uuid: UUID string too long
+SELECT TO_UUID('63616665-6630-3064-6465-616462656566-123')
+
+query error uuid: invalid string format
+SELECT TO_UUID('6361666512-6630-3064-6465-616462656566')
+
+query error uuid: UUID must be exactly 16 bytes long, got 4 bytes
+SELECT FROM_UUID(b'f00d')
