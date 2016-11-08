@@ -156,6 +156,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 func (rttc *raftTransportTestContext) GossipNode(nodeID roachpb.NodeID, addr net.Addr) {
 	if err := rttc.gossip.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 		&roachpb.NodeDescriptor{
+			NodeID:  nodeID,
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		},
 		time.Hour); err != nil {
