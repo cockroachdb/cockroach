@@ -2545,7 +2545,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableScanner = true
+	sc.TestingKnobs.DisableReplicaGCQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -2553,7 +2553,9 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	mtc.replicateRange(rangeID, 1)
 	mtc.unreplicateRange(rangeID, 0)
 
-	// Wait for store 0 to process the removal.
+	// Wait for store 0 to process the removal. The in-memory replica
+	// object still exists but store 0 is no longer present in the
+	// configuration.
 	util.SucceedsSoon(t, func() error {
 		rep, err := mtc.stores[0].GetReplica(rangeID)
 		if err != nil {
@@ -2566,8 +2568,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 		return nil
 	})
 
-	// The replica's data is still on disk even though the Replica
-	// object is removed.
+	// The replica's data is still on disk.
 	var desc roachpb.RangeDescriptor
 	descKey := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
@@ -2577,16 +2578,28 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 		t.Fatal("expected range descriptor to be present")
 	}
 
-	// Stop and restart the store to reset the replica's raftGroup
-	// pointer to nil. As long as the store has not been restarted it
-	// can continue to use its last known replica ID.
+	// Stop and restart the store. The primary motiviation for this test
+	// is to ensure that the store does not panic on restart (as was
+	// previously the case).
 	mtc.stopStore(0)
 	mtc.restartStore(0)
 
+	// Initially, the in-memory Replica object is recreated from the
+	// on-disk state.
+	if _, err := mtc.stores[0].GetReplica(rangeID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-enable the GC queue to allow the replica to be destroyed
+	// (after the simulated passage of time).
+	mtc.manualClock.Increment(int64(2*storage.ReplicaGCQueueInactivityThreshold + 1))
+	mtc.stores[0].SetReplicaGCQueueActive(true)
+	mtc.stores[0].ForceReplicaGCScanAndProcess()
+
 	util.SucceedsSoon(t, func() error {
 		// The Replica object should be removed.
-		if _, err := mtc.stores[0].GetReplica(rangeID); err == nil {
-			return errors.Errorf("expected replica to be missing")
+		if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, "range [0-9]+ was not found") {
+			return errors.Errorf("expected replica to be missing; got %v", err)
 		}
 
 		// And the data should no longer be on disk.
@@ -2594,7 +2607,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 			mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
 			return err
 		} else if ok {
-			return errors.Errorf("expected range descriptor to be absent")
+			return errors.New("expected range descriptor to be absent")
 		}
 		return nil
 	})
