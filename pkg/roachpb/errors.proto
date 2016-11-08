@@ -202,6 +202,13 @@ message ReplicaCorruptionError {
 message ReplicaTooOldError {
 }
 
+// A StoreNotFoundError indicates that a command was sent to a store
+// which is not hosted on this node.
+message StoreNotFoundError {
+  optional int64 store_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -224,6 +231,7 @@ message ErrorDetail {
   optional SendError send = 15;
   optional RangeFrozenError range_frozen = 25;
   optional AmbiguousResultError ambiguous_result = 26;
+  optional StoreNotFoundError store_not_found = 27;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
