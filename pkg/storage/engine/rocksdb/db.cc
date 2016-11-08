@@ -21,7 +21,6 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/stringprintf.h>
 #include "rocksdb/cache.h"
-#include "rocksdb/compaction_filter.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/filter_policy.h"
@@ -1638,7 +1637,14 @@ DBStatus DBFlush(DBEngine* db) {
 }
 
 DBStatus DBCompact(DBEngine* db) {
-  return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), NULL, NULL));
+  rocksdb::CompactRangeOptions options;
+  // By default, RocksDB doesn't recompact the bottom level (unless
+  // there is a compaction filter, which we don't use). However,
+  // recompacting the bottom layer is necessary to pick up changes to
+  // settings like bloom filter configurations (which is the biggest
+  // reason we currently have to use this function).
+  options.bottommost_level_compaction = rocksdb::BottommostLevelCompaction::kForce;
+  return ToDBStatus(db->rep->CompactRange(options, NULL, NULL));
 }
 
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
