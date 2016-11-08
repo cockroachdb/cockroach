@@ -333,10 +333,11 @@ func (n *groupNode) computeAggregates() error {
 	}
 
 	// Render the results.
-	n.values.rows = n.planner.NewRowContainer(
+	n.values.rows = NewRowContainer(
 		n.planner.session.TxnState.makeBoundAccount(),
 		n.values.Columns(), len(n.buckets),
 	)
+	row := make(parser.DTuple, len(n.render))
 	for k := range n.buckets {
 		n.currentBucket = k
 
@@ -351,14 +352,12 @@ func (n *groupNode) computeAggregates() error {
 				continue
 			}
 		}
-
-		row := make(parser.DTuple, 0, len(n.render))
-		for _, r := range n.render {
-			res, err := r.Eval(&n.planner.evalCtx)
+		for i, r := range n.render {
+			var err error
+			row[i], err = r.Eval(&n.planner.evalCtx)
 			if err != nil {
 				return err
 			}
-			row = append(row, res)
 		}
 
 		if err := n.values.rows.AddRow(row); err != nil {
