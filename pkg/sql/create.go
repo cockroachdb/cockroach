@@ -616,11 +616,6 @@ func (n *createTableNode) Start() error {
 	}
 
 	if n.n.As() {
-		resultColumns := n.sourcePlan.Columns()
-		if err != nil {
-			return err
-		}
-
 		// TODO(knz): Ideally we would want to plug the sourcePlan which
 		// was already computed as a data source into the insertNode. Now
 		// unfortunately this is not so easy: when this point is reached,
@@ -631,12 +626,8 @@ func (n *createTableNode) Start() error {
 		n.sourcePlan.Close()
 		n.sourcePlan = nil
 
-		desiredTypesFromSelect := make([]parser.Type, len(resultColumns))
-		for i, col := range resultColumns {
-			desiredTypesFromSelect[i] = col.Typ
-		}
 		insert := &parser.Insert{Table: &n.n.Table, Rows: n.n.AsSource}
-		insertPlan, err := n.p.Insert(insert, desiredTypesFromSelect, false)
+		insertPlan, err := n.p.Insert(insert, nil, false)
 		if err != nil {
 			return err
 		}
