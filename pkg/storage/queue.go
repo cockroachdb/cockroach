@@ -695,6 +695,16 @@ func (bq *baseQueue) remove(item *replicaItem) {
 // DrainQueue locks the queue and processes the remaining queued replicas. It
 // processes the replicas in the order they're queued in, one at a time.
 // Exposed for testing only.
+//
+// TODO(bdarnell): this method may race with the call to bq.pop() in
+// the main loop, in which case it does not guarantee that all
+// replicas have been processed by the time it returns. This is most
+// noticable with ForceReplicaGCScanAndProcess, since the replica GC
+// queue has many event-driven triggers. This should synchronize
+// somehow with processLoop so we wait for anything being handled
+// there to finish too. When that's done, the SucceedsSoon at the end
+// of TestRemoveRangeWithoutGC (and perhaps others) can be replaced
+// with a one-time check.
 func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
 	ctx := bq.AnnotateCtx(context.TODO())
 	for repl := bq.pop(); repl != nil; repl = bq.pop() {
