@@ -149,7 +149,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.write(s)
 
 	case *parser.DDecimal:
-		b.writeLengthPrefixedString(v.Dec.String())
+		b.writeLengthPrefixedDatum(v)
 
 	case *parser.DBytes:
 		// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
@@ -182,35 +182,33 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.write(s)
 
 	case *parser.DInterval:
-		b.writeLengthPrefixedString(v.String())
+		b.writeLengthPrefixedDatum(v)
 
 	case *parser.DTuple:
-		var tb bytes.Buffer
-		tb.WriteString("(")
+		b.variablePutbuf.WriteString("(")
 		for i, d := range *v {
 			if i > 0 {
-				tb.WriteString(",")
+				b.variablePutbuf.WriteString(",")
 			}
 			if d == parser.DNull {
 				// Emit nothing on NULL.
 				continue
 			}
-			tb.WriteString(d.String())
+			d.Format(&b.variablePutbuf, parser.FmtSimple)
 		}
-		tb.WriteString(")")
-		b.writeLengthPrefixedString(tb.String())
+		b.variablePutbuf.WriteString(")")
+		b.writeLengthPrefixedVariablePutbuf()
 
 	case *parser.DArray:
-		var tb bytes.Buffer
-		tb.WriteString("{")
+		b.variablePutbuf.WriteString("{")
 		for i, d := range *v {
 			if i > 0 {
-				tb.WriteString(",")
+				b.variablePutbuf.WriteString(",")
 			}
-			tb.WriteString(d.String())
+			d.Format(&b.variablePutbuf, parser.FmtSimple)
 		}
-		tb.WriteString("}")
-		b.writeLengthPrefixedString(tb.String())
+		b.variablePutbuf.WriteString("}")
+		b.writeLengthPrefixedVariablePutbuf()
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
