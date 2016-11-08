@@ -1271,6 +1271,30 @@ var powImpls = []Builtin{
 		_, err := decimal.Pow(&dd.Dec, x, y, decimal.Precision)
 		return dd, err
 	}),
+	{
+		Types:      ArgTypes{TypeInt, TypeInt},
+		ReturnType: TypeInt,
+		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+			// Caculate the x^y by squaring. See:
+			// https://en.wikipedia.org/wiki/Exponentiation_by_squaring
+			x := int(*args[0].(*DInt))
+			y := int(*args[1].(*DInt))
+			if y < 0 {
+				// TODO(hainesc): we simply return 0 if the exponent is negative.
+				return NewDInt(DInt(0)), nil
+			}
+
+			ret := 1
+			for y > 0 {
+				if y&1 == 1 {
+					ret *= x
+				}
+				x *= x
+				y >>= 1
+			}
+			return NewDInt(DInt(ret)), nil
+		},
+	},
 }
 
 func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) Builtin {
