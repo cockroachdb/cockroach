@@ -75,8 +75,11 @@ func (s channelServer) HandleRaftRequest(
 	return nil
 }
 
-func (s channelServer) HandleRaftResponse(ctx context.Context, resp *storage.RaftMessageResponse) {
+func (s channelServer) HandleRaftResponse(
+	ctx context.Context, resp *storage.RaftMessageResponse,
+) error {
 	log.Fatalf(ctx, "unexpected raft response: %s", resp)
+	return nil
 }
 
 func (s channelServer) HandleSnapshot(

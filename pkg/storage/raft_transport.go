@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -86,8 +85,9 @@ type RaftMessageHandler interface {
 		respStream RaftMessageResponseStream) *roachpb.Error
 
 	// HandleRaftResponse is called for each raft response. Note that
-	// not all messages receive a response.
-	HandleRaftResponse(context.Context, *RaftMessageResponse)
+	// not all messages receive a response. An error is returned if and only if
+	// the underlying Raft connection should be closed.
+	HandleRaftResponse(context.Context, *RaftMessageResponse) error
 
 	// HandleSnapshot is called for each new incoming snapshot stream, after
 	// parsing the initial SnapshotRequest_Header on the stream.
@@ -254,8 +254,9 @@ func (t *RaftTransport) handleRaftRequest(
 	t.recvMu.Unlock()
 
 	if !ok {
-		return roachpb.NewErrorf("unable to accept Raft message from %+v: no handler registered for %+v",
+		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
 			req.FromReplica, req.ToReplica)
+		return roachpb.NewError(roachpb.NewStoreNotFoundError(req.ToReplica.StoreID))
 	}
 
 	return handler.HandleRaftRequest(ctx, req, respStream)
@@ -353,9 +354,9 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 			handler, ok := t.recvMu.handlers[rmr.ToReplica.StoreID]
 			t.recvMu.Unlock()
 			if !ok {
-				return errors.Errorf(
-					"unable to accept Raft message from %+v: no handler registered for %+v",
+				log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
 					rmr.FromReplica, rmr.ToReplica)
+				return roachpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
 			}
 
 			return handler.HandleSnapshot(req.Header, stream)
@@ -472,7 +473,9 @@ func (t *RaftTransport) processQueue(
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
-					handler.HandleRaftResponse(stream.Context(), resp)
+					if err := handler.HandleRaftResponse(stream.Context(), resp); err != nil {
+						return err
+					}
 				}
 			}()
 		})
