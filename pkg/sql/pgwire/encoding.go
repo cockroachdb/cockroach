@@ -158,6 +158,10 @@ type writeBuffer struct {
 	// These two buffers are used as temporary storage. Use putbuf when the
 	// length of the required temp space is known. Use variablePutbuf when the length
 	// of the required temp space is unknown, or when a bytes.Buffer is needed.
+	//
+	// We keep both of these because there are operations that are only possible to
+	// perform (efficiently) with one or the other, such as strconv.AppendInt with
+	// putbuf or Datum.Format with variablePutbuf.
 	putbuf         [64]byte
 	variablePutbuf bytes.Buffer
 
