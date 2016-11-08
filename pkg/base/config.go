@@ -192,7 +192,7 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     user,
-		Host:     cfg.AdvertiseAddr,
+		Host:     cfg.Addr,
 		RawQuery: options.Encode(),
 	}, nil
 }
