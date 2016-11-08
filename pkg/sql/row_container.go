@@ -138,25 +138,6 @@ func (c *RowContainer) Swap(i, j int) {
 	c.rows[i], c.rows[j] = c.rows[j], c.rows[i]
 }
 
-// PseudoPop retrieves a pointer to the last row, and decreases the
-// visible size of the RowContainer.  This is used for heap sorting in
-// sql.sortNode.  A pointer is returned to avoid an allocation when
-// passing the DTuple as an interface{} to heap.Push().
-// Note that the pointer is only valid until the next call to AddRow.
-// We use this for heap sorting in sort.go.
-func (c *RowContainer) PseudoPop() *parser.DTuple {
-	idx := len(c.rows) - 1
-	x := &(c.rows)[idx]
-	c.rows = c.rows[:idx]
-	return x
-}
-
-// ResetLen cancels the effects of PseudoPop(), that is, it restores
-// the visible size of the RowContainer to its actual size.
-func (c *RowContainer) ResetLen(l int) {
-	c.rows = c.rows[:l]
-}
-
 // Replace substitutes one row for another. This does query the
 // MemoryMonitor to determine whether the new row fits the
 // allowance.

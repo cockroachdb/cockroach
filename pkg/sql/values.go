@@ -36,6 +36,11 @@ type valuesNode struct {
 	tuples   [][]parser.TypedExpr
 	rows     *RowContainer
 
+	// rowsPopped is used for heaps, it indicates the number of rows that were
+	// "popped". These rows are still part of the underlying RowContainer, in the
+	// range [rows.Len()-n.rowsPopped, rows.Len).
+	rowsPopped int
+
 	desiredTypes []parser.Type // This can be removed when we only type check once.
 
 	nextRow       int           // The index of the next row.
@@ -206,7 +211,7 @@ func (n *valuesNode) Close() {
 }
 
 func (n *valuesNode) Len() int {
-	return n.rows.Len()
+	return n.rows.Len() - n.rowsPopped
 }
 
 func (n *valuesNode) Less(i, j int) bool {
@@ -264,14 +269,28 @@ func (n *valuesNode) PushValues(values parser.DTuple) error {
 
 // Pop implements the heap.Interface interface.
 func (n *valuesNode) Pop() interface{} {
-	return n.rows.PseudoPop()
+	if n.rowsPopped >= n.rows.Len() {
+		panic("no more rows to pop")
+	}
+	n.rowsPopped++
+	// Returning a DTuple as an interface{} involves an allocation. Luckily, the
+	// value of Pop is only used for the return value of heap.Pop, which we can
+	// avoid using.
+	return nil
 }
 
 // PopValues pops the top DTuple value off the heap representation
 // of the valuesNode.
 func (n *valuesNode) PopValues() parser.DTuple {
-	x := heap.Pop(n)
-	return *x.(*parser.DTuple)
+	heap.Pop(n)
+	// Return the last popped row.
+	return n.rows.At(n.rows.Len() - n.rowsPopped)
+}
+
+// ResetLen resets the length to that of the underlying row container. This
+// resets the effect that popping values had on the valuesNode's visible length.
+func (n *valuesNode) ResetLen() {
+	n.rowsPopped = 0
 }
 
 // SortAll sorts all values in the valuesNode.rows slice.
