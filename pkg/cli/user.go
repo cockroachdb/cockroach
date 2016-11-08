@@ -19,8 +19,6 @@ package cli
 import (
 	"bufio"
 	"errors"
-	"fmt"
-	"net/url"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -126,9 +124,11 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	var hashed []byte
 	switch password {
 	case "":
-		hashed, err = security.PromptForPasswordAndHash()
-		if err != nil {
-			return err
+		if !baseCfg.Insecure {
+			hashed, err = security.PromptForPasswordAndHash()
+			if err != nil {
+				return err
+			}
 		}
 	case "-":
 		scanner := bufio.NewScanner(os.Stdin)
@@ -155,13 +155,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Only security.RootUser can set passwords.
-	// TODO(asubiotto): Implement appropriate server-side authorization rules
-	// for users to be able to change their own passwords.
-	if connUser != security.RootUser {
-		return fmt.Errorf("only %s is allowed to set passwords", security.RootUser)
-	}
-	conn, err := makeSQLClient(url.User(security.RootUser))
+	conn, err := getPasswordAndMakeSQLClient()
 	if err != nil {
 		return err
 	}

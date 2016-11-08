@@ -842,6 +842,31 @@ func Example_user() {
 	// (0 rows)
 }
 
+func Example_user_insecure() {
+	s, err := serverutils.StartServerRaw(
+		base.TestServerArgs{Insecure: true})
+	if err != nil {
+		log.Fatalf(context.Background(), "Could not start server: %v", err)
+	}
+	defer s.Stopper().Stop()
+	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
+
+	// No prompting for password in insecure mode.
+	c.Run("user set foo")
+	c.Run("user ls --pretty")
+
+	// Output:
+	// user set foo
+	// INSERT 1
+	// user ls --pretty
+	// +----------+
+	// | username |
+	// +----------+
+	// | foo      |
+	// +----------+
+	// (1 row)
+}
+
 // TestFlagUsage is a basic test to make sure the fragile
 // help template does not break.
 func TestFlagUsage(t *testing.T) {
