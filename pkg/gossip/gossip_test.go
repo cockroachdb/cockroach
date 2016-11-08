@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,6 +53,55 @@ func TestGossipInfoStore(t *testing.T) {
 	}
 	if _, err := g.GetInfo("s2"); err == nil {
 		t.Errorf("expected error fetching nonexistent key \"s2\"")
+	}
+}
+
+// TestGossipOverwriteNode verifies that if a new node is added with the same
+// address as an old node, that old node is removed from the cluster.
+func TestGossipOverwriteNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rpcContext := newInsecureRPCContext(stopper)
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
+	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")}
+	if err := g.SetNodeDescriptor(node1); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.SetNodeDescriptor(node2); err != nil {
+		t.Fatal(err)
+	}
+	if val, err := g.GetNodeDescriptor(node1.NodeID); err != nil {
+		t.Error(err)
+	} else if val.NodeID != node1.NodeID {
+		t.Errorf("expected node %d, got %+v", node1.NodeID, val)
+	}
+	if val, err := g.GetNodeDescriptor(node2.NodeID); err != nil {
+		t.Error(err)
+	} else if val.NodeID != node2.NodeID {
+		t.Errorf("expected node %d, got %+v", node2.NodeID, val)
+	}
+
+	// Give node3 the same address as node1, which should cause node1 to be
+	// removed from the cluster.
+	node3 := &roachpb.NodeDescriptor{NodeID: 3, Address: node1.Address}
+	if err := g.SetNodeDescriptor(node3); err != nil {
+		t.Fatal(err)
+	}
+	if val, err := g.GetNodeDescriptor(node3.NodeID); err != nil {
+		t.Error(err)
+	} else if val.NodeID != node3.NodeID {
+		t.Errorf("expected node %d, got %+v", node3.NodeID, val)
+	}
+
+	// Quiesce the stopper now to ensure that the update has propagated before
+	// checking whether node 1 has been removed from the infoStore.
+	stopper.Quiesce()
+	expectedErr := "unable to look up descriptor for node"
+	if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
+		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+			expectedErr, node1.NodeID, err, val)
 	}
 }
 
