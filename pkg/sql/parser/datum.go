@@ -737,16 +737,6 @@ func (d *DDate) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
-// DTimestamp is the timestamp Datum.
-type DTimestamp struct {
-	time.Time
-}
-
-// MakeDTimestamp creates a DTimestamp with specified precision.
-func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
-	return &DTimestamp{Time: t.Round(precision)}
-}
-
 // time.Time formats.
 const (
 	timestampFormat                       = "2006-01-02 15:04:05"
@@ -800,16 +790,22 @@ func checkForMissingZone(t time.Time, parseLoc *time.Location) error {
 	return nil
 }
 
+// DTimestamp is the timestamp Datum that is rendered with session offset.
+type DTimestamp struct {
+	time.Time
+}
+
+// MakeDTimestamp creates a DTimestamp with specified precision.
+func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
+	return &DTimestamp{Time: t.Round(precision)}
+}
+
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
-// the provided string in UTC, or an error if parsing is unsuccessful.
-func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
-	// `ParseInLocation` uses the location provided both for resolving an explicit
-	// abbreviated zone as well as for the default zone if not specified
-	// explicitly. For non-'WITH TIME ZONE' strings (which this is used to parse),
-	// we do not want to add a non-UTC zone if one is not explicitly stated, so we
-	// use time.UTC rather than the sesion location. Unfortunately this also means
-	// we do not use the session zone for resolving abbreviations.
-	t, err := parseTimestampInLocation(s, time.UTC)
+// the provided string in the provided location, or an error if parsing is unsuccessful.
+func ParseDTimestamp(
+	s string, loc *time.Location, precision time.Duration,
+) (*DTimestamp, error) {
+	t, err := parseTimestampInLocation(s, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -841,7 +837,7 @@ func (d *DTimestamp) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (*DTimestamp) HasPrev() bool {
+func (d *DTimestamp) HasPrev() bool {
 	return true
 }
 
@@ -851,7 +847,7 @@ func (d *DTimestamp) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (*DTimestamp) HasNext() bool {
+func (d *DTimestamp) HasNext() bool {
 	return true
 }
 
@@ -879,94 +875,6 @@ func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Size implements the Datum interface.
 func (d *DTimestamp) Size() uintptr {
-	return unsafe.Sizeof(*d)
-}
-
-// DTimestampTZ is the timestamp Datum that is rendered with session offset.
-type DTimestampTZ struct {
-	time.Time
-}
-
-// MakeDTimestampTZ creates a DTimestampTZ with specified precision.
-func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
-	return &DTimestampTZ{Time: t.Round(precision)}
-}
-
-// ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
-// the provided string in the provided location, or an error if parsing is unsuccessful.
-func ParseDTimestampTZ(
-	s string, loc *time.Location, precision time.Duration,
-) (*DTimestampTZ, error) {
-	t, err := parseTimestampInLocation(s, loc)
-	if err != nil {
-		return nil, err
-	}
-	return MakeDTimestampTZ(t, precision), nil
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (*DTimestampTZ) ResolvedType() Type {
-	return TypeTimestampTZ
-}
-
-// Compare implements the Datum interface.
-func (d *DTimestampTZ) Compare(other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := other.(*DTimestampTZ)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if d.Before(v.Time) {
-		return -1
-	}
-	if v.Before(d.Time) {
-		return 1
-	}
-	return 0
-}
-
-// HasPrev implements the Datum interface.
-func (d *DTimestampTZ) HasPrev() bool {
-	return true
-}
-
-// Prev implements the Datum interface.
-func (d *DTimestampTZ) Prev() Datum {
-	return &DTimestampTZ{Time: d.Add(-1)}
-}
-
-// HasNext implements the Datum interface.
-func (d *DTimestampTZ) HasNext() bool {
-	return true
-}
-
-// Next implements the Datum interface.
-func (d *DTimestampTZ) Next() Datum {
-	return &DTimestampTZ{Time: d.Add(1)}
-}
-
-// IsMax implements the Datum interface.
-func (d *DTimestampTZ) IsMax() bool {
-	// Adding 1 overflows to a smaller value
-	return d.After(d.Next().(*DTimestampTZ).Time)
-}
-
-// IsMin implements the Datum interface.
-func (d *DTimestampTZ) IsMin() bool {
-	// Subtracting 1 underflows to a larger value.
-	return d.Before(d.Add(-1))
-}
-
-// Format implements the NodeFormatter interface.
-func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(d.UTC().Format(timestampNodeFormat))
-}
-
-// Size implements the Datum interface.
-func (d *DTimestampTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 

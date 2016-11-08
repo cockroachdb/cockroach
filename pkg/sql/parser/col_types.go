@@ -30,16 +30,15 @@ type ColumnType interface {
 	columnType()
 }
 
-func (*BoolColType) columnType()        {}
-func (*IntColType) columnType()         {}
-func (*FloatColType) columnType()       {}
-func (*DecimalColType) columnType()     {}
-func (*DateColType) columnType()        {}
-func (*TimestampColType) columnType()   {}
-func (*TimestampTZColType) columnType() {}
-func (*IntervalColType) columnType()    {}
-func (*StringColType) columnType()      {}
-func (*BytesColType) columnType()       {}
+func (*BoolColType) columnType()      {}
+func (*IntColType) columnType()       {}
+func (*FloatColType) columnType()     {}
+func (*DecimalColType) columnType()   {}
+func (*DateColType) columnType()      {}
+func (*TimestampColType) columnType() {}
+func (*IntervalColType) columnType()  {}
+func (*StringColType) columnType()    {}
+func (*BytesColType) columnType()     {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -180,18 +179,6 @@ func (node *TimestampColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("TIMESTAMP")
 }
 
-// Pre-allocated immutable timestamp with time zone column type.
-var timestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
-
-// TimestampTZColType represents a TIMESTAMP type.
-type TimestampTZColType struct {
-}
-
-// Format implements the NodeFormatter interface.
-func (node *TimestampTZColType) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("TIMESTAMP WITH TIME ZONE")
-}
-
 // Pre-allocated immutable interval column type.
 var intervalColTypeInterval = &IntervalColType{}
 
@@ -243,16 +230,15 @@ func (node *BytesColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-func (node *BoolColType) String() string        { return AsString(node) }
-func (node *IntColType) String() string         { return AsString(node) }
-func (node *FloatColType) String() string       { return AsString(node) }
-func (node *DecimalColType) String() string     { return AsString(node) }
-func (node *DateColType) String() string        { return AsString(node) }
-func (node *TimestampColType) String() string   { return AsString(node) }
-func (node *TimestampTZColType) String() string { return AsString(node) }
-func (node *IntervalColType) String() string    { return AsString(node) }
-func (node *StringColType) String() string      { return AsString(node) }
-func (node *BytesColType) String() string       { return AsString(node) }
+func (node *BoolColType) String() string      { return AsString(node) }
+func (node *IntColType) String() string       { return AsString(node) }
+func (node *FloatColType) String() string     { return AsString(node) }
+func (node *DecimalColType) String() string   { return AsString(node) }
+func (node *DateColType) String() string      { return AsString(node) }
+func (node *TimestampColType) String() string { return AsString(node) }
+func (node *IntervalColType) String() string  { return AsString(node) }
+func (node *StringColType) String() string    { return AsString(node) }
+func (node *BytesColType) String() string     { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
@@ -267,8 +253,6 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return decimalColTypeDecimal, nil
 	case TypeTimestamp:
 		return timestampColTypeTimestamp, nil
-	case TypeTimestampTZ:
-		return timestampTzColTypeTimestampWithTZ, nil
 	case TypeInterval:
 		return intervalColTypeInterval, nil
 	case TypeDate:

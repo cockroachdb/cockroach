@@ -68,8 +68,6 @@ var (
 	TypeDate Type = tDate{}
 	// TypeTimestamp is the type of a DTimestamp. Can be compared with ==.
 	TypeTimestamp Type = tTimestamp{}
-	// TypeTimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
-	TypeTimestampTZ Type = tTimestampTZ{}
 	// TypeInterval is the type of a DInterval. Can be compared with ==.
 	TypeInterval Type = tInterval{}
 	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
@@ -147,13 +145,6 @@ func (tTimestamp) String() string              { return "timestamp" }
 func (tTimestamp) Equal(other Type) bool       { return other == TypeTimestamp }
 func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
 func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
-
-type tTimestampTZ struct{}
-
-func (tTimestampTZ) String() string              { return "timestamptz" }
-func (tTimestampTZ) Equal(other Type) bool       { return other == TypeTimestampTZ }
-func (tTimestampTZ) FamilyEqual(other Type) bool { return other == TypeTimestampTZ }
-func (tTimestampTZ) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampTZ{}), fixedSize }
 
 type tInterval struct{}
 

@@ -3243,18 +3243,15 @@ const_datetime:
   {
     $$.val = timestampColTypeTimestamp
   }
-| TIMESTAMP WITHOUT TIME ZONE
+| TIMESTAMPTZ
   {
     $$.val = timestampColTypeTimestamp
   }
-| TIMESTAMPTZ
-  {
-    $$.val = timestampTzColTypeTimestampWithTZ
-  }
 | TIMESTAMP WITH_LA TIME ZONE
   {
-    $$.val = timestampTzColTypeTimestampWithTZ
+    $$.val = timestampColTypeTimestamp
   }
+| TIMESTAMP WITHOUT TIME ZONE  { return unimplemented(sqllex) }
 
 const_interval:
   INTERVAL {
