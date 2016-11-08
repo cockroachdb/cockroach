@@ -67,7 +67,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 		return decoded.UTC()
 	}
 
-	if actual := parse(formatTs(ts, nil)); !ts.Equal(actual) {
+	if actual := parse(formatTs(ts, nil, nil)); !ts.Equal(actual) {
 		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
 	}
 
@@ -76,7 +76,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 	EST := time.FixedZone("America/New_York", 0)
 
 	for _, tz := range []*time.Location{time.UTC, CET, EST} {
-		if actual := parse(formatTs(ts, tz)); !ts.Equal(actual) {
+		if actual := parse(formatTs(ts, tz, nil)); !ts.Equal(actual) {
 			t.Fatalf("[%s]: timestamp did not roundtrip got [%s] expected [%s]", tz, actual, ts)
 		}
 	}
