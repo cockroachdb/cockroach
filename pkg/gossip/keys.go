@@ -18,9 +18,11 @@ package gossip
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/pkg/errors"
 )
 
 // separator is used to separate the non-prefix components of a
@@ -92,6 +94,21 @@ func MakePrefixPattern(prefix string) string {
 // MakeNodeIDKey returns the gossip key for node ID info.
 func MakeNodeIDKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeIDPrefix, nodeID.String())
+}
+
+// NodeIDFromKey attempts to extract a NodeID from the provided key.
+// The key should have been constructed by MakeNodeIDKey.
+// Returns an error if the key is not of the correct type or is not parsable.
+func NodeIDFromKey(key string) (roachpb.NodeID, error) {
+	trimmedKey := strings.TrimPrefix(key, KeyNodeIDPrefix+separator)
+	if trimmedKey == key {
+		return 0, errors.Errorf("%q is not a NodeID Key", key)
+	}
+	nodeID, err := strconv.ParseInt(trimmedKey, 10, 64)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed parsing NodeID from key %q", key)
+	}
+	return roachpb.NodeID(nodeID), nil
 }
 
 // MakeNodeLivenessKey returns the gossip key for node liveness info.
