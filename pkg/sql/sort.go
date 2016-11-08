@@ -428,9 +428,7 @@ func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
 }
 
 func (ss *sortAllStrategy) Add(values parser.DTuple) error {
-	valuesCopy := make(parser.DTuple, len(values))
-	copy(valuesCopy, values)
-	return ss.vNode.rows.AddRow(valuesCopy)
+	return ss.vNode.rows.AddRow(values)
 }
 
 func (ss *sortAllStrategy) Finish() {
@@ -476,9 +474,7 @@ func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
 }
 
 func (ss *iterativeSortStrategy) Add(values parser.DTuple) error {
-	valuesCopy := make(parser.DTuple, len(values))
-	copy(valuesCopy, values)
-	return ss.vNode.rows.AddRow(valuesCopy)
+	return ss.vNode.rows.AddRow(values)
 }
 
 func (ss *iterativeSortStrategy) Finish() {
@@ -545,20 +541,14 @@ func (ss *sortTopKStrategy) Add(values parser.DTuple) error {
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
-		valuesCopy := make(parser.DTuple, len(values))
-		copy(valuesCopy, values)
-
-		if err := ss.vNode.PushValues(valuesCopy); err != nil {
+		if err := ss.vNode.PushValues(values); err != nil {
 			return err
 		}
 	case ss.vNode.ValuesLess(values, ss.vNode.rows.At(0)):
 		// Once the heap is full, only replace the top
 		// value if a new value is less than it. If so
 		// replace and fix the heap.
-		valuesCopy := make(parser.DTuple, len(values))
-		copy(valuesCopy, values)
-
-		if err := ss.vNode.rows.Replace(0, valuesCopy); err != nil {
+		if err := ss.vNode.rows.Replace(0, values); err != nil {
 			return err
 		}
 		heap.Fix(ss.vNode, 0)

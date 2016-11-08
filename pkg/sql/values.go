@@ -52,7 +52,7 @@ type valuesNode struct {
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		columns: columns,
-		rows:    p.NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
+		rows:    NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
 	}
 }
 
@@ -143,15 +143,10 @@ func (n *valuesNode) Start() error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
-	n.rows = n.p.NewRowContainer(n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples))
+	n.rows = NewRowContainer(n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples))
 
-	numCols := len(n.columns)
-	rowBuf := make([]parser.Datum, len(n.n.Tuples)*numCols)
+	row := make([]parser.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {
-		// Chop off prefix of rowBuf and limit its capacity.
-		row := rowBuf[:numCols:numCols]
-		rowBuf = rowBuf[numCols:]
-
 		for i, typedExpr := range tupleRow {
 			if err := n.p.startSubqueryPlans(typedExpr); err != nil {
 				return err
