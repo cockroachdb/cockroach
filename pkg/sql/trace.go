@@ -49,6 +49,12 @@ var traceColumns = append(ResultColumns{
 	{Name: "Event", Typ: parser.TypeString},
 }, debugColumns...)
 
+// Internally, the explainTraceNode also returns a timestamp column which is
+// used during sorting.
+var traceColumnsWithTS = append(traceColumns, ResultColumn{
+	Name: "Timestamp", Typ: parser.TypeTimestamp,
+})
+
 var traceOrdering = sqlbase.ColumnOrdering{
 	{ColIdx: len(traceColumns), Direction: encoding.Ascending}, /* Start time */
 	{ColIdx: 2, Direction: encoding.Ascending},                 /* Span pos */
@@ -85,12 +91,14 @@ func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 			ctx:      opentracing.ContextWithSpan(p.ctx(), nil),
 			p:        p,
 			ordering: traceOrdering,
-			columns:  traceColumns,
+			// These are the columns that the sortNode (and thus the selectTopNode)
+			// presents as the output.
+			columns: traceColumns,
 		},
 	}
 }
 
-func (*explainTraceNode) Columns() ResultColumns { return traceColumns }
+func (*explainTraceNode) Columns() ResultColumns { return traceColumnsWithTS }
 func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *explainTraceNode) expandPlan() error {
