@@ -1,23 +1,21 @@
 import * as React from "react";
-import { IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 
-import * as protos from "../../js/protos";
-import { databaseNameAttr, tableNameAttr } from "../../util/constants";
-
-import { AdminUIState } from "../../redux/state";
-import { setUISetting } from "../../redux/ui";
-import { refreshDatabaseDetails, refreshTableDetails, generateTableID, CachedDataReducerState } from "../../redux/apiReducers";
-
+import { SummaryBar, SummaryItem } from "../../components/summaryBar";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 
-type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
-type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
-type Grant = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponse.Grant | Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse.Grant;
+import { AdminUIState } from "../../redux/state";
+import { setUISetting } from "../../redux/ui";
+import {
+    refreshDatabaseDetails, refreshTableDetails, refreshTableStats,
+} from "../../redux/apiReducers";
 
-// Constants used to store per-page sort settings in the redux UI store.
-const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databaseDetails/sort_setting/grants";
+import {
+    DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos, grants,
+} from "./databaseSummary";
+
+type Grant = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponse.Grant;
 
 // Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
@@ -25,106 +23,83 @@ const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databaseDetails/sort_setting/grants
 // The variable name must start with a capital letter or TSX will not recognize
 // it as a component.
 // tslint:disable-next-line:variable-name
-const DatabaseGrantsSortedTable = SortedTable as new () => SortedTable<Grant>;
+export const DatabaseGrantsSortedTable = SortedTable as new () => SortedTable<Grant>;
 
-/**
- * DatabaseGrantsData are the data properties which should be passed to the DatabaseGrants
- * container.
- */
-interface DatabaseGrantsData {
-  // Current sort setting for the grant table.
-  grantsSortSetting: SortSetting;
-  // A list of grants for the selected database.
-  sortedGrants: Grant[];
-}
+// Constants used to store per-page sort settings in the redux UI store.
+const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databases/sort_setting/grants";
 
-/**
- * DatabaseGrantsActions are the action dispatchers which should be passed to the
- * DatabaseGrants container.
- */
-interface DatabaseGrantsActions {
-  // Call if the user indicates they wish to change the sort of the table data.
-  setUISetting: typeof setUISetting;
-  refreshDatabaseDetails: typeof refreshDatabaseDetails;
-  refreshTableDetails: typeof refreshTableDetails;
-}
-
-/**
- * DatabaseGrantsProps is the type of the props object that must be passed to
- * DatabaseGrants component.
- */
-type DatabaseGrantsProps = DatabaseGrantsData & DatabaseGrantsActions & IInjectedProps;
-
-/**
- * DatabaseGrants renders the grants tabof the database details page.
- */
-class DatabaseGrants extends React.Component<DatabaseGrantsProps, {}> {
-  // Callback when the user elects to change the grant table sort setting.
-  changeGrantSortSetting(setting: SortSetting) {
+// DatabaseSummaryGrants displays a summary section describing the grants
+// active on a single database.
+class DatabaseSummaryGrants extends DatabaseSummaryBase {
+  // Callback when the user elects to change the table table sort setting.
+  changeTableSortSetting(setting: SortSetting) {
     this.props.setUISetting(UI_DATABASE_GRANTS_SORT_SETTING_KEY, setting);
   }
 
-  // Refresh when the component is mounted.
-  componentWillMount() {
-    if (this.props.params[tableNameAttr]) {
-      this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] }));
-    } else {
-      this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.params[databaseNameAttr] }));
-    }
+  totalUsers() {
+    let grants = this.props.grants;
+    return grants && grants.length;
   }
 
   render() {
-    let { sortedGrants, grantsSortSetting } = this.props;
+    let { grants, sortSetting } = this.props;
+    let dbID = this.props.name;
 
-    if (sortedGrants) {
-      return <div className="sql-table">
-        <DatabaseGrantsSortedTable
-          data={sortedGrants}
-          sortSetting={grantsSortSetting}
-          onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
-          columns={[
-            {
-              title: "User",
-              cell: (grants) => grants.user,
-              sort: (grants) => grants.user,
-            },
-            {
-              title: "Grants",
-              cell: (grants) => grants.privileges.join(", "),
-              sort: (grants) => grants.privileges.join(", "),
-            },
-          ]}/>
-      </div>;
-    }
-    return <div>No results.</div>;
+    let numTables = tableInfos && tableInfos.length || 0;
+
+    return <div className="database-summary">
+      <div className="database-summary-title">
+        { dbID }
+      </div>
+      <div className="content">
+        <div className="database-summary-table sql-table">
+        {
+          (numTables === 0) ? "" :
+          <DatabaseGrantsSortedTable
+              data={grants}
+              sortSetting={sortSetting}
+              onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }
+              columns={[
+                {
+                    title: "User",
+                    cell: (grant) => grant.user,
+                    sort: (grant) => grant.user,
+                },
+                {
+                    title: "Grants",
+                    cell: (grant) => grant.privileges.join(", "),
+                },
+              ]}/>
+        }
+        </div>
+      </div>
+      <SummaryBar>
+        <SummaryItem
+          title="Total Users"
+          tooltip="Total users that have been granted permissions on this table."
+          value={ this.totalUsers() }/>
+      </SummaryBar>
+    </div>;
   }
 }
 
 // Base selectors to extract data from redux state.
-function grants(state: AdminUIState, props: IInjectedProps): Grant[] {
-  let details: CachedDataReducerState<DatabaseDetailsResponseMessage | TableDetailsResponseMessage>;
-  if (props.params[tableNameAttr]) {
-    details = state.cachedData.tableDetails[generateTableID(props.params[databaseNameAttr], props.params[tableNameAttr])];
-  } else {
-    details = state.cachedData.databaseDetails[props.params[databaseNameAttr]];
-  }
-  return details && details.data && details.data.grants || [];
-}
 let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
 
-// Connect the DatabaseGrants class with our redux store.
-let databaseGrantsConnected = connect(
-  (state: AdminUIState, ownProps: IInjectedProps) => {
+// Connect the DatabaseSummaryGrants class with our redux store.
+export default connect(
+  (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => {
     return {
-      sortedGrants: grants(state, ownProps),
-      grantsSortSetting: grantsSortSetting(state),
+      tableInfos: tableInfos(state, ownProps.name),
+      sortSetting: grantsSortSetting(state),
+      dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
+      grants: grants(state, ownProps.name),
     };
   },
   {
     setUISetting,
     refreshDatabaseDetails,
     refreshTableDetails,
+    refreshTableStats,
   }
-)(DatabaseGrants);
-
-export default databaseGrantsConnected;
+)(DatabaseSummaryGrants);

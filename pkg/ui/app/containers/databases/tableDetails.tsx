@@ -1,5 +1,4 @@
 import * as React from "react";
-import * as d3 from "d3";
 import { IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 
@@ -9,23 +8,32 @@ import { Bytes } from "../../util/format";
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshTableDetails, refreshTableStats, generateTableID } from "../../redux/apiReducers";
-import Visualization from "../../components/visualization";
+import { SummaryBar, SummaryItem } from "../../components/summaryBar";
 
-type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
-type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsResponseMessage;
+import { TableInfo } from "./data";
+import { SortSetting } from "../../components/sortabletable";
+import { SortedTable } from "../../components/sortedtable";
 
-/******************************
- *   TABLE DETAILS MAIN COMPONENT
- */
+type Grant = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse.Grant;
+
+// Specialization of generic SortedTable component:
+//   https://github.com/Microsoft/TypeScript/issues/3960
+//
+// The variable name must start with a capital letter or TSX will not recognize
+// it as a component.
+// tslint:disable-next-line:variable-name
+export const GrantsSortedTable = SortedTable as new () => SortedTable<Grant>;
+
+// Constants used to store per-page sort settings in the redux UI store.
+const UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY = "tableDetails/sort_setting/grants";
 
 /**
  * TableMainData are the data properties which should be passed to the TableMain
  * container.
  */
-
 interface TableMainData {
-  tableDetails: TableDetailsResponseMessage;
-  tableStats: TableStatsResponseMessage;
+  tableInfo: TableInfo;
+  grantsSortSetting: SortSetting;
 }
 
 /**
@@ -36,6 +44,7 @@ interface TableMainActions {
   // Refresh the table data
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;
+  setUISetting: typeof setUISetting;
 }
 
 /**
@@ -49,53 +58,65 @@ type TableMainProps = TableMainData & TableMainActions & IInjectedProps;
  * data table of all databases.
  */
 class TableMain extends React.Component<TableMainProps, {}> {
-
   componentWillMount() {
-    // Refresh databases when mounting.
-    this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] }));
-    this.props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] }));
+    this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
+      database: this.props.params[databaseNameAttr],
+      table: this.props.params[tableNameAttr],
+    }));
+    this.props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
+      database: this.props.params[databaseNameAttr],
+      table: this.props.params[tableNameAttr],
+    }));
+  }
 
+  // Callback when the user elects to change the grant table sort setting.
+  changeGrantSortSetting(setting: SortSetting) {
+    this.props.setUISetting(UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY, setting);
   }
 
   render() {
-    let { tableDetails, tableStats } = this.props;
+    let { tableInfo, grantsSortSetting } = this.props;
 
-    if (tableDetails) {
-      let ranges = tableDetails.range_count.toNumber();
-      let createTableStatement = tableDetails.create_table_statement;
-      let replicationFactor = tableDetails.zone_config.num_replicas;
-      let targetRangeSize = tableDetails.zone_config.range_max_bytes.toNumber();
-      let tableSize = tableStats && (tableStats.stats.live_bytes.toNumber() + tableStats.stats.key_bytes.toNumber());
-
-      return <div className="sql-table">
-        <div className="table-stats small half">
-          <Visualization
-            title={ (ranges === 1) ? "Range" : "Ranges" }
-            tooltip="The total number of ranges this table spans.">
-            <div className="visualization">
-              <div style={{zoom:1.0}} className="number">{ d3.format("s")(ranges) }</div>
-            </div>
-          </Visualization>
-          <Visualization title="Table Size" tooltip="Not yet implemented.">
-            <div className="visualization">
-              <div style={{zoom:0.4}} className="number">{ Bytes(tableSize) }</div>
-            </div>
-          </Visualization>
-          <Visualization title="Replication Factor" tooltip="Not yet implemented.">
-            <div className="visualization">
-              <div style={{zoom:1.0}} className="number">{ d3.format("s")(replicationFactor) }</div>
-            </div>
-          </Visualization>
-          <Visualization title="Target Range Size" tooltip="Not yet implemented.">
-            <div className="visualization">
-              <div style={{zoom:0.4}} className="number">{ Bytes(targetRangeSize) }</div>
-            </div>
-          </Visualization>
+    if (tableInfo) {
+      return <div className="section databases">
+        <div className="database-summary-title">
+          { this.props.params[tableNameAttr] }
         </div>
-        <pre className="create-table">
-          {/* TODO (maxlang): format create table statement */}
-          {createTableStatement}
-        </pre>
+        <div className="content">
+          <pre className="create-table">
+            {/* TODO (mrtracy): format and highlight create table statement */}
+            {tableInfo.createStatement}
+          </pre>
+          <div className="sql-table">
+          <GrantsSortedTable
+            data={tableInfo.grants}
+            sortSetting={grantsSortSetting}
+            onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
+            columns={[
+              {
+                title: "User",
+                cell: (grants) => grants.user,
+                sort: (grants) => grants.user,
+              },
+              {
+                title: "Grants",
+                cell: (grants) => grants.privileges.join(", "),
+                sort: (grants) => grants.privileges.join(", "),
+              },
+            ]}/>
+          </div>
+        </div>
+        <SummaryBar>
+          <SummaryItem
+            title="Size"
+            tooltip="Total disk size of this table."
+            value={ tableInfo.size }
+            format={ Bytes }/>
+          <SummaryItem
+            title="Ranges"
+            tooltip="The total count of ranges in this database"
+            value={ tableInfo.rangeCount }/>
+        </SummaryBar>
       </div>;
     }
     return <div>No results.</div>;
@@ -106,28 +127,24 @@ class TableMain extends React.Component<TableMainProps, {}> {
  *         SELECTORS
  */
 
-// Helper function that gets a TableDetailsResponseMessage given a state and props
-function tableDetails(state: AdminUIState, props: IInjectedProps): TableDetailsResponseMessage {
+function tableInfo(state: AdminUIState, props: IInjectedProps): TableInfo {
   let db = props.params[databaseNameAttr];
   let table = props.params[tableNameAttr];
   let details = state.cachedData.tableDetails[generateTableID(db, table)];
-  return details && details.data;
+  let stats = state.cachedData.tableStats[generateTableID(db, table)];
+  return new TableInfo(table, details && details.data, stats && stats.data);
 }
 
-// Helper function that gets a TableStatsResponseMessage given a state and props
-function tableStats(state: AdminUIState, props: IInjectedProps): TableStatsResponseMessage {
-  let db = props.params[databaseNameAttr];
-  let table = props.params[tableNameAttr];
-  let details = state.cachedData.tableStats[generateTableID(db, table)];
-  return details && details.data;
+function grantsSortSetting(state: AdminUIState): SortSetting {
+  return state.ui[UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY] || {};
 }
 
 // Connect the TableMain class with our redux store.
 let tableMainConnected = connect(
   (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
-      tableDetails: tableDetails(state, ownProps),
-      tableStats: tableStats(state, ownProps),
+      tableInfo: tableInfo(state, ownProps),
+      grantsSortSetting: grantsSortSetting(state),
     };
   },
   {
