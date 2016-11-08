@@ -437,9 +437,20 @@ func makePGClient(t *testing.T, dest string) *gosql.DB {
 	return db
 }
 
+func getDefaultContainerConfig() container.Config {
+	return container.Config{
+		Image: postgresTestImage,
+		Env: []string{
+			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
+			"PGSSLCERT=/certs/node.crt",
+			"PGSSLKEY=/certs/node.key",
+		},
+	}
+}
+
 // testDockerFail ensures the specified docker cmd fails.
 func testDockerFail(t *testing.T, name string, cmd []string) {
-	containerConfig := defaultContainerConfig
+	containerConfig := getDefaultContainerConfig()
 	containerConfig.Cmd = cmd
 	if err := testDockerSingleNode(t, name, containerConfig); err == nil {
 		t.Error("expected failure")
@@ -448,7 +459,7 @@ func testDockerFail(t *testing.T, name string, cmd []string) {
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
 func testDockerSuccess(t *testing.T, name string, cmd []string) {
-	containerConfig := defaultContainerConfig
+	containerConfig := getDefaultContainerConfig()
 	containerConfig.Cmd = cmd
 	if err := testDockerSingleNode(t, name, containerConfig); err != nil {
 		t.Error(err)
@@ -462,15 +473,6 @@ const (
 	// by changing postgresTestImage to the hash of the container.
 	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag
 )
-
-var defaultContainerConfig = container.Config{
-	Image: postgresTestImage,
-	Env: []string{
-		fmt.Sprintf("PGPORT=%s", base.DefaultPort),
-		"PGSSLCERT=/certs/node.crt",
-		"PGSSLKEY=/certs/node.key",
-	},
-}
 
 func testDocker(t *testing.T, num int32, name string, containerConfig container.Config) error {
 	SkipUnlessLocal(t)
