@@ -46,10 +46,10 @@ message SimpleResponse {
 }
 
 service DistSQL {
-  // RunSimpleFlow instantiates a flow and streams back results of that flow.
+  // RunSyncFlow instantiates a flow and streams back results of that flow.
   // The request must contain one flow, and that flow must have a single mailbox
-  // of the special simple response type.
-  rpc RunSimpleFlow(SetupFlowRequest) returns (stream StreamMessage) {}
+  // of the special sync response type.
+  rpc RunSyncFlow(SetupFlowRequest) returns (stream StreamMessage) {}
 
   // SetupFlow instantiates a flow (subgraps of a distributed SQL
   // computation) on the receiving node.

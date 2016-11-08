@@ -45,9 +45,9 @@ type outbox struct {
 	addr    string
 	stream  DistSQL_FlowStreamClient
 
-	// simpleFlowStream is set if we are outputting to a simple flow stream; in
+	// syncFlowStream is set if we are outputting to a sync flow stream; in
 	// that case addr and stream will not be set.
-	simpleFlowStream DistSQL_RunSimpleFlowServer
+	syncFlowStream DistSQL_RunSyncFlowServer
 
 	encoder StreamEncoder
 	// numRows is the number of rows that have been accumulated in the encoder.
@@ -65,11 +65,11 @@ func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) 
 	return m
 }
 
-// newOutboxSimpleFlowStream sets up an outbox for the special "sync flow"
+// newOutboxSyncFlowStream sets up an outbox for the special "sync flow"
 // stream. The flow context should be provided via setFlowCtx when it is
 // available.
-func newOutboxSimpleFlowStream(stream DistSQL_RunSimpleFlowServer) *outbox {
-	return &outbox{simpleFlowStream: stream}
+func newOutboxSyncFlowStream(stream DistSQL_RunSyncFlowServer) *outbox {
+	return &outbox{syncFlowStream: stream}
 }
 
 func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
@@ -104,7 +104,7 @@ func (m *outbox) flush(last bool, err error) error {
 	if m.stream != nil {
 		sendErr = m.stream.Send(msg)
 	} else {
-		sendErr = m.simpleFlowStream.Send(msg)
+		sendErr = m.syncFlowStream.Send(msg)
 	}
 	if sendErr != nil {
 		if log.V(1) {
@@ -122,7 +122,7 @@ func (m *outbox) flush(last bool, err error) error {
 }
 
 func (m *outbox) mainLoop() error {
-	if m.simpleFlowStream == nil {
+	if m.syncFlowStream == nil {
 		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
 		if err != nil {
 			return err

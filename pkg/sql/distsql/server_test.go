@@ -65,13 +65,13 @@ func TestServer(t *testing.T) {
 			Core: ProcessorCoreUnion{TableReader: &ts},
 			Output: []OutputRouterSpec{{
 				Type:    OutputRouterSpec_MIRROR,
-				Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SimpleResponse: true}}},
+				Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SyncResponse: true}}},
 			}},
 		}},
 	}
 
 	distSQLClient := NewDistSQLClient(conn)
-	stream, err := distSQLClient.RunSimpleFlow(context.Background(), req)
+	stream, err := distSQLClient.RunSyncFlow(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}

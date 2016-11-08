@@ -170,7 +170,7 @@ func TestClusterFlow(t *testing.T) {
 				Core: ProcessorCoreUnion{JoinReader: &jr},
 				Output: []OutputRouterSpec{{
 					Type:    OutputRouterSpec_MIRROR,
-					Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SimpleResponse: true}}},
+					Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SyncResponse: true}}},
 				}}},
 		},
 	}
@@ -216,7 +216,7 @@ func TestClusterFlow(t *testing.T) {
 	if log.V(1) {
 		log.Infof(ctx, "Running flow on 2")
 	}
-	stream, err := clients[2].RunSimpleFlow(ctx, req3)
+	stream, err := clients[2].RunSyncFlow(ctx, req3)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -55,12 +55,12 @@ message Ordering {
 // A mailbox is where a stream "crosses" hosts - it is an endpoint of a local
 // stream which receives data from or sends to a remote host.
 message MailboxSpec {
-  // If set, we are in a special "simple flow" mode. In this mode, we return
+  // If set, we are in a special "sync flow" mode. In this mode, we return
   // results directly as part of the RPC call that set up the flow. This saves
   // overhead (extra RPCs) compared to the normal mode where the RPC just sets
   // up the flow. In this mode there are no remote endpoints so this must be the
   // only mailbox in that flow.
-  optional bool simple_response = 1 [(gogoproto.nullable) = false];
+  optional bool sync_response = 1 [(gogoproto.nullable) = false];
 
   // Serving address for the target host, used for outgoing mailboxes.
   optional string target_addr = 2 [(gogoproto.nullable) = false];
