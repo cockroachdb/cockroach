@@ -107,7 +107,7 @@ func newDistSQLNode(
 		recv = rc
 	}
 
-	flow, err := srv.SetupSimpleFlow(ctx, flowReq, recv)
+	flow, err := srv.SetupSyncFlow(ctx, flowReq, recv)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 			Output: []distsql.OutputRouterSpec{{
 				Type: distsql.OutputRouterSpec_MIRROR,
 				Streams: []distsql.StreamEndpointSpec{{
-					Mailbox: &distsql.MailboxSpec{SimpleResponse: true},
+					Mailbox: &distsql.MailboxSpec{SyncResponse: true},
 				}},
 			}},
 		}},

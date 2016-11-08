@@ -78,7 +78,7 @@ func (ds *ServerImpl) setupTxn(ctx context.Context, txnProto *roachpb.Transactio
 }
 
 func (ds *ServerImpl) setupFlow(
-	ctx context.Context, req *SetupFlowRequest, simpleFlowConsumer RowReceiver,
+	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
 ) (*Flow, error) {
 	sp, err := tracing.JoinOrNew(ds.AmbientContext.Tracer, req.TraceContext, "flow")
 	if err != nil {
@@ -95,7 +95,7 @@ func (ds *ServerImpl) setupFlow(
 		txn:     txn,
 	}
 
-	f := newFlow(flowCtx, ds.flowRegistry, simpleFlowConsumer)
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
 	if err := f.setupFlow(&req.Flow); err != nil {
 		log.Error(ctx, err)
 		sp.Finish()
@@ -104,24 +104,22 @@ func (ds *ServerImpl) setupFlow(
 	return f, nil
 }
 
-// SetupSimpleFlow sets up a simple flow, connecting the simple response output
-// stream to the given RowReceiver. The flow is not started.
-// The flow will be associated with the given context.
-func (ds *ServerImpl) SetupSimpleFlow(
+// SetupSyncFlow sets up a synchoronous flow, connecting the sync response
+// output stream to the given RowReceiver. The flow is not started. The flow
+// will be associated with the given context.
+func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (*Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), req, output)
 }
 
-// RunSimpleFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSimpleFlow(
-	req *SetupFlowRequest, stream DistSQL_RunSimpleFlowServer,
-) error {
+// RunSyncFlow is part of the DistSQLServer interface.
+func (ds *ServerImpl) RunSyncFlow(req *SetupFlowRequest, stream DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
-	mbox := newOutboxSimpleFlowStream(stream)
+	mbox := newOutboxSyncFlowStream(stream)
 	ctx := ds.AnnotateCtx(stream.Context())
 
-	f, err := ds.SetupSimpleFlow(ctx, req, mbox)
+	f, err := ds.SetupSyncFlow(ctx, req, mbox)
 	if err != nil {
 		log.Error(ctx, err)
 		return err
