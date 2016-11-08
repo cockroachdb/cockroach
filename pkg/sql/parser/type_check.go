@@ -623,10 +623,6 @@ func (d *DTimestamp) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) 
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTimestampTZ) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function for Datum.
 func (d *DInterval) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent

@@ -100,9 +100,6 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	case *parser.TimestampColType:
 		col.Type.Kind = ColumnType_TIMESTAMP
 		colDatumType = parser.TypeTimestamp
-	case *parser.TimestampTZColType:
-		col.Type.Kind = ColumnType_TIMESTAMPTZ
-		colDatumType = parser.TypeTimestampTZ
 	case *parser.IntervalColType:
 		col.Type.Kind = ColumnType_INTERVAL
 		colDatumType = parser.TypeInterval
@@ -388,11 +385,6 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeTimeAscending(b, t.Time), nil
 		}
 		return encoding.EncodeTimeDescending(b, t.Time), nil
-	case *parser.DTimestampTZ:
-		if dir == encoding.Ascending {
-			return encoding.EncodeTimeAscending(b, t.Time), nil
-		}
-		return encoding.EncodeTimeDescending(b, t.Time), nil
 	case *parser.DInterval:
 		if dir == encoding.Ascending {
 			return encoding.EncodeDurationAscending(b, t.Duration)
@@ -433,8 +425,6 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 	case *parser.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *parser.DTimestamp:
-		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
-	case *parser.DTimestampTZ:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *parser.DInterval:
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
@@ -733,15 +723,14 @@ const datumAllocSize = 16 // Arbitrary, could be tuned.
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
 // of the allocations.
 type DatumAlloc struct {
-	dintAlloc         []parser.DInt
-	dfloatAlloc       []parser.DFloat
-	dstringAlloc      []parser.DString
-	dbytesAlloc       []parser.DBytes
-	ddecimalAlloc     []parser.DDecimal
-	ddateAlloc        []parser.DDate
-	dtimestampAlloc   []parser.DTimestamp
-	dtimestampTzAlloc []parser.DTimestampTZ
-	dintervalAlloc    []parser.DInterval
+	dintAlloc       []parser.DInt
+	dfloatAlloc     []parser.DFloat
+	dstringAlloc    []parser.DString
+	dbytesAlloc     []parser.DBytes
+	ddecimalAlloc   []parser.DDecimal
+	ddateAlloc      []parser.DDate
+	dtimestampAlloc []parser.DTimestamp
+	dintervalAlloc  []parser.DInterval
 }
 
 // NewDInt allocates a DInt.
@@ -821,18 +810,6 @@ func (a *DatumAlloc) NewDTimestamp(v parser.DTimestamp) *parser.DTimestamp {
 	buf := &a.dtimestampAlloc
 	if len(*buf) == 0 {
 		*buf = make([]parser.DTimestamp, datumAllocSize)
-	}
-	r := &(*buf)[0]
-	*r = v
-	*buf = (*buf)[1:]
-	return r
-}
-
-// NewDTimestampTZ allocates a DTimestampTZ.
-func (a *DatumAlloc) NewDTimestampTZ(v parser.DTimestampTZ) *parser.DTimestampTZ {
-	buf := &a.dtimestampTzAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DTimestampTZ, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -934,14 +911,6 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestamp(parser.DTimestamp{Time: t}), rkey, err
-	case parser.TypeTimestampTZ:
-		var t time.Time
-		if dir == encoding.Ascending {
-			rkey, t, err = encoding.DecodeTimeAscending(key)
-		} else {
-			rkey, t, err = encoding.DecodeTimeDescending(key)
-		}
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), rkey, err
 	case parser.TypeInterval:
 		var d duration.Duration
 		if dir == encoding.Ascending {
@@ -1001,10 +970,6 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		var t time.Time
 		b, t, err = encoding.DecodeTimeValue(b)
 		return a.NewDTimestamp(parser.DTimestamp{Time: t}), b, err
-	case parser.TypeTimestampTZ:
-		var t time.Time
-		b, t, err = encoding.DecodeTimeValue(b)
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), b, err
 	case parser.TypeInterval:
 		var d duration.Duration
 		b, d, err = encoding.DecodeDurationValue(b)
@@ -1116,10 +1081,8 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 		set = parser.TypeBytes
 	case ColumnType_DATE:
 		set = parser.TypeDate
-	case ColumnType_TIMESTAMP:
+	case ColumnType_TIMESTAMP, ColumnType_TIMESTAMPTZ:
 		set = parser.TypeTimestamp
-	case ColumnType_TIMESTAMPTZ:
-		set = parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		set = parser.TypeInterval
 	default:
@@ -1197,7 +1160,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, nil
 		}
 	case ColumnType_TIMESTAMPTZ:
-		if v, ok := val.(*parser.DTimestampTZ); ok {
+		if v, ok := val.(*parser.DTimestamp); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
@@ -1279,7 +1242,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: v}), nil
+		return a.NewDTimestamp(parser.DTimestamp{Time: v}), nil
 	case ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {

@@ -187,7 +187,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		v = `'string'`
 	case parser.TypeBytes:
 		v = `b'bytes'`
-	case parser.TypeTimestamp, parser.TypeTimestampTZ:
+	case parser.TypeTimestamp:
 		t := time.Unix(0, r.Int63())
 		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
 	case parser.TypeBool:

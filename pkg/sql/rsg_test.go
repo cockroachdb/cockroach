@@ -127,7 +127,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				case 2:
 					typ = parser.TypeBool
 				case 3:
-					typ = parser.TypeTimestampTZ
+					typ = parser.TypeTimestamp
 				}
 				args = append(args, r.GenerateRandomArg(typ))
 			}

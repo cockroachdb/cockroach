@@ -246,10 +246,8 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					switch ct {
 					case "DATE":
 						d = parser.NewDDateFromTime(t, time.UTC)
-					case "TIMESTAMP":
+					case "TIMESTAMP", "TIMESTAMP WITH TIME ZONE":
 						d = parser.MakeDTimestamp(t, time.Nanosecond)
-					case "TIMESTAMP WITH TIME ZONE":
-						d = parser.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], coltypes[cols[si]]))
 					}

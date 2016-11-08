@@ -520,7 +520,7 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 1043  string       NULL          NULL      -1      false     b
 1082  date         NULL          NULL      8       true      b
 1114  timestamp    NULL          NULL      24      true      b
-1184  timestamptz  NULL          NULL      24      true      b
+1184  timestamp    NULL          NULL      24      true      b
 1186  interval     NULL          NULL      24      true      b
 1700  decimal      NULL          NULL      -1      false     b
 2283  anyelement   NULL          NULL      -1      false     b
@@ -543,7 +543,7 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 1043  string       S            false           true          ,         0         0        0
 1082  date         D            false           true          ,         0         0        0
 1114  timestamp    D            false           true          ,         0         0        0
-1184  timestamptz  D            false           true          ,         0         0        0
+1184  timestamp    D            false           true          ,         0         0        0
 1186  interval     T            false           true          ,         0         0        0
 1700  decimal      N            false           true          ,         0         0        0
 2283  anyelement   P            false           true          ,         0         0        0
@@ -566,7 +566,7 @@ oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout
 1043  string       0         0          0           0        0         0          0
 1082  date         0         0          0           0        0         0          0
 1114  timestamp    0         0          0           0        0         0          0
-1184  timestamptz  0         0          0           0        0         0          0
+1184  timestamp    0         0          0           0        0         0          0
 1186  interval     0         0          0           0        0         0          0
 1700  decimal      0         0          0           0        0         0          0
 2283  anyelement   0         0          0           0        0         0          0
@@ -589,7 +589,7 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 1043  string       NULL      NULL        false       0            -1
 1082  date         NULL      NULL        false       0            -1
 1114  timestamp    NULL      NULL        false       0            -1
-1184  timestamptz  NULL      NULL        false       0            -1
+1184  timestamp    NULL      NULL        false       0            -1
 1186  interval     NULL      NULL        false       0            -1
 1700  decimal      NULL      NULL        false       0            -1
 2283  anyelement   NULL      NULL        false       0            -1
@@ -612,7 +612,7 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 1043  string       0         0             NULL           NULL        NULL
 1082  date         0         0             NULL           NULL        NULL
 1114  timestamp    0         0             NULL           NULL        NULL
-1184  timestamptz  0         0             NULL           NULL        NULL
+1184  timestamp    0         0             NULL           NULL        NULL
 1186  interval     0         0             NULL           NULL        NULL
 1700  decimal      0         0             NULL           NULL        NULL
 2283  anyelement   0         0             NULL           NULL        NULL
@@ -755,7 +755,7 @@ name                           setting       unit  context  enumvals  boot_val  
 DATABASE                       test          NULL  user     NULL      test          test
 DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 SYNTAX                         Traditional   NULL  user     NULL      Traditional   Traditional
-TIME ZONE                      UTC           NULL  user     NULL      UTC           UTC 
+TIME ZONE                      UTC           NULL  user     NULL      UTC           UTC
 TRANSACTION ISOLATION LEVEL    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 TRANSACTION PRIORITY           NORMAL        NULL  user     NULL      NORMAL        NORMAL
 

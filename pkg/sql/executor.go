@@ -1334,7 +1334,6 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeString:
 	case parser.TypeDate:
 	case parser.TypeTimestamp:
-	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeArray:
 	case parser.TypePlaceholder:
@@ -1393,7 +1392,7 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	case *parser.DString:
 		// Allow nanosecond precision because the timestamp is only used by the
 		// system and won't be returned to the user over pgwire.
-		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
+		dt, err := parser.ParseDTimestamp(string(*d), planMaker.evalCtx.GetLocation(), time.Nanosecond)
 		if err != nil {
 			return nil, err
 		}

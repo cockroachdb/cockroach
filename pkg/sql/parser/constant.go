@@ -305,7 +305,6 @@ var (
 		TypeBytes,
 		TypeDate,
 		TypeTimestamp,
-		TypeTimestampTZ,
 		TypeInterval,
 	}
 	strValAvailBytesString = []Type{TypeBytes, TypeString}
@@ -335,9 +334,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	case TypeDate:
 		return ParseDDate(expr.s, ctx.getLocation())
 	case TypeTimestamp:
-		return ParseDTimestamp(expr.s, time.Microsecond)
-	case TypeTimestampTZ:
-		return ParseDTimestampTZ(expr.s, ctx.getLocation(), time.Microsecond)
+		return ParseDTimestamp(expr.s, ctx.getLocation(), time.Microsecond)
 	case TypeInterval:
 		return ParseDInterval(expr.s)
 	default:

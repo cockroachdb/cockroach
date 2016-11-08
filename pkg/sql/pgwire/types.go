@@ -97,8 +97,6 @@ func pgTypeForParserType(t parser.Type) pgType {
 	case parser.TypeDate:
 		return pgType{oid.T_date, 8}
 	case parser.TypeTimestamp:
-		return pgType{oid.T_timestamp, 8}
-	case parser.TypeTimestampTZ:
 		return pgType{oid.T_timestamptz, 8}
 	case parser.TypeInterval:
 		return pgType{oid.T_interval, 8}
@@ -165,11 +163,6 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.write(s)
 
 	case *parser.DTimestamp:
-		s := formatTs(v.Time, nil)
-		b.putInt32(int32(len(s)))
-		b.write(s)
-
-	case *parser.DTimestampTZ:
 		s := formatTs(v.Time, sessionLoc)
 		b.putInt32(int32(len(s)))
 		b.write(s)
@@ -291,10 +284,6 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		b.writeLengthPrefixedString(string(*v))
 
 	case *parser.DTimestamp:
-		b.putInt32(8)
-		b.putInt64(timeToPgBinary(v.Time, nil))
-
-	case *parser.DTimestampTZ:
 		b.putInt32(8)
 		b.putInt64(timeToPgBinary(v.Time, sessionLoc))
 
@@ -647,13 +636,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err != nil {
 				return d, errors.Errorf("could not parse string %q as timestamp", b)
 			}
-			d = parser.MakeDTimestampTZ(ts, time.Microsecond)
+			d = parser.MakeDTimestamp(ts, time.Microsecond)
 		case formatBinary:
 			if len(b) < 8 {
 				return d, errors.Errorf("timestamptz requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			d = parser.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond)
+			d = parser.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamptz format code: %s", code)
 		}

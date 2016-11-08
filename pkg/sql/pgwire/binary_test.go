@@ -96,18 +96,7 @@ func TestBinaryDecimal(t *testing.T) {
 func TestBinaryTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "timestamp", func(val string) parser.Datum {
-		ts, err := parser.ParseDTimestamp(val, time.Microsecond)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return ts
-	})
-}
-
-func TestBinaryTimestampTZ(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "timestamptz", func(val string) parser.Datum {
-		tstz, err := parser.ParseDTimestampTZ(val, time.UTC, time.Microsecond)
+		tstz, err := parser.ParseDTimestamp(val, time.UTC, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
