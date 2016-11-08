@@ -743,6 +743,7 @@ SELECT name, setting, category, short_desc, extra_desc, vartype FROM pg_catalog.
 name                           setting       category  short_desc  extra_desc  vartype
 database                       test          NULL      NULL        NULL        string
 default_transaction_isolation  SERIALIZABLE  NULL      NULL        NULL        string
+max_index_keys                 32            NULL      NULL        NULL        string
 syntax                         Traditional   NULL      NULL        NULL        string
 time zone                      UTC           NULL      NULL        NULL        string
 transaction isolation level    SERIALIZABLE  NULL      NULL        NULL        string
@@ -754,6 +755,7 @@ SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catal
 name                           setting       unit  context  enumvals  boot_val      reset_val
 database                       test          NULL  user     NULL      test          test
 default_transaction_isolation  SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
+max_index_keys                 32            NULL  user     NULL      32            32
 syntax                         Traditional   NULL  user     NULL      Traditional   Traditional
 time zone                      UTC           NULL  user     NULL      UTC           UTC
 transaction isolation level    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
@@ -765,6 +767,7 @@ SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg
 name                           source  min_val  max_val  sourcefile  sourceline
 database                       NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation  NULL    NULL     NULL     NULL        NULL
+max_index_keys                 NULL    NULL     NULL     NULL        NULL
 syntax                         NULL    NULL     NULL     NULL        NULL
 time zone                      NULL    NULL     NULL     NULL        NULL
 transaction isolation level    NULL    NULL     NULL     NULL        NULL
