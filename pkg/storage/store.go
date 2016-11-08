@@ -2960,9 +2960,9 @@ func (s *Store) processRaftRequest(
 	return nil
 }
 
-// HandleRaftResponse handles response messages from the raft transport. It
-// requires that s.mu is not held.
-func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
+// HandleRaftResponse implements the RaftMessageHandler interface.
+// It requires that s.mu is not held.
+func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) error {
 	ctx = s.AnnotateCtx(ctx)
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -2970,7 +2970,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 		case *roachpb.ReplicaTooOldError:
 			repl, err := s.GetReplica(resp.RangeID)
 			if err != nil {
-				return // not unexpected
+				return nil // not unexpected
 			}
 			ctx = repl.AnnotateCtx(ctx)
 			added, err := s.replicaGCQueue.Add(
@@ -2981,6 +2981,10 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			} else if added {
 				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
+		case *roachpb.StoreNotFoundError:
+			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
+				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
+			return val.GetDetail()
 		default:
 			log.Warningf(ctx, "got error from range %d, replica %s: %s",
 				resp.RangeID, resp.FromReplica, val)
@@ -2989,6 +2993,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 	default:
 		log.Infof(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
 	}
+	return nil
 }
 
 // OutgoingSnapshotStream is the minimal interface on a GRPC stream required
