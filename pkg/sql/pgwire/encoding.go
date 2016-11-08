@@ -23,6 +23,7 @@ import (
 	"io"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/pkg/errors"
 )
@@ -153,7 +154,12 @@ func (b *readBuffer) getUint32() (uint32, error) {
 type writeBuffer struct {
 	wrapped bytes.Buffer
 	err     error
-	putbuf  [64]byte
+
+	// These two buffers are used as temporary storage. Use putbuf when the
+	// length of the required temp space is known. Use variablePutbuf when the length
+	// of the required temp space is unknown, or when a bytes.Buffer is needed.
+	putbuf         [64]byte
+	variablePutbuf bytes.Buffer
 
 	// bytecount counts the number of bytes written across all pgwire connections, not just this
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
@@ -190,6 +196,18 @@ func (b *writeBuffer) nullTerminate() {
 func (b *writeBuffer) writeLengthPrefixedString(s string) {
 	b.putInt32(int32(len(s)))
 	b.writeString(s)
+}
+
+// writeString writes a length-prefixed Datum in its string representation.
+// The length is encoded as an int32.
+func (b *writeBuffer) writeLengthPrefixedDatum(d parser.Datum) {
+	if b.err == nil {
+		d.Format(&b.variablePutbuf, parser.FmtSimple)
+		b.putInt32(int32(b.variablePutbuf.Len()))
+
+		// variablePutbuf.WriteTo resets variablePutbuf.
+		_, b.err = b.variablePutbuf.WriteTo(&b.wrapped)
+	}
 }
 
 // writeString writes a null-terminated string.

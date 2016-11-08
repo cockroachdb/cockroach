@@ -149,7 +149,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.write(s)
 
 	case *parser.DDecimal:
-		b.writeLengthPrefixedString(v.Dec.String())
+		b.writeLengthPrefixedDatum(v)
 
 	case *parser.DBytes:
 		// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
@@ -182,7 +182,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.write(s)
 
 	case *parser.DInterval:
-		b.writeLengthPrefixedString(v.String())
+		b.writeLengthPrefixedDatum(v)
 
 	case *parser.DTuple:
 		var tb bytes.Buffer
@@ -195,7 +195,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 				// Emit nothing on NULL.
 				continue
 			}
-			tb.WriteString(d.String())
+			d.Format(&tb, parser.FmtSimple)
 		}
 		tb.WriteString(")")
 		b.writeLengthPrefixedString(tb.String())
@@ -207,7 +207,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 			if i > 0 {
 				tb.WriteString(",")
 			}
-			tb.WriteString(d.String())
+			d.Format(&tb, parser.FmtSimple)
 		}
 		tb.WriteString("}")
 		b.writeLengthPrefixedString(tb.String())
