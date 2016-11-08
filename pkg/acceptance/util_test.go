@@ -439,14 +439,18 @@ func makePGClient(t *testing.T, dest string) *gosql.DB {
 
 // testDockerFail ensures the specified docker cmd fails.
 func testDockerFail(t *testing.T, name string, cmd []string) {
-	if err := testDockerSingleNode(t, name, cmd); err == nil {
+	containerConfig := defaultContainerConfig
+	containerConfig.Cmd = cmd
+	if err := testDockerSingleNode(t, name, containerConfig); err == nil {
 		t.Error("expected failure")
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
 func testDockerSuccess(t *testing.T, name string, cmd []string) {
-	if err := testDockerSingleNode(t, name, cmd); err != nil {
+	containerConfig := defaultContainerConfig
+	containerConfig.Cmd = cmd
+	if err := testDockerSingleNode(t, name, containerConfig); err != nil {
 		t.Error(err)
 	}
 }
@@ -459,7 +463,16 @@ const (
 	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag
 )
 
-func testDocker(t *testing.T, num int32, name string, cmd []string) error {
+var defaultContainerConfig = container.Config{
+	Image: postgresTestImage,
+	Env: []string{
+		fmt.Sprintf("PGPORT=%s", base.DefaultPort),
+		"PGSSLCERT=/certs/node.crt",
+		"PGSSLKEY=/certs/node.key",
+	},
+}
+
+func testDocker(t *testing.T, num int32, name string, containerConfig container.Config) error {
 	SkipUnlessLocal(t)
 	cfg := cluster.TestConfig{
 		Name:     name,
@@ -469,15 +482,6 @@ func testDocker(t *testing.T, num int32, name string, cmd []string) error {
 	l := StartCluster(t, cfg).(*cluster.LocalCluster)
 	defer l.AssertAndStop(t)
 
-	containerConfig := container.Config{
-		Image: postgresTestImage,
-		Env: []string{
-			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
-			"PGSSLCERT=/certs/node.crt",
-			"PGSSLKEY=/certs/node.key",
-		},
-		Cmd: cmd,
-	}
 	if len(l.Nodes) > 0 {
 		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 	}
@@ -485,10 +489,10 @@ func testDocker(t *testing.T, num int32, name string, cmd []string) error {
 	return l.OneShot(postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
 }
 
-func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
-	return testDocker(t, 1, name, cmd)
+func testDockerSingleNode(t *testing.T, name string, containerConfig container.Config) error {
+	return testDocker(t, 1, name, containerConfig)
 }
 
-func testDockerOneShot(t *testing.T, name string, cmd []string) error {
-	return testDocker(t, 0, name, cmd)
+func testDockerOneShot(t *testing.T, name string, containerConfig container.Config) error {
+	return testDocker(t, 0, name, containerConfig)
 }

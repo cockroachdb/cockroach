@@ -21,14 +21,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/docker/docker/api/types/container"
 )
 
 func runReferenceTestWithScript(t *testing.T, script string) {
-	if err := testDockerOneShot(t, "reference", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
+	containerConfig := container.Config{
+		Image: postgresTestImage,
+		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
+	}
+	if err := testDockerOneShot(t, "reference", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
-	if err := testDockerOneShot(t, "reference", []string{"/bin/bash", "-c", script}); err != nil {
+	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
+	if err := testDockerOneShot(t, "reference", containerConfig); err != nil {
 		t.Error(err)
 	}
 }
