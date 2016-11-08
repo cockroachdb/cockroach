@@ -1271,6 +1271,15 @@ var powImpls = []Builtin{
 		_, err := decimal.Pow(&dd.Dec, x, y, decimal.Precision)
 		return dd, err
 	}),
+	{
+		Types:      ArgTypes{TypeInt, TypeInt},
+		ReturnType: TypeInt,
+		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+			x := float64(*args[0].(*DInt))
+			y := float64(*args[1].(*DInt))
+			return NewDInt(DInt(math.Pow(x, y))), nil
+		},
+	},
 }
 
 func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) Builtin {
