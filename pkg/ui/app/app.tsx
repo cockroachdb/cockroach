@@ -38,18 +38,14 @@ import * as ReactDOM from "react-dom";
 import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect } from "react-router";
 
-import { databaseNameAttr, nodeIDAttr, tableNameAttr } from "./util/constants";
+import { tableNameAttr, databaseNameAttr, nodeIDAttr} from "./util/constants";
 
 import { store, history } from "./redux/state";
 import Layout from "./containers/layout";
 import Cluster from "./containers/cluster";
 import ClusterOverview from "./containers/clusterOverview";
 import ClusterEvents from "./containers/clusterEvents";
-import Databases from "./containers/databases/databases";
-import DatabaseList from "./containers/databases/databaseList";
-import DatabaseEvents from "./containers/databases/databaseEvents";
-import DatabaseDetails from "./containers/databases/databaseDetails";
-import DatabaseGrants from "./containers/databases/databaseGrants";
+import { DatabaseTablesList, DatabaseGrantsList } from "./containers/databases/databases";
 import TableDetails from "./containers/databases/tableDetails";
 import HelpUs from "./containers/helpus";
 import Nodes from "./containers/nodes";
@@ -95,26 +91,11 @@ ReactDOM.render(
             <Route path="logs" component={ NodeLogs } />
           </Route>
         </Route>
-        <Route path="databases" component= { Databases }>
-          <IndexRedirect to="overview" />
-          <Route path="overview" component={ DatabaseList } />
-          <Route path="events" component={ DatabaseEvents } />
-          <Route path="database" >
-            <Route path={ `:${databaseNameAttr}` } >
-              <IndexRedirect to="overview" />
-              <Route path="overview" component={ DatabaseDetails } />
-              <Route path="events" component={ DatabaseEvents } />
-              <Route path="grants" component={ DatabaseGrants } />
-              <Route path="table">
-                <Route path={ `:${tableNameAttr}` } >
-                  <IndexRedirect to="overview" />
-                  <Route path="overview" component={ TableDetails } />
-                  <Route path="events" component={ DatabaseEvents } />
-                  <Route path="grants" component={ DatabaseGrants } />
-                </Route>
-              </Route>
-            </Route>
-          </Route>
+        <Route path="databases">
+          <IndexRedirect to="tables" />
+          <Route path="tables" component={ DatabaseTablesList } />
+          <Route path="grants" component={ DatabaseGrantsList } />
+          <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
         </Route>
         <Route path="help-us/reporting" component={ HelpUs } />
         <Route path="raft" component={ Raft }>
