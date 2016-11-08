@@ -167,17 +167,20 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DDate:
 		t := time.Unix(int64(*v)*secondsInDay, 0)
-		s := formatTs(t, nil)
+		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s := formatTs(t, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
 	case *parser.DTimestamp:
-		s := formatTs(v.Time, nil)
+		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s := formatTs(v.Time, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
 	case *parser.DTimestampTZ:
-		s := formatTs(v.Time, sessionLoc)
+		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s := formatTs(v.Time, sessionLoc, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -333,9 +336,10 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999"
 const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 
-// formatTs formats t into a format lib/pq understands.
-// Mostly cribbed from github.com/lib/pq.
-func formatTs(t time.Time, offset *time.Location) (b []byte) {
+// formatTs formats t with an optional offset into a format lib/pq understands,
+// appending to the provided tmp buffer if it is large enough and returning the
+// resulting buffer. The function is mostly cribbed from github.com/lib/pq.
+func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
@@ -352,9 +356,9 @@ func formatTs(t time.Time, offset *time.Location) (b []byte) {
 	}
 
 	if offset != nil {
-		b = []byte(t.Format(pgTimeStampFormat))
+		b = t.AppendFormat(tmp, pgTimeStampFormat)
 	} else {
-		b = []byte(t.Format(pgTimeStampFormatNoOffset))
+		b = t.AppendFormat(tmp, pgTimeStampFormatNoOffset)
 	}
 
 	if bc {
