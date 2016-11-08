@@ -2716,6 +2716,7 @@ func (s *Store) processRaftRequest(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
+	ctx = r.AnnotateCtx(ctx)
 	defer r.raftMu.Unlock()
 	r.setLastReplicaDescriptors(req)
 
@@ -2922,8 +2923,8 @@ func (s *Store) processRaftRequest(
 		// getOrCreateReplica disallows moving the replica ID backward, so the only
 		// way we can get here is if the replica did not previously exist.
 		if log.V(1) {
-			log.Infof(ctx, "refusing incoming Raft message %s for range %d from %+v to %+v",
-				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
+			log.Infof(ctx, "refusing incoming Raft message %s from %+v to %+v",
+				req.Message.Type, req.FromReplica, req.ToReplica)
 		}
 		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
 			r.store.StoreID(), req.RangeID)
@@ -2967,13 +2968,14 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			if err != nil {
 				return // not unexpected
 			}
+			ctx = repl.AnnotateCtx(ctx)
 			added, err := s.replicaGCQueue.Add(
 				repl, replicaGCPriorityRemoved,
 			)
 			if err != nil {
-				log.Errorf(ctx, "%s: unable to add to replica GC queue: %s", repl, err)
+				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 			} else if added {
-				log.Infof(ctx, "%s: added to replica GC queue (peer suggestion)", repl)
+				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		default:
 			log.Warningf(ctx, "got error from range %d, replica %s: %s",
