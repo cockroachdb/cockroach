@@ -37,7 +37,7 @@ type loop struct {
 	stallThresh   inf.Dec // The maximum |delta| to be considered a stall.
 }
 
-var digitsToBitsRatio = 1 / math.Log10(2)
+const digitsToBitsRatio = math.Ln10 / math.Ln2
 
 // newLoop returns a new loop checker. The arguments are the name
 // of the function being evaluated, the argument to the function,
