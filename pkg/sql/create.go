@@ -347,10 +347,10 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	numColNames := len(n.ColumnNames)
 	numColumns := len(sourcePlan.Columns())
 	if numColNames != 0 && numColNames != numColumns {
+		sourcePlan.Close()
 		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
 			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
 			numColNames, util.Pluralize(int64(numColNames)),
@@ -358,10 +358,6 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	}
 
 	return &createViewNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
-}
-
-func (n *createViewNode) expandPlan() error {
-	return n.sourcePlan.expandPlan()
 }
 
 func (n *createViewNode) Start() error {
@@ -429,8 +425,13 @@ func (n *createViewNode) Start() error {
 	return nil
 }
 
+func (n *createViewNode) Close() {
+	n.sourcePlan.Close()
+	n.sourcePlan = nil
+}
+
+func (n *createViewNode) expandPlan() error                   { return n.sourcePlan.expandPlan() }
 func (n *createViewNode) Next() (bool, error)                 { return false, nil }
-func (n *createViewNode) Close()                              {}
 func (n *createViewNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createViewNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createViewNode) Values() parser.DTuple               { return parser.DTuple{} }
@@ -446,7 +447,6 @@ type createTableNode struct {
 	p          *planner
 	n          *parser.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
-	insertPlan planNode
 	sourcePlan planNode
 }
 
@@ -491,6 +491,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		numColNames := len(n.AsColumnNames)
 		numColumns := len(sourcePlan.Columns())
 		if numColNames != 0 && numColNames != numColumns {
+			sourcePlan.Close()
 			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
 				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
 				numColNames, util.Pluralize(int64(numColNames)),
@@ -531,7 +532,7 @@ func hoistConstraints(n *parser.CreateTable) {
 }
 
 func (n *createTableNode) expandPlan() error {
-	if n.n.As() {
+	if n.sourcePlan != nil {
 		return n.sourcePlan.expandPlan()
 	}
 	return nil
@@ -616,31 +617,22 @@ func (n *createTableNode) Start() error {
 	}
 
 	if n.n.As() {
-		resultColumns := n.sourcePlan.Columns()
-		if err != nil {
-			return err
-		}
-
 		// TODO(knz): Ideally we would want to plug the sourcePlan which
 		// was already computed as a data source into the insertNode. Now
 		// unfortunately this is not so easy: when this point is reached,
-		// sourcePlan.expandPlan() has already been called, and
-		// insertPlan.expandPlan() below would cause a 2nd invocation and
-		// cause a panic. So instead we close this sourcePlan and let the
-		// insertNode create it anew from the AsSource syntax node.
+		// sourcePlan.expandPlan() has already been called (for EXPLAIN),
+		// and insertPlan.expandPlan() below would cause a 2nd invocation
+		// and cause a panic. So instead we close this sourcePlan and let
+		// the insertNode create it anew from the AsSource syntax node.
 		n.sourcePlan.Close()
 		n.sourcePlan = nil
 
-		desiredTypesFromSelect := make([]parser.Type, len(resultColumns))
-		for i, col := range resultColumns {
-			desiredTypesFromSelect[i] = col.Typ
-		}
 		insert := &parser.Insert{Table: &n.n.Table, Rows: n.n.AsSource}
-		insertPlan, err := n.p.Insert(insert, desiredTypesFromSelect, false)
+		insertPlan, err := n.p.Insert(insert, nil, false)
 		if err != nil {
 			return err
 		}
-		n.insertPlan = insertPlan
+		defer insertPlan.Close()
 		if err := insertPlan.expandPlan(); err != nil {
 			return err
 		}
@@ -660,8 +652,9 @@ func (n *createTableNode) Start() error {
 }
 
 func (n *createTableNode) Close() {
-	if n.insertPlan != nil {
-		n.insertPlan.Close()
+	if n.sourcePlan != nil {
+		n.sourcePlan.Close()
+		n.sourcePlan = nil
 	}
 }
 
