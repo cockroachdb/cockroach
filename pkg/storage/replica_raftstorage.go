@@ -18,7 +18,6 @@ package storage
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -315,7 +314,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, e
 	// state of the Replica). Everything must come from the snapshot.
 	snapData, err := snapshot(ctx, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
-		log.Errorf(ctx, "%s: error generating snapshot: %s", r, err)
+		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
 	}
 	log.Event(ctx, "snapshot generated")
@@ -442,8 +441,8 @@ func snapshot(
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.NewV4()
 
-	log.Infof(ctx, "generated snapshot %s for range %s at index %d in %s.",
-		snapUUID.Short(), rangeID, appliedIndex, timeutil.Since(start))
+	log.Infof(ctx, "generated snapshot %s at index %d in %s.",
+		snapUUID.Short(), appliedIndex, timeutil.Since(start))
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,
@@ -528,7 +527,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
 		ctx := r.AnnotateCtx(context.TODO())
-		log.Warningf(ctx, "%s: no system config available, cannot determine range MaxBytes", r)
+		log.Warningf(ctx, "no system config available, cannot determine range MaxBytes")
 		return nil
 	}
 
@@ -579,20 +578,18 @@ func (r *Replica) applySnapshot(
 		return nil
 	}
 
-	replicaIDStr := "[?]"
 	snapType := "preemptive"
 	if !isPreemptive {
-		replicaIDStr = strconv.FormatInt(int64(replicaID), 10)
 		snapType = "Raft"
 	}
 
-	log.Infof(ctx, "%s: with replicaID %s, applying %s snapshot at index %d "+
+	log.Infof(ctx, "applying %s snapshot at index %d "+
 		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
-		r, replicaIDStr, snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
+		snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
 		len(snap.Data), len(inSnap.Batches), len(inSnap.LogEntries))
 	defer func(start time.Time) {
-		log.Infof(ctx, "%s: with replicaID %s, applied %s snapshot in %.3fs",
-			r, replicaIDStr, snapType, timeutil.Since(start).Seconds())
+		log.Infof(ctx, "applied %s snapshot in %.3fs",
+			snapType, timeutil.Since(start).Seconds())
 	}(timeutil.Now())
 
 	batch := r.store.Engine().NewBatch()
@@ -661,14 +658,14 @@ func (r *Replica) applySnapshot(
 	}
 
 	if s.Desc.RangeID != r.RangeID {
-		log.Fatalf(ctx, "%s: unexpected range ID %d", r, s.Desc.RangeID)
+		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
 
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
 	if s.RaftAppliedIndex != snap.Metadata.Index {
-		log.Fatalf(ctx, "%s: snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
-			r, s.RaftAppliedIndex, snap.Metadata.Index)
+		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
+			s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
 	if err := batch.Commit(); err != nil {

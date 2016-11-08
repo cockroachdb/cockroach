@@ -2044,8 +2044,8 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special
 		// because raft needs to understand it; it cannot simply be an
 		// opaque command.
-		log.Infof(ctx, "proposing %s %+v for range %d: %+v",
-			crt.ChangeType, crt.Replica, p.RangeID, crt.UpdatedReplicas)
+		log.Infof(ctx, "proposing %s %+v: %+v",
+			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
 
 		confChangeCtx := ConfChangeContext{
 			CommandID: string(p.idKey),
