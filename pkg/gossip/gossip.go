@@ -190,6 +190,7 @@ type Gossip struct {
 	resolvers      []resolver.Resolver
 	resolversTried map[int]struct{} // Set of attempted resolver indexes
 	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
+	nodeAddrs      map[util.UnresolvedAddr]roachpb.NodeID
 
 	// Membership sets for resolvers and bootstrap addresses.
 	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
@@ -222,6 +223,7 @@ func New(
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
+		nodeAddrs:         map[util.UnresolvedAddr]roachpb.NodeID{},
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
@@ -525,7 +527,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 			if err := i.Value.GetProto(&desc); err != nil {
 				return err
 			}
-			if desc.Address == g.mu.is.NodeAddr {
+			if desc.Address == (util.UnresolvedAddr{}) || desc.Address == g.mu.is.NodeAddr {
 				return nil
 			}
 			g.maybeAddResolver(desc.Address)
@@ -565,7 +567,7 @@ func (g *Gossip) maxPeers(nodeCount int) int {
 // new resolvers for each encountered host and to write the
 // set of gossip node addresses to persistent storage when it
 // changes.
-func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
+func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
 	var desc roachpb.NodeDescriptor
 	if err := content.GetProto(&desc); err != nil {
@@ -576,12 +578,47 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	// If desc is the empty descriptor, that indicates that the node has been
+	// removed from the cluster. If that's the case, remove it from our map of
+	// nodes to prevent other parts of the system from trying to talk to it.
+	if desc.NodeID == 0 {
+		nodeID, err := NodeIDFromKey(key)
+		if err != nil {
+			log.Errorf(ctx, "unable to update node address for removed node: %s", err)
+			return
+		}
+		log.Infof(ctx, "removed node %d from gossip", nodeID)
+		delete(g.nodeDescs, nodeID)
+		return
+	}
+
 	// Skip if the node has already been seen.
 	if _, ok := g.nodeDescs[desc.NodeID]; ok {
 		return
 	}
-
 	g.nodeDescs[desc.NodeID] = &desc
+
+	// If the new node's address conflicts with another node's address, then it
+	// must be the case that the new node has replaced the previous one. Remove
+	// it from our set of tracked descriptors to ensure we don't attempt to
+	// connect to its previous identity (as came up in issue #10266).
+	// We ignore empty addresses for the sake of not breaking tests.
+	if desc.Address != (util.UnresolvedAddr{}) {
+		if oldNodeID, ok := g.nodeAddrs[desc.Address]; ok && oldNodeID != desc.NodeID {
+			log.Infof(ctx, "removing node %d which was at same address as new node %v", oldNodeID, desc)
+			delete(g.nodeDescs, oldNodeID)
+			bytes, err := protoutil.Marshal(&roachpb.NodeDescriptor{})
+			if err != nil {
+				log.Errorf(ctx, "failed to marshal empty NodeDescriptor proto: %s", err)
+			} else {
+				key := MakeNodeIDKey(oldNodeID)
+				if err := g.addInfoLocked(key, bytes, ttlNodeDescriptorGossip); err != nil {
+					log.Errorf(ctx, "failed to empty node descriptor for node %d: %s", oldNodeID, err)
+				}
+			}
+		}
+		g.nodeAddrs[desc.Address] = desc.NodeID
+	}
 
 	// Recompute max peers based on size of network and set the max
 	// sizes for incoming and outgoing node sets.
@@ -630,7 +667,9 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 		if err := i.Value.GetProto(nodeDescriptor); err != nil {
 			return nil, err
 		}
-		return nodeDescriptor, nil
+		if nodeDescriptor.NodeID != 0 {
+			return nodeDescriptor, nil
+		}
 	}
 
 	return nil, errors.Errorf("unable to lookup descriptor for node %d", nodeID)
@@ -653,6 +692,12 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.addInfoLocked(key, val, ttl)
+}
+
+// addInfoLocked adds or updates an info object. The mutex is assumed held by
+// the caller. Returns an error if info couldn't be added.
+func (g *Gossip) addInfoLocked(key string, val []byte, ttl time.Duration) error {
 	err := g.mu.is.addInfo(key, g.mu.is.newInfo(val, ttl))
 	if err == nil {
 		g.signalConnectedLocked()

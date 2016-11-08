@@ -55,6 +55,53 @@ func TestGossipInfoStore(t *testing.T) {
 	}
 }
 
+// TestGossipOverwriteNode verifies that if a new node is added with the same
+// address as an old node, that old node is removed from the cluster.
+func TestGossipOverwriteNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rpcContext := newInsecureRPCContext(stopper)
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
+	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")}
+	if err := g.SetNodeDescriptor(node1); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.SetNodeDescriptor(node2); err != nil {
+		t.Fatal(err)
+	}
+	if val, err := g.GetNodeDescriptor(1); err != nil {
+		t.Errorf("error fetching node 1: %s", err)
+	} else if val.NodeID != 1 {
+		t.Errorf("expected node 1, got %+v", val)
+	}
+	if val, err := g.GetNodeDescriptor(2); err != nil {
+		t.Errorf("error fetching node 2: %s", err)
+	} else if val.NodeID != 2 {
+		t.Errorf("expected node 2, got %+v", val)
+	}
+
+	// Give node3 the same address as node1, which should cause node1 to be
+	// removed from the cluster.
+	node3 := &roachpb.NodeDescriptor{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
+	if err := g.SetNodeDescriptor(node3); err != nil {
+		t.Fatal(err)
+	}
+	if val, err := g.GetNodeDescriptor(3); err != nil {
+		t.Errorf("error fetching node 1: %s", err)
+	} else if val.NodeID != 3 {
+		t.Errorf("expected node 3, got %+v", val)
+	}
+
+	// Quiesce the stopper now to ensure that the update has propagated before
+	// checking whether node 1 has been removed from the infoStore.
+	stopper.Quiesce()
+	if val, err := g.GetNodeDescriptor(1); err == nil {
+		t.Errorf("expected error fetching node 1, got node %+v", val)
+	}
+}
+
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
