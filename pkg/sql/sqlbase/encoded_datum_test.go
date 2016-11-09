@@ -35,9 +35,9 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("empty EncDatum has an encoding")
 	}
 
-	x = EncDatumFromDatum(ColumnType_INT, parser.NewDInt(5))
+	x = DatumToEncDatum(ColumnType_INT, parser.NewDInt(5))
 	if x.IsUnset() {
-		t.Errorf("unset after EncDatumFromDatum()")
+		t.Errorf("unset after DatumToEncDatum()")
 	}
 
 	encoded, err := x.Encode(a, DatumEncoding_ASCENDING_KEY, nil)
@@ -85,6 +85,10 @@ func TestEncDatum(t *testing.T) {
 	}
 	if cmp := y.Datum.Compare(z.Datum); cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	}
+	y.UnsetDatum()
+	if !y.IsUnset() {
+		t.Error("not unset after UnsetDatum()")
 	}
 }
 
@@ -148,8 +152,8 @@ func TestEncDatumCompare(t *testing.T) {
 				break
 			}
 		}
-		v1 := EncDatumFromDatum(typ, d1)
-		v2 := EncDatumFromDatum(typ, d2)
+		v1 := DatumToEncDatum(typ, d1)
+		v2 := DatumToEncDatum(typ, d2)
 
 		if val, err := v1.Compare(a, &v2); err != nil {
 			t.Fatal(err)
@@ -226,7 +230,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 func TestEncDatumRowCompare(t *testing.T) {
 	v := [5]EncDatum{}
 	for i := range v {
-		v[i] = EncDatumFromDatum(ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = DatumToEncDatum(ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
 
 	asc := encoding.Ascending

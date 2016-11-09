@@ -446,7 +446,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		var lastRowSeen parser.DTuple
 		i := int64(0)
 		for ; i < chunkSize; i++ {
-			row, err := rf.NextRow()
+			row, err := rf.NextRowDecoded()
 			if err != nil {
 				return err
 			}

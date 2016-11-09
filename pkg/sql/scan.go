@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // A scanNode handles scanning over the key/value pairs for a table and
@@ -177,25 +178,33 @@ func (n *scanNode) debugNext() (bool, error) {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
 	var err error
-	n.debugVals.key, n.debugVals.value, n.row, err = n.fetcher.NextKeyDebug()
+	var encRow sqlbase.EncDatumRow
+	n.debugVals.key, n.debugVals.value, encRow, err = n.fetcher.NextKeyDebug()
 	if err != nil || n.debugVals.key == "" {
 		return false, err
 	}
-
-	if n.row != nil {
-		passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
-		if err != nil {
-			return false, err
-		}
-		if passesFilter {
-			n.debugVals.output = debugValueRow
-		} else {
-			n.debugVals.output = debugValueFiltered
-		}
-		n.rowIndex++
-	} else {
+	if encRow == nil {
+		n.row = nil
 		n.debugVals.output = debugValuePartial
+		return true, nil
 	}
+	tuple := make(parser.DTuple, len(encRow))
+	var da sqlbase.DatumAlloc
+	err = sqlbase.EncDatumRowToDTuple(tuple, encRow, &da)
+	if err != nil {
+		return false, errors.Errorf("Could not decode row: %v", err)
+	}
+	n.row = tuple
+	passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
+	if err != nil {
+		return false, err
+	}
+	if passesFilter {
+		n.debugVals.output = debugValueRow
+	} else {
+		n.debugVals.output = debugValueFiltered
+	}
+	n.rowIndex++
 	return true, nil
 }
 
@@ -214,7 +223,7 @@ func (n *scanNode) Next() (bool, error) {
 	// We fetch one row at a time until we find one that passes the filter.
 	for {
 		var err error
-		n.row, err = n.fetcher.NextRow()
+		n.row, err = n.fetcher.NextRowDecoded()
 		if err != nil || n.row == nil {
 			return false, err
 		}

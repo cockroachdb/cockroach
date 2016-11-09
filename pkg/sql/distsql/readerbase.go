@@ -119,12 +119,9 @@ func (rb *readerBase) nextRow() (sqlbase.EncDatumRow, error) {
 			return nil, err
 		}
 
-		// TODO(radu): we are defeating the purpose of EncDatum here - we
-		// should modify RowFetcher to return EncDatums directly and avoid
-		// the cost of decoding/reencoding.
 		for i := range fetcherRow {
-			if fetcherRow[i] != nil {
-				rb.row[i] = sqlbase.EncDatumFromDatum(rb.desc.Columns[i].Type.Kind, fetcherRow[i])
+			if !fetcherRow[i].IsUnset() {
+				rb.row[i] = fetcherRow[i]
 			}
 		}
 		passesFilter, err := rb.filter.evalFilter(rb.row)
