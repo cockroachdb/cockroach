@@ -1340,16 +1340,28 @@ func (d dNull) Size() uintptr {
 	return unsafe.Sizeof(d)
 }
 
-// DArray is the array Datum. Currently, all arrays are text arrays. Any Datum
-// inserted into a DArray are treated as text during serialization. This is
-// probably sufficient to provide basic ORM (ActiveRecord) support, but we'll
-// need to support different array types (e.g. int[]) when we implement
-// persistent storage and other features of arrays.
-type DArray []Datum
+// DArray is the array Datum. Any Datum inserted into a DArray are treated as
+// text during serialization.
+type DArray struct {
+	Typ   Type
+	Array []Datum
+}
+
+// NewDArray returns a DArray containing elements of the specified type.
+func NewDArray(typ Type) *DArray {
+	switch typ {
+	case TypeInt:
+		return &DArray{Typ: TypeIntArray}
+	case TypeString:
+		return &DArray{Typ: TypeStringArray}
+	default:
+		panic(fmt.Sprintf("invalid type for DArray %s", typ))
+	}
+}
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() Type {
-	return TypeArray
+	return d.Typ
 }
 
 // Compare implements the Datum interface.
@@ -1362,20 +1374,23 @@ func (d *DArray) Compare(other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	n := len(*d)
-	if n > len(*v) {
-		n = len(*v)
+	if d.Typ != v.Typ {
+		panic(makeUnsupportedComparisonMessage(d, v))
+	}
+	n := len(d.Array)
+	if n > len(v.Array) {
+		n = len(v.Array)
 	}
 	for i := 0; i < n; i++ {
-		c := (*d)[i].Compare((*v)[i])
+		c := d.Array[i].Compare(v.Array[i])
 		if c != 0 {
 			return c
 		}
 	}
-	if len(*d) < len(*v) {
+	if len(d.Array) < len(v.Array) {
 		return -1
 	}
-	if len(*d) > len(*v) {
+	if len(d.Array) > len(v.Array) {
 		return 1
 	}
 	return 0
@@ -1383,8 +1398,8 @@ func (d *DArray) Compare(other Datum) int {
 
 // HasPrev implements the Datum interface.
 func (d *DArray) HasPrev() bool {
-	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasPrev() {
+	for i := len(d.Array) - 1; i >= 0; i-- {
+		if d.Array[i].HasPrev() {
 			return true
 		}
 	}
@@ -1393,21 +1408,22 @@ func (d *DArray) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DArray) Prev() Datum {
-	n := make(DArray, len(*d))
-	copy(n, *d)
-	for i := len(n) - 1; i >= 0; i-- {
-		if n[i].HasPrev() {
-			n[i] = n[i].Prev()
+	n := DArray{Typ: d.Typ}
+	n.Array = make([]Datum, len(d.Array))
+	copy(n.Array, d.Array)
+	for i := len(n.Array) - 1; i >= 0; i-- {
+		if n.Array[i].HasPrev() {
+			n.Array[i] = n.Array[i].Prev()
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
+	panic(fmt.Errorf("Prev() cannot be computed on an array whose datum does not support it"))
 }
 
 // HasNext implements the Datum interface.
 func (d *DArray) HasNext() bool {
-	for i := len(*d) - 1; i >= 0; i-- {
-		if (*d)[i].HasNext() {
+	for i := len(d.Array) - 1; i >= 0; i-- {
+		if d.Array[i].HasNext() {
 			return true
 		}
 	}
@@ -1416,15 +1432,16 @@ func (d *DArray) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d *DArray) Next() Datum {
-	n := make(DArray, len(*d))
-	copy(n, *d)
-	for i := len(n) - 1; i >= 0; i-- {
-		if n[i].HasNext() {
-			n[i] = n[i].Next()
+	n := DArray{Typ: d.Typ}
+	n.Array = make([]Datum, len(d.Array))
+	copy(n.Array, d.Array)
+	for i := len(n.Array) - 1; i >= 0; i-- {
+		if n.Array[i].HasNext() {
+			n.Array[i] = n.Array[i].Next()
 			return &n
 		}
 	}
-	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
+	panic(fmt.Errorf("Next() cannot be computed on an array whose datum does not support it"))
 }
 
 // IsMax implements the Datum interface.
@@ -1446,7 +1463,7 @@ func (*DArray) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('{')
-	for i, v := range *d {
+	for i, v := range d.Array {
 		if i > 0 {
 			buf.WriteString(",")
 		}
@@ -1456,21 +1473,21 @@ func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func (d *DArray) Len() int {
-	return len(*d)
+	return len(d.Array)
 }
 
 func (d *DArray) Less(i, j int) bool {
-	return (*d)[i].Compare((*d)[j]) < 0
+	return d.Array[i].Compare(d.Array[j]) < 0
 }
 
 func (d *DArray) Swap(i, j int) {
-	(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
+	d.Array[i], d.Array[j] = d.Array[j], d.Array[i]
 }
 
 // Size implements the Datum interface.
 func (d *DArray) Size() uintptr {
 	sz := unsafe.Sizeof(*d)
-	for _, e := range *d {
+	for _, e := range d.Array {
 		dsz := e.Size()
 		sz += dsz
 	}

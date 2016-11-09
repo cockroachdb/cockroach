@@ -109,8 +109,10 @@ func pgTypeForParserType(t parser.Type) pgType {
 		return pgType{oid.T_timestamptz, 8}
 	case parser.TypeInterval:
 		return pgType{oid.T_interval, 8}
-	case parser.TypeArray:
+	case parser.TypeStringArray:
 		return pgType{oid.T__text, -1}
+	case parser.TypeIntArray:
+		return pgType{oid.T__int8, -1}
 	default:
 		panic(fmt.Sprintf("unsupported type %s", t))
 	}
@@ -203,7 +205,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 	case *parser.DArray:
 		var tb bytes.Buffer
 		tb.WriteString("{")
-		for i, d := range *v {
+		for i, d := range v.Array {
 			if i > 0 {
 				tb.WriteString(",")
 			}

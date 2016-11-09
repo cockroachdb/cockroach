@@ -516,7 +516,10 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 25    string       NULL          NULL      -1      false     b
 700   float        NULL          NULL      8       true      b
 701   float        NULL          NULL      8       true      b
+1005  int[]        NULL          NULL      -1      false     b
+1007  int[]        NULL          NULL      -1      false     b
 1009  string[]     NULL          NULL      -1      false     b
+1016  int[]        NULL          NULL      -1      false     b
 1043  string       NULL          NULL      -1      false     b
 1082  date         NULL          NULL      8       true      b
 1114  timestamp    NULL          NULL      24      true      b
@@ -539,7 +542,10 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 25    string       S            false           true          ,         0         0        0
 700   float        N            false           true          ,         0         0        0
 701   float        N            false           true          ,         0         0        0
+1005  int[]        A            false           true          ,         0         0        0
+1007  int[]        A            false           true          ,         0         0        0
 1009  string[]     A            false           true          ,         0         0        0
+1016  int[]        A            false           true          ,         0         0        0
 1043  string       S            false           true          ,         0         0        0
 1082  date         D            false           true          ,         0         0        0
 1114  timestamp    D            false           true          ,         0         0        0
@@ -562,7 +568,10 @@ oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout
 25    string       0         0          0           0        0         0          0
 700   float        0         0          0           0        0         0          0
 701   float        0         0          0           0        0         0          0
+1005  int[]        0         0          0           0        0         0          0
+1007  int[]        0         0          0           0        0         0          0
 1009  string[]     0         0          0           0        0         0          0
+1016  int[]        0         0          0           0        0         0          0
 1043  string       0         0          0           0        0         0          0
 1082  date         0         0          0           0        0         0          0
 1114  timestamp    0         0          0           0        0         0          0
@@ -585,7 +594,10 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 25    string       NULL      NULL        false       0            -1
 700   float        NULL      NULL        false       0            -1
 701   float        NULL      NULL        false       0            -1
+1005  int[]        NULL      NULL        false       0            -1
+1007  int[]        NULL      NULL        false       0            -1
 1009  string[]     NULL      NULL        false       0            -1
+1016  int[]        NULL      NULL        false       0            -1
 1043  string       NULL      NULL        false       0            -1
 1082  date         NULL      NULL        false       0            -1
 1114  timestamp    NULL      NULL        false       0            -1
@@ -608,7 +620,10 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 25    string       0         0             NULL           NULL        NULL
 700   float        0         0             NULL           NULL        NULL
 701   float        0         0             NULL           NULL        NULL
+1005  int[]        0         0             NULL           NULL        NULL
+1007  int[]        0         0             NULL           NULL        NULL
 1009  string[]     0         0             NULL           NULL        NULL
+1016  int[]        0         0             NULL           NULL        NULL
 1043  string       0         0             NULL           NULL        NULL
 1082  date         0         0             NULL           NULL        NULL
 1114  timestamp    0         0             NULL           NULL        NULL

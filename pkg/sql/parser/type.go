@@ -77,8 +77,12 @@ var (
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
-	// TypeArray is the type family of a DArray. Can be compared with ==.
-	TypeArray Type = tArray{TypeString}
+	// TypeStringArray is the type family of a DArray containing strings. Can be
+	// compared with ==.
+	TypeStringArray Type = tArray{TypeString}
+	// TypeIntArray is the type family of a DArray containing ints. Can be
+	// compared with ==.
+	TypeIntArray Type = tArray{TypeInt}
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
 )
@@ -237,20 +241,24 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 // Size implements the Type interface.
 func (t TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
 
-// TArray is the type of a DArray. For now, this only supports arrays of
-// strings.
+// TArray is the type of a DArray.
 type tArray struct{ Typ Type }
 
 func (a tArray) String() string { return a.Typ.String() + "[]" }
 
 // Equal implements the Type interface.
-func (tArray) Equal(other Type) bool {
-	return other == TypeArray
+func (a tArray) Equal(other Type) bool {
+	oa, ok := other.(tArray)
+	if !ok {
+		return false
+	}
+	return a.Typ == oa.Typ
 }
 
 // FamilyEqual implements the Type interface.
 func (tArray) FamilyEqual(other Type) bool {
-	return other == TypeArray
+	_, ok := other.(tArray)
+	return ok
 }
 
 // Size implements the Type interface.

@@ -1141,7 +1141,8 @@ func typByVal(typ parser.Type) parser.Datum {
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
-	reflect.TypeOf(parser.TypeArray):       typCategoryArray,
+	reflect.TypeOf(parser.TypeStringArray): typCategoryArray,
+	reflect.TypeOf(parser.TypeIntArray):    typCategoryArray,
 	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
 	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
 	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
