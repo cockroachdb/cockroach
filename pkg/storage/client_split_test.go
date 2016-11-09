@@ -1264,7 +1264,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		lease, _, err := tc.FindRangeLease(&desc, nil)
+		lease, _, err := tc.FindRangeLease(desc, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
