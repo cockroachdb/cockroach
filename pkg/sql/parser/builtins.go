@@ -1263,7 +1263,7 @@ var uuidV4Impl = Builtin{
 	category:   categoryIDGeneration,
 	impure:     true,
 	fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-		return NewDBytes(DBytes(uuid.NewV4().GetBytes())), nil
+		return NewDBytes(DBytes(uuid.MakeV4().GetBytes())), nil
 	},
 }
 

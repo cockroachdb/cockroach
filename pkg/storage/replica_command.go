@@ -423,7 +423,7 @@ func (r *Replica) BeginTransaction(
 	if err := verifyTransaction(h, &args); err != nil {
 		return reply, err
 	}
-	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
+	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
 	clonedTxn := h.Txn.Clone()
 	reply.Txn = &clonedTxn
 
@@ -501,7 +501,7 @@ func (r *Replica) EndTransaction(
 		return reply, ProposalData{}, err
 	}
 
-	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
+	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
 
 	// Fetch existing transaction.
 	reply.Txn = &roachpb.Transaction{}
@@ -766,7 +766,7 @@ func updateTxnWithExternalIntents(
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Intent,
 ) error {
-	key := keys.TransactionKey(txn.Key, txn.ID)
+	key := keys.TransactionKey(txn.Key, *txn.ID)
 	if txnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.ID.Short(), len(args.IntentSpans))
@@ -1152,7 +1152,7 @@ func (r *Replica) HeartbeatTxn(
 		return reply, err
 	}
 
-	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
+	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
 
 	var txn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &txn); err != nil {
@@ -1295,7 +1295,7 @@ func (r *Replica) PushTxn(
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return reply, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
 	}
-	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
+	key := keys.TransactionKey(args.PusheeTxn.Key, *args.PusheeTxn.ID)
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	existTxn := &roachpb.Transaction{}
@@ -1460,14 +1460,14 @@ func (r *Replica) setAbortCache(
 	poison bool,
 ) error {
 	if !poison {
-		return r.abortCache.Del(ctx, batch, ms, txn.ID)
+		return r.abortCache.Del(ctx, batch, ms, *txn.ID)
 	}
 	entry := roachpb.AbortCacheEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
 		Priority:  txn.Priority,
 	}
-	return r.abortCache.Put(ctx, batch, ms, txn.ID, &entry)
+	return r.abortCache.Put(ctx, batch, ms, *txn.ID, &entry)
 }
 
 // ResolveIntent resolves a write intent from the specified key

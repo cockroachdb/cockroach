@@ -85,9 +85,9 @@ func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
 		{keys.RangeLastReplicaGCTimestampKey(r.RangeID), ts0},
 		{keys.RangeLastVerificationTimestampKeyDeprecated(r.RangeID), ts0},
 		{keys.RangeDescriptorKey(desc.StartKey), ts},
-		{keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.NewV4()), ts0},
-		{keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), uuid.NewV4()), ts0},
-		{keys.TransactionKey(fakePrevKey(desc.EndKey), uuid.NewV4()), ts0},
+		{keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.MakeV4()), ts0},
+		{keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), uuid.MakeV4()), ts0},
+		{keys.TransactionKey(fakePrevKey(desc.EndKey), uuid.MakeV4()), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
 		// replace this with something that reliably generates the first valid key in the range.
