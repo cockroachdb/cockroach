@@ -1146,6 +1146,91 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 ----
 NULL
 
+# TODO(nvanbenschoten) in the effort to support Hibernate, ARRAY support has been
+# minimally added. When we add support for the ARRAY[1, 2, 3] syntax, it should be
+# used here instead of calling CURRENT_SCHEMAS, which is very fragile.
+
+query TI
+SELECT current_schemas(true), array_length(current_schemas(true), 1);
+----
+{'pg_catalog','test'}  2
+
+query TI
+SELECT current_schemas(false), array_length(current_schemas(false), 1);
+----
+{'test'}  1
+
+query TI
+SELECT current_schemas(false), array_length(current_schemas(false), 0);
+----
+{'test'}  NULL
+
+query TI
+SELECT current_schemas(false), array_length(current_schemas(false), 2);
+----
+{'test'}  NULL
+
+query TI
+SELECT current_schemas(true), array_lower(current_schemas(true), 1);
+----
+{'pg_catalog','test'}  1
+
+query TI
+SELECT current_schemas(false), array_lower(current_schemas(false), 1);
+----
+{'test'}  1
+
+query TI
+SELECT current_schemas(false), array_lower(current_schemas(false), 0);
+----
+{'test'}  NULL
+
+query TI
+SELECT current_schemas(false), array_lower(current_schemas(false), 2);
+----
+{'test'}  NULL
+
+query TI
+SELECT current_schemas(true), array_upper(current_schemas(true), 1);
+----
+{'pg_catalog','test'}  2
+
+query TI
+SELECT current_schemas(false), array_upper(current_schemas(false), 1);
+----
+{'test'}  1
+
+query TI
+SELECT current_schemas(false), array_upper(current_schemas(false), 0);
+----
+{'test'}  NULL
+
+query TI
+SELECT current_schemas(false), array_upper(current_schemas(false), 2);
+----
+{'test'}  NULL
+
+statement ok
+SET DATABASE = ''
+
+query TI
+SELECT current_schemas(false), array_length(current_schemas(false), 1);
+----
+{}  NULL
+
+query TI
+SELECT current_schemas(false), array_lower(current_schemas(false), 1);
+----
+{}  NULL
+
+query TI
+SELECT current_schemas(false), array_upper(current_schemas(false), 1);
+----
+{}  NULL
+
+statement ok
+SET DATABASE = 'test'
+
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
 ----
