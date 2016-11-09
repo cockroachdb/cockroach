@@ -133,7 +133,7 @@ func (n *distSQLNode) Next() (bool, error) {
 	}
 	for i := range row {
 		col := n.colMapping[i]
-		err := row[i].Decode(&n.alloc)
+		err := row[i].EnsureDecoded(&n.alloc)
 		if err != nil {
 			return false, err
 		}
