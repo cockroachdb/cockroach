@@ -32,7 +32,7 @@ func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i].SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
 	null := sqlbase.EncDatum{Datum: parser.DNull}
 

@@ -124,7 +124,7 @@ func (rb *readerBase) nextRow() (sqlbase.EncDatumRow, error) {
 		// the cost of decoding/reencoding.
 		for i := range fetcherRow {
 			if fetcherRow[i] != nil {
-				rb.row[i].SetDatum(rb.desc.Columns[i].Type.Kind, fetcherRow[i])
+				rb.row[i] = sqlbase.EncDatumFromDatum(rb.desc.Columns[i].Type.Kind, fetcherRow[i])
 			}
 		}
 		passesFilter, err := rb.filter.evalFilter(rb.row)

@@ -30,7 +30,7 @@ func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i].SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -141,9 +141,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				var a, b sqlbase.EncDatum
-				a.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
-				b.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(j)))
+				a := sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+				b := sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				mrc.PushRow(row)
 			}
@@ -183,9 +182,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				var a, b sqlbase.EncDatum
-				a.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
-				b.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(j)))
+				a := sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+				b := sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				mrc.PushRow(row)
 			}
