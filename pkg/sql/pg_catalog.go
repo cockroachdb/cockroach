@@ -930,23 +930,23 @@ CREATE TABLE pg_catalog.pg_settings (
 			value := gen(p)
 			valueDatum := parser.NewDString(value)
 			if err := addRow(
-				parser.NewDString(vName), // name
-				valueDatum,               // setting
-				parser.DNull,             // unit
-				parser.DNull,             // category
-				parser.DNull,             // short_desc
-				parser.DNull,             // extra_desc
-				settingsCtxUser,          // context
-				varTypeString,            // vartype
-				parser.DNull,             // source
-				parser.DNull,             // min_val
-				parser.DNull,             // max_val
-				parser.DNull,             // enumvals
-				valueDatum,               // boot_val
-				valueDatum,               // reset_val
-				parser.DNull,             // sourcefile
-				parser.DNull,             // sourceline
-				parser.MakeDBool(false),  // pending_restart
+				parser.NewDString(strings.ToLower(vName)), // name
+				valueDatum,              // setting
+				parser.DNull,            // unit
+				parser.DNull,            // category
+				parser.DNull,            // short_desc
+				parser.DNull,            // extra_desc
+				settingsCtxUser,         // context
+				varTypeString,           // vartype
+				parser.DNull,            // source
+				parser.DNull,            // min_val
+				parser.DNull,            // max_val
+				parser.DNull,            // enumvals
+				valueDatum,              // boot_val
+				valueDatum,              // reset_val
+				parser.DNull,            // sourcefile
+				parser.DNull,            // sourceline
+				parser.MakeDBool(false), // pending_restart
 			); err != nil {
 				return err
 			}
