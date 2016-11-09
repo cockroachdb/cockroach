@@ -2224,6 +2224,10 @@ func (disruptiveElectionTestHandler) HandleSnapshot(
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("#10577")
+	}
+
 	mtc := startMultiTestContext(t, 4)
 	defer mtc.Stop()
 
