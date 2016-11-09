@@ -109,7 +109,7 @@ func TestJoinReader(t *testing.T) {
 		for _, row := range c.input {
 			encRow := make(sqlbase.EncDatumRow, len(row))
 			for i, d := range row {
-				encRow[i] = sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, d)
+				encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, d)
 			}
 			in.rows = append(in.rows, encRow)
 		}

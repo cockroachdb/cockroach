@@ -31,15 +31,14 @@ func TestEvaluator(t *testing.T) {
 
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
 
 	b := [2]sqlbase.EncDatum{}
-	b[0].SetDatum(sqlbase.ColumnType_BOOL, parser.DBoolTrue)
-	b[1].SetDatum(sqlbase.ColumnType_BOOL, parser.DBoolFalse)
+	b[0] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_BOOL, parser.DBoolTrue)
+	b[1] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_BOOL, parser.DBoolFalse)
 
-	var nullInt sqlbase.EncDatum
-	nullInt.SetDatum(sqlbase.ColumnType_INT, parser.DNull)
+	nullInt := sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.DNull)
 
 	testCases := []struct {
 		spec     EvaluatorSpec
