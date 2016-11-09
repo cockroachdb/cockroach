@@ -67,10 +67,10 @@ type Flow struct {
 	flowRegistry *flowRegistry
 	processors   []processor
 	outboxes     []*outbox
-	// simpleFlowConsumer is a special outbox which instead of sending rows to
-	// another host, returns them directly (as a result to a SetupSimpleFlow RPC,
+	// syncFlowConsumer is a special outbox which instead of sending rows to
+	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
-	simpleFlowConsumer RowReceiver
+	syncFlowConsumer RowReceiver
 
 	localStreams map[StreamID]RowReceiver
 
@@ -89,15 +89,15 @@ type Flow struct {
 	status flowStatus
 }
 
-func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowReceiver) *Flow {
+func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
 	if opentracing.SpanFromContext(flowCtx.Context) == nil {
 		panic("flow context has no span")
 	}
 	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
 	f := &Flow{
-		FlowCtx:            flowCtx,
-		flowRegistry:       flowReg,
-		simpleFlowConsumer: simpleFlowConsumer,
+		FlowCtx:          flowCtx,
+		flowRegistry:     flowReg,
+		syncFlowConsumer: syncFlowConsumer,
 	}
 	f.status = FlowNotStarted
 	return f
@@ -108,8 +108,8 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowRecei
 func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver) error {
 	sid := spec.StreamID
 	if spec.Mailbox != nil {
-		if spec.Mailbox.SimpleResponse || spec.Mailbox.TargetAddr != "" {
-			return errors.Errorf("inbound stream has SimpleResponse or TargetAddr set")
+		if spec.Mailbox.SyncResponse || spec.Mailbox.TargetAddr != "" {
+			return errors.Errorf("inbound stream has SyncResponse or TargetAddr set")
 		}
 		if _, found := f.inboundStreams[sid]; found {
 			return errors.Errorf("inbound stream %d has multiple consumers", sid)
@@ -139,8 +139,8 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 func (f *Flow) setupOutStream(spec StreamEndpointSpec) (RowReceiver, error) {
 	sid := spec.StreamID
 	if spec.Mailbox != nil {
-		if spec.Mailbox.SimpleResponse {
-			return f.simpleFlowConsumer, nil
+		if spec.Mailbox.SyncResponse {
+			return f.syncFlowConsumer, nil
 		}
 		outbox := newOutbox(&f.FlowCtx, spec.Mailbox.TargetAddr, f.id, sid)
 		f.outboxes = append(f.outboxes, outbox)
