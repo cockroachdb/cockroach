@@ -154,7 +154,7 @@ func (ag *aggregator) accumulateRows() error {
 		ag.buckets[string(encoded)] = struct{}{}
 		// Feed the func holders for this bucket the non-grouping datums.
 		for i, colIdx := range ag.inputCols {
-			if err := row[colIdx].Decode(&ag.datumAlloc); err != nil {
+			if err := row[colIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
 				return err
 			}
 			if err := ag.funcs[i].add(encoded, row[colIdx].Datum); err != nil {

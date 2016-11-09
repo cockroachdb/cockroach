@@ -111,7 +111,7 @@ func (sd *StreamDecoder) GetRow(rowBuf sqlbase.EncDatumRow) (sqlbase.EncDatumRow
 	}
 	for i := range rowBuf {
 		var err error
-		sd.data, err = rowBuf[i].SetFromBuffer(sd.info[i].Type, sd.info[i].Encoding, sd.data)
+		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.info[i].Type, sd.info[i].Encoding, sd.data)
 		if err != nil {
 			// Reset sd because it is no longer usable.
 			*sd = StreamDecoder{}
