@@ -2965,7 +2965,11 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 		case *roachpb.ReplicaTooOldError:
 			repl, err := s.GetReplica(resp.RangeID)
 			if err != nil {
-				return nil // not unexpected
+				// RangeNotFoundErrors are expected here; nothing else is.
+				if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+					log.Error(ctx, err)
+				}
+				return nil
 			}
 			added, err := s.replicaGCQueue.Add(
 				repl, replicaGCPriorityRemoved,
