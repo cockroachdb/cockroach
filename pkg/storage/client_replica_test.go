@@ -829,9 +829,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	kvDB1 := tc.Servers[1].DB()
 
 	key := []byte("a")
-	rangeDesc := new(roachpb.RangeDescriptor)
-	var err error
-	*rangeDesc, err = tc.LookupRange(key)
+	rangeDesc, err := tc.LookupRange(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -855,7 +853,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	}
 
 	// Lease should start on Server 0, since nobody told it to move.
-	leaseHolderReplica := LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[0] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[0], leaseHolderReplica)
 	}
@@ -869,7 +867,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica = LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica = LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[1] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
@@ -882,7 +880,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		// from the supposed lease holder, because this node might initially be
 		// unaware of the new lease and so the request might bounce around for a
 		// while (see #8816).
-		leaseHolderReplica = LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 		if leaseHolderReplica != replicas[1] {
 			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[1], leaseHolderReplica)
@@ -896,7 +894,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaseHolderReplica = LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[2] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[2], leaseHolderReplica)
 	}
