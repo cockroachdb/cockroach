@@ -1143,6 +1143,59 @@ var Builtins = map[string][]Builtin{
 		}),
 	},
 
+	// Array functions.
+
+	"array_length": {
+		Builtin{
+			Types:      ArgTypes{TypeArray, TypeInt},
+			ReturnType: TypeInt,
+			category:   categorySystemInfo,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				arr := *args[0].(*DArray)
+				dimen := *args[1].(*DInt)
+				// We do not currently support multi-dimensional arrays.
+				if dimen != 1 || len(arr) == 0 {
+					return DNull, nil
+				}
+				return NewDInt(DInt(len(arr))), nil
+			},
+		},
+	},
+
+	"array_lower": {
+		Builtin{
+			Types:      ArgTypes{TypeArray, TypeInt},
+			ReturnType: TypeInt,
+			category:   categorySystemInfo,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				arr := *args[0].(*DArray)
+				dimen := *args[1].(*DInt)
+				// We do not currently support multi-dimensional arrays.
+				if dimen != 1 || len(arr) == 0 {
+					return DNull, nil
+				}
+				return NewDInt(DInt(1)), nil
+			},
+		},
+	},
+
+	"array_upper": {
+		Builtin{
+			Types:      ArgTypes{TypeArray, TypeInt},
+			ReturnType: TypeInt,
+			category:   categorySystemInfo,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				arr := *args[0].(*DArray)
+				dimen := *args[1].(*DInt)
+				// We do not currently support multi-dimensional arrays.
+				if dimen != 1 || len(arr) == 0 {
+					return DNull, nil
+				}
+				return NewDInt(DInt(len(arr))), nil
+			},
+		},
+	},
+
 	// Metadata functions.
 
 	"version": {
