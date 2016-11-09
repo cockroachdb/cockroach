@@ -45,7 +45,9 @@ func main() {
 	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/..."})
 
 	client := teamcity.New("teamcity.cockroachdb.com", username, password)
+	// Queue a build per configuration per package.
 	for _, params := range []map[string]string{
+		{}, // uninstrumented
 		{"env.GOFLAGS": "-race"},
 		{"env.TAGS": "deadlock"},
 	} {
