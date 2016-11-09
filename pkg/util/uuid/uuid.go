@@ -18,7 +18,6 @@ package uuid
 
 import (
 	"encoding/binary"
-	"errors"
 
 	"github.com/satori/go.uuid"
 )
@@ -34,11 +33,16 @@ func (u UUID) Short() string {
 	return u.String()[:8]
 }
 
-// Bytes shadows (*github.com/satori/go.uuid.UUID).Bytes() to prevent confusing
-// our default proto stringer.
+// Bytes shadows (*github.com/satori/go.uuid.UUID).Bytes() to prevent UUID
+// from implementing github.com/golang/protobuf/proto.raw, the semantics of
+// which do not match the semantics of the shadowed method. See
+// https://github.com/golang/protobuf/blob/5386fff/proto/text.go#L173:L176.
+//
+//
 // TODO(tschottdorf): fix upstream.
-func (u UUID) Bytes() error {
-	return errors.New("intentionally shadowed; use GetBytes()")
+// TODO(tamird): what does fixing upstream even mean?
+func (UUID) Bytes() {
+	panic("intentionally shadowed; use GetBytes()")
 }
 
 // Silence unused warning for UUID.Bytes.
