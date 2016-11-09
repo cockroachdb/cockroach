@@ -13,6 +13,7 @@ import { SummaryBar, SummaryItem } from "../../components/summaryBar";
 import { TableInfo } from "./data";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
+import * as hljs from "highlight.js";
 
 type Grant = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse.Grant;
 
@@ -58,6 +59,8 @@ type TableMainProps = TableMainData & TableMainActions & IInjectedProps;
  * data table of all databases.
  */
 class TableMain extends React.Component<TableMainProps, {}> {
+  createStmtNode: Node;
+
   componentWillMount() {
     this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
       database: this.props.params[databaseNameAttr],
@@ -74,6 +77,10 @@ class TableMain extends React.Component<TableMainProps, {}> {
     this.props.setUISetting(UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY, setting);
   }
 
+  componentDidMount() {
+    hljs.highlightBlock(this.createStmtNode);
+  }
+
   render() {
     let { tableInfo, grantsSortSetting } = this.props;
 
@@ -83,7 +90,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
           { this.props.params[tableNameAttr] }
         </div>
         <div className="content">
-          <pre className="create-table">
+          <pre className="sql" ref={(node) => this.createStmtNode = node}>
             {/* TODO (mrtracy): format and highlight create table statement */}
             {tableInfo.createStatement}
           </pre>

@@ -23,6 +23,7 @@
       "classnames": "npm:classnames@^2.2.5",
       "css": "github:systemjs/plugin-css@^0.1.23",
       "d3": "npm:d3@^3.5.17",
+      "highlight.js": "npm:highlight.js@^9.8.0",
       "lodash": "npm:lodash@^4.14.0",
       "long": "npm:long@^3.2.0",
       "moment": "npm:moment@^2.14.1",
