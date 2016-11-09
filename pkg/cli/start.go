@@ -338,6 +338,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "CockroachDB node starting at %s\n", timeutil.Now())
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
 	fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
 	fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
