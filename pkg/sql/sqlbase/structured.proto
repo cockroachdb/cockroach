@@ -38,6 +38,7 @@ message ColumnType {
     STRING = 7;     // STRING(width)
     BYTES = 8;
     TIMESTAMPTZ = 9;
+    INT_ARRAY = 10;
   }
 
   optional Kind kind = 1 [(gogoproto.nullable) = false];
@@ -45,6 +46,7 @@ message ColumnType {
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // FLOAT and DECIMAL.
   optional int32 precision = 3 [(gogoproto.nullable) = false];
+  repeated int32 arrayDimensions = 4;
 }
 
 enum ConstraintValidity {

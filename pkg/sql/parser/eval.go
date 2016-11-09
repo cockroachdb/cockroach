@@ -1981,10 +1981,10 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	// Index into the DArray, using 1-indexing.
 	arr := d.(*DArray)
-	if subscriptIdx < 1 || subscriptIdx > len(*arr) {
+	if subscriptIdx < 1 || subscriptIdx > len(arr.Array) {
 		return DNull, nil
 	}
-	return (*arr)[subscriptIdx-1], nil
+	return arr.Array[subscriptIdx-1], nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -2334,15 +2334,25 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
-	array := make(DArray, 0, len(t.Exprs))
+	var array *DArray
+	switch t.typ {
+	case TypeStringArray:
+		array = NewDArray(TypeString)
+	case TypeIntArray:
+		array = NewDArray(TypeInt)
+	default:
+		return nil, errors.Errorf("cannot eval array node: unknown array type %v", t.typ)
+	}
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		array = append(array, d)
+		if err := array.Append(d); err != nil {
+			return nil, err
+		}
 	}
-	return &array, nil
+	return array, nil
 }
 
 // Eval implements the TypedExpr interface.

@@ -36,16 +36,19 @@ var oidToDatum = map[oid.Oid]parser.Type{
 	oid.T_interval:    parser.TypeInterval,
 	oid.T_numeric:     parser.TypeDecimal,
 	oid.T_text:        parser.TypeString,
-	oid.T__text:       parser.TypeArray,
+	oid.T__text:       parser.TypeStringArray,
+	oid.T__int2:       parser.TypeIntArray,
+	oid.T__int4:       parser.TypeIntArray,
+	oid.T__int8:       parser.TypeIntArray,
 	oid.T_timestamp:   parser.TypeTimestamp,
 	oid.T_timestamptz: parser.TypeTimestampTZ,
 	oid.T_varchar:     parser.TypeString,
 }
 
 var datumToOid = map[reflect.Type]oid.Oid{
-	reflect.TypeOf(parser.TypeAny): oid.T_anyelement,
-	// Currently, only text arrays are supported.
-	reflect.TypeOf(parser.TypeArray):       oid.T__text,
+	reflect.TypeOf(parser.TypeAny):         oid.T_anyelement,
+	reflect.TypeOf(parser.TypeIntArray):    oid.T__int8,
+	reflect.TypeOf(parser.TypeStringArray): oid.T__text,
 	reflect.TypeOf(parser.TypeBool):        oid.T_bool,
 	reflect.TypeOf(parser.TypeBytes):       oid.T_bytea,
 	reflect.TypeOf(parser.TypeDate):        oid.T_date,

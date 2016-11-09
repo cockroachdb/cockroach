@@ -174,10 +174,12 @@ func benchmarkWriteTuple(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteArray(b *testing.B, format formatCode) {
-	i1 := parser.NewDInt(1234)
-	i2 := parser.NewDInt(1234)
-	i3 := parser.NewDInt(1234)
-	a := &parser.DArray{i1, i2, i3}
+	a := parser.NewDArray(parser.TypeInt)
+	for i := 0; i < 3; i++ {
+		if err := a.AppendInt64(1234); err != nil {
+			b.Fatal(err)
+		}
+	}
 	benchmarkWriteType(b, a, format)
 }
 
