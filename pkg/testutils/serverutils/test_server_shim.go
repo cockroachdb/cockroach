@@ -31,15 +31,11 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -173,20 +169,4 @@ func PostJSONProto(ts TestServerInterface, path string, request, response proto.
 		return err
 	}
 	return httputil.PostJSON(httpClient, ts.AdminURL()+path, request, response)
-}
-
-// LookupRange returns the descriptor of the range containing key.
-func LookupRange(ds *kv.DistSender, key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rangeLookupReq := roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(keys.MustAddr(key)),
-		},
-		MaxRanges: 1,
-	}
-	resp, pErr := client.SendWrapped(context.Background(), ds, &rangeLookupReq)
-	if pErr != nil {
-		return roachpb.RangeDescriptor{}, errors.Errorf(
-			"%q: lookup range unexpected error: %s", key, pErr)
-	}
-	return resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
 }

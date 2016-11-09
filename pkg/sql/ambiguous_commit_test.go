@@ -114,7 +114,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	leaseHolder, err := tc.FindRangeLeaseHolder(
-		&tableRangeDesc,
+		tableRangeDesc,
 		&testcluster.ReplicationTarget{
 			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
 			StoreID: tc.Servers[0].GetFirstStoreID(),
@@ -143,7 +143,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	// Find a node other than the current lease holder to transfer the lease to.
 	for i, s := range tc.Servers {
 		if leaseHolder.StoreID != s.GetFirstStoreID() {
-			if err := tc.TransferRangeLease(&tableRangeDesc, tc.Target(i)); err != nil {
+			if err := tc.TransferRangeLease(tableRangeDesc, tc.Target(i)); err != nil {
 				t.Fatal(err)
 			}
 			break
