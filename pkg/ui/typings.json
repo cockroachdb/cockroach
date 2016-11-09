@@ -4,6 +4,7 @@
     "classnames": "registry:dt/classnames#0.0.0+20160316155526",
     "cockroach-protos": "file:generated/protos.d.ts",
     "fetch-mock": "registry:dt/fetch-mock#5.0.0+20160829142453",
+    "highlightjs": "registry:dt/highlightjs#9.1.0+20160317120654",
     "long": "registry:dt/long#3.0.2+20160602144319",
     "mocha": "registry:dt/mocha#2.2.5+20160720003353",
     "react": "registry:dt/react#0.14.0+20160927082313",

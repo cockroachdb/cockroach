@@ -82,6 +82,7 @@ System.config({
     "d3": "npm:d3@3.5.17",
     "enzyme": "npm:enzyme@2.4.1",
     "fetch-mock": "npm:fetch-mock@5.5.0",
+    "highlight.js": "npm:highlight.js@9.8.0",
     "lodash": "npm:lodash@4.16.3",
     "long": "npm:long@3.2.0",
     "moment": "npm:moment@2.15.1",
@@ -692,6 +693,10 @@ System.config({
       "sntp": "npm:sntp@1.0.9",
       "systemjs-json": "github:systemjs/plugin-json@0.1.2",
       "url": "github:jspm/nodelibs-url@0.1.0"
+    },
+    "npm:highlight.js@9.8.0": {
+      "buffer": "github:jspm/nodelibs-buffer@0.1.0",
+      "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:history@2.1.2": {
       "deep-equal": "npm:deep-equal@1.0.1",
