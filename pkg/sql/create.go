@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -978,7 +979,7 @@ func (p *planner) addInterleave(
 		if interleave.Fields[i].Normalize() != parser.ReNormalizeName(col.Name) {
 			return fmt.Errorf("declared columns must match index being interleaved")
 		}
-		if col.Type != targetCol.Type ||
+		if !reflect.DeepEqual(col.Type, targetCol.Type) ||
 			index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 
 			return fmt.Errorf("interleaved columns must match parent")
@@ -1169,6 +1170,12 @@ func (p *planner) makeTableDesc(
 
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {
+			if !desc.IsVirtualTable() {
+				if _, ok := d.Type.(*parser.ArrayColType); ok {
+					return desc, util.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
+				}
+			}
+
 			col, idx, err := sqlbase.MakeColumnDefDescs(d)
 			if err != nil {
 				return desc, err

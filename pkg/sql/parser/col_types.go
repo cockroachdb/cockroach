@@ -40,6 +40,7 @@ func (*TimestampTZColType) columnType() {}
 func (*IntervalColType) columnType()    {}
 func (*StringColType) columnType()      {}
 func (*BytesColType) columnType()       {}
+func (*ArrayColType) columnType()       {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -243,6 +244,30 @@ func (node *BytesColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
+// ArrayColType represents an ARRAY column type.
+type ArrayColType struct {
+	Name string
+	// ParamTyp is the type of the elements in this array.
+	ParamType   ColumnType
+	BoundsExprs Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(node.Name)
+}
+
+func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
+	switch colType {
+	case intColTypeInt:
+		return &ArrayColType{Name: "INT[]", ParamType: intColTypeInt, BoundsExprs: boundsExprs}, nil
+	case stringColTypeString:
+		return &ArrayColType{Name: "STRING[]", ParamType: stringColTypeString, BoundsExprs: boundsExprs}, nil
+	default:
+		return nil, errors.Errorf("cannot make array for column type %s", colType)
+	}
+}
+
 func (node *BoolColType) String() string        { return AsString(node) }
 func (node *IntColType) String() string         { return AsString(node) }
 func (node *FloatColType) String() string       { return AsString(node) }
@@ -253,6 +278,7 @@ func (node *TimestampTZColType) String() string { return AsString(node) }
 func (node *IntervalColType) String() string    { return AsString(node) }
 func (node *StringColType) String() string      { return AsString(node) }
 func (node *BytesColType) String() string       { return AsString(node) }
+func (node *ArrayColType) String() string       { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during

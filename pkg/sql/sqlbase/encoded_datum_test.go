@@ -137,6 +137,10 @@ func TestEncDatumCompare(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for typ := ColumnType_Kind(0); int(typ) < len(ColumnType_Kind_value); typ++ {
+		// TODO(cuongdo): we don't support persistence for arrays yet
+		if typ == ColumnType_INT_ARRAY {
+			continue
+		}
 		// Generate two datums d1 < d2
 		var d1, d2 parser.Datum
 		for {
