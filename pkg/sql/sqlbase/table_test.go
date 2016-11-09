@@ -90,8 +90,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 func decodeIndex(
 	a *DatumAlloc, tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
 ) ([]parser.Datum, error) {
-	values := make([]parser.Datum, len(index.ColumnIDs))
-	valTypes, err := MakeKeyVals(tableDesc, index.ColumnIDs)
+	values, err := MakeEncodedKeyVals(tableDesc, index.ColumnIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -102,14 +101,25 @@ func decodeIndex(
 			return nil, err
 		}
 	}
-	_, ok, err := DecodeIndexKey(a, tableDesc, index.ID, valTypes, values, colDirs, key)
+	_, ok, err := DecodeIndexKey(a, tableDesc, index.ID, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, errors.Errorf("key did not match descriptor")
 	}
-	return values, nil
+
+	decodedValues := make([]parser.Datum, len(values))
+	var da DatumAlloc
+	for i, value := range values {
+		err := value.EnsureDecoded(&da)
+		if err != nil {
+			return nil, err
+		}
+		decodedValues[i] = value.Datum
+	}
+
+	return decodedValues, nil
 }
 
 func TestIndexKey(t *testing.T) {

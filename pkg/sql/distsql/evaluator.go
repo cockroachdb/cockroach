@@ -122,7 +122,7 @@ func (ev *evaluator) eval(row sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) 
 		if err != nil {
 			return nil, err
 		}
-		outRow[i].SetDatum(ev.exprTypes[i], datum)
+		outRow[i] = sqlbase.DatumToEncDatum(ev.exprTypes[i], datum)
 	}
 
 	return outRow, nil

@@ -451,7 +451,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 
 	rows := make([]parser.DTuple, len(primaryKeys))
 	for {
-		row, err := tu.fetcher.NextRow()
+		row, err := tu.fetcher.NextRowDecoded()
 		if err != nil {
 			return nil, err
 		}
@@ -658,7 +658,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRow()
+		row, err := rf.NextRowDecoded()
 		if err != nil {
 			return resume, err
 		}
@@ -750,7 +750,7 @@ func (td *tableDeleter) deleteIndexScan(
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRow()
+		row, err := rf.NextRowDecoded()
 		if err != nil {
 			return resume, err
 		}
