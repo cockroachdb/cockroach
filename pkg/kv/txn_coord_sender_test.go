@@ -982,15 +982,18 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
+	u := uuid.MakeV4()
+
 	testCases := []struct {
 		roachpb.Error
 		errMsg string
 	}{
 		{*roachpb.NewError(roachpb.NewTransactionRetryError()), "retry txn"},
-		{*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				ID: uuid.NewV4(),
-			}})), "failed to push"},
+		{
+			*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{ID: &u}}),
+			), "failed to push",
+		},
 		{*roachpb.NewErrorf("testError"), "testError"},
 	}
 	for i, test := range testCases {

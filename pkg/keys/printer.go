@@ -394,7 +394,7 @@ func abortCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.
 	var err error
 	input = mustShiftSlash(input)
 	_, input = mustShift(input[:len(input)-1])
-	if len(input) != len(uuid.EmptyUUID.String()) {
+	if len(input) != len(uuid.UUID{}.String()) {
 		panic(&errUglifyUnsupported{errors.New("txn id not available")})
 	}
 	id, err := uuid.FromString(input)

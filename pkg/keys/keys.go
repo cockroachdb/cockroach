@@ -138,7 +138,7 @@ func DecodeRangeIDKey(
 // AbortCacheKey returns a range-local key by Range ID for an
 // abort cache entry, with detail specified by encoding the
 // supplied transaction ID.
-func AbortCacheKey(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
+func AbortCacheKey(rangeID roachpb.RangeID, txnID uuid.UUID) roachpb.Key {
 	key := MakeRangeIDReplicatedKey(rangeID, LocalAbortCacheSuffix, nil)
 	key = encoding.EncodeBytesAscending(key, txnID.GetBytes())
 	return key
@@ -146,22 +146,22 @@ func AbortCacheKey(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
 
 // DecodeAbortCacheKey decodes the provided abort cache entry,
 // returning the transaction ID.
-func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, error) {
+func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 	_, _, suffix, detail, err := DecodeRangeIDKey(key)
 	if err != nil {
-		return nil, err
+		return uuid.UUID{}, err
 	}
 	if !bytes.Equal(suffix, LocalAbortCacheSuffix) {
-		return nil, errors.Errorf("key %s does not contain the abort cache suffix %s",
+		return uuid.UUID{}, errors.Errorf("key %s does not contain the abort cache suffix %s",
 			key, LocalAbortCacheSuffix)
 	}
 	// Decode the id.
 	detail, idBytes, err := encoding.DecodeBytesAscending(detail, dest)
 	if err != nil {
-		return nil, err
+		return uuid.UUID{}, err
 	}
 	if len(detail) > 0 {
-		return nil, errors.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key", key, detail)
+		return uuid.UUID{}, errors.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key", key, detail)
 	}
 	txnID, err := uuid.FromBytes(idBytes)
 	return txnID, err
@@ -331,7 +331,7 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
-func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
+func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	rk, err := Addr(key)
 	if err != nil {
 		panic(err)

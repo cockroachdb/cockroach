@@ -44,7 +44,7 @@ var (
 func newTestSender(
 	pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 ) SenderFunc {
-	txnID := uuid.NewV4()
+	txnID := uuid.MakeV4()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if ba.UserPriority == 0 {
@@ -52,7 +52,7 @@ func newTestSender(
 		}
 		if ba.Txn != nil && ba.Txn.ID == nil {
 			ba.Txn.Key = txnKey
-			ba.Txn.ID = txnID
+			ba.Txn.ID = &txnID
 		}
 
 		var br *roachpb.BatchResponse

@@ -1376,7 +1376,7 @@ func (r *Replica) endCmds(
 				case *roachpb.EndTransactionRequest:
 					// EndTransaction adds to the write timestamp cache to ensure replays
 					// create a transaction record with WriteTooOld set.
-					key := keys.TransactionKey(header.Key, cr.txnID)
+					key := keys.TransactionKey(header.Key, *cr.txnID)
 					cr.txn = roachpb.Span{Key: key}
 				default:
 					cr.reads = append(cr.reads, header)
@@ -1439,7 +1439,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bumped bool, _ 
 			// key to look for an entry which would indicate this transaction
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
-				key := keys.TransactionKey(header.Key, ba.GetTxnID())
+				key := keys.TransactionKey(header.Key, *ba.GetTxnID())
 				wTS, _, wOK := r.mu.tsCache.GetMaxWrite(key, nil)
 				if wOK {
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
@@ -2212,11 +2212,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		if err != nil {
 			return errors.Wrap(err, "invalid snapshot id")
 		}
-		if inSnap.SnapUUID == *uuid.EmptyUUID {
+		if inSnap.SnapUUID == (uuid.UUID{}) {
 			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
 		}
-		if *snapUUID != inSnap.SnapUUID {
-			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", *snapUUID, inSnap.SnapUUID)
+		if snapUUID != inSnap.SnapUUID {
+			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 		}
 
 		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
@@ -2800,7 +2800,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		if err != nil {
 			log.Fatalf(ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
 		}
-		if *msgUUID != snap.SnapUUID {
+		if msgUUID != snap.SnapUUID {
 			log.Fatalf(ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
 				msgUUID.Short(), snap.SnapUUID.Short())
 		}
@@ -3408,7 +3408,7 @@ func (r *Replica) checkIfTxnAborted(
 	defer r.mu.Unlock()
 
 	var entry roachpb.AbortCacheEntry
-	aborted, err := r.abortCache.Get(ctx, b, txn.ID, &entry)
+	aborted, err := r.abortCache.Get(ctx, b, *txn.ID, &entry)
 	if err != nil {
 		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from abort cache")))
 	}
@@ -3816,7 +3816,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	// so we error out below.
 	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
 		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			if *gossipClusterID != r.store.ClusterID() {
+			if gossipClusterID != r.store.ClusterID() {
 				log.Fatalf(
 					ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)

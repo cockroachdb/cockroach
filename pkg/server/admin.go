@@ -855,7 +855,7 @@ func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
 	clusterID := s.server.node.ClusterID
-	if clusterID == *uuid.EmptyUUID {
+	if clusterID == (uuid.UUID{}) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 	return &serverpb.ClusterResponse{ClusterID: clusterID.String()}, nil
