@@ -288,6 +288,9 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 		// 2 because one length of the string will cover the 0s after the decimal,
 		// and the other length of the string covers the digits of the division.
 		nd, _ := NumDigits(x.UnscaledBig(), nil)
+		if xs := int(x.Scale()); xs < 0 {
+			nd -= xs
+		}
 		if nd := inf.Scale(nd * 2); nd > ns {
 			ns = nd
 		}
