@@ -245,9 +245,10 @@ func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
 // AliasedTableExpr represents a table expression coupled with an optional
 // alias.
 type AliasedTableExpr struct {
-	Expr  TableExpr
-	Hints *IndexHints
-	As    AliasClause
+	Expr       TableExpr
+	Hints      *IndexHints
+	Ordinality bool
+	As         AliasClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -255,6 +256,9 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Expr)
 	if node.Hints != nil {
 		FormatNode(buf, f, node.Hints)
+	}
+	if node.Ordinality {
+		buf.WriteString(" WITH ORDINALITY")
 	}
 	if node.As.Alias != "" {
 		buf.WriteString(" AS ")
