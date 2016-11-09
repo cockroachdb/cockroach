@@ -471,6 +471,7 @@ func (u *sqlSymUnion) window() Window {
 %type <Expr> ctext_expr
 %type <Expr> numeric_only
 %type <AliasClause> alias_clause opt_alias_clause
+%type <bool> opt_ordinality
 %type <*Order> sortby
 %type <IndexElem> index_elem
 %type <TableExpr> table_ref
@@ -2765,21 +2766,31 @@ opt_index_hints:
 
 // table_ref is where an alias clause can be attached.
 table_ref:
-  relation_expr opt_index_hints opt_alias_clause
+  relation_expr opt_index_hints opt_ordinality opt_alias_clause
   {
-    $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), As: $3.aliasClause()}
+   $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), As: $4.aliasClause(), Ordinality: $3.bool() }
   }
-| select_with_parens opt_alias_clause
+| select_with_parens opt_ordinality opt_alias_clause
   {
-    $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $2.aliasClause()}
+    $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $3.aliasClause(), Ordinality: $2.bool() }
   }
 | joined_table
   {
     $$.val = $1.tblExpr()
   }
-| '(' joined_table ')' alias_clause
+| '(' joined_table ')' opt_ordinality alias_clause
   {
-   $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), As: $4.aliasClause()}
+    $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), As: $5.aliasClause(), Ordinality: $4.bool() }
+  }
+
+opt_ordinality:
+  WITH_LA ORDINALITY
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
   }
 
 // It may seem silly to separate joined_table from table_ref, but there is
