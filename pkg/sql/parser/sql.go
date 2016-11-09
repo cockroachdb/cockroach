@@ -901,7 +901,7 @@ const sqlEofCode = 1
 const sqlErrCode = 2
 const sqlInitialStackSize = 16
 
-//line sql.y:4893
+//line sql.y:4897
 
 //line yacctab:1
 var sqlExca = [...]int{
@@ -7697,88 +7697,93 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2965
 		{
-			sqlVAL.union.val = sqlDollar[1].union.colType()
+			if sqlDollar[2].union.bool() {
+				sqlVAL.union.val = arrayOf(sqlDollar[1].union.colType())
+			} else {
+				sqlVAL.union.val = sqlDollar[1].union.colType()
+			}
 		}
 	case 468:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2969
+		//line sql.y:2973
 		{
 			return unimplementedWithIssue(sqllex, 2115)
 		}
 	case 469:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2970
+		//line sql.y:2974
 		{
 			return unimplementedWithIssue(sqllex, 2115)
 		}
 	case 470:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:2973
+		//line sql.y:2977
 		{
-			return unimplementedWithIssue(sqllex, 2115)
+			sqlVAL.union.val = true
 		}
 	case 471:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2974
+		//line sql.y:2978
 		{
 			return unimplementedWithIssue(sqllex, 2115)
 		}
 	case 472:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2975
+		//line sql.y:2979
 		{
+			sqlVAL.union.val = false
 		}
 	case 478:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2983
+		//line sql.y:2987
 		{
 			return unimplemented(sqllex)
 		}
 	case 479:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2985
+		//line sql.y:2989
 		{
 			sqlVAL.union.val = bytesColTypeBlob
 		}
 	case 480:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2989
+		//line sql.y:2993
 		{
 			sqlVAL.union.val = bytesColTypeBytes
 		}
 	case 481:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2993
+		//line sql.y:2997
 		{
 			sqlVAL.union.val = bytesColTypeBytea
 		}
 	case 482:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2997
+		//line sql.y:3001
 		{
 			sqlVAL.union.val = stringColTypeText
 		}
 	case 483:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3001
+		//line sql.y:3005
 		{
 			sqlVAL.union.val = intColTypeSerial
 		}
 	case 484:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3005
+		//line sql.y:3009
 		{
 			sqlVAL.union.val = intColTypeSmallSerial
 		}
 	case 485:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3009
+		//line sql.y:3013
 		{
 			sqlVAL.union.val = intColTypeBigSerial
 		}
 	case 490:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3030
+		//line sql.y:3034
 		{
 			prec, err := sqlDollar[2].union.numVal().asInt64()
 			if err != nil {
@@ -7789,7 +7794,7 @@ sqldefault:
 		}
 	case 491:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3039
+		//line sql.y:3043
 		{
 			prec, err := sqlDollar[2].union.numVal().asInt64()
 			if err != nil {
@@ -7805,55 +7810,55 @@ sqldefault:
 		}
 	case 492:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3053
+		//line sql.y:3057
 		{
 			sqlVAL.union.val = nil
 		}
 	case 493:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3060
+		//line sql.y:3064
 		{
 			sqlVAL.union.val = intColTypeInt
 		}
 	case 494:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3064
+		//line sql.y:3068
 		{
 			sqlVAL.union.val = intColTypeInt8
 		}
 	case 495:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3068
+		//line sql.y:3072
 		{
 			sqlVAL.union.val = intColTypeInt64
 		}
 	case 496:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3072
+		//line sql.y:3076
 		{
 			sqlVAL.union.val = intColTypeInteger
 		}
 	case 497:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3076
+		//line sql.y:3080
 		{
 			sqlVAL.union.val = intColTypeSmallInt
 		}
 	case 498:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3080
+		//line sql.y:3084
 		{
 			sqlVAL.union.val = intColTypeBigInt
 		}
 	case 499:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3084
+		//line sql.y:3088
 		{
 			sqlVAL.union.val = floatColTypeReal
 		}
 	case 500:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3088
+		//line sql.y:3092
 		{
 			prec, err := sqlDollar[2].union.numVal().asInt64()
 			if err != nil {
@@ -7864,13 +7869,13 @@ sqldefault:
 		}
 	case 501:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3097
+		//line sql.y:3101
 		{
 			sqlVAL.union.val = floatColTypeDouble
 		}
 	case 502:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3101
+		//line sql.y:3105
 		{
 			sqlVAL.union.val = sqlDollar[2].union.colType()
 			if sqlVAL.union.val == nil {
@@ -7881,7 +7886,7 @@ sqldefault:
 		}
 	case 503:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3110
+		//line sql.y:3114
 		{
 			sqlVAL.union.val = sqlDollar[2].union.colType()
 			if sqlVAL.union.val == nil {
@@ -7892,7 +7897,7 @@ sqldefault:
 		}
 	case 504:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3119
+		//line sql.y:3123
 		{
 			sqlVAL.union.val = sqlDollar[2].union.colType()
 			if sqlVAL.union.val == nil {
@@ -7903,31 +7908,31 @@ sqldefault:
 		}
 	case 505:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3128
+		//line sql.y:3132
 		{
 			sqlVAL.union.val = boolColTypeBoolean
 		}
 	case 506:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3132
+		//line sql.y:3136
 		{
 			sqlVAL.union.val = boolColTypeBool
 		}
 	case 507:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3138
+		//line sql.y:3142
 		{
 			sqlVAL.union.val = sqlDollar[2].union.numVal()
 		}
 	case 508:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3142
+		//line sql.y:3146
 		{
 			sqlVAL.union.val = &NumVal{Value: constant.MakeInt64(0)}
 		}
 	case 513:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3160
+		//line sql.y:3164
 		{
 			n, err := sqlDollar[4].union.numVal().asInt64()
 			if err != nil {
@@ -7943,13 +7948,13 @@ sqldefault:
 		}
 	case 514:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3176
+		//line sql.y:3180
 		{
 			sqlVAL.union.val = intColTypeBit
 		}
 	case 519:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3192
+		//line sql.y:3196
 		{
 			n, err := sqlDollar[3].union.numVal().asInt64()
 			if err != nil {
@@ -7965,796 +7970,796 @@ sqldefault:
 		}
 	case 520:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3208
+		//line sql.y:3212
 		{
 			sqlVAL.union.val = sqlDollar[1].union.colType()
 		}
 	case 521:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3214
+		//line sql.y:3218
 		{
 			sqlVAL.union.val = stringColTypeChar
 		}
 	case 522:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3218
+		//line sql.y:3222
 		{
 			sqlVAL.union.val = stringColTypeChar
 		}
 	case 523:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3222
+		//line sql.y:3226
 		{
 			sqlVAL.union.val = stringColTypeVarChar
 		}
 	case 524:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3226
+		//line sql.y:3230
 		{
 			sqlVAL.union.val = stringColTypeString
 		}
 	case 525:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3231
+		//line sql.y:3235
 		{
 		}
 	case 526:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3232
+		//line sql.y:3236
 		{
 		}
 	case 527:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3237
+		//line sql.y:3241
 		{
 			sqlVAL.union.val = dateColTypeDate
 		}
 	case 528:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3241
+		//line sql.y:3245
 		{
 			sqlVAL.union.val = timestampColTypeTimestamp
 		}
 	case 529:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3245
+		//line sql.y:3249
 		{
 			sqlVAL.union.val = timestampColTypeTimestamp
 		}
 	case 530:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3249
+		//line sql.y:3253
 		{
 			sqlVAL.union.val = timestampTzColTypeTimestampWithTZ
 		}
 	case 531:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3253
+		//line sql.y:3257
 		{
 			sqlVAL.union.val = timestampTzColTypeTimestampWithTZ
 		}
 	case 532:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3258
+		//line sql.y:3262
 		{
 			sqlVAL.union.val = intervalColTypeInterval
 		}
 	case 533:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3263
+		//line sql.y:3267
 		{
 			return unimplemented(sqllex)
 		}
 	case 534:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3264
+		//line sql.y:3268
 		{
 			return unimplemented(sqllex)
 		}
 	case 535:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3265
+		//line sql.y:3269
 		{
 			return unimplemented(sqllex)
 		}
 	case 536:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3266
+		//line sql.y:3270
 		{
 			return unimplemented(sqllex)
 		}
 	case 537:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3267
+		//line sql.y:3271
 		{
 			return unimplemented(sqllex)
 		}
 	case 538:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3268
+		//line sql.y:3272
 		{
 			return unimplemented(sqllex)
 		}
 	case 539:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3269
+		//line sql.y:3273
 		{
 			return unimplemented(sqllex)
 		}
 	case 540:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3270
+		//line sql.y:3274
 		{
 			return unimplemented(sqllex)
 		}
 	case 541:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3271
+		//line sql.y:3275
 		{
 			return unimplemented(sqllex)
 		}
 	case 542:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3272
+		//line sql.y:3276
 		{
 			return unimplemented(sqllex)
 		}
 	case 543:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3273
+		//line sql.y:3277
 		{
 			return unimplemented(sqllex)
 		}
 	case 544:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3274
+		//line sql.y:3278
 		{
 			return unimplemented(sqllex)
 		}
 	case 545:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3275
+		//line sql.y:3279
 		{
 			return unimplemented(sqllex)
 		}
 	case 546:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3276
+		//line sql.y:3280
 		{
 		}
 	case 547:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3279
+		//line sql.y:3283
 		{
 			return unimplemented(sqllex)
 		}
 	case 548:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3280
+		//line sql.y:3284
 		{
 			return unimplemented(sqllex)
 		}
 	case 550:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3304
+		//line sql.y:3308
 		{
 			sqlVAL.union.val = &CastExpr{Expr: sqlDollar[1].union.expr(), Type: sqlDollar[3].union.colType(), syntaxMode: castShort}
 		}
 	case 551:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3308
+		//line sql.y:3312
 		{
 			sqlVAL.union.val = &AnnotateTypeExpr{Expr: sqlDollar[1].union.expr(), Type: sqlDollar[3].union.colType(), syntaxMode: annotateShort}
 		}
 	case 552:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3311
+		//line sql.y:3315
 		{
 			return unimplemented(sqllex)
 		}
 	case 553:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3312
+		//line sql.y:3316
 		{
 			return unimplemented(sqllex)
 		}
 	case 554:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3321
+		//line sql.y:3325
 		{
 			sqlVAL.union.val = &UnaryExpr{Operator: UnaryPlus, Expr: sqlDollar[2].union.expr()}
 		}
 	case 555:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3325
+		//line sql.y:3329
 		{
 			sqlVAL.union.val = &UnaryExpr{Operator: UnaryMinus, Expr: sqlDollar[2].union.expr()}
 		}
 	case 556:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3329
+		//line sql.y:3333
 		{
 			sqlVAL.union.val = &UnaryExpr{Operator: UnaryComplement, Expr: sqlDollar[2].union.expr()}
 		}
 	case 557:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3333
+		//line sql.y:3337
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Plus, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 558:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3337
+		//line sql.y:3341
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Minus, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 559:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3341
+		//line sql.y:3345
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Mult, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 560:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3345
+		//line sql.y:3349
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Div, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 561:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3349
+		//line sql.y:3353
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: FloorDiv, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 562:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3353
+		//line sql.y:3357
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Mod, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 563:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3357
+		//line sql.y:3361
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitxor, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 564:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3361
+		//line sql.y:3365
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitxor, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 565:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3365
+		//line sql.y:3369
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitand, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 566:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3369
+		//line sql.y:3373
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitor, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 567:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3373
+		//line sql.y:3377
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: LT, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 568:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3377
+		//line sql.y:3381
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: GT, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 569:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3381
+		//line sql.y:3385
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: EQ, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 570:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3385
+		//line sql.y:3389
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Concat, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 571:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3389
+		//line sql.y:3393
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: LShift, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 572:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3393
+		//line sql.y:3397
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: RShift, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 573:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3397
+		//line sql.y:3401
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: LE, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 574:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3401
+		//line sql.y:3405
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: GE, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 575:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3405
+		//line sql.y:3409
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NE, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 576:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3409
+		//line sql.y:3413
 		{
 			sqlVAL.union.val = &AndExpr{Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 577:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3413
+		//line sql.y:3417
 		{
 			sqlVAL.union.val = &OrExpr{Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 578:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3417
+		//line sql.y:3421
 		{
 			sqlVAL.union.val = &NotExpr{Expr: sqlDollar[2].union.expr()}
 		}
 	case 579:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3421
+		//line sql.y:3425
 		{
 			sqlVAL.union.val = &NotExpr{Expr: sqlDollar[2].union.expr()}
 		}
 	case 580:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3425
+		//line sql.y:3429
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: Like, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 581:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3429
+		//line sql.y:3433
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NotLike, Left: sqlDollar[1].union.expr(), Right: sqlDollar[4].union.expr()}
 		}
 	case 582:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3433
+		//line sql.y:3437
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: ILike, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 583:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3437
+		//line sql.y:3441
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NotILike, Left: sqlDollar[1].union.expr(), Right: sqlDollar[4].union.expr()}
 		}
 	case 584:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3441
+		//line sql.y:3445
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: SimilarTo, Left: sqlDollar[1].union.expr(), Right: sqlDollar[4].union.expr()}
 		}
 	case 585:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3445
+		//line sql.y:3449
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NotSimilarTo, Left: sqlDollar[1].union.expr(), Right: sqlDollar[5].union.expr()}
 		}
 	case 586:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3449
+		//line sql.y:3453
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: RegMatch, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 587:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3453
+		//line sql.y:3457
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NotRegMatch, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 588:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3457
+		//line sql.y:3461
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: RegIMatch, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 589:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3461
+		//line sql.y:3465
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NotRegIMatch, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 590:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3465
+		//line sql.y:3469
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: DNull}
 		}
 	case 591:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3469
+		//line sql.y:3473
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: DNull}
 		}
 	case 592:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3472
+		//line sql.y:3476
 		{
 			return unimplemented(sqllex)
 		}
 	case 593:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3474
+		//line sql.y:3478
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: MakeDBool(true)}
 		}
 	case 594:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3478
+		//line sql.y:3482
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: MakeDBool(true)}
 		}
 	case 595:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3482
+		//line sql.y:3486
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: MakeDBool(false)}
 		}
 	case 596:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3486
+		//line sql.y:3490
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: MakeDBool(false)}
 		}
 	case 597:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3490
+		//line sql.y:3494
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: DNull}
 		}
 	case 598:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3494
+		//line sql.y:3498
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: DNull}
 		}
 	case 599:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3498
+		//line sql.y:3502
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsDistinctFrom, Left: sqlDollar[1].union.expr(), Right: sqlDollar[5].union.expr()}
 		}
 	case 600:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3502
+		//line sql.y:3506
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: sqlDollar[1].union.expr(), Right: sqlDollar[6].union.expr()}
 		}
 	case 601:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3506
+		//line sql.y:3510
 		{
 			sqlVAL.union.val = &IsOfTypeExpr{Expr: sqlDollar[1].union.expr(), Types: sqlDollar[5].union.colTypes()}
 		}
 	case 602:
 		sqlDollar = sqlS[sqlpt-7 : sqlpt+1]
-		//line sql.y:3510
+		//line sql.y:3514
 		{
 			sqlVAL.union.val = &IsOfTypeExpr{Not: true, Expr: sqlDollar[1].union.expr(), Types: sqlDollar[6].union.colTypes()}
 		}
 	case 603:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3514
+		//line sql.y:3518
 		{
 			sqlVAL.union.val = &RangeCond{Left: sqlDollar[1].union.expr(), From: sqlDollar[4].union.expr(), To: sqlDollar[6].union.expr()}
 		}
 	case 604:
 		sqlDollar = sqlS[sqlpt-7 : sqlpt+1]
-		//line sql.y:3518
+		//line sql.y:3522
 		{
 			sqlVAL.union.val = &RangeCond{Not: true, Left: sqlDollar[1].union.expr(), From: sqlDollar[5].union.expr(), To: sqlDollar[7].union.expr()}
 		}
 	case 605:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3522
+		//line sql.y:3526
 		{
 			sqlVAL.union.val = &RangeCond{Left: sqlDollar[1].union.expr(), From: sqlDollar[4].union.expr(), To: sqlDollar[6].union.expr()}
 		}
 	case 606:
 		sqlDollar = sqlS[sqlpt-7 : sqlpt+1]
-		//line sql.y:3526
+		//line sql.y:3530
 		{
 			sqlVAL.union.val = &RangeCond{Not: true, Left: sqlDollar[1].union.expr(), From: sqlDollar[5].union.expr(), To: sqlDollar[7].union.expr()}
 		}
 	case 607:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3530
+		//line sql.y:3534
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: In, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 608:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3534
+		//line sql.y:3538
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NotIn, Left: sqlDollar[1].union.expr(), Right: sqlDollar[4].union.expr()}
 		}
 	case 610:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3551
+		//line sql.y:3555
 		{
 			sqlVAL.union.val = &CastExpr{Expr: sqlDollar[1].union.expr(), Type: sqlDollar[3].union.colType(), syntaxMode: castShort}
 		}
 	case 611:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3555
+		//line sql.y:3559
 		{
 			sqlVAL.union.val = &AnnotateTypeExpr{Expr: sqlDollar[1].union.expr(), Type: sqlDollar[3].union.colType(), syntaxMode: annotateShort}
 		}
 	case 612:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3559
+		//line sql.y:3563
 		{
 			sqlVAL.union.val = &UnaryExpr{Operator: UnaryPlus, Expr: sqlDollar[2].union.expr()}
 		}
 	case 613:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3563
+		//line sql.y:3567
 		{
 			sqlVAL.union.val = &UnaryExpr{Operator: UnaryMinus, Expr: sqlDollar[2].union.expr()}
 		}
 	case 614:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3567
+		//line sql.y:3571
 		{
 			sqlVAL.union.val = &UnaryExpr{Operator: UnaryComplement, Expr: sqlDollar[2].union.expr()}
 		}
 	case 615:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3571
+		//line sql.y:3575
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Plus, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 616:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3575
+		//line sql.y:3579
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Minus, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 617:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3579
+		//line sql.y:3583
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Mult, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 618:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3583
+		//line sql.y:3587
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Div, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 619:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3587
+		//line sql.y:3591
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: FloorDiv, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 620:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3591
+		//line sql.y:3595
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Mod, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 621:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3595
+		//line sql.y:3599
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitxor, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 622:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3599
+		//line sql.y:3603
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitxor, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 623:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3603
+		//line sql.y:3607
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitand, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 624:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3607
+		//line sql.y:3611
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Bitor, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 625:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3611
+		//line sql.y:3615
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: LT, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 626:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3615
+		//line sql.y:3619
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: GT, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 627:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3619
+		//line sql.y:3623
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: EQ, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 628:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3623
+		//line sql.y:3627
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: Concat, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 629:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3627
+		//line sql.y:3631
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: LShift, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 630:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3631
+		//line sql.y:3635
 		{
 			sqlVAL.union.val = &BinaryExpr{Operator: RShift, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 631:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3635
+		//line sql.y:3639
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: LE, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 632:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3639
+		//line sql.y:3643
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: GE, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 633:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3643
+		//line sql.y:3647
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: NE, Left: sqlDollar[1].union.expr(), Right: sqlDollar[3].union.expr()}
 		}
 	case 634:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3647
+		//line sql.y:3651
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsDistinctFrom, Left: sqlDollar[1].union.expr(), Right: sqlDollar[5].union.expr()}
 		}
 	case 635:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3651
+		//line sql.y:3655
 		{
 			sqlVAL.union.val = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: sqlDollar[1].union.expr(), Right: sqlDollar[6].union.expr()}
 		}
 	case 636:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3655
+		//line sql.y:3659
 		{
 			sqlVAL.union.val = &IsOfTypeExpr{Expr: sqlDollar[1].union.expr(), Types: sqlDollar[5].union.colTypes()}
 		}
 	case 637:
 		sqlDollar = sqlS[sqlpt-7 : sqlpt+1]
-		//line sql.y:3659
+		//line sql.y:3663
 		{
 			sqlVAL.union.val = &IsOfTypeExpr{Not: true, Expr: sqlDollar[1].union.expr(), Types: sqlDollar[6].union.colTypes()}
 		}
 	case 638:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3671
+		//line sql.y:3675
 		{
 			sqlVAL.union.val = sqlDollar[1].union.unresolvedName()
 		}
 	case 640:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3676
+		//line sql.y:3680
 		{
 			sqlVAL.union.val = NewPlaceholder(sqlDollar[1].str)
 		}
 	case 641:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3680
+		//line sql.y:3684
 		{
 			sqlVAL.union.val = &ParenExpr{Expr: sqlDollar[2].union.expr()}
 		}
 	case 644:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3686
+		//line sql.y:3690
 		{
 			sqlVAL.union.val = &Subquery{Select: sqlDollar[1].union.selectStmt()}
 		}
 	case 645:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3690
+		//line sql.y:3694
 		{
 			sqlVAL.union.val = &Subquery{Select: sqlDollar[1].union.selectStmt()}
 		}
 	case 646:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3694
+		//line sql.y:3698
 		{
 			sqlVAL.union.val = &ExistsExpr{Subquery: &Subquery{Select: sqlDollar[2].union.selectStmt()}}
 		}
 	case 647:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3700
+		//line sql.y:3704
 		{
 			sqlVAL.union.val = sqlDollar[2].union.expr()
 		}
 	case 648:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3704
+		//line sql.y:3708
 		{
 			sqlVAL.union.val = sqlDollar[1].union.expr()
 		}
 	case 649:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3708
+		//line sql.y:3712
 		{
 			sqlVAL.union.val = sqlDollar[1].union.expr()
 		}
 	case 650:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3716
+		//line sql.y:3720
 		{
 			sqlVAL.union.val = &FuncExpr{Name: sqlDollar[1].union.normalizableFunctionName()}
 		}
 	case 651:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3720
+		//line sql.y:3724
 		{
 			sqlVAL.union.val = &FuncExpr{Name: sqlDollar[1].union.normalizableFunctionName(), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 652:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3723
+		//line sql.y:3727
 		{
 			return unimplemented(sqllex)
 		}
 	case 653:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
-		//line sql.y:3724
+		//line sql.y:3728
 		{
 			return unimplemented(sqllex)
 		}
 	case 654:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3726
+		//line sql.y:3730
 		{
 			sqlVAL.union.val = &FuncExpr{Name: sqlDollar[1].union.normalizableFunctionName(), Type: All, Exprs: sqlDollar[4].union.exprs()}
 		}
 	case 655:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3730
+		//line sql.y:3734
 		{
 			sqlVAL.union.val = &FuncExpr{Name: sqlDollar[1].union.normalizableFunctionName(), Type: Distinct, Exprs: sqlDollar[4].union.exprs()}
 		}
 	case 656:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3734
+		//line sql.y:3738
 		{
 			sqlVAL.union.val = &FuncExpr{Name: sqlDollar[1].union.normalizableFunctionName(), Exprs: Exprs{StarExpr()}}
 		}
 	case 657:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3747
+		//line sql.y:3751
 		{
 			f := sqlDollar[1].union.expr().(*FuncExpr)
 			f.WindowDef = sqlDollar[4].union.windowDef()
@@ -8762,233 +8767,233 @@ sqldefault:
 		}
 	case 658:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3753
+		//line sql.y:3757
 		{
 			sqlVAL.union.val = sqlDollar[1].union.expr()
 		}
 	case 659:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3762
+		//line sql.y:3766
 		{
 			return unimplemented(sqllex)
 		}
 	case 660:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3763
+		//line sql.y:3767
 		{
 			return unimplemented(sqllex)
 		}
 	case 661:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3767
+		//line sql.y:3771
 		{
 			return unimplemented(sqllex)
 		}
 	case 662:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3769
+		//line sql.y:3773
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str)}
 		}
 	case 663:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3773
+		//line sql.y:3777
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str)}
 		}
 	case 664:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3777
+		//line sql.y:3781
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str)}
 		}
 	case 665:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3781
+		//line sql.y:3785
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str)}
 		}
 	case 666:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3784
+		//line sql.y:3788
 		{
 			return unimplemented(sqllex)
 		}
 	case 667:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3785
+		//line sql.y:3789
 		{
 			return unimplemented(sqllex)
 		}
 	case 668:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3786
+		//line sql.y:3790
 		{
 			return unimplemented(sqllex)
 		}
 	case 669:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3787
+		//line sql.y:3791
 		{
 			return unimplemented(sqllex)
 		}
 	case 670:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3789
+		//line sql.y:3793
 		{
 			sqlVAL.union.val = &CastExpr{Expr: sqlDollar[3].union.expr(), Type: sqlDollar[5].union.colType(), syntaxMode: castExplicit}
 		}
 	case 671:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3793
+		//line sql.y:3797
 		{
 			sqlVAL.union.val = &AnnotateTypeExpr{Expr: sqlDollar[3].union.expr(), Type: sqlDollar[5].union.colType(), syntaxMode: annotateExplicit}
 		}
 	case 672:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3797
+		//line sql.y:3801
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 673:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3801
+		//line sql.y:3805
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 674:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3805
+		//line sql.y:3809
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 675:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3809
+		//line sql.y:3813
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName("STRPOS"), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 676:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3813
+		//line sql.y:3817
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 677:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3816
+		//line sql.y:3820
 		{
 			return unimplemented(sqllex)
 		}
 	case 678:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3818
+		//line sql.y:3822
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: sqlDollar[4].union.exprs()}
 		}
 	case 679:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3822
+		//line sql.y:3826
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName("LTRIM"), Exprs: sqlDollar[4].union.exprs()}
 		}
 	case 680:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3826
+		//line sql.y:3830
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName("RTRIM"), Exprs: sqlDollar[4].union.exprs()}
 		}
 	case 681:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3830
+		//line sql.y:3834
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 682:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
-		//line sql.y:3834
+		//line sql.y:3838
 		{
 			sqlVAL.union.val = &IfExpr{Cond: sqlDollar[3].union.expr(), True: sqlDollar[5].union.expr(), Else: sqlDollar[7].union.expr()}
 		}
 	case 683:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3838
+		//line sql.y:3842
 		{
 			sqlVAL.union.val = &NullIfExpr{Expr1: sqlDollar[3].union.expr(), Expr2: sqlDollar[5].union.expr()}
 		}
 	case 684:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3842
+		//line sql.y:3846
 		{
 			sqlVAL.union.val = &CoalesceExpr{Name: "IFNULL", Exprs: Exprs{sqlDollar[3].union.expr(), sqlDollar[5].union.expr()}}
 		}
 	case 685:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3846
+		//line sql.y:3850
 		{
 			sqlVAL.union.val = &CoalesceExpr{Name: "COALESCE", Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 686:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3850
+		//line sql.y:3854
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 687:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3854
+		//line sql.y:3858
 		{
 			sqlVAL.union.val = &FuncExpr{Name: WrapQualifiedFunctionName(sqlDollar[1].str), Exprs: sqlDollar[3].union.exprs()}
 		}
 	case 688:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3860
+		//line sql.y:3864
 		{
 			return unimplemented(sqllex)
 		}
 	case 689:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3861
+		//line sql.y:3865
 		{
 		}
 	case 690:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3864
+		//line sql.y:3868
 		{
 			return unimplemented(sqllex)
 		}
 	case 691:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3865
+		//line sql.y:3869
 		{
 		}
 	case 692:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3870
+		//line sql.y:3874
 		{
 			sqlVAL.union.val = sqlDollar[2].union.window()
 		}
 	case 693:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3874
+		//line sql.y:3878
 		{
 			sqlVAL.union.val = Window(nil)
 		}
 	case 694:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3880
+		//line sql.y:3884
 		{
 			sqlVAL.union.val = Window{sqlDollar[1].union.windowDef()}
 		}
 	case 695:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3884
+		//line sql.y:3888
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.window(), sqlDollar[3].union.windowDef())
 		}
 	case 696:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3890
+		//line sql.y:3894
 		{
 			n := sqlDollar[3].union.windowDef()
 			n.Name = Name(sqlDollar[1].str)
@@ -8996,25 +9001,25 @@ sqldefault:
 		}
 	case 697:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3898
+		//line sql.y:3902
 		{
 			sqlVAL.union.val = sqlDollar[2].union.windowDef()
 		}
 	case 698:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3902
+		//line sql.y:3906
 		{
 			sqlVAL.union.val = &WindowDef{Name: Name(sqlDollar[2].str)}
 		}
 	case 699:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3906
+		//line sql.y:3910
 		{
 			sqlVAL.union.val = (*WindowDef)(nil)
 		}
 	case 700:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3913
+		//line sql.y:3917
 		{
 			sqlVAL.union.val = &WindowDef{
 				RefName:    Name(sqlDollar[2].str),
@@ -9024,669 +9029,669 @@ sqldefault:
 		}
 	case 702:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3932
+		//line sql.y:3936
 		{
 			sqlVAL.str = ""
 		}
 	case 703:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3938
+		//line sql.y:3942
 		{
 			sqlVAL.union.val = sqlDollar[3].union.exprs()
 		}
 	case 704:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3942
+		//line sql.y:3946
 		{
 			sqlVAL.union.val = Exprs(nil)
 		}
 	case 705:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3952
+		//line sql.y:3956
 		{
 			return unimplemented(sqllex)
 		}
 	case 706:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3953
+		//line sql.y:3957
 		{
 			return unimplemented(sqllex)
 		}
 	case 707:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3954
+		//line sql.y:3958
 		{
 		}
 	case 708:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3957
+		//line sql.y:3961
 		{
 			return unimplemented(sqllex)
 		}
 	case 709:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3958
+		//line sql.y:3962
 		{
 			return unimplemented(sqllex)
 		}
 	case 710:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3964
+		//line sql.y:3968
 		{
 			return unimplemented(sqllex)
 		}
 	case 711:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3965
+		//line sql.y:3969
 		{
 			return unimplemented(sqllex)
 		}
 	case 712:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3966
+		//line sql.y:3970
 		{
 			return unimplemented(sqllex)
 		}
 	case 713:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3967
+		//line sql.y:3971
 		{
 			return unimplemented(sqllex)
 		}
 	case 714:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3968
+		//line sql.y:3972
 		{
 			return unimplemented(sqllex)
 		}
 	case 715:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3979
+		//line sql.y:3983
 		{
 			sqlVAL.union.val = &Tuple{Exprs: sqlDollar[3].union.exprs(), row: true}
 		}
 	case 716:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3983
+		//line sql.y:3987
 		{
 			sqlVAL.union.val = &Tuple{Exprs: nil, row: true}
 		}
 	case 717:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3987
+		//line sql.y:3991
 		{
 			sqlVAL.union.val = &Tuple{Exprs: append(sqlDollar[2].union.exprs(), sqlDollar[4].union.expr())}
 		}
 	case 718:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3993
+		//line sql.y:3997
 		{
 			sqlVAL.union.val = &Tuple{Exprs: sqlDollar[3].union.exprs(), row: true}
 		}
 	case 719:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3997
+		//line sql.y:4001
 		{
 			sqlVAL.union.val = &Tuple{Exprs: nil, row: true}
 		}
 	case 720:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:4003
+		//line sql.y:4007
 		{
 			sqlVAL.union.val = &Tuple{Exprs: append(sqlDollar[2].union.exprs(), sqlDollar[4].union.expr())}
 		}
 	case 721:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4046
+		//line sql.y:4050
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr()}
 		}
 	case 722:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4050
+		//line sql.y:4054
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.exprs(), sqlDollar[3].union.expr())
 		}
 	case 723:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4056
+		//line sql.y:4060
 		{
 			sqlVAL.union.val = []ColumnType{sqlDollar[1].union.colType()}
 		}
 	case 724:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4060
+		//line sql.y:4064
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.colTypes(), sqlDollar[3].union.colType())
 		}
 	case 725:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4066
+		//line sql.y:4070
 		{
 			sqlVAL.union.val = &Array{sqlDollar[2].union.exprs()}
 		}
 	case 726:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4070
+		//line sql.y:4074
 		{
 			sqlVAL.union.val = &Array{sqlDollar[2].union.exprs()}
 		}
 	case 727:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4074
+		//line sql.y:4078
 		{
 			sqlVAL.union.val = &Array{nil}
 		}
 	case 728:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4080
+		//line sql.y:4084
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr()}
 		}
 	case 729:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4084
+		//line sql.y:4088
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.exprs(), sqlDollar[3].union.expr())
 		}
 	case 730:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4090
+		//line sql.y:4094
 		{
 			sqlVAL.union.val = Exprs{&StrVal{s: sqlDollar[1].str}, sqlDollar[3].union.expr()}
 		}
 	case 731:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4094
+		//line sql.y:4098
 		{
 			sqlVAL.union.val = sqlDollar[1].union.exprs()
 		}
 	case 739:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:4116
+		//line sql.y:4120
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), sqlDollar[2].union.expr(), sqlDollar[3].union.expr(), sqlDollar[4].union.expr()}
 		}
 	case 740:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4120
+		//line sql.y:4124
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), sqlDollar[2].union.expr(), sqlDollar[3].union.expr()}
 		}
 	case 741:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4124
+		//line sql.y:4128
 		{
 			sqlVAL.union.val = sqlDollar[1].union.exprs()
 		}
 	case 742:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4130
+		//line sql.y:4134
 		{
 			sqlVAL.union.val = sqlDollar[2].union.expr()
 		}
 	case 743:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4137
+		//line sql.y:4141
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[3].union.expr(), sqlDollar[1].union.expr()}
 		}
 	case 744:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4141
+		//line sql.y:4145
 		{
 			sqlVAL.union.val = Exprs(nil)
 		}
 	case 745:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4158
+		//line sql.y:4162
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), sqlDollar[2].union.expr(), sqlDollar[3].union.expr()}
 		}
 	case 746:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4162
+		//line sql.y:4166
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), sqlDollar[3].union.expr(), sqlDollar[2].union.expr()}
 		}
 	case 747:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4166
+		//line sql.y:4170
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), sqlDollar[2].union.expr()}
 		}
 	case 748:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4170
+		//line sql.y:4174
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), NewDInt(1), sqlDollar[2].union.expr()}
 		}
 	case 749:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4174
+		//line sql.y:4178
 		{
 			sqlVAL.union.val = sqlDollar[1].union.exprs()
 		}
 	case 750:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4178
+		//line sql.y:4182
 		{
 			sqlVAL.union.val = Exprs(nil)
 		}
 	case 751:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4184
+		//line sql.y:4188
 		{
 			sqlVAL.union.val = sqlDollar[2].union.expr()
 		}
 	case 752:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4190
+		//line sql.y:4194
 		{
 			sqlVAL.union.val = sqlDollar[2].union.expr()
 		}
 	case 753:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4196
+		//line sql.y:4200
 		{
 			sqlVAL.union.val = append(sqlDollar[3].union.exprs(), sqlDollar[1].union.expr())
 		}
 	case 754:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4200
+		//line sql.y:4204
 		{
 			sqlVAL.union.val = sqlDollar[2].union.exprs()
 		}
 	case 755:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4204
+		//line sql.y:4208
 		{
 			sqlVAL.union.val = sqlDollar[1].union.exprs()
 		}
 	case 756:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4210
+		//line sql.y:4214
 		{
 			sqlVAL.union.val = &Subquery{Select: sqlDollar[1].union.selectStmt()}
 		}
 	case 757:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4214
+		//line sql.y:4218
 		{
 			sqlVAL.union.val = &Tuple{Exprs: sqlDollar[2].union.exprs()}
 		}
 	case 758:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:4225
+		//line sql.y:4229
 		{
 			sqlVAL.union.val = &CaseExpr{Expr: sqlDollar[2].union.expr(), Whens: sqlDollar[3].union.whens(), Else: sqlDollar[4].union.expr()}
 		}
 	case 759:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4232
+		//line sql.y:4236
 		{
 			sqlVAL.union.val = []*When{sqlDollar[1].union.when()}
 		}
 	case 760:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4236
+		//line sql.y:4240
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.whens(), sqlDollar[2].union.when())
 		}
 	case 761:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:4242
+		//line sql.y:4246
 		{
 			sqlVAL.union.val = &When{Cond: sqlDollar[2].union.expr(), Val: sqlDollar[4].union.expr()}
 		}
 	case 762:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4248
+		//line sql.y:4252
 		{
 			sqlVAL.union.val = sqlDollar[2].union.expr()
 		}
 	case 763:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4252
+		//line sql.y:4256
 		{
 			sqlVAL.union.val = Expr(nil)
 		}
 	case 765:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4259
+		//line sql.y:4263
 		{
 			sqlVAL.union.val = Expr(nil)
 		}
 	case 766:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4265
+		//line sql.y:4269
 		{
 			sqlVAL.union.val = sqlDollar[1].union.namePart()
 		}
 	case 767:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4269
+		//line sql.y:4273
 		{
 			sqlVAL.union.val = sqlDollar[1].union.namePart()
 		}
 	case 768:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4273
+		//line sql.y:4277
 		{
 			sqlVAL.union.val = &ArraySubscript{Begin: sqlDollar[2].union.expr()}
 		}
 	case 769:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:4277
+		//line sql.y:4281
 		{
 			sqlVAL.union.val = &ArraySubscript{Begin: sqlDollar[2].union.expr(), End: sqlDollar[4].union.expr()}
 		}
 	case 770:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4283
+		//line sql.y:4287
 		{
 			sqlVAL.union.val = Name(sqlDollar[2].str)
 		}
 	case 771:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4289
+		//line sql.y:4293
 		{
 			sqlVAL.union.val = UnqualifiedStar{}
 		}
 	case 772:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4295
+		//line sql.y:4299
 		{
 			sqlVAL.union.val = UnresolvedName{sqlDollar[1].union.namePart()}
 		}
 	case 773:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4299
+		//line sql.y:4303
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.unresolvedName(), sqlDollar[2].union.namePart())
 		}
 	case 774:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4304
+		//line sql.y:4308
 		{
 		}
 	case 775:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4305
+		//line sql.y:4309
 		{
 		}
 	case 777:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4314
+		//line sql.y:4318
 		{
 			sqlVAL.union.val = DefaultVal{}
 		}
 	case 778:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4320
+		//line sql.y:4324
 		{
 			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr()}
 		}
 	case 779:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4324
+		//line sql.y:4328
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.exprs(), sqlDollar[3].union.expr())
 		}
 	case 780:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4333
+		//line sql.y:4337
 		{
 			sqlVAL.union.val = sqlDollar[2].union.exprs()
 		}
 	case 781:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4339
+		//line sql.y:4343
 		{
 			sqlVAL.union.val = SelectExprs{sqlDollar[1].union.selExpr()}
 		}
 	case 782:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4343
+		//line sql.y:4347
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.selExprs(), sqlDollar[3].union.selExpr())
 		}
 	case 783:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4349
+		//line sql.y:4353
 		{
 			sqlVAL.union.val = SelectExpr{Expr: sqlDollar[1].union.expr(), As: Name(sqlDollar[3].str)}
 		}
 	case 784:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4358
+		//line sql.y:4362
 		{
 			sqlVAL.union.val = SelectExpr{Expr: sqlDollar[1].union.expr(), As: Name(sqlDollar[2].str)}
 		}
 	case 785:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4362
+		//line sql.y:4366
 		{
 			sqlVAL.union.val = SelectExpr{Expr: sqlDollar[1].union.expr()}
 		}
 	case 786:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4366
+		//line sql.y:4370
 		{
 			sqlVAL.union.val = starSelectExpr()
 		}
 	case 787:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4374
+		//line sql.y:4378
 		{
 			sqlVAL.union.val = UnresolvedNames{sqlDollar[1].union.unresolvedName()}
 		}
 	case 788:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4378
+		//line sql.y:4382
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.unresolvedNames(), sqlDollar[3].union.unresolvedName())
 		}
 	case 789:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4384
+		//line sql.y:4388
 		{
 			sqlVAL.union.val = TableNameWithIndexList{sqlDollar[1].union.tableWithIdx()}
 		}
 	case 790:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4388
+		//line sql.y:4392
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.tableWithIdxList(), sqlDollar[3].union.tableWithIdx())
 		}
 	case 791:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4394
+		//line sql.y:4398
 		{
 			sqlVAL.union.val = TablePatterns{sqlDollar[1].union.unresolvedName()}
 		}
 	case 792:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4398
+		//line sql.y:4402
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.tablePatterns(), sqlDollar[3].union.unresolvedName())
 		}
 	case 793:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4409
+		//line sql.y:4413
 		{
 			sqlVAL.union.val = UnresolvedName{Name(sqlDollar[1].str)}
 		}
 	case 794:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4413
+		//line sql.y:4417
 		{
 			sqlVAL.union.val = append(UnresolvedName{Name(sqlDollar[1].str)}, sqlDollar[2].union.unresolvedName()...)
 		}
 	case 795:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4419
+		//line sql.y:4423
 		{
 			sqlVAL.union.val = &TableNameWithIndex{Table: sqlDollar[1].union.normalizableTableName(), Index: Name(sqlDollar[3].str)}
 		}
 	case 796:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4423
+		//line sql.y:4427
 		{
 			sqlVAL.union.val = &TableNameWithIndex{Table: sqlDollar[1].union.normalizableTableName(), SearchTable: true}
 		}
 	case 797:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4434
+		//line sql.y:4438
 		{
 			sqlVAL.union.val = UnresolvedName{Name(sqlDollar[1].str)}
 		}
 	case 798:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4438
+		//line sql.y:4442
 		{
 			sqlVAL.union.val = UnresolvedName{UnqualifiedStar{}}
 		}
 	case 799:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4442
+		//line sql.y:4446
 		{
 			sqlVAL.union.val = UnresolvedName{Name(sqlDollar[1].str), sqlDollar[2].union.namePart()}
 		}
 	case 800:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4446
+		//line sql.y:4450
 		{
 			sqlVAL.union.val = UnresolvedName{Name(sqlDollar[1].str), sqlDollar[2].union.namePart()}
 		}
 	case 801:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4452
+		//line sql.y:4456
 		{
 			sqlVAL.union.val = NameList{Name(sqlDollar[1].str)}
 		}
 	case 802:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4456
+		//line sql.y:4460
 		{
 			sqlVAL.union.val = append(sqlDollar[1].union.nameList(), Name(sqlDollar[3].str))
 		}
 	case 803:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4462
+		//line sql.y:4466
 		{
 			sqlVAL.union.val = sqlDollar[2].union.nameList()
 		}
 	case 804:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4465
+		//line sql.y:4469
 		{
 		}
 	case 805:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4475
+		//line sql.y:4479
 		{
 			sqlVAL.union.val = UnresolvedName{Name(sqlDollar[1].str)}
 		}
 	case 806:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4479
+		//line sql.y:4483
 		{
 			sqlVAL.union.val = append(UnresolvedName{Name(sqlDollar[1].str)}, sqlDollar[2].union.unresolvedName()...)
 		}
 	case 807:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4486
+		//line sql.y:4490
 		{
 			sqlVAL.union.val = sqlDollar[1].union.numVal()
 		}
 	case 808:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4490
+		//line sql.y:4494
 		{
 			sqlVAL.union.val = sqlDollar[1].union.numVal()
 		}
 	case 809:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4494
+		//line sql.y:4498
 		{
 			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 810:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4498
+		//line sql.y:4502
 		{
 			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str, bytesEsc: true}
 		}
 	case 811:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:4501
+		//line sql.y:4505
 		{
 			return unimplemented(sqllex)
 		}
 	case 812:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4503
+		//line sql.y:4507
 		{
 			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType(), syntaxMode: castPrefix}
 		}
 	case 813:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4507
+		//line sql.y:4511
 		{
 			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType(), syntaxMode: castPrefix}
 		}
 	case 814:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:4511
+		//line sql.y:4515
 		{
 			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[5].str}, Type: sqlDollar[1].union.colType(), syntaxMode: castPrefixParens}
 		}
 	case 815:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4515
+		//line sql.y:4519
 		{
 			sqlVAL.union.val = MakeDBool(true)
 		}
 	case 816:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4519
+		//line sql.y:4523
 		{
 			sqlVAL.union.val = MakeDBool(false)
 		}
 	case 817:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:4523
+		//line sql.y:4527
 		{
 			sqlVAL.union.val = DNull
 		}
 	case 819:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4530
+		//line sql.y:4534
 		{
 			sqlVAL.union.val = sqlDollar[2].union.numVal()
 		}
 	case 820:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:4534
+		//line sql.y:4538
 		{
 			sqlVAL.union.val = &NumVal{Value: constant.UnaryOp(token.SUB, sqlDollar[2].union.numVal().Value, 0)}
 		}
 	case 825:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4556
+		//line sql.y:4560
 		{
 			sqlVAL.str = ""
 		}
 	case 826:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:4562
+		//line sql.y:4566
 		{
 			sqlVAL.str = sqlDollar[2].str
 		}
 	case 827:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:4566
+		//line sql.y:4570
 		{
 			sqlVAL.str = ""
 		}

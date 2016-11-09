@@ -38,6 +38,7 @@ message ColumnType {
     STRING = 7;     // STRING(width)
     BYTES = 8;
     TIMESTAMPTZ = 9;
+    INT_ARRAY = 10;
   }
 
   optional Kind kind = 1 [(gogoproto.nullable) = false];

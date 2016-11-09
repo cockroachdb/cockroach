@@ -103,6 +103,13 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 		return parser.NewDBytes(parser.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
 		return &parser.DTimestampTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+	case ColumnType_INT_ARRAY:
+		d := parser.NewDArray(parser.TypeInt)
+		d.Array = make([]parser.Datum, rng.Intn(10))
+		for i := range d.Array {
+			d.Array[i] = parser.NewDInt(parser.DInt(rng.Int63()))
+		}
+		return d
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ))
 	}

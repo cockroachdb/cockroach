@@ -1558,6 +1558,8 @@ func (c *ColumnType) SQLString() string {
 		}
 	case ColumnType_TIMESTAMPTZ:
 		return "TIMESTAMP WITH TIME ZONE"
+	case ColumnType_INT_ARRAY:
+		return "INT[]"
 	}
 	return c.Kind.String()
 }
@@ -1647,6 +1649,8 @@ func (k ColumnType_Kind) ToDatumType() parser.Type {
 		return parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		return parser.TypeInterval
+	case ColumnType_INT_ARRAY:
+		return parser.TypeIntArray
 	}
 	return nil
 }
