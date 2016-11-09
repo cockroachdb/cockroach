@@ -1918,11 +1918,11 @@ func (s *Store) removePlaceholder(rngID roachpb.RangeID) bool {
 }
 
 func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
-	repl, ok := s.mu.replicaPlaceholders[rngID]
+	placeholder, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
 		return false
 	}
-	switch exRng := s.mu.replicasByKey.Delete(repl).(type) {
+	switch exRng := s.mu.replicasByKey.Delete(placeholder).(type) {
 	case *ReplicaPlaceholder:
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
@@ -2324,7 +2324,6 @@ func (s *Store) Send(
 		}
 		return r.Next()
 	}
-	var repl *Replica
 
 	// Add the command to the range for execution; exit retry loop on success.
 	s.mu.Lock()
@@ -2332,8 +2331,7 @@ func (s *Store) Send(
 	s.mu.Unlock()
 	for r := retry.StartWithCtx(ctx, retryOpts); next(&r); {
 		// Get range and add command to the range for execution.
-		var err error
-		repl, err = s.GetReplica(ba.RangeID)
+		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
 			pErr = roachpb.NewError(err)
 			return nil, pErr
@@ -3413,13 +3411,13 @@ func (s *Store) tryGetOrCreateReplica(
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
 	s.mu.Lock()
-	r, ok := s.mu.replicas[rangeID]
+	repl, ok := s.mu.replicas[rangeID]
 	s.mu.Unlock()
 	if ok {
 		if creatingReplica != nil {
 			// Drop messages that come from a node that we believe was once a member of
 			// the group but has been removed.
-			desc := r.Desc()
+			desc := repl.Desc()
 			_, found := desc.GetReplicaDescriptorByID(creatingReplica.ReplicaID)
 			// It's not a current member of the group. Is it from the past?
 			if !found && creatingReplica.ReplicaID < desc.NextReplicaID {
@@ -3427,22 +3425,22 @@ func (s *Store) tryGetOrCreateReplica(
 			}
 		}
 
-		r.raftMu.Lock()
-		r.mu.Lock()
-		destroyed, corrupted := r.mu.destroyed, r.mu.corrupted
-		r.mu.Unlock()
+		repl.raftMu.Lock()
+		repl.mu.Lock()
+		destroyed, corrupted := repl.mu.destroyed, repl.mu.corrupted
+		repl.mu.Unlock()
 		if destroyed != nil {
-			r.raftMu.Unlock()
+			repl.raftMu.Unlock()
 			if corrupted {
 				return nil, false, destroyed
 			}
 			return nil, false, errRetry
 		}
-		if err := r.setReplicaID(replicaID); err != nil {
-			r.raftMu.Unlock()
+		if err := repl.setReplicaID(replicaID); err != nil {
+			repl.raftMu.Unlock()
 			return nil, false, err
 		}
-		return r, false, nil
+		return repl, false, nil
 	}
 
 	ctx := s.AnnotateCtx(context.TODO())
@@ -3463,9 +3461,9 @@ func (s *Store) tryGetOrCreateReplica(
 	}
 
 	// Create a new replica and lock it for raft processing.
-	r = newReplica(rangeID, s)
-	r.creatingReplica = creatingReplica
-	r.raftMu.Lock()
+	repl = newReplica(rangeID, s)
+	repl.creatingReplica = creatingReplica
+	repl.raftMu.Lock()
 
 	// Install the replica in the store's replica map. The replica is in an
 	// inconsistent state, but nobody will be accessing it while we hold its
@@ -3474,18 +3472,18 @@ func (s *Store) tryGetOrCreateReplica(
 	// Grab the internal Replica state lock to ensure nobody mucks with our
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
-	r.mu.Lock()
+	repl.mu.Lock()
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
 	// might have snuck in and created the replica, so we retry on error.
-	if s.addReplicaToRangeMapLocked(r) != nil {
-		r.mu.Unlock()
+	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
+		repl.mu.Unlock()
 		s.mu.Unlock()
-		r.raftMu.Unlock()
+		repl.raftMu.Unlock()
 		return nil, false, errRetry
 	}
-	s.mu.uninitReplicas[r.RangeID] = r
+	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock()
 
 	desc := &roachpb.RangeDescriptor{
@@ -3493,21 +3491,21 @@ func (s *Store) tryGetOrCreateReplica(
 		// TODO(bdarnell): other fields are unknown; need to populate them from
 		// snapshot.
 	}
-	if err := r.initLocked(desc, s.Clock(), replicaID); err != nil {
+	if err := repl.initLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		r.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", r)
-		r.mu.Unlock()
+		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)
+		repl.mu.Unlock()
 		s.mu.Lock()
 		delete(s.mu.replicas, rangeID)
 		delete(s.mu.replicaQueues, rangeID)
 		delete(s.mu.uninitReplicas, rangeID)
 		s.mu.Unlock()
-		r.raftMu.Unlock()
+		repl.raftMu.Unlock()
 		return nil, false, err
 	}
-	r.mu.Unlock()
-	return r, true, nil
+	repl.mu.Unlock()
+	return repl, true, nil
 }
 
 // canApplySnapshot returns (_, nil) if the snapshot can be applied to
