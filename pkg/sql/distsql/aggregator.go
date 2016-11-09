@@ -175,9 +175,16 @@ func (ag *aggregator) computeAggregates() error {
 		}
 
 		row := ag.rowAlloc.AllocRow(len(tuple))
-		err := sqlbase.DTupleToEncDatumRow(row, tuple)
-		if err != nil {
-			return err
+		if len(row) != len(tuple) {
+			return errors.Errorf(
+				"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
+		}
+		for i, datum := range tuple {
+			encD, err := sqlbase.DatumToEncDatumWithInferredType(datum)
+			if err != nil {
+				return err
+			}
+			row[i] = encD
 		}
 
 		if ok := ag.rows.PushRow(row); !ok {

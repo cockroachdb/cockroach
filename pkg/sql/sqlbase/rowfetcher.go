@@ -74,14 +74,13 @@ type RowFetcher struct {
 
 	// -- Fields updated during a scan --
 
-	kvFetcher        kvFetcher
-	keyValTypes      []parser.Type  // the index key value types for the current row
-	keyVals          []parser.Datum // the index key values for the current row
-	implicitValTypes []parser.Type  // the implicit value types for unique indexes
-	implicitVals     []parser.Datum // the implicit values for unique indexes
-	indexKey         []byte         // the index key of the current row
-	row              parser.DTuple
-	prettyValueBuf   bytes.Buffer
+	kvFetcher      kvFetcher
+	keyVals        []EncDatum  // the index key values for the current row
+	implicitVals   EncDatumRow // the implicit values for unique indexes
+	indexKey       []byte      // the index key of the current row
+	row            EncDatumRow
+	decodedRow     parser.DTuple
+	prettyValueBuf bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
 	kv                client.KeyValue
@@ -110,7 +109,8 @@ func (rf *RowFetcher) Init(
 	rf.isSecondaryIndex = isSecondaryIndex
 	rf.cols = cols
 	rf.valNeededForCol = valNeededForCol
-	rf.row = make([]parser.Datum, len(rf.cols))
+	rf.row = make([]EncDatum, len(rf.cols))
+	rf.decodedRow = make([]parser.Datum, len(rf.cols))
 
 	var indexColumnIDs []ColumnID
 	indexColumnIDs, rf.indexColumnDirs = index.FullColumnIDs()
@@ -130,22 +130,20 @@ func (rf *RowFetcher) Init(
 
 	var err error
 	// Prepare our index key vals slice.
-	rf.keyValTypes, err = MakeKeyVals(rf.desc, indexColumnIDs)
+	rf.keyVals, err = MakeEncodedKeyVals(rf.desc, indexColumnIDs)
 	if err != nil {
 		return err
 	}
-	rf.keyVals = make([]parser.Datum, len(rf.keyValTypes))
 
 	if isSecondaryIndex && index.Unique {
 		// Unique secondary indexes have a value that is the primary index
 		// key. Prepare implicitVals for use in decoding this value.
 		// Primary indexes only contain ascendingly-encoded values. If this
 		// ever changes, we'll probably have to figure out the directions here too.
-		rf.implicitValTypes, err = MakeKeyVals(desc, index.ImplicitColumnIDs)
+		rf.implicitVals, err = MakeEncodedKeyVals(desc, index.ImplicitColumnIDs)
 		if err != nil {
 			return err
 		}
-		rf.implicitVals = make([]parser.Datum, len(rf.implicitValTypes))
 	}
 	return nil
 }
@@ -238,17 +236,20 @@ func (rf *RowFetcher) NextKey() (rowDone bool, err error) {
 	}
 }
 
-func prettyDatums(vals []parser.Datum) string {
+func prettyEncDatums(vals []EncDatum) string {
 	var buf bytes.Buffer
 	for _, v := range vals {
-		fmt.Fprintf(&buf, "/%v", v)
+		if err := v.EnsureDecoded(&DatumAlloc{}); err != nil {
+			fmt.Fprintf(&buf, "error decoding: %v", err)
+		}
+		fmt.Fprintf(&buf, "/%v", v.Datum)
 	}
 	return buf.String()
 }
 
 // ReadIndexKey decodes an index key for the fetcher's table.
 func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, err error) {
-	return DecodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyValTypes, rf.keyVals,
+	return DecodeIndexKey(&rf.alloc, rf.desc, rf.index.ID, rf.keyVals,
 		rf.indexColumnDirs, k)
 }
 
@@ -259,7 +260,7 @@ func (rf *RowFetcher) ProcessKV(
 	kv client.KeyValue, debugStrings bool,
 ) (prettyKey string, prettyValue string, err error) {
 	if debugStrings {
-		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyDatums(rf.keyVals))
+		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyEncDatums(rf.keyVals))
 	}
 
 	if rf.indexKey == nil {
@@ -269,7 +270,7 @@ func (rf *RowFetcher) ProcessKV(
 		// Reset the row to nil; it will get filled in with the column
 		// values as we decode the key-value pairs for the row.
 		for i := range rf.row {
-			rf.row[i] = nil
+			rf.row[i].UnsetDatum()
 		}
 
 		// Fill in the column values that are part of the index key.
@@ -302,8 +303,7 @@ func (rf *RowFetcher) ProcessKV(
 		if rf.implicitVals != nil {
 			// This is a unique index; decode the implicit column values from
 			// the value.
-			_, err := DecodeKeyVals(&rf.alloc, rf.implicitValTypes, rf.implicitVals, nil,
-				kv.ValueBytes())
+			_, err := DecodeKeyVals(&rf.alloc, rf.implicitVals, nil, kv.ValueBytes())
 			if err != nil {
 				return "", "", err
 			}
@@ -313,13 +313,13 @@ func (rf *RowFetcher) ProcessKV(
 				}
 			}
 			if debugStrings {
-				prettyValue = prettyDatums(rf.implicitVals)
+				prettyValue = prettyEncDatums(rf.implicitVals)
 			}
 		}
 
 		if log.V(2) {
 			if rf.implicitVals != nil {
-				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyDatums(rf.implicitVals))
+				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyEncDatums(rf.implicitVals))
 			} else {
 				log.Infof(context.TODO(), "Scan %s", kv.Key)
 			}
@@ -358,8 +358,6 @@ func (rf *RowFetcher) processValueSingle(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 		}
 		kind := rf.cols[idx].Type.Kind
-		// TODO(dan): Once we decide if we're changing the tuple encoding, see if we
-		// can get rid of UnmarshalColumnValue in favor of DecodeTableValue.
 		value, err := UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
 		if err != nil {
 			return "", "", err
@@ -367,10 +365,10 @@ func (rf *RowFetcher) processValueSingle(
 		if debugStrings {
 			prettyValue = value.String()
 		}
-		if rf.row[idx] != nil {
+		if !rf.row[idx].IsUnset() {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
-		rf.row[idx] = value
+		rf.row[idx] = DatumToEncDatum(rf.cols[idx].Type.Kind, value)
 		if log.V(3) {
 			log.Infof(context.TODO(), "Scan %s -> %v", kv.Key, value)
 		}
@@ -411,17 +409,13 @@ func (rf *RowFetcher) processValueTuple(
 		colID := lastColID + ColumnID(colIDDiff)
 		lastColID = colID
 		idx, ok := rf.colIdxMap[colID]
-		// TODO(dan): Ideally rowFetcher would generate EncDatums instead of Datums
-		// and that would make the logic simpler. We won't need valNeededForCol at
-		// all, it would be up to the user of the class to decide if they want to
-		// decode them or not.
 		if !ok || !rf.valNeededForCol[idx] {
 			// This column wasn't requested, so read its length and skip it.
-			_, i, err := encoding.PeekValueLength(tupleBytes)
+			_, len, err := encoding.PeekValueLength(tupleBytes)
 			if err != nil {
 				return "", "", err
 			}
-			tupleBytes = tupleBytes[i:]
+			tupleBytes = tupleBytes[len:]
 			if log.V(3) {
 				log.Infof(context.TODO(), "Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
@@ -432,18 +426,27 @@ func (rf *RowFetcher) processValueTuple(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 		}
 
-		kind := rf.cols[idx].Type.Kind.ToDatumType()
-		value, tupleBytes, err = DecodeTableValue(&rf.alloc, kind, tupleBytes)
+		kind := rf.cols[idx].Type.Kind
+		if err != nil {
+			return "", "", err
+		}
+		var encValue EncDatum
+		encValue, tupleBytes, err = EncDatumFromBuffer(kind, DatumEncoding_VALUE, tupleBytes)
 		if err != nil {
 			return "", "", err
 		}
 		if debugStrings {
+			err := encValue.EnsureDecoded(&rf.alloc)
+			if err != nil {
+				return "", "", err
+			}
+			value = encValue.Datum
 			fmt.Fprintf(&rf.prettyValueBuf, "/%v", value)
 		}
-		if rf.row[idx] != nil {
+		if !rf.row[idx].IsUnset() {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
-		rf.row[idx] = value
+		rf.row[idx] = encValue
 		if log.V(3) {
 			log.Infof(context.TODO(), "Scan %d -> %v", idx, value)
 		}
@@ -455,13 +458,12 @@ func (rf *RowFetcher) processValueTuple(
 	return prettyKey, prettyValue, nil
 }
 
-// NextRow processes keys until we complete one row, which is returned as a
-// DTuple. The row contains one value per table column, regardless of the index
-// used; values that are not needed (as per valNeededForCol) are nil.
-//
-// The DTuple should not be modified and is only valid until the next call. When
-// there are no more rows, the DTuple is nil.
-func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
+// NextRow processes keys until we complete one row, which is returned as an
+// EncDatumRow. The row contains one value per table column, regardless of the
+// index used; values that are not needed (as per valNeededForCol) are nil. The
+// EncDatumRow should not be modified and is only valid until the next call.
+// When there are no more rows, the EncDatumRow is nil.
+func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -488,10 +490,28 @@ func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
 	}
 }
 
+// NextRowDecoded calls NextRow and decodes the EncDatumRow into a DTuple.
+// The DTuple should not be modified and is only valid until the next call.
+// When there are no more rows, the DTuple is nil.
+func (rf *RowFetcher) NextRowDecoded() (parser.DTuple, error) {
+	encRow, err := rf.NextRow()
+	if err != nil {
+		return nil, err
+	}
+	if encRow == nil {
+		return nil, nil
+	}
+	err = EncDatumRowToDTuple(rf.decodedRow, encRow, &rf.alloc)
+	if err != nil {
+		return nil, err
+	}
+	return rf.decodedRow, nil
+}
+
 // NextKeyDebug processes one key at a time and returns a pretty printed key and
 // value. If we completed a row, the row is returned as well (see nextRow). If
 // there are no more keys, prettyKey is "".
-func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row parser.DTuple, err error) {
+func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row EncDatumRow, err error) {
 	if rf.kvEnd {
 		return "", "", nil, nil
 	}
@@ -513,11 +533,14 @@ func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row 
 func (rf *RowFetcher) finalizeRow() {
 	// Fill in any missing values with NULLs
 	for i, col := range rf.cols {
-		if rf.valNeededForCol[i] && rf.row[i] == nil {
+		if rf.valNeededForCol[i] && rf.row[i].IsUnset() {
 			if !col.Nullable {
 				panic("Non-nullable column with no value!")
 			}
-			rf.row[i] = parser.DNull
+			rf.row[i] = EncDatum{
+				Type:  col.Type.Kind,
+				Datum: parser.DNull,
+			}
 		}
 	}
 }
