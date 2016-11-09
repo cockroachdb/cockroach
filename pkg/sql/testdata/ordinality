@@ -1,0 +1,67 @@
+query TI colnames
+SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
+----
+name i
+a 1
+b 2
+
+query I colnames
+SELECT ordinality FROM (VALUES ('a'), ('b')) WITH ORDINALITY
+----
+ordinality
+1
+2
+
+statement ok
+CREATE TABLE foo (x CHAR); INSERT INTO foo(x) VALUES ('a'), ('b')
+
+query TI
+SELECT * FROM foo WITH ORDINALITY
+----
+a 1
+b 2
+
+query TI
+SELECT * FROM foo WITH ORDINALITY LIMIT 1
+----
+a 1
+
+query I
+SELECT MAX(ordinality) FROM foo WITH ORDINALITY
+----
+2
+
+query TITI
+SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
+----
+a 1 a 1
+a 1 b 2
+b 2 a 1
+b 2 b 2
+
+query TI
+SELECT * FROM (SELECT x||x FROM foo) WITH ORDINALITY
+----
+aa 1
+bb 2
+
+query TII
+SELECT * FROM (SELECT x, ordinality*2 FROM foo WITH ORDINALITY AS a) JOIN foo WITH ORDINALITY AS b USING(x)
+----
+a 2 1
+b 4 2
+
+statement ok
+INSERT INTO foo(x) VALUES ('c')
+
+query TI
+SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
+----
+b 2
+c 3
+
+query TI
+SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
+----
+b 1
+c 2

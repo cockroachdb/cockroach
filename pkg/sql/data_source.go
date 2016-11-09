@@ -270,6 +270,19 @@ func (p *planner) getDataSource(
 			return src, err
 		}
 
+		if t.Ordinality {
+			// The ordinality number the rows coming out of the data source.
+			// See the comments next to the definition of `ordinalityNode`
+			// in particular how this restricts optimizations.
+			newPlan, err := p.wrapOrdinality(src.plan)
+			if err != nil {
+				return src, err
+			}
+			newColumns := newPlan.Columns()
+			src.plan = newPlan
+			src.info.sourceColumns = append(src.info.sourceColumns, newColumns[len(newColumns)-1])
+		}
+
 		var tableAlias parser.TableName
 		if t.As.Alias != "" {
 			// If an alias was specified, use that.

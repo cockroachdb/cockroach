@@ -213,6 +213,7 @@ var _ planNode = &sortNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &ordinalityNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
