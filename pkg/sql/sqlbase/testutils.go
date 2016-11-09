@@ -103,14 +103,25 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 		return parser.NewDBytes(parser.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
 		return &parser.DTimestampTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+	case ColumnType_INT_ARRAY:
+		// TODO(cuongdo): we don't support for persistence of arrays yet
+		return parser.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ))
 	}
 }
 
+var columnTypes []ColumnType_Kind
+
+func init() {
+	for k := range ColumnType_Kind_name {
+		columnTypes = append(columnTypes, ColumnType_Kind(k))
+	}
+}
+
 // RandColumnType returns a random ColumnType_Kind value.
 func RandColumnType(rng *rand.Rand) ColumnType_Kind {
-	return ColumnType_Kind(rng.Intn(len(ColumnType_Kind_value)))
+	return columnTypes[rng.Intn(len(columnTypes))]
 }
 
 // RandDatumEncoding returns a random DatumEncoding value.

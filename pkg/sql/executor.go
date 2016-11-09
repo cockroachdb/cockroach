@@ -1328,7 +1328,8 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestamp:
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
-	case parser.TypeArray:
+	case parser.TypeStringArray:
+	case parser.TypeIntArray:
 	default:
 		return errors.Errorf("unsupported result type: %s", typ)
 	}

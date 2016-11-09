@@ -1210,31 +1210,33 @@ var Builtins = map[string][]Builtin{
 
 	"array_length": {
 		Builtin{
-			Types:      ArgTypes{TypeArray, TypeInt},
+			// TODO(nvanbenschoten): Make this work with all types of arrays.
+			Types:      ArgTypes{TypeStringArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				arr := *args[0].(*DArray)
 				dimen := *args[1].(*DInt)
 				// We do not currently support multi-dimensional arrays.
-				if dimen != 1 || len(arr) == 0 {
+				if dimen != 1 || arr.Len() == 0 {
 					return DNull, nil
 				}
-				return NewDInt(DInt(len(arr))), nil
+				return NewDInt(DInt(arr.Len())), nil
 			},
 		},
 	},
 
 	"array_lower": {
 		Builtin{
-			Types:      ArgTypes{TypeArray, TypeInt},
+			// TODO(nvanbenschoten): Make this work with all types of arrays.
+			Types:      ArgTypes{TypeStringArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				arr := *args[0].(*DArray)
 				dimen := *args[1].(*DInt)
 				// We do not currently support multi-dimensional arrays.
-				if dimen != 1 || len(arr) == 0 {
+				if dimen != 1 || arr.Len() == 0 {
 					return DNull, nil
 				}
 				return NewDInt(DInt(1)), nil
@@ -1244,17 +1246,18 @@ var Builtins = map[string][]Builtin{
 
 	"array_upper": {
 		Builtin{
-			Types:      ArgTypes{TypeArray, TypeInt},
+			// TODO(nvanbenschoten): Make this work with all types of arrays.
+			Types:      ArgTypes{TypeStringArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				arr := *args[0].(*DArray)
 				dimen := *args[1].(*DInt)
 				// We do not currently support multi-dimensional arrays.
-				if dimen != 1 || len(arr) == 0 {
+				if dimen != 1 || arr.Len() == 0 {
 					return DNull, nil
 				}
-				return NewDInt(DInt(len(arr))), nil
+				return NewDInt(DInt(arr.Len())), nil
 			},
 		},
 	},
@@ -1292,20 +1295,24 @@ var Builtins = map[string][]Builtin{
 	"current_schemas": {
 		Builtin{
 			Types:      ArgTypes{TypeBool},
-			ReturnType: TypeArray,
+			ReturnType: TypeStringArray,
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				var schemas DArray
+				schemas := NewDArray(TypeString)
 				showImplicitSchemas := args[0].(*DBool)
 				if showImplicitSchemas == DBoolTrue {
 					for _, p := range ctx.SearchPath {
-						schemas = append(schemas, NewDString(p))
+						if err := schemas.Append(NewDString(p)); err != nil {
+							return nil, err
+						}
 					}
 				}
 				if len(ctx.Database) != 0 {
-					schemas = append(schemas, NewDString(ctx.Database))
+					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
+						return nil, err
+					}
 				}
-				return &schemas, nil
+				return schemas, nil
 			},
 		},
 	},

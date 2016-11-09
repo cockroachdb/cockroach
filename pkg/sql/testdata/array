@@ -3,8 +3,10 @@
 query error cannot determine type of empty array
 SELECT ARRAY[]
 
-query error unhandled parameterized array type parser.tInt
+query T
 SELECT ARRAY[1, 2, 3]
+----
+{1,2,3}
 
 query error expected true to be of type string, found type bool
 SELECT ARRAY['a', true, 1]
@@ -51,6 +53,37 @@ query T
 SELECT (ARRAY['a', 'b', 'c'])[1.5 + 1.5]
 ----
 c
+
+query I
+SELECT (ARRAY[1, 2, 3])[-1]
+----
+NULL
+
+query I
+SELECT (ARRAY[1, 2, 3])[0]
+----
+NULL
+
+query I
+SELECT (ARRAY[1, 2, 3])[2]
+----
+2
+
+query I
+SELECT (ARRAY[1, 2, 3])[4]
+----
+NULL
+
+query I
+SELECT ((SELECT ARRAY[1, 2, 3]))[3]
+----
+3
+
+query I
+SELECT (ARRAY[1, 2, 3])[1.5 + 1.5]
+----
+3
+
 
 query error unimplemented: multidimensional ARRAY
 SELECT (ARRAY['a', 'b', 'c'])[4][2]
