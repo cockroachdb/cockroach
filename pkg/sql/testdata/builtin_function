@@ -1174,3 +1174,7 @@ SELECT TO_IP('')
 query error pq: TO_IP: Invalid IP format: 'asdf'
 select TO_IP('asdf')
 
+query R
+select ln(4.0786335175292462e+34::decimal)
+----
+79.6936551719404616
