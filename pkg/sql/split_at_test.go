@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -128,7 +129,7 @@ func TestSplitAt(t *testing.T) {
 			}
 		} else {
 			// Successful split, verify it happened.
-			rng, err := serverutils.LookupRange(s.DistSender(), key)
+			rng, err := s.(*server.TestServer).LookupRange(key)
 			if err != nil {
 				t.Fatal(err)
 			}
