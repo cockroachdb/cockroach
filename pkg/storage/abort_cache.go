@@ -30,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var errEmptyTxnID = errors.New("empty Transaction ID used in abort cache")
-
 // The AbortCache sets markers for aborted transactions to provide
 // protection against an aborted but active transaction not reading
 // values it wrote (due to its intents having been removed).
@@ -57,17 +55,16 @@ func NewAbortCache(rangeID roachpb.RangeID) *AbortCache {
 	}
 }
 
-var txnIDMin = new(uuid.UUID)
-var txnIDMax = new(uuid.UUID)
-
-func init() {
-	for i := range txnIDMin.GetBytes() {
-		txnIDMin.UUID[i] = '\x00'
+func fillUUID(b byte) uuid.UUID {
+	var ret uuid.UUID
+	for i := range ret.GetBytes() {
+		ret.UUID[i] = b
 	}
-	for i := range txnIDMax.GetBytes() {
-		txnIDMax.UUID[i] = '\xff'
-	}
+	return ret
 }
+
+var txnIDMin = fillUUID('\x00')
+var txnIDMax = fillUUID('\xff')
 
 func (sc *AbortCache) min() roachpb.Key {
 	return keys.AbortCacheKey(sc.rangeID, txnIDMin)
@@ -91,11 +88,8 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 // Get looks up an abort cache entry recorded for this transaction ID.
 // Returns whether an abort record was found and any error.
 func (sc *AbortCache) Get(
-	ctx context.Context, e engine.Reader, txnID *uuid.UUID, entry *roachpb.AbortCacheEntry,
+	ctx context.Context, e engine.Reader, txnID uuid.UUID, entry *roachpb.AbortCacheEntry,
 ) (bool, error) {
-	if txnID == nil {
-		return false, errEmptyTxnID
-	}
 
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
@@ -108,20 +102,19 @@ func (sc *AbortCache) Get(
 // entry.
 // TODO(tschottdorf): should not use a pointer to UUID.
 func (sc *AbortCache) Iterate(
-	ctx context.Context, e engine.Reader, f func([]byte, *uuid.UUID, roachpb.AbortCacheEntry),
+	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortCacheEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortCacheEntry
-			txnID, err := keys.DecodeAbortCacheKey(kv.Key, nil)
-			if err != nil {
+			if _, err := keys.DecodeAbortCacheKey(kv.Key, nil); err != nil {
 				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 			}
 			if err := kv.Value.GetProto(&entry); err != nil {
 				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 			}
-			f(kv.Key, txnID, entry)
+			f(kv.Key, entry)
 			return false, nil
 		})
 }
@@ -197,7 +190,7 @@ func (sc *AbortCache) CopyFrom(
 
 // Del removes all abort cache entries for the given transaction.
 func (sc *AbortCache) Del(
-	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, txnID *uuid.UUID,
+	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
 	return engine.MVCCDelete(ctx, e, ms, key, hlc.ZeroTimestamp, nil /* txn */)
@@ -208,19 +201,16 @@ func (sc *AbortCache) Put(
 	ctx context.Context,
 	e engine.ReadWriter,
 	ms *enginepb.MVCCStats,
-	txnID *uuid.UUID,
+	txnID uuid.UUID,
 	entry *roachpb.AbortCacheEntry,
 ) error {
-	if txnID == nil {
-		return errEmptyTxnID
-	}
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
 	return engine.MVCCPutProto(ctx, e, ms, key, hlc.ZeroTimestamp, nil /* txn */, entry)
 }
 
-func decodeAbortCacheMVCCKey(encKey engine.MVCCKey, dest []byte) (*uuid.UUID, error) {
+func decodeAbortCacheMVCCKey(encKey engine.MVCCKey, dest []byte) (uuid.UUID, error) {
 	if encKey.IsValue() {
-		return nil, errors.Errorf("key %s is not a raw MVCC value", encKey)
+		return uuid.UUID{}, errors.Errorf("key %s is not a raw MVCC value", encKey)
 	}
 	return keys.DecodeAbortCacheKey(encKey.Key, dest)
 }

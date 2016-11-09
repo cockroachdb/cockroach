@@ -2593,7 +2593,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:        *snapUUID,
+				SnapUUID:        snapUUID,
 				RangeDescriptor: header.RangeDescriptor,
 				Batches:         batches,
 				LogEntries:      logEntries,

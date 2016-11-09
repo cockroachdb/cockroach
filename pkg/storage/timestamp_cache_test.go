@@ -494,13 +494,14 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 
 					txns := make([]txnState, len(testCase.spans))
 					if sameTxn {
-						id := uuid.NewV4()
+						id := uuid.MakeV4()
 						for i := range testCase.spans {
-							txns[i].id = id
+							txns[i].id = &id
 						}
 					} else {
 						for i := range testCase.spans {
-							txns[i].id = uuid.NewV4()
+							u := uuid.MakeV4()
+							txns[i].id = &u
 						}
 					}
 
@@ -571,12 +572,12 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, nil, true)
 
 	// Add two successive txn entries; one read-only and one read-write.
-	txn1ID := uuid.NewV4()
-	txn2ID := uuid.NewV4()
+	txn1ID := uuid.MakeV4()
+	txn2ID := uuid.MakeV4()
 	ts2 := clock.Now()
-	tc.add(roachpb.Key("a"), nil, ts2, txn1ID, true)
+	tc.add(roachpb.Key("a"), nil, ts2, &txn1ID, true)
 	ts3 := clock.Now()
-	tc.add(roachpb.Key("a"), nil, ts3, txn2ID, false)
+	tc.add(roachpb.Key("a"), nil, ts3, &txn2ID, false)
 
 	rTS, _, rOK := tc.GetMaxRead(roachpb.Key("a"), nil)
 	wTS, _, wOK := tc.GetMaxWrite(roachpb.Key("a"), nil)
@@ -594,23 +595,23 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
 
-	txn1 := uuid.NewV4()
-	txn2 := uuid.NewV4()
+	txn1 := uuid.MakeV4()
+	txn2 := uuid.MakeV4()
 
 	// Add two non-overlapping transactions at the same timestamp.
 	ts1 := clock.Now()
-	tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, txn1, true)
-	tc.add(roachpb.Key("b"), roachpb.Key("c"), ts1, txn2, true)
+	tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, &txn1, true)
+	tc.add(roachpb.Key("b"), roachpb.Key("c"), ts1, &txn2, true)
 
 	// When querying either side separately, the transaction ID is returned.
 	if ts, txn, _ := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); !ts.Equal(ts1) {
 		t.Errorf("expected 'a'-'b' to have timestamp %s, but found %s", ts1, ts)
-	} else if *txn != *txn1 {
+	} else if *txn != txn1 {
 		t.Errorf("expected 'a'-'b' to have txn id %s, but found %s", txn1, txn)
 	}
 	if ts, txn, _ := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); !ts.Equal(ts1) {
 		t.Errorf("expected 'b'-'c' to have timestamp %s, but found %s", ts1, ts)
-	} else if *txn != *txn2 {
+	} else if *txn != txn2 {
 		t.Errorf("expected 'b'-'c' to have txn id %s, but found %s", txn2, txn)
 	}
 

@@ -439,14 +439,14 @@ func snapshot(
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
-	snapUUID := uuid.NewV4()
+	snapUUID := uuid.MakeV4()
 
 	log.Infof(ctx, "generated snapshot %s at index %d in %s.",
 		snapUUID.Short(), appliedIndex, timeutil.Since(start))
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,
-		SnapUUID:   *snapUUID,
+		SnapUUID:   snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
