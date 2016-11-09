@@ -337,7 +337,7 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	// Set the cluster ID to the empty UUID.
 	sIdent := roachpb.StoreIdent{
-		ClusterID: *uuid.EmptyUUID,
+		ClusterID: uuid.UUID{},
 		NodeID:    1,
 		StoreID:   1,
 	}

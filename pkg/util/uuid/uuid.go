@@ -23,9 +23,6 @@ import (
 	"github.com/satori/go.uuid"
 )
 
-// EmptyUUID is the zero-UUID.
-var EmptyUUID = &UUID{}
-
 // UUID is a thin wrapper around "github.com/satori/go.uuid".UUID that can be
 // used as a gogo/protobuf customtype.
 type UUID struct {
@@ -34,18 +31,12 @@ type UUID struct {
 
 // String returns the canonical representation of the UUID. For nil UUIDs,
 // returns <nil>.
-func (u *UUID) String() string {
-	if u == nil {
-		return "<nil>"
-	}
+func (u UUID) String() string {
 	return u.UUID.String()
 }
 
 // Short returns the first eight characters of the output of String().
-func (u *UUID) Short() string {
-	if u == nil {
-		return u.String()
-	}
+func (u UUID) Short() string {
 	return u.String()[:8]
 }
 
@@ -85,12 +76,6 @@ func MakeV4() UUID {
 	return UUID{uuid.NewV4()}
 }
 
-// NewV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
-// a UUID.
-func NewV4() *UUID {
-	return &UUID{uuid.NewV4()}
-}
-
 // NewPopulatedUUID returns a populated UUID.
 func NewPopulatedUUID(r interface {
 	Int63() int64
@@ -103,14 +88,14 @@ func NewPopulatedUUID(r interface {
 
 // FromBytes delegates to "github.com/satori/go.uuid".FromBytes and wraps the
 // result in a UUID.
-func FromBytes(input []byte) (*UUID, error) {
+func FromBytes(input []byte) (UUID, error) {
 	u, err := uuid.FromBytes(input)
-	return &UUID{u}, err
+	return UUID{u}, err
 }
 
 // FromString delegates to "github.com/satori/go.uuid".FromString and wraps the
 // result in a UUID.
-func FromString(input string) (*UUID, error) {
+func FromString(input string) (UUID, error) {
 	u, err := uuid.FromString(input)
-	return &UUID{u}, err
+	return UUID{u}, err
 }

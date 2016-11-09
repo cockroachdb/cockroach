@@ -32,6 +32,8 @@ import (
 )
 
 func TestCloneProto(t *testing.T) {
+	u := uuid.MakeV4()
+
 	testCases := []struct {
 		pb          proto.Message
 		shouldPanic bool
@@ -39,7 +41,7 @@ func TestCloneProto(t *testing.T) {
 		{&roachpb.StoreIdent{}, false},
 		{&roachpb.StoreIdent{ClusterID: uuid.MakeV4()}, true},
 		{&enginepb.TxnMeta{}, false},
-		{&enginepb.TxnMeta{ID: uuid.NewV4()}, true},
+		{&enginepb.TxnMeta{ID: &u}, true},
 		{&roachpb.Transaction{}, false},
 		{&config.ZoneConfig{RangeMinBytes: 123, RangeMaxBytes: 456}, false},
 	}

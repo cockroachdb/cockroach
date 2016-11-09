@@ -484,8 +484,9 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	ds := NewDistSender(cfg, g)
 
+	u := uuid.MakeV4()
 	txn := &roachpb.Transaction{
-		TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()},
+		TxnMeta: enginepb.TxnMeta{ID: &u},
 	}
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.

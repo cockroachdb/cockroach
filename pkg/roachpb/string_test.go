@@ -41,7 +41,7 @@ func TestTransactionString(t *testing.T) {
 		TxnMeta: enginepb.TxnMeta{
 			Isolation: enginepb.SERIALIZABLE,
 			Key:       roachpb.Key("foo"),
-			ID:        txnID,
+			ID:        &txnID,
 			Epoch:     2,
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 21},
 			Priority:  957356782,

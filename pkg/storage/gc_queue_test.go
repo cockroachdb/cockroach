@@ -474,13 +474,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txn.Timestamp.Forward(hlc.MaxTimestamp)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
-			key := keys.TransactionKey(addrKey, txn.ID)
+			key := keys.TransactionKey(addrKey, *txn.ID)
 			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, hlc.ZeroTimestamp, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
 		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, *txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -499,7 +499,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
-			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
+			key := keys.TransactionKey(roachpb.Key(strKey), *txns[strKey].ID)
 			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.ZeroTimestamp, true, nil, txn)
 			if err != nil {
 				return err
@@ -520,7 +520,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 					strKey, expIntents, resolved[strKey])
 			}
 			entry := &roachpb.AbortCacheEntry{}
-			abortExists, err := tc.repl.abortCache.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
+			abortExists, err := tc.repl.abortCache.Get(context.Background(), tc.store.Engine(), *txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -531,8 +531,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		return nil
 	})
 
-	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.EmptyUUID)
-	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.EmptyUUID)
+	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
+	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
 	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.ZeroTimestamp,
 		true, nil, false, func(roachpb.KeyValue) (bool, error) {
