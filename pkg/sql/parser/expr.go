@@ -957,16 +957,16 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 var (
 	boolCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
 	intCastTypes  = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
-		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
+		TypeTimestamp, TypeDate, TypeInterval}
 	floatCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
-		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
+		TypeTimestamp, TypeDate, TypeInterval}
 	decimalCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
-		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
+		TypeTimestamp, TypeDate, TypeInterval}
 	stringCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
-		TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeDate}
+		TypeBytes, TypeTimestamp, TypeInterval, TypeDate}
 	bytesCastTypes     = []Type{TypeNull, TypeString, TypeBytes}
-	dateCastTypes      = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
-	timestampCastTypes = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
+	dateCastTypes      = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeInt}
+	timestampCastTypes = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeInt}
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeInt, TypeInterval}
 )
 
@@ -988,8 +988,6 @@ func colTypeToTypeAndValidArgTypes(t ColumnType) (Type, []Type) {
 		return TypeDate, dateCastTypes
 	case *TimestampColType:
 		return TypeTimestamp, timestampCastTypes
-	case *TimestampTZColType:
-		return TypeTimestampTZ, timestampCastTypes
 	case *IntervalColType:
 		return TypeInterval, intervalCastTypes
 	}
@@ -1060,8 +1058,7 @@ func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }
-func (node *DTimestamp) String() string       { return AsString(node) }
-func (node *DTimestampTZ) String() string     { return AsString(node) }
+func (node *DTimestamp) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }

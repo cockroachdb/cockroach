@@ -102,7 +102,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 		_, _ = rng.Read(p)
 		return parser.NewDBytes(parser.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
-		return &parser.DTimestampTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &parser.DTimestamp{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ))
 	}

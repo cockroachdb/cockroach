@@ -921,8 +921,8 @@ CREATE TABLE pg_catalog.pg_settings (
     reset_val STRING,
     sourcefile STRING,
     sourceline int,
-    pending_restart BOOL  
-);    
+    pending_restart BOOL
+);
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		for _, vName := range varNames {
@@ -1140,19 +1140,18 @@ func typByVal(typ parser.Type) parser.Datum {
 
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
-	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
-	reflect.TypeOf(parser.TypeArray):       typCategoryArray,
-	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
-	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
-	reflect.TypeOf(parser.TypeFloat):       typCategoryNumeric,
-	reflect.TypeOf(parser.TypeInt):         typCategoryNumeric,
-	reflect.TypeOf(parser.TypeInterval):    typCategoryTimespan,
-	reflect.TypeOf(parser.TypeDecimal):     typCategoryNumeric,
-	reflect.TypeOf(parser.TypeString):      typCategoryString,
-	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
+	reflect.TypeOf(parser.TypeAny):       typCategoryPseudo,
+	reflect.TypeOf(parser.TypeArray):     typCategoryArray,
+	reflect.TypeOf(parser.TypeBool):      typCategoryBoolean,
+	reflect.TypeOf(parser.TypeBytes):     typCategoryUserDefined,
+	reflect.TypeOf(parser.TypeDate):      typCategoryDateTime,
+	reflect.TypeOf(parser.TypeFloat):     typCategoryNumeric,
+	reflect.TypeOf(parser.TypeInt):       typCategoryNumeric,
+	reflect.TypeOf(parser.TypeInterval):  typCategoryTimespan,
+	reflect.TypeOf(parser.TypeDecimal):   typCategoryNumeric,
+	reflect.TypeOf(parser.TypeString):    typCategoryString,
+	reflect.TypeOf(parser.TypeTimestamp): typCategoryDateTime,
+	reflect.TypeOf(parser.TypeTuple):     typCategoryPseudo,
 }
 
 func typCategory(typ parser.Type) parser.Datum {

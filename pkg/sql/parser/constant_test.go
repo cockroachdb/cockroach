@@ -188,20 +188,15 @@ func mustParseDDate(t *testing.T, s string) Datum {
 	}
 	return d
 }
+
 func mustParseDTimestamp(t *testing.T, s string) Datum {
-	d, err := ParseDTimestamp(s, time.Millisecond)
+	d, err := ParseDTimestamp(s, time.UTC, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
-func mustParseDTimestampTZ(t *testing.T, s string) Datum {
-	d, err := ParseDTimestampTZ(s, time.UTC, time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return d
-}
+
 func mustParseDInterval(t *testing.T, s string) Datum {
 	d, err := ParseDInterval(s)
 	if err != nil {
@@ -211,12 +206,11 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 }
 
 var parseFuncs = map[string]func(*testing.T, string) Datum{
-	"string":      func(t *testing.T, s string) Datum { return NewDString(s) },
-	"bytes":       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
-	"date":        mustParseDDate,
-	"timestamp":   mustParseDTimestamp,
-	"timestamptz": mustParseDTimestampTZ,
-	"interval":    mustParseDInterval,
+	"string":    func(t *testing.T, s string) Datum { return NewDString(s) },
+	"bytes":     func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
+	"date":      mustParseDDate,
+	"timestamp": mustParseDTimestamp,
+	"interval":  mustParseDInterval,
 }
 
 func strSet(ss ...string) map[string]struct{} {
@@ -243,11 +237,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
-			parseOptions: strSet("string", "bytes", "date", "timestamp", "timestamptz"),
+			parseOptions: strSet("string", "bytes", "date", "timestamp"),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false},
-			parseOptions: strSet("string", "bytes", "timestamp", "timestamptz"),
+			parseOptions: strSet("string", "bytes", "timestamp"),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: false},

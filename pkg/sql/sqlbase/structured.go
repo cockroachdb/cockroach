@@ -1644,7 +1644,7 @@ func (k ColumnType_Kind) ToDatumType() parser.Type {
 	case ColumnType_TIMESTAMP:
 		return parser.TypeTimestamp
 	case ColumnType_TIMESTAMPTZ:
-		return parser.TypeTimestampTZ
+		return parser.TypeTimestamp
 	case ColumnType_INTERVAL:
 		return parser.TypeInterval
 	}
