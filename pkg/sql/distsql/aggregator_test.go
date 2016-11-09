@@ -41,7 +41,7 @@ func TestAggregator(t *testing.T) {
 
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.EncDatumFromDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
 
 	testCases := []struct {

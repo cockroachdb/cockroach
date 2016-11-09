@@ -133,7 +133,7 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 func RandEncDatum(rng *rand.Rand) EncDatum {
 	typ := RandColumnType(rng)
 	datum := RandDatum(rng, typ, true)
-	return EncDatumFromDatum(typ, datum)
+	return DatumToEncDatum(typ, datum)
 }
 
 // RandEncDatumSlice generates a slice of random EncDatum values of the same random
@@ -142,7 +142,7 @@ func RandEncDatumSlice(rng *rand.Rand, numVals int) []EncDatum {
 	typ := RandColumnType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
-		vals[i] = EncDatumFromDatum(typ, RandDatum(rng, typ, true))
+		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
 	}
 	return vals
 }

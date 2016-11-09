@@ -64,16 +64,16 @@ func (ed *EncDatum) String() string {
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
 // SetEncoded wipes the underlying Datum.
-func EncDatumFromEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byte) EncDatum {
-	if len(val) == 0 {
+func EncDatumFromEncoded(typ ColumnType_Kind, enc DatumEncoding, encoded []byte) EncDatum {
+	if len(encoded) == 0 {
 		panic("empty encoded value")
 	}
-	ed := EncDatum{}
-	ed.Type = typ
-	ed.encoding = enc
-	ed.encoded = val
-	ed.Datum = nil
-	return ed
+	return EncDatum{
+		Type:     typ,
+		encoding: enc,
+		encoded:  encoded,
+		Datum:    nil,
+	}
 }
 
 // EncDatumFromBuffer initializes an EncDatum with an encoding that is
@@ -103,20 +103,38 @@ func EncDatumFromBuffer(
 	}
 }
 
-// EncDatumFromDatum initializes an EncDatum with the given Datum.
-func EncDatumFromDatum(typ ColumnType_Kind, d parser.Datum) EncDatum {
+// DatumToEncDatum initializes an EncDatum with the given Datum.
+func DatumToEncDatum(typ ColumnType_Kind, d parser.Datum) EncDatum {
 	if d == nil {
-		panic("nil datum given")
+		panic("Cannot convert nil datum to EncDatum")
 	}
 	if d != parser.DNull && !typ.ToDatumType().Equal(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
 			d.ResolvedType(), typ.ToDatumType()))
 	}
-	ed := EncDatum{}
-	ed.Type = typ
+	return EncDatum{
+		Type:  typ,
+		Datum: d,
+	}
+}
+
+// DatumToEncDatumWithInferredType initializes an EncDatum with the given
+// Datum, setting its Type automatically. This does not work if the base
+// Datum's type is DNull, in which case an error is returned.
+func DatumToEncDatumWithInferredType(datum parser.Datum) (EncDatum, error) {
+	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
+	if !ok {
+		return EncDatum{}, errors.Errorf(
+			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
+	}
+	return DatumToEncDatum(ColumnType_Kind(dType), datum), nil
+}
+
+// UnsetDatum ensures subsequent IsUnset() calls return false.
+func (ed *EncDatum) UnsetDatum() {
 	ed.encoded = nil
-	ed.Datum = d
-	return ed
+	ed.Datum = nil
+	ed.encoding = 0
 }
 
 // IsUnset returns true if SetEncoded or SetDatum were not called.
@@ -230,31 +248,22 @@ func (r EncDatumRow) String() string {
 	return b.String()
 }
 
-// DatumToEncDatum converts a parser.Datum to an EncDatum.
-func DatumToEncDatum(datum parser.Datum) (EncDatum, error) {
-	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
-	if !ok {
-		return EncDatum{}, errors.Errorf(
-			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
-	}
-	return EncDatum{
-		Type:  (ColumnType_Kind)(dType),
-		Datum: datum,
-	}, nil
-}
-
-// DTupleToEncDatumRow converts a parser.DTuple to an EncDatumRow.
-func DTupleToEncDatumRow(row EncDatumRow, tuple parser.DTuple) error {
+// EncDatumRowToDTuple converts a given EncDatumRow to a DTuple.
+func EncDatumRowToDTuple(tuple parser.DTuple, row EncDatumRow, da *DatumAlloc) error {
 	if len(row) != len(tuple) {
 		return errors.Errorf(
-			"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
+			"Length mismatch (%d and %d) between tuple and row", len(tuple), len(row))
 	}
-	for i, datum := range tuple {
-		encDatum, err := DatumToEncDatum(datum)
+	for i, encDatum := range row {
+		if encDatum.IsUnset() {
+			tuple[i] = parser.DNull
+			continue
+		}
+		err := encDatum.EnsureDecoded(da)
 		if err != nil {
 			return err
 		}
-		row[i] = encDatum
+		tuple[i] = encDatum.Datum
 	}
 	return nil
 }

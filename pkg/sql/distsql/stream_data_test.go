@@ -97,7 +97,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 		for i := range rows {
 			rows[i] = make(sqlbase.EncDatumRow, rowLen)
 			for j := range rows[i] {
-				rows[i][j] = sqlbase.EncDatumFromDatum(info[j].Type, sqlbase.RandDatum(rng, info[j].Type, true))
+				rows[i][j] = sqlbase.DatumToEncDatum(info[j].Type, sqlbase.RandDatum(rng, info[j].Type, true))
 			}
 		}
 		var trailerErr error
