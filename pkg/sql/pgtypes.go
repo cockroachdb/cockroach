@@ -36,16 +36,19 @@ var oidToDatum = map[oid.Oid]parser.Type{
 	oid.T_interval:    parser.TypeInterval,
 	oid.T_numeric:     parser.TypeDecimal,
 	oid.T_text:        parser.TypeString,
-	oid.T__text:       parser.TypeArray,
+	oid.T__text:       parser.TypeStringArray,
+	oid.T__int2:       parser.TypeIntArray,
+	oid.T__int4:       parser.TypeIntArray,
+	oid.T__int8:       parser.TypeIntArray,
 	oid.T_timestamp:   parser.TypeTimestamp,
 	oid.T_timestamptz: parser.TypeTimestampTZ,
 	oid.T_varchar:     parser.TypeString,
 }
 
 var datumToOid = map[reflect.Type]oid.Oid{
-	reflect.TypeOf(parser.TypeAny): oid.T_anyelement,
-	// Currently, only text arrays are supported.
-	reflect.TypeOf(parser.TypeArray):       oid.T__text,
+	// Array types are not listed here, because reflection on array types may
+	// result in duplicate keys for this map.
+	reflect.TypeOf(parser.TypeAny):         oid.T_anyelement,
 	reflect.TypeOf(parser.TypeBool):        oid.T_bool,
 	reflect.TypeOf(parser.TypeBytes):       oid.T_bytea,
 	reflect.TypeOf(parser.TypeDate):        oid.T_date,
@@ -68,6 +71,16 @@ func OidToDatum(oid oid.Oid) (parser.Type, bool) {
 // DatumToOid maps CockroachDB types to Postgres object IDs, using reflection
 // to support unhashable types.
 func DatumToOid(typ parser.Type) (oid.Oid, bool) {
-	oid, ok := datumToOid[reflect.TypeOf(typ)]
-	return oid, ok
+	// TODO(cuongdo): Remove datumToOId, converting its entries to more cases
+	// for the switch below.
+	dOid, ok := datumToOid[reflect.TypeOf(typ)]
+	if !ok {
+		switch typ {
+		case parser.TypeIntArray:
+			return oid.T__int8, true
+		case parser.TypeStringArray:
+			return oid.T__text, true
+		}
+	}
+	return dOid, ok
 }
