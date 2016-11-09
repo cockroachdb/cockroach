@@ -30,31 +30,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+func uuidFromString(input string) uuid.UUID {
+	u, err := uuid.FromString(input)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
 var (
-	batchR           = roachpb.BatchResponse{}
-	testTxnID        *uuid.UUID
-	testTxnID2       *uuid.UUID
+	testTxnID        = uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
+	testTxnID2       = uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 	testTxnKey       = []byte("a")
 	testTxnTimestamp = hlc.ZeroTimestamp.Add(123, 456)
 	testTxnPriority  = int32(123)
 )
-
-func init() {
-	incR := roachpb.IncrementResponse{
-		NewValue: 1,
-	}
-	batchR.Add(&incR)
-
-	var err error
-	testTxnID, err = uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
-	if err != nil {
-		panic(err)
-	}
-	testTxnID2, err = uuid.FromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
-	if err != nil {
-		panic(err)
-	}
-}
 
 // createTestAbortCache creates an in-memory engine and
 // returns a abort cache using the supplied Range ID.
@@ -123,12 +113,6 @@ func TestAbortCacheEmptyParams(t *testing.T) {
 	// Put value for test response.
 	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
-	}
-	if err := sc.Put(context.Background(), e, nil, nil, &entry); err != errEmptyTxnID {
-		t.Errorf("expected errEmptyTxnID error putting response; got %s", err)
-	}
-	if _, err := sc.Get(context.Background(), e, nil, nil); err != errEmptyTxnID {
-		t.Fatalf("expected errEmptyTxnID error; got %s", err)
 	}
 }
 

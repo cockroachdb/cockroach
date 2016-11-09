@@ -228,8 +228,8 @@ func processTransactionTable(
 		return nil
 	}
 
-	startKey := keys.TransactionKey(desc.StartKey.AsRawKey(), uuid.EmptyUUID)
-	endKey := keys.TransactionKey(desc.EndKey.AsRawKey(), uuid.EmptyUUID)
+	startKey := keys.TransactionKey(desc.StartKey.AsRawKey(), uuid.UUID{})
+	endKey := keys.TransactionKey(desc.EndKey.AsRawKey(), uuid.UUID{})
 
 	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey,
 		hlc.ZeroTimestamp, true /* consistent */, nil, /* txn */
@@ -260,7 +260,7 @@ func processAbortCache(
 	abortCache := NewAbortCache(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
-	abortCache.Iterate(ctx, snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.AbortCacheEntry) {
+	abortCache.Iterate(ctx, snap, func(key []byte, v roachpb.AbortCacheEntry) {
 		infoMu.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			infoMu.AbortSpanGCNum++

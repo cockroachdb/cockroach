@@ -318,13 +318,14 @@ func TestSetGetChecked(t *testing.T) {
 }
 
 func TestTxnEqual(t *testing.T) {
+	u1, u2 := uuid.MakeV4(), uuid.MakeV4()
 	tc := []struct {
 		txn1, txn2 *Transaction
 		eq         bool
 	}{
 		{nil, nil, true},
 		{&Transaction{}, nil, false},
-		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.NewV4()}}, false},
+		{&Transaction{TxnMeta: enginepb.TxnMeta{ID: &u1}}, &Transaction{TxnMeta: enginepb.TxnMeta{ID: &u2}}, false},
 	}
 	for i, c := range tc {
 		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
@@ -334,16 +335,16 @@ func TestTxnEqual(t *testing.T) {
 }
 
 func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := uuid.NewV4(), uuid.NewV4()
-	txn1Copy := *txn1
+	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
+	txn1Copy := txn1
 
 	testCases := []struct {
 		a, b     *uuid.UUID
 		expEqual bool
 	}{
-		{txn1, txn1, true},
-		{txn1, txn2, false},
-		{txn1, &txn1Copy, true},
+		{&txn1, &txn1, true},
+		{&txn1, &txn2, false},
+		{&txn1, &txn1Copy, true},
 	}
 	for i, test := range testCases {
 		if eq := TxnIDEqual(test.a, test.b); eq != test.expEqual {
@@ -392,9 +393,12 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Isolation:  enginepb.SNAPSHOT,
-		Key:        Key("foo"),
-		ID:         uuid.NewV4(),
+		Isolation: enginepb.SNAPSHOT,
+		Key:       Key("foo"),
+		ID: func() *uuid.UUID {
+			u := uuid.MakeV4()
+			return &u
+		}(),
 		Epoch:      2,
 		Timestamp:  makeTS(20, 21),
 		Priority:   957356782,
@@ -426,8 +430,9 @@ func TestTransactionUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	u := uuid.MakeV4()
 	var txn3 Transaction
-	txn3.ID = uuid.NewV4()
+	txn3.ID = &u
 	txn3.Name = "carl"
 	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)

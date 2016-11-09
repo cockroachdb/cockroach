@@ -37,7 +37,7 @@ func TestPrettyPrint(t *testing.T) {
 	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
 	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
 	durationDesc, _ := encoding.EncodeDurationDescending(nil, duration)
-	txnID := uuid.NewV4()
+	txnID := uuid.MakeV4()
 
 	// The following test cases encode keys with a mixture of ascending and descending direction,
 	// but always decode keys in the ascending direction. This is why some of the decoded values

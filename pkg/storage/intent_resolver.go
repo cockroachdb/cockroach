@@ -342,7 +342,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 					// the txn span directly.
 					b := &client.Batch{}
 					txn := item.intents[0].Txn
-					txnKey := keys.TransactionKey(txn.Key, txn.ID)
+					txnKey := keys.TransactionKey(txn.Key, *txn.ID)
 
 					// This is pretty tricky. Transaction keys are range-local and
 					// so they are encoded specially. The key range addressed by

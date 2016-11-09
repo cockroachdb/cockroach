@@ -941,7 +941,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, uuid.NewV4()), []byte("value"))
+	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, uuid.MakeV4()), []byte("value"))
 	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs); pErr != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", pErr)
 	}
@@ -1287,7 +1287,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			if pErr != nil {
 				t.Fatalf("expected intent resolved; got unexpected error: %s", pErr)
 			}
-			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
+			txnKey := keys.TransactionKey(pushee.Key, *pushee.ID)
 			var txn roachpb.Transaction
 			ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, hlc.ZeroTimestamp, true, nil, &txn)
 			if !ok || err != nil {
@@ -1569,7 +1569,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Read pushee's txn.
-	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
+	txnKey := keys.TransactionKey(pushee.Key, *pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, hlc.ZeroTimestamp, true, nil, &txn); !ok || err != nil {
 		t.Fatalf("not found or err: %s", err)

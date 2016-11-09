@@ -667,24 +667,20 @@ func NewTransaction(
 	now hlc.Timestamp,
 	maxOffset int64,
 ) *Transaction {
-	// Compute priority by adjusting based on userPriority factor.
-	priority := MakePriority(userPriority)
-	// Compute timestamp and max timestamp.
-	max := now
-	max.WallTime += maxOffset
+	u := uuid.MakeV4()
 
 	return &Transaction{
 		TxnMeta: enginepb.TxnMeta{
 			Key:       baseKey,
-			ID:        uuid.NewV4(),
+			ID:        &u,
 			Isolation: isolation,
 			Timestamp: now,
-			Priority:  priority,
+			Priority:  MakePriority(userPriority),
 			Sequence:  1,
 		},
 		Name:          name,
 		OrigTimestamp: now,
-		MaxTimestamp:  max,
+		MaxTimestamp:  now.Add(maxOffset, 0),
 	}
 }
 
@@ -917,8 +913,12 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
+	short := "<nil>"
+	if t.ID != nil {
+		short = t.ID.Short()
+	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t rop=%t",
-		t.ID.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
+		short, Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush)
 	return buf.String()
 }

@@ -135,9 +135,10 @@ func TestTruncate(t *testing.T) {
 		goldenOriginal := roachpb.BatchRequest{}
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
+				u := uuid.MakeV4()
 				goldenOriginal.Add(&roachpb.ResolveIntentRangeRequest{
 					Span:      roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
-					IntentTxn: enginepb.TxnMeta{ID: uuid.NewV4()},
+					IntentTxn: enginepb.TxnMeta{ID: &u},
 				})
 			} else {
 				goldenOriginal.Add(&roachpb.GetRequest{

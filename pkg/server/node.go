@@ -197,7 +197,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Verify the store isn't already part of a cluster.
-		if s.Ident.ClusterID != *uuid.EmptyUUID {
+		if s.Ident.ClusterID != (uuid.UUID{}) {
 			return uuid.UUID{}, errors.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 		}
 
@@ -424,7 +424,7 @@ func (n *Node) initStores(
 			}
 			return errors.Errorf("failed to start store: %s", err)
 		}
-		if s.Ident.ClusterID == *uuid.EmptyUUID || s.Ident.NodeID == 0 {
+		if s.Ident.ClusterID == (uuid.UUID{}) || s.Ident.NodeID == 0 {
 			return errors.Errorf("unidentified store: %s", s)
 		}
 		capacity, err := s.Capacity()
@@ -498,7 +498,7 @@ func (n *Node) addStore(store *storage.Store) {
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		if n.ClusterID == *uuid.EmptyUUID {
+		if n.ClusterID == (uuid.UUID{}) {
 			n.ClusterID = s.Ident.ClusterID
 			n.initNodeID(s.Ident.NodeID)
 		} else if n.ClusterID != s.Ident.ClusterID {
@@ -517,7 +517,7 @@ func (n *Node) validateStores() error {
 func (n *Node) bootstrapStores(
 	ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper,
 ) {
-	if n.ClusterID == *uuid.EmptyUUID {
+	if n.ClusterID == (uuid.UUID{}) {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
@@ -570,13 +570,12 @@ func (n *Node) connectGossip(ctx context.Context) {
 	if err != nil {
 		log.Fatalf(ctx, "unable to ascertain cluster ID from gossip network: %s", err)
 	}
-	gossipClusterIDPtr, err := uuid.FromBytes(uuidBytes)
+	gossipClusterID, err := uuid.FromBytes(uuidBytes)
 	if err != nil {
 		log.Fatalf(ctx, "unable to ascertain cluster ID from gossip network: %s", err)
 	}
-	gossipClusterID := *gossipClusterIDPtr
 
-	if n.ClusterID == *uuid.EmptyUUID {
+	if n.ClusterID == (uuid.UUID{}) {
 		n.ClusterID = gossipClusterID
 	} else if n.ClusterID != gossipClusterID {
 		log.Fatalf(ctx, "node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
