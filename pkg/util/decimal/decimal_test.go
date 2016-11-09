@@ -357,7 +357,7 @@ func TestDecimalLog(t *testing.T) {
 		{"10000000000000000000000000000000000000000000000", "105.9189142777261015"},
 		{"1000002350000002340000000345354700000000764000009", "110.5240868137114339"},
 	}
-	testDecimalSingleArgFunc(t, nilErrorSingle(Log), 16, tests)
+	testDecimalSingleArgFunc(t, Log, 16, tests)
 }
 
 func TestDecimalLogDoubleScale(t *testing.T) {
@@ -376,7 +376,7 @@ func TestDecimalLogDoubleScale(t *testing.T) {
 		{"10000000000000000000000000000000000000000000000", "105.91891427772610146482760691548075"},
 		{"1000002350000002340000000345354700000000764000009", "110.52408681371143392718404189196936"},
 	}
-	testDecimalSingleArgFunc(t, nilErrorSingle(Log), 32, tests)
+	testDecimalSingleArgFunc(t, Log, 32, tests)
 }
 
 func TestDecimalLog10(t *testing.T) {
@@ -389,7 +389,7 @@ func TestDecimalLog10(t *testing.T) {
 		{"1000", "3"},
 		{"1234567898765432112.2763812", "18.0915149802527613"},
 	}
-	testDecimalSingleArgFunc(t, nilErrorSingle(Log10), 16, tests)
+	testDecimalSingleArgFunc(t, Log10, 16, tests)
 }
 
 func TestDecimalLog10DoubleScale(t *testing.T) {
@@ -402,7 +402,7 @@ func TestDecimalLog10DoubleScale(t *testing.T) {
 		{"1000", "3"},
 		{"1234567898765432112.2763812", "18.09151498025276129089765759457130"},
 	}
-	testDecimalSingleArgFunc(t, nilErrorSingle(Log10), 32, tests)
+	testDecimalSingleArgFunc(t, Log10, 32, tests)
 }
 
 func TestDecimalLogN(t *testing.T) {
@@ -417,7 +417,7 @@ func TestDecimalLogN(t *testing.T) {
 		{"1234567898765432112.2763812", strE, "41.6572527032084749"},
 		{"1234567898765432112.2763812", "10", "18.0915149802527613"},
 	}
-	testDecimalDoubleArgFunc(t, nilErrorDouble(LogN), 16, tests)
+	testDecimalDoubleArgFunc(t, LogN, 16, tests)
 }
 
 func TestDecimalLogNDoubleScale(t *testing.T) {
@@ -432,7 +432,7 @@ func TestDecimalLogNDoubleScale(t *testing.T) {
 		{"1234567898765432112.2763812", strE, "41.65725270320847492372271693721825"},
 		{"1234567898765432112.2763812", "10", "18.09151498025276129089765759457130"},
 	}
-	testDecimalDoubleArgFunc(t, nilErrorDouble(LogN), 32, tests)
+	testDecimalDoubleArgFunc(t, LogN, 32, tests)
 }
 
 func BenchmarkDecimalLog(b *testing.B) {
@@ -446,7 +446,7 @@ func BenchmarkDecimalLog(b *testing.B) {
 	z := new(inf.Dec)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Log(z, vals[i%len(vals)], 16)
+		_, _ = Log(z, vals[i%len(vals)], 16)
 	}
 }
 
@@ -535,6 +535,7 @@ func TestDecimalPow(t *testing.T) {
 		{"0.00000458966", "-123415", "argument too large"},
 		{"2", "-38", "argument too large"},
 		{"10000000000", "500", "argument too large"},
+		{"425644047350.89246", "74.4647211651881", "argument too large"},
 	}
 	testDecimalDoubleArgFunc(t, Pow, 16, tests)
 }
@@ -558,6 +559,7 @@ func TestDecimalPowDoubleScale(t *testing.T) {
 		{"0.00000458966", "-123415", "argument too large"},
 		{"2", "-38", "0.000000000004"},
 		{"10000000000", "500", "argument too large"},
+		{"425644047350.89246", "74.4647211651881", "argument too large"},
 	}
 	testDecimalDoubleArgFunc(t, Pow, 32, tests)
 }

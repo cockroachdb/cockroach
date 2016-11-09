@@ -244,27 +244,37 @@ func Cbrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
 // LogN computes the log of x with base n to the specified scale and
 // stores the result in z, which is also the return value. The function
 // will panic if x is a negative number or if n is a negative number.
-func LogN(z *inf.Dec, x *inf.Dec, n *inf.Dec, s inf.Scale) *inf.Dec {
+func LogN(z *inf.Dec, x *inf.Dec, n *inf.Dec, s inf.Scale) (*inf.Dec, error) {
 	if z == n {
 		n = new(inf.Dec).Set(n)
 	}
-	z = Log(z, x, s+1)
-	return z.QuoRound(z, Log(nil, n, s+1), s, inf.RoundHalfUp)
+	z, err := Log(z, x, s+1)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := Log(nil, n, s+1)
+	if err != nil {
+		return nil, err
+	}
+	return z.QuoRound(z, ln, s, inf.RoundHalfUp), nil
 }
 
 // Log10 computes the log of x with base 10 to the specified scale and
 // stores the result in z, which is also the return value. The function
 // will panic if x is a negative number.
-func Log10(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
-	z = Log(z, x, s)
-	return z.QuoRound(z, decimalLog10, s, inf.RoundHalfUp)
+func Log10(z *inf.Dec, x *inf.Dec, s inf.Scale) (*inf.Dec, error) {
+	z, err := Log(z, x, s)
+	if err != nil {
+		return nil, err
+	}
+	return z.QuoRound(z, decimalLog10, s, inf.RoundHalfUp), nil
 }
 
 // Log computes the natural log of x using the Maclaurin series for
 // log(1-x) to the specified scale and stores the result in z, which
 // is also the return value. The function will panic if x is a negative
 // number.
-func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) (*inf.Dec, error) {
 	// Validate the sign of x.
 	if x.Sign() <= 0 {
 		panic(fmt.Sprintf("natural log of non-positive value: %s", x))
@@ -318,9 +328,17 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	term := new(inf.Dec)
 	n := inf.NewDec(1, 0)
 
+	// maxExp10 is the maximum number of digits exp10 is expected to return. Above
+	// this it becomes very slow. However since the implementation for that lies
+	// in the inf package, we instead check the length in this function.
+	const maxExp10 = 500000
+
 	// Loop over the Maclaurin series given above until convergence.
 	for loop := newLoop("log", x, s, 40); ; {
 		n.SetUnscaled(int64(loop.i + 1))
+		if shift := s + 2 - (yN.Scale() - n.Scale()); shift > maxExp10 || shift < -maxExp10 {
+			return nil, errArgumentTooLarge
+		}
 		term.QuoRound(yN, n, s+2, inf.RoundHalfUp)
 		z.Sub(z, term)
 		if loop.done(z) {
@@ -336,7 +354,7 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	z.Add(z, exp)
 
 	// Round to the desired scale.
-	return z.Round(z, s, inf.RoundHalfUp)
+	return z.Round(z, s, inf.RoundHalfUp), nil
 }
 
 // For integers we use exponentiation by squaring.
@@ -491,7 +509,10 @@ func Pow(z, x, y *inf.Dec, s inf.Scale) (*inf.Dec, error) {
 	}
 
 	tmp = new(inf.Dec).Abs(x)
-	Log(tmp, tmp, es)
+	_, err := Log(tmp, tmp, es)
+	if err != nil {
+		return nil, err
+	}
 	tmp.Mul(tmp, y)
 	Exp(tmp, tmp, es)
 

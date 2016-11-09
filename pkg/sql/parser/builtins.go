@@ -1309,7 +1309,7 @@ var powImpls = []Builtin{
 	}),
 }
 
-func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) Builtin {
+func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error)) Builtin {
 	return decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 		switch x.Sign() {
 		case -1:
@@ -1318,8 +1318,8 @@ func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) Builtin {
 			return nil, errLogOfZero
 		}
 		dd := &DDecimal{}
-		logFn(&dd.Dec, x, decimal.Precision)
-		return dd, nil
+		_, err := logFn(&dd.Dec, x, decimal.Precision)
+		return dd, err
 	})
 }
 
