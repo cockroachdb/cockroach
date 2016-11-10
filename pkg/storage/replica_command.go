@@ -769,7 +769,7 @@ func updateTxnWithExternalIntents(
 	key := keys.TransactionKey(txn.Key, *txn.ID)
 	if txnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
-			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.ID.Short(), len(args.IntentSpans))
+			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
 		}
 		return engine.MVCCDelete(ctx, batch, ms, key, hlc.ZeroTimestamp, nil /* txn */)
 	}
@@ -1413,16 +1413,9 @@ func (r *Replica) PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		pusherShort := "<nil>"
-		if id := args.PusherTxn.ID; id != nil {
-			pusherShort = id.Short()
-		}
-		pusheeShort := "<nil>"
-		if id := args.PusheeTxn.ID; id != nil {
-			pusheeShort = id.Short()
-		}
 		log.Infof(ctx, "%s "+s+" %s: %s (pushee last active: %s)",
-			pusherShort, pusheeShort, reason, reply.PusheeTxn.LastActive())
+			args.PusherTxn.Short(), args.PusheeTxn.Short(),
+			reason, reply.PusheeTxn.LastActive())
 	}
 
 	if !pusherWins {
