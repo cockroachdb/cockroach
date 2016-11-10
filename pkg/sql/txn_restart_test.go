@@ -540,7 +540,7 @@ INSERT INTO t.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp());
 
 	// Check that the txns succeeded by reading the rows.
 	var count int
-	if err := sqlDB.QueryRow("SELECT COUNT(*) FROM t.test").Scan(&count); err != nil {
+	if err := sqlDB.QueryRow("SELECT count(*) FROM t.test").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 6 {
