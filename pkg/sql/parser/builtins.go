@@ -998,6 +998,18 @@ var Builtins = map[string][]Builtin{
 			dd.QuoRound(x, y, 0, inf.RoundDown)
 			return dd, nil
 		}),
+		{
+			Types:      ArgTypes{TypeInt, TypeInt},
+			ReturnType: TypeInt,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				y := *args[1].(*DInt)
+				if y == 0 {
+					return nil, errDivByZero
+				}
+				x := *args[0].(*DInt)
+				return NewDInt(x / y), nil
+			},
+		},
 	},
 
 	"exp": {
@@ -1389,6 +1401,15 @@ var powImpls = []Builtin{
 		_, err := decimal.Pow(&dd.Dec, x, y, decimal.Precision)
 		return dd, err
 	}),
+	{
+		Types:      ArgTypes{TypeInt, TypeInt},
+		ReturnType: TypeInt,
+		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+			x := int64(*args[0].(*DInt))
+			y := int64(*args[1].(*DInt))
+			return NewDInt(DInt(intPow(x, y))), nil
+		},
+	},
 }
 
 func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) Builtin {
@@ -1782,6 +1803,25 @@ func pickFromTuple(ctx *EvalContext, greatest bool, args DTuple) (Datum, error) 
 		}
 	}
 	return g, nil
+}
+
+func intPow(x, y int64) int64 {
+	// Calculate x^y by squaring. See:
+	// https://en.wikipedia.org/wiki/Exponentiation_by_squaring
+	// special case 1: x == 0 (result 1 if y = 0, 0 otherwise)
+	// special case 2: y < 0 (result 0)
+	if y < 0 {
+		return 0
+	}
+	var ret int64 = 1
+	for y > 0 {
+		if y&1 == 1 {
+			ret *= x
+		}
+		x *= x
+		y >>= 1
+	}
+	return ret
 }
 
 var uniqueBytesState struct {
