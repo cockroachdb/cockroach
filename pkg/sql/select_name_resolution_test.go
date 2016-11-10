@@ -45,7 +45,7 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 func TestRetryResolveNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	expr, err := parser.ParseExprTraditional(`COUNT(a)`)
+	expr, err := parser.ParseExprTraditional(`count(a)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +70,8 @@ func TestRetryResolveNames(t *testing.T) {
 		if count != 1 {
 			t.Fatalf("%d: expected 1 ivar, but found %d", i, count)
 		}
-		if newExpr.String() != "COUNT(a)" {
-			t.Fatalf("%d: newExpr: got %s, expected 'COUNT(a)'", i, newExpr.String())
+		if newExpr.String() != "count(a)" {
+			t.Fatalf("%d: newExpr: got %s, expected 'count(a)'", i, newExpr.String())
 		}
 		expr = newExpr
 	}

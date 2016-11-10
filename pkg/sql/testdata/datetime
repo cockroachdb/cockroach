@@ -415,7 +415,7 @@ SELECT extract(microsecond from '2001-04-10 12:04:59.34565423')
 ----
 345654
 
-query error extract: unsupported timespan: nansecond
+query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423')
 
 # Test SET TIME ZONE
