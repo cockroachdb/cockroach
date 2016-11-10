@@ -5755,6 +5755,7 @@ func TestGCIncorrectRange(t *testing.T) {
 // commands via a cancelable context.Context.
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(spencerkimball): https://github.com/cockroachdb/cockroach/issues/10488")
 	// Pick a key unlikely to be used by background processes.
 	key := []byte("acdfg")
 	tc := testContext{}
