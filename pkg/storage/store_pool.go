@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -524,6 +525,8 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 
 	if sp.deterministic {
 		sort.Sort(storeIDs)
+	} else {
+		shuffle.Shuffle(storeIDs)
 	}
 
 	var aliveStoreCount int
