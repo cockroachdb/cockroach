@@ -524,6 +524,8 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 
 	if sp.deterministic {
 		sort.Sort(storeIDs)
+	} else {
+		storeIDs.Shuffle()
 	}
 
 	var aliveStoreCount int

@@ -19,6 +19,7 @@ package roachpb
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +45,14 @@ type StoreIDSlice []StoreID
 func (s StoreIDSlice) Len() int           { return len(s) }
 func (s StoreIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s StoreIDSlice) Less(i, j int) bool { return s[i] < s[j] }
+
+// Shuffle randomizes the order of the store IDs.
+func (s StoreIDSlice) Shuffle() {
+	for i := range s {
+		j := rand.Intn(i + 1)
+		s.Swap(i, j)
+	}
+}
 
 // String implements the fmt.Stringer interface.
 // It is used to format the ID for use in Gossip keys.
