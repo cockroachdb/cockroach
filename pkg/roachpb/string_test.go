@@ -66,19 +66,20 @@ func TestTransactionString(t *testing.T) {
 		Cmd: &roachpb.BatchRequest{},
 	}
 	cmd.Cmd.Txn = &txn
-	if actStr, idStr := fmt.Sprintf("%s", &cmd), txn.ID.String(); !strings.Contains(actStr, idStr) {
+	if actStr, idStr := fmt.Sprintf("%s", &cmd), txnID.String(); !strings.Contains(actStr, idStr) {
 		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
 	}
 }
 
 func TestBatchRequestString(t *testing.T) {
 	br := roachpb.BatchRequest{}
+	br.Txn = new(roachpb.Transaction)
 	for i := 0; i < 100; i++ {
 		br.Requests = append(br.Requests, roachpb.RequestUnion{Get: &roachpb.GetRequest{}})
 	}
 	br.Requests = append(br.Requests, roachpb.RequestUnion{EndTransaction: &roachpb.EndTransactionRequest{}})
 
-	e := `Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`
+	e := `[txn: <nil>], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`
 	if e != br.String() {
 		t.Fatalf("e = %s, v = %s", e, br.String())
 	}

@@ -913,12 +913,8 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	short := "<nil>"
-	if id := t.ID; id != nil {
-		short = id.Short()
-	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t rop=%t",
-		short, Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
+		t.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush)
 	return buf.String()
 }
