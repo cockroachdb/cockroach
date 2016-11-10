@@ -157,7 +157,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 
 	// Verify a single row exists in the table.
 	var rowCount int
-	sqlDB.QueryRow(`SELECT COUNT(*) FROM test.t`).Scan(&rowCount)
+	sqlDB.QueryRow(`SELECT count(*) FROM test.t`).Scan(&rowCount)
 	if rowCount != 1 {
 		t.Errorf("expected 1 row but found %d", rowCount)
 	}

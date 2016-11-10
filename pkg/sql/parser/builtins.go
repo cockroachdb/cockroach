@@ -54,8 +54,8 @@ var (
 	errSqrtOfNegNumber  = errors.New("cannot take square root of a negative number")
 	errLogOfNegNumber   = errors.New("cannot take logarithm of a negative number")
 	errLogOfZero        = errors.New("cannot take logarithm of zero")
-	errInsufficientArgs = errors.New("unknown signature for CONCAT_WS: CONCAT_WS()")
-	errZeroIP           = errors.New("Zero length IP")
+	errInsufficientArgs = errors.New("unknown signature: concat_ws()")
+	errZeroIP           = errors.New("zero length IP")
 )
 
 // FunctionClass specifies the class of the builtin function.
@@ -162,6 +162,23 @@ func (b Builtin) Impure() bool {
 // Signature returns a human-readable signature.
 func (b Builtin) Signature() string {
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType)
+}
+
+func init() {
+	funDefs = make(map[string]*FunctionDefinition)
+	for name, def := range Builtins {
+		fdef := &FunctionDefinition{Name: name, Definition: def}
+		funDefs[name] = fdef
+
+		// We alias the builtins to uppercase to hasten the lookup in the
+		// common case.
+		uname := strings.ToUpper(name)
+		Builtins[uname] = def
+		if def[0].class == AggregateClass {
+			Aggregates[uname] = def
+		}
+		funDefs[uname] = fdef
+	}
 }
 
 // Builtins contains the built-in functions indexed by name.
@@ -305,7 +322,7 @@ var Builtins = map[string][]Builtin{
 				// If ipdstr could not be parsed to a valid IP,
 				// ip will be nil.
 				if ip == nil {
-					return nil, fmt.Errorf("Invalid IP format: %s", ipdstr)
+					return nil, fmt.Errorf("invalid IP format: %s", ipdstr)
 				}
 				return NewDBytes(DBytes(ip)), nil
 			},
@@ -1287,12 +1304,26 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 	},
-}
 
-func init() {
-	for k, v := range Builtins {
-		Builtins[strings.ToUpper(k)] = v
-	}
+	// pg_catalog functions.
+	"pg_catalog.pg_typeof": {
+		// TODO(knz): This is a proof-of-concept until TypeAny works
+		// properly.
+		Builtin{
+			Types:      ArgTypes{TypeInt},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+	},
 }
 
 var substringImpls = []Builtin{
@@ -1616,7 +1647,7 @@ func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, er
 
 			sub, err := strconv.Atoi(string(subRef))
 			if err != nil {
-				panic(fmt.Sprintf("Invalid integer submatch reference seen: %v", err))
+				panic(fmt.Sprintf("invalid integer submatch reference seen: %v", err))
 			}
 			if 2*sub >= len(matchIndex) {
 				// regexpReplace expects references to "out-of-bounds" capture groups
