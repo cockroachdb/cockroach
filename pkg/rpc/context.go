@@ -295,11 +295,11 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			heartbeatTimer.Read = true
 		}
 
-		sendTime := ctx.localClock.PhysicalTime()
+		sendTime := ctx.localClock.Now().GoTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
 		ctx.setConnHealthy(remoteAddr, err == nil)
 		if err == nil {
-			receiveTime := ctx.localClock.PhysicalTime()
+			receiveTime := ctx.localClock.Now().GoTime()
 
 			// Only update the clock offset measurement if we actually got a
 			// successful response from the server.

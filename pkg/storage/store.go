@@ -1354,7 +1354,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 		// the process since a contested election just restarts the clock to where
 		// it would have been anyway if we weren't doing idle replica campaigning.
 		electionTimeout := s.cfg.RaftTickInterval * time.Duration(s.cfg.RaftElectionTimeoutTicks)
-		s.idleReplicaElectionTime.at = s.Clock().PhysicalTime().Add(electionTimeout)
+		s.idleReplicaElectionTime.at = s.Clock().Now().GoTime().Add(electionTimeout)
 	}
 	s.idleReplicaElectionTime.Unlock()
 	return nil
@@ -1366,7 +1366,7 @@ func (s *Store) canCampaignIdleReplica() bool {
 	if s.idleReplicaElectionTime.at == (time.Time{}) {
 		return false
 	}
-	return !s.Clock().PhysicalTime().Before(s.idleReplicaElectionTime.at)
+	return !s.Clock().Now().GoTime().Before(s.idleReplicaElectionTime.at)
 }
 
 // GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
@@ -1441,7 +1441,7 @@ func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 // replicas to campaign immediately. This primarily affects tests.
 func (s *Store) NotifyBootstrapped() {
 	s.idleReplicaElectionTime.Lock()
-	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
+	s.idleReplicaElectionTime.at = s.Clock().Now().GoTime()
 	s.idleReplicaElectionTime.Unlock()
 }
 
@@ -2243,15 +2243,13 @@ func (s *Store) Send(
 		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
 	}
 
-	if s.Clock().MaxOffset() > 0 {
-		// Once a command is submitted to raft, all replicas' logical
-		// clocks will be ratcheted forward to match. If the command
-		// appears to come from a node with a bad clock, reject it now
-		// before we reach that point.
-		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
-		if offset > s.Clock().MaxOffset() && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
-				ba.Timestamp.WallTime, offset)
+	// Once a command is submitted to raft, all replicas' logical
+	// clocks will be ratcheted forward to match. If the command
+	// appears to come from a node with a bad clock, reject it now
+	// before we reach that point.
+	if !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+		if err := s.Clock().CheckOffset(ba.Timestamp); err != nil {
+			return nil, roachpb.NewErrorf("rejecting command: %s", err)
 		}
 	}
 	// Update our clock with the incoming request timestamp. This advances the
