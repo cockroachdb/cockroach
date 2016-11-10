@@ -18,6 +18,7 @@ package sql_test
 
 import (
 	gosql "database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -46,7 +47,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 	const rootStmt = "stmt"
 
-	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
+	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
 		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
@@ -54,19 +55,19 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		// for the following statement. The CREATE DATABASE below would fail with
 		// errors about an aborted transaction and thus panic.
 		if strings.HasPrefix(s, "BEGIN") || strings.HasPrefix(s, "START") {
-			return false
+			return errors.New("transactions are unsupported")
 		}
-		// TODO(mjibson): figure out why these run slowly. May be a bug.
 		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
-			return false
+			return errors.New("TODO(mjibson): figure out why these run slowly, may be a bug")
 		}
-		// But the create should always succeed.
+		// Recreate the database on every run in case it was dropped or renamed in
+		// a previous run. Should always succeed.
 		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident`)
 		if err != nil {
 			panic(err)
 		}
 		_, err = db.Exec(s)
-		return err == nil
+		return err
 	})
 }
 
@@ -78,7 +79,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 	testRandomSyntax(t, func(db *gosql.DB) error {
 		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
 		return err
-	}, func(db *gosql.DB, r *rsg.RSG) bool {
+	}, func(db *gosql.DB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 30)
 		var where, from string
 		// Only generate complex clauses half the time.
@@ -90,24 +91,39 @@ func TestRandomSyntaxSelect(t *testing.T) {
 		}
 		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
 		_, err := db.Exec(s)
-		return err == nil
+		return err
 	})
+}
+
+type namedBuiltin struct {
+	name    string
+	builtin parser.Builtin
 }
 
 func TestRandomSyntaxFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var names []string
-	for b := range parser.Builtins {
-		names = append(names, b)
-	}
+	done := make(chan struct{})
+	defer close(done)
+	namedBuiltinChan := make(chan namedBuiltin)
+	go func() {
+		for {
+			for name, variations := range parser.Builtins {
+				for _, builtin := range variations {
+					select {
+					case <-done:
+						return
+					case namedBuiltinChan <- namedBuiltin{name: name, builtin: builtin}:
+					}
+				}
+			}
+		}
+	}()
 
-	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
-		name := names[r.Intn(len(names))]
-		variations := parser.Builtins[name]
-		fn := variations[r.Intn(len(variations))]
+	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) error {
+		nb := <-namedBuiltinChan
 		var args []string
-		switch ft := fn.Types.(type) {
+		switch ft := nb.builtin.Types.(type) {
 		case parser.ArgTypes:
 			for _, typ := range ft {
 				args = append(args, r.GenerateRandomArg(typ))
@@ -136,19 +152,19 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(ft.Typ))
 			}
 		default:
-			panic(fmt.Errorf("unknown fn.Types: %T", ft))
+			panic(fmt.Sprintf("unknown fn.Types: %T", ft))
 		}
-		s := fmt.Sprintf("SELECT %s(%s)", name, strings.Join(args, ", "))
-		funcdone := make(chan bool, 1)
+		s := fmt.Sprintf("SELECT %s(%s)", nb.name, strings.Join(args, ", "))
+		funcdone := make(chan error, 1)
 		go func() {
 			_, err := db.Exec(s)
-			funcdone <- err == nil
+			funcdone <- err
 		}()
 		select {
-		case success := <-funcdone:
-			return success
+		case err := <-funcdone:
+			return err
 		case <-time.After(time.Second * 5):
-			panic(fmt.Errorf("func exec timeout: %s", s))
+			panic(fmt.Sprintf("func exec timeout: %s", s))
 		}
 	})
 }
@@ -158,17 +174,21 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
+	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
 		_, err := db.Exec(s)
-		return err == nil
+		return err
 	})
 }
 
-// testRandomSyntax performs all of the RSG setup and teardown for common random syntax testing operations. It takes f, a closure where the random expression should be generated and executed. It returns a boolean indicating if the statement executed successfully. This is used to verify that at least 1 success occurs (otherwise it is likely a bad test).
+// testRandomSyntax performs all of the RSG setup and teardown for common
+// random syntax testing operations. It takes a closure where the random
+// expression should be generated and executed. It returns an error indicating
+// if the statement executed successfully. This is used to verify that at
+// least 1 success occurs (otherwise it is likely a bad test).
 func testRandomSyntax(
-	t *testing.T, setup func(db *gosql.DB) error, f func(db *gosql.DB, r *rsg.RSG) (success bool),
+	t *testing.T, setup func(*gosql.DB) error, fn func(*gosql.DB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
 		t.Skip("enable with '-rsg <duration>'")
@@ -186,19 +206,21 @@ func testRandomSyntax(
 		}
 	}
 
-	y, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
+	yBytes, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(y))
+	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Broadcast channel for all workers.
-	done := make(chan bool)
+	done := time.After(*flagRSGTime)
 	var wg sync.WaitGroup
-	var lock syncutil.Mutex
-	var total, success int
+	var countsMu struct {
+		syncutil.Mutex
+		total, success int
+	}
 	worker := func() {
 		defer wg.Done()
 		for {
@@ -207,24 +229,22 @@ func testRandomSyntax(
 				return
 			default:
 			}
-			s := f(db, r)
-			lock.Lock()
-			total++
-			if s {
-				success++
+			err := fn(db, r)
+			countsMu.Lock()
+			countsMu.total++
+			if err == nil {
+				countsMu.success++
 			}
-			lock.Unlock()
+			countsMu.Unlock()
 		}
 	}
+	wg.Add(*flagRSGGoRoutines)
 	for i := 0; i < *flagRSGGoRoutines; i++ {
 		go worker()
-		wg.Add(1)
 	}
-	time.Sleep(*flagRSGTime)
-	close(done)
 	wg.Wait()
-	t.Logf("%d executions, %d successful", total, success)
-	if success == 0 {
+	t.Logf("%d executions, %d successful", countsMu.total, countsMu.success)
+	if countsMu.success == 0 {
 		t.Fatal("0 successful executions")
 	}
 }
