@@ -40,7 +40,7 @@ type RSG struct {
 // NewRSG creates a random syntax generator from the given random seed and
 // yacc file.
 func NewRSG(seed int64, y string) (*RSG, error) {
-	tree, err := yacc.Parse("", y)
+	tree, err := yacc.Parse("sql", y)
 	if err != nil {
 		return nil, err
 	}
