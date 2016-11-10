@@ -469,6 +469,11 @@ SELECT cos(-0.5), cos(0.5)
 ----
 0.8775825618903728 0.8775825618903728
 
+query IIII
+SELECT div(-1::int, 2::int), div(1::int, 2::int), div(9::int, 4::int), div(-9::int, 4::int)
+----
+0 0 2 -2
+
 query RRRRRR
 SELECT div(-1.0::float, 2.0), div(1.0::float, 2.0), div(9.0::float, 4.0), div(-9.0::float, 4.0), div(1.0::float, 0.0), div(1111.0::decimal, 9.44)
 ----
@@ -481,6 +486,9 @@ SELECT degrees(-0.5), degrees(0.5)
 
 query error div: division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
+
+query error div: division by zero
+SELECT div(1::int, 0::int)
 
 query RRR
 SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
