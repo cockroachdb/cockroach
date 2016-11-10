@@ -248,6 +248,36 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"to_uuid": {
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeBytes,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				s := string(*args[0].(*DString))
+				uv, err := uuid.FromString(s)
+				if err != nil {
+					return nil, err
+				}
+				return NewDBytes(DBytes(uv.GetBytes())), nil
+			},
+		},
+	},
+
+	"from_uuid": {
+		Builtin{
+			Types:      ArgTypes{TypeBytes},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				b := []byte(*args[0].(*DBytes))
+				uv, err := uuid.FromBytes(b)
+				if err != nil {
+					return nil, err
+				}
+				return NewDString(uv.String()), nil
+			},
+		},
+	},
+
 	"from_ip": {
 		Builtin{
 			Types:      ArgTypes{TypeBytes},
@@ -874,8 +904,7 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	// Math functions.
-
+	// Math functions
 	"abs": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Abs(x))), nil
