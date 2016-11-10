@@ -51,6 +51,7 @@ pg_class
 pg_constraint
 pg_database
 pg_description
+pg_index
 pg_indexes
 pg_namespace
 pg_proc
@@ -383,6 +384,49 @@ t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t2 (rowi
 t2         t2_t1_ID_idx  CREATE INDEX t2_t1_ID_idx ON constraint_db.t2 (t1_ID ASC)
 t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t3 (rowid ASC)
 t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.t3 (a ASC, b DESC) STORING (c)
+
+## pg_catalog.pg_index
+
+query IIIBBB colnames
+SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
+from pg_catalog.pg_index
+WHERE indnatts = 1
+----
+indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
+1759889455  2265044713  1         true         true          false
+1759889452  2265044713  1         true         false         false
+559702615   2030599329  1         true         true          false
+559702612   2030599329  1         false        false         false
+4171047647  2064007441  1         true         true          false
+3277965703  603838087   1         true         true          false
+857944491   734892363   1         true         true          false
+449008775   1772916061  1         true         true          false
+456550805   761394483   1         true         true          false
+
+query IBBBBB colnames
+SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
+from pg_catalog.pg_index
+WHERE indnatts = 2
+----
+indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
+1759889453  false         false           true        false         false
+4171047644  true          false           true        false         false
+1957505477  false         false           true        false         false
+1657267940  false         false           true        false         false
+2471030497  false         false           true        false         false
+
+query IBBTIIITT colnames
+SELECT indexrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
+from pg_catalog.pg_index
+WHERE indnatts = 2
+----
+indexrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
+1759889453  true       false           {3,4}   0             0         0          NULL      NULL
+4171047644  true       false           {1,2}   0             0         0          NULL      NULL
+1957505477  true       false           {1,6}   0             0         0          NULL      NULL
+1657267940  true       false           {1,2}   0             0         0          NULL      NULL
+2471030497  true       false           {1,7}   0             0         0          NULL      NULL
+
 
 ## pg_catalog.pg_constraint
 ##
