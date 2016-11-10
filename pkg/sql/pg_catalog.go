@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -379,8 +378,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 	conislocal BOOL,
 	coninhcount INT,
 	connoinherit BOOL,
-	conkey STRING,
-	confkey STRING,
+	conkey INT[],
+	confkey INT[],
 	conpfeqop STRING,
 	conppeqop STRING,
 	conffeqop STRING,
@@ -496,22 +495,17 @@ CREATE TABLE pg_catalog.pg_constraint (
 	},
 }
 
-// colIDArrayToDatum returns a mock int[] as a DString for a slice of ColumnIDs.
-// TODO(nvanbenschoten) use real int arrays when they are supported.
+// colIDArrayToDatum returns an int[] containing the ColumnIDs, or NULL if there
+// are no ColumnIDs.
 func colIDArrayToDatum(arr []sqlbase.ColumnID) parser.Datum {
 	if len(arr) == 0 {
 		return parser.DNull
 	}
-	var buf bytes.Buffer
-	buf.WriteByte('{')
-	for i, val := range arr {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(strconv.Itoa(int(val)))
+	d := parser.DArray{Typ: parser.TypeIntArray}
+	for _, val := range arr {
+		d.Array = append(d.Array, parser.NewDInt(parser.DInt(val)))
 	}
-	buf.WriteByte('}')
-	return parser.NewDString(buf.String())
+	return &d
 }
 
 var (
