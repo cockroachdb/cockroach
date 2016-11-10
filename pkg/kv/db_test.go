@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -41,7 +42,7 @@ import (
 )
 
 func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
-	return createTestClientForUser(t, s, security.NodeUser)
+	return createTestClientForUser(t, s, security.NodeUser.Username())
 }
 
 func createTestClientForUser(
@@ -49,7 +50,7 @@ func createTestClientForUser(
 ) *client.DB {
 	var ctx base.Config
 	ctx.InitDefaults()
-	ctx.User = user
+	ctx.User = url.User(user)
 	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
 	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
 	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
@@ -268,7 +269,7 @@ func TestAuthentication(t *testing.T) {
 
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
-	db1 := createTestClientForUser(t, s, security.NodeUser)
+	db1 := createTestClientForUser(t, s, security.NodeUser.Username())
 	if err := db1.Run(context.TODO(), b1); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +279,7 @@ func TestAuthentication(t *testing.T) {
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
-	db2 := createTestClientForUser(t, s, security.RootUser)
+	db2 := createTestClientForUser(t, s, security.RootUser.Username())
 	if err := db2.Run(context.TODO(), b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
 	}

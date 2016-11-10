@@ -1214,7 +1214,7 @@ var _ security.RequestWithUser = &Request{}
 // GetUser implements security.RequestWithUser.
 // Gossip messages are always sent by the node user.
 func (*Request) GetUser() string {
-	return security.NodeUser
+	return security.NodeUser.Username()
 }
 
 // Metrics contains gossip metrics used per node and server.

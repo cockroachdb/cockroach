@@ -36,7 +36,6 @@ import (
 // Base config defaults.
 const (
 	defaultInsecure = false
-	defaultUser     = security.RootUser
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
@@ -85,7 +84,7 @@ type Config struct {
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
-	User string
+	User *url.Userinfo
 
 	// Addr is the address the server is listening on.
 	Addr string
@@ -116,7 +115,7 @@ type Config struct {
 // InitDefaults sets up the default values for a config.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
-	cfg.User = defaultUser
+	cfg.User = security.RootUser
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr

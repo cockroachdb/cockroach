@@ -98,7 +98,7 @@ func (s *DBServer) Batch(
 			if err != nil {
 				return nil, err
 			}
-			if certUser != security.NodeUser {
+			if certUser != security.NodeUser.Username() {
 				return nil, errors.Errorf("user %s is not allowed", certUser)
 			}
 		}
