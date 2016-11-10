@@ -33,7 +33,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := p.parser.IsAggregate(n); !isAggregate {
+	if isAggregate := p.parser.IsAggregate(n, p.session.SearchPath); !isAggregate {
 		return nil, nil
 	}
 
@@ -509,7 +509,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				// Type checking has already run on these expressions thus
 				// if an aggregate function of the wrong arity gets here,
 				// something has gone really wrong.
-				panic(fmt.Sprintf("%q has %d arguments (expected 1)", t.Name, len(t.Exprs)))
+				panic(fmt.Sprintf("%q has %d arguments (expected 1)", t.Func, len(t.Exprs)))
 			}
 
 			argExpr := t.Exprs[0]
@@ -517,7 +517,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			defer v.subAggregateVisitor.Reset()
 			parser.WalkExprConst(&v.subAggregateVisitor, argExpr)
 			if v.subAggregateVisitor.Aggregated {
-				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
+				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Func)
 				return false, expr
 			}
 

@@ -39,6 +39,7 @@ type nameResolutionVisitor struct {
 	sources    multiSourceInfo
 	colOffsets []int
 	ivarHelper parser.IndexedVarHelper
+	searchPath []string
 }
 
 var _ parser.Visitor = &nameResolutionVisitor{}
@@ -88,13 +89,13 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		// Save back to avoid re-doing the work later.
 		t.Exprs[0] = vn
 
-		fn, err := t.Name.Normalize()
+		fd, err := t.Func.Resolve(v.searchPath)
 		if err != nil {
 			v.err = err
 			return false, expr
 		}
 
-		if strings.EqualFold(fn.Function(), "count") {
+		if strings.EqualFold(fd.Name, "count") {
 			// Special case handling for COUNT(*). This is a special construct to
 			// count the number of rows; in this case * does NOT refer to a set of
 			// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
@@ -148,6 +149,7 @@ func (p *planner) resolveNames(
 		sources:    sources,
 		colOffsets: make([]int, len(sources)),
 		ivarHelper: ivarHelper,
+		searchPath: p.session.SearchPath,
 	}
 	colOffset := 0
 	for i, s := range sources {

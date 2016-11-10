@@ -1272,6 +1272,26 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 	},
+
+	// pg_catalog functions.
+	"pg_catalog.pg_typeof": {
+		// TODO(knz): This is a proof-of-concept until TypeAny works
+		// properly.
+		Builtin{
+			Types:      ArgTypes{TypeInt},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+	},
 }
 
 func init() {
