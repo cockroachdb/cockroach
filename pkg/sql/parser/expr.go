@@ -602,6 +602,8 @@ func (node *Tuple) ResolvedType() Type {
 // Array represents an array constructor.
 type Array struct {
 	Exprs Exprs
+
+	typeAnnotation
 }
 
 // Format implements the NodeFormatter interface.
