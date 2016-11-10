@@ -18,13 +18,12 @@
 package kv
 
 import (
-	"math/rand"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 )
 
 // ReplicaInfo extends the Replica structure with the associated node
@@ -65,10 +64,13 @@ func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) Repli
 	return replicas
 }
 
-// Swap interchanges the replicas stored at the given indices.
-func (rs ReplicaSlice) Swap(i, j int) {
-	rs[i], rs[j] = rs[j], rs[i]
-}
+// ReplicaSlice implements shuffle.Interface.
+
+// Len returns the total number of replicas in the slice.
+func (rs ReplicaSlice) Len() int { return len(rs) }
+
+// Swap swaps the replicas with indexes i and j.
+func (rs ReplicaSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
 
 // FindReplica returns the index of the replica which matches the specified store
 // ID. If no replica matches, -1 is returned.
@@ -116,7 +118,7 @@ func (rs ReplicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 			}
 		}
 		if topIndex < len(rs)-1 {
-			rs.randPerm(firstNotOrdered, topIndex, rand.Intn)
+			shuffle.Shuffle(rs[firstNotOrdered : topIndex+1])
 		}
 		if firstNotOrdered == 0 {
 			return bucket
@@ -137,17 +139,4 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	// Move the first i elements one index to the right
 	copy(rs[1:], rs[:i])
 	rs[0] = front
-}
-
-// Shuffle randomizes the order of the replicas.
-func (rs ReplicaSlice) Shuffle() {
-	rs.randPerm(0, len(rs)-1, rand.Intn)
-}
-
-func (rs ReplicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
-	length := topIndex - startIndex + 1
-	for i := 1; i < length; i++ {
-		j := intnFn(i + 1)
-		rs.Swap(startIndex+i, startIndex+j)
-	}
 }

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -52,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -260,6 +260,10 @@ type storeReplicaVisitor struct {
 	visited int        // Number of visited ranges, -1 before first call to Visit()
 }
 
+// storeReplicaVisitor implements the shuffle.Interface.
+func (rs storeReplicaVisitor) Len() int      { return len(rs.repls) }
+func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i] }
+
 func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 	return &storeReplicaVisitor{
 		store:   store,
@@ -287,10 +291,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	//
 	// TODO(peter): Re-evaluate whether this is necessary after we allow
 	// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
-	for i := 1; i < len(rs.repls); i++ {
-		j := rand.Intn(i + 1)
-		rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i]
-	}
+	shuffle.Shuffle(rs)
 
 	rs.visited = 0
 	for _, repl := range rs.repls {
