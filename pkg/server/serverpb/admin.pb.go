@@ -238,6 +238,11 @@ type TableDetailsResponse struct {
 	Indexes []TableDetailsResponse_Index  `protobuf:"bytes,3,rep,name=indexes" json:"indexes"`
 	// range_count is the size of the table in ranges. This provides a rough
 	// estimate of the storage requirements for the table.
+	// TODO(mrtracy): The TableStats method also returns a range_count field which
+	// is more accurate than this one; TableDetails calculates this number using
+	// a potentially faster method that is subject to cache staleness. We should
+	// consider removing or renaming this field to reflect that difference. See
+	// Github issue #5435 for more information.
 	RangeCount int64 `protobuf:"varint,4,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
 	// create_table_statement is the output of "SHOW CREATE TABLE" for this table;
 	// it is a SQL statement that would re-create the table's current schema if
