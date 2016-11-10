@@ -1591,6 +1591,13 @@ func (r *Replica) addReadOnlyCmd(
 		pErr = endCmdsFunc(br, pErr)
 	}()
 
+	r.mu.Lock()
+	err := r.mu.destroyed
+	r.mu.Unlock()
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
 	// Execute read-only batch command. It checks for matching key range; note
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
