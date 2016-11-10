@@ -3065,26 +3065,25 @@ func IsPreemptiveSnapshotError(err error) bool {
 // contains a ChangeReplicasTrigger and proposes a ConfChange to Raft (via
 // raft.RawNode.ProposeConfChange).
 //
-// The ConfChange is propagated to all of the replicas similar to a normal Raft
-// command, though additional processing is done inside of Raft. A Replica
-// encounters the ConfChange in Replica.handleRaftReady and executes it using
-// raft.RawNode.ApplyConfChange. If a new replica was added the Raft leader
-// will start sending it heartbeat messages and attempting to bring it up to
-// date. If a replica was removed, it is at this point that the Raft leader
-// will stop communicating with it.
-//
-// The fourth phase of change replicas occurs when each replica for the range
+// The third phase of change replicas occurs when each replica for the range
 // encounters the ChangeReplicasTrigger when applying the EndTransaction
 // request. The replica will update its local range descriptor so as to contain
-// the new set of replicas. If the replica is the one that is being removed, it
-// will queue itself for removal with replicaGCQueue.
+// the new set of replicas.
 //
-// Note that a removed replica may not see the EndTransaction containing the
-// ChangeReplicasTrigger. The ConfChange operation will be applied as soon as a
-// quorum of nodes have committed it. If the removed replica is down or the
-// message is dropped for some reason the removed replica will not be
-// notified. The replica GC queue will eventually discover and cleanup this
-// state.
+// The fourth phase involves ConfChange propagated to all of the replicas
+// similar to a normal Raft command, though additional processing is done
+// inside of Raft. A Replica encounters the ConfChange in
+// Replica.handleRaftReady and executes it using raft.RawNode.ApplyConfChange.
+// If a new replica was added the Raft leader will start sending it heartbeat
+// messages and attempting to bring it up to date. If a replica was removed,
+// it is at this point that the Raft leader will stop communicating with it;
+// it will also queue itself for removal with replicaGCQueue.
+//
+// Note that a removed replica may not see the ConfChange. The ConfChange
+// operation will be applied as soon as a quorum of nodes have committed the
+// EndTransaction. If the removed replica is down or the message is dropped
+// for some reason the removed replica will not be notified. The replica GC
+// queue will eventually discover and cleanup this state.
 //
 // When a new replica is added, it will have to catch up to the state of the
 // other replicas. The Raft leader automatically handles this by either sending

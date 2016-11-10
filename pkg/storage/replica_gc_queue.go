@@ -19,7 +19,6 @@ package storage
 import (
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -114,31 +113,26 @@ func (q *replicaGCQueue) shouldQueue(
 		lastActivity.Forward(nextLease.Expiration)
 	}
 
-	var isCandidate bool
-	if raftStatus := repl.RaftStatus(); raftStatus != nil {
-		isCandidate = (raftStatus.SoftState.RaftState == raft.StateCandidate)
-	}
-	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isCandidate)
+	// Check if the replica has been removed from the range descriptor.
+	_, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID())
+	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, currentMember)
 }
 
 func replicaGCShouldQueueImpl(
-	now, lastCheck, lastActivity hlc.Timestamp, isCandidate bool,
+	now, lastCheck, lastActivity hlc.Timestamp, currentMember bool,
 ) (bool, float64) {
 	timeout := ReplicaGCQueueInactivityThreshold
 	priority := replicaGCPriorityDefault
 
-	if isCandidate {
-		// If the range is a candidate (which happens if its former replica set
-		// ignores it), let it expire much earlier.
+	if !currentMember {
+		// If the replica is no longer listed in the range descriptor.
 		timeout = ReplicaGCQueueCandidateTimeout
 		priority = replicaGCPriorityCandidate
 	} else if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
 		// Return false immediately if the previous check was less than the
-		// check interval in the past. Note that we don't do this is the
-		// replica is in candidate state, in which case we want to be more
-		// aggressive - a failed rebalance attempt could have checked this
-		// range, and candidate state suggests that a retry succeeded. See
-		// #7489.
+		// check interval in the past. Note that we don't do this if the
+		// replica is not a member, in which case we want to be more
+		// aggressive - See #7489.
 		return false, 0
 	}
 
