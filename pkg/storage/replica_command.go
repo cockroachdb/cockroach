@@ -1413,9 +1413,16 @@ func (r *Replica) PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
+		pusherShort := "<nil>"
+		if id := args.PusherTxn.ID; id != nil {
+			pusherShort = id.Short()
+		}
+		pusheeShort := "<nil>"
+		if id := args.PusheeTxn.ID; id != nil {
+			pusheeShort = id.Short()
+		}
 		log.Infof(ctx, "%s "+s+" %s: %s (pushee last active: %s)",
-			args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason,
-			reply.PusheeTxn.LastActive())
+			pusherShort, pusheeShort, reason, reply.PusheeTxn.LastActive())
 	}
 
 	if !pusherWins {
