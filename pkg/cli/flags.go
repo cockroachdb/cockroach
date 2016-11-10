@@ -372,7 +372,7 @@ func init() {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connURL, cliflags.URL, "")
 
-		stringFlag(f, &connUser, cliflags.User, security.RootUser)
+		stringFlag(f, &connUser, cliflags.User, security.RootUser.Username())
 		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
 		stringFlag(f, &connDBName, cliflags.Database, "")
 	}

@@ -98,7 +98,7 @@ func (c *Cluster) Start(db string, numWorkers int, args, env []string) {
 	c.started = timeutil.Now()
 
 	baseCtx := &base.Config{
-		User:     security.NodeUser,
+		User:     security.NodeUser.Username(),
 		Insecure: true,
 	}
 	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,

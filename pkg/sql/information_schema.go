@@ -734,7 +734,7 @@ func forEachUser(p *planner, fn func(username string) error) error {
 
 	// TODO(cuongdo/asubiotto): Get rid of root user special-casing if/when a row
 	// for "root" exists in system.user.
-	if err := fn(security.RootUser); err != nil {
+	if err := fn(security.RootUser.Username()); err != nil {
 		return err
 	}
 

@@ -303,7 +303,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	initBlockProfile()
 
 	// Default user for servers.
-	serverCfg.User = security.NodeUser
+	serverCfg.User = security.NodeUser.Username()
 
 	stopper := initBacktrace(logDir)
 	log.Event(startCtx, "initialized profiles")

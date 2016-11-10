@@ -116,7 +116,7 @@ func (s *adminServer) RegisterGateway(
 // TODO(cdo): Make this work when we have an authentication scheme for the
 // API.
 func (s *adminServer) getUser(_ proto.Message) string {
-	return security.RootUser
+	return security.RootUser.Username()
 }
 
 // serverError logs the provided error and returns an error that should be returned by
