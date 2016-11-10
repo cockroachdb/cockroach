@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"strings"
 
 	"gopkg.in/inf.v0"
 
@@ -27,7 +26,7 @@ import (
 
 func init() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
-	for k, v := range Aggregates {
+	for _, v := range Aggregates {
 		for _, a := range v {
 			if !a.impure {
 				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
@@ -45,8 +44,6 @@ func init() {
 					"found %v", a))
 			}
 		}
-		Builtins[strings.ToUpper(k)] = v
-		Builtins[strings.ToLower(k)] = v
 	}
 }
 
@@ -72,7 +69,9 @@ type AggregateFunc interface {
 // table, so their evaluation must always be delayed until query
 // execution.
 // Exported for use in documentation.
-var Aggregates = map[string][]Builtin{
+var Aggregates map[string][]Builtin
+
+var _ = setupBuiltins(map[string][]Builtin{
 	"avg": {
 		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate),
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate),
@@ -117,7 +116,7 @@ var Aggregates = map[string][]Builtin{
 		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStdDevAggregate),
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStdDevAggregate),
 	},
-}
+})
 
 func makeAggBuiltin(in, ret Type, f func() AggregateFunc) Builtin {
 	return Builtin{
@@ -664,6 +663,8 @@ var _ Visitor = &IsAggregateVisitor{}
 // IsAggregateVisitor checks if walked expressions contain aggregate functions.
 type IsAggregateVisitor struct {
 	Aggregated bool
+	// searchPath is used to search for unqualified function names.
+	searchPath []string
 }
 
 // VisitPre satisfies the Visitor interface.
@@ -675,11 +676,11 @@ func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			// aggregate function, but it can contain aggregate functions.
 			return true, expr
 		}
-		fn, err := t.Name.Normalize()
+		fd, err := t.Func.Resolve(v.searchPath)
 		if err != nil {
 			return false, expr
 		}
-		if _, ok := Aggregates[strings.ToLower(fn.Function())]; ok {
+		if _, ok := Aggregates[fd.Name]; ok {
 			v.Aggregated = true
 			return false, expr
 		}
@@ -711,11 +712,12 @@ func (p *Parser) AggregateInExpr(expr Expr) bool {
 }
 
 // IsAggregate determines if SelectClause contains an aggregate function.
-func (p *Parser) IsAggregate(n *SelectClause) bool {
+func (p *Parser) IsAggregate(n *SelectClause, searchPath []string) bool {
 	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
 
+	p.isAggregateVisitor.searchPath = searchPath
 	defer p.isAggregateVisitor.Reset()
 	for _, target := range n.Exprs {
 		WalkExprConst(&p.isAggregateVisitor, target.Expr)

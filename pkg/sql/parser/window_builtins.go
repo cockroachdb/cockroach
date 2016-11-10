@@ -106,7 +106,7 @@ type WindowFunc interface {
 // windows are a special class of builtin functions that can only be applied
 // as window functions using an OVER clause.
 // See `windowFuncHolder` in the sql package.
-var windows = map[string][]Builtin{
+var windows = setupBuiltins(map[string][]Builtin{
 	"row_number": {
 		makeWindowBuiltin(ArgTypes{}, TypeInt, newRowNumberWindow),
 	},
@@ -156,7 +156,7 @@ var windows = map[string][]Builtin{
 	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
 	}, anyElementTypes...),
-}
+})
 
 var anyElementTypes = []Type{
 	TypeBool,
@@ -338,7 +338,7 @@ func newNtileWindow() WindowFunc {
 	return &ntileWindow{}
 }
 
-var errInvalidArgumentForNtile = errors.Errorf("argument of ntile must be greater than zero")
+var errInvalidArgumentForNtile = errors.Errorf("argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
 	if w.ntile == nil {
@@ -459,7 +459,7 @@ func newNthValueWindow() WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = errors.Errorf("argument of nth_value must be greater than zero")
+var errInvalidArgumentForNthValue = errors.Errorf("argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(wf WindowFrame) (Datum, error) {
 	arg := wf.args()[1]

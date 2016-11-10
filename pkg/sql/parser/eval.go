@@ -2040,7 +2040,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	res, err := expr.fn.fn(ctx, args)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", expr.Name, err)
+		return nil, fmt.Errorf("%s(): %v", expr.Func, err)
 	}
 	return res, nil
 }

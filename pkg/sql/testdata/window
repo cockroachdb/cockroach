@@ -177,7 +177,7 @@ SELECT avg(k) OVER (PARTITION BY a) FROM kv
 query error column name "a" not found
 SELECT avg(k) OVER (ORDER BY a) FROM kv
 
-query error aggregate function calls cannot contain window function call avg
+query error aggregate function calls cannot contain window function call avg\(\)
 SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
 
 query R
@@ -185,19 +185,19 @@ SELECT avg(avg(k)) OVER () FROM kv ORDER BY 1
 ----
 5.0000000000000000
 
-query error OVER specified, but now is not a window function nor an aggregate function
+query error OVER specified, but now\(\) is neither a window function nor an aggregate function
 SELECT now() OVER () FROM kv ORDER BY 1
 
-query error window function rank requires an OVER clause
+query error window function rank\(\) requires an OVER clause
 SELECT rank() FROM kv
 
-query error unknown signature for rank: rank\(int\)
+query error unknown signature: rank\(int\)
 SELECT rank(22) FROM kv
 
-query error window function calls cannot be nested under avg
+query error window function calls cannot be nested under avg\(\)
 SELECT avg(avg(k) OVER ()) OVER () FROM kv ORDER BY 1
 
-query error OVER specified, but round is not a window function nor an aggregate function
+query error OVER specified, but round\(\) is neither a window function nor an aggregate function
 SELECT round(avg(k) OVER ()) OVER () FROM kv ORDER BY 1
 
 query R
@@ -766,10 +766,10 @@ SELECT k, v, w, cume_dist() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 10  4     9  1
 11  NULL  9  1
 
-query error argument of ntile must be greater than zero
+query error argument of ntile\(\) must be greater than zero
 SELECT k, ntile(-10) OVER () FROM kv ORDER BY 1
 
-query error argument of ntile must be greater than zero
+query error argument of ntile\(\) must be greater than zero
 SELECT k, ntile(0) OVER () FROM kv ORDER BY 1
 
 query II
@@ -1124,16 +1124,16 @@ SELECT k, lead(k, w) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 10  NULL
 11  NULL
 
-query error unknown signature for lag: lag\(int, int, string\)
+query error unknown signature: lag\(int, int, string\)
 SELECT k, lag(k, 1, 'FOO') OVER () FROM kv ORDER BY 1
 
-query error unknown signature for lead: lead\(int, int, string\)
+query error unknown signature: lead\(int, int, string\)
 SELECT k, lead(k, 1, 'FOO') OVER () FROM kv ORDER BY 1
 
-query error unknown signature for lag: lag\(int, int, string\)
+query error unknown signature: lag\(int, int, string\)
 SELECT k, lag(k, 1, s) OVER () FROM kv ORDER BY 1
 
-query error unknown signature for lead: lead\(int, int, string\)
+query error unknown signature: lead\(int, int, string\)
 SELECT k, lead(k, 1, s) OVER () FROM kv ORDER BY 1
 
 query II
@@ -1357,13 +1357,13 @@ SELECT k, v, w, last_value(w) OVER (PARTITION BY v ORDER BY w DESC) FROM kv ORDE
 10  4     9  9
 11  NULL  9  9
 
-query error unknown signature for nth_value: nth_value\(int, string\)
+query error unknown signature: nth_value\(int, string\)
 SELECT k, nth_value(v, 'FOO') OVER () FROM kv ORDER BY 1
 
-query error argument of nth_value must be greater than zero
+query error argument of nth_value\(\) must be greater than zero
 SELECT k, nth_value(v, -99) OVER () FROM kv ORDER BY 1
 
-query error argument of nth_value must be greater than zero
+query error argument of nth_value\(\) must be greater than zero
 SELECT k, nth_value(v, 0) OVER () FROM kv ORDER BY 1
 
 query II
@@ -1486,7 +1486,7 @@ SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 statement ok
 INSERT INTO kv VALUES (12, -1, DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 
-query error argument of nth_value must be greater than zero
+query error argument of nth_value\(\) must be greater than zero
 SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 
 statement ok
