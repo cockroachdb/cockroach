@@ -47,5 +47,6 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 		if _, err := rep.GetSnapshot(context.Background()); err != nil {
 			b.Fatal(err)
 		}
+		rep.CloseOutSnap()
 	}
 }
