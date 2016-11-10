@@ -211,10 +211,8 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 		Processors: []distsql.ProcessorSpec{{
 			Core: distsql.ProcessorCoreUnion{TableReader: tr},
 			Output: []distsql.OutputRouterSpec{{
-				Type: distsql.OutputRouterSpec_MIRROR,
-				Streams: []distsql.StreamEndpointSpec{{
-					Mailbox: &distsql.MailboxSpec{SyncResponse: true},
-				}},
+				Type:    distsql.OutputRouterSpec_MIRROR,
+				Streams: []distsql.StreamEndpointSpec{{Type: distsql.StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
 		}},
 	}

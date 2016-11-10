@@ -52,32 +52,36 @@ message Ordering {
   repeated Column columns = 1 [(gogoproto.nullable) = false];
 }
 
-// A mailbox is where a stream "crosses" hosts - it is an endpoint of a local
-// stream which receives data from or sends to a remote host.
-message MailboxSpec {
-  // If set, we are in a special "sync flow" mode. In this mode, we return
-  // results directly as part of the RPC call that set up the flow. This saves
-  // overhead (extra RPCs) compared to the normal mode where the RPC just sets
-  // up the flow. In this mode there are no remote endpoints so this must be the
-  // only mailbox in that flow.
-  optional bool sync_response = 1 [(gogoproto.nullable) = false];
-
-  // Serving address for the target host, used for outgoing mailboxes.
-  optional string target_addr = 2 [(gogoproto.nullable) = false];
-}
-
 // StreamEndpointSpec describes one of the endpoints (input or output) of a physical
 // stream.
 message StreamEndpointSpec {
-  // The ID of this stream. If mailbox is not set, both ends of the stream are
-  // part of the flow on this machine (and there must be a corresponding
-  // endpoint with the same ID). If mailbox is set, this ID is used to refer to
-  // this mailbox in a StreamHeader.
-  optional int32 stream_id = 1 [(gogoproto.nullable) = false,
+  enum Type {
+    // Stream that is part of the local flow.
+    LOCAL = 0;
+    // Stream that has the other endpoint on a different node.
+    REMOTE = 1;
+    // Special stream used when in "sync flow" mode. In this mode, we return
+    // results directly as part of the RPC call that set up the flow. This saves
+    // overhead (extra RPCs) compared to the normal mode where the RPC just sets
+    // up the flow. This type can only be used with outbound endpoints.
+    SYNC_RESPONSE = 2;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+
+  // The ID of this stream.
+  //
+  // For LOCAL streams, both ends of the stream are part of the flow on this
+  // machine (and there must be a corresponding endpoint with the same ID).
+  //
+  // For REMOTE streams, this ID is used in the StreamHeader when connecting to
+  // the other host.
+  //
+  // For SYNC_RESPONSE streams, the ID is unused.
+  optional int32 stream_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "StreamID",
                                 (gogoproto.casttype) = "StreamID"];
-  // If set, the stream crosses flows; the endpoint is a mailbox.
-  optional MailboxSpec mailbox = 2;
+  // Serving address for the target host, only used for outgoing REMOTE streams.
+  optional string target_addr = 3 [(gogoproto.nullable) = false];
 }
 
 // InputSyncSpec is the specification for an input synchronizer; it decides how

@@ -65,7 +65,7 @@ func TestServer(t *testing.T) {
 			Core: ProcessorCoreUnion{TableReader: &ts},
 			Output: []OutputRouterSpec{{
 				Type:    OutputRouterSpec_MIRROR,
-				Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SyncResponse: true}}},
+				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
 		}},
 	}
