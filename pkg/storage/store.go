@@ -2333,8 +2333,7 @@ func (s *Store) Send(
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			pErr = roachpb.NewError(err)
-			return nil, pErr
+			return nil, roachpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
 			repl.mu.Lock()
