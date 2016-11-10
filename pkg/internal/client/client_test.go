@@ -120,7 +120,7 @@ func (ss *notifyingSender) Send(
 }
 
 func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
-	return createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
+	return createTestClientForUser(t, s, security.NodeUser.Username(), client.DefaultDBContext())
 }
 
 func createTestClientForUser(
@@ -314,7 +314,7 @@ func TestClientRunTransaction(t *testing.T) {
 	defer s.Stopper().Stop()
 	dbCtx := client.DefaultDBContext()
 	dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
-	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
+	db := createTestClientForUser(t, s, security.NodeUser.Username(), dbCtx)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -757,8 +757,8 @@ func TestClientPermissions(t *testing.T) {
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
-	rootClient := createTestClientForUser(t, s, security.RootUser, client.DefaultDBContext())
+	nodeClient := createTestClientForUser(t, s, security.NodeUser.Username(), client.DefaultDBContext())
+	rootClient := createTestClientForUser(t, s, security.RootUser.Username(), client.DefaultDBContext())
 
 	testCases := []struct {
 		path    string

@@ -36,7 +36,6 @@ import (
 // Base config defaults.
 const (
 	defaultInsecure = false
-	defaultUser     = security.RootUser
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
@@ -116,7 +115,7 @@ type Config struct {
 // InitDefaults sets up the default values for a config.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
-	cfg.User = defaultUser
+	cfg.User = security.RootUser.Username()
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr

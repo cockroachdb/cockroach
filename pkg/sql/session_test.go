@@ -18,7 +18,6 @@ package sql_test
 
 import (
 	"database/sql/driver"
-	"net/url"
 	"testing"
 	"time"
 
@@ -44,7 +43,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer s.Stopper().Stop()
 	{
 		pgURL, cleanup := sqlutils.PGUrl(
-			t, s.ServingAddr(), "TestSessionFinishRollsBackTxn", url.User(security.RootUser))
+			t, s.ServingAddr(), "TestSessionFinishRollsBackTxn", security.RootUser)
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -68,7 +67,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Run(state.String(), func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
 			pgURL, cleanupDB := sqlutils.PGUrl(
-				t, s.ServingAddr(), state.String(), url.User(security.RootUser))
+				t, s.ServingAddr(), state.String(), security.RootUser)
 			defer cleanupDB()
 			conn, err := pq.Open(pgURL.String())
 			if err != nil {

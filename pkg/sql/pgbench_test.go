@@ -111,7 +111,7 @@ func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
 	defer s.Stopper().Stop()
 
 	pgUrl, cleanupFn := sqlutils.PGUrl(
-		b, s.ServingAddr(), "benchmarkCockroach", url.User(security.RootUser))
+		b, s.ServingAddr(), "benchmarkCockroach", security.RootUser)
 	pgUrl.RawQuery = "sslmode=disable"
 	defer cleanupFn()
 

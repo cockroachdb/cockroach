@@ -876,7 +876,7 @@ CREATE TABLE pg_catalog.pg_roles (
 		h := makeOidHasher()
 		return forEachUser(p,
 			func(username string) error {
-				isRoot := parser.DBool(username == security.RootUser)
+				isRoot := parser.DBool(username == security.RootUser.Username())
 				return addRow(
 					h.UserOid(username),           // oid
 					parser.NewDString(username),   // rolname

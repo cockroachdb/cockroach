@@ -89,7 +89,7 @@ func TestSSLEnforcement(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)
+	rootCertsContext := testutils.NewTestBaseContext(security.RootUser.Username())
 	// HTTPS with client certs for security.NodeUser.
 	nodeCertsContext := testutils.NewNodeTestBaseContext()
 	// HTTPS with client certs for TestUser.

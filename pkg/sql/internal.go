@@ -41,7 +41,7 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 func (ie InternalExecutor) ExecuteStatementInTransaction(
 	opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
-	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	p := makeInternalPlanner(opName, txn, security.RootUser.Username(), ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, qargs...)

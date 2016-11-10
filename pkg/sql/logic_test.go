@@ -454,7 +454,7 @@ func (t *logicTest) setup() {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.cleanupRootUser = t.setUser(security.RootUser)
+	t.cleanupRootUser = t.setUser(security.RootUser.Username())
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;

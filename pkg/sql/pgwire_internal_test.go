@@ -20,7 +20,6 @@ package sql
 
 import (
 	"database/sql/driver"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,7 +39,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	url, cleanupConn := sqlutils.PGUrl(t, s.ServingAddr(), "SetupServer", url.User(security.RootUser))
+	url, cleanupConn := sqlutils.PGUrl(t, s.ServingAddr(), "SetupServer", security.RootUser)
 	defer cleanupConn()
 	conn, err := pq.Open(url.String())
 	if err != nil {

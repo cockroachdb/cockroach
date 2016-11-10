@@ -114,7 +114,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,
-			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]),
+			sqlbase.NewPrivilegeDescriptor(security.RootUser.Username(), sqlbase.SystemConfigAllowedPrivileges[test.id]),
 		)
 		if err != nil {
 			t.Fatal(err)
