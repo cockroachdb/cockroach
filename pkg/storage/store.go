@@ -2751,7 +2751,7 @@ func (s *Store) processRaftRequest(
 				// TODO(arjun): Now that we have better raft transport error
 				// handling, consider if this error should be returned and
 				// handled by the sending store.
-				log.Info(ctx, errors.Wrapf(err, "%s: cannot apply snapshot", r))
+				log.Infof(ctx, "cannot apply snapshot: %s", err)
 				return true
 			}
 
@@ -2761,7 +2761,7 @@ func (s *Store) processRaftRequest(
 				// Replica.handleRaftReady. Note that we can only get here if the
 				// replica doesn't exist or is uninitialized.
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatal(ctx, errors.Wrapf(err, "%s: could not add vetted placeholder %s", s, placeholder))
+					log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
 				}
 				addedPlaceholder = true
 			}
@@ -2801,7 +2801,7 @@ func (s *Store) processRaftRequest(
 				if addedPlaceholder {
 					// Clear the replica placeholder; we are about to swap it with a real replica.
 					if !s.removePlaceholderLocked(req.RangeID) {
-						log.Fatalf(ctx, "%s: could not remove placeholder after preemptive snapshot", r)
+						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
 					}
 					if pErr == nil {
 						atomic.AddInt32(&s.counts.filledPlaceholders, 1)
