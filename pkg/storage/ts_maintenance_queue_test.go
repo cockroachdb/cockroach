@@ -178,7 +178,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	// periods; this simplifies verification.
 	seriesName := "test.metric"
 	sourceName := "source1"
-	now := tsrv.Clock().PhysicalNow()
+	now := tsrv.Clock().Now().WallTime
 	nearPast := now - (ts.Resolution10s.PruneThreshold() * 2)
 	farPast := now - (ts.Resolution10s.PruneThreshold() * 4)
 	sampleDuration := ts.Resolution10s.SampleDuration()

@@ -200,7 +200,7 @@ func (s *Store) logChange(
 // physical time instead.
 func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
 	if input == hlc.ZeroTimestamp {
-		return s.Clock().PhysicalTime()
+		return s.Clock().Now().GoTime()
 	}
 	return input.GoTime()
 }

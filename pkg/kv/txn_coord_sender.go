@@ -288,7 +288,7 @@ func (tc *TxnCoordSender) Send(
 		tracer = sp.Tracer()
 	}
 
-	startNS := tc.clock.PhysicalNow()
+	startNS := tc.clock.Now().WallTime
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
@@ -443,7 +443,7 @@ func (tc *TxnCoordSender) Send(
 		startNS = tsNS
 	}
 	sleepNS := tc.clock.MaxOffset() -
-		time.Duration(tc.clock.PhysicalNow()-startNS)
+		time.Duration(tc.clock.Now().WallTime-startNS)
 	if tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
@@ -584,7 +584,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
-	duration = tc.clock.PhysicalNow() - txnMeta.firstUpdateNanos
+	duration = tc.clock.Now().WallTime - txnMeta.firstUpdateNanos
 	restarts = int64(txnMeta.txn.Epoch)
 	status = txnMeta.txn.Status
 
@@ -710,7 +710,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	txn := txnMeta.txn.Clone()
-	hasAbandoned := txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow())
+	hasAbandoned := txnMeta.hasClientAbandonedCoord(tc.clock.Now().WallTime)
 	tc.Unlock()
 
 	if txn.Status != roachpb.PENDING {
@@ -905,7 +905,7 @@ func (tc *TxnCoordSender) updateState(
 					txn:              newTxn,
 					keys:             keys,
 					firstUpdateNanos: startNS,
-					lastUpdateNanos:  tc.clock.PhysicalNow(),
+					lastUpdateNanos:  tc.clock.Now().WallTime,
 					timeoutDuration:  tc.clientTimeout,
 					txnEnd:           make(chan struct{}),
 				}
@@ -926,7 +926,7 @@ func (tc *TxnCoordSender) updateState(
 				// directly as they won't otherwise be updated on heartbeat
 				// loop shutdown.
 				etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
-				tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
+				tc.updateStats(tc.clock.Now().WallTime-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
 			}
 		}
 	}
@@ -937,7 +937,7 @@ func (tc *TxnCoordSender) updateState(
 		if !txnMeta.txn.Writing {
 			panic("tracking a non-writing txn")
 		}
-		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+		txnMeta.setLastUpdate(tc.clock.Now().WallTime)
 	}
 
 	if pErr == nil {

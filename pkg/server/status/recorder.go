@@ -207,7 +207,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	data := make([]tspb.TimeSeriesData, 0, mr.mu.lastDataCount)
 
 	// Record time series from node-level registries.
-	now := mr.mu.clock.PhysicalNow()
+	now := mr.mu.clock.Now().WallTime
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
 		format:         nodeTimeSeriesPrefix,
@@ -245,7 +245,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		return nil
 	}
 
-	now := mr.mu.clock.PhysicalNow()
+	now := mr.mu.clock.Now().WallTime
 
 	// Generate an node status with no store data.
 	nodeStat := &NodeStatus{
