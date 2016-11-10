@@ -152,7 +152,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			}
 			ts := timeutil.Now()
 			var count int
-			if err := txCheck.QueryRow("SELECT COUNT(1) FROM t.test").Scan(&count); err != nil {
+			if err := txCheck.QueryRow("SELECT count(1) FROM t.test").Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 			// CommitWait actually committed, so we'll need to clean up.

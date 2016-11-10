@@ -117,11 +117,11 @@ func (u *sqlSymUnion) unresolvedName() UnresolvedName {
 func (u *sqlSymUnion) unresolvedNames() UnresolvedNames {
     return u.val.(UnresolvedNames)
 }
-func (u *sqlSymUnion) functionName() FunctionName {
-    return u.val.(FunctionName)
+func (u *sqlSymUnion) functionReference() FunctionReference {
+    return u.val.(FunctionReference)
 }
-func (u *sqlSymUnion) normalizableFunctionName() NormalizableFunctionName {
-    return NormalizableFunctionName{u.val.(FunctionName)}
+func (u *sqlSymUnion) resolvableFunctionReference() ResolvableFunctionReference {
+    return ResolvableFunctionReference{u.val.(FunctionReference)}
 }
 func (u *sqlSymUnion) normalizableTableName() NormalizableTableName {
     return NormalizableTableName{u.val.(TableNameReference)}
@@ -372,7 +372,7 @@ func (u *sqlSymUnion) window() Window {
 %type <str>   savepoint_name
 
 // %type <empty> subquery_op
-%type <FunctionName> func_name
+%type <FunctionReference> func_name
 %type <empty> opt_collate
 
 %type <UnresolvedName> qualified_name
@@ -3719,25 +3719,25 @@ c_expr:
 func_application:
   func_name '(' ')'
   {
-    $$.val = &FuncExpr{Name: $1.normalizableFunctionName()}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference()}
   }
 | func_name '(' expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: $3.exprs()}
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex) }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex) }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Type: All, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Type: All, Exprs: $4.exprs()}
   }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Type: Distinct, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Type: Distinct, Exprs: $4.exprs()}
   }
 | func_name '(' '*' ')'
   {
-    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Exprs: Exprs{StarExpr()}}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: Exprs{StarExpr()}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
@@ -3772,19 +3772,19 @@ func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' { return unimplemented(sqllex) }
 | CURRENT_DATE
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
 | CURRENT_DATE '(' ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
 | CURRENT_TIMESTAMP
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
 | CURRENT_ROLE { return unimplemented(sqllex) }
 | CURRENT_USER { return unimplemented(sqllex) }
@@ -3800,40 +3800,40 @@ func_expr_common_subexpr:
   }
 | EXTRACT '(' extract_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
 | EXTRACT_DURATION '(' extract_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
 | OVERLAY '(' overlay_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
 | POSITION '(' position_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("STRPOS"), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction("STRPOS"), Exprs: $3.exprs()}
   }
 | SUBSTRING '(' substr_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
 | TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex) }
 | TRIM '(' BOTH trim_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction("BTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("LTRIM"), Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction("LTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("RTRIM"), Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction("RTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' trim_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction("BTRIM"), Exprs: $3.exprs()}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
@@ -3853,11 +3853,11 @@ func_expr_common_subexpr:
   }
 | GREATEST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
 | LEAST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
 
 // Aggregate decoration clauses

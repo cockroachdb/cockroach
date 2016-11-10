@@ -22,21 +22,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
-func TestNormalizeFunctionName(t *testing.T) {
+func TestResolveFunction(t *testing.T) {
 	testCases := []struct {
 		in, out string
 		err     string
 	}{
-		{`foo`, `foo`, ``},
-		{`foo.bar`, `foo.bar`, ``},
-		{`foo.*.baz`, `foo.*.baz`, ``},
-		{`foo[bar].baz`, `foo[bar].baz`, ``},
+		{`count`, `count`, ``},
+		{`pg_catalog.pg_typeof`, `pg_catalog.pg_typeof`, ``},
+		{`pg_typeof`, `pg_catalog.pg_typeof`, ``},
 
-		{`""`, ``, `empty function name`},
-		{`foo.*`, ``, `invalid function name: "foo.*"`},
-		{`foo[bar]`, ``, `invalid function name: "foo\[bar\]"`},
+		{`foo`, ``, `unknown function: foo`},
+		{`""`, ``, `invalid function name: ""`},
+		{`foo.*.baz`, ``, `invalid function name: foo.*.baz`},
+		{`foo.*`, ``, `invalid function name: foo.*`},
+		{`foo[bar]`, ``, `invalid function name: foo\[bar\]`},
 	}
 
+	searchPath := []string{"pg_catalog"}
 	for _, tc := range testCases {
 		stmt, err := ParseOneTraditional("SELECT " + tc.in + "(1)")
 		if err != nil {
@@ -46,8 +48,8 @@ func TestNormalizeFunctionName(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s does not parse to a FuncExpr", tc.in)
 		}
-		q := f.Name
-		_, err = q.Normalize()
+		q := f.Func
+		_, err = q.Resolve(searchPath)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)

@@ -123,7 +123,7 @@ func (t *TableName) String() string { return AsString(t) }
 func (t *TableName) NormalizeTableName() (*TableName, error) { return t, nil }
 
 // NormalizedTableName normalize DatabaseName and TableName to lowercase
-// And Unicode Normalization.
+// and performs Unicode Normalization.
 func (t *TableName) NormalizedTableName() TableName {
 	return TableName{
 		DatabaseName: Name(t.DatabaseName.Normalize()),

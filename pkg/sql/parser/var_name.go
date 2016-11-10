@@ -227,6 +227,7 @@ func (n UnresolvedName) NormalizeVarName() (VarName, error) {
 		}
 	}
 	// The element at position i - 1 must be the column name.
+	// (We don't support record types yet.)
 	if i == 0 {
 		return nil, fmt.Errorf("invalid column name: %q", n)
 	}
