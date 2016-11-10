@@ -1971,16 +1971,17 @@ func (s *Store) removeReplicaImpl(
 	}
 
 	s.mu.Lock()
-	if _, ok := s.mu.replicas[rep.RangeID]; !ok {
+	if _, err := s.getReplicaLocked(rep.RangeID); err != nil {
 		s.mu.Unlock()
-		return errors.New("replica not found")
+		return err
 	}
-	if kr := s.getOverlappingKeyRangeLocked(desc); kr != rep {
+	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
+		ctx := rep.AnnotateCtx(context.TODO())
 		// This is a fatal error because uninitialized replicas shouldn't make it
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
 		s.mu.Unlock()
-		panic(fmt.Sprintf("replica %s unexpectedly overlapped by %v", rep, kr))
+		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1994,6 +1995,7 @@ func (s *Store) removeReplicaImpl(
 	// Replica.raftMu and the replica is present in Store.mu.replicasByKey
 	// (preventing any concurrent access to the replica's key range).
 
+	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
 	// Clear the pending command queue.
 	if len(rep.mu.proposals) > 0 {
@@ -2010,6 +2012,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
+	rep.readOnlyCmdMu.Unlock()
 
 	if destroyData {
 		if err := rep.destroyDataRaftMuLocked(); err != nil {
@@ -2020,14 +2023,15 @@ func (s *Store) removeReplicaImpl(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.mu.replicas, rep.RangeID)
-	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
-	if kr := s.mu.replicasByKey.Delete(rep); kr != rep {
+	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
+		ctx := rep.AnnotateCtx(context.TODO())
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		panic(fmt.Sprintf("replica %s unexpectedly overlapped by %v", rep, kr))
+		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
 	}
+	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
 	return nil
@@ -2333,8 +2337,7 @@ func (s *Store) Send(
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			pErr = roachpb.NewError(err)
-			return nil, pErr
+			return nil, roachpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
 			repl.mu.Lock()
@@ -2751,7 +2754,7 @@ func (s *Store) processRaftRequest(
 				// TODO(arjun): Now that we have better raft transport error
 				// handling, consider if this error should be returned and
 				// handled by the sending store.
-				log.Info(ctx, errors.Wrapf(err, "%s: cannot apply snapshot", r))
+				log.Infof(ctx, "cannot apply snapshot: %s", err)
 				return true
 			}
 
@@ -2761,7 +2764,7 @@ func (s *Store) processRaftRequest(
 				// Replica.handleRaftReady. Note that we can only get here if the
 				// replica doesn't exist or is uninitialized.
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatal(ctx, errors.Wrapf(err, "%s: could not add vetted placeholder %s", s, placeholder))
+					log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
 				}
 				addedPlaceholder = true
 			}
@@ -2801,7 +2804,7 @@ func (s *Store) processRaftRequest(
 				if addedPlaceholder {
 					// Clear the replica placeholder; we are about to swap it with a real replica.
 					if !s.removePlaceholderLocked(req.RangeID) {
-						log.Fatalf(ctx, "%s: could not remove placeholder after preemptive snapshot", r)
+						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
 					}
 					if pErr == nil {
 						atomic.AddInt32(&s.counts.filledPlaceholders, 1)
