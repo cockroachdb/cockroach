@@ -330,13 +330,15 @@ func (tc *TestCluster) changeReplicas(
 		if err != nil {
 			return nil, err
 		}
-		err = replica.ChangeReplicas(context.Background(),
+		ctx := replica.AnnotateCtx(context.Background())
+		if err := replica.ChangeReplicas(
+			ctx,
 			action,
 			roachpb.ReplicaDescriptor{
 				NodeID:  target.NodeID,
 				StoreID: target.StoreID,
-			}, rangeDesc)
-		if err != nil {
+			}, rangeDesc,
+		); err != nil {
 			return nil, err
 		}
 	}
