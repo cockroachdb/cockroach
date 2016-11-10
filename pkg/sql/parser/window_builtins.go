@@ -106,7 +106,7 @@ type WindowFunc interface {
 // windows are a special class of builtin functions that can only be applied
 // as window functions using an OVER clause.
 // See `windowFuncHolder` in the sql package.
-var windows = map[string][]Builtin{
+var windows = setupBuiltins(map[string][]Builtin{
 	"row_number": {
 		makeWindowBuiltin(ArgTypes{}, TypeInt, newRowNumberWindow),
 	},
@@ -156,7 +156,7 @@ var windows = map[string][]Builtin{
 	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
 	}, anyElementTypes...),
-}
+})
 
 var anyElementTypes = []Type{
 	TypeBool,

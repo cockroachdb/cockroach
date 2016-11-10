@@ -164,8 +164,36 @@ func (b Builtin) Signature() string {
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType)
 }
 
+func setupBuiltins(builtins map[string][]Builtin) map[string][]Builtin {
+	if Builtins == nil {
+		Builtins = make(map[string][]Builtin)
+		Aggregates = make(map[string][]Builtin)
+		funDefs = make(map[string]*FunctionDefinition)
+	}
+	for name, def := range builtins {
+		uname := strings.ToUpper(name)
+
+		if funDefs[name] != nil {
+			panic(fmt.Sprintf("built-in function %s defined more than once", name))
+		}
+
+		Builtins[name] = def
+		Builtins[uname] = def
+		if def[0].class == AggregateClass {
+			Aggregates[name] = def
+			Aggregates[uname] = def
+		}
+		fdef := &FunctionDefinition{Name: uname, Definition: def}
+		funDefs[name] = fdef
+		funDefs[uname] = fdef
+	}
+	return builtins
+}
+
 // Builtins contains the built-in functions indexed by name.
-var Builtins = map[string][]Builtin{
+var Builtins map[string][]Builtin
+
+var _ = setupBuiltins(map[string][]Builtin{
 	// Keep the list of functions sorted.
 
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
@@ -1273,13 +1301,27 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 	},
-}
 
-func init() {
-	for k, v := range Builtins {
-		Builtins[strings.ToUpper(k)] = v
-	}
-}
+	// pg_catalog functions.
+	"pg_catalog.pg_typeof": {
+		// TODO(knz): This is a proof-of-concept until TypeAny works
+		// properly.
+		Builtin{
+			Types:      ArgTypes{TypeInt},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+	},
+})
 
 var substringImpls = []Builtin{
 	{

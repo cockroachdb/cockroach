@@ -81,11 +81,11 @@ func TestSplitAt(t *testing.T) {
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT (avg(1))",
-			error: "unknown signature for avg: avg(int) (desired <int>)",
+			error: "unknown signature for AVG: AVG(int) (desired <int>)",
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT (avg(k))",
-			error: `avg: name "k" is not defined`,
+			error: `AVG: name "k" is not defined`,
 		},
 		{
 			in:   "ALTER TABLE d.i SPLIT AT ($1)",

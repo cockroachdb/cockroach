@@ -104,7 +104,7 @@ storeID       INT        false  NULL
 eventType     STRING     false  NULL
 otherRangeID  INT        true   NULL
 info          STRING     true   NULL
-uniqueID      INT        false  unique_rowid()
+uniqueID      INT        false  UNIQUE_ROWID()
 
 query TTBT
 SHOW COLUMNS FROM system.users;

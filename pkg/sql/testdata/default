@@ -30,8 +30,8 @@ SHOW COLUMNS FROM t
 ----
 Field Type      Null Default
 a     INT       false 42
-b     TIMESTAMP true now()
-c     FLOAT     true random()
+b     TIMESTAMP true NOW()
+c     FLOAT     true RANDOM()
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)

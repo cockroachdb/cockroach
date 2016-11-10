@@ -198,7 +198,7 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-statement error pq: repeat: runtime error: makeslice: len out of range
+statement error pq: REPEAT: runtime error: makeslice: len out of range
 SELECT repeat('s', 9223372036854775807)
 
 query I
@@ -211,7 +211,7 @@ select ascii('禅');
 ----
 31109
 
-query error ascii: the input string must not be empty
+query error ASCII: the input string must not be empty
 select ascii('');
 
 query T
@@ -416,7 +416,7 @@ SELECT abs(-1.2::float), abs(1.2::float), abs(-0.0::float), abs(0), abs(1), abs(
 ----
 1.2 1.2 0 0 1 1.2121
 
-query error abs: abs of min integer value \(-9223372036854775808\) not defined
+query error ABS: abs of min integer value \(-9223372036854775808\) not defined
 SELECT abs(-9223372036854775808)
 
 query I
@@ -484,10 +484,10 @@ SELECT degrees(-0.5), degrees(0.5)
 ----
 -28.64788975654116 28.64788975654116
 
-query error div: division by zero
+query error DIV: division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
 
-query error div: division by zero
+query error DIV: division by zero
 SELECT div(1::int, 0::int)
 
 query RRR
@@ -533,10 +533,10 @@ SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal,
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
-query error mod: zero modulus
+query error MOD: zero modulus
 SELECT mod(5, 0)
 
-query error mod: zero modulus
+query error MOD: zero modulus
 SELECT mod(5::decimal, 0::decimal)
 
 query II
@@ -850,7 +850,7 @@ SELECT regexp_replace('foobarbaz', 'nope', 'NO')
 ----
 foobarbaz
 
-query error regexp_replace: invalid regexp flag: 'z'
+query error REGEXP_REPLACE: invalid regexp flag: 'z'
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 
 query T

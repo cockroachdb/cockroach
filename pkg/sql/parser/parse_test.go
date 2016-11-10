@@ -674,9 +674,9 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM t1 RIGHT JOIN t2 ON a = b`},
 		// Some functions are nearly keywords.
 		{`SELECT CURRENT_TIMESTAMP`,
-			`SELECT "CURRENT_TIMESTAMP"()`},
+			`SELECT CURRENT_TIMESTAMP()`},
 		{`SELECT CURRENT_DATE`,
-			`SELECT "CURRENT_DATE"()`},
+			`SELECT CURRENT_DATE()`},
 		{`SELECT POSITION(a IN b)`,
 			`SELECT STRPOS(b, a)`},
 		{`SELECT TRIM(BOTH a FROM b)`,

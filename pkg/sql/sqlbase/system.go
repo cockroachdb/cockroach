@@ -84,7 +84,7 @@ CREATE TABLE system.eventlog (
   targetID     INT        NOT NULL,
   reportingID  INT        NOT NULL,
   info         STRING,
-  uniqueID     BYTES      DEFAULT experimental_unique_bytes(),
+  uniqueID     BYTES      DEFAULT EXPERIMENTAL_UNIQUE_BYTES(),
   PRIMARY KEY (timestamp, uniqueID)
 );`
 
@@ -99,7 +99,7 @@ CREATE TABLE system.rangelog (
   eventType     STRING     NOT NULL,
   otherRangeID  INT,
   info          STRING,
-  uniqueID      INT        DEFAULT unique_rowid(),
+  uniqueID      INT        DEFAULT UNIQUE_ROWID(),
   PRIMARY KEY (timestamp, uniqueID)
 );`
 
@@ -298,7 +298,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	experimentalUniqueBytesString = "experimental_unique_bytes()"
+	experimentalUniqueBytesString = "EXPERIMENTAL_UNIQUE_BYTES()"
 
 	// EventLogTable is the descriptor for the event log table.
 	EventLogTable = TableDescriptor{
@@ -337,7 +337,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	uniqueRowIDString = "unique_rowid()"
+	uniqueRowIDString = "UNIQUE_ROWID()"
 
 	// RangeEventTable is the descriptor for the range log table.
 	RangeEventTable = TableDescriptor{
