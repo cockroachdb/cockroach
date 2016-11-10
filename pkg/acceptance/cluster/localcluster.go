@@ -653,7 +653,7 @@ func (l *LocalCluster) Start() {
 		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
 		filepath.Join(l.CertsDir, security.EmbeddedRootCert),
 		filepath.Join(l.CertsDir, security.EmbeddedRootKey),
-		512, security.RootUser))
+		512, security.RootUser.Username()))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
@@ -780,7 +780,7 @@ func (l *LocalCluster) stop() {
 func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		User:       security.NodeUser,
+		User:       security.NodeUser.Username(),
 		SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(l.CertsDir, security.EmbeddedNodeCert),
 		SSLCertKey: filepath.Join(l.CertsDir, security.EmbeddedNodeKey),
@@ -804,7 +804,7 @@ func (l *LocalCluster) InternalIP(i int) net.IP {
 
 // PGUrl returns a URL string for the given node postgres server.
 func (l *LocalCluster) PGUrl(i int) string {
-	certUser := security.RootUser
+	certUser := security.RootUser.Username()
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
 	options.Add("sslcert", filepath.Join(l.CertsDir, security.EmbeddedRootCert))

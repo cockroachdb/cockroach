@@ -44,8 +44,8 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	if p.session.User != security.RootUser {
-		return nil, fmt.Errorf("only %s is allowed to rename databases", security.RootUser)
+	if p.session.User != security.RootUser.Username() {
+		return nil, fmt.Errorf("only %s is allowed to rename databases", security.RootUser.Username())
 	}
 
 	dbDesc, err := p.mustGetDatabaseDesc(string(n.Name))

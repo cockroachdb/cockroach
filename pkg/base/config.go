@@ -36,7 +36,7 @@ import (
 // Base config defaults.
 const (
 	defaultInsecure = false
-	defaultUser     = security.RootUser
+	defaultUser     = security.RootUserName
 	httpScheme      = "http"
 	httpsScheme     = "https"
 

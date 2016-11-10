@@ -32,13 +32,13 @@ func GetUserHashedPassword(
 ) ([]byte, error) {
 	normalizedUsername := parser.Name(username).Normalize()
 	// The root user is not in system.users.
-	if normalizedUsername == security.RootUser {
+	if normalizedUsername == security.RootUser.Username() {
 		return nil, nil
 	}
 
 	var hashedPassword []byte
 	if err := executor.cfg.DB.Txn(ctx, func(txn *client.Txn) error {
-		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
+		p := makeInternalPlanner("get-pwd", txn, security.RootUser.Username(), metrics)
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT hashedPassword FROM system.users ` +
 			`WHERE username=$1`

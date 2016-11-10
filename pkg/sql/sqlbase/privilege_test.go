@@ -35,31 +35,31 @@ func TestPrivilege(t *testing.T) {
 		show          []UserPrivilegeString
 	}{
 		{"", nil, nil,
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{{security.RootUser.Username(), []string{"ALL"}}},
 		},
-		{security.RootUser, privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+		{security.RootUser.Username(), privilege.List{privilege.ALL}, nil,
+			[]UserPrivilegeString{{security.RootUser.Username(), []string{"ALL"}}},
 		},
-		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+		{security.RootUser.Username(), privilege.List{privilege.INSERT, privilege.DROP}, nil,
+			[]UserPrivilegeString{{security.RootUser.Username(), []string{"ALL"}}},
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser.Username(), []string{"ALL"}}},
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
-			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser.Username(), []string{"ALL"}}},
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{"foo", []string{"ALL"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{{"foo", []string{"ALL"}}, {security.RootUser.Username(), []string{"ALL"}}},
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
-			[]UserPrivilegeString{{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE"}}, {security.RootUser.Username(), []string{"ALL"}}},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{{security.RootUser.Username(), []string{"ALL"}}},
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
-		{security.RootUser, nil, privilege.List{privilege.ALL},
+		{security.RootUser.Username(), nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{},
 		},
 	}
@@ -172,21 +172,21 @@ func TestPrivilegeValidate(t *testing.T) {
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
+	descriptor.Grant(security.RootUser.Username(), privilege.List{privilege.SELECT})
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Revoke(security.RootUser, privilege.List{privilege.SELECT})
+	descriptor.Revoke(security.RootUser.Username(), privilege.List{privilege.SELECT})
 	if err := descriptor.Validate(id); err == nil {
 		t.Fatal("unexpected success")
 	}
 	// TODO(marc): validate fails here because we do not aggregate
 	// privileges into ALL when all are set.
-	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
+	descriptor.Grant(security.RootUser.Username(), privilege.List{privilege.SELECT})
 	if err := descriptor.Validate(id); err == nil {
 		t.Fatal("unexpected success")
 	}
-	descriptor.Revoke(security.RootUser, privilege.List{privilege.ALL})
+	descriptor.Revoke(security.RootUser.Username(), privilege.List{privilege.ALL})
 	if err := descriptor.Validate(id); err == nil {
 		t.Fatal("unexpected success")
 	}
@@ -211,7 +211,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	// Exhaustively grant/revoke all privileges.
 	// Due to the way validation is done after Grant/Revoke,
 	// we need to revert the just-performed change after errors.
-	descriptor := NewPrivilegeDescriptor(security.RootUser, allowedPrivileges)
+	descriptor := NewPrivilegeDescriptor(security.RootUser.Username(), allowedPrivileges)
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		if hasPrivilege(allowedPrivileges, p) {
 			// Grant allowed privileges. Either they are already
 			// on (noop), or they're accepted.
-			descriptor.Grant(security.RootUser, privilege.List{p})
+			descriptor.Grant(security.RootUser.Username(), privilege.List{p})
 			if err := descriptor.Validate(id); err != nil {
 				t.Fatal(err)
 			}
@@ -230,19 +230,19 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 			// Remove allowed privileges. This fails for root,
 			// but passes for other users.
-			descriptor.Revoke(security.RootUser, privilege.List{p})
+			descriptor.Revoke(security.RootUser.Username(), privilege.List{p})
 			if err := descriptor.Validate(id); err == nil {
 				t.Fatal("unexpected success")
 			}
-			descriptor.Grant(security.RootUser, privilege.List{p})
+			descriptor.Grant(security.RootUser.Username(), privilege.List{p})
 		} else {
 			// Granting non-allowed privileges always.
-			descriptor.Grant(security.RootUser, privilege.List{p})
+			descriptor.Grant(security.RootUser.Username(), privilege.List{p})
 			if err := descriptor.Validate(id); err == nil {
 				t.Fatal("unexpected success")
 			}
-			descriptor.Revoke(security.RootUser, privilege.List{p})
-			descriptor.Grant(security.RootUser, allowedPrivileges)
+			descriptor.Revoke(security.RootUser.Username(), privilege.List{p})
+			descriptor.Grant(security.RootUser.Username(), allowedPrivileges)
 
 			descriptor.Grant("foo", privilege.List{p})
 			if err := descriptor.Validate(id); err == nil {
@@ -256,13 +256,13 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 			if p == privilege.ALL {
 				// We need to reset privileges as Revoke(ALL) will clear
 				// all bits.
-				descriptor.Revoke(security.RootUser, privilege.List{p})
+				descriptor.Revoke(security.RootUser.Username(), privilege.List{p})
 				if err := descriptor.Validate(id); err == nil {
 					t.Fatal("unexpected success")
 				}
-				descriptor.Grant(security.RootUser, allowedPrivileges)
+				descriptor.Grant(security.RootUser.Username(), allowedPrivileges)
 			} else {
-				descriptor.Revoke(security.RootUser, privilege.List{p})
+				descriptor.Revoke(security.RootUser.Username(), privilege.List{p})
 				if err := descriptor.Validate(id); err != nil {
 					t.Fatal(err)
 				}

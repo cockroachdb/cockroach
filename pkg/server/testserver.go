@@ -79,7 +79,7 @@ func makeTestConfig() Config {
 	cfg.AdvertiseAddr = util.TestAddr.String()
 	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
-	cfg.User = security.NodeUser
+	cfg.User = security.NodeUser.Username()
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 
 	return cfg

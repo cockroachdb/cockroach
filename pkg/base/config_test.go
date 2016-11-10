@@ -50,11 +50,11 @@ func TestClientSSLSettings(t *testing.T) {
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, false, security.NodeUser, "http", "", true, false},
+		{true, false, security.NodeUser.Username(), "http", "", true, false},
 		{true, true, "not-a-user", "http", "", true, false},
 		{false, true, "not-a-user", "https", assetNotFound, true, false},
-		{false, false, security.NodeUser, "https", assetNotFound, false, true},
-		{false, true, security.NodeUser, "https", "", false, false},
+		{false, false, security.NodeUser.Username(), "https", assetNotFound, false, true},
+		{false, true, security.NodeUser.Username(), "https", "", false, false},
 		{false, true, "bad-user", "https", assetNotFound, false, false},
 	}
 
@@ -104,9 +104,9 @@ func TestServerSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
+		cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser.Username()}
 		if tc.hasCerts {
-			fillCertPaths(cfg, security.NodeUser)
+			fillCertPaths(cfg, security.NodeUser.Username())
 		}
 		if cfg.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())

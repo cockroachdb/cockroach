@@ -18,17 +18,25 @@ package security
 
 import (
 	"crypto/tls"
+	"net/url"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
 const (
-	// NodeUser is used by nodes for intra-cluster traffic.
-	NodeUser = "node"
-	// RootUser is the default cluster administrator.
-	RootUser = "root"
+	// NodeUserName is name of user used by nodes for intra-cluster traffic.
+	NodeUserName = "node"
+
+	// RootUserName is name of the default cluster administrator.
+	RootUserName = "root"
 )
+
+// NodeUser is used by nodes for intra-cluster traffic.
+var NodeUser = url.User(NodeUserName)
+
+// RootUser is the default cluster administrator.
+var RootUser = url.User(RootUserName)
 
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster.
@@ -99,7 +107,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 			return errors.New("user is missing")
 		}
 
-		if !clientConnection && requestedUser != NodeUser {
+		if !clientConnection && requestedUser != NodeUser.Username() {
 			return errors.Errorf("user %s is not allowed", requestedUser)
 		}
 
@@ -111,7 +119,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// The client certificate user must match the requested user,
 		// except if the certificate user is NodeUser, which is allowed to
 		// act on behalf of all other users.
-		if !(certUser == NodeUser || certUser == requestedUser) {
+		if !(certUser == NodeUser.Username() || certUser == requestedUser) {
 			return errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUser)
 		}
 
@@ -135,7 +143,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 			return nil
 		}
 
-		if requestedUser == RootUser {
+		if requestedUser == RootUser.Username() {
 			return errors.Errorf("user %s must authenticate using a client certificate ", RootUser)
 		}
 

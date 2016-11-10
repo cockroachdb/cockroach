@@ -144,7 +144,7 @@ var (
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewPrivilegeDescriptor(security.RootUser,
+		Privileges: NewPrivilegeDescriptor(security.RootUser.Username(),
 			SystemConfigAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
@@ -174,7 +174,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[2]),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser.Username(), SystemConfigAllowedPrivileges[2]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -183,7 +183,7 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[3]),
+		Privileges: NewPrivilegeDescriptor(security.RootUser.Username(), SystemConfigAllowedPrivileges[3]),
 		ParentID:   1,
 		Version:    1,
 		Columns: []ColumnDescriptor{
@@ -220,7 +220,7 @@ var (
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[4]),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser.Username(), SystemConfigAllowedPrivileges[4]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -243,7 +243,7 @@ var (
 		PrimaryIndex:   pk("id"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[5]),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser.Username(), SystemConfigAllowedPrivileges[5]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}

@@ -144,7 +144,7 @@ func GenerateServerCert(
 		return nil, nil, err
 	}
 
-	template, err := newTemplate(NodeUser)
+	template, err := newTemplate(NodeUser.Username())
 	if err != nil {
 		return nil, nil, err
 	}
