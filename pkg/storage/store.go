@@ -1971,16 +1971,17 @@ func (s *Store) removeReplicaImpl(
 	}
 
 	s.mu.Lock()
-	if _, ok := s.mu.replicas[rep.RangeID]; !ok {
+	if _, err := s.getReplicaLocked(rep.RangeID); err != nil {
 		s.mu.Unlock()
-		return errors.New("replica not found")
+		return err
 	}
-	if kr := s.getOverlappingKeyRangeLocked(desc); kr != rep {
+	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
+		ctx := rep.AnnotateCtx(context.TODO())
 		// This is a fatal error because uninitialized replicas shouldn't make it
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
 		s.mu.Unlock()
-		panic(fmt.Sprintf("replica %s unexpectedly overlapped by %v", rep, kr))
+		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -2022,14 +2023,15 @@ func (s *Store) removeReplicaImpl(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.mu.replicas, rep.RangeID)
-	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
-	if kr := s.mu.replicasByKey.Delete(rep); kr != rep {
+	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
+		ctx := rep.AnnotateCtx(context.TODO())
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		panic(fmt.Sprintf("replica %s unexpectedly overlapped by %v", rep, kr))
+		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
 	}
+	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
 	return nil
