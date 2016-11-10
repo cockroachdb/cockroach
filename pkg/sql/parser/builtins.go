@@ -959,6 +959,18 @@ var Builtins = map[string][]Builtin{
 			dd.QuoRound(x, y, 0, inf.RoundDown)
 			return dd, nil
 		}),
+		{
+			Types:      ArgTypes{TypeInt, TypeInt},
+			ReturnType: TypeInt,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				y := *args[1].(*DInt)
+				if y == 0 {
+					return nil, errDivByZero
+				}
+				x := *args[0].(*DInt)
+				return NewDInt(x / y), nil
+			},
+		},
 	},
 
 	"exp": {
