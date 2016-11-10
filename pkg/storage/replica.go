@@ -1951,9 +1951,9 @@ func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (chan proposalResult, func() bool, error) {
 	r.mu.Lock()
-	if r.mu.destroyed != nil {
+	if err := r.mu.destroyed; err != nil {
 		r.mu.Unlock()
-		return nil, nil, r.mu.destroyed
+		return nil, nil, err
 	}
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
