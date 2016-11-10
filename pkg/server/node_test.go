@@ -457,9 +457,6 @@ func compareNodeStatus(
 				"replicas.leaseholders",
 			},
 			[]string{
-				"livebytes",
-				"keybytes",
-				"valbytes",
 				"livecount",
 				"keycount",
 				"valcount",
