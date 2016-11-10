@@ -337,7 +337,7 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 func (ba BatchRequest) String() string {
 	var str []string
 	if ba.Txn != nil {
-		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.ID.Short()))
+		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.Short()))
 	}
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit

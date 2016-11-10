@@ -17,6 +17,14 @@
 
 package enginepb
 
+// Short returns a prefix of the transaction's ID.
+func (t TxnMeta) Short() string {
+	if id := t.ID; id != nil {
+		return id.Short()
+	}
+	return "<nil>"
+}
+
 // Total returns the range size as the sum of the key and value
 // bytes. This includes all non-live keys and all versioned values.
 func (ms MVCCStats) Total() int64 {

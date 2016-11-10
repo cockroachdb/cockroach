@@ -296,10 +296,12 @@ func (tc *TxnCoordSender) Send(
 			return nil, roachpb.NewError(err)
 		}
 
+		txnID := *ba.Txn.ID
+
 		// Associate the txnID with the trace. We need to do this after the
 		// maybeBeginTxn call. We set both a baggage item and a tag because only
 		// tags show up in the LIghtstep UI.
-		txnIDStr := ba.Txn.ID.String()
+		txnIDStr := txnID.String()
 		sp.SetTag("txnID", txnIDStr)
 		sp.SetBaggageItem("txnID", txnIDStr)
 
@@ -337,7 +339,7 @@ func (tc *TxnCoordSender) Send(
 
 			// Populate et.IntentSpans, taking into account both any existing
 			// and new writes, and taking care to perform proper deduplication.
-			txnMeta := tc.txns[*ba.Txn.ID]
+			txnMeta := tc.txns[txnID]
 			distinctSpans := true
 			if txnMeta != nil {
 				et.IntentSpans = txnMeta.keys
@@ -447,7 +449,7 @@ func (tc *TxnCoordSender) Send(
 	if tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.ID.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
 			}
 			time.Sleep(sleepNS)
 		}()
