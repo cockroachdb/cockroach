@@ -1461,7 +1461,8 @@ type EvalContext struct {
 	// Database is the database in the current Session.
 	Database string
 	// SearchPath is the search path for databases used when encountering an
-	// unqualified table name.
+	// unqualified table name. Names in the search path are normalized already.
+	// This must not modified (it is shared from the session).
 	SearchPath []string
 
 	ReCache *RegexpCache
