@@ -1568,24 +1568,24 @@ func (ctx *EvalContext) getTmpDec() *inf.Dec {
 func (expr *AndExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if left != DNull {
 		if v, err := GetBool(left); err != nil {
-			return DNull, err
+			return nil, err
 		} else if !v {
 			return left, nil
 		}
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if right == DNull {
 		return DNull, nil
 	}
 	if v, err := GetBool(right); err != nil {
-		return DNull, err
+		return nil, err
 	} else if !v {
 		return right, nil
 	}
@@ -1619,20 +1619,20 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 		// For each "when" expression we compare for equality to <val>.
 		val, err := expr.Expr.(TypedExpr).Eval(ctx)
 		if err != nil {
-			return DNull, err
+			return nil, err
 		}
 
 		for _, when := range expr.Whens {
 			arg, err := when.Cond.(TypedExpr).Eval(ctx)
 			if err != nil {
-				return DNull, err
+				return nil, err
 			}
 			d, err := evalComparison(ctx, EQ, val, arg)
 			if err != nil {
-				return DNull, err
+				return nil, err
 			}
 			if v, err := GetBool(d); err != nil {
-				return DNull, err
+				return nil, err
 			} else if v {
 				return when.Val.(TypedExpr).Eval(ctx)
 			}
@@ -1642,10 +1642,10 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 		for _, when := range expr.Whens {
 			d, err := when.Cond.(TypedExpr).Eval(ctx)
 			if err != nil {
-				return DNull, err
+				return nil, err
 			}
 			if v, err := GetBool(d); err != nil {
-				return DNull, err
+				return nil, err
 			} else if v {
 				return when.Val.(TypedExpr).Eval(ctx)
 			}
@@ -1904,7 +1904,7 @@ func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 	for _, e := range expr.Exprs {
 		d, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
-			return DNull, err
+			return nil, err
 		}
 		if d != DNull {
 			return d, nil
@@ -1917,11 +1917,11 @@ func (expr *CoalesceExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 
 	if left == DNull || right == DNull {
@@ -1988,7 +1988,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if cond == DBoolTrue {
 		return expr.True.(TypedExpr).Eval(ctx)
@@ -2000,7 +2000,7 @@ func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 
 	result := DBool(true)
@@ -2087,14 +2087,14 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if d == DNull {
 		return DNull, nil
 	}
 	v, err := GetBool(d)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	return MakeDBool(!v), nil
 }
@@ -2103,15 +2103,15 @@ func (expr *NotExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	expr1, err := expr.Expr1.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	expr2, err := expr.Expr2.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	cond, err := evalComparison(ctx, EQ, expr1, expr2)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if cond == DBoolTrue {
 		return DNull, nil
@@ -2123,24 +2123,24 @@ func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *OrExpr) Eval(ctx *EvalContext) (Datum, error) {
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if left != DNull {
 		if v, err := GetBool(left); err != nil {
-			return DNull, err
+			return nil, err
 		} else if v {
 			return left, nil
 		}
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	if right == DNull {
 		return DNull, nil
 	}
 	if v, err := GetBool(right); err != nil {
-		return DNull, err
+		return nil, err
 	} else if v {
 		return right, nil
 	}
@@ -2216,7 +2216,7 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
-			return DNull, err
+			return nil, err
 		}
 		tuple = append(tuple, d)
 	}
@@ -2229,7 +2229,7 @@ func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
-			return DNull, err
+			return nil, err
 		}
 		array = append(array, d)
 	}
