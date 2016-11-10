@@ -530,7 +530,7 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	var throttledStoreCount int
 	var storeDescriptors []roachpb.StoreDescriptor
 
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	for _, storeID := range storeIDs {
 		detail := sp.mu.storeDetails[storeID]
 		switch detail.status(now, rangeID) {

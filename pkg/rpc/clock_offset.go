@@ -97,7 +97,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 		if !emptyOffset {
 			r.mu.offsets[addr] = offset
 		}
-	} else if oldOffset.isStale(r.offsetTTL, r.clock.PhysicalTime()) {
+	} else if oldOffset.isStale(r.offsetTTL, r.clock.Now().GoTime()) {
 		// We have a measurement but it's old - if the incoming measurement is not empty,
 		// set it, otherwise delete the old measurement.
 		if !emptyOffset {
@@ -128,7 +128,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 	// of the max offset is disabled. However we may still want to
 	// propagate the information to a status node.
 	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
-		now := r.clock.PhysicalTime()
+		now := r.clock.Now().GoTime()
 
 		healthyOffsetCount := 0
 

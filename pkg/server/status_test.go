@@ -388,7 +388,7 @@ func TestMetricsRecording(t *testing.T) {
 	// Verify that metrics for the current timestamp are recorded. This should
 	// be true very quickly.
 	util.SucceedsSoon(t, func() error {
-		now := s.Clock().PhysicalNow()
+		now := s.Clock().Now().WallTime
 		if err := checkTimeSeriesKey(now, "cr.store.livebytes.1"); err != nil {
 			return err
 		}

@@ -1354,7 +1354,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 		// the process since a contested election just restarts the clock to where
 		// it would have been anyway if we weren't doing idle replica campaigning.
 		electionTimeout := s.cfg.RaftTickInterval * time.Duration(s.cfg.RaftElectionTimeoutTicks)
-		s.idleReplicaElectionTime.at = s.Clock().PhysicalTime().Add(electionTimeout)
+		s.idleReplicaElectionTime.at = s.Clock().Now().GoTime().Add(electionTimeout)
 	}
 	s.idleReplicaElectionTime.Unlock()
 	return nil
@@ -1366,7 +1366,7 @@ func (s *Store) canCampaignIdleReplica() bool {
 	if s.idleReplicaElectionTime.at == (time.Time{}) {
 		return false
 	}
-	return !s.Clock().PhysicalTime().Before(s.idleReplicaElectionTime.at)
+	return !s.Clock().Now().GoTime().Before(s.idleReplicaElectionTime.at)
 }
 
 // GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
@@ -1441,7 +1441,7 @@ func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 // replicas to campaign immediately. This primarily affects tests.
 func (s *Store) NotifyBootstrapped() {
 	s.idleReplicaElectionTime.Lock()
-	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
+	s.idleReplicaElectionTime.at = s.Clock().Now().GoTime()
 	s.idleReplicaElectionTime.Unlock()
 }
 
@@ -2248,7 +2248,7 @@ func (s *Store) Send(
 		// clocks will be ratcheted forward to match. If the command
 		// appears to come from a node with a bad clock, reject it now
 		// before we reach that point.
-		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
+		offset := ba.Timestamp.GoTime().Sub(s.Clock().Now().GoTime())
 		if offset > s.Clock().MaxOffset() && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
 			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
 				ba.Timestamp.WallTime, offset)

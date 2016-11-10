@@ -734,8 +734,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErr:      nil,
 			expEpoch:  0,
 			expPri:    1,
-			expTS:     origTS,
-			expOrigTS: origTS,
+			expTS:     origTS.Add(0, 1), // the act of reading the clock increments it
+			expOrigTS: origTS.Add(0, 1), // the act of reading the clock increments it
 		},
 		{
 			// On uncertainty error, new epoch begins and node is seen.

@@ -136,18 +136,18 @@ func (c *Clock) MaxOffset() time.Duration {
 // getPhysicalClockLocked returns the current physical clock and checks for
 // time jumps.
 func (c *Clock) getPhysicalClockLocked() int64 {
-	newTime := c.physicalClock()
+	physicalTime := c.physicalClock()
 
 	if c.mu.lastPhysicalTime != 0 {
-		interval := c.mu.lastPhysicalTime - newTime
+		interval := c.mu.lastPhysicalTime - physicalTime
 		if interval > int64(c.maxOffset/10) {
 			c.mu.monotonicityErrorsCount++
-			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(newTime-c.mu.lastPhysicalTime)/1e9)
+			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(physicalTime-c.mu.lastPhysicalTime)/1e9)
 		}
 	}
 
-	c.mu.lastPhysicalTime = newTime
-	return newTime
+	c.mu.lastPhysicalTime = physicalTime
+	return physicalTime
 }
 
 // Now returns a timestamp associated with an event from
@@ -158,28 +158,15 @@ func (c *Clock) getPhysicalClockLocked() int64 {
 func (c *Clock) Now() Timestamp {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if physicalClock := c.getPhysicalClockLocked(); c.mu.timestamp.WallTime >= physicalClock {
+	if physicalTime := c.getPhysicalClockLocked(); c.mu.timestamp.WallTime >= physicalTime {
 		// The wall time is ahead, so the logical clock ticks.
 		c.mu.timestamp.Logical++
 	} else {
 		// Use the physical clock, and reset the logical one.
-		c.mu.timestamp.WallTime = physicalClock
+		c.mu.timestamp.WallTime = physicalTime
 		c.mu.timestamp.Logical = 0
 	}
 	return c.mu.timestamp
-}
-
-// PhysicalNow returns the local wall time. It corresponds to the physicalClock
-// provided at instantiation. For a timestamp value, use Now() instead.
-func (c *Clock) PhysicalNow() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.getPhysicalClockLocked()
-}
-
-// PhysicalTime returns a time.Time struct using the local wall time.
-func (c *Clock) PhysicalTime() time.Time {
-	return time.Unix(0, c.PhysicalNow()).UTC()
 }
 
 // Update takes a hybrid timestamp, usually originating from
@@ -194,12 +181,12 @@ func (c *Clock) PhysicalTime() time.Time {
 func (c *Clock) Update(rt Timestamp) Timestamp {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	physicalClock := c.getPhysicalClockLocked()
+	physicalTime := c.getPhysicalClockLocked()
 
-	if physicalClock > c.mu.timestamp.WallTime && physicalClock > rt.WallTime {
+	if physicalTime > c.mu.timestamp.WallTime && physicalTime > rt.WallTime {
 		// Our physical clock is ahead of both wall times. It is used
 		// as the new wall time and the logical clock is reset.
-		c.mu.timestamp.WallTime = physicalClock
+		c.mu.timestamp.WallTime = physicalTime
 		c.mu.timestamp.Logical = 0
 		return c.mu.timestamp
 	}
@@ -208,7 +195,7 @@ func (c *Clock) Update(rt Timestamp) Timestamp {
 	// as it is behind the local and remote wall times. Instead,
 	// the logical clock comes into play.
 	if rt.WallTime > c.mu.timestamp.WallTime {
-		offset := time.Duration(rt.WallTime-physicalClock) * time.Nanosecond
+		offset := time.Duration(rt.WallTime-physicalTime) * time.Nanosecond
 		if c.maxOffset > 0 && offset > c.maxOffset {
 			log.Warningf(context.TODO(), "remote wall time is too far ahead (%s) to be trustworthy - updating anyway", offset)
 		}

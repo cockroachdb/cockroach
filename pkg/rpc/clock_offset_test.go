@@ -46,7 +46,7 @@ func TestUpdateOffset(t *testing.T) {
 	offset1 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 20,
-		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
+		MeasuredAt:  monitor.clock.Now().GoTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
 	monitor.UpdateOffset(key, offset1)
 	monitor.mu.Lock()
@@ -61,7 +61,7 @@ func TestUpdateOffset(t *testing.T) {
 	offset2 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 20,
-		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
+		MeasuredAt:  monitor.clock.Now().GoTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
 	monitor.UpdateOffset(key, offset2)
 	monitor.mu.Lock()
