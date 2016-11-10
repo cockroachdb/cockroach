@@ -4066,15 +4066,15 @@ type_list:
 array_expr:
   '[' expr_list ']'
   {
-    $$.val = &Array{$2.exprs()}
+    $$.val = &Array{Exprs: $2.exprs()}
   }
 | '[' array_expr_list ']'
   {
-    $$.val = &Array{$2.exprs()}
+    $$.val = &Array{Exprs: $2.exprs()}
   }
 | '[' ']'
   {
-    $$.val = &Array{nil}
+    $$.val = &Array{Exprs: nil}
   }
 
 array_expr_list:

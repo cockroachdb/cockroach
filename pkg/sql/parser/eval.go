@@ -2223,6 +2223,19 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
+	array := make(DArray, 0, len(t.Exprs))
+	for _, v := range t.Exprs {
+		d, err := v.(TypedExpr).Eval(ctx)
+		if err != nil {
+			return DNull, err
+		}
+		array = append(array, d)
+	}
+	return &array, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (t *DBool) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }

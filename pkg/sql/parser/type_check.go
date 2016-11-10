@@ -530,11 +530,6 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Array) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
-}
-
-// TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
@@ -564,6 +559,38 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		expr.Exprs[i] = typedExpr
 		expr.types[i] = typedExpr.ResolvedType()
 	}
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+	desiredParam := NoTypePreference
+	if arr, ok := desired.(tArray); ok {
+		desiredParam = arr.Typ
+	}
+
+	if len(expr.Exprs) == 0 {
+		if desiredParam == NoTypePreference {
+			return nil, errors.Errorf("cannot determine type of empty array")
+		}
+		expr.typ = tArray{desiredParam}
+		return expr, nil
+	}
+
+	typedSubExprs, typ, err := typeCheckSameTypedExprs(ctx, desiredParam, expr.Exprs...)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(nvanbenschoten): For now we only support text arrays.
+	if !typ.Equal(TypeString) {
+		return nil, errors.Errorf("unhandled parameterized array type %T", typ)
+	}
+
+	for i := range typedSubExprs {
+		expr.Exprs[i] = typedSubExprs[i]
+	}
+	expr.typ = tArray{typ}
 	return expr, nil
 }
 
