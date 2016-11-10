@@ -252,7 +252,7 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.evalCtx.NodeID = e.cfg.NodeID.Get()
 	p.evalCtx.ReCache = e.reCache
 	p.evalCtx.Database = p.session.Database
-	p.evalCtx.SearchPath = append([]string(nil), p.session.SearchPath...)
+	p.evalCtx.SearchPath = p.session.SearchPath
 }
 
 // query initializes a planNode from a SQL statement string. Close() must be
