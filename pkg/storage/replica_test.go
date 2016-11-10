@@ -2090,44 +2090,41 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 		}
 	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
-	cmd1Done := make(chan struct{})
+	cmd1Done := make(chan *roachpb.Error)
 	go func() {
 		args := putArgs(key, []byte{1})
 
 		_, pErr := tc.SendWrapped(&args)
-
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		close(cmd1Done)
+		cmd1Done <- pErr
 	}()
 	// Wait for cmd1 to get into the command queue.
 	<-blockingStart
 
 	// An inconsistent read to the key won't wait.
-	cmd2Done := make(chan struct{})
+	cmd2Done := make(chan *roachpb.Error)
 	go func() {
 		args := getArgs(key)
 
 		_, pErr := tc.SendWrappedWith(roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &args)
-
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		close(cmd2Done)
+		cmd2Done <- pErr
 	}()
 
 	select {
-	case <-cmd2Done:
+	case pErr := <-cmd2Done:
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 		// success.
-	case <-cmd1Done:
-		t.Fatalf("cmd1 should have been blocked")
+	case pErr := <-cmd1Done:
+		t.Fatalf("cmd1 should have been blocked, got %v", pErr)
 	}
 
 	close(blockingDone)
-	<-cmd1Done
+	if pErr := <-cmd1Done; pErr != nil {
+		t.Fatal(pErr)
+	}
 	// Success.
 }
 

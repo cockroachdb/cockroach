@@ -1564,7 +1564,10 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error
+	endCmdsFunc := func(_ *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+		return pErr
+	}
+
 	if !ba.IsNonKV() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
@@ -1573,12 +1576,6 @@ func (r *Replica) addReadOnlyCmd(
 		endCmdsFunc, err = r.beginCmds(ctx, &ba)
 		if err != nil {
 			return nil, roachpb.NewError(err)
-		}
-	} else {
-		endCmdsFunc = func(
-			br *roachpb.BatchResponse, pErr *roachpb.Error,
-		) *roachpb.Error {
-			return pErr
 		}
 	}
 
@@ -1593,6 +1590,13 @@ func (r *Replica) addReadOnlyCmd(
 	defer func() {
 		pErr = endCmdsFunc(br, pErr)
 	}()
+
+	r.mu.Lock()
+	err := r.mu.destroyed
+	r.mu.Unlock()
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Execute read-only batch command. It checks for matching key range; note
 	// that holding readMu throughout is important to avoid reads from the
@@ -1954,9 +1958,9 @@ func (r *Replica) propose(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (chan proposalResult, func() bool, error) {
 	r.mu.Lock()
-	if r.mu.destroyed != nil {
+	if err := r.mu.destroyed; err != nil {
 		r.mu.Unlock()
-		return nil, nil, r.mu.destroyed
+		return nil, nil, err
 	}
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
