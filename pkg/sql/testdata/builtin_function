@@ -1,4 +1,4 @@
-query error unknown function: foo.bar
+query error unknown function: "foo.bar"
 SELECT foo.bar()
 
 query error unknown function: defaults
@@ -15,7 +15,7 @@ SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
 ----
 9 13
 
-statement error unknown signature for LENGTH: LENGTH\(int\)
+statement error unknown signature for length: length\(int\)
 SELECT LENGTH(23)
 
 query II
@@ -29,7 +29,7 @@ SELECT UPPER('roacH7')
 UPPER('roacH7')
 ROACH7
 
-statement error unknown signature for UPPER: UPPER\(decimal\)
+statement error unknown signature for upper: upper\(decimal\)
 SELECT UPPER(2.2)
 
 query T colnames
@@ -38,7 +38,7 @@ SELECT LOWER('RoacH7')
 LOWER('RoacH7')
 roach7
 
-statement error unknown signature for LOWER: LOWER\(int\)
+statement error unknown signature for lower: lower\(int\)
 SELECT LOWER(32)
 
 # Multiplying by zero so the result is deterministic.
@@ -58,7 +58,7 @@ SELECT CONCAT('RoacH', NULL)
 ----
 RoacH
 
-statement error unknown signature for CONCAT: CONCAT\(string, bool, decimal, bool\)
+statement error unknown signature for concat: concat\(string, bool, decimal, bool\)
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
 ----
 
@@ -127,7 +127,7 @@ SELECT SUBSTR('12345', -2, 77)
 ----
 12345
 
-statement error SUBSTR: negative substring length -1 not allowed
+statement error substr: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
 
 query T
@@ -155,13 +155,13 @@ SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')
 ----
 a
 
-query error SUBSTRING: error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
+query error substring: error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
 SELECT SUBSTRING('f(oabaroob' from '\(o(.)b' for '+')
 
-query error unknown signature for SUBSTRING: SUBSTRING()
+query error unknown signature for substring: substring()
 SELECT SUBSTRING()
 
-query error unknown signature for CONCAT_WS: CONCAT_WS()
+query error unknown signature for concat_ws: concat_ws()
 SELECT CONCAT_WS()
 
 query T
@@ -179,7 +179,7 @@ SELECT CONCAT_WS(',', 'abcde', '2')
 ----
 abcde,2
 
-statement error unknown signature for CONCAT_WS: CONCAT_WS\(string, string, int, NULL, int\)
+statement error unknown signature for concat_ws: concat_ws\(string, string, int, NULL, int\)
 SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
 ----
 
@@ -259,7 +259,7 @@ SELECT position('a' in 'high')
 ----
 0
 
-query error unknown signature for STRPOS: STRPOS()
+query error unknown signature for strpos: strpos()
 SELECT position()
 
 query T
@@ -1014,10 +1014,10 @@ SELECT LEAST(NULL, NULL, NULL)
 ----
 NULL
 
-query error GREATEST: expected 2 to be of type string, found type int
+query error greatest: expected 2 to be of type string, found type int
 SELECT GREATEST(2, '4')
 
-query error LEAST: expected 2 to be of type string, found type int
+query error least: expected 2 to be of type string, found type int
 SELECT LEAST(2, '4')
 
 query T
@@ -1122,7 +1122,7 @@ SELECT strpos(version(), 'CockroachDB')
 1
 
 # Don't panic during incorrect use of * (#7727)
-query error pq: COS: cannot use "\*" in this context
+query error pq: cos: cannot use "\*" in this context
 SELECT COS(*) FROM system.namespace
 
 # Don't panic with invalid names (#8045)
@@ -1146,6 +1146,12 @@ SELECT nonexistent.* IS NOT TRUE
 query error cannot use "foo.\*" in this context
 SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 
+# Check qualified function names and the function search path.
+query TT
+SELECT PG_TYPEOF('hello'), pg_Catalog.pg_typeof('hello')
+----
+string string
+
 query T
 SELECT CURRENT_SCHEMAS(true)
 ----
@@ -1156,7 +1162,7 @@ SELECT CURRENT_SCHEMAS(false)
 ----
 {'test'}
 
-query error pq: unknown signature for CURRENT_SCHEMAS: CURRENT_SCHEMAS()
+query error pq: unknown signature for current_schemas: current_schemas()
 SELECT CURRENT_SCHEMAS()
 
 query T
@@ -1265,16 +1271,16 @@ select FROM_IP(TO_IP('2001:0db8:85a3:0000:0000:8a2e:0370:7334'))
 ----
 2001:db8:85a3::8a2e:370:7334
 
-query error pq: unknown signature for TO_IP: TO_IP()
+query error pq: unknown signature for to_ip: to_ip()
 SELECT TO_IP()
 
-query error pq: FROM_IP: Zero length IP
+query error pq: from_ip: Zero length IP
 SELECT FROM_IP(b'')
 
-query error pq: TO_IP: Invalid IP format: ''
+query error pq: to_ip: Invalid IP format: ''
 SELECT TO_IP('')
 
-query error pq: TO_IP: Invalid IP format: 'asdf'
+query error pq: to_ip: Invalid IP format: 'asdf'
 select TO_IP('asdf')
 
 query R

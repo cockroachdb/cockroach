@@ -20,6 +20,8 @@
 package sql
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -39,6 +41,7 @@ type nameResolutionVisitor struct {
 	sources    multiSourceInfo
 	colOffsets []int
 	ivarHelper parser.IndexedVarHelper
+	session    *Session
 }
 
 var _ parser.Visitor = &nameResolutionVisitor{}
@@ -73,6 +76,17 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		return true, ivar
 
 	case *parser.FuncExpr:
+		fn, err := t.Name.Normalize()
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+
+		if err := v.lookupAndExpandFunctionName(fn); err != nil {
+			v.err = err
+			return false, expr
+		}
+
 		// Check for invalid use of *, which, if it is an argument, is the only argument.
 		if len(t.Exprs) != 1 {
 			break
@@ -87,12 +101,6 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		}
 		// Save back to avoid re-doing the work later.
 		t.Exprs[0] = vn
-
-		fn, err := t.Name.Normalize()
-		if err != nil {
-			v.err = err
-			return false, expr
-		}
 
 		if strings.EqualFold(fn.Function(), "count") {
 			// Special case handling for COUNT(*). This is a special construct to
@@ -128,6 +136,45 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 	return true, expr
 }
 
+func (v *nameResolutionVisitor) lookupAndExpandFunctionName(
+	fn *parser.QualifiedFunctionName,
+) error {
+	var buf bytes.Buffer
+	for _, part := range fn.Context {
+		switch t := part.(type) {
+		case parser.Name:
+			buf.WriteString(t.Normalize())
+			buf.WriteByte('.')
+		default:
+			return fmt.Errorf("unknown function: %s", fn, t)
+		}
+	}
+	prefix := buf.String()
+	smallName := fn.FunctionName.Normalize()
+	fullName := prefix + smallName
+	if _, ok := parser.Builtins[fullName]; !ok {
+		if prefix == "" {
+			// The function wasn't qualified, so we must search for it via
+			// the search path first.
+			found := false
+			for _, alt := range v.session.SearchPath {
+				fullName = alt + "." + smallName
+				if _, ok := parser.Builtins[fullName]; ok {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("unknown function: %s", fn)
+			}
+		}
+	}
+
+	fn.Context = nil
+	fn.FunctionName = parser.Name(fullName)
+	return nil
+}
+
 func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, error) {
@@ -148,6 +195,7 @@ func (p *planner) resolveNames(
 		sources:    sources,
 		colOffsets: make([]int, len(sources)),
 		ivarHelper: ivarHelper,
+		session:    p.session,
 	}
 	colOffset := 0
 	for i, s := range sources {

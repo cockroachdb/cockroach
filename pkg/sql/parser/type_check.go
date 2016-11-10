@@ -279,20 +279,16 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	}
 
 	if len(fname.Context) > 0 {
-		// We don't support qualified function names (yet).
+		// At this point the context should have been handled by name
+		// resolution already. If there is some remaining, we really don't
+		// know what to do.
 		return nil, fmt.Errorf("unknown function: %s", fname)
 	}
 
-	name := string(fname.FunctionName)
-	// Optimize for the case where name is already normalized to upper/lower
-	// case. Note that the Builtins map contains duplicate entries for
-	// upper/lower case names.
+	name := fname.Function()
 	candidates, ok := Builtins[name]
 	if !ok {
-		candidates, ok = Builtins[strings.ToLower(name)]
-	}
-	if !ok {
-		return nil, fmt.Errorf("unknown function: %s", name)
+		return nil, fmt.Errorf("unknown function: %s", fname)
 	}
 
 	overloads := make([]overloadImpl, len(candidates))

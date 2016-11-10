@@ -54,7 +54,7 @@ var (
 	errSqrtOfNegNumber  = errors.New("cannot take square root of a negative number")
 	errLogOfNegNumber   = errors.New("cannot take logarithm of a negative number")
 	errLogOfZero        = errors.New("cannot take logarithm of zero")
-	errInsufficientArgs = errors.New("unknown signature for CONCAT_WS: CONCAT_WS()")
+	errInsufficientArgs = errors.New("unknown signature for concat_ws: concat_ws()")
 	errZeroIP           = errors.New("Zero length IP")
 )
 
@@ -1269,6 +1269,26 @@ var Builtins = map[string][]Builtin{
 					schemas = append(schemas, NewDString(ctx.Database))
 				}
 				return &schemas, nil
+			},
+		},
+	},
+
+	// pg_catalog functions.
+	"pg_catalog.pg_typeof": {
+		// TODO(knz): This is a proof-of-concept until TypeAny works
+		// properly.
+		Builtin{
+			Types:      ArgTypes{TypeInt},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
 			},
 		},
 	},
