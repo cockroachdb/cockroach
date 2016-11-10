@@ -15,7 +15,6 @@
 		SimpleResponse
 		Expression
 		Ordering
-		MailboxSpec
 		StreamEndpointSpec
 		InputSyncSpec
 		OutputRouterSpec

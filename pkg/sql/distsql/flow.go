@@ -106,11 +106,15 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceive
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver) error {
+	if spec.TargetAddr != "" {
+		return errors.Errorf("inbound stream has target address set: %s", spec.TargetAddr)
+	}
 	sid := spec.StreamID
-	if spec.Mailbox != nil {
-		if spec.Mailbox.SyncResponse || spec.Mailbox.TargetAddr != "" {
-			return errors.Errorf("inbound stream has SyncResponse or TargetAddr set")
-		}
+	switch spec.Type {
+	case StreamEndpointSpec_SYNC_RESPONSE:
+		return errors.Errorf("inbound stream of type SYNC_RESPONSE")
+
+	case StreamEndpointSpec_REMOTE:
 		if _, found := f.inboundStreams[sid]; found {
 			return errors.Errorf("inbound stream %d has multiple consumers", sid)
 		}
@@ -121,15 +125,20 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 			log.Infof(f.FlowCtx.Context, "set up inbound stream %d", sid)
 		}
 		f.inboundStreams[sid] = &inboundStreamInfo{receiver: receiver, waitGroup: &f.waitGroup}
-		return nil
+
+	case StreamEndpointSpec_LOCAL:
+		if _, found := f.localStreams[sid]; found {
+			return errors.Errorf("local stream %d has multiple consumers", sid)
+		}
+		if f.localStreams == nil {
+			f.localStreams = make(map[StreamID]RowReceiver)
+		}
+		f.localStreams[sid] = receiver
+
+	default:
+		return errors.Errorf("invalid stream type %d", spec.Type)
 	}
-	if _, found := f.localStreams[sid]; found {
-		return errors.Errorf("local stream %d has multiple consumers", sid)
-	}
-	if f.localStreams == nil {
-		f.localStreams = make(map[StreamID]RowReceiver)
-	}
-	f.localStreams[sid] = receiver
+
 	return nil
 }
 
@@ -138,24 +147,29 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 // mailbox is created.
 func (f *Flow) setupOutStream(spec StreamEndpointSpec) (RowReceiver, error) {
 	sid := spec.StreamID
-	if spec.Mailbox != nil {
-		if spec.Mailbox.SyncResponse {
-			return f.syncFlowConsumer, nil
-		}
-		outbox := newOutbox(&f.FlowCtx, spec.Mailbox.TargetAddr, f.id, sid)
+	switch spec.Type {
+	case StreamEndpointSpec_SYNC_RESPONSE:
+		return f.syncFlowConsumer, nil
+
+	case StreamEndpointSpec_REMOTE:
+		outbox := newOutbox(&f.FlowCtx, spec.TargetAddr, f.id, sid)
 		f.outboxes = append(f.outboxes, outbox)
 		return outbox, nil
+
+	case StreamEndpointSpec_LOCAL:
+		rowChan, found := f.localStreams[sid]
+		if !found {
+			return nil, errors.Errorf("unconnected inbound stream %d", sid)
+		}
+		// Once we "connect" a stream, we set the value in the map to nil.
+		if rowChan == nil {
+			return nil, errors.Errorf("stream %d has multiple connections", sid)
+		}
+		f.localStreams[sid] = nil
+		return rowChan, nil
+	default:
+		return nil, errors.Errorf("invalid stream type %d", spec.Type)
 	}
-	rowChan, found := f.localStreams[sid]
-	if !found {
-		return nil, errors.Errorf("unconnected inbound stream %d", sid)
-	}
-	// Once we "connect" a stream, we set the value in the map to nil.
-	if rowChan == nil {
-		return nil, errors.Errorf("stream %d has multiple connections", sid)
-	}
-	f.localStreams[sid] = nil
-	return rowChan, nil
 }
 
 func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
