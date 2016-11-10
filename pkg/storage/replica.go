@@ -1564,7 +1564,10 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error
+	endCmdsFunc := func(_ *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+		return pErr
+	}
+
 	if !ba.IsNonKV() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
@@ -1573,12 +1576,6 @@ func (r *Replica) addReadOnlyCmd(
 		endCmdsFunc, err = r.beginCmds(ctx, &ba)
 		if err != nil {
 			return nil, roachpb.NewError(err)
-		}
-	} else {
-		endCmdsFunc = func(
-			br *roachpb.BatchResponse, pErr *roachpb.Error,
-		) *roachpb.Error {
-			return pErr
 		}
 	}
 
