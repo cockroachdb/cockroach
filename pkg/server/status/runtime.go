@@ -124,7 +124,7 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 
 	return RuntimeStatSampler{
 		clock:          clock,
-		startTimeNanos: clock.PhysicalNow(),
+		startTimeNanos: clock.Now().WallTime,
 		CgoCalls:       metric.NewGauge(metaCgoCalls),
 		Goroutines:     metric.NewGauge(metaGoroutines),
 		GoAllocBytes:   metric.NewGauge(metaGoAllocBytes),
@@ -194,7 +194,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	// Time statistics can be compared to the total elapsed time to create a
 	// useful percentage of total CPU usage, which would be somewhat less accurate
 	// if calculated later using downsampled time series data.
-	now := rsr.clock.PhysicalNow()
+	now := rsr.clock.Now().WallTime
 	dur := float64(now - rsr.lastNow)
 	// cpu.{User,Sys} are in milliseconds, convert to nanoseconds.
 	newUtime := int64(cpu.User) * 1e6

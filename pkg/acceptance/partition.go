@@ -56,7 +56,7 @@ type NemesisFn func(t *testing.T, stop <-chan struct{}, c cluster.Cluster)
 // symmetrically between two random groups of nodes. Partitioned and connected
 // mode take alternating turns, with random durations of up to 15s.
 func BidirectionalPartitionNemesis(t *testing.T, stop <-chan struct{}, c cluster.Cluster) {
-	randSec := func() time.Duration { return time.Duration(rand.Int63n(15 * int64(time.Second))) }
+	randSec := func() time.Duration { return time.Duration(rand.Int63n(15 * time.Second.Nanoseconds())) }
 	log.Infof(context.Background(), "cleaning up any previous rules")
 	_ = restoreNetwork(t, c) // clean up any potential leftovers
 	log.Infof(context.Background(), "starting partition nemesis")

@@ -138,7 +138,7 @@ VALUES(
 // physical time instead.
 func (ev EventLogger) selectEventTimestamp(input hlc.Timestamp) time.Time {
 	if input == hlc.ZeroTimestamp {
-		return ev.LeaseManager.clock.PhysicalTime()
+		return ev.LeaseManager.clock.Now().GoTime()
 	}
 	return input.GoTime()
 }
