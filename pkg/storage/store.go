@@ -1994,6 +1994,7 @@ func (s *Store) removeReplicaImpl(
 	// Replica.raftMu and the replica is present in Store.mu.replicasByKey
 	// (preventing any concurrent access to the replica's key range).
 
+	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
 	// Clear the pending command queue.
 	if len(rep.mu.proposals) > 0 {
@@ -2010,6 +2011,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
+	rep.readOnlyCmdMu.Unlock()
 
 	if destroyData {
 		if err := rep.destroyDataRaftMuLocked(); err != nil {
