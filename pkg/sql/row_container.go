@@ -55,6 +55,11 @@ type RowContainer struct {
 	// is variable.
 	varSizedColumns []int
 
+	// deletedRows is the number of rows that have been deleted from the front
+	// of container. When this number reaches rowsPerChunk we delete that chunk
+	// and rest this back to zero.
+	deletedRows int
+
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
 	memAcc mon.BoundAccount
@@ -64,7 +69,7 @@ type RowContainer struct {
 //
 // The acc argument indicates where to register memory allocations by
 // this row container. Should probably be created by
-// Session.makeSessionBoundAccount() or Session.makeTxnBoundAccount().
+// Session.makeBoundAccount() or Session.TxnState.makeBoundAccount().
 //
 // The rowCapacity argument indicates how many rows are to be
 // expected; it is used to pre-allocate the outer array of row
@@ -157,10 +162,9 @@ func (c *RowContainer) rowSize(row parser.DTuple) int64 {
 // a given row index.
 func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 	// This is a potential hot path; use int32 for faster division.
-	row := int32(rowIdx)
+	row := int32(rowIdx + c.deletedRows)
 	div := int32(c.rowsPerChunk)
 	return int(row / div), int(row % div * int32(c.numCols))
-
 }
 
 // AddRow attempts to insert a new row in the RowContainer. The row slice is not
@@ -222,6 +226,16 @@ func (c *RowContainer) Swap(i, j int) {
 	for idx := 0; idx < c.numCols; idx++ {
 		r1[idx], r2[idx] = r2[idx], r1[idx]
 	}
+}
+
+// Pop 'deletes' the the first rows added to the RowContainer.
+func (c *RowContainer) Pop() {
+	c.deletedRows++
+	if c.deletedRows < c.rowsPerChunk {
+		return
+	}
+	c.deletedRows = 0
+	c.chunks = c.chunks[1:]
 }
 
 // Replace substitutes one row for another. This does query the

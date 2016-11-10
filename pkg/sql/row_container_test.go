@@ -29,8 +29,9 @@ import (
 
 func TestRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	for _, numCols := range []int{1, 2, 3, 5, 10, 15} {
-		for _, numRows := range []int{1, 5, 10, 100} {
+		for _, numRows := range []int{5, 10, 100} {
 			resCol := make(ResultColumns, numCols)
 			for i := range resCol {
 				resCol[i] = ResultColumn{Typ: parser.TypeInt}
@@ -46,12 +47,19 @@ func TestRowContainer(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			for i := 0; i < numRows; i++ {
+
+			rc.Pop()
+			rc.Pop()
+
+			// Given we just deleted two rows, we have numRows - 2 rows to
+			// iterate through. Additionally what was previously rc.At(i + 2) is
+			// now rc.At(i).
+			for i := 0; i < numRows-2; i++ {
 				row := rc.At(i)
 				for j := range row {
 					dint, ok := row[j].(*parser.DInt)
-					if !ok || int(*dint) != i*numCols+j {
-						t.Fatalf("invalid value %+v on row %d, col %d", row[j], i, j)
+					if !ok || int(*dint) != (i+2)*numCols+j {
+						t.Fatalf("invalid value %+v on row %d, col %d", row[j], i+2, j)
 					}
 				}
 			}
