@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -104,6 +105,89 @@ func TestReplicateQueueRebalance(t *testing.T) {
 				log.Info(context.Background(), err)
 				return err
 			}
+		}
+		return nil
+	})
+}
+
+// TestReplicateQueueDownReplicateverifies that the replication queue will notice
+// over-replicated ranges and remove replicas from them.
+func TestReplicateQueueDownReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const replicaCount = 3
+
+	tc := testcluster.StartTestCluster(t, replicaCount+2,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+	)
+	defer tc.Stopper().Stop()
+
+	// Split off a range from the initial range for testing; there are
+	// complications if the metadata ranges are up-replicated.
+	testKey := roachpb.Key("m")
+	for {
+		if _, _, err := tc.SplitRange(testKey); err != nil {
+			if testutils.IsError(err, "split at key .* failed: conflict updating range descriptors") {
+				continue
+			}
+			t.Fatal(err)
+		}
+		break
+	}
+
+	desc, err := tc.LookupRange(testKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeID := desc.RangeID
+
+	countReplicas := func() int {
+		count := 0
+		for _, s := range tc.Servers {
+			if err := s.Stores().VisitStores(func(s *storage.Store) error {
+				return storage.IterateRangeDescriptors(context.TODO(), s.Engine(), func(desc roachpb.RangeDescriptor) (bool, error) {
+					if desc.RangeID == rangeID {
+						count++
+					}
+					return false, nil
+				})
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return count
+	}
+
+	// Ensure that the new range is fully replicated.
+	util.SucceedsSoon(t, func() error {
+		if c := countReplicas(); c != replicaCount {
+			return errors.Errorf("replica count = %d", c)
+		}
+		return nil
+	})
+
+	// Up-replicate the new range to all servers to create redundant replicas.
+	util.SucceedsSoon(t, func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			_, err := tc.AddReplicas(testKey, tc.Target(i))
+			if err != nil {
+				if testutils.IsError(err, "unable to add replica .* which is already present") {
+					continue
+				}
+				return err
+			}
+		}
+		if c := countReplicas(); c != tc.NumServers() {
+			return errors.Errorf("replica count = %d", c)
+		}
+		return nil
+	})
+
+	// Ensure that the replicas for the new range down replicate.
+	util.SucceedsSoon(t, func() error {
+		if c := countReplicas(); c != replicaCount {
+			return errors.Errorf("replica count = %d", c)
 		}
 		return nil
 	})
