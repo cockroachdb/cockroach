@@ -554,7 +554,21 @@ func (s *adminServer) TableStats(
 
 	// Construct TableStatsResponse by sending an RPC to every node involved.
 	tableStatResponse := serverpb.TableStatsResponse{
-		NodeCount:  int64(len(nodeIDs)),
+		NodeCount: int64(len(nodeIDs)),
+		// TODO(mrtracy): The "RangeCount" returned by TableStats is more
+		// accurate than the "RangeCount" returned by TableDetails, because this
+		// method always consistently queries the meta2 key range for the table;
+		// in contrast, TableDetails uses a method on the DistSender, which
+		// queries using a range metadata cache and thus may return stale data
+		// for tables that are rapidly splitting. However, one potential
+		// *advantage* of using the DistSender is that it will populate the
+		// DistSender's range metadata cache in the case where meta2 information
+		// for this table is not already present; the query used by TableStats
+		// does not populate the DistSender cache. We should consider plumbing
+		// TableStats' meta2 query through the DistSender so that it will share
+		// the advantage of populating the cache (without the disadvantage of
+		// potentially returning stale data).
+		// See Github #5435 for some discussion.
 		RangeCount: int64(len(rangeDescKVs)),
 	}
 	type nodeResponse struct {
