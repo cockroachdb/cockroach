@@ -9163,19 +9163,19 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:4066
 		{
-			sqlVAL.union.val = &Array{sqlDollar[2].union.exprs()}
+			sqlVAL.union.val = &Array{Exprs: sqlDollar[2].union.exprs()}
 		}
 	case 726:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:4070
 		{
-			sqlVAL.union.val = &Array{sqlDollar[2].union.exprs()}
+			sqlVAL.union.val = &Array{Exprs: sqlDollar[2].union.exprs()}
 		}
 	case 727:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:4074
 		{
-			sqlVAL.union.val = &Array{nil}
+			sqlVAL.union.val = &Array{Exprs: nil}
 		}
 	case 728:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
