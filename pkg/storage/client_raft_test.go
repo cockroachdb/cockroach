@@ -1993,15 +1993,43 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+
+	const numStores = 3
+	mtc := startMultiTestContext(t, numStores)
 	defer mtc.Stop()
 
 	const rangeID = roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 1, 2)
 
-	for i := 0; i < 10; i++ {
-		mtc.unreplicateRange(rangeID, 2)
-		mtc.replicateRange(rangeID, 2)
+	{
+		// Replicate the range to all stores in a single call because it's faster.
+		var storeIndexes []int
+		for i := 1; i < numStores; i++ {
+			storeIndexes = append(storeIndexes, i)
+		}
+		mtc.replicateRange(rangeID, storeIndexes...)
+	}
+
+	repl, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := repl.AnnotateCtx(context.Background())
+
+	for i := 0; i < 100; i++ {
+		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
+			if err := repl.ChangeReplicas(
+				ctx,
+				action,
+				roachpb.ReplicaDescriptor{
+					NodeID:  mtc.idents[numStores-1].NodeID,
+					StoreID: mtc.idents[numStores-1].StoreID,
+				},
+				repl.Desc(),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
