@@ -25,6 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+const (
+	leftSide = iota
+	rightSide
+)
+
 type joinPredicate interface {
 	// eval tests whether the current combination of rows passes the
 	// predicate. The result argument is an array pre-allocated to the
@@ -34,6 +39,10 @@ type joinPredicate interface {
 	// prepareRow prepares the output row by combining values from the
 	// input data sources.
 	prepareRow(result, leftRow, rightRow parser.DTuple)
+
+	// encode returns the encoding of a row from a given side (left or right),
+	// according to the columns specified by the equality constraints.
+	encode(scratch []byte, row parser.DTuple, side int) (encoding []byte, containsNull bool, err error)
 
 	// expand and start propagate to embedded sub-queries.
 	expand() error
@@ -71,6 +80,9 @@ func (p *crossPredicate) start() error                        { return nil }
 func (p *crossPredicate) expand() error                       { return nil }
 func (p *crossPredicate) format(_ *bytes.Buffer)              {}
 func (p *crossPredicate) explainTypes(_ func(string, string)) {}
+func (p *crossPredicate) encode(_ []byte, _ parser.DTuple, _ int) ([]byte, bool, error) {
+	return nil, false, nil
+}
 
 // onPredicate implements the predicate logic for joins with an ON clause.
 type onPredicate struct {
@@ -100,6 +112,10 @@ func (p *onPredicate) IndexedVarResolvedType(idx int) parser.Type {
 // IndexedVarFormat implements the parser.IndexedVarContainer interface.
 func (p *onPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
 	p.info.FormatVar(buf, f, idx)
+}
+
+func (p *onPredicate) encode(_ []byte, _ parser.DTuple, _ int) ([]byte, bool, error) {
+	panic("ON predicate extraction unimplemented")
 }
 
 // eval for onPredicate uses an arbitrary SQL expression to determine
@@ -193,6 +209,31 @@ func (p *usingPredicate) start() error                        { return nil }
 func (p *usingPredicate) expand() error                       { return nil }
 func (p *usingPredicate) explainTypes(_ func(string, string)) {}
 
+func (p *usingPredicate) encode(b []byte, row parser.DTuple, side int) ([]byte, bool, error) {
+	var cols []int
+	switch side {
+	case rightSide:
+		cols = p.rightUsingIndices
+	case leftSide:
+		cols = p.leftUsingIndices
+	default:
+		panic("invalid side provided, only leftSide or rightSide applicable")
+	}
+
+	var err error
+	containsNull := false
+	for _, colIdx := range cols {
+		if row[colIdx] == parser.DNull {
+			containsNull = true
+		}
+		b, err = sqlbase.EncodeDatum(b, row[colIdx])
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return b, containsNull, nil
+}
+
 // eval for usingPredicate compares the USING columns, returning true
 // if and only if all USING columns are equal on both sides.
 func (p *usingPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, error) {
@@ -251,7 +292,11 @@ func pickUsingColumn(cols ResultColumns, colName string, context string) (int, p
 			continue
 		}
 		if parser.ReNormalizeName(col.Name) == colName {
+			if idx != invalidColIdx {
+				return 0, parser.TypeNull, fmt.Errorf("USING: column name %s is ambiguous in %s table", colName, context)
+			}
 			idx = j
+			break
 		}
 	}
 	if idx == invalidColIdx {

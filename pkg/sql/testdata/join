@@ -29,11 +29,11 @@ SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 42 42
 
 query I colnames
-SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x)
+SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
 ----
  x
-44
 42
+44
 
 query I colnames
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
@@ -51,12 +51,12 @@ NULL  NULL
   42    42
 
 query I colnames
-SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
    x
-  44
 NULL
   42
+  44
 
 query I colnames
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
@@ -75,12 +75,12 @@ NULL  NULL
   42    42
 
 query I colnames
-SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
    x
-  44
 NULL
   42
+  44
 
 query I colnames
 SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
@@ -181,12 +181,12 @@ NULL NULL
 42   NULL
 
 query I colnames
-SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x)
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x) ORDER BY x
 ----
 x
-44
 NULL
 42
+44
 
 query II
 SELECT * FROM empty AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
@@ -213,12 +213,12 @@ NULL NULL
 NULL 42
 
 query I colnames
-SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 x
-44
 NULL
 42
+44
 
 query II colnames
 SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y
@@ -229,12 +229,12 @@ NULL NULL
 42   NULL
 
 query I colnames
-SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x)
+SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
 ----
 x
-44
 NULL
 42
+44
 
 query II colnames
 SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y
@@ -245,12 +245,12 @@ NULL NULL
 NULL 42
 
 query I colnames
-SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 x
-44
 NULL
 42
+44
 
 statement ok
 CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51), (NULL,52), (42,53)
@@ -311,11 +311,11 @@ x  y  y  y
 44 51 51 51
 
 query IIIIII colnames
-SELECT a.x, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x))
+SELECT a.x, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x
 ----
 x    x    x    y  y  y
-44   44   44   51 51 51
 42   42   42   53 53 53
+44   44   44   51 51 51
 
 query error column "y" specified in USING clause does not exist
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
