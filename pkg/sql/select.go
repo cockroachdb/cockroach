@@ -444,6 +444,12 @@ func (s *selectNode) expandPlan() error {
 		s.source.plan = plan
 	}
 
+	// Expand the source node. We need to do this before computing the
+	// ordering, since expansion may modify the ordering.
+	if err := s.source.plan.expandPlan(); err != nil {
+		return err
+	}
+
 	s.ordering = s.computeOrdering(s.source.plan.Ordering())
 
 	// Expand the sub-query plans in the local sub-expressions, if any.
@@ -459,8 +465,7 @@ func (s *selectNode) expandPlan() error {
 		}
 	}
 
-	// Expand the source node.
-	return s.source.plan.expandPlan()
+	return nil
 }
 
 // initFrom initializes the table node, given the parsed select expression

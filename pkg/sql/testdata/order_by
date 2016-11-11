@@ -404,3 +404,14 @@ NaN
 NaN
 -1
 1
+
+query ITT
+EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x);
+----
+0  select                           (x)        +x
+1  render/filter  from (""."".x)    (x)        +x
+2  select                           (x)        +x
+3  sort           +x                (x)        +x
+4  render/filter  from ("".c.x)     (x)
+5  select                           (column1)
+6  values         1 column, 3 rows  (column1)
