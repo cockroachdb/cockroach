@@ -26,7 +26,11 @@ sudo chown -R ${USER} "${HOME}/.config/gcloud"
 # numeric part.
 gcs_url="$2"
 hostname="$(hostname)"
-node_index="${hostname##*-}" # remove everything through the final '-' in the hostname
+if [ -z ${NODE_INDEX+x} ]; then
+    node_index="${hostname##*-}" # remove everything through the final '-' in the hostname
+else
+    node_index="${NODE_INDEX}"
+fi
 store_url="${gcs_url}/store${node_index}.tgz"
 
 action=$1
