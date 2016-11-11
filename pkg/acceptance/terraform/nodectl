@@ -13,6 +13,15 @@ usage() {
     exit 1
 }
 
+# Backup all regular files in the data directory.
+backup_data_dir() {
+    local backup_dir
+    backup_dir="${DATA_DIR}/backup-$(date +%Y%m%d-%H%M%S)"
+    echo "Backing up files in ${DATA_DIR} to ${backup_dir}"
+    mkdir "${backup_dir}"
+    find "${DATA_DIR}" -maxdepth 1 -type f -exec mv {} "${backup_dir}" \;
+}
+
 if [ $# -ne 2 ]; then
     echo "expected 2 parameters"
     echo ""
@@ -20,7 +29,7 @@ if [ $# -ne 2 ]; then
 fi
 
 # ~/.config/gcloud may be erroneously owned by root, so fix that.
-sudo chown -R ${USER} "${HOME}/.config/gcloud"
+sudo chown -R "${USER}" "${HOME}/.config/gcloud"
 
 # CockroachDB nodes are named blah-cockroach-[0-9]*, so extract the final
 # numeric part.
@@ -42,12 +51,11 @@ download)
         exit 1
     fi
     if [[ ! -z $(compgen -G "${DATA_DIR}/*.sst" 2>/dev/null) ]]; then
-        echo "sstables already exist in the destination"
-        exit 1
+        backup_data_dir
     fi
     echo "Downloading ${store_url} to store ${DATA_DIR}"
     cd "${DATA_DIR}"
-    gsutil cat ${store_url} | tar zxf -
+    gsutil cat "${store_url}" | tar zxf -
     ;;
 *)
     echo "Unknown action '${action}'"
