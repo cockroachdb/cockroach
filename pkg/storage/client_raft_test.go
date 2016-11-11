@@ -1841,9 +1841,28 @@ func TestRaftRemoveRace(t *testing.T) {
 	// existed on the same store.
 	mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-	for i := 0; i < 10; i++ {
-		mtc.unreplicateRange(rangeID, 2)
-		mtc.replicateRange(rangeID, 2)
+	repl, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ident := mtc.idents[1]
+	ctx := repl.AnnotateCtx(context.Background())
+
+	for i := 0; i < 100; i++ {
+		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
+			if err := repl.ChangeReplicas(
+				ctx,
+				action,
+				roachpb.ReplicaDescriptor{
+					NodeID:  ident.NodeID,
+					StoreID: ident.StoreID,
+				},
+				repl.Desc(),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
