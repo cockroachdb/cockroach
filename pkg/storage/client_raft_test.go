@@ -68,7 +68,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
 	key1 := roachpb.Key("a")
 	key2 := roachpb.Key("z")
@@ -865,7 +865,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.Start(t, 3)
 			defer mtc.Stop()
 
-			rangeID := roachpb.RangeID(1)
+			const rangeID = roachpb.RangeID(1)
 			mtc.replicateRange(rangeID, 1, 2)
 
 			// Put some data in the range so we'll have something to test for.
@@ -1137,7 +1137,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	// Replicate the range to store 1.
 	mtc.replicateRange(rangeID, 1)
 	// Unreplicate the from from store 0.
@@ -1317,7 +1317,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
 
 	incArgs := incrementArgs([]byte("a"), 5)
@@ -1395,7 +1395,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	key := roachpb.Key("a")
 
 	// Replicate the initial range to all three nodes.
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
 
 	// Verify that the first increment propagates to all the engines.
@@ -1497,7 +1497,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	}
 
 	// Replicate the initial range to three of the four nodes.
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 3, 1)
 
 	inc1 := int64(5)
@@ -1701,7 +1701,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
 	key := roachpb.Key("z")
 
@@ -1764,7 +1764,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 		},
 	}
 
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
 	key2 := roachpb.Key("z")
 
@@ -1996,7 +1996,7 @@ func TestRaftRemoveRace(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
 
 	for i := 0; i < 10; i++ {
@@ -2232,7 +2232,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer mtc.Stop()
 
 	// Move the first range from the first node to the other three.
-	rangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2, 3)
 	mtc.unreplicateRange(rangeID, 0)
 	mtc.expireLeases()
