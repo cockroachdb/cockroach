@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-const joinBatchSize = 100
+const indexJoinBatchSize = 100
 
 // An indexJoinNode implements joining of results from an index with the rows
 // of a table. The index side of the join is pulled first and the resulting
@@ -191,7 +191,7 @@ func (n *indexJoinNode) Next() (bool, error) {
 		n.table.scanInitialized = false
 		n.table.spans = n.table.spans[:0]
 
-		for len(n.table.spans) < joinBatchSize {
+		for len(n.table.spans) < indexJoinBatchSize {
 			if next, err := n.index.Next(); !next {
 				// The index is out of rows or an error occurred.
 				if err != nil {
