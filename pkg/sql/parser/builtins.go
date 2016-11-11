@@ -1257,6 +1257,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeArray,
+			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				var schemas DArray
 				showImplicitSchemas := args[0].(*DBool)
