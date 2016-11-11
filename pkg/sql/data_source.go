@@ -68,7 +68,7 @@ import (
 // is implemented as follows:
 //
 // - dataSourceInfo provides column metadata for exactly one data source;
-// - multiSourceInfo is an array of one ore more dataSourceInfo
+// - multiSourceInfo is an array of one or more dataSourceInfo
 // - the index in IndexedVars points to one of the columns in the
 //   logical concatenation of all items in the multiSourceInfo;
 // - IndexedVarResolver (select_name_resolution.go) is tasked with

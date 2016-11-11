@@ -25,13 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-const joinBatchSize = 100
+const indexJoinBatchSize = 100
 
 // An indexJoinNode implements joining of results from an index with the rows
 // of a table. The index side of the join is pulled first and the resulting
 // rows are used to lookup rows in the table. The work is batched: we pull
-// joinBatchSize rows from the index and use the primary key to construct spans
-// that are looked up in the table.
+// indexJoinBatchSize rows from the index and use the primary key to construct
+// spans that are looked up in the table.
 type indexJoinNode struct {
 	index            *scanNode
 	table            *scanNode
@@ -167,72 +167,76 @@ func (n *indexJoinNode) Start() error {
 }
 
 func (n *indexJoinNode) Next() (bool, error) {
-	// Loop looking up the next row. We either are going to pull a row from the
-	// table or a batch of rows from the index. If we pull a batch of rows from
-	// the index we perform another iteration of the loop looking for rows in the
-	// table. This outer loop is necessary because a batch of rows from the index
-	// might all be filtered when the resulting rows are read from the table.
-	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
-		// First, try to pull a row from the table.
-		if tableLookup {
-			next, err := n.table.Next()
+	// First, try to pull a row from the table.
+	if len(n.table.spans) > 0 {
+		next, err := n.table.Next()
+		if err != nil {
+			return false, err
+		}
+		if next {
+			if n.explain == explainDebug {
+				n.debugVals = n.table.DebugValues()
+			}
+			return true, nil
+		}
+	}
+
+	// The table is out of rows. Pull primary keys from the index.
+	n.table.scanInitialized = false
+	n.table.spans = n.table.spans[:0]
+
+	for len(n.table.spans) < indexJoinBatchSize {
+		if next, err := n.index.Next(); !next {
+			// The index is out of rows or an error occurred.
 			if err != nil {
 				return false, err
 			}
-			if next {
-				if n.explain == explainDebug {
-					n.debugVals = n.table.DebugValues()
-				}
+			if len(n.table.spans) == 0 {
+				// The index is out of rows.
+				return false, nil
+			}
+			break
+		}
+
+		if n.explain == explainDebug {
+			n.debugVals = n.index.DebugValues()
+			if n.debugVals.output != debugValueRow {
 				return true, nil
 			}
 		}
 
-		// The table is out of rows. Pull primary keys from the index.
-		n.table.scanInitialized = false
-		n.table.spans = n.table.spans[:0]
-
-		for len(n.table.spans) < joinBatchSize {
-			if next, err := n.index.Next(); !next {
-				// The index is out of rows or an error occurred.
-				if err != nil {
-					return false, err
-				}
-				if len(n.table.spans) == 0 {
-					// The index is out of rows.
-					return false, nil
-				}
-				break
-			}
-
-			if n.explain == explainDebug {
-				n.debugVals = n.index.DebugValues()
-				if n.debugVals.output != debugValueRow {
-					return true, nil
-				}
-			}
-
-			vals := n.index.Values()
-			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-				&n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
-			if err != nil {
-				return false, err
-			}
-			key := roachpb.Key(primaryIndexKey)
-			n.table.spans = append(n.table.spans, roachpb.Span{
-				Key:    key,
-				EndKey: key.PrefixEnd(),
-			})
-
-			if n.explain == explainDebug {
-				// In debug mode, return the index information as a "partial" row.
-				n.debugVals.output = debugValuePartial
-				return true, nil
-			}
+		vals := n.index.Values()
+		primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+			&n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+		if err != nil {
+			return false, err
 		}
+		key := roachpb.Key(primaryIndexKey)
+		n.table.spans = append(n.table.spans, roachpb.Span{
+			Key:    key,
+			EndKey: key.PrefixEnd(),
+		})
 
-		if log.V(3) {
-			log.Infof(n.index.p.ctx(), "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
+		if n.explain == explainDebug {
+			// In debug mode, return the index information as a "partial" row.
+			n.debugVals.output = debugValuePartial
+			return true, nil
 		}
+	}
+
+	if log.V(3) {
+		log.Infof(n.index.p.ctx(), "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
+	}
+
+	next, err := n.table.Next()
+	if err != nil {
+		return false, err
+	}
+	if next {
+		if n.explain == explainDebug {
+			n.debugVals = n.table.DebugValues()
+		}
+		return true, nil
 	}
 	return false, nil
 }
