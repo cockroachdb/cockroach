@@ -31,11 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// TODO(Tobias): Figure out if it would make sense to save some
-// history of the physical clock and react if it jumps backwards
-// repeatedly. This is expected during NTP updates, but may
-// indicate a broken clock in some cases.
-
 // Clock is a hybrid logical clock. Objects of this
 // type model causality while maintaining a relation
 // to physical time. Roughly speaking, timestamps
