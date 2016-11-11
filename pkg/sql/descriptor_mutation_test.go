@@ -18,7 +18,6 @@ package sql_test
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"math/rand"
 	"testing"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -46,56 +46,9 @@ type mutationTest struct {
 // the expected response. It returns the total number of non-null values
 // returned in the response (num-rows*num-columns - total-num-null-values),
 // as a measure of the number of key:value pairs visible to it.
-func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
-	// Read from DB.
-	rows, err := mt.sqlDB.Query(q)
-	if err != nil {
-		mt.Fatal(err)
-	}
-	cols, err := rows.Columns()
-	if err != nil {
-		mt.Fatal(err)
-	}
-	if len(e) > 0 && len(cols) != len(e[0]) {
-		mt.Fatalf("wrong number of columns %d in response to query %s", len(cols), q)
-	}
-	vals := make([]interface{}, len(cols))
-	for i := range vals {
-		vals[i] = new(interface{})
-	}
-	i := 0
-	// Number of non-NULL values.
-	numVals := 0
-	for ; rows.Next(); i++ {
-		if i >= len(e) {
-			mt.Errorf("expected less than %d rows, got %d rows:, %v", len(e), i, e)
-			return numVals
-		}
-		if err := rows.Scan(vals...); err != nil {
-			mt.Fatal(err)
-		}
-		for j, v := range vals {
-			if val := *v.(*interface{}); val != nil {
-				var s string
-				switch t := val.(type) {
-				case []byte:
-					s = string(t)
-				default:
-					s = fmt.Sprint(val)
-				}
-				if e[i][j] != s {
-					mt.Errorf("expected %v, found %v", e[i][j], s)
-				}
-				numVals++
-			} else if e[i][j] != "NULL" {
-				mt.Errorf("expected %v, found %v", e[i][j], "NULL")
-			}
-		}
-	}
-	if i != len(e) {
-		mt.Errorf("fewer rows read than expected: found %d, expected %v", i, e)
-	}
-	return numVals
+func (mt mutationTest) checkQueryResponse(q string, e [][]string) {
+	sr := sqlutils.MakeSQLRunner(mt.T, mt.sqlDB)
+	sr.CheckQueryResults(q, e)
 }
 
 // checkTableSize checks that the number of key:value pairs stored
@@ -247,7 +200,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 				}
 			}
 			// Check that the table only contains the initRows.
-			_ = mTest.checkQueryResponse(starQuery, initRows)
+			mTest.checkQueryResponse(starQuery, initRows)
 
 			// Add column "i" as a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
@@ -256,7 +209,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 				t.Fatalf("Read succeeded despite column being in %v state", sqlbase.DescriptorMutation{State: state})
 			}
 			// The table only contains columns "k" and "v".
-			_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}})
+			mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}})
 
 			// The column backfill uses Put instead of CPut because it depends on
 			// an INSERT of a column in the WRITE_ONLY state failing. These two
@@ -286,9 +239,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
 			// Check that we can read all the rows and columns.
-			_ = mTest.checkQueryResponse(starQuery, initRows)
+			mTest.checkQueryResponse(starQuery, initRows)
 
 			var afterInsert, afterUpdate, afterDelete [][]string
+			var afterDeleteKeys int
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
 				// The default value of "i" for column "i" is not written.
 				afterInsert = [][]string{{"a", "z", "q"}, {"c", "x", "NULL"}}
@@ -296,6 +250,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 				afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}}
 				// Delete also deletes column "i".
 				afterDelete = [][]string{{"c", "x", "NULL"}}
+				afterDeleteKeys = 2
 			} else {
 				// The default value of "i" for column "i" is written.
 				afterInsert = [][]string{{"a", "z", "q"}, {"c", "x", "i"}}
@@ -309,6 +264,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 				}
 				// Delete also deletes column "i".
 				afterDelete = [][]string{{"c", "x", "i"}}
+				afterDeleteKeys = 3
 			}
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
@@ -326,7 +282,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			mTest.makeMutationsActive()
 			// Notice that the default value of "i" is only written when the
 			// descriptor is in the WRITE_ONLY state.
-			_ = mTest.checkQueryResponse(starQuery, afterInsert)
+			mTest.checkQueryResponse(starQuery, afterInsert)
 
 			// The column backfill uses Put instead of CPut because it depends on
 			// an UPDATE of a column in the WRITE_ONLY state failing. This test
@@ -347,7 +303,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
 			// The above failed update was a noop.
-			_ = mTest.checkQueryResponse(starQuery, afterInsert)
+			mTest.checkQueryResponse(starQuery, afterInsert)
 
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
@@ -364,7 +320,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
 			// The update to column "v" is seen; there is no effect on column "i".
-			_ = mTest.checkQueryResponse(starQuery, afterUpdate)
+			mTest.checkQueryResponse(starQuery, afterUpdate)
 
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
@@ -374,13 +330,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			}
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
-			// Row "a" is deleted. numVals is the number of non-NULL values seen,
-			// or the number of KV values belonging to all the rows in the table
-			// excluding row "a" since it's deleted.
-			numVals := mTest.checkQueryResponse(starQuery, afterDelete)
+			// Row "a" is deleted.
+			mTest.checkQueryResponse(starQuery, afterDelete)
 			// Check that there are no hidden KV values for row "a",
 			// and column "i" for row "a" was deleted.
-			mTest.checkTableSize(numVals)
+			mTest.checkTableSize(afterDeleteKeys)
 		}
 	}
 
@@ -472,9 +426,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 					}
 				}
 			}
-			_ = mTest.checkQueryResponse(starQuery, initRows)
+			mTest.checkQueryResponse(starQuery, initRows)
 			// Index foo is visible.
-			_ = mTest.checkQueryResponse(indexQuery, [][]string{{"y"}, {"z"}})
+			mTest.checkQueryResponse(indexQuery, [][]string{{"y"}, {"z"}})
 
 			// Index foo is invisible once it's a mutation.
 			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
@@ -492,16 +446,16 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 					t.Fatal(err)
 				}
 			}
-			_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
+			mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
 
 			// Make index "foo" live so that we can read it.
 			mTest.makeMutationsActive()
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
 				// "x" didn't get added to the index.
-				_ = mTest.checkQueryResponse(indexQuery, [][]string{{"y"}, {"z"}})
+				mTest.checkQueryResponse(indexQuery, [][]string{{"y"}, {"z"}})
 			} else {
 				// "x" got added to the index.
-				_ = mTest.checkQueryResponse(indexQuery, [][]string{{"x"}, {"y"}, {"z"}})
+				mTest.checkQueryResponse(indexQuery, [][]string{{"x"}, {"y"}, {"z"}})
 			}
 
 			// Make "foo" a mutation.
@@ -524,18 +478,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 					t.Fatal(err)
 				}
 			}
-			_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
+			mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
 
 			// Make index "foo" live so that we can read it.
 			mTest.makeMutationsActive()
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
 				// updating "x" -> "w" is a noop on the index,
 				// updating "z" -> "z" results in "z" being deleted from the index.
-				_ = mTest.checkQueryResponse(indexQuery, [][]string{{"y"}, {"z"}})
+				mTest.checkQueryResponse(indexQuery, [][]string{{"y"}, {"z"}})
 			} else {
 				// updating "x" -> "w" results in the index updating from "x" -> "w",
 				// updating "z" -> "z" is a noop on the index.
-				_ = mTest.checkQueryResponse(indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
+				mTest.checkQueryResponse(indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
 			}
 
 			// Make "foo" a mutation.
@@ -544,7 +498,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = 'b'`); err != nil {
 				t.Fatal(err)
 			}
-			_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}, {"c", "w"}})
+			mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}, {"c", "w"}})
 
 			// Make index "foo" live so that we can read it.
 			mTest.makeMutationsActive()
@@ -636,7 +590,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 					}
 				}
 				// Check that the table only contains the initRows.
-				_ = mTest.checkQueryResponse(starQuery, initRows)
+				mTest.checkQueryResponse(starQuery, initRows)
 
 				// Add index "foo" as a mutation.
 				mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: idxState})
@@ -657,13 +611,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
 				// column "i" has no entry.
-				_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
+				mTest.checkQueryResponse(starQuery, [][]string{{"a", "z", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
 				if idxState == sqlbase.DescriptorMutation_DELETE_ONLY {
 					// No index entry for row "c"
-					_ = mTest.checkQueryResponse(indexQuery, [][]string{{"q"}, {"r"}})
+					mTest.checkQueryResponse(indexQuery, [][]string{{"q"}, {"r"}})
 				} else {
 					// Index entry for row "c"
-					_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}, {"r"}})
+					mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}, {"r"}})
 				}
 
 				// Add index "foo" as a mutation.
@@ -696,13 +650,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 				mTest.makeMutationsActive()
 
 				// The update to column "v" is seen; there is no effect on column "i".
-				_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
+				mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
 				if idxState == sqlbase.DescriptorMutation_DELETE_ONLY {
 					// Index entry for row "a" is deleted.
-					_ = mTest.checkQueryResponse(indexQuery, [][]string{{"r"}})
+					mTest.checkQueryResponse(indexQuery, [][]string{{"r"}})
 				} else {
 					// No change in index "foo"
-					_ = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}, {"r"}})
+					mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}, {"r"}})
 				}
 
 				// Add index "foo" as a mutation.
@@ -716,26 +670,24 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 				}
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
-				// Row "b" is deleted. numVals is the number of non-NULL values seen,
-				// or the number of KV values belonging to all the rows in the table
-				// excluding row "b" since it's deleted.
-				numVals := mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
-				// idxVals is the number of index values seen.
-				var idxVals int
+				// Row "b" is deleted.
+				mTest.checkQueryResponse(starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
+				// numKVs is the number of expected key-values. We start with the number
+				// of non-NULL values above.
+				numKVs := 5
 				if idxState == sqlbase.DescriptorMutation_DELETE_ONLY {
 					// Index entry for row "b" is deleted.
-					idxVals = mTest.checkQueryResponse(indexQuery, [][]string{})
+					mTest.checkQueryResponse(indexQuery, [][]string{})
 				} else {
-					// Index entry for row "b" is deleted. idxVals doesn't account for
-					// the NULL value seen.
-					idxVals = mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}})
-					// Increment idxVals to account for the NULL value seen above.
-					idxVals++
+					// Index entry for row "b" is deleted.
+					mTest.checkQueryResponse(indexQuery, [][]string{{"NULL"}, {"q"}})
+					// We have two index values.
+					numKVs += 2
 				}
 				// Check that there are no hidden KV values for row "b", and column
 				// "i" for row "b" was deleted. Also check that the index values are
 				// all accounted for.
-				mTest.checkTableSize(numVals + idxVals)
+				mTest.checkTableSize(numKVs)
 			}
 		}
 	}
@@ -916,7 +868,13 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Make "ufo" live.
 	mt.makeMutationsActive()
 	// The index has been renamed to ufo, and the column to d.
-	_ = mt.checkQueryResponse("SHOW INDEXES FROM t.test", [][]string{{"test", "primary", "true", "1", "a", "ASC", "false"}, {"test", "ufo", "false", "1", "d", "ASC", "false"}})
+	mt.checkQueryResponse(
+		"SHOW INDEXES FROM t.test",
+		[][]string{
+			{"test", "primary", "true", "1", "a", "ASC", "false"},
+			{"test", "ufo", "false", "1", "d", "ASC", "false"},
+		},
+	)
 
 	// Rename column under mutation works properly.
 
@@ -933,7 +891,14 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Make column "e" live.
 	mt.makeMutationsActive()
 	// Column b changed to d.
-	_ = mt.checkQueryResponse("SHOW COLUMNS FROM t.test", [][]string{{"a", "STRING", "false", "NULL"}, {"d", "STRING", "true", "NULL"}, {"e", "STRING", "true", "NULL"}})
+	mt.checkQueryResponse(
+		"SHOW COLUMNS FROM t.test",
+		[][]string{
+			{"a", "STRING", "false", "NULL"},
+			{"d", "STRING", "true", "NULL"},
+			{"e", "STRING", "true", "NULL"},
+		},
+	)
 
 	// Try to change column defaults while column is under mutation.
 	mt.writeColumnMutation("e", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})

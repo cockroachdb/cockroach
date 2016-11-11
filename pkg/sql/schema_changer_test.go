@@ -387,7 +387,7 @@ CREATE INDEX foo ON t.test (v)
 		tableDesc: tableDesc,
 	}
 	indexQuery := `SELECT v FROM t.test@foo`
-	_ = mTest.checkQueryResponse(indexQuery, [][]string{{"b"}, {"d"}})
+	mTest.checkQueryResponse(indexQuery, [][]string{{"b"}, {"d"}})
 
 	// Ensure that the version has been incremented.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
@@ -436,7 +436,7 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 	for i := 0; i < count; i++ {
 		indexQuery := fmt.Sprintf(`SELECT v FROM t.test@foo%d`, i)
-		_ = mTest.checkQueryResponse(indexQuery, [][]string{{"b"}, {"d"}})
+		mTest.checkQueryResponse(indexQuery, [][]string{{"b"}, {"d"}})
 	}
 }
 

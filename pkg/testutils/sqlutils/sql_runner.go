@@ -18,6 +18,7 @@ package sqlutils
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"testing"
 )
 
@@ -80,4 +81,53 @@ func (r *Row) Scan(dest ...interface{}) {
 // QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
 func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
 	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
+}
+
+// CheckQueryResults checks that the rows returned by a query match the expected
+// response.
+func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
+	rows := sr.Query(query)
+	cols, err := rows.Columns()
+	if err != nil {
+		sr.Error(err)
+		return
+	}
+	if len(expected) > 0 && len(cols) != len(expected[0]) {
+		sr.Errorf("query '%s': wrong number of columns %d", query, len(cols))
+		return
+	}
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+	i := 0
+	for ; rows.Next(); i++ {
+		if i >= len(expected) {
+			sr.Errorf("query '%s': expected %d rows, got more", query, len(expected))
+			return
+		}
+		if err := rows.Scan(vals...); err != nil {
+			sr.Error(err)
+			return
+		}
+		for j, v := range vals {
+			if val := *v.(*interface{}); val != nil {
+				var s string
+				switch t := val.(type) {
+				case []byte:
+					s = string(t)
+				default:
+					s = fmt.Sprint(val)
+				}
+				if expected[i][j] != s {
+					sr.Errorf("query '%s': expected %v, found %v", query, expected[i][j], s)
+				}
+			} else if expected[i][j] != "NULL" {
+				sr.Errorf("query '%s': expected %v, found %v", query, expected[i][j], "NULL")
+			}
+		}
+	}
+	if i != len(expected) {
+		sr.Errorf("query '%s': found %d rows, expected %d", query, i, len(expected))
+	}
 }
