@@ -29,29 +29,44 @@ import (
 
 func TestRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	for _, numCols := range []int{1, 2, 3, 5, 10, 15} {
-		for _, numRows := range []int{1, 5, 10, 100} {
-			resCol := make(ResultColumns, numCols)
-			for i := range resCol {
-				resCol[i] = ResultColumn{Typ: parser.TypeInt}
-			}
-			m := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
-			rc := NewRowContainer(m.MakeBoundAccount(context.Background()), resCol, 0)
-			row := make(parser.DTuple, numCols)
-			for i := 0; i < numRows; i++ {
-				for j := range row {
-					row[j] = parser.NewDInt(parser.DInt(i*numCols + j))
+		for _, numRows := range []int{5, 10, 100} {
+			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
+				resCol := make(ResultColumns, numCols)
+				for i := range resCol {
+					resCol[i] = ResultColumn{Typ: parser.TypeInt}
 				}
-				if err := rc.AddRow(row); err != nil {
-					t.Fatal(err)
+				m := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+				rc := NewRowContainer(m.MakeBoundAccount(context.Background()), resCol, 0)
+				row := make(parser.DTuple, numCols)
+				for i := 0; i < numRows; i++ {
+					for j := range row {
+						row[j] = parser.NewDInt(parser.DInt(i*numCols + j))
+					}
+					if err := rc.AddRow(row); err != nil {
+						t.Fatal(err)
+					}
 				}
-			}
-			for i := 0; i < numRows; i++ {
-				row := rc.At(i)
-				for j := range row {
-					dint, ok := row[j].(*parser.DInt)
-					if !ok || int(*dint) != i*numCols+j {
-						t.Fatalf("invalid value %+v on row %d, col %d", row[j], i, j)
+
+				for i := 0; i < numPops; i++ {
+					rc.PopFirst()
+				}
+
+				// Given that we just deleted numPops rows, we have numRows -
+				// numPops rows remaining.
+				if rc.Len() != numRows-numPops {
+					t.Fatalf("invalid length, expected %d got %d", numRows-numPops, rc.Len())
+				}
+
+				// what was previously rc.At(i + numPops) is now rc.At(i).
+				for i := 0; i < rc.Len(); i++ {
+					row := rc.At(i)
+					for j := range row {
+						dint, ok := row[j].(*parser.DInt)
+						if !ok || int(*dint) != (i+numPops)*numCols+j {
+							t.Fatalf("invalid value %+v on row %d, col %d", row[j], i+numPops, j)
+						}
 					}
 				}
 			}
