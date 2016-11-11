@@ -1902,17 +1902,18 @@ func (r *Replica) CheckConsistency(
 		}
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
 	} else {
-		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-			log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
-				inconsistencyCount)
-			// Keep the request from crossing the local->global boundary.
-			if bytes.Compare(key, keys.LocalMax) < 0 {
-				key = keys.LocalMax
-			}
-			if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
-			}
-		}); err != nil {
+		if err := r.store.stopper.RunAsyncTask(
+			r.AnnotateCtx(context.Background()), func(ctx context.Context) {
+				log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
+					inconsistencyCount)
+				// Keep the request from crossing the local->global boundary.
+				if bytes.Compare(key, keys.LocalMax) < 0 {
+					key = keys.LocalMax
+				}
+				if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
+					log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
+				}
+			}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
 		}
 	}
