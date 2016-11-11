@@ -13,6 +13,19 @@ usage() {
     exit 1
 }
 
+# Backup all regular files in the data directory.
+backup_data_dir() {
+    local backup_dir="${DATA_DIR}/backup-$(date +%Y%m%d-%H%M%S)"
+    echo "Backing up files in ${DATA_DIR} to ${backup_dir}"
+    mkdir "${backup_dir}"
+    for f in "${DATA_DIR}"/*; do
+        echo "$f"
+        if [[ -f "$f" ]]; then
+            mv -i "$f" "$backup_dir"
+        fi
+    done
+}
+
 if [ $# -ne 2 ]; then
     echo "expected 2 parameters"
     echo ""
@@ -46,8 +59,7 @@ download)
         exit 1
     fi
     if [[ ! -z $(compgen -G "${DATA_DIR}/*.sst" 2>/dev/null) ]]; then
-        echo "sstables already exist in the destination"
-        exit 1
+        backup_data_dir
     fi
     echo "Downloading ${store_url} to store ${DATA_DIR}"
     cd "${DATA_DIR}"
