@@ -1222,7 +1222,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest,
-) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
+) (func(*roachpb.BatchResponse, *roachpb.Error, bool) *roachpb.Error, error) {
 	var cmdGlobal *cmd
 	var cmdLocal *cmd
 	// Don't use the command queue for inconsistent reads.
@@ -1341,8 +1341,8 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr)
+	return func(br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) *roachpb.Error {
+		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr, shouldRetry)
 	}, nil
 }
 
@@ -1355,10 +1355,13 @@ func (r *Replica) endCmds(
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
-) (rErr *roachpb.Error) {
-	// Only update the timestamp cache if the command succeeded and is
-	// marked as affecting the cache. Inconsistent reads are excluded.
-	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
+	shouldRetry bool,
+) *roachpb.Error {
+	// Update the timestamp cache if the command succeeded and is not
+	// being retried. Each request is considered in turn; only those
+	// marked as affecting the cache are processed. Inconsistent reads
+	// are excluded.
+	if pErr == nil && !shouldRetry && ba.ReadConsistency != roachpb.INCONSISTENT {
 		cr := cacheRequest{
 			timestamp: ba.Timestamp,
 			txnID:     ba.GetTxnID(),
@@ -1564,7 +1567,7 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	endCmdsFunc := func(_ *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+	endCmdsFunc := func(_ *roachpb.BatchResponse, pErr *roachpb.Error, _ bool) *roachpb.Error {
 		return pErr
 	}
 
@@ -1588,7 +1591,7 @@ func (r *Replica) addReadOnlyCmd(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		pErr = endCmdsFunc(br, pErr)
+		pErr = endCmdsFunc(br, pErr, false)
 	}()
 
 	r.mu.Lock()
@@ -1711,7 +1714,7 @@ func (r *Replica) tryAddWriteCmd(
 		// Guarantee we remove the commands from the command queue. This is
 		// wrapped to delay pErr evaluation to its value when returning.
 		defer func() {
-			pErr = endCmdsFunc(br, pErr)
+			pErr = endCmdsFunc(br, pErr, shouldRetry)
 		}()
 	}
 
