@@ -31,8 +31,8 @@ type joinAlgorithm int
 
 const (
 	joinTypeInner joinType = iota
-	joinTypeOuterLeft
-	joinTypeOuterFull
+	joinTypeLeftOuter
+	joinTypeFullOuter
 )
 
 const (
@@ -148,13 +148,13 @@ func (p *planner) makeJoin(
 	case "JOIN", "INNER JOIN", "CROSS JOIN":
 		typ = joinTypeInner
 	case "LEFT JOIN":
-		typ = joinTypeOuterLeft
+		typ = joinTypeLeftOuter
 	case "RIGHT JOIN":
 		left, right = right, left // swap
-		typ = joinTypeOuterLeft
+		typ = joinTypeLeftOuter
 		swapped = true
 	case "FULL JOIN":
-		typ = joinTypeOuterFull
+		typ = joinTypeFullOuter
 	default:
 		return planDataSource{}, errors.Errorf("unsupported JOIN type %T", astJoinType)
 	}
@@ -259,13 +259,13 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 			jType = "CROSS"
 		}
 		buf.WriteString(jType)
-	case joinTypeOuterLeft:
+	case joinTypeLeftOuter:
 		if !n.swapped {
 			buf.WriteString("LEFT OUTER")
 		} else {
 			buf.WriteString("RIGHT OUTER")
 		}
-	case joinTypeOuterFull:
+	case joinTypeFullOuter:
 		buf.WriteString("FULL OUTER")
 	}
 
@@ -331,7 +331,7 @@ func (n *joinNode) Start() error {
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
-	if n.joinType == joinTypeOuterLeft || n.joinType == joinTypeOuterFull {
+	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
 		n.emptyRight = make(parser.DTuple, len(n.right.plan.Columns()))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
@@ -343,7 +343,7 @@ func (n *joinNode) Start() error {
 	}
 	// If needed, allocate an array of booleans to remember which
 	// right rows have matched.
-	if n.joinAlgorithm == nestedLoopJoin && n.joinType == joinTypeOuterFull && n.rightRows != nil {
+	if n.joinAlgorithm == nestedLoopJoin && n.joinType == joinTypeFullOuter && n.rightRows != nil {
 		n.rightMatched = make([]bool, n.rightRows.rows.Len())
 	}
 
@@ -439,7 +439,7 @@ func (n *joinNode) nestedLoopJoinNext() (bool, error) {
 	var nRightRows int
 
 	if n.rightRows == nil {
-		if n.joinType != joinTypeOuterLeft && n.joinType != joinTypeOuterFull {
+		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
 			// No rows on right; don't even try.
 			return false, nil
 		}
@@ -492,7 +492,7 @@ func (n *joinNode) nestedLoopJoinNext() (bool, error) {
 
 		if curRightIdx >= nRightRows {
 			n.rightIdx = 0
-			if (n.joinType == joinTypeOuterLeft || n.joinType == joinTypeOuterFull) && !n.passedFilter {
+			if (n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter) && !n.passedFilter {
 				// If nothing was emitted in the previous batch of right rows,
 				// insert a tuple of NULLs on the right.
 				rightRow = n.emptyRight
@@ -541,7 +541,7 @@ func (n *joinNode) nestedLoopJoinNext() (bool, error) {
 // NATURAL, predicate extraction for ON ignored.
 func (n *joinNode) hashJoinNext() (bool, error) {
 	if len(n.buckets) == 0 {
-		if n.joinType != joinTypeOuterLeft && n.joinType != joinTypeOuterFull {
+		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
 			// No rows on right; don't even try.
 			return false, nil
 		}
@@ -674,7 +674,7 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 	}
 
 	// no more lrows, we go through the unmatched rows in the internal hashmap.
-	if n.joinType != joinTypeOuterFull {
+	if n.joinType != joinTypeFullOuter {
 		return false, nil
 	}
 
