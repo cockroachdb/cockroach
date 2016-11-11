@@ -18,7 +18,10 @@ package sqlutils
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides
@@ -80,4 +83,56 @@ func (r *Row) Scan(dest ...interface{}) {
 // QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
 func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
 	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
+}
+
+// CheckQueryResults checks that the rows returned by a query match the expected
+// response.
+func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
+	file, line, _ := caller.Lookup(1)
+	info := fmt.Sprintf("%s:%d query '%s'", file, line, query)
+
+	rows := sr.Query(query)
+	cols, err := rows.Columns()
+	if err != nil {
+		sr.Error(err)
+		return
+	}
+	if len(expected) > 0 && len(cols) != len(expected[0]) {
+		sr.Errorf("%s: wrong number of columns %d", info, len(cols))
+		return
+	}
+	vals := make([]interface{}, len(cols))
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+	i := 0
+	for ; rows.Next(); i++ {
+		if i >= len(expected) {
+			sr.Errorf("%s: expected %d rows, got more", info, len(expected))
+			return
+		}
+		if err := rows.Scan(vals...); err != nil {
+			sr.Error(err)
+			return
+		}
+		for j, v := range vals {
+			if val := *v.(*interface{}); val != nil {
+				var s string
+				switch t := val.(type) {
+				case []byte:
+					s = string(t)
+				default:
+					s = fmt.Sprint(val)
+				}
+				if expected[i][j] != s {
+					sr.Errorf("%s: expected %v, found %v", info, expected[i][j], s)
+				}
+			} else if expected[i][j] != "NULL" {
+				sr.Errorf("%s: expected %v, found %v", info, expected[i][j], "NULL")
+			}
+		}
+	}
+	if i != len(expected) {
+		sr.Errorf("%s: found %d rows, expected %d", info, i, len(expected))
+	}
 }
