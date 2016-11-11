@@ -412,7 +412,11 @@ func (t *RaftTransport) connectAndProcess(
 	breaker := t.GetCircuitBreaker(nodeID)
 	successes := breaker.Successes()
 	consecFailures := breaker.ConsecFailures()
-	if err := breaker.Call(func() error {
+	// NB: We don't check breaker.Ready() here or use breaker.Call() (which
+	// internally checks breaker.Ready()) because we've already done so in
+	// RaftTransport.SendAsync() and the nature of half-open breakers is that
+	// they only allow breaker.Ready() to return true once per backoff period.
+	if err := func() error {
 		addr, err := t.resolver(nodeID)
 		if err != nil {
 			return err
@@ -431,12 +435,13 @@ func (t *RaftTransport) connectAndProcess(
 		if successes == 0 || consecFailures > 0 {
 			log.Infof(ctx, "raft transport stream to node %d established", nodeID)
 		}
+		breaker.Success()
 		return t.processQueue(nodeID, ch, stats, stream)
-	}, 0); err != nil {
+	}(); err != nil {
 		if consecFailures == 0 {
 			log.Warningf(ctx, "raft transport stream to node %d failed: %s", nodeID, err)
 		}
-		return
+		breaker.Fail()
 	}
 }
 
