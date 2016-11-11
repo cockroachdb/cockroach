@@ -117,6 +117,8 @@ const (
 	// DefaultGossipStoresInterval is the default interval for gossiping storage-
 	// related info.
 	DefaultGossipStoresInterval = 5 * time.Second
+
+	unknownNodeID roachpb.NodeID = 0
 )
 
 // Gossip metrics counter names.
@@ -189,15 +191,13 @@ type Gossip struct {
 	resolverIdx    int
 	resolvers      []resolver.Resolver
 	resolversTried map[int]struct{} // Set of attempted resolver indexes
-
-	// Track the set of nodes in the cluster. nodeAddrs contains the same info
-	// as nodeDescs, just arranged for fast lookup by address.
-	nodeDescs map[roachpb.NodeID]*roachpb.NodeDescriptor
-	nodeAddrs map[util.UnresolvedAddr]roachpb.NodeID
+	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
 
 	// Membership sets for resolvers and bootstrap addresses.
+	// bootstrapAddrs also tracks which address is associated with which
+	// node ID to enable faster node lookup by address.
 	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
-	bootstrapAddrs map[util.UnresolvedAddr]struct{}
+	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 }
 
 // New creates an instance of a gossip node.
@@ -226,9 +226,8 @@ func New(
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
-		nodeAddrs:         map[util.UnresolvedAddr]roachpb.NodeID{},
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
-		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
+		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 	}
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
@@ -342,7 +341,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	for _, addr := range storedBI.Addresses {
 		// If the address is new, and isn't our own address, add it.
 		if _, ok := existing[makeKey(addr)]; !ok && addr != g.mu.is.NodeAddr {
-			g.maybeAddBootstrapAddress(addr)
+			g.maybeAddBootstrapAddress(addr, unknownNodeID)
 		}
 	}
 	// Persist merged addresses.
@@ -494,12 +493,15 @@ func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
 // maybeAddBootstrapAddress adds the specified address to the list of
 // bootstrap addresses if not already present. Returns whether a new
 // bootstrap address was added. The caller must hold the gossip mutex.
-func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr) bool {
-	if _, ok := g.bootstrapAddrs[addr]; ok {
+func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr, nodeID roachpb.NodeID) bool {
+	if existingNodeID, ok := g.bootstrapAddrs[addr]; ok {
+		if existingNodeID == unknownNodeID || existingNodeID != nodeID {
+			g.bootstrapAddrs[addr] = nodeID
+		}
 		return false
 	}
 	g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
-	g.bootstrapAddrs[addr] = struct{}{}
+	g.bootstrapAddrs[addr] = nodeID
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Eventf(ctx, "add bootstrap %s", addr)
 	return true
@@ -519,7 +521,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 	g.resolvers = g.resolvers[:0]
 	g.resolverIdx = 0
 	g.bootstrapInfo.Addresses = g.bootstrapInfo.Addresses[:0]
-	g.bootstrapAddrs = map[util.UnresolvedAddr]struct{}{}
+	g.bootstrapAddrs = map[util.UnresolvedAddr]roachpb.NodeID{}
 	g.resolverAddrs = map[util.UnresolvedAddr]resolver.Resolver{}
 	g.resolversTried = map[int]struct{}{}
 
@@ -533,7 +535,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 				return nil
 			}
 			g.maybeAddResolver(desc.Address)
-			g.maybeAddBootstrapAddress(desc.Address)
+			g.maybeAddBootstrapAddress(desc.Address, desc.NodeID)
 		}
 		return nil
 	}); err != nil {
@@ -602,35 +604,6 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	}
 	g.nodeDescs[desc.NodeID] = &desc
 
-	// If the new node's address conflicts with another node's address, then it
-	// must be the case that the new node has replaced the previous one. Remove
-	// it from our set of tracked descriptors to ensure we don't attempt to
-	// connect to its previous identity (as came up in issue #10266).
-	// We ignore empty addresses for the sake of not breaking the many tests
-	// that don't bother specifying addresses.
-	if !desc.Address.IsEmpty() {
-		if oldNodeID, ok := g.nodeAddrs[desc.Address]; ok && oldNodeID != desc.NodeID {
-			log.Infof(ctx, "removing node %d which was at same address (%s) as new node %v",
-				oldNodeID, desc.Address, desc)
-			delete(g.nodeDescs, oldNodeID)
-
-			// Deleting the local copy isn't enough to remove the node from the gossip
-			// network. We also have to clear it out in the infoStore by overwriting
-			// it with an empty descriptor, which can be represented as just an empty
-			// byte array due to how protocol buffers are serialied.
-			// Calling addInfoLocked here is somewhat recursive since
-			// updateNodeAddress is typically called in response to the infoStore
-			// being updated but won't lead to deadlock because it's called
-			// asynchronously.
-			key := MakeNodeIDKey(oldNodeID)
-			var emptyProto []byte
-			if err := g.addInfoLocked(key, emptyProto, ttlNodeDescriptorGossip); err != nil {
-				log.Errorf(ctx, "failed to empty node descriptor for node %d: %s", oldNodeID, err)
-			}
-		}
-		g.nodeAddrs[desc.Address] = desc.NodeID
-	}
-
 	// Recompute max peers based on size of network and set the max
 	// sizes for incoming and outgoing node sets.
 	maxPeers := g.maxPeers(len(g.nodeDescs))
@@ -647,9 +620,40 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// resolvers go offline.
 	g.maybeAddResolver(desc.Address)
 
+	// We ignore empty addresses for the sake of not breaking the many tests
+	// that don't bother specifying addresses.
+	if desc.Address.IsEmpty() {
+		return
+	}
+
+	// If the new node's address conflicts with another node's address, then it
+	// must be the case that the new node has replaced the previous one. Remove
+	// it from our set of tracked descriptors to ensure we don't attempt to
+	// connect to its previous identity (as came up in issue #10266).
+	oldNodeID, ok := g.bootstrapAddrs[desc.Address]
+	if ok && oldNodeID != unknownNodeID && oldNodeID != desc.NodeID {
+		log.Infof(ctx, "removing node %d which was at same address (%s) as new node %v",
+			oldNodeID, desc.Address, desc)
+		delete(g.nodeDescs, oldNodeID)
+
+		// Deleting the local copy isn't enough to remove the node from the gossip
+		// network. We also have to clear it out in the infoStore by overwriting
+		// it with an empty descriptor, which can be represented as just an empty
+		// byte array due to how protocol buffers are serialied.
+		// Calling addInfoLocked here is somewhat recursive since
+		// updateNodeAddress is typically called in response to the infoStore
+		// being updated but won't lead to deadlock because it's called
+		// asynchronously.
+		key := MakeNodeIDKey(oldNodeID)
+		var emptyProto []byte
+		if err := g.addInfoLocked(key, emptyProto, ttlNodeDescriptorGossip); err != nil {
+			log.Errorf(ctx, "failed to empty node descriptor for node %d: %s", oldNodeID, err)
+		}
+	}
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
-	if g.storage != nil && g.maybeAddBootstrapAddress(desc.Address) {
+	added := g.maybeAddBootstrapAddress(desc.Address, desc.NodeID)
+	if added && g.storage != nil {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
 			log.Error(ctx, err)
 		}
