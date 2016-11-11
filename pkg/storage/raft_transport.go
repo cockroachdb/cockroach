@@ -609,7 +609,7 @@ func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
 }
 
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible
-// for closing the OutgoingSnapshot with snap.Close.
+// for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
 	storePool *StorePool,
