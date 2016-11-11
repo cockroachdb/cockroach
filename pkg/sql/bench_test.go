@@ -1245,12 +1245,10 @@ func BenchmarkInsertDistinct1Multinode_Cockroach(b *testing.B) {
 }
 
 func BenchmarkInsertDistinct10Multinode_Cockroach(b *testing.B) {
-	b.Skip("https://github.com/cockroachdb/cockroach/issues/10551")
 	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 10) })
 }
 
 func BenchmarkInsertDistinct100Multinode_Cockroach(b *testing.B) {
-	b.Skip("https://github.com/cockroachdb/cockroach/issues/10551")
 	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
 }
 
