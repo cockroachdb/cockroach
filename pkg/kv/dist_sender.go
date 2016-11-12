@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -246,7 +247,7 @@ func (ds *DistSender) RangeLookup(
 		Reverse:   useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
-	replicas.Shuffle()
+	shuffle.Shuffle(replicas)
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, nil, roachpb.NewError(err)
@@ -288,7 +289,7 @@ func (ds *DistSender) optimizeReplicaOrder(replicas ReplicaSlice) {
 	nodeDesc := ds.getNodeDescriptor()
 	// If we don't know which node we're on, don't optimize anything.
 	if nodeDesc == nil {
-		replicas.Shuffle()
+		shuffle.Shuffle(replicas)
 		return
 	}
 	// Sort replicas by attribute affinity (if any), which we treat as a stand-in
