@@ -85,11 +85,13 @@ func (v *IndexedVar) ResolvedType() Type {
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
-	if f.symbolicVars || v.container == nil {
+	if f.indexedVarFormat != nil {
+		f.indexedVarFormat(buf, f, v.container, v.Idx)
+	} else if f.symbolicVars || v.container == nil {
 		fmt.Fprintf(buf, "@%d", v.Idx+1)
-		return
+	} else {
+		v.container.IndexedVarFormat(buf, f, v.Idx)
 	}
-	v.container.IndexedVarFormat(buf, f, v.Idx)
 }
 
 // NewOrdinalReference is a helper routine to create a standalone

@@ -71,6 +71,20 @@ func TestIndexedVars(t *testing.T) {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}
 
+	// Test formatting using the indexed var format interceptor.
+	var buf bytes.Buffer
+	typedExpr.Format(
+		&buf,
+		FmtIndexedVarFormat(func(buf *bytes.Buffer, _ FmtFlags, _ IndexedVarContainer, idx int) {
+			fmt.Fprintf(buf, "customVar%d", idx)
+		}),
+	)
+	str = buf.String()
+	expectedStr = "customVar0 + (customVar1 * customVar2)"
+	if str != expectedStr {
+		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+
 	typ := typedExpr.ResolvedType()
 	if !typ.Equal(TypeInt) {
 		t.Errorf("invalid expression type %s", typ)
