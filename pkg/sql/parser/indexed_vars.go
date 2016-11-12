@@ -65,7 +65,11 @@ func (v *IndexedVar) ResolvedType() Type {
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
-	v.container.IndexedVarFormat(buf, f, v.Idx)
+	if f.indexedVarFormat != nil {
+		f.indexedVarFormat(buf, f, v.container, v.Idx)
+	} else {
+		v.container.IndexedVarFormat(buf, f, v.Idx)
+	}
 }
 
 // IndexedVarHelper is a structure that helps with initialization of IndexVars.
