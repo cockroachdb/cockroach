@@ -2795,10 +2795,8 @@ func (s *Store) processRaftRequest(
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
-			// Allow snapshots to be applied to replicas before they are
-			// members of the raft group (i.e. replicas with an ID of 0). This
-			// is the only operation that can be performed before it is part of
-			// the raft group.
+			// Snapshots addressed to replica ID 0 are permitted; this is the
+			// mechanism by which preemptive snapshots work.
 
 			defer func() {
 				s.mu.Lock()
