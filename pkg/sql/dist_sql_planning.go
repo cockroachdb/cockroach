@@ -295,7 +295,7 @@ func initTableReaderSpec(n *scanNode) (distsql.TableReaderSpec, error) {
 			}
 		}
 		if s.IndexIdx == 0 {
-			return distsql.TableReaderSpec{}, errors.Errorf("invalid scanNode index %d", n.index)
+			return distsql.TableReaderSpec{}, errors.Errorf("invalid scanNode index %v", n.index)
 		}
 	}
 	s.OutputColumns = make([]uint32, 0, len(n.resultColumns))
@@ -396,6 +396,47 @@ func (dsp *distSQLPlanner) createTableReaders(
 	return p, nil
 }
 
+// addParallelStage adds a processor to each of the result streams, on the same
+// node with the source of the stream; all processors have the same core. This
+// is for stages that correspond to logical blocks that don't require any
+// grouping (e.g. evaluator, sorting, etc).
+func (dsp *distSQLPlanner) addNoGroupingStage(
+	planCtx *planningCtx, p *physicalPlan, core distsql.ProcessorCoreUnion,
+) {
+	pIdx := len(p.processors)
+	for i, s := range p.resultStreams {
+		prevProc := &p.processors[s.processor]
+
+		proc := processor{
+			node: prevProc.node,
+			spec: distsql.ProcessorSpec{
+				Input: []distsql.InputSyncSpec{{
+					Type: distsql.InputSyncSpec_UNORDERED,
+				}},
+				Core: core,
+				Output: []distsql.OutputRouterSpec{{
+					Type: distsql.OutputRouterSpec_MIRROR,
+				}},
+			},
+		}
+
+		p.streams = append(p.streams, stream{
+			sourceProcessor: s.processor,
+			sourceSlot:      s.slot,
+			destProcessor:   pIdx,
+			destSlot:        0,
+		})
+
+		p.resultStreams[i] = resultStream{
+			processor: pIdx,
+			slot:      0,
+		}
+
+		p.processors = append(p.processors, proc)
+		pIdx++
+	}
+}
+
 // selectRenders takes a physicalPlan that reflects a select source and updates
 // it to reflect the select node. An evaluator stage is added if needed.
 func (dsp *distSQLPlanner) selectRenders(
@@ -424,10 +465,26 @@ func (dsp *distSQLPlanner) selectRenders(
 			planToStreamColMap[i] = streamCol
 		}
 		p.planToStreamColMap = planToStreamColMap
+		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
 		return nil
 	}
-	// TODO(radu): add an evaluator stage.
-	panic("render expressions not implemented")
+	// Add a stage with Evaluator processors.
+	evalSpec := distsql.EvaluatorSpec{
+		Exprs: make([]distsql.Expression, len(n.render)),
+	}
+	for i := range n.render {
+		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
+	}
+	evalCore := distsql.ProcessorCoreUnion{Evaluator: &evalSpec}
+	dsp.addNoGroupingStage(planCtx, p, evalCore)
+
+	// Update planToStreamColMap; we now have a simple 1-to-1 mapping.
+	p.planToStreamColMap = p.planToStreamColMap[:0]
+	for i := range n.render {
+		p.planToStreamColMap = append(p.planToStreamColMap, i)
+	}
+	p.ordering = dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap)
+	return nil
 }
 
 func (dsp *distSQLPlanner) createPlanForNode(
