@@ -568,17 +568,6 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return descs[len(descs)-1], nil
 }
 
-// RangeLookup implements the RangeDescriptorDB interface. It looks up the
-// descriptors for the given (meta) key.
-func (m *multiTestContext) RangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	// DistSender's RangeLookup function will work correctly, as long as
-	// multiTestContext's FirstRange() method returns the correct descriptor for the
-	// first range.
-	return m.distSenders[0].RangeLookup(ctx, key, desc, useReverseScan)
-}
-
 func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	var cfg storage.StoreConfig
 	if m.storeConfig != nil {
@@ -597,14 +586,30 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	return cfg
 }
 
+var _ kv.RangeDescriptorDB = mtcRangeDescriptorDB{}
+
+type mtcRangeDescriptorDB struct {
+	*multiTestContext
+	ds **kv.DistSender
+}
+
+func (mrdb mtcRangeDescriptorDB) RangeLookup(
+	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	return (*mrdb.ds).RangeLookup(ctx, key, desc, useReverseScan)
+}
+
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	m.distSenders[idx] = kv.NewDistSender(kv.DistSenderConfig{
-		Clock:             m.clock,
-		RangeDescriptorDB: m,
-		TransportFactory:  m.kvTransportFactory,
-		RPCRetryOptions:   &retryOpts,
+		Clock: m.clock,
+		RangeDescriptorDB: mtcRangeDescriptorDB{
+			multiTestContext: m,
+			ds:               &m.distSenders[idx],
+		},
+		TransportFactory: m.kvTransportFactory,
+		RPCRetryOptions:  &retryOpts,
 	}, m.gossips[idx])
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := kv.NewTxnCoordSender(
