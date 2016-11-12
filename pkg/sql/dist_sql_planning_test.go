@@ -42,11 +42,11 @@ func TestDistSQLPlanner(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.Exec("SET DIST_SQL = ALWAYS")
 	r.CheckQueryResults(
-		"SELECT * FROM test.t",
+		"SELECT 5, 2 + num, * FROM test.t",
 		[][]string{
-			{"1", "one"},
-			{"2", "two"},
-			{"3", "three"},
+			{"5", "3", "1", "one"},
+			{"5", "4", "2", "two"},
+			{"5", "5", "3", "three"},
 		},
 	)
 }
