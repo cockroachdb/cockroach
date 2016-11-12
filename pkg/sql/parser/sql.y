@@ -453,6 +453,7 @@ func (u *sqlSymUnion) window() Window {
 %type <NamePart> glob_indirection
 %type <NamePart> name_indirection
 %type <NamePart> indirection_elem
+%type <Expr> opt_slice_bound
 %type <*IndexHints> opt_index_hints
 %type <*IndexHints> index_hints_param
 %type <*IndexHints> index_hints_param_list
@@ -657,7 +658,7 @@ func (u *sqlSymUnion) window() Window {
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH, NOT_REGIMATCH NOT_LA
+%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
@@ -4275,9 +4276,16 @@ indirection_elem:
   {
     $$.val = &ArraySubscript{Begin: $2.expr()}
   }
-| '[' a_expr ':' a_expr ']'
+| '[' opt_slice_bound ':' opt_slice_bound ']'
   {
-    $$.val = &ArraySubscript{Begin: $2.expr(), End: $4.expr()}
+    $$.val = &ArraySubscript{Begin: $2.expr(), End: $4.expr(), Slice: true}
+  }
+
+opt_slice_bound:
+  a_expr
+| /*EMPTY*/
+  {
+    $$.val = Expr(nil)
   }
 
 name_indirection:
