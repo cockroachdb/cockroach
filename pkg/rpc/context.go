@@ -212,8 +212,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 		}
 
-		dialOpts := make([]grpc.DialOption, 0, 1+len(opts))
+		dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
 		dialOpts = append(dialOpts, dialOpt)
+		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, opts...)
 
 		if log.V(1) {
