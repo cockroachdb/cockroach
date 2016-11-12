@@ -127,15 +127,20 @@ func (u UnqualifiedStar) String() string                     { return AsString(u
 type ArraySubscript struct {
 	Begin Expr
 	End   Expr
+	Slice bool
 }
 
 // Format implements the NodeFormatter interface.
 func (a *ArraySubscript) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('[')
-	FormatNode(buf, f, a.Begin)
-	if a.End != nil {
+	if a.Begin != nil {
+		FormatNode(buf, f, a.Begin)
+	}
+	if a.Slice {
 		buf.WriteByte(':')
-		FormatNode(buf, f, a.End)
+		if a.End != nil {
+			FormatNode(buf, f, a.End)
+		}
 	}
 	buf.WriteByte(']')
 }
