@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+const maxBackoff = time.Second
+
 // breakerClock is an implementation of clock.Clock that internally uses an
 // hlc.Clock. It is used to bridge the hlc clock to the circuit breaker
 // clocks. Note that it only implements the After() and Now() methods needed by
@@ -82,7 +84,7 @@ func newBackOff(clock backoff.Clock) backoff.BackOff {
 		InitialInterval:     500 * time.Millisecond,
 		RandomizationFactor: 0.5,
 		Multiplier:          1.5,
-		MaxInterval:         1 * time.Second,
+		MaxInterval:         maxBackoff,
 		MaxElapsedTime:      0,
 		Clock:               clock,
 	}
