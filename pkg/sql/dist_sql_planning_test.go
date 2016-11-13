@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,8 +36,8 @@ func TestDistSQLPlanner(t *testing.T) {
 
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
-		"num INT PRIMARY KEY, str STRING",
-		4, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
+		"num INT PRIMARY KEY, str STRING, mod INT, INDEX(mod)",
+		10, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn, sqlutils.RowModuloFn(3)),
 	)
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
@@ -44,10 +45,24 @@ func TestDistSQLPlanner(t *testing.T) {
 	r.CheckQueryResults(
 		"SELECT 5, 2 + num, * FROM test.t ORDER BY str",
 		[][]string{
-			{"5", "6", "4", "four"},
-			{"5", "3", "1", "one"},
-			{"5", "5", "3", "three"},
-			{"5", "4", "2", "two"},
+			strings.Fields("5 10  8 eight    2"),
+			strings.Fields("5  7  5 five     2"),
+			strings.Fields("5  6  4 four     1"),
+			strings.Fields("5 11  9 nine     0"),
+			strings.Fields("5  3  1 one      1"),
+			strings.Fields("5 12 10 one-zero 1"),
+			strings.Fields("5  9  7 seven    1"),
+			strings.Fields("5  8  6 six      0"),
+			strings.Fields("5  5  3 three    0"),
+			strings.Fields("5  4  2 two      2"),
+		},
+	)
+	r.CheckQueryResults(
+		"SELECT str FROM test.t WHERE mod=0",
+		[][]string{
+			{"three"},
+			{"six"},
+			{"nine"},
 		},
 	)
 }
