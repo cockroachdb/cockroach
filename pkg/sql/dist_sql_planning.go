@@ -104,7 +104,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 		}
 		return dsp.CheckSupport(n.source.plan)
 
-	case *scanNode:
+	case *indexJoinNode, *scanNode:
 		return nil
 
 	default:
@@ -278,7 +278,7 @@ func (dsp *distSQLPlanner) splitSpans(
 }
 
 // initTableReaderSpec initializes a TableReaderSpec that corresponds to a
-// scanNode, except for the Spans.
+// scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(n *scanNode) (distsql.TableReaderSpec, error) {
 	s := distsql.TableReaderSpec{
 		Table:   n.desc,
@@ -295,12 +295,6 @@ func initTableReaderSpec(n *scanNode) (distsql.TableReaderSpec, error) {
 			return distsql.TableReaderSpec{}, errors.Errorf("invalid scanNode index %v", n.index)
 		}
 	}
-	s.OutputColumns = make([]uint32, 0, len(n.resultColumns))
-	for i := range n.resultColumns {
-		if n.valNeededForCol[i] {
-			s.OutputColumns = append(s.OutputColumns, uint32(i))
-		}
-	}
 	if n.limitSoft {
 		s.SoftLimit = n.limitHint
 	} else {
@@ -309,6 +303,27 @@ func initTableReaderSpec(n *scanNode) (distsql.TableReaderSpec, error) {
 
 	s.Filter = distSQLExpression(n.filter, nil)
 	return s, nil
+}
+
+// getOutputColumnsFromScanNode returns the indices of the columns that are
+// returned by a scanNode.
+func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
+	num := 0
+	for i := range n.resultColumns {
+		if n.valNeededForCol[i] {
+			num++
+		}
+	}
+	outputColumns := make([]uint32, 0, num)
+	for i := range n.resultColumns {
+		// TODO(radu): if we have a scan with a filter, valNeededForCol will include
+		// the columns needed for the filter, even if they aren't needed for the
+		// next stage.
+		if n.valNeededForCol[i] {
+			outputColumns = append(outputColumns, uint32(i))
+		}
+	}
+	return outputColumns
 }
 
 func (dsp *distSQLPlanner) convertOrdering(
@@ -339,12 +354,20 @@ func (dsp *distSQLPlanner) convertOrdering(
 	return ordering
 }
 
+// createTableReaders generates a plan consisting of table reader processors,
+// one for each node that has spans that we are reading.
+// overrideResultColumns is optional.
 func (dsp *distSQLPlanner) createTableReaders(
-	planCtx *planningCtx, n *scanNode,
+	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
 	spec, err := initTableReaderSpec(n)
 	if err != nil {
 		return physicalPlan{}, err
+	}
+	if overrideResultColumns != nil {
+		spec.OutputColumns = overrideResultColumns
+	} else {
+		spec.OutputColumns = getOutputColumnsFromScanNode(n)
 	}
 	planToStreamColMap := make([]int, len(n.resultColumns))
 	for i := range spec.OutputColumns {
@@ -397,9 +420,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 // node with the source of the stream; all processors have the same core. This
 // is for stages that correspond to logical blocks that don't require any
 // grouping (e.g. evaluator, sorting, etc).
-func (dsp *distSQLPlanner) addNoGroupingStage(
-	planCtx *planningCtx, p *physicalPlan, core distsql.ProcessorCoreUnion,
-) {
+func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.ProcessorCoreUnion) {
 	pIdx := len(p.processors)
 	for i, s := range p.resultStreams {
 		prevProc := &p.processors[s.processor]
@@ -472,7 +493,8 @@ func (dsp *distSQLPlanner) selectRenders(
 	for i := range n.render {
 		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
 	}
-	dsp.addNoGroupingStage(planCtx, p, distsql.ProcessorCoreUnion{Evaluator: &evalSpec})
+
+	dsp.addNoGroupingStage(p, distsql.ProcessorCoreUnion{Evaluator: &evalSpec})
 
 	// Update planToStreamColMap; we now have a simple 1-to-1 mapping.
 	p.planToStreamColMap = p.planToStreamColMap[:0]
@@ -497,7 +519,7 @@ func (dsp *distSQLPlanner) addSorters(
 			n.ordering, sorterSpec.OutputOrdering.Columns,
 		))
 	}
-	dsp.addNoGroupingStage(planCtx, p, distsql.ProcessorCoreUnion{Sorter: &sorterSpec})
+	dsp.addNoGroupingStage(p, distsql.ProcessorCoreUnion{Sorter: &sorterSpec})
 
 	p.ordering = sorterSpec.OutputOrdering
 	// Remove any columns that were only used only for sorting.
@@ -506,12 +528,58 @@ func (dsp *distSQLPlanner) addSorters(
 	p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
 }
 
+func (dsp *distSQLPlanner) createPlanForIndexJoin(
+	planCtx *planningCtx, n *indexJoinNode,
+) (physicalPlan, error) {
+	priCols := make([]uint32, len(n.index.desc.PrimaryIndex.ColumnIDs))
+	for i := range priCols {
+		colID := n.index.desc.PrimaryIndex.ColumnIDs[i]
+		for j, c := range n.index.desc.Columns {
+			if c.ID == colID {
+				priCols[i] = uint32(j)
+				break
+			}
+		}
+	}
+
+	plan, err := dsp.createTableReaders(planCtx, n.index, priCols)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	joinReaderSpec := distsql.JoinReaderSpec{
+		Table:         n.index.desc,
+		IndexIdx:      0,
+		Filter:        distSQLExpression(n.table.filter, nil),
+		OutputColumns: getOutputColumnsFromScanNode(n.table),
+	}
+
+	// TODO(radu): we currently use a single Joiner. We could have multiple. Note
+	// that in that case, if the index ordering is used, we must make sure that
+	// the index columns are part of the output (so that ordered synchronizers
+	// down the road can maintain the order).
+
+	dsp.addSingleGroupStage(
+		&plan, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+	)
+	for i := range plan.planToStreamColMap {
+		plan.planToStreamColMap[i] = -1
+	}
+	for i, col := range joinReaderSpec.OutputColumns {
+		plan.planToStreamColMap[col] = i
+	}
+	return plan, nil
+}
+
 func (dsp *distSQLPlanner) createPlanForNode(
 	planCtx *planningCtx, node planNode,
 ) (physicalPlan, error) {
 	switch n := node.(type) {
 	case *scanNode:
-		return dsp.createTableReaders(planCtx, n)
+		return dsp.createTableReaders(planCtx, n, nil)
+
+	case *indexJoinNode:
+		return dsp.createPlanForIndexJoin(planCtx, n)
 
 	case *selectNode:
 		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
@@ -564,19 +632,21 @@ func (dsp *distSQLPlanner) mergeResultStreams(
 	}
 }
 
-// addFinalStage adds a final stage that brings the results back to this node.
-func (dsp *distSQLPlanner) addFinalStage(p *physicalPlan) {
-	thisNodeID := dsp.nodeDesc.NodeID
-	if len(p.resultStreams) == 1 {
-		proc := p.resultStreams[0].processor
-		if p.processors[proc].node == thisNodeID {
-			// What luck! The plan has a single result stream, and it's coming from a
-			// processor on this node.
-			return
-		}
+// addSingleGroupStage adds a "no grouping" stage (logical stage that cannot be
+// parallelized) which consists of a single processor on the specified node.
+func (dsp *distSQLPlanner) addSingleGroupStage(
+	p *physicalPlan, nodeID roachpb.NodeID, core distsql.ProcessorCoreUnion,
+) {
+	proc := processor{
+		node: nodeID,
+		spec: distsql.ProcessorSpec{
+			Input: []distsql.InputSyncSpec{{}},
+			Core:  core,
+			Output: []distsql.OutputRouterSpec{{
+				Type: distsql.OutputRouterSpec_MIRROR,
+			}},
+		},
 	}
-	proc := processor{node: thisNodeID}
-	proc.spec.Core.SetValue(&distsql.NoopCoreSpec{})
 
 	// Add a no-op processor.
 	pIdx := len(p.processors)
@@ -642,7 +712,15 @@ func (dsp *distSQLPlanner) PlanAndRun(
 		return err
 	}
 
-	dsp.addFinalStage(&plan)
+	// If we don't already have a single result stream on this node, add a final
+	// stage.
+	if len(plan.resultStreams) != 1 ||
+		plan.processors[plan.resultStreams[0].processor].node != thisNodeID {
+		dsp.addSingleGroupStage(
+			&plan, thisNodeID, distsql.ProcessorCoreUnion{Noop: &distsql.NoopCoreSpec{}},
+		)
+	}
+
 	dsp.populateEndpoints(&planCtx, &plan)
 
 	recv.resultToStreamColMap = plan.planToStreamColMap
