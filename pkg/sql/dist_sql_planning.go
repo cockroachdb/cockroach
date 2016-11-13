@@ -90,9 +90,6 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 		if n.window != nil {
 			return errors.Errorf("windows not supported yet")
 		}
-		if n.sort != nil {
-			return errors.Errorf("sorting not supported yet")
-		}
 		if n.distinct != nil {
 			return errors.Errorf("distinct not supported yet")
 		}
@@ -475,8 +472,7 @@ func (dsp *distSQLPlanner) selectRenders(
 	for i := range n.render {
 		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
 	}
-	evalCore := distsql.ProcessorCoreUnion{Evaluator: &evalSpec}
-	dsp.addNoGroupingStage(planCtx, p, evalCore)
+	dsp.addNoGroupingStage(planCtx, p, distsql.ProcessorCoreUnion{Evaluator: &evalSpec})
 
 	// Update planToStreamColMap; we now have a simple 1-to-1 mapping.
 	p.planToStreamColMap = p.planToStreamColMap[:0]
@@ -485,6 +481,29 @@ func (dsp *distSQLPlanner) selectRenders(
 	}
 	p.ordering = dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap)
 	return nil
+}
+
+// addSorters adds sorters coresponding to a sortNode.
+func (dsp *distSQLPlanner) addSorters(
+	planCtx *planningCtx, p *physicalPlan, n *sortNode, sourceNode planNode,
+) {
+	sorterSpec := distsql.SorterSpec{
+		OutputOrdering:   dsp.convertOrdering(n.ordering, p.planToStreamColMap),
+		OrderingMatchLen: uint32(computeOrderingMatch(n.ordering, sourceNode.Ordering(), false)),
+	}
+	if len(sorterSpec.OutputOrdering.Columns) != len(n.ordering) {
+		panic(fmt.Sprintf(
+			"not all columns in sort ordering available: %v; %v",
+			n.ordering, sorterSpec.OutputOrdering.Columns,
+		))
+	}
+	dsp.addNoGroupingStage(planCtx, p, distsql.ProcessorCoreUnion{Sorter: &sorterSpec})
+
+	p.ordering = sorterSpec.OutputOrdering
+	// Remove any columns that were only used only for sorting.
+	// TODO(radu): we should configure the sorter to only output the columns we
+	// care about.
+	p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
 }
 
 func (dsp *distSQLPlanner) createPlanForNode(
@@ -505,7 +524,14 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		return plan, nil
 
 	case *selectTopNode:
-		return dsp.createPlanForNode(planCtx, n.source)
+		plan, err := dsp.createPlanForNode(planCtx, n.source)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		if n.sort != nil {
+			dsp.addSorters(planCtx, &plan, n.sort, n.source)
+		}
+		return plan, nil
 
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))

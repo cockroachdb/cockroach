@@ -36,17 +36,18 @@ func TestDistSQLPlanner(t *testing.T) {
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
 		"num INT PRIMARY KEY, str STRING",
-		3, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
+		4, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.Exec("SET DIST_SQL = ALWAYS")
 	r.CheckQueryResults(
-		"SELECT 5, 2 + num, * FROM test.t",
+		"SELECT 5, 2 + num, * FROM test.t ORDER BY str",
 		[][]string{
+			{"5", "6", "4", "four"},
 			{"5", "3", "1", "one"},
-			{"5", "4", "2", "two"},
 			{"5", "5", "3", "three"},
+			{"5", "4", "2", "two"},
 		},
 	)
 }
