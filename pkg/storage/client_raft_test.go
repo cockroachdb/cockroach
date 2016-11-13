@@ -1152,6 +1152,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9603, #10171, #10536")
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
 	mtc.initGossipNetwork()
@@ -2349,6 +2350,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#10189")
 
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
