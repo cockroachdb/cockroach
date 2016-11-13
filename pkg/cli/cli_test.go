@@ -803,7 +803,7 @@ func Example_user() {
 	c.Run("user ls")
 	c.Run("user ls --pretty")
 	c.Run("user ls --pretty=false")
-	c.Run("user set foo --password=bar")
+	c.Run("user set foo")
 	// Don't use get, since the output of hashedPassword is random.
 	// c.Run("user get foo")
 	c.Run("user ls --pretty")
@@ -823,7 +823,7 @@ func Example_user() {
 	// user ls --pretty=false
 	// 0 rows
 	// username
-	// user set foo --password=bar
+	// user set foo
 	// INSERT 1
 	// user ls --pretty
 	// +----------+
@@ -840,36 +840,6 @@ func Example_user() {
 	// +----------+
 	// +----------+
 	// (0 rows)
-}
-
-func Example_user_insecure() {
-	s, err := serverutils.StartServerRaw(
-		base.TestServerArgs{Insecure: true})
-	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %v", err)
-	}
-	defer s.Stopper().Stop()
-	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
-
-	// Since util.IsolatedTestAddr is used on Linux in insecure test clusters,
-	// we have to reset the advertiseHost so that the value from previous
-	// tests is not used to construct an incorrect postgres URL by the client.
-	advertiseHost = ""
-
-	// No prompting for password in insecure mode.
-	c.Run("user set foo")
-	c.Run("user ls --pretty")
-
-	// Output:
-	// user set foo
-	// INSERT 1
-	// user ls --pretty
-	// +----------+
-	// | username |
-	// +----------+
-	// | foo      |
-	// +----------+
-	// (1 row)
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
