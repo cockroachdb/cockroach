@@ -53,13 +53,12 @@ eexpect "user root must authenticate using a client certificate"
 
 eexpect $prompt
 
-send "$argv sql --ca-cert=$ca_crt --cert=$root_crt --key=$root_key\r"
-eexpect "root@"
-send "CREATE USER carl WITH PASSWORD 'woof';\r"
-eexpect "CREATE USER\r\n"
-
-# Terminate with Ctrl+C.
-send "\003"
+send "$argv user set carl --password --ca-cert=$ca_crt --cert=$root_crt --key=$root_key\r"
+eexpect "Enter password:"
+send "woof\r"
+eexpect "Confirm password:"
+send "woof\r"
+eexpect "INSERT 1\r\n"
 
 eexpect $prompt
 

@@ -17,8 +17,6 @@
 package cli
 
 import (
-	"bufio"
-	"errors"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -26,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
-var password string
+var password bool
 
 // A getUserCmd command displays the config for the specified username.
 var getUserCmd = &cobra.Command{
@@ -122,34 +120,13 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	}
 	var err error
 	var hashed []byte
-	switch password {
-	case "":
-		if !baseCfg.Insecure {
-			hashed, err = security.PromptForPasswordAndHash()
-			if err != nil {
-				return err
-			}
+	if password {
+		hashed, err = security.PromptForPasswordAndHash()
+		if err != nil {
+			return err
 		}
-	case "-":
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			hashed, err = security.HashPassword(scanner.Text())
-			if err != nil {
-				return err
-			}
-			if scanner.Scan() {
-				return errors.New("multiline passwords are not permitted")
-			}
-			if err := scanner.Err(); err != nil {
-				return err
-			}
-		} else {
-			if err := scanner.Err(); err != nil {
-				return err
-			}
-		}
-	default:
-		hashed, err = security.HashPassword(password)
+	} else {
+		hashed, err = security.HashPassword("")
 		if err != nil {
 			return err
 		}
