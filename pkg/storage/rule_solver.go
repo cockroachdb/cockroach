@@ -39,50 +39,21 @@ type solveState struct {
 	tierOrder   []string
 }
 
-// rule is a generic rule that can be used to solve a constraint problem.
-type rule struct {
-	weight float64
-	// run is a function that given a solveState will score and possibly
-	// disqualify a store. The store in solveState can be disqualified by
-	// returning false. Unless disqualified, the higher the returned score, the
-	// more likely the store will be picked as a candidate. When calculating the
-	// best candidate, the rule's weight is used as a multiplier for the
-	// score.
-	run func(state solveState) (float64, bool)
-}
+// rule is a function that given a solveState will score and possibly
+// disqualify a store. The store in solveState can be disqualified by
+// returning false. Unless disqualified, the higher the returned score, the
+// more likely the store will be picked as a candidate.
+type rule func(state solveState) (float64, bool)
 
-// defaultSolverRules is the default rule set to use.
-var defaultSolverRules = []rule{
-	{
-		weight: 1.0,
-		run:    ruleReplicasUniqueNodes,
-	},
-	{
-		weight: 1.0,
-		run:    ruleConstraints,
-	},
-	{
-		weight: 0.01,
-		run:    ruleCapacity,
-	},
-	{
-		weight: 0.1,
-		run:    ruleDiversity,
-	},
-}
+// ruleSolver is used to test a collection of rules against stores.
+type ruleSolver []rule
 
-// makeRuleSolver makes a new ruleSolver. The order of the rules is the order in
-// which they are run. For optimization purposes, less computationally expensive
-// rules should run first to eliminate candidates.
-func makeRuleSolver(rules []rule) ruleSolver {
-	return ruleSolver{
-		rules: rules,
-	}
-}
-
-// ruleSolver solves a set of rules for a store.
-type ruleSolver struct {
-	rules []rule
+// defaultRuleSolver is the set of rules used.
+var defaultRuleSolver = ruleSolver{
+	ruleReplicasUniqueNodes,
+	ruleConstraints,
+	ruleCapacity,
+	ruleDiversity,
 }
 
 // Solve runs the rules against the stores in the store list and returns all
@@ -113,12 +84,12 @@ func (rs ruleSolver) Solve(
 // state and returns each candidate's score and if the candidate is valid.
 func (rs ruleSolver) computeCandidate(state solveState) (candidate, bool) {
 	var totalScore float64
-	for _, rule := range rs.rules {
-		score, valid := rule.run(state)
+	for _, rule := range rs {
+		score, valid := rule(state)
 		if !valid {
 			return candidate{}, false
 		}
-		totalScore += score * rule.weight
+		totalScore += score
 	}
 	return candidate{store: state.store, score: totalScore}, true
 }
@@ -200,7 +171,7 @@ func ruleDiversity(state solveState) (float64, bool) {
 	if maxScore == 0 {
 		return 0, true
 	}
-	return score / maxScore, true
+	return score / maxScore * 0.1, true
 }
 
 // ruleCapacity returns true iff a new replica won't overfill the store. The
@@ -213,7 +184,7 @@ func ruleCapacity(state solveState) (float64, bool) {
 		return 0, false
 	}
 
-	return 1 / float64(state.store.Capacity.RangeCount+1), true
+	return 0.01 / float64(state.store.Capacity.RangeCount+1), true
 }
 
 // canonicalTierOrder returns the most common key at each tier level in
