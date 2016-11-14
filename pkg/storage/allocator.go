@@ -155,7 +155,7 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 		storePool:  storePool,
 		options:    options,
 		randGen:    makeAllocatorRand(randSource),
-		ruleSolver: makeRuleSolver(defaultSolverRules),
+		ruleSolver: defaultRuleSolver,
 	}
 }
 
