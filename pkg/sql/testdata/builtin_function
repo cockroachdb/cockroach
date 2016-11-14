@@ -1164,69 +1164,68 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 ----
 NULL
 
-# TODO(nvanbenschoten) in the effort to support Hibernate, ARRAY support has been
-# minimally added. When we add support for the ARRAY[1, 2, 3] syntax, it should be
-# used here instead of calling CURRENT_SCHEMAS, which is very fragile.
-
-query TI
-SELECT current_schemas(true), array_length(current_schemas(true), 1);
+query I
+SELECT array_length(ARRAY['a', 'b'], 1);
 ----
-{'pg_catalog','test'}  2
+2
 
-query TI
-SELECT current_schemas(false), array_length(current_schemas(false), 1);
+query I
+SELECT array_length(ARRAY['a'], 1);
 ----
-{'test'}  1
+1
 
-query TI
-SELECT current_schemas(false), array_length(current_schemas(false), 0);
+query I
+SELECT array_length(ARRAY['a'], 0);
 ----
-{'test'}  NULL
+NULL
 
-query TI
-SELECT current_schemas(false), array_length(current_schemas(false), 2);
+query I
+SELECT array_length(ARRAY['a'], 2);
 ----
-{'test'}  NULL
+NULL
 
-query TI
-SELECT current_schemas(true), array_lower(current_schemas(true), 1);
+query I
+SELECT array_lower(ARRAY['a', 'b'], 1);
 ----
-{'pg_catalog','test'}  1
+1
 
-query TI
-SELECT current_schemas(false), array_lower(current_schemas(false), 1);
+query I
+SELECT array_lower(ARRAY['a'], 1);
 ----
-{'test'}  1
+1
 
-query TI
-SELECT current_schemas(false), array_lower(current_schemas(false), 0);
+query I
+SELECT array_lower(ARRAY['a'], 0);
 ----
-{'test'}  NULL
+NULL
 
-query TI
-SELECT current_schemas(false), array_lower(current_schemas(false), 2);
+query I
+SELECT array_lower(ARRAY['a'], 2);
 ----
-{'test'}  NULL
+NULL
 
-query TI
-SELECT current_schemas(true), array_upper(current_schemas(true), 1);
+query I
+SELECT array_upper(ARRAY['a', 'b'], 1);
 ----
-{'pg_catalog','test'}  2
+2
 
-query TI
-SELECT current_schemas(false), array_upper(current_schemas(false), 1);
+query I
+SELECT array_upper(ARRAY['a'], 1);
 ----
-{'test'}  1
+1
 
-query TI
-SELECT current_schemas(false), array_upper(current_schemas(false), 0);
+query I
+SELECT array_upper(ARRAY['a'], 0);
 ----
-{'test'}  NULL
+NULL
 
-query TI
-SELECT current_schemas(false), array_upper(current_schemas(false), 2);
+query I
+SELECT array_upper(ARRAY['a'], 2);
 ----
-{'test'}  NULL
+NULL
+
+# TODO(nvanbenschoten): Until we support casts to array types, or support the
+# array_remove builtin, this is the easiest way to test with an empty array.
 
 statement ok
 SET DATABASE = ''

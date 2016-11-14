@@ -225,7 +225,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				if len(args) == 0 {
-					return DNull, errInsufficientArgs
+					return nil, errInsufficientArgs
 				}
 				if args[0] == DNull {
 					return DNull, nil
@@ -288,7 +288,7 @@ var Builtins = map[string][]Builtin{
 				sv := nboip.String()
 				// if nboip has a length of 0, sv will be "<nil>"
 				if sv == "<nil>" {
-					return DNull, errZeroIP
+					return nil, errZeroIP
 				}
 				return NewDString(sv), nil
 			},
@@ -305,7 +305,7 @@ var Builtins = map[string][]Builtin{
 				// If ipdstr could not be parsed to a valid IP,
 				// ip will be nil.
 				if ip == nil {
-					return DNull, fmt.Errorf("Invalid IP format: %s", ipdstr)
+					return nil, fmt.Errorf("Invalid IP format: %s", ipdstr)
 				}
 				return NewDBytes(DBytes(ip)), nil
 			},
@@ -322,7 +322,7 @@ var Builtins = map[string][]Builtin{
 				field := int(*args[2].(*DInt))
 
 				if field <= 0 {
-					return DNull, fmt.Errorf("field position %d must be greater than zero", field)
+					return nil, fmt.Errorf("field position %d must be greater than zero", field)
 				}
 
 				splits := strings.Split(text, sep)
@@ -866,7 +866,7 @@ var Builtins = map[string][]Builtin{
 					return NewDInt(DInt(fromTime.Unix())), nil
 
 				default:
-					return DNull, fmt.Errorf("unsupported timespan: %s", timeSpan)
+					return nil, fmt.Errorf("unsupported timespan: %s", timeSpan)
 				}
 			},
 		},
@@ -898,7 +898,7 @@ var Builtins = map[string][]Builtin{
 					return NewDInt(DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
 
 				default:
-					return DNull, fmt.Errorf("unsupported timespan: %s", timeSpan)
+					return nil, fmt.Errorf("unsupported timespan: %s", timeSpan)
 				}
 			},
 		},
@@ -921,7 +921,7 @@ var Builtins = map[string][]Builtin{
 				x := *args[0].(*DInt)
 				switch {
 				case x == math.MinInt64:
-					return DNull, errAbsOfMinInt64
+					return nil, errAbsOfMinInt64
 				case x < 0:
 					return NewDInt(-x), nil
 				}
@@ -1064,7 +1064,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				y := *args[1].(*DInt)
 				if y == 0 {
-					return DNull, errZeroModulus
+					return nil, errZeroModulus
 				}
 				x := *args[0].(*DInt)
 				return NewDInt(x % y), nil
@@ -1309,7 +1309,7 @@ var substringImpls = []Builtin{
 			length := int(*args[2].(*DInt))
 
 			if length < 0 {
-				return DNull, fmt.Errorf("negative substring length %d not allowed", length)
+				return nil, fmt.Errorf("negative substring length %d not allowed", length)
 			}
 
 			end := start + length
