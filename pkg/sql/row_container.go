@@ -170,16 +170,16 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 // AddRow attempts to insert a new row in the RowContainer. The row slice is not
 // used directly: the Datums inside the DTuple are copied to internal storage.
 // Returns an error if the allocation was denied by the MemoryMonitor.
-func (c *RowContainer) AddRow(row parser.DTuple) error {
+func (c *RowContainer) AddRow(row parser.DTuple) (parser.DTuple, error) {
 	if len(row) != c.numCols {
 		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
 	if c.numCols == 0 {
 		c.numRows++
-		return nil
+		return nil, nil
 	}
 	if err := c.memAcc.Grow(c.rowSize(row)); err != nil {
-		return err
+		return nil, err
 	}
 	chunk, pos := c.getChunkAndPos(c.numRows)
 	if chunk == len(c.chunks) {
@@ -189,12 +189,12 @@ func (c *RowContainer) AddRow(row parser.DTuple) error {
 			numChunks = 1 + len(c.chunks)/8
 		}
 		if err := c.allocChunks(numChunks); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	copy(c.chunks[chunk][pos:pos+c.numCols], row)
 	c.numRows++
-	return nil
+	return c.chunks[chunk][pos : pos+c.numCols : pos+c.numCols], nil
 }
 
 // Len reports the number of rows currently held in this RowContainer.

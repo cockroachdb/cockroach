@@ -360,7 +360,7 @@ func (n *groupNode) computeAggregates() error {
 			}
 		}
 
-		if err := n.values.rows.AddRow(row); err != nil {
+		if _, err := n.values.rows.AddRow(row); err != nil {
 			return err
 		}
 	}

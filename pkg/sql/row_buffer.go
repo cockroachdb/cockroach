@@ -29,19 +29,8 @@ import (
 // under the constraints imposed by Next() and Values() under the planNode
 // interface.
 type RowBuffer struct {
-	rows   *RowContainer
+	*RowContainer
 	output parser.DTuple
-}
-
-// Close releases the memory associated with the internal RowContainer.
-func (rb *RowBuffer) Close() {
-	rb.rows.Close()
-	rb.rows = nil
-}
-
-// AddRow adds a row to the RowBuffer's internal row store.
-func (rb *RowBuffer) AddRow(row parser.DTuple) error {
-	return rb.rows.AddRow(row)
 }
 
 // Values here is analogous to Values() as defined under planNode.
@@ -55,10 +44,10 @@ func (rb *RowBuffer) Values() parser.DTuple {
 // results were buffered in prior to the call we return false. Else we stage the
 // next output value for the subsequent call to Values().
 func (rb *RowBuffer) Next() bool {
-	if rb.rows.Len() == 0 {
+	if rb.Len() == 0 {
 		return false
 	}
-	rb.output = rb.rows.At(0)
-	rb.rows.PopFirst()
+	rb.output = rb.At(0)
+	rb.PopFirst()
 	return true
 }
