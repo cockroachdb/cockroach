@@ -2523,6 +2523,7 @@ export interface storagebaseBuilder {
 	decode64(buffer: string) : storagebaseMessage;
 	ReplicaState: storagebase.ReplicaStateBuilder;
 	RangeInfo: storagebase.RangeInfoBuilder;
+	QueueState: storagebase.QueueStateBuilder;
 	
 }
 
@@ -2712,6 +2713,51 @@ export interface RangeInfoBuilder {
 	decode(buffer: ArrayBuffer) : RangeInfoMessage;
 	decode(buffer: ByteBuffer) : RangeInfoMessage;
 	decode64(buffer: string) : RangeInfoMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.storage.storagebase {
+
+	export interface QueueState {
+
+		
+
+low_water?: util.hlc.Timestamp;
+		
+
+getLowWater?() : util.hlc.Timestamp;
+		setLowWater?(lowWater : util.hlc.Timestamp): void;
+		
+
+
+
+last_processed?: ProtoBufMap<string, util.hlc.Timestamp>;
+		
+
+getLastProcessed?() : ProtoBufMap<string, util.hlc.Timestamp>;
+		setLastProcessed?(lastProcessed : ProtoBufMap<string, util.hlc.Timestamp>): void;
+		
+
+
+
+}
+
+	export interface QueueStateMessage extends QueueState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface QueueStateBuilder {
+	new(data?: QueueState): QueueStateMessage;
+	decode(buffer: ArrayBuffer) : QueueStateMessage;
+	decode(buffer: ByteBuffer) : QueueStateMessage;
+	decode64(buffer: string) : QueueStateMessage;
 	
 }
 

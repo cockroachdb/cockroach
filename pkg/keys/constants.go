@@ -102,21 +102,21 @@ var (
 	// abort cache protects a transaction from re-reading its own intents
 	// after it's been aborted.
 	LocalAbortCacheSuffix = []byte("abc-")
-	// localRangeFrozenStatusSuffix is the suffix for a frozen status.
+	// LocalRangeFrozenStatusSuffix is the suffix for a frozen status.
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
-	// localRangeLastGCSuffix is the suffix for the last GC.
+	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
 	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	LocalRaftAppliedIndexSuffix = []byte("rfta")
-	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
+	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.
 	LocalRaftTombstoneSuffix = []byte("rftb")
-	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
+	// LocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
-	// localRangeLeaseSuffix is the suffix for a range lease.
+	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
 	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
 	LocalLeaseAppliedIndexSuffix = []byte("rlla")
-	// localRangeStatsSuffix is the suffix for range statistics.
+	// LocalRangeStatsSuffix is the suffix for range statistics.
 	LocalRangeStatsSuffix = []byte("stat")
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
@@ -128,16 +128,16 @@ var (
 	// replicated keys for the same Range ID, so they can be manipulated either
 	// together or individually in a single scan.
 	localRangeIDUnreplicatedInfix = []byte("u")
-	// localRaftHardStateSuffix is the Suffix for the raft HardState.
+	// LocalRaftHardStateSuffix is the Suffix for the raft HardState.
 	LocalRaftHardStateSuffix = []byte("rfth")
-	// localRaftLastIndexSuffix is the suffix for raft's last index.
+	// LocalRaftLastIndexSuffix is the suffix for raft's last index.
 	LocalRaftLastIndexSuffix = []byte("rfti")
 	// LocalRaftLogSuffix is the suffix for the raft log.
 	LocalRaftLogSuffix = []byte("rftl")
-	// localRangeLastReplicaGCTimestampSuffix is the suffix for a range's
+	// LocalRangeLastReplicaGCTimestampSuffix is the suffix for a range's
 	// last replica GC timestamp (for GC of old replicas).
 	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
-	// localRangeLastVerificationTimestampSuffixDeprecated is the suffix for a range's
+	// LocalRangeLastVerificationTimestampSuffixDeprecated is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
 	// Note: DEPRECATED.
 	LocalRangeLastVerificationTimestampSuffixDeprecated = []byte("rlvt")
@@ -159,11 +159,13 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
-	// localTransactionSuffix specifies the key suffix for
+	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
 	// (storage/engine/rocksdb/db.cc).
-	localTransactionSuffix = roachpb.RKey("txn-")
+	LocalTransactionSuffix = roachpb.RKey("txn-")
+	// localQueueStateSuffix is the suffix for replica queue state.
+	localQueueStateSuffix = []byte("qst-")
 
 	// Meta1Prefix is the first level of key addressing. It is selected such that
 	// all range addressing records sort before any system tables which they

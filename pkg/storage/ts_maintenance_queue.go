@@ -30,6 +30,9 @@ import (
 )
 
 const (
+	// TimeSeriesMaintenanceInterval is the minimum interval between two
+	// time series maintenance runs on a replica.
+	TimeSeriesMaintenanceInterval           = time.Hour * 24 // daily
 	timeSeriesMaintenanceQueueTimerDuration = time.Second
 	timeSeriesMaintenanceQueueMaxSize       = 100
 )
@@ -91,6 +94,7 @@ func newTimeSeriesMaintenanceQueue(
 			maxSize:              timeSeriesMaintenanceQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: true,
+			minInterval:          TimeSeriesMaintenanceInterval,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
 			failures:             store.metrics.TimeSeriesMaintenanceQueueFailures,
 			pending:              store.metrics.TimeSeriesMaintenanceQueuePending,

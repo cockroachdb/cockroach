@@ -336,7 +336,13 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	if err != nil {
 		panic(err)
 	}
-	return MakeRangeKey(rk, localTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
+	return MakeRangeKey(rk, LocalTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
+}
+
+// QueueStateKey returns a range-local key for the per-replica
+// queue state.
+func QueueStateKey(key roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(key, localQueueStateSuffix, nil)
 }
 
 // IsLocal performs a cheap check that returns true iff a range-local key is

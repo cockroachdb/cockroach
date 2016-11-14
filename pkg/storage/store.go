@@ -330,24 +330,23 @@ type raftRequestQueue []raftRequestInfo
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident                   roachpb.StoreIdent
-	cfg                     StoreConfig
-	db                      *client.DB
-	engine                  engine.Engine               // The underlying key-value store
-	allocator               Allocator                   // Makes allocation decisions
-	rangeIDAlloc            *idAllocator                // Range ID allocator
-	gcQueue                 *gcQueue                    // Garbage collection queue
-	splitQueue              *splitQueue                 // Range splitting queue
-	replicateQueue          *replicateQueue             // Replication queue
-	replicaGCQueue          *replicaGCQueue             // Replica GC queue
-	raftLogQueue            *raftLogQueue               // Raft Log Truncation queue
-	tsMaintenanceQueue      *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner                 *replicaScanner             // Replica scanner
-	replicaConsistencyQueue *replicaConsistencyQueue    // Replica consistency check queue
-	consistencyScanner      *replicaScanner             // Consistency checker scanner
-	metrics                 *StoreMetrics
-	intentResolver          *intentResolver
-	raftEntryCache          *raftEntryCache
+	Ident              roachpb.StoreIdent
+	cfg                StoreConfig
+	db                 *client.DB
+	engine             engine.Engine               // The underlying key-value store
+	allocator          Allocator                   // Makes allocation decisions
+	rangeIDAlloc       *idAllocator                // Range ID allocator
+	gcQueue            *gcQueue                    // Garbage collection queue
+	splitQueue         *splitQueue                 // Range splitting queue
+	replicateQueue     *replicateQueue             // Replication queue
+	replicaGCQueue     *replicaGCQueue             // Replica GC queue
+	raftLogQueue       *raftLogQueue               // Raft Log Truncation queue
+	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner            *replicaScanner             // Replica scanner
+	consistencyQueue   *consistencyQueue           // Replica consistency check queue
+	metrics            *StoreMetrics
+	intentResolver     *intentResolver
+	raftEntryCache     *raftEntryCache
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -682,6 +681,8 @@ type StoreTestingKnobs struct {
 	DisableRefreshReasonTicks bool
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft bool
+	// DisableLastProcessedCheck disables checking on replica queue last processed times.
+	DisableLastProcessedCheck bool
 	// ReplicateQueueAcceptsUnsplit allows the replication queue to
 	// process ranges that need to be split, for use in tests that use
 	// the replication queue but disable the split queue.
@@ -816,14 +817,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
-		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
-
-		// Add consistency check scanner.
-		s.consistencyScanner = newReplicaScanner(
-			s.cfg.AmbientCtx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
+		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
+		s.scanner.AddQueues(
+			s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue, s.consistencyQueue,
 		)
-		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
-		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 
 		if s.cfg.TimeSeriesDataStore != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
@@ -1168,16 +1165,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			select {
 			case <-s.cfg.Gossip.Connected:
 				s.scanner.Start(s.cfg.Clock, s.stopper)
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		})
-
-		// Start the consistency scanner.
-		s.stopper.RunWorker(func() {
-			select {
-			case <-s.cfg.Gossip.Connected:
-				s.consistencyScanner.Start(s.cfg.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
 			}
@@ -1593,6 +1580,11 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	meta1Key := keys.RangeMetaKey(meta2KeyAddr)
 	if err := engine.MVCCPutProto(ctx, batch, ms, meta1Key, now, nil, desc); err != nil {
+		return err
+	}
+	// Initial per-replica queue state.
+	qs := storagebase.QueueState{LowWater: now}
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.QueueStateKey(desc.StartKey), hlc.ZeroTimestamp, nil, &qs); err != nil {
 		return err
 	}
 
@@ -2038,7 +2030,6 @@ func (s *Store) removeReplicaImpl(
 	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	s.scanner.RemoveReplica(rep)
-	s.consistencyScanner.RemoveReplica(rep)
 	return nil
 }
 

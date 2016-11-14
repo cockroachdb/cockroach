@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -94,7 +95,8 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		pruneSeenEndKeys:   make(map[string]struct{}),
 	}
 
-	cfg := storage.TestStoreConfig(nil)
+	manual := hlc.NewManualClock(1)
+	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TimeSeriesDataStore = model
 	cfg.TestingKnobs.DisableScanner = true
 	cfg.TestingKnobs.DisableSplitQueue = true
@@ -137,7 +139,20 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		return nil
 	})
 
-	// Force replica scan to run, which will populate the model.
+	// Force replica scan to run. But because we haven't moved the
+	// clock forward, no pruning will take place.
+	store.ForceTimeSeriesMaintenanceQueueProcess()
+	time.Sleep(10 * time.Millisecond)
+	if a, e := model.containsCalled, 0; a != e {
+		t.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
+	}
+	if a, e := model.pruneCalled, 0; a != e {
+		t.Errorf("PruneTimeSeries called %d times; expected %d", a, e)
+	}
+
+	// Move clock forward and force replica scan to run, which will
+	// populate the model.
+	manual.Increment(storage.TimeSeriesMaintenanceInterval.Nanoseconds())
 	store.ForceTimeSeriesMaintenanceQueueProcess()
 
 	// Wait for processing to complete.
@@ -167,7 +182,13 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 // maintenance queue runs correctly on a test server.
 func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+
+	// Create manual clock.
+	testArgs := base.TestServerArgs{}
+	testArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		DisableLastProcessedCheck: true,
+	}
+	s, _, db := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop()
 	tsrv := s.(*server.TestServer)
 	tsdb := tsrv.TsDB()
@@ -206,7 +227,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// generate a split key at a timestamp halfway between near past and far past.
+	// Generate a split key at a timestamp halfway between near past and far past.
 	splitKey := ts.MakeDataKey(
 		seriesName, sourceName, ts.Resolution10s, farPast+(nearPast-farPast)/2,
 	)
