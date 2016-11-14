@@ -27,11 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
-	timeSeriesMaintenanceQueueTimerDuration = time.Second
-	timeSeriesMaintenanceQueueMaxSize       = 100
+	// TimeSeriesMaintenanceInterval is the minimum interval between two
+	// time series maintenance runs on a replica.
+	TimeSeriesMaintenanceInterval     = 24 * time.Hour // daily
+	timeSeriesMaintenanceQueueMaxSize = 100
 )
 
 // TimeSeriesDataStore is an interface defined in the storage package that can
@@ -72,8 +75,9 @@ type TimeSeriesDataStore interface {
 // a no-op.
 type timeSeriesMaintenanceQueue struct {
 	*baseQueue
-	tsData TimeSeriesDataStore
-	db     *client.DB
+	tsData         TimeSeriesDataStore
+	replicaCountFn func() int
+	db             *client.DB
 }
 
 // newTimeSeriesMaintenanceQueue returns a new instance of
@@ -81,12 +85,13 @@ type timeSeriesMaintenanceQueue struct {
 func newTimeSeriesMaintenanceQueue(
 	store *Store, db *client.DB, g *gossip.Gossip, tsData TimeSeriesDataStore,
 ) *timeSeriesMaintenanceQueue {
-	tsmq := &timeSeriesMaintenanceQueue{
-		tsData: tsData,
-		db:     db,
+	q := &timeSeriesMaintenanceQueue{
+		tsData:         tsData,
+		replicaCountFn: store.ReplicaCount,
+		db:             db,
 	}
-	tsmq.baseQueue = newBaseQueue(
-		"timeSeriesMaintenance", tsmq, store, g,
+	q.baseQueue = newBaseQueue(
+		"timeSeriesMaintenance", q, store, g,
 		queueConfig{
 			maxSize:              timeSeriesMaintenanceQueueMaxSize,
 			needsLease:           true,
@@ -98,29 +103,59 @@ func newTimeSeriesMaintenanceQueue(
 		},
 	)
 
-	return tsmq
+	return q
 }
 
-func (tsmq *timeSeriesMaintenanceQueue) shouldQueue(
-	_ context.Context, _ hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+func (q *timeSeriesMaintenanceQueue) shouldQueue(
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
+	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
+		if err != nil {
+			log.ErrEventf(ctx, "time series maintenance queue last processed timestamp: %s", err)
+		}
+		shouldQ, priority = shouldQueueAgain(now, lpTS, TimeSeriesMaintenanceInterval)
+		if !shouldQ {
+			return
+		}
+	}
 	desc := repl.Desc()
-	return tsmq.tsData.ContainsTimeSeries(desc.StartKey, desc.EndKey), 0
+	if q.tsData.ContainsTimeSeries(desc.StartKey, desc.EndKey) {
+		return
+	}
+	return false, 0
 }
 
-func (tsmq *timeSeriesMaintenanceQueue) process(
+func (q *timeSeriesMaintenanceQueue) process(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	desc := repl.Desc()
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
-	return tsmq.tsData.PruneTimeSeries(ctx, snap, desc.StartKey, desc.EndKey, tsmq.db, now)
+	if err := q.tsData.PruneTimeSeries(ctx, snap, desc.StartKey, desc.EndKey, q.db, now); err != nil {
+		return err
+	}
+	// Update the last processed time for this queue.
+	if err := repl.setQueueLastProcessed(ctx, q.name, now); err != nil {
+		log.ErrEventf(ctx, "failed to update last processed time: %v", err)
+	}
+	return nil
 }
 
-func (tsmq *timeSeriesMaintenanceQueue) timer() time.Duration {
-	return timeSeriesMaintenanceQueueTimerDuration
+func (q *timeSeriesMaintenanceQueue) timer(duration time.Duration) time.Duration {
+	// An interval between replicas to space consistency checks out over
+	// the check interval.
+	replicaCount := q.replicaCountFn()
+	if replicaCount == 0 {
+		return 0
+	}
+	replInterval := TimeSeriesMaintenanceInterval / time.Duration(replicaCount)
+	if replInterval < duration {
+		return 0
+	}
+	return replInterval - duration
 }
 
-func (tsmq *timeSeriesMaintenanceQueue) purgatoryChan() <-chan struct{} {
+func (*timeSeriesMaintenanceQueue) purgatoryChan() <-chan struct{} {
 	return nil
 }

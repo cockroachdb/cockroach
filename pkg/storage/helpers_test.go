@@ -216,6 +216,12 @@ func (r *Replica) IsQuiescent() bool {
 	return r.mu.quiescent
 }
 
+// GetQueueLastProcessed returns the last processed timestamp for the
+// specified queue, or the zero timestamp if not available.
+func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
+	return r.getQueueLastProcessed(ctx, queue)
+}
+
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
 }
