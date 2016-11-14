@@ -1092,7 +1092,7 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 // gcThreshold.
 func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	timestamp := hlc.Timestamp{}
+	var timestamp hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return hlc.ZeroTimestamp, err
@@ -1103,6 +1103,29 @@ func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
+}
+
+// getQueueLastProcessed returns the last processed timestamp for the
+// specified queue, or the zero timestamp if not available.
+func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
+	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
+	var timestamp hlc.Timestamp
+	if r.store != nil {
+		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
+		if err != nil {
+			return hlc.ZeroTimestamp, err
+		}
+	}
+	return timestamp, nil
+}
+
+// setQueueLastProcessed writes the last processed timestamp for the
+// specified queue.
+func (r *Replica) setQueueLastProcessed(
+	ctx context.Context, queue string, timestamp hlc.Timestamp,
+) error {
+	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
+	return r.store.DB().PutInline(ctx, key, &timestamp)
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil

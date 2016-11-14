@@ -110,6 +110,29 @@ func isExpectedQueueError(err error) bool {
 	return err == nil || cause == errQueueDisabled || cause == errReplicaNotAddable
 }
 
+// shouldQueueAgain is a helper function to determine whether the
+// replica should be queued according to the current time, the last
+// time the replica was processed, and the minimum interval between
+// successive processing. Specifying minInterval=0 queues all replicas.
+// Returns a bool for whether to queue as well as a priority based
+// on how long it's been since last processed.
+func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool, float64) {
+	if minInterval == 0 || last == hlc.ZeroTimestamp {
+		return true, 0
+	}
+	if diff := now.GoTime().Sub(last.GoTime()); diff >= minInterval {
+		priority := float64(1)
+		// If there's a non-zero last processed timestamp, adjust the
+		// priority by a multiple of how long it's been since the last
+		// time this replica was processed.
+		if last != hlc.ZeroTimestamp {
+			priority = float64(diff.Nanoseconds()) / float64(minInterval.Nanoseconds())
+		}
+		return true, priority
+	}
+	return false, 0
+}
+
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
@@ -124,8 +147,9 @@ type queueImpl interface {
 	process(context.Context, hlc.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
-	// from the queue.
-	timer() time.Duration
+	// from the queue. The duration of the last processing of a replica
+	// is supplied as an argument.
+	timer(time.Duration) time.Duration
 
 	// purgatoryChan returns a channel that is signaled when it's time
 	// to retry replicas which have been relegated to purgatory due to
@@ -429,8 +453,6 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 
 // processLoop processes the entries in the queue until the provided
 // stopper signals exit.
-//
-// TODO(spencer): current load should factor into replica processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		ctx := bq.AnnotateCtx(context.Background())
@@ -463,18 +485,23 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 					nextTime = immediately
 
 					// In case we're in a test, still block on the impl.
-					bq.impl.timer()
+					bq.impl.timer(0)
 				}
 			// Process replicas as the timer expires.
 			case <-nextTime:
 				repl := bq.pop()
+				var duration time.Duration
 				if repl != nil {
 					if stopper.RunTask(func() {
 						annotatedCtx := repl.AnnotateCtx(ctx)
+						start := timeutil.Now()
 						if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
 							// Maybe add failing replica to purgatory if the queue supports it.
 							bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
 						}
+						duration = timeutil.Since(start)
+						log.VEventf(annotatedCtx, 2, "done %s", duration)
+						bq.processingNanos.Inc(duration.Nanoseconds())
 					}) != nil {
 						return
 					}
@@ -482,7 +509,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				if bq.Length() == 0 {
 					nextTime = nil
 				} else {
-					nextTime = time.After(bq.impl.timer())
+					nextTime = time.After(bq.impl.timer(duration))
 				}
 			}
 		}
@@ -545,14 +572,9 @@ func (bq *baseQueue) processReplica(
 	}
 
 	log.VEventf(queueCtx, 3, "processing")
-	start := timeutil.Now()
-	err := bq.impl.process(ctx, clock.Now(), repl, cfg)
-	duration := timeutil.Since(start)
-	bq.processingNanos.Inc(duration.Nanoseconds())
-	if err != nil {
+	if err := bq.impl.process(ctx, clock.Now(), repl, cfg); err != nil {
 		return err
 	}
-	log.VEventf(queueCtx, 2, "done: %s", duration)
 	log.Event(ctx, "done")
 	bq.successes.Inc(1)
 	return nil

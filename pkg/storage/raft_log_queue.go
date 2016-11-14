@@ -229,7 +229,7 @@ func (rlq *raftLogQueue) process(
 }
 
 // timer returns interval between processing successive queued truncations.
-func (*raftLogQueue) timer() time.Duration {
+func (*raftLogQueue) timer(_ time.Duration) time.Duration {
 	return RaftLogQueueTimerDuration
 }
 
