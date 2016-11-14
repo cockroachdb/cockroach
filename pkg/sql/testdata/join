@@ -271,6 +271,13 @@ x  x  y  b  d  e
 44 44 51 44 44 51
 
 # Check EXPLAIN.
+query ITT 
+EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
+----
+0  join  INNER ON EQUALS((x),(x))
+1  scan  onecolumn@primary
+1  scan  twocolumn@primary
+
 query ITT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
