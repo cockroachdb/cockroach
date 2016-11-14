@@ -109,7 +109,7 @@ type joinPredicate interface {
 
 var _ joinPredicate = &onPredicate{}
 var _ joinPredicate = &crossPredicate{}
-var _ joinPredicate = &usingPredicate{}
+var _ joinPredicate = &equalityPredicate{}
 
 // prepareRowConcat implement the simple case of CROSS JOIN or JOIN
 // with an ON clause, where the rows of the two inputs are simply
@@ -223,10 +223,12 @@ func (p *planner) makeOnPredicate(
 	return pred, info, nil
 }
 
-// usingPredicate implements the predicate logic for joins with a USING clause.
-type usingPredicate struct {
-	// The list of column names given to USING.
-	colNames parser.NameList
+// equalityPredicate implements the predicate logic for joins with a USING clause.
+type equalityPredicate struct {
+	// The list of leftColumn names given to USING.
+	leftColNames parser.NameList
+	// The list of rightColumn names given to USING.
+	rightColNames parser.NameList
 
 	// The comparison function to use for each column. We need
 	// different functions because each USING column may have a different
@@ -246,20 +248,22 @@ type usingPredicate struct {
 	rightRestIndices []int
 }
 
-func (p *usingPredicate) format(buf *bytes.Buffer) {
-	buf.WriteString(" USING(")
-	p.colNames.Format(buf, parser.FmtSimple)
-	buf.WriteByte(')')
+func (p *equalityPredicate) format(buf *bytes.Buffer) {
+	buf.WriteString(" ON EQUALS((")
+	p.leftColNames.Format(buf, parser.FmtSimple)
+	buf.WriteString("),(")
+	p.rightColNames.Format(buf, parser.FmtSimple)
+	buf.WriteString("))")
 }
-func (p *usingPredicate) start() error                        { return nil }
-func (p *usingPredicate) expand() error                       { return nil }
-func (p *usingPredicate) explainTypes(_ func(string, string)) {}
+func (p *equalityPredicate) start() error                        { return nil }
+func (p *equalityPredicate) expand() error                       { return nil }
+func (p *equalityPredicate) explainTypes(_ func(string, string)) {}
 
-// eval for usingPredicate compares the USING columns, returning true
+// eval for equalityPredicate compares the USING columns, returning true
 // if and only if all USING columns are equal on both sides.
-func (p *usingPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, error) {
+func (p *equalityPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, error) {
 	eq := true
-	for i := range p.colNames {
+	for i := range p.leftColNames {
 		leftVal := leftRow[p.leftUsingIndices[i]]
 		rightVal := rightRow[p.rightUsingIndices[i]]
 		if leftVal == parser.DNull || rightVal == parser.DNull {
@@ -278,11 +282,11 @@ func (p *usingPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, error) 
 	return eq, nil
 }
 
-// prepareRow for usingPredicate has more work to do than for ON
+// prepareRow for equalityPredicate has more work to do than for ON
 // clauses and CROSS JOIN: a result row contains first the values for
 // the USING columns; then the non-USING values from the left input
 // row, then the non-USING values from the right input row.
-func (p *usingPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
+func (p *equalityPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 	d := 0
 	for k, j := range p.leftUsingIndices {
 		// The result for USING columns must be computed as per COALESCE().
@@ -322,14 +326,20 @@ func pickUsingColumn(cols ResultColumns, colName string, context string) (int, p
 	return idx, cols[idx].Typ, nil
 }
 
-// makeUsingPredicate constructs a joinPredicate object for joins with
-// a USING clause.
-func (p *planner) makeUsingPredicate(
-	left *dataSourceInfo, right *dataSourceInfo, colNames parser.NameList,
+// makeEqualityPredicate constructs a joinPredicate object for joins.
+func (p *planner) makeEqualityPredicate(
+	left *dataSourceInfo,
+	right *dataSourceInfo,
+	leftColNames parser.NameList,
+	rightColNames parser.NameList,
 ) (joinPredicate, *dataSourceInfo, error) {
-	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error), len(colNames))
-	leftUsingIndices := make([]int, len(colNames))
-	rightUsingIndices := make([]int, len(colNames))
+	if len(leftColNames) != len(rightColNames) {
+		panic(fmt.Errorf("left columns' length %q doesn't match right columns' length %q in EqualityPredicate",
+			len(leftColNames), len(rightColNames)))
+	}
+	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error), len(leftColNames))
+	leftUsingIndices := make([]int, len(leftColNames))
+	rightUsingIndices := make([]int, len(rightColNames))
 	usedLeft := make([]int, len(left.sourceColumns))
 	for i := range usedLeft {
 		usedLeft[i] = invalidColIdx
@@ -338,28 +348,22 @@ func (p *planner) makeUsingPredicate(
 	for i := range usedRight {
 		usedRight[i] = invalidColIdx
 	}
-	seenNames := make(map[string]struct{})
-	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns)-len(colNames))
+	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns)-len(leftColNames))
 
-	// Find out which columns are involved in the USING clause.
-	for i, unnormalizedColName := range colNames {
-		colName := unnormalizedColName.Normalize()
-
-		// Check for USING(x,x)
-		if _, ok := seenNames[colName]; ok {
-			return nil, nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
-		}
-		seenNames[colName] = struct{}{}
+	// Find out which columns are involved in EqualityPredicate.
+	for i := range leftColNames {
+		leftColName := leftColNames[i].Normalize()
+		rightColName := rightColNames[i].Normalize()
 
 		// Find the column name on the left.
-		leftIdx, leftType, err := pickUsingColumn(left.sourceColumns, colName, "left")
+		leftIdx, leftType, err := pickUsingColumn(left.sourceColumns, leftColName, "left")
 		if err != nil {
 			return nil, nil, err
 		}
 		usedLeft[leftIdx] = i
 
 		// Find the column name on the right.
-		rightIdx, rightType, err := pickUsingColumn(right.sourceColumns, colName, "right")
+		rightIdx, rightType, err := pickUsingColumn(right.sourceColumns, rightColName, "right")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -372,16 +376,16 @@ func (p *planner) makeUsingPredicate(
 		// Memoize the comparison function.
 		fn, found := parser.FindEqualComparisonFunction(leftType, rightType)
 		if !found {
-			return nil, nil, fmt.Errorf("JOIN/USING types %s and %s for column %s cannot be matched",
-				leftType, rightType, colName)
+			return nil, nil, fmt.Errorf("JOIN/USING types %s for left column %s and %s for right column %s cannot be matched",
+				leftType, leftColName, rightType, rightColName)
 		}
 		cmpOps[i] = fn
 
-		// Prepare the output column for USING.
+		// Prepare the output column for EqualityPredicate.
 		columns = append(columns, left.sourceColumns[leftIdx])
 	}
 
-	// Find out which columns are not involved in the USING clause.
+	// Find out which columns are not involved in the EqualityPredicate.
 	leftRestIndices := make([]int, 0, len(left.sourceColumns)-1)
 	for i := range left.sourceColumns {
 		if usedLeft[i] == invalidColIdx {
@@ -422,15 +426,34 @@ func (p *planner) makeUsingPredicate(
 		sourceAliases: aliases,
 	}
 
-	return &usingPredicate{
+	return &equalityPredicate{
 		evalCtx:           &p.evalCtx,
-		colNames:          colNames,
+		leftColNames:      leftColNames,
+		rightColNames:     rightColNames,
 		usingCmp:          cmpOps,
 		leftUsingIndices:  leftUsingIndices,
 		rightUsingIndices: rightUsingIndices,
 		leftRestIndices:   leftRestIndices,
 		rightRestIndices:  rightRestIndices,
 	}, info, nil
+}
+
+// makeUsingPredicate constructs a joinPredicate object for joins with
+// a USING clause.
+func (p *planner) makeUsingPredicate(
+	left *dataSourceInfo, right *dataSourceInfo, colNames parser.NameList,
+) (joinPredicate, *dataSourceInfo, error) {
+	seenNames := make(map[string]struct{})
+
+	for _, unnormalizedColName := range colNames {
+		colName := unnormalizedColName.Normalize()
+		// Check for USING(x,x)
+		if _, ok := seenNames[colName]; ok {
+			return nil, nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
+		}
+		seenNames[colName] = struct{}{}
+	}
+	return p.makeEqualityPredicate(left, right, colNames, colNames)
 }
 
 // commonColumns returns the names of columns common on the
