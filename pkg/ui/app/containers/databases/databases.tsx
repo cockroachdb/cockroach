@@ -3,7 +3,6 @@
 import _ from "lodash";
 import * as React from "react";
 import { connect } from "react-redux";
-import { IInjectedProps } from "react-router";
 
 import { ListLink } from "../../components/listLink";
 
@@ -13,7 +12,7 @@ import { refreshDatabases } from "../../redux/apiReducers";
 import DatabaseSummaryTables from "./databaseTables";
 import DatabaseSummaryGrants from "./databaseGrants";
 
-// excludedTableList is a list of virtual databases that should be excluded 
+// excludedTableList is a list of virtual databases that should be excluded
 // from database lists; they are not physical databases, and thus cause issues
 // with our backend methods.
 // TODO(mrtracy): This exclusion should occur on the backend methods, which
@@ -23,7 +22,7 @@ const excludedTableList = {
   "pg_catalog": true,
 };
 
-// DatabaseListNav is a pure-function component that renders the navigation 
+// DatabaseListNav is a pure-function component that renders the navigation
 // element specific to the databases tab.
 function DatabaseListNav(props: {children?: any}) {
   return <div className="nav-container">
@@ -41,13 +40,13 @@ interface DatabaseListData {
   databaseNames: string[];
 }
 
-// DatabaseListActions describes actions that can be dispatched by a 
+// DatabaseListActions describes actions that can be dispatched by a
 // DatabaseList component.
 interface DatabaseListActions {
   refreshDatabases: typeof refreshDatabases;
 }
 
-type DatabaseListProps = DatabaseListData & DatabaseListActions & IInjectedProps;
+type DatabaseListProps = DatabaseListData & DatabaseListActions;
 
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
 class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {

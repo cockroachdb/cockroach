@@ -29,7 +29,6 @@ export default class extends React.Component<IInjectedProps, {}> {
       <div className="nav-container">
         <ul className="nav">
           <IndexListLink to={baseRoute}>Overview</IndexListLink>
-          <ListLink to={baseRoute + "/graphs"}>Graphs</ListLink>
           <ListLink to={baseRoute + "/logs"}>Logs</ListLink>
           { displayTimescale ? <TimeScaleSelector/> : null }
         </ul>
