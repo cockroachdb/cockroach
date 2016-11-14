@@ -409,7 +409,7 @@ func (u *sqlSymUnion) window() Window {
 %type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
-%type <UnresolvedName> indirection
+%type <UnresolvedName> indirection opt_indirection
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
@@ -3678,13 +3678,29 @@ c_expr:
     $$.val = $1.unresolvedName()
   }
 | a_expr_const
-| PLACEHOLDER
+| PLACEHOLDER opt_indirection
   {
-    $$.val = NewPlaceholder($1)
+    placeholder := NewPlaceholder($1)
+    if indirection := $2.unresolvedName(); indirection != nil {
+      $$.val = &IndirectionExpr{
+        Expr: placeholder,
+        Indirection: indirection,
+      }
+    } else {
+      $$.val = placeholder
+    }
   }
-| '(' a_expr ')'
+| '(' a_expr ')' opt_indirection
   {
-    $$.val = &ParenExpr{Expr: $2.expr()}
+    paren := &ParenExpr{Expr: $2.expr()}
+    if indirection := $4.unresolvedName(); indirection != nil {
+      $$.val = &IndirectionExpr{
+        Expr: paren,
+        Indirection: indirection,
+      }
+    } else {
+      $$.val = paren
+    }
   }
 | case_expr
 | func_expr
@@ -3694,7 +3710,10 @@ c_expr:
   }
 | select_with_parens indirection
   {
-    $$.val = &Subquery{Select: $1.selectStmt()}
+    $$.val = &IndirectionExpr{
+      Expr: &Subquery{Select: $1.selectStmt()},
+      Indirection: $2.unresolvedName(),
+    }
   }
 | EXISTS select_with_parens
   {
@@ -4309,6 +4328,16 @@ indirection:
     $$.val = UnresolvedName{$1.namePart()}
   }
 | indirection indirection_elem
+  {
+    $$.val = append($1.unresolvedName(), $2.namePart())
+  }
+
+opt_indirection:
+  /* EMPTY */
+  {
+    $$.val = UnresolvedName(nil)
+  }
+| opt_indirection indirection_elem
   {
     $$.val = append($1.unresolvedName(), $2.namePart())
   }

@@ -278,6 +278,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + $1) + CURRENT_DATE()":         "pq: could not determine data type of placeholder $1",
 		"SELECT $1 + $2, $2::FLOAT":                 "pq: could not determine data type of placeholder $1",
+		"SELECT $1[2]":                              "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + 2) + ($1 + 2.5::FLOAT)":       "pq: unsupported binary operator: <int> + <float>",
 	}
 
@@ -415,6 +416,10 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(2, 3).Results(2),
 			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
+		// TODO(nvanbenschoten) Blocked on #10713.
+		// "SELECT $1[2] LIKE 'b'": {
+		// 	baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
+		// },
 		"SHOW DATABASE": {
 			baseTest.Results(""),
 		},
