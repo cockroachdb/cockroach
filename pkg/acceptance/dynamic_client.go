@@ -44,7 +44,7 @@ type dynamicClient struct {
 	}
 }
 
-// newDyanmicClient creates a dynamic client. `close()` must be called after
+// newDynamicClient creates a dynamic client. `close()` must be called after
 // the dynamic client is no longer needed.
 func newDynamicClient(cluster cluster.Cluster, stopper *stop.Stopper) *dynamicClient {
 	dc := &dynamicClient{
