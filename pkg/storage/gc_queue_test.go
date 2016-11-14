@@ -626,3 +626,55 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGCQueueLastProcessedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Create two last processed times both at the range start key and
+	// also at some mid-point key in order to simulate a merge.
+	// Two transactions.
+	lastProcessedVals := []struct {
+		key   roachpb.Key
+		expGC bool
+	}{
+		{keys.QueueLastProcessedKey(roachpb.RKeyMin, "timeSeriesMaintenance"), false},
+		{keys.QueueLastProcessedKey(roachpb.RKeyMin, "replica consistency checker"), false},
+		{keys.QueueLastProcessedKey(roachpb.RKey("a"), "timeSeriesMaintenance"), true},
+		{keys.QueueLastProcessedKey(roachpb.RKey("b"), "replica consistency checker"), true},
+	}
+
+	ts := tc.Clock().Now()
+	for _, lpv := range lastProcessedVals {
+		if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, lpv.key, hlc.ZeroTimestamp, nil, &ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
+	}
+
+	// Process through a scan queue.
+	gcQ := newGCQueue(tc.store, tc.gossip)
+	if err := gcQ.process(context.Background(), tc.Clock().Now(), tc.repl, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify GC.
+	util.SucceedsSoon(t, func() error {
+		for _, lpv := range lastProcessedVals {
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.ZeroTimestamp, true, nil, &ts)
+			if err != nil {
+				return err
+			}
+			if ok == lpv.expGC {
+				return errors.Errorf("expected GC of %s: %t; got %t", lpv.key, lpv.expGC, ok)
+			}
+		}
+		return nil
+	})
+}
