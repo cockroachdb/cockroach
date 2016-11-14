@@ -770,6 +770,13 @@ func (r *Replica) IsFirstRange() bool {
 	return r.RangeID == 1
 }
 
+// IsDestroyed returns true if the replica has been destroyed.
+func (r *Replica) IsDestroyed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.destroyed != nil
+}
+
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {

@@ -521,6 +521,11 @@ func (bq *baseQueue) processReplica(
 	defer cancel()
 	log.Eventf(ctx, "processing replica")
 
+	if repl.IsDestroyed() {
+		log.VEventf(queueCtx, 3, "replica destroyed; skipping")
+		return nil
+	}
+
 	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease
 	// and renew or acquire if necessary.
