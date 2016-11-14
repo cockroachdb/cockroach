@@ -39,7 +39,7 @@
       "redux": "npm:redux@^3.5.2",
       "redux-thunk": "npm:redux-thunk@^2.1.0",
       "reselect": "npm:reselect@^2.5.3",
-      "whatwg-fetch": "github:tamird/fetch@support-arraybuffer"
+      "whatwg-fetch": "npm:whatwg-fetch@^2.0.0"
     },
     "devDependencies": {
       "chai": "npm:chai@^3.5.0",
