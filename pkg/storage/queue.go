@@ -527,11 +527,13 @@ func (bq *baseQueue) processReplica(
 	if bq.needsLease {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
-			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
-				log.VEventf(queueCtx, 3, "not holding lease; skipping")
+			switch v := err.GetDetail().(type) {
+			case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
+				log.VEventf(queueCtx, 3, "%s; skipping", v)
 				return nil
+			default:
+				return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
 			}
-			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
 		}
 		log.Event(ctx, "got range lease")
 	}
