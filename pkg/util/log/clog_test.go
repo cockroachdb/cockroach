@@ -99,8 +99,15 @@ func setFlags() {
 	logging.toStderr = false
 }
 
+func (l *TestLogScope) close(t *testing.T) {
+	l.Close(t.Failed(), t.Fatal)
+}
+
 // Test that Info works as advertised.
 func TestInfo(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Info(context.Background(), "test")
@@ -114,6 +121,9 @@ func TestInfo(t *testing.T) {
 
 // Test that copyStandardLogTo panics on bad input.
 func TestCopyStandardLogToPanic(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer func() {
 		if s, ok := recover().(string); !ok || !strings.Contains(s, "LOG") {
@@ -125,6 +135,9 @@ func TestCopyStandardLogToPanic(t *testing.T) {
 
 // Test that using the standard log package logs to INFO.
 func TestStandardLog(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	stdLog.Print("test")
@@ -138,6 +151,9 @@ func TestStandardLog(t *testing.T) {
 
 // Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
 		buf := formatHeader(s, now, gid, file, line, nil)
 		buf.WriteString(msg)
@@ -221,6 +237,9 @@ func TestEntryDecoder(t *testing.T) {
 // Even in the Info log, the source character will be E, so the data should
 // all be identical.
 func TestError(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Error(context.Background(), "test")
@@ -243,6 +262,9 @@ func TestError(t *testing.T) {
 // Even in the Info log, the source character will be W, so the data should
 // all be identical.
 func TestWarning(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Warning(context.Background(), "test")
@@ -260,6 +282,9 @@ func TestWarning(t *testing.T) {
 
 // Test that a V log goes to Info.
 func TestV(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	_ = logging.verbosity.Set("2")
@@ -277,6 +302,9 @@ func TestV(t *testing.T) {
 
 // Test that a vmodule enables a log in this file.
 func TestVmoduleOn(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	_ = logging.vmodule.Set("clog_test=2")
@@ -303,6 +331,9 @@ func TestVmoduleOn(t *testing.T) {
 
 // Test that a vmodule of another file does not enable a log in this file.
 func TestVmoduleOff(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	_ = logging.vmodule.Set("notthisfile=2")
@@ -340,6 +371,9 @@ var vGlobs = map[string]bool{
 
 // Test that vmodule globbing works as advertised.
 func testVmoduleGlob(pat string, match bool, t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	defer func() { _ = logging.vmodule.Set("") }()
@@ -357,6 +391,9 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 
 	methods := map[Severity]func(context.Context, ...interface{}){
@@ -399,6 +436,9 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	Warning(context.Background(), "x")
 	warn, ok := logging.file[Severity_WARNING].(*syncBuffer)
@@ -416,7 +456,11 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	otherFile, err := os.Create(filepath.Join(logDir, "other.txt"))
+	dir, err := logDir.get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherFile, err := os.Create(filepath.Join(dir, "other.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,11 +472,11 @@ func TestGetLogReader(t *testing.T) {
 		expErrUnrestricted string
 	}{
 		// File is not specified (trying to open a directory instead).
-		{logDir, "pathnames must be basenames", "not a regular file"},
+		{dir, "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
 		{warn.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(logDir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
+		{filepath.Join(dir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
 		{removePeriods(program) + ".WARNING", "malformed log filename", ""},
 		// Non-log file.
@@ -476,6 +520,9 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	var err error
 	defer func(previous func(error)) { logExitFunc = previous }(logExitFunc)
@@ -521,6 +568,9 @@ func TestRollover(t *testing.T) {
 }
 
 func TestLogBacktraceAt(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	// The peculiar style of this code simplifies line counting and maintenance of the
@@ -563,6 +613,9 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
 	logging.toStderr = false

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -42,8 +43,11 @@ import (
 func TestDumpRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest()
-	defer c.stop()
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	const create = `
 	CREATE DATABASE d;
@@ -129,6 +133,9 @@ INSERT INTO t VALUES
 func TestDumpBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
@@ -192,6 +199,9 @@ func init() {
 // round-trippable.
 func TestDumpRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
