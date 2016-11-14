@@ -31,6 +31,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1892,6 +1893,48 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	return nil, fmt.Errorf("invalid cast: %s -> %s", d.ResolvedType(), expr.Type)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
+	var subscriptIdx int
+	for i, part := range expr.Indirection {
+		switch t := part.(type) {
+		case *ArraySubscript:
+			if t.Slice {
+				return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
+			}
+			if i > 0 {
+				return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+			}
+
+			d, err := t.Begin.(TypedExpr).Eval(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if d == DNull {
+				return d, nil
+			}
+			subscriptIdx = int(*d.(*DInt))
+		default:
+			return nil, errors.Errorf("unhandled indirection type %T", t)
+		}
+	}
+
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if d == DNull {
+		return d, nil
+	}
+
+	// Index into the DArray, using 1-indexing.
+	arr := d.(*DArray)
+	if subscriptIdx < 1 || subscriptIdx > len(*arr) {
+		return DNull, nil
+	}
+	return (*arr)[subscriptIdx-1], nil
 }
 
 // Eval implements the TypedExpr interface.

@@ -300,6 +300,8 @@ func TestParse(t *testing.T) {
 		{`SELECT (true = false)`},
 		{`SELECT (SELECT 1)`},
 		{`SELECT ((SELECT 1))`},
+		{`SELECT (SELECT ARRAY['a', 'b'])[2]`},
+		{`SELECT ((SELECT ARRAY['a', 'b']))[2]`},
 		{`SELECT ((((VALUES (1)))))`},
 		{`SELECT EXISTS (SELECT 1)`},
 		{`SELECT (VALUES (1))`},

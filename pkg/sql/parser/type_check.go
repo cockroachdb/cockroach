@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
@@ -219,6 +220,42 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	}
 
 	return nil, fmt.Errorf("invalid cast: %s -> %s", castFrom, expr.Type)
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+	for i, part := range expr.Indirection {
+		switch t := part.(type) {
+		case *ArraySubscript:
+			if t.Slice {
+				return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
+			}
+			if i > 0 {
+				return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+			}
+
+			beginExpr, err := typeCheckAndRequire(ctx, t.Begin, TypeInt, "ARRAY subscript")
+			if err != nil {
+				return nil, err
+			}
+			t.Begin = beginExpr
+		default:
+			return nil, errors.Errorf("unhandled indirection type %T", t)
+		}
+	}
+
+	subExpr, err := expr.Expr.TypeCheck(ctx, tArray{desired})
+	if err != nil {
+		return nil, err
+	}
+	typ := subExpr.ResolvedType()
+	arrType, ok := typ.(tArray)
+	if !ok {
+		return nil, errors.Errorf("cannot subscript type %s because it is not an array", typ)
+	}
+	expr.Expr = subExpr
+	expr.typ = arrType.Typ
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -609,7 +646,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 		expr.typ = typ
 		return expr, nil
 	}
-	if desired == NoTypePreference || desired == TypeNull {
+	if desired == NoTypePreference || desired.IsAmbiguous() {
 		return nil, placeholderTypeAmbiguityError{expr}
 	}
 	if err := ctx.Placeholders.SetType(expr.Name, desired); err != nil {

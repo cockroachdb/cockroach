@@ -42,6 +42,11 @@ type Type interface {
 	//
 	// It holds for every Datum d that d.Size() >= d.ResolvedType().Size().
 	Size() (uintptr, bool)
+
+	// IsAmbiguous returns whether the type is ambiguous or fully defined. This
+	// is important for parameterized types to determine whether they are fully
+	// concrete type specification or not.
+	IsAmbiguous() bool
 }
 
 const (
@@ -91,6 +96,7 @@ func (tNull) String() string              { return "NULL" }
 func (tNull) Equal(other Type) bool       { return other == TypeNull }
 func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
 func (tNull) Size() (uintptr, bool)       { return unsafe.Sizeof(dNull{}), fixedSize }
+func (tNull) IsAmbiguous() bool           { return true }
 
 type tBool struct{}
 
@@ -98,6 +104,7 @@ func (tBool) String() string              { return "bool" }
 func (tBool) Equal(other Type) bool       { return other == TypeBool }
 func (tBool) FamilyEqual(other Type) bool { return other == TypeBool }
 func (tBool) Size() (uintptr, bool)       { return unsafe.Sizeof(DBool(false)), fixedSize }
+func (tBool) IsAmbiguous() bool           { return false }
 
 type tInt struct{}
 
@@ -105,6 +112,7 @@ func (tInt) String() string              { return "int" }
 func (tInt) Equal(other Type) bool       { return other == TypeInt }
 func (tInt) FamilyEqual(other Type) bool { return other == TypeInt }
 func (tInt) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
+func (tInt) IsAmbiguous() bool           { return false }
 
 type tFloat struct{}
 
@@ -112,6 +120,7 @@ func (tFloat) String() string              { return "float" }
 func (tFloat) Equal(other Type) bool       { return other == TypeFloat }
 func (tFloat) FamilyEqual(other Type) bool { return other == TypeFloat }
 func (tFloat) Size() (uintptr, bool)       { return unsafe.Sizeof(DFloat(0.0)), fixedSize }
+func (tFloat) IsAmbiguous() bool           { return false }
 
 type tDecimal struct{}
 
@@ -119,6 +128,7 @@ func (tDecimal) String() string              { return "decimal" }
 func (tDecimal) Equal(other Type) bool       { return other == TypeDecimal }
 func (tDecimal) FamilyEqual(other Type) bool { return other == TypeDecimal }
 func (tDecimal) Size() (uintptr, bool)       { return unsafe.Sizeof(DDecimal{}), variableSize }
+func (tDecimal) IsAmbiguous() bool           { return false }
 
 type tString struct{}
 
@@ -126,6 +136,7 @@ func (tString) String() string              { return "string" }
 func (tString) Equal(other Type) bool       { return other == TypeString }
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+func (tString) IsAmbiguous() bool           { return false }
 
 type tBytes struct{}
 
@@ -133,6 +144,7 @@ func (tBytes) String() string              { return "bytes" }
 func (tBytes) Equal(other Type) bool       { return other == TypeBytes }
 func (tBytes) FamilyEqual(other Type) bool { return other == TypeBytes }
 func (tBytes) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }
+func (tBytes) IsAmbiguous() bool           { return false }
 
 type tDate struct{}
 
@@ -140,6 +152,7 @@ func (tDate) String() string              { return "date" }
 func (tDate) Equal(other Type) bool       { return other == TypeDate }
 func (tDate) FamilyEqual(other Type) bool { return other == TypeDate }
 func (tDate) Size() (uintptr, bool)       { return unsafe.Sizeof(DDate(0)), fixedSize }
+func (tDate) IsAmbiguous() bool           { return false }
 
 type tTimestamp struct{}
 
@@ -147,6 +160,7 @@ func (tTimestamp) String() string              { return "timestamp" }
 func (tTimestamp) Equal(other Type) bool       { return other == TypeTimestamp }
 func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
 func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
+func (tTimestamp) IsAmbiguous() bool           { return false }
 
 type tTimestampTZ struct{}
 
@@ -154,6 +168,7 @@ func (tTimestampTZ) String() string              { return "timestamptz" }
 func (tTimestampTZ) Equal(other Type) bool       { return other == TypeTimestampTZ }
 func (tTimestampTZ) FamilyEqual(other Type) bool { return other == TypeTimestampTZ }
 func (tTimestampTZ) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampTZ{}), fixedSize }
+func (tTimestampTZ) IsAmbiguous() bool           { return false }
 
 type tInterval struct{}
 
@@ -161,6 +176,7 @@ func (tInterval) String() string              { return "interval" }
 func (tInterval) Equal(other Type) bool       { return other == TypeInterval }
 func (tInterval) FamilyEqual(other Type) bool { return other == TypeInterval }
 func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}), fixedSize }
+func (tInterval) IsAmbiguous() bool           { return false }
 
 // TTuple is the type of a DTuple.
 type TTuple []Type
@@ -214,6 +230,16 @@ func (t TTuple) Size() (uintptr, bool) {
 	return sz, variable
 }
 
+// IsAmbiguous implements the Type interface.
+func (t TTuple) IsAmbiguous() bool {
+	for _, typ := range t {
+		if typ == nil || typ.IsAmbiguous() {
+			return true
+		}
+	}
+	return false
+}
+
 // TPlaceholder is the type of a placeholder.
 type TPlaceholder struct {
 	Name string
@@ -235,7 +261,10 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 }
 
 // Size implements the Type interface.
-func (t TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
+func (TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
+
+// IsAmbiguous implements the Type interface.
+func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
 
 // TArray is the type of a DArray. For now, this only supports arrays of
 // strings.
@@ -258,9 +287,15 @@ func (tArray) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DString("")), variableSize
 }
 
+// IsAmbiguous implements the Type interface.
+func (a tArray) IsAmbiguous() bool {
+	return a.Typ == nil || a.Typ.IsAmbiguous()
+}
+
 type tAny struct{}
 
 func (tAny) String() string              { return "anyelement" }
 func (tAny) Equal(other Type) bool       { return other == TypeAny }
 func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
 func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+func (tAny) IsAmbiguous() bool           { return true }

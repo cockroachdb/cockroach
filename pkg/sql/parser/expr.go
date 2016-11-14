@@ -1002,6 +1002,20 @@ func (node *CastExpr) castTypeAndValidArgTypes() (Type, []Type) {
 	return colTypeToTypeAndValidArgTypes(node.Type)
 }
 
+// IndirectionExpr represents a subscript expression.
+type IndirectionExpr struct {
+	Expr        Expr
+	Indirection UnresolvedName
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *IndirectionExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Expr)
+	FormatNode(buf, f, node.Indirection)
+}
+
 type annotateSyntaxMode int
 
 const (
@@ -1071,6 +1085,7 @@ func (node Exprs) String() string             { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
 func (node *IfExpr) String() string           { return AsString(node) }
 func (node *IndexedVar) String() string       { return AsString(node) }
+func (node *IndirectionExpr) String() string  { return AsString(node) }
 func (node *IsOfTypeExpr) String() string     { return AsString(node) }
 func (node Name) String() string              { return AsString(node) }
 func (node *NotExpr) String() string          { return AsString(node) }
