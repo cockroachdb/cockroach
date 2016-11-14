@@ -24,7 +24,7 @@ import (
 
 func init() {
 	logflags.InitFlags(&logging.mu, &logging.toStderr,
-		newStringValue(&logDir, &logDirSet), &logging.nocolor, &logging.verbosity,
+		&logDir, &logging.nocolor, &logging.verbosity,
 		&logging.vmodule, &logging.traceLocation)
 	// We define this flag here because stderrThreshold has the type Severity
 	// which we can't pass to logflags without creating an import cycle.
