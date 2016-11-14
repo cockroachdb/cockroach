@@ -1044,7 +1044,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
-		// Needs Three replicas, have two
+		// Needs three replicas, have two
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
@@ -1097,6 +1097,40 @@ func TestAllocatorComputeAction(t *testing.T) {
 						StoreID:   4,
 						NodeID:    4,
 						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+		},
+		// Needs Five replicas, have four, one is on a dead store
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   5,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
 					},
 				},
 			},
@@ -1192,7 +1226,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs five replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
+				NumReplicas:   5,
 				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,

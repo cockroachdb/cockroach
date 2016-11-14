@@ -171,15 +171,6 @@ func (a *Allocator) ComputeAction(
 		return AllocatorNoop, 0
 	}
 
-	deadReplicas := a.storePool.deadReplicas(desc.RangeID, desc.Replicas)
-	if len(deadReplicas) > 0 {
-		// The range has dead replicas, which should be removed immediately.
-		// Adjust the priority by the number of dead replicas the range has.
-		quorum := computeQuorum(len(desc.Replicas))
-		liveReplicas := len(desc.Replicas) - len(deadReplicas)
-		return AllocatorRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
-	}
-
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
 	have := len(desc.Replicas)
@@ -189,6 +180,14 @@ func (a *Allocator) ComputeAction(
 		// count and the quorum of the desired replica count.
 		neededQuorum := computeQuorum(need)
 		return AllocatorAdd, addMissingReplicaPriority + float64(neededQuorum-have)
+	}
+	deadReplicas := a.storePool.deadReplicas(desc.RangeID, desc.Replicas)
+	if len(deadReplicas) > 0 {
+		// The range has dead replicas, which should be removed immediately.
+		// Adjust the priority by the number of dead replicas the range has.
+		quorum := computeQuorum(len(desc.Replicas))
+		liveReplicas := len(desc.Replicas) - len(deadReplicas)
+		return AllocatorRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
 	}
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
