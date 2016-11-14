@@ -531,6 +531,10 @@ func (bq *baseQueue) processReplica(
 				log.VEventf(queueCtx, 3, "not holding lease; skipping")
 				return nil
 			}
+			if _, harmless := err.GetDetail().(*roachpb.RangeNotFoundError); harmless {
+				log.Event(queueCtx, "range not found on node; skipping")
+				return nil
+			}
 			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
 		}
 		log.Event(ctx, "got range lease")
