@@ -1308,6 +1308,8 @@ func checkResultType(typ parser.Type) error {
 	// Compare all types that cannot rely on == equality.
 	istype := typ.FamilyEqual
 	switch {
+	case istype(parser.TypeCollatedString):
+		return nil
 	case istype(parser.TypePlaceholder):
 		return errors.Errorf("could not determine data type of %s", typ)
 	case istype(parser.TypeTuple):

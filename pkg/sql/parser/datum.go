@@ -27,6 +27,9 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
+
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -546,6 +549,110 @@ func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 // Size implements the Datum interface.
 func (d *DString) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+// DCollatedString is the Datum for strings with a locale. The struct members
+// are intended to be immutable.
+type DCollatedString struct {
+	Contents string
+	Locale   string
+	// key is the collation key.
+	key []byte
+}
+
+// CollationEnvironment stores the state needed by NewDCollatedString to
+// construct collation keys efficiently.
+type CollationEnvironment struct {
+	cache  map[string]collationEnvironmentCacheEntry
+	buffer collate.Buffer
+}
+
+type collationEnvironmentCacheEntry struct {
+	// locale is interned.
+	locale string
+	// collator is an expensive factory.
+	collator *collate.Collator
+}
+
+func (env *CollationEnvironment) getCacheEntry(locale string) collationEnvironmentCacheEntry {
+	entry, ok := env.cache[locale]
+	if !ok {
+		if env.cache == nil {
+			env.cache = make(map[string]collationEnvironmentCacheEntry)
+		}
+		entry = collationEnvironmentCacheEntry{locale, collate.New(language.MustParse(locale))}
+		env.cache[locale] = entry
+	}
+	return entry
+}
+
+// NewDCollatedString is a helper routine to create a *DCollatedString. Panics
+// if locale is invalid. Not safe for concurrent use.
+func NewDCollatedString(contents string, locale string, env *CollationEnvironment) *DCollatedString {
+	entry := env.getCacheEntry(locale)
+	key := entry.collator.KeyFromString(&env.buffer, contents)
+	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}
+	copy(d.key, key)
+	env.buffer.Reset()
+	return &d
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLString(buf, d.Contents)
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DCollatedString) ResolvedType() Type {
+	return TCollatedString{d.Locale}
+}
+
+// Compare implements the Datum interface.
+func (d *DCollatedString) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DCollatedString)
+	if !ok || d.Locale != v.Locale {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	return bytes.Compare(d.key, v.key)
+}
+
+// HasPrev implements the Datum interface.
+func (*DCollatedString) HasPrev() bool {
+	return false
+}
+
+// Prev implements the Datum interface.
+func (d *DCollatedString) Prev() Datum {
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
+}
+
+// HasNext implements the Datum interface.
+func (*DCollatedString) HasNext() bool {
+	return false
+}
+
+// Next implements the Datum interface.
+func (d *DCollatedString) Next() Datum {
+	panic(makeUnsupportedMethodMessage(d, "Next"))
+}
+
+// IsMax implements the Datum interface.
+func (*DCollatedString) IsMax() bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DCollatedString) IsMin() bool {
+	return d.Contents == ""
+}
+
+// Size implements the Datum interface.
+func (d *DCollatedString) Size() uintptr {
+	return unsafe.Sizeof(*d) + uintptr(len(d.Contents)) + uintptr(len(d.Locale)) + uintptr(len(d.key))
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
