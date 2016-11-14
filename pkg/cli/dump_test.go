@@ -30,9 +30,7 @@ import (
 	"github.com/spf13/pflag"
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -42,8 +40,8 @@ import (
 func TestDumpRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(t, false)
+	defer c.stop(true)
 
 	const create = `
 	CREATE DATABASE d;
@@ -129,10 +127,10 @@ INSERT INTO t VALUES
 func TestDumpBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	c := newCLITest(t, false)
+	defer c.stop(true)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestDumpBytes", url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), "TestDumpBytes", url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -193,10 +191,10 @@ func init() {
 func TestDumpRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	c := newCLITest(t, false)
+	defer c.stop(true)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestDumpRandom", url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), "TestDumpRandom", url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

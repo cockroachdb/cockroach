@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,59 +54,106 @@ type cliTest struct {
 	cleanupFunc func()
 }
 
-func (c cliTest) stop() {
-	c.cleanupFunc()
-	security.SetReadFileFn(securitytest.Asset)
-	c.Stopper().Stop()
-}
+func newCLITest(t *testing.T, insecure bool) cliTest {
+	c := cliTest{}
 
-func newCLITest() cliTest {
+	errorFn, fatalfFn := getErrorFunctions(t)
+
+	certsDir, err := ioutil.TempDir("", "cli-test")
+	if err != nil {
+		fatalfFn("cannot create temp certs dir: %s", err)
+	}
+	c.certsDir = certsDir
+
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
 	baseCfg.InitDefaults()
 	cliCtx.InitCLIDefaults()
 
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: insecure})
+	if err != nil {
+		fatalfFn("could not start server: %s", err)
+	}
+	c.TestServer = s.(*server.TestServer)
+
+	if insecure {
+		c.cleanupFunc = func() {}
+	} else {
+		// Copy these assets to disk from embedded strings, so this test can
+		// run from a standalone binary.
+		// Disable embedded certs, or the security library will try to load
+		// our real files as embedded assets.
+		security.ResetReadFileFn()
+
+		assets := []string{
+			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
+			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
+			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
+			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
+			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
+		}
+
+		for _, a := range assets {
+			securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
+		}
+
+		c.cleanupFunc = func() {
+			security.SetReadFileFn(securitytest.Asset)
+			if err := os.RemoveAll(certsDir); err != nil {
+				errorFn(err)
+			}
+		}
+	}
+
+	// Ensure that CLI error messages are logged to stdout, where they
+	// can be captured.
 	osStderr = os.Stdout
 
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
-	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %s", err)
-	}
+	return c
+}
 
-	tempDir, err := ioutil.TempDir("", "cli-test")
-	if err != nil {
-		log.Fatal(context.Background(), err)
+// getErrorFunctions returns an "error" and a "fatal" function for use
+// in newCLITest above. This interface is provided to cater for the
+// fact many tests are Examples which do not have a *testing.T
+// argument. In these cases, the two functions print their argument on
+// standard output, and the fatal function also terminates the test
+// like its T.Fatal() counterpart.
+func getErrorFunctions(
+	t *testing.T,
+) (errorFn func(...interface{}), fatalfFn func(string, ...interface{})) {
+	if t == nil {
+		errorFn = func(args ...interface{}) {
+			fmt.Print(args...)
+		}
+		fatalfFn = func(f string, args ...interface{}) {
+			fmt.Printf(f, args...)
+			// Terminate the test. We know that the testing package
+			// is running this test in its own goroutine, so we can
+			// terminate the test by calling Goexit().
+			// This also ensures the defers are called, which
+			// is what we want.
+			runtime.Goexit()
+		}
+	} else {
+		errorFn = t.Error
+		fatalfFn = t.Fatalf
 	}
+	return errorFn, fatalfFn
+}
 
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	// Disable embedded certs, or the security library will try to load
-	// our real files as embedded assets.
-	security.ResetReadFileFn()
+// stop cleans up after the test.
+// It also stops the test server is runStopper is true.
+// The log files are removed if the test has succeeded.
+func (c cliTest) stop(runStopper bool) {
+	// Restore stderr.
+	osStderr = os.Stderr
 
-	assets := []string{
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
+	if runStopper {
+		c.Stopper().Stop()
 	}
-
-	for _, a := range assets {
-		securitytest.RestrictedCopy(nil, a, tempDir, filepath.Base(a))
-	}
-
-	return cliTest{
-		TestServer: s.(*server.TestServer),
-		certsDir:   tempDir,
-		cleanupFunc: func() {
-			if err := os.RemoveAll(tempDir); err != nil {
-				log.Fatal(context.Background(), err)
-			}
-		},
-	}
+	c.cleanupFunc()
 }
 
 func (c cliTest) Run(line string) {
@@ -200,7 +248,10 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	c := newCLITest()
+
+	c := newCLITest(t, false)
+	defer c.stop(false)
+
 	c.Run("quit")
 	// Wait until this async command stops the server.
 	<-c.Stopper().IsStopped()
@@ -208,7 +259,7 @@ func TestQuit(t *testing.T) {
 	// NB: if this test is ever flaky due to port reuse, we could run against
 	// :0 (which however changes some of the errors we get).
 	// One way of getting that is:
-	//	c.TestServer.Cfg.AdvertiseAddr = "127.0.0.1:0"
+	//	c.Cfg.AdvertiseAddr = "127.0.0.1:0"
 
 	styled := func(s string) string {
 		const preamble = `unable to connect or connection lost.
@@ -251,15 +302,11 @@ communicate with a secure cluster\).
 			t.Errorf("expected '%s' to match pattern\n%s\ngot:\n%s", test.cmd, exp, out)
 		}
 	}
-	// Manually run the cleanup functions (intentionally only on success,
-	// preserving the logs on failure).
-	c.cleanupFunc()
-	security.SetReadFileFn(securitytest.Asset)
 }
 
 func Example_basic() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3")
 	c.Run("debug kv scan")
@@ -316,8 +363,8 @@ func Example_basic() {
 }
 
 func Example_quoted() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`debug kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -350,13 +397,8 @@ func Example_quoted() {
 }
 
 func Example_insecure() {
-	s, err := serverutils.StartServerRaw(
-		base.TestServerArgs{Insecure: true})
-	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %v", err)
-	}
-	defer s.Stopper().Stop()
-	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
+	c := newCLITest(nil, true)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2")
 	c.Run("debug kv scan")
@@ -370,8 +412,8 @@ func Example_insecure() {
 }
 
 func Example_ranges() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -432,8 +474,8 @@ func Example_ranges() {
 }
 
 func Example_logging() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
@@ -470,8 +512,8 @@ func Example_logging() {
 }
 
 func Example_cput() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -499,8 +541,8 @@ func Example_cput() {
 }
 
 func Example_max_results() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan --max-results=3")
@@ -531,8 +573,8 @@ func Example_max_results() {
 }
 
 func Example_zone() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
@@ -626,8 +668,8 @@ func Example_zone() {
 }
 
 func Example_sql() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
@@ -678,8 +720,8 @@ func Example_sql() {
 }
 
 func Example_sql_escape() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
@@ -797,8 +839,8 @@ func Example_sql_escape() {
 }
 
 func Example_user() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	c.Run("user ls")
 	c.Run("user ls --pretty")
@@ -843,18 +885,16 @@ func Example_user() {
 }
 
 func Example_user_insecure() {
-	s, err := serverutils.StartServerRaw(
-		base.TestServerArgs{Insecure: true})
-	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %v", err)
-	}
-	defer s.Stopper().Stop()
-	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
+	c := newCLITest(nil, true)
+	defer c.stop(true)
 
 	// Since util.IsolatedTestAddr is used on Linux in insecure test clusters,
 	// we have to reset the advertiseHost so that the value from previous
 	// tests is not used to construct an incorrect postgres URL by the client.
+	// However, ensure the value is restored in case subsequent tests need it.
+	advertiseHostSave := advertiseHost
 	advertiseHost = ""
+	defer func() { advertiseHost = advertiseHostSave }()
 
 	// No prompting for password in insecure mode.
 	c.Run("user set foo")
@@ -938,7 +978,7 @@ Available Commands:
 Flags:
       --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default NONE)
       --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir string                    if non-empty, write log files in this directory (default "")
+      --log-dir string                    if non-empty, write log files in this directory
       --logtostderr                       log to standard error instead of files
       --no-color                          disable standard error log colorization
 
@@ -951,11 +991,11 @@ Use "cockroach [command] --help" for more information about a command.
 }
 
 func Example_node() {
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(nil, false)
+	defer c.stop(true)
 
 	// Refresh time series data, which is required to retrieve stats.
-	if err := c.TestServer.WriteSummaries(); err != nil {
+	if err := c.WriteSummaries(); err != nil {
 		log.Fatalf(context.Background(), "Couldn't write stats summaries: %s", err)
 	}
 
@@ -982,8 +1022,8 @@ func Example_node() {
 func TestFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(t, false)
+	defer c.stop(true)
 
 	assertOutput := func(msg string) {
 		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
@@ -1011,11 +1051,11 @@ func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	start := timeutil.Now()
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(t, false)
+	defer c.stop(true)
 
 	// Refresh time series data, which is required to retrieve stats.
-	if err := c.TestServer.WriteSummaries(); err != nil {
+	if err := c.WriteSummaries(); err != nil {
 		t.Fatalf("couldn't write stats summaries: %s", err)
 	}
 
