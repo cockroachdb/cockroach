@@ -424,7 +424,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	if ent.Type == raftpb.EntryNormal {
 		if len(ent.Data) > 0 {
 			_, cmdData := storage.DecodeRaftCommand(ent.Data)
-			var cmd storagebase.ReplicatedProposalData
+			var cmd storagebase.RaftCommand
 			if err := cmd.Unmarshal(cmdData); err != nil {
 				return "", err
 			}

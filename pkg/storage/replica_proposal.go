@@ -104,7 +104,11 @@ type LocalProposalData struct {
 //    it must run when the command has applied (such as resolving intents).
 type ProposalData struct {
 	LocalProposalData
+	MaxLeaseIndex uint64
+	OriginReplica roachpb.ReplicaDescriptor
+	Cmd           *roachpb.BatchRequest
 	storagebase.ReplicatedProposalData
+	WriteBatch *storagebase.WriteBatch
 }
 
 // coalesceBool ORs rhs into lhs and then zeroes rhs.
@@ -398,13 +402,9 @@ func (r *Replica) handleReplicatedProposalData(
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
-		rpd.WriteBatch = nil
 		rpd.IsLeaseRequest = false
 		rpd.IsConsistencyRelated = false
 		rpd.IsFreeze = false
-		rpd.RangeID = 0
-		rpd.Cmd = nil
-		rpd.MaxLeaseIndex = 0
 		rpd.Timestamp = hlc.ZeroTimestamp
 	}
 
@@ -440,7 +440,6 @@ func (r *Replica) handleReplicatedProposalData(
 	rpd.State.Stats = enginepb.MVCCStats{}
 	rpd.State.LeaseAppliedIndex = 0
 	rpd.State.RaftAppliedIndex = 0
-	rpd.OriginReplica = roachpb.ReplicaDescriptor{}
 
 	// The above are always present, so we assert only if there are
 	// "nontrivial" actions below.
@@ -670,9 +669,8 @@ func (r *Replica) handleLocalProposalData(
 }
 
 func (r *Replica) handleProposalData(
-	ctx context.Context, lpd LocalProposalData, rpd storagebase.ReplicatedProposalData,
+	ctx context.Context, originReplica roachpb.ReplicaDescriptor, lpd LocalProposalData, rpd storagebase.ReplicatedProposalData,
 ) {
-	originReplica := rpd.OriginReplica
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 	shouldAssert := r.handleReplicatedProposalData(ctx, rpd)
 	shouldAssert = r.handleLocalProposalData(ctx, originReplica, lpd) || shouldAssert
