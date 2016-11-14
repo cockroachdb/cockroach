@@ -4,7 +4,6 @@ import { IInjectedProps } from "react-router";
 
 import { TitledComponent } from "../interfaces/layout";
 import SideBar from "../components/layoutSidebar";
-import Header from "../components/layoutHeader";
 import TimeWindowManager from "../containers/timewindow";
 import Banner from "../containers/banner/bannerContainer";
 
@@ -42,9 +41,6 @@ export default class extends React.Component<IInjectedProps, {}> {
         <div id="page-container">
           <div id="root">
             <div className="page">
-              <Header>
-                { title }
-              </Header>
               { children }
             </div>
           </div>

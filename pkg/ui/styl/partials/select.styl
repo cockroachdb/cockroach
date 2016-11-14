@@ -1,0 +1,28 @@
+@require '../modules/layout-vars.styl'
+@require '../modules/palette.styl'
+
+.Select
+  line-height normal
+  margin-top 6px
+
+ul.nav li.title
+  padding-left 20px
+  border-radius 3px 0 0 3px
+
+// @stylint off
+.has-value.Select--single > .Select-control .Select-value .Select-value-label,
+.has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
+  color $secondary-blue-3 !important
+
+.Select-option.is-selected
+  color $secondary-blue-3 !important
+
+.Select-control
+  border-width 0 !important
+  box-shadow 0 0 0 black !important
+  border-radius 0 3px 3px 0 !important
+  background-color transparent !important
+
+ul.nav li.title, ul.nav li.selector
+  background-color transparent !important
+// @stylint on
