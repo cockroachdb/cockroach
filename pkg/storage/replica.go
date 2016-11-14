@@ -337,6 +337,9 @@ type Replica struct {
 		// Raft group). The replica ID will be non-zero whenever the replica is
 		// part of a Raft group.
 		replicaID roachpb.ReplicaID
+		// The minimum allowed ID for this replica. Initialized from
+		// RaftTombstone.NextReplicaID.
+		minReplicaID roachpb.ReplicaID
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
@@ -727,7 +730,9 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 		// there's nothing to do (this is only expected for preemptive snapshots).
 		return nil
 	}
-	if r.mu.replicaID == replicaID {
+	if replicaID < r.mu.minReplicaID {
+		return &roachpb.RaftGroupDeletedError{}
+	} else if r.mu.replicaID == replicaID {
 		return nil
 	} else if r.mu.replicaID > replicaID {
 		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)

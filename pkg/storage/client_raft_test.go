@@ -1994,11 +1994,11 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := startMultiTestContext(t, 10)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 1, 2)
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 	for i := 0; i < 10; i++ {
 		mtc.unreplicateRange(rangeID, 2)
