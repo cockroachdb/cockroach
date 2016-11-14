@@ -74,6 +74,11 @@ func (a *UnresolvedAddr) Network() string {
 	return a.NetworkField
 }
 
+// IsEmpty returns true if the address has no network or address specified.
+func (a UnresolvedAddr) IsEmpty() bool {
+	return a == (UnresolvedAddr{})
+}
+
 // String returns the address's string form.
 func (a *UnresolvedAddr) String() string {
 	return a.AddressField

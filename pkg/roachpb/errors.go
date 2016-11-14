@@ -562,3 +562,20 @@ func (*ReplicaTooOldError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &ReplicaTooOldError{}
+
+// NewStoreNotFoundError initializes a new StoreNotFoundError.
+func NewStoreNotFoundError(storeID StoreID) *StoreNotFoundError {
+	return &StoreNotFoundError{
+		StoreID: storeID,
+	}
+}
+
+func (e *StoreNotFoundError) Error() string {
+	return e.message(nil)
+}
+
+func (e *StoreNotFoundError) message(_ *Error) string {
+	return fmt.Sprintf("store %d was not found", e.StoreID)
+}
+
+var _ ErrorDetailInterface = &StoreNotFoundError{}
