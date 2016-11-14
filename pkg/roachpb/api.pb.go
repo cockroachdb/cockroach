@@ -114,6 +114,7 @@
 		RaftGroupDeletedError
 		ReplicaCorruptionError
 		ReplicaTooOldError
+		StoreNotFoundError
 		ErrorDetail
 		ErrPosition
 		Error

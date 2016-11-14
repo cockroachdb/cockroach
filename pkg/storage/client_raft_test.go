@@ -2207,13 +2207,14 @@ func (disruptiveElectionTestHandler) HandleRaftRequest(
 
 func (d disruptiveElectionTestHandler) HandleRaftResponse(
 	ctx context.Context, resp *storage.RaftMessageResponse,
-) {
+) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		d <- val
 	default:
 		log.Fatalf(ctx, "unexpected response type %T", val)
 	}
+	return nil
 }
 
 func (disruptiveElectionTestHandler) HandleSnapshot(
