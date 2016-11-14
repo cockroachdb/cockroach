@@ -14,11 +14,11 @@
 
 package storagebase
 
-// Strip removes all state changes from the ReplicatedProposalData, leaving
-// only metadata behind.
+// Strip removes all state changes from the ReplicatedProposalData,
+// leaving only metadata behind.
+//
+// TODO(bdarnell): this method is insufficiently tested; there are
+// no tests that fail if it becomes a no-op.
 func (rpd *ReplicatedProposalData) Strip() {
-	*rpd = ReplicatedProposalData{
-		OriginReplica: rpd.OriginReplica,
-		RangeID:       rpd.RangeID,
-	}
+	*rpd = ReplicatedProposalData{}
 }

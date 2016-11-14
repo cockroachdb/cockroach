@@ -184,7 +184,7 @@ func raftEntryFormatter(data []byte) string {
 		// large snapshot entries.
 		return fmt.Sprintf("[%x] [%d]", commandID, len(data))
 	}
-	var cmd storagebase.ReplicatedProposalData
+	var cmd storagebase.RaftCommand
 	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
 	}
