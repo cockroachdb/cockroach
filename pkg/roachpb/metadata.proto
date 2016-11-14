@@ -121,7 +121,7 @@ message Locality {
   repeated Tier tiers = 1 [(gogoproto.nullable) = false];
 }
 
-// Tier represents one level of the locality hiearchy.
+// Tier represents one level of the locality hierarchy.
 message Tier {
   option (gogoproto.goproto_stringer) = false;
 
