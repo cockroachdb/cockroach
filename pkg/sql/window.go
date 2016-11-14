@@ -90,10 +90,9 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	window.replaceIndexedVars(s)
 	indexedVarCols := s.columns[len(renderCols)+len(windowDefCols):]
 
-	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = NewRowContainer(acc, renderCols, 0)
-	window.wrappedWindowDefVals = NewRowContainer(acc, windowDefCols, 0)
-	window.wrappedIndexedVarVals = NewRowContainer(acc, indexedVarCols, 0)
+	window.wrappedRenderVals = NewRowContainer(p.session.TxnState.makeBoundAccount(), renderCols, 0)
+	window.wrappedWindowDefVals = NewRowContainer(p.session.TxnState.makeBoundAccount(), windowDefCols, 0)
+	window.wrappedIndexedVarVals = NewRowContainer(p.session.TxnState.makeBoundAccount(), indexedVarCols, 0)
 	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
@@ -684,7 +683,8 @@ func (n *windowNode) populateValues() error {
 	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
 	n.values.rows = NewRowContainer(
-		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
+		n.planner.session.TxnState.makeBoundAccount(),
+		n.values.columns, rowCount,
 	)
 
 	row := make(parser.DTuple, len(n.windowRender))

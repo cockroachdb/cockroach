@@ -20,12 +20,27 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // targetChunkSize is the target number of Datums in a RowContainer chunk.
 const targetChunkSize = 64
+
+// TODO(irfansharif): Push this down to sql/mon. Collate differences between
+// WrappedMemoryAccount and mon.BoundMonitor, etc.
+type memoryMonitor interface {
+	// Grow requests a new allocation in an account.
+	Grow(extraSize int64) error
+
+	// Close releases all the cumulated allocations of an account at once.
+	Close()
+
+	// ResizeItem requests a size change for an object already registered
+	// in an account. The reservation is not modified if the new allocation is
+	// refused, so that the caller can keep using the original item
+	// without an accounting error.
+	ResizeItem(oldSize, newSize int64) error
+}
 
 // RowContainer is a container for rows of DTuples which tracks the
 // approximate amount of memory allocated for row data.
@@ -62,7 +77,7 @@ type RowContainer struct {
 
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
-	memAcc mon.BoundAccount
+	memAcc memoryMonitor
 }
 
 // NewRowContainer allocates a new row container.
@@ -86,7 +101,7 @@ type RowContainer struct {
 // test properly.  The trade-off is that very large table schemas or
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
-func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *RowContainer {
+func NewRowContainer(acc memoryMonitor, h ResultColumns, rowCapacity int) *RowContainer {
 	nCols := len(h)
 
 	c := &RowContainer{

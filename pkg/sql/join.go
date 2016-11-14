@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 )
@@ -51,6 +50,7 @@ type bucket struct {
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
+	planner       *planner
 	joinType      joinType
 	joinAlgorithm joinAlgorithm
 
@@ -94,7 +94,7 @@ type joinNode struct {
 	buffer *RowBuffer
 
 	buckets map[string]bucket
-	acc     mon.BoundAccount
+	acc     WrappableMemoryAccount
 
 	// emptyRight contain tuples of NULL values to use on the
 	// right for outer joins when the filter fails.
@@ -204,6 +204,7 @@ func (p *planner) makeJoin(
 	}
 
 	n := &joinNode{
+		planner:       p,
 		left:          left,
 		right:         right,
 		joinType:      typ,
@@ -216,10 +217,11 @@ func (p *planner) makeJoin(
 	if algorithm == nestedLoopJoin {
 		n.rightRows = p.newContainerValuesNode(right.plan.Columns(), 0)
 	} else if algorithm == hashJoin {
-		acc := p.session.TxnState.makeBoundAccount()
+		acc := p.session.TxnState.OpenAccount()
 		n.acc = acc
+
 		n.buffer = &RowBuffer{
-			rows: NewRowContainer(acc, n.Columns(), 0),
+			rows: NewRowContainer(n.acc.Wtxn(p.session), n.Columns(), 0),
 		}
 		n.buckets = make(map[string]bucket)
 	}
@@ -397,7 +399,7 @@ func (n *joinNode) hashJoinStart() error {
 
 		b, ok := n.buckets[string(encoded)]
 		if !ok {
-			b.rows = NewRowContainer(n.acc, n.right.plan.Columns(), 0)
+			b.rows = NewRowContainer(n.acc.Wtxn(n.planner.session), n.right.plan.Columns(), 0)
 		}
 
 		copy := append(parser.DTuple(nil), row...)
@@ -729,6 +731,13 @@ func (n *joinNode) DebugValues() debugValues {
 
 // Close implements the planNode interface.
 func (n *joinNode) Close() {
+	// The internal buffer and row store within each of the buckets share the
+	// same memory account, we simply Close() it once externally.
+	// TODO(irfansharif): This is messy, compared to the other uses of
+	// RowContainer the closing of the internal memory account is delegated to
+	// the container itself and not done manually as here.
+	n.acc.Wtxn(n.planner.session).Close()
+
 	switch n.joinAlgorithm {
 	case nestedLoopJoin:
 		if n.rightRows != nil {
@@ -737,13 +746,9 @@ func (n *joinNode) Close() {
 		}
 		n.rightMatched = nil
 	case hashJoin:
-		n.buffer.Close()
 		n.buffer = nil
 		for _, b := range n.buckets {
-			if b.rows != nil {
-				b.rows.Close()
-				b.rows = nil
-			}
+			b.rows = nil
 		}
 	default:
 		panic("unsupported JOIN algorithm")

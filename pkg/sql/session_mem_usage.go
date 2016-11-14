@@ -147,10 +147,12 @@ func (s *Session) deriveAndStartMonitors() {
 		-1, noteworthyMemoryUsageBytes)
 }
 
-func (s *Session) makeBoundAccount() mon.BoundAccount {
-	return s.sessionMon.MakeBoundAccount(s.context)
+func (s *Session) makeBoundAccount() *mon.BoundAccount {
+	ba := s.sessionMon.MakeBoundAccount(s.context)
+	return &ba
 }
 
-func (ts *txnState) makeBoundAccount() mon.BoundAccount {
-	return ts.mon.MakeBoundAccount(ts.Ctx)
+func (ts *txnState) makeBoundAccount() *mon.BoundAccount {
+	ba := ts.mon.MakeBoundAccount(ts.Ctx)
+	return &ba
 }
