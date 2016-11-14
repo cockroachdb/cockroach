@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -148,7 +149,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
+func (tq *testQueue) MaybeAdd(repl *Replica, now hlc.Timestamp, qs storagebase.QueueState) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(repl.RangeID); index == -1 {

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -167,8 +168,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -193,14 +194,14 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same replica twice.
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -208,8 +209,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -224,10 +225,10 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp, storagebase.QueueState{})
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
@@ -261,7 +262,7 @@ func TestBaseQueueAdd(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 1})
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
 	}
@@ -315,8 +316,8 @@ func TestBaseQueueProcess(t *testing.T) {
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 	bq.Start(tc.Clock(), tc.stopper)
 
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(r2, hlc.ZeroTimestamp, storagebase.QueueState{})
 	if pc := testQueue.getProcessed(); pc != 0 {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
@@ -386,7 +387,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	bq.Start(clock, tc.stopper)
 
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp, storagebase.QueueState{})
 	bq.MaybeRemove(r.RangeID)
 
 	// Wake the queue
@@ -466,8 +467,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
-	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
-	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
+	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp, storagebase.QueueState{})
 
 	util.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 2 {
@@ -498,8 +499,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		t.Fatal("System config says range does not need to be split")
 	}
 
-	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
-	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
+	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp, storagebase.QueueState{})
+	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp, storagebase.QueueState{})
 
 	util.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 3 {
@@ -565,7 +566,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if err := tc.store.AddReplica(r); err != nil {
 			t.Fatal(err)
 		}
-		bq.MaybeAdd(r, hlc.ZeroTimestamp)
+		bq.MaybeAdd(r, hlc.ZeroTimestamp, storagebase.QueueState{})
 	}
 
 	util.SucceedsSoon(t, func() error {
@@ -701,7 +702,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
 	bq.Start(tc.Clock(), tc.stopper)
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp, storagebase.QueueState{})
 
 	if l := bq.Length(); l != 1 {
 		t.Errorf("expected one queued replica; got %d", l)
@@ -752,7 +753,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
 	bq.Start(tc.Clock(), tc.stopper)
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp, storagebase.QueueState{})
 
 	util.SucceedsSoon(t, func() error {
 		if v := bq.successes.Count(); v != 1 {
@@ -760,6 +761,87 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 		}
 		if min, v := 5*time.Millisecond, bq.processingNanos.Count(); v < min.Nanoseconds() {
 			return errors.Errorf("expected >= %s in processing time; got %d", min, v)
+		}
+		return nil
+	})
+}
+
+func TestBaseQueueShouldQueueAgain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		now, last   hlc.Timestamp
+		minInterval time.Duration
+		expQueue    bool
+	}{
+		{makeTS(1, 0), makeTS(1, 0), 0, true},
+		{makeTS(100, 0), makeTS(0, 0), 100, true},
+		{makeTS(100, 0), makeTS(100, 0), 100, false},
+		{makeTS(101, 0), makeTS(100, 0), 100, false},
+		{makeTS(200, 0), makeTS(100, 0), 100, false},
+		{makeTS(200, 1), makeTS(100, 0), 100, false},
+		{makeTS(201, 0), makeTS(100, 0), 100, true},
+		{makeTS(201, 0), makeTS(100, 1), 100, true},
+	}
+
+	for i, tc := range testCases {
+		sq := shouldQueueAgain(tc.now, tc.last, tc.minInterval)
+		if sq != tc.expQueue {
+			t.Errorf("case %d: expected shouldQueue %t; got %t", i, tc.expQueue, sq)
+		}
+	}
+}
+
+func TestBaseQueueUpdateLastProcessed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tsc := TestStoreConfig(nil)
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, tsc)
+	defer tc.Stop()
+
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	repl, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	testQueue1 := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (bool, float64) { return true, 0 },
+	}
+	bq1 := makeTestBaseQueue("q1", testQueue1, tc.store, tc.gossip,
+		queueConfig{maxSize: 2, needsLease: true})
+	bq1.Start(tc.Clock(), tc.stopper)
+
+	testQueue2 := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (bool, float64) { return true, 0 },
+	}
+	bq2 := makeTestBaseQueue("q2", testQueue2, tc.store, tc.gossip,
+		queueConfig{maxSize: 2, needsLease: true})
+	bq2.Start(tc.Clock(), tc.stopper)
+
+	now1 := tc.Clock().Now()
+	bq1.MaybeAdd(repl, now1, storagebase.QueueState{})
+	now2 := tc.Clock().Now()
+	bq2.MaybeAdd(repl, now2, storagebase.QueueState{})
+	util.SucceedsSoon(t, func() error {
+		if pc := testQueue1.getProcessed(); pc != 1 {
+			return errors.Errorf("expected no processed ranges; got %d", pc)
+		}
+		if pc := testQueue2.getProcessed(); pc != 1 {
+			return errors.Errorf("expected no processed ranges; got %d", pc)
+		}
+		return nil
+	})
+
+	util.SucceedsSoon(t, func() error {
+		qs, err := repl.getQueueState(context.Background())
+		if err != nil {
+			return err
+		}
+		if ts := qs.GetLastProcessed("q1"); !now1.Less(ts) {
+			return errors.Errorf("expected last processed for \"q1\" %s > %s", ts, now1)
+		}
+		if ts := qs.GetLastProcessed("q2"); !now2.Less(ts) {
+			return errors.Errorf("expected last processed for \"q2\" %s > %s", ts, now2)
 		}
 		return nil
 	})

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -68,7 +69,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 
 func forceScanAndProcess(s *Store, q *baseQueue) {
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		q.MaybeAdd(repl, s.cfg.Clock.Now())
+		q.MaybeAdd(repl, s.cfg.Clock.Now(), storagebase.QueueState{})
 		return true
 	})
 

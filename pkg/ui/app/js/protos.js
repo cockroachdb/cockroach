@@ -1699,6 +1699,33 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "id": 6
                                         }
                                     ]
+                                },
+                                {
+                                    "name": "QueueState",
+                                    "options": {
+                                        "(gogoproto.populate)": true
+                                    },
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "util.hlc.Timestamp",
+                                            "name": "low_water",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "map",
+                                            "type": "util.hlc.Timestamp",
+                                            "keytype": "string",
+                                            "name": "last_processed",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ]
                                 }
                             ]
                         }

@@ -14,8 +14,55 @@
 
 package storagebase
 
+import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 // IsFrozen returns true if the underlying ReplicaState indicates that the
 // Replica is frozen.
 func (s ReplicaState) IsFrozen() bool {
 	return s.Frozen == ReplicaState_FROZEN
+}
+
+// GetLastProcessed returns the last processed time corresponding to the
+// specified queue. If no last processed time is recorded, returns the
+// low water timestamp.
+func (qs *QueueState) GetLastProcessed(name string) hlc.Timestamp {
+	if qs.LastProcessed == nil {
+		return qs.LowWater
+	}
+	if ts, ok := qs.LastProcessed[name]; ok {
+		return ts
+	}
+	return qs.LowWater
+}
+
+// SetLastProcessed updates the last processed time for the specified queue.
+func (qs *QueueState) SetLastProcessed(name string, ts hlc.Timestamp) {
+	if qs.LastProcessed == nil {
+		qs.LastProcessed = map[string]hlc.Timestamp{}
+	}
+	qs.LastProcessed[name] = ts
+}
+
+// Merge adjusts the contents of a QueueState to be the lowest common
+// denominator between it and another QueueState. The minimum low water
+// state is taken. The minimum of matching pairs of queue timestmaps
+// is set. The minimum of a queue timestamp and the other QueueState's
+// low water timestamp is taken for unmatched queue timestamps.
+func (qs *QueueState) Merge(oqs QueueState) {
+	for name, ts := range qs.LastProcessed {
+		ots, ok := oqs.LastProcessed[name]
+		if !ok {
+			ots = oqs.LowWater
+		}
+		ots.Backward(ts)
+		qs.LastProcessed[name] = ots
+	}
+	// Account for last processed timestamps in oqs not present in qs.
+	for name, ots := range oqs.LastProcessed {
+		if _, ok := qs.LastProcessed[name]; !ok {
+			ots.Backward(qs.LowWater)
+			qs.LastProcessed[name] = ots
+		}
+	}
+	qs.LowWater.Backward(oqs.LowWater)
 }

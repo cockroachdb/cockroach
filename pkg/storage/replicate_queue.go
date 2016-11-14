@@ -247,7 +247,11 @@ func (rq *replicateQueue) process(
 	}
 
 	// Enqueue this replica again to see if there are more changes to be made.
-	rq.MaybeAdd(repl, rq.clock.Now())
+	qs, err := repl.getQueueState(ctx)
+	if err != nil {
+		log.ErrEventf(ctx, "could not fetch queue state: %v", err)
+	}
+	rq.MaybeAdd(repl, rq.clock.Now(), qs)
 	return nil
 }
 

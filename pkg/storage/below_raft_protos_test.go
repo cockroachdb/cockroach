@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -105,6 +106,11 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedConstructor: func(r *rand.Rand) proto.Message { return roachpb.NewPopulatedTransaction(r, false) },
 		emptySum:             8650182997796107667,
 		populatedSum:         85604713557216790,
+	},
+	reflect.TypeOf(&storagebase.QueueState{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message { return storagebase.NewPopulatedQueueState(r, false) },
+		emptySum:             4857794150530143219,
+		populatedSum:         17994759232801202427,
 	},
 }
 

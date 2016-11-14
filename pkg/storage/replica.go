@@ -1055,6 +1055,46 @@ func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.T
 	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
 }
 
+// getQueueState reads per-replica queue state.
+func (r *Replica) getQueueState(ctx context.Context) (storagebase.QueueState, error) {
+	key := keys.QueueStateKey(r.Desc().StartKey)
+	qs := storagebase.QueueState{}
+	if r.store != nil {
+		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &qs)
+		if err != nil {
+			return qs, err
+		}
+	}
+	// Note that if there's no QueueState on disk, it's correct to just
+	// use the zero struct, since we don't know the correct low water.
+	return qs, nil
+}
+
+// setLastProcessed updates the per-replica queue state by adding a
+// last processed time for the named queue.
+func (r *Replica) setLastProcessed(ctx context.Context, name string, ts hlc.Timestamp) error {
+	// We loop and use a conditional put in order to account for the
+	// possibility of two queues updating state at the same time and
+	// losing information.
+	for {
+		qs, err := r.getQueueState(ctx)
+		if err != nil {
+			return err
+		}
+		newQS := qs
+		newQS.LastProcessed = map[string]hlc.Timestamp{}
+		for n, ts := range qs.LastProcessed {
+			newQS.LastProcessed[n] = ts
+		}
+		newQS.SetLastProcessed(name, ts)
+		err = r.store.DB().CPutInline(ctx, keys.QueueStateKey(r.Desc().StartKey), &newQS, &qs)
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
+			continue
+		}
+		return err
+	}
+}
+
 // RaftStatus returns the current raft status of the replica. It returns nil
 // if the Raft group has not been initialized yet.
 func (r *Replica) RaftStatus() *raft.Status {

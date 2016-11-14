@@ -117,6 +117,10 @@ message ConditionalPutRequest {
   // to indicate there should be no existing entry. This is different
   // from the expectation that the value exists but is empty.
   optional Value exp_value = 3;
+  // Specify as true to put the value without a corresponding
+  // timestamp. This option should be used with care as it precludes
+  // the use of this value with transactions.
+  optional bool inline = 5 [(gogoproto.nullable) = false];
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.

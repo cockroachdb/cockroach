@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -41,7 +42,7 @@ type replicaQueue interface {
 	// MaybeAdd adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	MaybeAdd(*Replica, hlc.Timestamp)
+	MaybeAdd(*Replica, hlc.Timestamp, storagebase.QueueState)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(roachpb.RangeID)
 }
@@ -214,11 +215,18 @@ func (rs *replicaScanner) waitAndProcess(
 				return false
 			}
 
+			now := clock.Now()
 			if log.V(2) {
 				log.Infof(ctx, "replica scanner processing %s", repl)
 			}
+			// Fetch the replica's queue state.
+			qs, err := repl.getQueueState(ctx)
+			if err != nil {
+				log.Warningf(ctx, "%s: couldn't fetch replica queue state: %v", repl, err)
+				qs = storagebase.QueueState{LowWater: now}
+			}
 			for _, q := range rs.queues {
-				q.MaybeAdd(repl, clock.Now())
+				q.MaybeAdd(repl, now, qs)
 			}
 			return false
 

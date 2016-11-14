@@ -30,6 +30,7 @@ import (
 )
 
 const (
+	timeSeriesMaintenanceInterval           = time.Hour * 24 // daily
 	timeSeriesMaintenanceQueueTimerDuration = time.Second
 	timeSeriesMaintenanceQueueMaxSize       = 100
 )
@@ -91,6 +92,7 @@ func newTimeSeriesMaintenanceQueue(
 			maxSize:              timeSeriesMaintenanceQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: true,
+			minInterval:          timeSeriesMaintenanceInterval,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
 			failures:             store.metrics.TimeSeriesMaintenanceQueueFailures,
 			pending:              store.metrics.TimeSeriesMaintenanceQueuePending,
@@ -102,7 +104,7 @@ func newTimeSeriesMaintenanceQueue(
 }
 
 func (tsmq *timeSeriesMaintenanceQueue) shouldQueue(
-	_ context.Context, _ hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	_ context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	return tsmq.tsData.ContainsTimeSeries(desc.StartKey, desc.EndKey), 0

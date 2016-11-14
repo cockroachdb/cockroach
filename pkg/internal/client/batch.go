@@ -379,17 +379,7 @@ func (b *Batch) PutInline(key, value interface{}) {
 	b.put(key, value, true)
 }
 
-// CPut conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
-//
-// A new result will be appended to the batch which will contain a single row
-// and Result.Err will indicate success or failure.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
-func (b *Batch) CPut(key, value, expValue interface{}) {
+func (b *Batch) cput(key, value, expValue interface{}, inline bool) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -405,8 +395,43 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev))
+	if inline {
+		b.appendReqs(roachpb.NewConditionalPutInline(k, v, ev))
+	} else {
+		b.appendReqs(roachpb.NewConditionalPut(k, v, ev))
+	}
 	b.initResult(1, 1, notRaw, nil)
+}
+
+// CPut conditionally sets the value for a key if the existing value is equal
+// to expValue. To conditionally set a value only if there is no existing entry
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
+//
+// A new result will be appended to the batch which will contain a single row
+// and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
+func (b *Batch) CPut(key, value, expValue interface{}) {
+	b.cput(key, value, expValue, false)
+}
+
+// CPutInline conditionally sets the value for a key if the existing
+// value is equal to expValue, but does not maintain multi-version
+// values. To conditionally set a value only if there is no existing
+// entry pass nil for expValue. Note that this must be an
+// interface{}(nil), not a typed nil value (e.g. []byte(nil)). The
+// most recent value is always overwritten.  Inline values cannot be
+// mutated transactionally and should be used with caution.
+//
+// A new result will be appended to the batch which will contain a single row
+// and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
+func (b *Batch) CPutInline(key, value, expValue interface{}) {
+	b.cput(key, value, expValue, true)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a

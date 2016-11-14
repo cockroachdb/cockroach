@@ -95,3 +95,14 @@ message RangeInfo {
   // See storage.Replica.mu.raftLogSize.
   int64 raft_log_size = 6;
 }
+
+// QueueState contains information about replica queues.
+message QueueState {
+  option (gogoproto.populate) = true;
+
+  // The initial timestamp; if a timestamp for last processing is not
+  // found in the last_processed map, use low_water as the default.
+  util.hlc.Timestamp low_water = 1 [(gogoproto.nullable) = false];
+  // Map from queue to last processed time.
+  map<string, util.hlc.Timestamp> last_processed = 2 [(gogoproto.nullable) = false];
+}

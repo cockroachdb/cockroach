@@ -431,10 +431,10 @@ func (r *Replica) handleReplicatedProposalData(
 
 	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
 	if rpd.State.RaftAppliedIndex%raftLogCheckFrequency == 1 {
-		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now(), storagebase.QueueState{})
 	}
 	if needsSplitBySize {
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now(), storagebase.QueueState{})
 	}
 
 	rpd.State.Stats = enginepb.MVCCStats{}
@@ -640,7 +640,7 @@ func (r *Replica) handleLocalProposalData(
 	}
 
 	if lpd.maybeAddToSplitQueue {
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now(), storagebase.QueueState{})
 		lpd.maybeAddToSplitQueue = false
 	}
 

@@ -330,24 +330,23 @@ type raftRequestQueue []raftRequestInfo
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident                   roachpb.StoreIdent
-	cfg                     StoreConfig
-	db                      *client.DB
-	engine                  engine.Engine               // The underlying key-value store
-	allocator               Allocator                   // Makes allocation decisions
-	rangeIDAlloc            *idAllocator                // Range ID allocator
-	gcQueue                 *gcQueue                    // Garbage collection queue
-	splitQueue              *splitQueue                 // Range splitting queue
-	replicateQueue          *replicateQueue             // Replication queue
-	replicaGCQueue          *replicaGCQueue             // Replica GC queue
-	raftLogQueue            *raftLogQueue               // Raft Log Truncation queue
-	tsMaintenanceQueue      *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner                 *replicaScanner             // Replica scanner
-	replicaConsistencyQueue *replicaConsistencyQueue    // Replica consistency check queue
-	consistencyScanner      *replicaScanner             // Consistency checker scanner
-	metrics                 *StoreMetrics
-	intentResolver          *intentResolver
-	raftEntryCache          *raftEntryCache
+	Ident              roachpb.StoreIdent
+	cfg                StoreConfig
+	db                 *client.DB
+	engine             engine.Engine               // The underlying key-value store
+	allocator          Allocator                   // Makes allocation decisions
+	rangeIDAlloc       *idAllocator                // Range ID allocator
+	gcQueue            *gcQueue                    // Garbage collection queue
+	splitQueue         *splitQueue                 // Range splitting queue
+	replicateQueue     *replicateQueue             // Replication queue
+	replicaGCQueue     *replicaGCQueue             // Replica GC queue
+	raftLogQueue       *raftLogQueue               // Raft Log Truncation queue
+	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner            *replicaScanner             // Replica scanner
+	consistencyQueue   *consistencyQueue           // Replica consistency check queue
+	metrics            *StoreMetrics
+	intentResolver     *intentResolver
+	raftEntryCache     *raftEntryCache
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -816,14 +815,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
-		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
-
-		// Add consistency check scanner.
-		s.consistencyScanner = newReplicaScanner(
-			s.cfg.AmbientCtx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
+		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
+		s.scanner.AddQueues(
+			s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue, s.consistencyQueue,
 		)
-		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
-		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 
 		if s.cfg.TimeSeriesDataStore != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
@@ -1173,16 +1168,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		})
 
-		// Start the consistency scanner.
-		s.stopper.RunWorker(func() {
-			select {
-			case <-s.cfg.Gossip.Connected:
-				s.consistencyScanner.Start(s.cfg.Clock, s.stopper)
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		})
-
 		// Run metrics computation up front to populate initial statistics.
 		if err = s.ComputeMetrics(-1); err != nil {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
@@ -1307,7 +1292,7 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 		if zone, err := cfg.GetZoneConfigForKey(repl.Desc().StartKey); err == nil {
 			repl.SetMaxBytes(zone.RangeMaxBytes)
 		}
-		s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now())
+		s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now(), storagebase.QueueState{})
 		return true // more
 	})
 }
@@ -1595,6 +1580,11 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	if err := engine.MVCCPutProto(ctx, batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
+	// Initial per-replica queue state.
+	qs := storagebase.QueueState{LowWater: now}
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.QueueStateKey(desc.StartKey), hlc.ZeroTimestamp, nil, &qs); err != nil {
+		return err
+	}
 
 	// Now add all passed-in default entries.
 	for _, kv := range initialValues {
@@ -1721,15 +1711,15 @@ func splitPostApply(
 	// While performing the split, zone config changes or a newly created table
 	// might require the range to be split again. Enqueue both the left and right
 	// ranges to speed up such splits. See #10160.
-	r.store.splitQueue.MaybeAdd(r, now)
-	r.store.splitQueue.MaybeAdd(rightRng, now)
+	r.store.splitQueue.MaybeAdd(r, now, storagebase.QueueState{})
+	r.store.splitQueue.MaybeAdd(rightRng, now, storagebase.QueueState{})
 
 	// If the range was not properly replicated before the split, the replicate
 	// queue may not have picked it up (due to the need for a split). Enqueue
 	// both the left and right ranges to speed up a potentially necessary
 	// replication. See #7022 and #7800.
-	r.store.replicateQueue.MaybeAdd(r, now)
-	r.store.replicateQueue.MaybeAdd(rightRng, now)
+	r.store.replicateQueue.MaybeAdd(r, now, storagebase.QueueState{})
+	r.store.replicateQueue.MaybeAdd(rightRng, now, storagebase.QueueState{})
 
 	if len(split.RightDesc.Replicas) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
@@ -2038,7 +2028,6 @@ func (s *Store) removeReplicaImpl(
 	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	s.scanner.RemoveReplica(rep)
-	s.consistencyScanner.RemoveReplica(rep)
 	return nil
 }
 

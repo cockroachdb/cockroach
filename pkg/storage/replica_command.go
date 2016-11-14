@@ -274,7 +274,10 @@ func (r *Replica) ConditionalPut(
 	args roachpb.ConditionalPutRequest,
 ) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
-
+	ts := hlc.ZeroTimestamp
+	if !args.Inline {
+		ts = h.Timestamp
+	}
 	if h.DistinctSpans {
 		if b, ok := batch.(engine.Batch); ok {
 			// Use the distinct batch for both blind and normal ops so that we don't
@@ -285,9 +288,9 @@ func (r *Replica) ConditionalPut(
 		}
 	}
 	if args.Blind {
-		return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+		return reply, engine.MVCCBlindConditionalPut(ctx, batch, ms, args.Key, ts, args.Value, args.ExpValue, h.Txn)
 	}
-	return reply, engine.MVCCConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+	return reply, engine.MVCCConditionalPut(ctx, batch, ms, args.Key, ts, args.Value, args.ExpValue, h.Txn)
 }
 
 // InitPut sets the value for a specified key only if it doesn't exist. It
@@ -2661,7 +2664,7 @@ func (r *Replica) splitTrigger(
 			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}
 	} else {
-		// Because neither the original stats or the delta stats contain
+		// Because neither the original stats nor the delta stats contain
 		// estimate values, we can safely perform arithmetic to determine the
 		// new range's stats. The calculation looks like:
 		//   rhs_ms = orig_both_ms - orig_left_ms + right_delta_ms
@@ -2681,6 +2684,18 @@ func (r *Replica) splitTrigger(
 		// the batch contributions for the right-hand side.
 		rightMS.Subtract(leftMS)
 		rightMS.Add(bothDeltaMS)
+	}
+
+	// Copy the per-replica queue state. We do this here so we can
+	// account for RHS stats directly.
+	qs := storagebase.QueueState{}
+	_, err = engine.MVCCGetProto(ctx, batch, keys.QueueStateKey(split.LeftDesc.StartKey), hlc.ZeroTimestamp, true, nil, &qs)
+	if err != nil {
+		log.Errorf(ctx, "failed to read queue state: %v", err)
+		return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to fetch per-replica queue state")
+	}
+	if err := engine.MVCCPutProto(ctx, batch, &rightMS, keys.QueueStateKey(split.RightDesc.StartKey), hlc.ZeroTimestamp, nil, &qs); err != nil {
+		return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to copy per-replica queue state")
 	}
 
 	// Now that we've computed the stats for the RHS so far, we persist them.
@@ -2944,6 +2959,26 @@ func (r *Replica) mergeTrigger(
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
+
+	// Merge the per-replica queue states.
+	var lqs, rqs storagebase.QueueState
+	_, err = engine.MVCCGetProto(ctx, batch, keys.QueueStateKey(merge.LeftDesc.StartKey), hlc.ZeroTimestamp, true, nil, &lqs)
+	if err != nil {
+		return ProposalData{}, errors.Wrap(err, "unable to fetch LHS per-replica queue state")
+	}
+	_, err = engine.MVCCGetProto(ctx, batch, keys.QueueStateKey(merge.RightDesc.StartKey), hlc.ZeroTimestamp, true, nil, &rqs)
+	if err != nil {
+		return ProposalData{}, errors.Wrap(err, "unable to fetch RHS per-replica queue state")
+	}
+	lqs.Merge(rqs)
+	// Don't worry about updating stats; system stats are recomputed below.
+	if err := engine.MVCCPutProto(ctx, batch, nil, keys.QueueStateKey(merge.LeftDesc.StartKey), hlc.ZeroTimestamp, nil, &lqs); err != nil {
+		return ProposalData{}, errors.Wrap(err, "unable to set per-replica queue state")
+	}
+	// Delete the RHS queue stats.
+	if err := engine.MVCCDelete(ctx, batch, nil, keys.QueueStateKey(merge.RightDesc.StartKey), hlc.ZeroTimestamp, nil); err != nil {
+		return ProposalData{}, errors.Wrap(err, "unable to delete per-replica queue state")
+	}
 
 	// Copy the RHS range's abort cache to the new LHS one.
 	if _, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {

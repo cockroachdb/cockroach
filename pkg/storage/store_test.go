@@ -1981,7 +1981,7 @@ func (fq *fakeRangeQueue) Start(_ *hlc.Clock, _ *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAdd(_ *Replica, _ hlc.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAdd(_ *Replica, _ hlc.Timestamp, _ storagebase.QueueState) {
 	// Do nothing
 }
 
