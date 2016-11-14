@@ -55,7 +55,7 @@ func FatalOnPanic() {
 func EnableLogFileOutput(dir string) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
-	logDir = dir
+	logDir.Set(dir)
 	logging.toStderr = false
 	logging.stderrThreshold = Severity_INFO
 }
@@ -67,7 +67,7 @@ func DisableLogFileOutput() {
 	if err := logging.removeFilesLocked(); err != nil {
 		logging.exit(err)
 	}
-	logDir = ""
+	logDir.clear()
 	logging.toStderr = true
 	logging.stderrThreshold = Severity_NONE
 }

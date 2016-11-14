@@ -53,10 +53,12 @@ type cliTest struct {
 	cleanupFunc func()
 }
 
-func (c cliTest) stop() {
+func (c cliTest) stop(runStopper bool) {
 	c.cleanupFunc()
 	security.SetReadFileFn(securitytest.Asset)
-	c.Stopper().Stop()
+	if runStopper {
+		c.Stopper().Stop()
+	}
 }
 
 func newCLITest() cliTest {
@@ -66,6 +68,7 @@ func newCLITest() cliTest {
 	baseCfg.InitDefaults()
 	cliCtx.InitCLIDefaults()
 
+	log.DisableLogFileOutput()
 	osStderr = os.Stdout
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
@@ -201,6 +204,8 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	c := newCLITest()
+	defer c.stop(false)
+
 	c.Run("quit")
 	// Wait until this async command stops the server.
 	<-c.Stopper().IsStopped()
@@ -251,15 +256,11 @@ communicate with a secure cluster\).
 			t.Errorf("expected '%s' to match pattern\n%s\ngot:\n%s", test.cmd, exp, out)
 		}
 	}
-	// Manually run the cleanup functions (intentionally only on success,
-	// preserving the logs on failure).
-	c.cleanupFunc()
-	security.SetReadFileFn(securitytest.Asset)
 }
 
 func Example_basic() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3")
 	c.Run("debug kv scan")
@@ -317,7 +318,7 @@ func Example_basic() {
 
 func Example_quoted() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`debug kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -371,7 +372,7 @@ func Example_insecure() {
 
 func Example_ranges() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -433,7 +434,7 @@ func Example_ranges() {
 
 func Example_logging() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
@@ -471,7 +472,7 @@ func Example_logging() {
 
 func Example_cput() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -500,7 +501,7 @@ func Example_cput() {
 
 func Example_max_results() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan --max-results=3")
@@ -532,7 +533,7 @@ func Example_max_results() {
 
 func Example_zone() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
@@ -627,7 +628,7 @@ func Example_zone() {
 
 func Example_sql() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
@@ -679,7 +680,7 @@ func Example_sql() {
 
 func Example_sql_escape() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
@@ -798,7 +799,7 @@ func Example_sql_escape() {
 
 func Example_user() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	c.Run("user ls")
 	c.Run("user ls --pretty")
@@ -938,7 +939,7 @@ Available Commands:
 Flags:
       --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default NONE)
       --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir string                    if non-empty, write log files in this directory (default "")
+      --log-dir string                    if non-empty, write log files in this directory
       --logtostderr                       log to standard error instead of files
       --no-color                          disable standard error log colorization
 
@@ -952,7 +953,7 @@ Use "cockroach [command] --help" for more information about a command.
 
 func Example_node() {
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
@@ -983,7 +984,7 @@ func TestFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	assertOutput := func(msg string) {
 		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
@@ -1012,7 +1013,7 @@ func TestNodeStatus(t *testing.T) {
 
 	start := timeutil.Now()
 	c := newCLITest()
-	defer c.stop()
+	defer c.stop(true)
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
