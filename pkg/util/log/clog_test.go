@@ -399,6 +399,9 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
+	s := logScope(t)
+	defer s.close(t)
+
 	setFlags()
 	Warning(context.Background(), "x")
 	warn, ok := logging.file[Severity_WARNING].(*syncBuffer)
@@ -416,7 +419,11 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	otherFile, err := os.Create(filepath.Join(logDir, "other.txt"))
+	dir, err := logDir.get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherFile, err := os.Create(filepath.Join(dir, "other.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,11 +435,11 @@ func TestGetLogReader(t *testing.T) {
 		expErrUnrestricted string
 	}{
 		// File is not specified (trying to open a directory instead).
-		{logDir, "pathnames must be basenames", "not a regular file"},
+		{dir, "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
 		{warn.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(logDir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
+		{filepath.Join(dir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
 		{removePeriods(program) + ".WARNING", "malformed log filename", ""},
 		// Non-log file.
@@ -476,6 +483,9 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
+	s := logScope(t)
+	defer s.close(t)
+
 	setFlags()
 	var err error
 	defer func(previous func(error)) { logExitFunc = previous }(logExitFunc)
@@ -521,6 +531,9 @@ func TestRollover(t *testing.T) {
 }
 
 func TestLogBacktraceAt(t *testing.T) {
+	s := logScope(t)
+	defer s.close(t)
+
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	// The peculiar style of this code simplifies line counting and maintenance of the
@@ -563,6 +576,9 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
+	s := logScope(t)
+	defer s.close(t)
+
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
 	logging.toStderr = false
