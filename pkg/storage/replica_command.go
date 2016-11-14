@@ -270,7 +270,6 @@ func (r *Replica) ConditionalPut(
 	args roachpb.ConditionalPutRequest,
 ) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
-
 	if h.DistinctSpans {
 		if b, ok := batch.(engine.Batch); ok {
 			// Use the distinct batch for both blind and normal ops so that we don't
@@ -2674,7 +2673,7 @@ func (r *Replica) splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}
 	} else {
-		// Because neither the original stats or the delta stats contain
+		// Because neither the original stats nor the delta stats contain
 		// estimate values, we can safely perform arithmetic to determine the
 		// new range's stats. The calculation looks like:
 		//   rhs_ms = orig_both_ms - orig_left_ms + right_delta_ms
@@ -2695,6 +2694,11 @@ func (r *Replica) splitTrigger(
 		rightMS.Subtract(leftMS)
 		rightMS.Add(bothDeltaMS)
 	}
+
+	// Note: we don't copy the queue last processed times. This means
+	// we'll process the RHS range in consistency and time series
+	// maintenance queues again possibly sooner than if we copied. The
+	// intent it to simplify.
 
 	// Now that we've computed the stats for the RHS so far, we persist them.
 	// This looks a bit more complicated than it really is: updating the stats
@@ -2958,6 +2962,23 @@ func (r *Replica) mergeTrigger(
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
+
+	// Note: we don't clear the LHS queue last processed times for
+	// simplicity. This means that we may delay queue processing for
+	// RHS of the merged range.
+	{
+		startKey := keys.QueueLastProcessedKey(merge.RightDesc.StartKey, "")
+		endKey := keys.QueueLastProcessedKey(merge.RightDesc.StartKey.Next(), "")
+		kvs, _, _, err := engine.MVCCScan(context.Background(), batch, startKey, endKey, math.MaxInt64, hlc.ZeroTimestamp, true, nil)
+		if err != nil {
+			return EvalResult{}, errors.Wrap(err, "error fetching RHS queue last processed times")
+		}
+		for _, kv := range kvs {
+			if err := engine.MVCCDelete(ctx, batch, &mergedMS, kv.Key, hlc.ZeroTimestamp, nil); err != nil {
+				return EvalResult{}, errors.Wrapf(err, "unable to delete RHS queue last processed time %s", kv.Key)
+			}
+		}
+	}
 
 	// Copy the RHS range's abort cache to the new LHS one.
 	if _, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {

@@ -109,6 +109,29 @@ func isExpectedQueueError(err error) bool {
 	return err == nil || cause == errQueueDisabled || cause == errReplicaNotAddable
 }
 
+// shouldQueueAgain is a helper function to determine whether the
+// replica should be queued according to the current time, the last
+// time the replica was processed, and the minimum interval between
+// successive processing. Specifying minInterval=0 queues all replicas.
+// Returns a bool for whether to queue as well as a priority based
+// on how long it's been since last processed.
+func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool, float64) {
+	if minInterval == 0 || last == hlc.ZeroTimestamp {
+		return true, 0
+	}
+	if diff := now.GoTime().Sub(last.GoTime()); diff >= minInterval {
+		priority := float64(1)
+		// If there's a non-zero last processed timestamp, adjust the
+		// priority by a multiple of how long it's been since the last
+		// time this replica was processed.
+		if last != hlc.ZeroTimestamp {
+			priority = float64(diff.Nanoseconds()) / float64(minInterval.Nanoseconds())
+		}
+		return true, priority
+	}
+	return false, 0
+}
+
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.

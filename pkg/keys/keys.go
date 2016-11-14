@@ -336,7 +336,14 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	if err != nil {
 		panic(err)
 	}
-	return MakeRangeKey(rk, localTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
+	return MakeRangeKey(rk, LocalTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
+}
+
+// QueueLastProcessedKey returns a range-local key for last processed
+// timestamps for the named queue. These keys represent per-range last
+// processed times.
+func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
+	return MakeRangeKey(key, localQueueLastProcessedSuffix, roachpb.RKey(queue))
 }
 
 // IsLocal performs a cheap check that returns true iff a range-local key is
