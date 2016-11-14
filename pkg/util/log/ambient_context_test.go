@@ -24,6 +24,9 @@ import (
 )
 
 func TestAnnotateCtxTags(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	ac := AmbientContext{}
 	ac.AddLogTag("a", 1)
 	ac.AddLogTag("b", 2)
@@ -44,6 +47,9 @@ func TestAnnotateCtxTags(t *testing.T) {
 }
 
 func TestAnnotateCtxSpan(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	var traceEv events
 	tracer := testingTracer(&traceEv)
 

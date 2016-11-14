@@ -974,6 +974,20 @@ func (l *loggingT) removeFilesLocked() error {
 	return nil
 }
 
+func (l *loggingT) closeFilesLocked() error {
+	for s := Severity_FATAL; s >= Severity_INFO; s-- {
+		if l.file[s] != nil {
+			if sb, ok := l.file[s].(*syncBuffer); ok {
+				if err := sb.file.Close(); err != nil {
+					return err
+				}
+			}
+			l.file[s] = nil
+		}
+	}
+	return nil
+}
+
 // createFiles creates all the log files for severity from sev down to Severity_INFO.
 // l.mu is held.
 func (l *loggingT) createFiles(sev Severity) error {

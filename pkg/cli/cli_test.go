@@ -53,13 +53,15 @@ type cliTest struct {
 	cleanupFunc func()
 }
 
-func (c cliTest) stop() {
+func (c cliTest) stop(runStopper bool) {
+	if runStopper {
+		c.Stopper().Stop()
+	}
 	c.cleanupFunc()
 	security.SetReadFileFn(securitytest.Asset)
-	c.Stopper().Stop()
 }
 
-func newCLITest() cliTest {
+func newCLITest(t *testing.T) cliTest {
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
@@ -70,12 +72,12 @@ func newCLITest() cliTest {
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %s", err)
+		t.Fatalf("could not start server: %s", err)
 	}
 
-	tempDir, err := ioutil.TempDir("", "cli-test")
+	certsDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
-		log.Fatal(context.Background(), err)
+		t.Fatalf("cannot create temp certs dir: %s", err)
 	}
 
 	// Copy these assets to disk from embedded strings, so this test can
@@ -94,15 +96,15 @@ func newCLITest() cliTest {
 	}
 
 	for _, a := range assets {
-		securitytest.RestrictedCopy(nil, a, tempDir, filepath.Base(a))
+		securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
 	}
 
 	return cliTest{
 		TestServer: s.(*server.TestServer),
-		certsDir:   tempDir,
+		certsDir:   certsDir,
 		cleanupFunc: func() {
-			if err := os.RemoveAll(tempDir); err != nil {
-				log.Fatal(context.Background(), err)
+			if err := os.RemoveAll(certsDir); err != nil {
+				t.Fatal(err)
 			}
 		},
 	}
@@ -198,9 +200,17 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 	}
 }
 
+func closeScope(l log.TestLogScope, t *testing.T) {
+	l.Close(t.Failed(), t.Fatal)
+}
+
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	c := newCLITest()
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+
 	c.Run("quit")
 	// Wait until this async command stops the server.
 	<-c.Stopper().IsStopped()
@@ -251,15 +261,20 @@ communicate with a secure cluster\).
 			t.Errorf("expected '%s' to match pattern\n%s\ngot:\n%s", test.cmd, exp, out)
 		}
 	}
-	// Manually run the cleanup functions (intentionally only on success,
-	// preserving the logs on failure).
-	c.cleanupFunc()
-	security.SetReadFileFn(securitytest.Asset)
+
+	// Run the cleanup method on success. On failure we avoid this so as
+	// to preserve the temporary output directory.
+	c.stop(false)
 }
 
-func Example_basic() {
-	c := newCLITest()
-	defer c.stop()
+func TestBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3")
 	c.Run("debug kv scan")
@@ -315,9 +330,14 @@ func Example_basic() {
 	// invalid increment: strconv.ParseInt: parsing "b": invalid syntax
 }
 
-func Example_quoted() {
-	c := newCLITest()
-	defer c.stop()
+func TestQuoted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`debug kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -349,11 +369,16 @@ func Example_quoted() {
 	// 1
 }
 
-func Example_insecure() {
+func TestInsecure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
 	s, err := serverutils.StartServerRaw(
 		base.TestServerArgs{Insecure: true})
 	if err != nil {
-		log.Fatalf(context.Background(), "Could not start server: %v", err)
+		t.Fatalf("could not start server: %v", err)
 	}
 	defer s.Stopper().Stop()
 	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
@@ -369,9 +394,14 @@ func Example_insecure() {
 	// 2 result(s)
 }
 
-func Example_ranges() {
-	c := newCLITest()
-	defer c.stop()
+func TestRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -431,9 +461,14 @@ func Example_ranges() {
 	// 2 result(s)
 }
 
-func Example_logging() {
-	c := newCLITest()
-	defer c.stop()
+func TestLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
@@ -469,9 +504,14 @@ func Example_logging() {
 	// 1
 }
 
-func Example_cput() {
-	c := newCLITest()
-	defer c.stop()
+func TestDebugCPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -498,9 +538,14 @@ func Example_cput() {
 	// 5 result(s)
 }
 
-func Example_max_results() {
-	c := newCLITest()
-	defer c.stop()
+func TestMaxResults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan --max-results=3")
@@ -530,9 +575,14 @@ func Example_max_results() {
 	// 2 result(s)
 }
 
-func Example_zone() {
-	c := newCLITest()
-	defer c.stop()
+func TestZone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
@@ -625,9 +675,14 @@ func Example_zone() {
 	// constraints: []
 }
 
-func Example_sql() {
-	c := newCLITest()
-	defer c.stop()
+func TestSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
@@ -677,9 +732,14 @@ func Example_sql() {
 	// 2
 }
 
-func Example_sql_escape() {
-	c := newCLITest()
-	defer c.stop()
+func TestSQLEscape(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
@@ -796,9 +856,14 @@ func Example_sql_escape() {
 	// (1 row)
 }
 
-func Example_user() {
-	c := newCLITest()
-	defer c.stop()
+func TestUser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	c.Run("user ls")
 	c.Run("user ls --pretty")
@@ -842,7 +907,12 @@ func Example_user() {
 	// (0 rows)
 }
 
-func Example_user_insecure() {
+func TestUserInsecure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
 	s, err := serverutils.StartServerRaw(
 		base.TestServerArgs{Insecure: true})
 	if err != nil {
@@ -938,7 +1008,7 @@ Available Commands:
 Flags:
       --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default NONE)
       --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir string                    if non-empty, write log files in this directory (default "")
+      --log-dir string                    if non-empty, write log files in this directory
       --logtostderr                       log to standard error instead of files
       --no-color                          disable standard error log colorization
 
@@ -950,9 +1020,14 @@ Use "cockroach [command] --help" for more information about a command.
 	}
 }
 
-func Example_node() {
-	c := newCLITest()
-	defer c.stop()
+func TestNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
@@ -982,8 +1057,11 @@ func Example_node() {
 func TestFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest()
-	defer c.stop()
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	assertOutput := func(msg string) {
 		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
@@ -1010,9 +1088,12 @@ func TestFreeze(t *testing.T) {
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	l := log.MakeTestLogScope(t.Fatal)
+	defer closeScope(l, t)
+
 	start := timeutil.Now()
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {

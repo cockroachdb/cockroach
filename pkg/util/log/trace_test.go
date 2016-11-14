@@ -86,6 +86,9 @@ func compareTraces(expected, actual events) bool {
 }
 
 func TestTrace(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	ctx := context.Background()
 
 	// Events to context without a trace should be no-ops.
@@ -113,6 +116,9 @@ func TestTrace(t *testing.T) {
 }
 
 func TestTraceWithTags(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	ctx := context.Background()
 	ctx = WithLogTagInt(ctx, "tag", 1)
 
@@ -157,6 +163,9 @@ func (el *testingEventLog) Finish() {
 }
 
 func TestEventLog(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	ctx := context.Background()
 
 	// Events to context without a trace should be no-ops.
@@ -189,6 +198,9 @@ func TestEventLog(t *testing.T) {
 }
 
 func TestEventLogAndTrace(t *testing.T) {
+	s := MakeTestLogScope(t.Fatal)
+	defer s.close(t)
+
 	ctx := context.Background()
 
 	// Events to context without a trace should be no-ops.
