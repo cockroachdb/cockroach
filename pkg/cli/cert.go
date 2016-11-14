@@ -81,7 +81,7 @@ var createClientCertCmd = &cobra.Command{
 	Short: "create client cert and key",
 	Long: `
 Generates a client certificate and key, writing them to --cert and --key.
---cert and --key. CA certificate and key must be passed in.
+CA certificate and key must be passed in.
 The certs directory should contain a CA cert and key.
 `,
 	SilenceUsage: true,
