@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/big"
@@ -884,6 +885,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
+			LeftType:  TypeCollatedString,
+			RightType: TypeCollatedString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(bytes.Equal(left.(*DCollatedString).key, right.(*DCollatedString).key)), nil
+			},
+		},
+		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
 
@@ -1029,6 +1037,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			RightType: TypeString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(*left.(*DString) < *right.(*DString)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeCollatedString,
+			RightType: TypeCollatedString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(bytes.Compare(left.(*DCollatedString).key, right.(*DCollatedString).key) < 0), nil
 			},
 		},
 		CmpOp{
@@ -1179,6 +1194,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
+			LeftType:  TypeCollatedString,
+			RightType: TypeCollatedString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(bytes.Compare(left.(*DCollatedString).key, right.(*DCollatedString).key) <= 0), nil
+			},
+		},
+		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
@@ -1323,6 +1345,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeFloat),
 		makeEvalTupleIn(TypeDecimal),
 		makeEvalTupleIn(TypeString),
+		makeEvalTupleIn(TypeCollatedString),
 		makeEvalTupleIn(TypeBytes),
 		makeEvalTupleIn(TypeDate),
 		makeEvalTupleIn(TypeTimestamp),
@@ -1476,6 +1499,8 @@ type EvalContext struct {
 	// (false) or not (true).  It is set to true conditionally by
 	// EXPLAIN(TYPES[, NORMALIZE]).
 	SkipNormalize bool
+
+	collationEnv CollationEnvironment
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per
@@ -1683,6 +1708,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(v.Sign() != 0), nil
 		case *DString:
 			return ParseDBool(string(*v))
+		case *DCollatedString:
+			return ParseDBool(v.Contents)
 		}
 
 	case *IntColType:
@@ -1710,6 +1737,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return NewDInt(DInt(i)), nil
 		case *DString:
 			return ParseDInt(string(*v))
+		case *DCollatedString:
+			return ParseDInt(v.Contents)
 		case *DTimestamp:
 			return NewDInt(DInt(v.Unix())), nil
 		case *DTimestampTZ:
@@ -1739,6 +1768,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return NewDFloat(DFloat(f)), nil
 		case *DString:
 			return ParseDFloat(string(*v))
+		case *DCollatedString:
+			return ParseDFloat(v.Contents)
 		case *DTimestamp:
 			micros := float64(v.Nanosecond() / int(time.Microsecond))
 			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
@@ -1776,6 +1807,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return d, nil
 		case *DString:
 			return ParseDDecimal(string(*v))
+		case *DCollatedString:
+			return ParseDDecimal(v.Contents)
 		case *DTimestamp:
 			var res DDecimal
 			val := res.UnscaledBig()
@@ -1809,6 +1842,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			s = DString(d.String())
 		case *DString:
 			s = *t
+		case *DCollatedString:
+			s = DString(t.Contents)
 		case *DBytes:
 			if !utf8.ValidString(string(*t)) {
 				return nil, fmt.Errorf("invalid utf8: %q", string(*t))
@@ -1828,6 +1863,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		switch t := d.(type) {
 		case *DString:
 			return NewDBytes(DBytes(*t)), nil
+		case *DCollatedString:
+			return NewDBytes(DBytes(t.Contents)), nil
 		case *DBytes:
 			return d, nil
 		}
@@ -1836,6 +1873,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		switch d := d.(type) {
 		case *DString:
 			return ParseDDate(string(*d), ctx.GetLocation())
+		case *DCollatedString:
+			return ParseDDate(d.Contents, ctx.GetLocation())
 		case *DDate:
 			return d, nil
 		case *DInt:
@@ -1851,6 +1890,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTimestamp(string(*d), time.Microsecond)
+		case *DCollatedString:
+			return ParseDTimestamp(d.Contents, time.Microsecond)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
@@ -1867,6 +1908,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
+		case *DCollatedString:
+			return ParseDTimestampTZ(d.Contents, ctx.GetLocation(), time.Microsecond)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation()), time.Microsecond), nil
@@ -1883,6 +1926,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		switch v := d.(type) {
 		case *DString:
 			return ParseDInterval(string(*v))
+		case *DCollatedString:
+			return ParseDInterval(v.Contents)
 		case *DInt:
 			// An integer duration represents a duration in microseconds.
 			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
@@ -1897,6 +1942,22 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 // Eval implements the TypedExpr interface.
 func (expr *AnnotateTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return expr.Expr.(TypedExpr).Eval(ctx)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return DNull, err
+	}
+	switch d := d.(type) {
+	case *DString:
+		return NewDCollatedString(string(*d), expr.Locale, &ctx.collationEnv), nil
+	case *DCollatedString:
+		return NewDCollatedString(d.Contents, expr.Locale, &ctx.collationEnv), nil
+	default:
+		panic(fmt.Sprintf("invalid argument to COLLATE: %s", d))
+	}
 }
 
 // Eval implements the TypedExpr interface.
@@ -2278,6 +2339,11 @@ func (t dNull) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DString) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DCollatedString) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

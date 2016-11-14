@@ -132,6 +132,17 @@ func (expr *AnnotateTypeExpr) Walk(v Visitor) Expr {
 	return expr
 }
 
+// Walk implements the Expr interface.
+func (expr *CollateExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *CoalesceExpr) CopyNode() *CoalesceExpr {
 	exprCopy := *expr
@@ -414,6 +425,9 @@ func (expr dNull) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DString) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *DCollatedString) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DTimestamp) Walk(_ Visitor) Expr { return expr }
