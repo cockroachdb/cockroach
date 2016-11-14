@@ -27,9 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
+	// TimeSeriesMaintenanceInterval is the minimum interval between two
+	// time series maintenance runs on a replica.
+	TimeSeriesMaintenanceInterval           = 24 * time.Hour // daily
 	timeSeriesMaintenanceQueueTimerDuration = time.Second
 	timeSeriesMaintenanceQueueMaxSize       = 100
 )
@@ -102,10 +106,23 @@ func newTimeSeriesMaintenanceQueue(
 }
 
 func (tsmq *timeSeriesMaintenanceQueue) shouldQueue(
-	_ context.Context, _ hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
+	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+		lpTS, err := repl.getQueueLastProcessed(ctx, tsmq.name)
+		if err != nil {
+			log.ErrEventf(ctx, "time series maintenance queue last processed timestamp: %s", err)
+		}
+		shouldQ, priority = shouldQueueAgain(now, lpTS, TimeSeriesMaintenanceInterval)
+		if !shouldQ {
+			return
+		}
+	}
 	desc := repl.Desc()
-	return tsmq.tsData.ContainsTimeSeries(desc.StartKey, desc.EndKey), 0
+	if tsmq.tsData.ContainsTimeSeries(desc.StartKey, desc.EndKey) {
+		return
+	}
+	return false, 0
 }
 
 func (tsmq *timeSeriesMaintenanceQueue) process(
@@ -114,7 +131,14 @@ func (tsmq *timeSeriesMaintenanceQueue) process(
 	desc := repl.Desc()
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
-	return tsmq.tsData.PruneTimeSeries(ctx, snap, desc.StartKey, desc.EndKey, tsmq.db, now)
+	if err := tsmq.tsData.PruneTimeSeries(ctx, snap, desc.StartKey, desc.EndKey, tsmq.db, now); err != nil {
+		return err
+	}
+	// Update the last processed time for this queue.
+	if err := repl.setQueueLastProcessed(ctx, tsmq.name, now); err != nil {
+		log.ErrEventf(ctx, "failed to update last processed time: %v", err)
+	}
+	return nil
 }
 
 func (tsmq *timeSeriesMaintenanceQueue) timer() time.Duration {

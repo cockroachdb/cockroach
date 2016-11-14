@@ -29,20 +29,20 @@ import (
 )
 
 const (
-	replicaConsistencyQueueSize = 100
+	consistencyQueueSize = 100
 )
 
-type replicaConsistencyQueue struct {
+type consistencyQueue struct {
 	*baseQueue
 }
 
-// newReplicaConsistencyQueue returns a new instance of replicaConsistencyQueue.
-func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaConsistencyQueue {
-	rcq := &replicaConsistencyQueue{}
+// newConsistencyQueue returns a new instance of consistencyQueue.
+func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue {
+	rcq := &consistencyQueue{}
 	rcq.baseQueue = newBaseQueue(
 		"replica consistency checker", rcq, store, gossip,
 		queueConfig{
-			maxSize:              replicaConsistencyQueueSize,
+			maxSize:              consistencyQueueSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.ConsistencyQueueSuccesses,
@@ -54,30 +54,40 @@ func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaCon
 	return rcq
 }
 
-func (*replicaConsistencyQueue) shouldQueue(
-	_ context.Context, _ hlc.Timestamp, _ *Replica, _ config.SystemConfig,
+func (q *consistencyQueue) shouldQueue(
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (bool, float64) {
-	return true, 1.0
+	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
+		if err != nil {
+			log.ErrEventf(ctx, "consistency queue last processed timestamp: %s", err)
+		}
+		return shouldQueueAgain(now, lpTS, repl.store.cfg.ConsistencyCheckInterval)
+	}
+	return true, 0
 }
 
 // process() is called on every range for which this node is a lease holder.
-func (q *replicaConsistencyQueue) process(
-	ctx context.Context, _ hlc.Timestamp, r *Replica, _ config.SystemConfig,
+func (q *consistencyQueue) process(
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) error {
 	req := roachpb.CheckConsistencyRequest{}
-	_, pErr := r.CheckConsistency(ctx, req)
-	if pErr != nil {
+	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
 		log.Error(ctx, pErr.GoError())
+	}
+	// Update the last processed time for this queue.
+	if err := repl.setQueueLastProcessed(ctx, q.name, now); err != nil {
+		log.ErrEventf(ctx, "failed to update last processed time: %v", err)
 	}
 	return nil
 }
 
-func (*replicaConsistencyQueue) timer() time.Duration {
+func (*consistencyQueue) timer() time.Duration {
 	// Some interval between replicas.
 	return 10 * time.Second
 }
 
 // purgatoryChan returns nil.
-func (*replicaConsistencyQueue) purgatoryChan() <-chan struct{} {
+func (*consistencyQueue) purgatoryChan() <-chan struct{} {
 	return nil
 }

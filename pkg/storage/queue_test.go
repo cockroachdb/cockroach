@@ -764,3 +764,33 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 		return nil
 	})
 }
+
+func TestBaseQueueShouldQueueAgain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		now, last   hlc.Timestamp
+		minInterval time.Duration
+		expQueue    bool
+		expPriority float64
+	}{
+		{makeTS(1, 0), makeTS(1, 0), 0, true, 0},
+		{makeTS(100, 0), makeTS(0, 0), 100, true, 0},
+		{makeTS(100, 0), makeTS(100, 0), 100, false, 0},
+		{makeTS(101, 0), makeTS(100, 0), 100, false, 0},
+		{makeTS(200, 0), makeTS(100, 0), 100, true, 1},
+		{makeTS(200, 1), makeTS(100, 0), 100, true, 1},
+		{makeTS(201, 0), makeTS(100, 0), 100, true, 1.01},
+		{makeTS(201, 0), makeTS(100, 1), 100, true, 1.01},
+		{makeTS(1100, 0), makeTS(100, 1), 100, true, 10},
+	}
+
+	for i, tc := range testCases {
+		sq, pri := shouldQueueAgain(tc.now, tc.last, tc.minInterval)
+		if sq != tc.expQueue {
+			t.Errorf("case %d: expected shouldQueue %t; got %t", i, tc.expQueue, sq)
+		}
+		if pri != tc.expPriority {
+			t.Errorf("case %d: expected priority %f; got %f", i, tc.expPriority, pri)
+		}
+	}
+}

@@ -149,13 +149,20 @@ func (gcq *gcQueue) shouldQueue(
 	return
 }
 
-// processTransactionTable scans the transaction table and updates txnMap with
-// those transactions which are old and either PENDING or with intents
-// registered. In the first case we want to push the transaction so that it is
-// aborted, and in the second case we may have to resolve the intents success-
-// fully before GCing the entry. The transaction records which can be gc'ed are
-// returned separately and are not added to txnMap nor intentSpanMap.
-func processTransactionTable(
+// processLocalKeyRange scans the local range key entries, consisting of
+// transaction records, queue last processed timestamps, and range descriptors.
+//
+// - Transaction entries: updates txnMap with those transactions which
+//   are old and either PENDING or with intents registered. In the
+//   first case we want to push the transaction so that it is aborted,
+//   and in the second case we may have to resolve the intents
+//   success- fully before GCing the entry. The transaction records
+//   which can be gc'ed are returned separately and are not added to
+//   txnMap nor intentSpanMap.
+//
+// - Queue last processed times: cleanup any entries which don't match
+//   this range's start key. This can happen on range merges.
+func processLocalKeyRange(
 	ctx context.Context,
 	snap engine.Reader,
 	desc *roachpb.RangeDescriptor,
@@ -168,7 +175,8 @@ func processTransactionTable(
 	defer infoMu.Unlock()
 
 	var gcKeys []roachpb.GCRequest_GCKey
-	handleOne := func(kv roachpb.KeyValue) error {
+
+	handleOneTransaction := func(kv roachpb.KeyValue) error {
 		var txn roachpb.Transaction
 		if err := kv.Value.GetProto(&txn); err != nil {
 			return err
@@ -228,8 +236,33 @@ func processTransactionTable(
 		return nil
 	}
 
-	startKey := keys.TransactionKey(desc.StartKey.AsRawKey(), uuid.UUID{})
-	endKey := keys.TransactionKey(desc.EndKey.AsRawKey(), uuid.UUID{})
+	handleOneQueueLastProcessed := func(kv roachpb.KeyValue, rangeKey roachpb.RKey) error {
+		if !rangeKey.Equal(desc.StartKey) {
+			// Garbage collect the last processed timestamp if it doesn't match start key.
+			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
+		}
+		return nil
+	}
+
+	handleOne := func(kv roachpb.KeyValue) error {
+		rangeKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+		if err != nil {
+			return err
+		}
+		if suffix.Equal(keys.LocalTransactionSuffix.AsRawKey()) {
+			if err := handleOneTransaction(kv); err != nil {
+				return err
+			}
+		} else if suffix.Equal(keys.LocalQueueLastProcessedSuffix.AsRawKey()) {
+			if err := handleOneQueueLastProcessed(kv, roachpb.RKey(rangeKey)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	startKey := keys.MakeRangeKeyPrefix(desc.StartKey)
+	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
 	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey,
 		hlc.ZeroTimestamp, true /* consistent */, nil, /* txn */
@@ -539,7 +572,8 @@ func RunGC(
 	infoMu.IntentTxns = len(txnMap)
 	infoMu.NumKeysAffected = len(gcKeys)
 
-	txnKeys, err := processTransactionTable(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntentsFn)
+	// Process local range key entries (txn records, queue last processed times).
+	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntentsFn)
 	if err != nil {
 		return nil, GCInfo{}, err
 	}
@@ -549,7 +583,7 @@ func RunGC(
 	// hard-coded the full non-local key range in the header, but that does
 	// not take into account the range-local keys. It will be OK as long as
 	// we send directly to the Replica, though.
-	gcKeys = append(gcKeys, txnKeys...)
+	gcKeys = append(gcKeys, localRangeKeys...)
 
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
