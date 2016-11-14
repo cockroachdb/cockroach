@@ -337,6 +337,9 @@ type Replica struct {
 		// Raft group). The replica ID will be non-zero whenever the replica is
 		// part of a Raft group.
 		replicaID roachpb.ReplicaID
+		// The minimum allowed ID for this replica. Initialized from
+		// RaftTombstone.NextReplicaID.
+		minReplicaID roachpb.ReplicaID
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
@@ -702,16 +705,22 @@ func (r *Replica) destroyDataRaftMuLocked() error {
 
 	// Save a tombstone. The range cannot be re-replicated onto this
 	// node without having a replica ID of at least desc.NextReplicaID.
+	ctx := r.AnnotateCtx(context.TODO())
+	if err := r.setTombstoneKey(ctx, batch, desc); err != nil {
+		return err
+	}
+	return batch.Commit()
+}
+
+func (r *Replica) setTombstoneKey(
+	ctx context.Context, eng engine.ReadWriter, desc *roachpb.RangeDescriptor,
+) error {
 	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: desc.NextReplicaID,
 	}
-	ctx := r.AnnotateCtx(context.TODO())
-	if err := engine.MVCCPutProto(ctx, batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
-		return err
-	}
-
-	return batch.Commit()
+	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
+		hlc.ZeroTimestamp, nil, tombstone)
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -723,11 +732,24 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 // setReplicaIDLocked requires that the replica lock is held.
 func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if replicaID == 0 {
-		// If the incoming message didn't give us a new replica ID,
-		// there's nothing to do (this is only expected for preemptive snapshots).
-		return nil
+		// If the incoming message didn't give us a new replica ID it is a
+		// preemptive snapshot. Clear the existing replica ID and note the minimum
+		// replica ID we can accept for future messages.
+		r.mu.replicaID = 0
+		if r.mu.minReplicaID == r.mu.state.Desc.NextReplicaID {
+			return nil
+		}
+		r.mu.minReplicaID = r.mu.state.Desc.NextReplicaID
+		ctx := r.AnnotateCtx(context.TODO())
+		// TODO(peter): Is writing the tombstone necessary? If this replica is
+		// destroyed we'll write the tombstone then. If we crash before applying
+		// the preemptive snapshot we'll be in the same state as before the
+		// preemptive snapshot (old replica present).
+		return r.setTombstoneKey(ctx, r.store.Engine(), r.mu.state.Desc)
 	}
-	if r.mu.replicaID == replicaID {
+	if replicaID < r.mu.minReplicaID {
+		return &roachpb.RaftGroupDeletedError{}
+	} else if r.mu.replicaID == replicaID {
 		return nil
 	} else if r.mu.replicaID > replicaID {
 		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
