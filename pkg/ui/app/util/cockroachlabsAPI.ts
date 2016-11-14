@@ -32,7 +32,7 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T, config: Fetch
       throw Error(res.statusText);
     }
     return res.json();
-  });
+  }) as Promise<any>; // TODO(tamird): why is this cast required?
 }
 
 /**

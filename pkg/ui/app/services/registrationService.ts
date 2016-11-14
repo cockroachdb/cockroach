@@ -99,7 +99,7 @@ export function syncRegistration(state: AdminUIState, dispatch: (a: any) => any,
 
   const helpusData: uiData.OptInAttributes = uiData.getData(state, uiData.KEY_HELPUS);
   const clusterId = state.cachedData.cluster.data.cluster_id;
-  let cockroachServerRequest: Promise<void>;
+  let cockroachServerRequest: Promise<{}>;
   // Register the cluster if the user opted in. Deregister it if they opted out.
   if (helpusData && helpusData.optin) {
     cockroachServerRequest = registerCluster({
