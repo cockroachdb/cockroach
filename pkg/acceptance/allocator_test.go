@@ -38,7 +38,7 @@ package acceptance
 //
 // Things to note:
 // - You must use an SSH key without a passphrase. It is recommended that you
-//   create a neww key for this purpose named google_compute_engine so that
+//   create a new key for this purpose named google_compute_engine so that
 //   gcloud and related tools can use it too. Create the key with:
 //     ssh-keygen -f ~/.ssh/google_compute_engine
 // - Your SSH key (-key-name) for Google Cloud Platform must be in

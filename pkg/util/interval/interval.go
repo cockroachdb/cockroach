@@ -217,7 +217,7 @@ func (n *Node) fixUp(fast bool) *Node {
 	return n
 }
 
-// adjustRange sets the Range to the maximum extent of the childrens' Range
+// adjustRange sets the Range to the maximum extent of the children's Range
 // spans and the node's Elem span.
 func (n *Node) adjustRange() {
 	if n.Left == nil {

@@ -141,7 +141,7 @@ func (m *Locality) Reset()                    { *m = Locality{} }
 func (*Locality) ProtoMessage()               {}
 func (*Locality) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{8} }
 
-// Tier represents one level of the locality hiearchy.
+// Tier represents one level of the locality hierarchy.
 type Tier struct {
 	// Key is the name of tier and should match all other nodes.
 	Key string `protobuf:"bytes,1,opt,name=key" json:"key"`
