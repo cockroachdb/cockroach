@@ -145,6 +145,7 @@ func pruneTimeSeries(
 ) error {
 	thresholds := computeThresholds(now.WallTime)
 
+	b := &client.Batch{}
 	for _, timeSeries := range timeSeriesList {
 		// Time series data for a specific resolution falls in a contiguous key
 		// range, and can be deleted with a DelRange command.
@@ -164,10 +165,6 @@ func pruneTimeSeries(
 			end = start.PrefixEnd()
 		}
 
-		// TODO(mrtracy): There is no reason not to execute the individual
-		// deletes in parallel, although the best way to do that is not clear.
-		// See the RFC PR #9343 for details.
-		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
 			Span: roachpb.Span{
 				Key:    start,
@@ -175,12 +172,9 @@ func pruneTimeSeries(
 			},
 			Inline: true,
 		})
-		if err := db.Run(ctx, b); err != nil {
-			return err
-		}
 	}
 
-	return nil
+	return db.Run(ctx, b)
 }
 
 // computeThresholds returns a map of timestamps for each resolution supported
