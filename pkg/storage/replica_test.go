@@ -6030,6 +6030,47 @@ func TestReplicaIDChangePending(t *testing.T) {
 	<-commandProposed
 }
 
+func TestSetReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreConfig(nil)
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, tsc)
+	defer tc.Stop()
+
+	repl := tc.repl
+
+	testCases := []struct {
+		replicaID    roachpb.ReplicaID
+		minReplicaID roachpb.ReplicaID
+		newReplicaID roachpb.ReplicaID
+		expected     string
+	}{
+		{0, 0, 1, ""},
+		{0, 1, 1, ""},
+		{0, 2, 1, "raft group deleted"},
+		{1, 2, 1, ""},
+		{2, 0, 1, "replicaID cannot move backwards"},
+	}
+	for i, c := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			repl.mu.Lock()
+			repl.mu.replicaID = c.replicaID
+			repl.mu.minReplicaID = c.minReplicaID
+			repl.mu.Unlock()
+
+			err := repl.setReplicaID(c.newReplicaID)
+			if c.expected == "" {
+				if err != nil {
+					t.Fatalf("expected success, but found %v", err)
+				}
+			} else if !testutils.IsError(err, c.expected) {
+				t.Fatalf("expected %s, but found %v", c.expected, err)
+			}
+		})
+	}
+}
+
 func TestReplicaRetryRaftProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
