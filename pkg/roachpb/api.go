@@ -692,6 +692,28 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 	}
 }
 
+// NewConditionalPutInline returns a Request initialized to put value
+// as a byte slice at key if the existing value at key equals
+// expValueBytes using an inline value.
+func NewConditionalPutInline(key Key, value, expValue Value) Request {
+	value.InitChecksum(key)
+	var expValuePtr *Value
+	if expValue.RawBytes != nil {
+		// Make a copy to avoid forcing expValue itself on to the heap.
+		expValueTmp := expValue
+		expValuePtr = &expValueTmp
+		expValue.InitChecksum(key)
+	}
+	return &ConditionalPutRequest{
+		Span: Span{
+			Key: key,
+		},
+		Value:    value,
+		ExpValue: expValuePtr,
+		Inline:   true,
+	}
+}
+
 // NewInitPut returns a Request initialized to put the value at key,
 // as long as the key doesn't exist, returning an error if the key
 // exists and the existing value is different from value.

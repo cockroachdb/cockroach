@@ -443,6 +443,44 @@ func TestClientPutInline(t *testing.T) {
 	}
 }
 
+func TestClientCPutInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	db := createTestClient(t, s)
+
+	value := []byte("value")
+	if err := db.CPutInline(context.TODO(), testUser+"/key", value, nil); err != nil {
+		t.Fatalf("unable to put value: %s", err)
+	}
+	gr, err := db.Get(context.TODO(), testUser+"/key")
+	if err != nil {
+		t.Fatalf("unable to get value: %s", err)
+	}
+	if !bytes.Equal(value, gr.ValueBytes()) {
+		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
+	}
+	if ts := gr.Value.Timestamp; !ts.Equal(hlc.ZeroTimestamp) {
+		t.Fatalf("expected zero timestamp; got %s", ts)
+	}
+
+	// Now write conditionally with previous value as expected.
+	value2 := []byte("value2")
+	if err := db.CPutInline(context.TODO(), testUser+"/key", value2, value); err != nil {
+		t.Fatalf("unable to put value: %s", err)
+	}
+	gr, err = db.Get(context.TODO(), testUser+"/key")
+	if err != nil {
+		t.Fatalf("unable to get value: %s", err)
+	}
+	if !bytes.Equal(value2, gr.ValueBytes()) {
+		t.Errorf("expected values equal; %s != %s", value2, gr.ValueBytes())
+	}
+	if ts := gr.Value.Timestamp; !ts.Equal(hlc.ZeroTimestamp) {
+		t.Fatalf("expected zero timestamp; got %s", ts)
+	}
+}
+
 // TestClientEmptyValues verifies that empty values are preserved
 // for both empty []byte and integer=0. This used to fail when we
 // allowed the protobufs to be gob-encoded using the default go rpc

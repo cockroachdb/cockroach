@@ -38,6 +38,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1060,6 +1062,60 @@ func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
+}
+
+// getQueueState reads per-replica queue state.
+func (r *Replica) getQueueState(ctx context.Context) (storagebase.QueueState, error) {
+	key := keys.QueueStateKey(r.Desc().StartKey)
+	qs := storagebase.QueueState{}
+	if r.store != nil {
+		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &qs)
+		if err != nil {
+			return qs, err
+		}
+	}
+	// Note that if there's no QueueState on disk, it's correct to just
+	// use the zero struct, since we don't know the correct low water.
+	return qs, nil
+}
+
+// setLastProcessed updates the per-replica queue state by adding a
+// last processed time for the named queue.
+func (r *Replica) setLastProcessed(ctx context.Context, name string, ts hlc.Timestamp) error {
+	// We loop and use a conditional put in order to account for the
+	// possibility of two queues updating state at the same time and
+	// losing information. We use a non-transactional cput to avoid
+	// creating intents and multiple versions, which would otherwise
+	// need to be navigated when splitting ranges.
+	for ir := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); ir.Next(); {
+		key := keys.QueueStateKey(r.Desc().StartKey)
+		var qs storagebase.QueueState
+		val, err := r.store.DB().Get(ctx, key)
+		if err != nil {
+			return err
+		}
+		if val.Value == nil {
+			var newQS storagebase.QueueState
+			newQS.SetLastProcessed(name, ts)
+			err = r.store.DB().CPutInline(ctx, key, &newQS, nil)
+		} else {
+			if err = val.ValueProto(&qs); err != nil {
+				return err
+			}
+			newQS := qs
+			newQS.LastProcessed = map[string]hlc.Timestamp{}
+			for n, ts := range qs.LastProcessed {
+				newQS.SetLastProcessed(n, ts)
+			}
+			newQS.SetLastProcessed(name, ts)
+			err = r.store.DB().CPutInline(ctx, key, &newQS, &qs)
+		}
+		if _, ok := err.(*roachpb.ConditionFailedError); ok {
+			continue
+		}
+		return err
+	}
+	return errors.Errorf("exceeded retry attempts setting last processed for %s", name)
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil

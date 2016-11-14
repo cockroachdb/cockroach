@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -214,6 +215,10 @@ func (r *Replica) IsQuiescent() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.quiescent
+}
+
+func (r *Replica) GetQueueState(ctx context.Context) (storagebase.QueueState, error) {
+	return r.getQueueState(ctx)
 }
 
 func GetGCQueueTxnCleanupThreshold() time.Duration {

@@ -18,6 +18,7 @@ package storage
 
 import (
 	"container/heap"
+	"fmt"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -109,6 +111,21 @@ func isExpectedQueueError(err error) bool {
 	return err == nil || cause == errQueueDisabled || cause == errReplicaNotAddable
 }
 
+// shouldQueueAgain is a helper function to determine whether the
+// replica should be queued according to the current time, the last
+// time the replica was processed, and the minimum interval between
+// successive processing. If minInterval is 0, nothing will be
+// queued.
+func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) bool {
+	if minInterval == 0 || last == hlc.ZeroTimestamp {
+		return true
+	}
+	if now.GoTime().Sub(last.GoTime()) >= minInterval {
+		return true
+	}
+	return false
+}
+
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
@@ -149,6 +166,13 @@ type queueConfig struct {
 	acceptsUnsplitRanges bool
 	// processTimeout is the timeout for processing a replica.
 	processTimeout time.Duration
+	// minInterval is the minimum interval between successive processing
+	// of the same replica. 0 indicates processing should not wait to repeat.
+	// If this value is non-zero, needsLease MUST be true because the last
+	// processed time is stored and replicated for a range, not any one
+	// specific replica.
+	// TODO(spencer): support per-replica last processed times.
+	minInterval time.Duration
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -215,6 +239,11 @@ func newBaseQueue(
 	// Use the default process timeout if none specified.
 	if cfg.processTimeout == 0 {
 		cfg.processTimeout = defaultProcessTimeout
+	}
+	// Cannot specify minInterval > 0 if the queue isn't limited to leaseholders.
+	if cfg.minInterval > 0 && !cfg.needsLease {
+		panic(fmt.Sprintf("queue %s specifies minInterval=%s but also "+
+			"does require the range lease", name, cfg.minInterval))
 	}
 
 	ambient := store.cfg.AmbientCtx
@@ -327,6 +356,20 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 			lease.Covers(repl.store.Clock().Now()) && !lease.OwnedBy(repl.store.StoreID()) {
 			log.VEventf(ctx, 1, "needs lease; not adding: %+v", lease)
 			return
+		}
+
+		if bq.minInterval > 0 && !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+			// Fetch the replica's queue state.
+			qs, err := repl.getQueueState(ctx)
+			if err != nil {
+				log.ErrEventf(ctx, "couldn't fetch queue state: %v", err)
+				qs = storagebase.QueueState{}
+			}
+			// Skip this queue if the replica doesn't need to be processed yet.
+			if lpTS := qs.GetLastProcessed(bq.name); !shouldQueueAgain(now, lpTS, bq.minInterval) {
+				log.VEventf(ctx, 1, "processed recently: %s", lpTS)
+				return
+			}
 		}
 	}
 
@@ -545,7 +588,8 @@ func (bq *baseQueue) processReplica(
 
 	log.VEventf(queueCtx, 3, "processing")
 	start := timeutil.Now()
-	err := bq.impl.process(ctx, clock.Now(), repl, cfg)
+	now := clock.Now()
+	err := bq.impl.process(ctx, now, repl, cfg)
 	duration := timeutil.Since(start)
 	bq.processingNanos.Inc(duration.Nanoseconds())
 	if err != nil {
@@ -554,6 +598,12 @@ func (bq *baseQueue) processReplica(
 	log.VEventf(queueCtx, 2, "done: %s", duration)
 	log.Event(ctx, "done")
 	bq.successes.Inc(1)
+	// Keep track of the last processed time for this queue.
+	if bq.needsLease && bq.minInterval > 0 {
+		if err := repl.setLastProcessed(queueCtx, bq.name, now); err != nil {
+			log.ErrEventf(ctx, "failed to update last processed time: %v", err)
+		}
+	}
 	return nil
 }
 

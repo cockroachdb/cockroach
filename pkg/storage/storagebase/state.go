@@ -14,8 +14,31 @@
 
 package storagebase
 
+import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 // IsFrozen returns true if the underlying ReplicaState indicates that the
 // Replica is frozen.
 func (s ReplicaState) IsFrozen() bool {
 	return s.Frozen == ReplicaState_FROZEN
+}
+
+// GetLastProcessed returns the last processed time corresponding to the
+// specified queue. If no last processed time is recorded, returns the
+// low water timestamp.
+func (qs *QueueState) GetLastProcessed(name string) hlc.Timestamp {
+	if qs.LastProcessed == nil {
+		return hlc.ZeroTimestamp
+	}
+	if ts, ok := qs.LastProcessed[name]; ok {
+		return ts
+	}
+	return hlc.ZeroTimestamp
+}
+
+// SetLastProcessed updates the last processed time for the specified queue.
+func (qs *QueueState) SetLastProcessed(name string, ts hlc.Timestamp) {
+	if qs.LastProcessed == nil {
+		qs.LastProcessed = map[string]hlc.Timestamp{}
+	}
+	qs.LastProcessed[name] = ts
 }

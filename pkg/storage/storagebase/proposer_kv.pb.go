@@ -16,6 +16,7 @@
 		ReplicatedProposalData
 		ReplicaState
 		RangeInfo
+		QueueState
 */
 package storagebase
 
