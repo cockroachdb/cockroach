@@ -1202,7 +1202,7 @@ func (e *Executor) execStmt(
 					return result, err
 				}
 			}
-			if err := result.Rows.AddRow(values); err != nil {
+			if _, err := result.Rows.AddRow(values); err != nil {
 				return result, err
 			}
 		}

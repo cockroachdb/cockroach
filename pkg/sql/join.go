@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 )
@@ -44,8 +43,60 @@ const (
 // columns specified by the join constraints), 'seen' is used to determine if
 // there was a matching group (with the same group key) in the opposite stream.
 type bucket struct {
-	rows *RowContainer
+	rows []parser.DTuple
 	seen bool
+}
+
+func (b *bucket) Seen() bool {
+	return b.seen
+}
+
+func (b *bucket) Rows() []parser.DTuple {
+	return b.rows
+}
+
+func (b *bucket) MarkSeen() {
+	b.seen = true
+}
+
+func (b *bucket) AddRow(row parser.DTuple) {
+	b.rows = append(b.rows, row)
+}
+
+type buckets struct {
+	buckets      map[string]*bucket
+	rowContainer *RowContainer
+}
+
+func (b *buckets) Buckets() map[string]*bucket {
+	return b.buckets
+}
+
+func (b *buckets) AddRow(encoding []byte, row parser.DTuple) error {
+	bk, ok := b.buckets[string(encoding)]
+	if !ok {
+		bk = &bucket{}
+	}
+	rowCopy, err := b.rowContainer.AddRow(row)
+	if err != nil {
+		return err
+	}
+	bk.AddRow(rowCopy)
+	if !ok {
+		b.buckets[string(encoding)] = bk
+	}
+	return nil
+}
+
+func (b *buckets) Close() {
+	b.rowContainer.Close()
+	b.rowContainer = nil
+	b.buckets = nil
+}
+
+func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
+	bk, ok := b.buckets[string(encoding)]
+	return bk, ok
 }
 
 // joinNode is a planNode whose rows are the result of an inner or
@@ -93,8 +144,7 @@ type joinNode struct {
 	// Values().
 	buffer *RowBuffer
 
-	buckets map[string]bucket
-	acc     mon.BoundAccount
+	buckets buckets
 
 	// emptyRight contain tuples of NULL values to use on the
 	// right for outer joins when the filter fails.
@@ -216,12 +266,14 @@ func (p *planner) makeJoin(
 	if algorithm == nestedLoopJoin {
 		n.rightRows = p.newContainerValuesNode(right.plan.Columns(), 0)
 	} else if algorithm == hashJoin {
-		acc := p.session.TxnState.makeBoundAccount()
-		n.acc = acc
 		n.buffer = &RowBuffer{
-			rows: NewRowContainer(acc, n.Columns(), 0),
+			RowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.Columns(), 0),
 		}
-		n.buckets = make(map[string]bucket)
+
+		n.buckets = buckets{
+			buckets:      make(map[string]*bucket),
+			rowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0),
+		}
 	}
 
 	return planDataSource{
@@ -367,7 +419,7 @@ func (n *joinNode) nestedLoopJoinStart() error {
 			break
 		}
 		row := n.right.plan.Values()
-		if err := n.rightRows.rows.AddRow(row); err != nil {
+		if _, err := n.rightRows.rows.AddRow(row); err != nil {
 			return err
 		}
 	}
@@ -390,23 +442,16 @@ func (n *joinNode) hashJoinStart() error {
 			return nil
 		}
 		row := n.right.plan.Values()
-		encoded, _, err := n.pred.encode(scratch, row, rightSide)
+		encoding, _, err := n.pred.encode(scratch, row, rightSide)
 		if err != nil {
 			return err
 		}
 
-		b, ok := n.buckets[string(encoded)]
-		if !ok {
-			b.rows = NewRowContainer(n.acc, n.right.plan.Columns(), 0)
+		if err := n.buckets.AddRow(encoding, row); err != nil {
+			return err
 		}
 
-		copy := append(parser.DTuple(nil), row...)
-		if err := b.rows.AddRow(copy); err != nil {
-			return nil
-		}
-		n.buckets[string(encoded)] = b
-
-		scratch = encoded[:0]
+		scratch = encoding[:0]
 	}
 }
 
@@ -546,7 +591,7 @@ func (n *joinNode) nestedLoopJoinNext() (bool, error) {
 // TODO(irfansharif): Currently hash joins are implemented only for USING and
 // NATURAL, predicate extraction for ON ignored.
 func (n *joinNode) hashJoinNext() (bool, error) {
-	if len(n.buckets) == 0 {
+	if len(n.buckets.Buckets()) == 0 {
 		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
 			// No rows on right; don't even try.
 			return false, nil
@@ -571,7 +616,7 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 		}
 
 		lrow := n.left.plan.Values()
-		encoded, containsNull, err := n.pred.encode(scratch, lrow, leftSide)
+		encoding, containsNull, err := n.pred.encode(scratch, lrow, leftSide)
 		if err != nil {
 			return false, err
 		}
@@ -621,23 +666,23 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 		//    | NULL |  52  |
 		if containsNull {
 			if n.joinType == joinTypeInner {
-				scratch = encoded[:0]
+				scratch = encoding[:0]
 				// Failed to match -- no matching row, nothing to do.
 				continue
 			}
 			// We append an empty right row to the left row, adding the result
 			// to our buffer for the subsequent call to Next().
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
 			}
 			return n.buffer.Next(), nil
 		}
 
-		b, ok := n.buckets[string(encoded)]
+		b, ok := n.buckets.Fetch(encoding)
 		if !ok {
 			if n.joinType == joinTypeInner {
-				scratch = encoded[:0]
+				scratch = encoding[:0]
 				continue
 			}
 			// Outer join: unmatched rows are padded with NULLs.
@@ -645,35 +690,31 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 			// empty right row to the left row, adding the result to our buffer
 			// for the subsequent call to Next().
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
 			}
 			return n.buffer.Next(), nil
 		}
+		b.MarkSeen()
 
-		b.seen = true
-		n.buckets[string(encoded)] = b
 		// We iterate through all the rows in the bucket attempting to match the
 		// filter, if the filter passes we add it to the buffer.
-		for i := 0; i < b.rows.Len(); i++ {
-			rrow := b.rows.At(i)
+		for _, rrow := range b.Rows() {
 			passesFilter, err := n.pred.eval(n.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}
 
 			if !passesFilter {
-				scratch = encoded[:0]
+				scratch = encoding[:0]
 				continue
 			}
 
 			n.pred.prepareRow(n.output, lrow, rrow)
-			if err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
 			}
 		}
-		// If any of the joined rows matched the filter we return true, else we
-		// try for the next lrow.
 		if n.buffer.Next() {
 			return true, nil
 		}
@@ -684,17 +725,15 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 		return false, nil
 	}
 
-	for k, b := range n.buckets {
-		if !b.seen {
-			b.seen = true
-			for i := 0; i < b.rows.Len(); i++ {
-				rrow := b.rows.At(i)
+	for _, b := range n.buckets.Buckets() {
+		if !b.Seen() {
+			for _, rrow := range b.Rows() {
 				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
-				if err := n.buffer.AddRow(n.output); err != nil {
+				if _, err := n.buffer.AddRow(n.output); err != nil {
 					return false, err
 				}
 			}
-			n.buckets[k] = b
+			b.MarkSeen()
 		}
 	}
 
@@ -739,12 +778,7 @@ func (n *joinNode) Close() {
 	case hashJoin:
 		n.buffer.Close()
 		n.buffer = nil
-		for _, b := range n.buckets {
-			if b.rows != nil {
-				b.rows.Close()
-				b.rows = nil
-			}
-		}
+		n.buckets.Close()
 	default:
 		panic("unsupported JOIN algorithm")
 	}

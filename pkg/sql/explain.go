@@ -215,7 +215,7 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 		parser.NewDString("result"),
 		parser.NewDString(formatColumns(plan.Columns(), true)),
 	}
-	if err := v.rows.AddRow(row); err != nil {
+	if _, err := v.rows.AddRow(row); err != nil {
 		return err
 	}
 
@@ -232,7 +232,7 @@ func populateTypes(v *valuesNode, plan planNode, level int) error {
 			parser.NewDString(elt),
 			parser.NewDString(desc),
 		}
-		err = v.rows.AddRow(row)
+		_, err = v.rows.AddRow(row)
 	}
 	plan.ExplainTypes(regType)
 
@@ -300,7 +300,7 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) erro
 		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
 		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
 	}
-	if err := v.rows.AddRow(row); err != nil {
+	if _, err := v.rows.AddRow(row); err != nil {
 		return err
 	}
 
