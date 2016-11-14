@@ -42,8 +42,8 @@ import (
 func TestDumpRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest()
-	defer c.stop()
+	c := newCLITest(t)
+	defer c.stop(true)
 
 	const create = `
 	CREATE DATABASE d;

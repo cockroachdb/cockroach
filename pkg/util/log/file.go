@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -43,46 +44,75 @@ var MaxSize uint64 = 1024 * 1024 * 10
 // If non-empty, overrides the choice of directory in which to write logs. See
 // createLogDirs for the full list of possible destinations. Note that the
 // default is to log to stderr independent of this setting. See --logtostderr.
-var logDir = func() string {
-	name, err := ioutil.TempDir("", "cockroach")
-	if err != nil {
-		panic(err)
+
+type logDirName struct {
+	syncutil.Mutex
+	name string
+}
+
+var _ flag.Value = &logDirName{}
+
+var logDir logDirName
+
+// Set implements the flag.Value interface.
+func (l *logDirName) Set(dir string) error {
+	l.Lock()
+	defer l.Unlock()
+	if l.name != "" {
+		return fmt.Errorf("log directory already set to %s", l.name)
 	}
-	return name
-}()
-var logDirSet bool
-
-// DirSet returns true of the log directory has been changed from its default.
-func DirSet() bool {
-	return logDirSet
-}
-
-type stringValue struct {
-	val *string
-	set *bool
-}
-
-var _ flag.Value = &stringValue{}
-
-func newStringValue(val *string, set *bool) *stringValue {
-	return &stringValue{val: val, set: set}
-}
-
-func (s *stringValue) Set(val string) error {
-	*s.val = val
-	*s.set = true
+	l.name = dir
 	return nil
 }
 
-func (s *stringValue) Type() string {
+// Type implements the flag.Value interface.
+func (l *logDirName) Type() string {
 	return "string"
 }
 
-func (s *stringValue) String() string {
-	if s.val == nil {
-		return ""
+// String implements the flag.Value interface.
+func (l *logDirName) String() string {
+	l.Lock()
+	defer l.Unlock()
+	return l.name
+}
+
+func (l *logDirName) clear() {
+	// For testing only.
+	l.Lock()
+	defer l.Unlock()
+	l.name = ""
+}
+
+func (l *logDirName) isSet() bool {
+	l.Lock()
+	defer l.Unlock()
+	return l.name != ""
+}
+
+func (l *logDirName) get() string {
+	l.Lock()
+	defer l.Unlock()
+	if len(l.name) == 0 {
+		panic("log directory not set")
 	}
-	return *s.val
+	return l.name
+}
+
+// DirSet returns true of the log directory has been changed from its default.
+func DirSet() bool {
+	return logDir.isSet()
+}
+
+// DirTestOverride sets the default value for the logging output directory
+// for use in tests.
+func DirTestOverride(dir string) {
+	if dir == "" {
+		logging.closeFilesLocked()
+	}
+	logDir.Lock()
+	defer logDir.Unlock()
+	logDir.name = dir
 }
 
 // logFileRE matches log files to avoid exposing non-log files accidentally
@@ -193,17 +223,18 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
 func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
-	if len(logDir) == 0 {
+	if !logDir.isSet() {
 		return nil, "", errDirectoryNotSet
 	}
 	name, link := logName(severity, t)
-	fname := filepath.Join(logDir, name)
+	dir := logDir.get()
+	fname := filepath.Join(dir, name)
 
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err == nil {
-		symlink := filepath.Join(logDir, link)
+		symlink := filepath.Join(dir, link)
 		_ = os.Remove(symlink) // ignore err
 		err = os.Symlink(fname, symlink)
 	}
@@ -241,10 +272,10 @@ func verifyFile(filename string) error {
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	if logDir == "" {
+	if !logDir.isSet() {
 		return nil, nil
 	}
-	infos, err := ioutil.ReadDir(logDir)
+	infos, err := ioutil.ReadDir(logDir.get())
 	if err != nil {
 		return results, err
 	}
@@ -275,7 +306,10 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
 	}
 	if !filepath.IsAbs(filename) {
-		filename = filepath.Join(logDir, filename)
+		if !logDir.isSet() {
+			return nil, errors.New("log directory not configured")
+		}
+		filename = filepath.Join(logDir.get(), filename)
 	}
 	if !restricted {
 		var err error

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	stdLog "log"
 	"os"
 	"path/filepath"
@@ -416,7 +417,20 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	otherFile, err := os.Create(filepath.Join(logDir, "other.txt"))
+	tmpDir, err := ioutil.TempDir("", "logtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Fatalf("failed to clean up temp directory: %s", err)
+		}
+	}()
+	if err := logDir.Set(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	otherFile, err := os.Create(filepath.Join(logDir.get(), "other.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,11 +442,11 @@ func TestGetLogReader(t *testing.T) {
 		expErrUnrestricted string
 	}{
 		// File is not specified (trying to open a directory instead).
-		{logDir, "pathnames must be basenames", "not a regular file"},
+		{logDir.get(), "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
 		{warn.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(logDir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
+		{filepath.Join(logDir.get(), removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
 		{removePeriods(program) + ".WARNING", "malformed log filename", ""},
 		// Non-log file.
