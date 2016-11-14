@@ -2490,7 +2490,7 @@ var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", t
 // Note that both the quiesce and wake-the-leader messages can be dropped or
 // reordered by the transport. The wake-the-leader message is termless so it
 // won't affect elections and, while it triggers reproprosals that won't cause
-// problems on reorderin. If the wake-the-leader message is dropped the leader
+// problems on reordering. If the wake-the-leader message is dropped the leader
 // won't be woken and the follower will eventually call an election.
 //
 // If the quiesce message is dropped the follower which missed it will not

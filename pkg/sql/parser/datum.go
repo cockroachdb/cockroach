@@ -914,7 +914,7 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 	// abbreviated zone as well as for the default zone if not specified
 	// explicitly. For non-'WITH TIME ZONE' strings (which this is used to parse),
 	// we do not want to add a non-UTC zone if one is not explicitly stated, so we
-	// use time.UTC rather than the sesion location. Unfortunately this also means
+	// use time.UTC rather than the session location. Unfortunately this also means
 	// we do not use the session zone for resolving abbreviations.
 	t, err := parseTimestampInLocation(s, time.UTC)
 	if err != nil {
@@ -1086,7 +1086,7 @@ type DInterval struct {
 // string, or an error if parsing is unsuccessful.
 func ParseDInterval(s string) (*DInterval, error) {
 	// At this time the only supported interval formats are:
-	// - SQL stardard.
+	// - SQL standard.
 	// - Postgres compatible.
 	// - iso8601 format (with designators only), see interval.go for
 	//   sources of documentation.
