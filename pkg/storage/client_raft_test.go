@@ -1906,19 +1906,19 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	mtc.expireLeases()
 }
 
-// TestRaftRemoveRace adds and removes a replica repeatedly in an
-// attempt to reproduce a race
-// (https://github.com/cockroachdb/cockroach/issues/1911). Note that
-// 10 repetitions is not enough to reliably reproduce the problem, but
-// it's better than any other tests we have for this (increasing the
-// number of repetitions adds an unacceptable amount of test runtime).
+// TestRaftRemoveRace adds and removes a replica repeatedly in an attempt to
+// reproduce a race (see #1911 and #9037).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := startMultiTestContext(t, 10)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 1, 2)
+	const rangeID = roachpb.RangeID(1)
+	// Up-replicate to a bunch of nodes which stresses a condition where a
+	// replica created via a preemptive snapshot receives a message for a
+	// previous incarnation of the replica (i.e. has a smaller replica ID) that
+	// existed on the same store.
+	mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 	for i := 0; i < 10; i++ {
 		mtc.unreplicateRange(rangeID, 2)

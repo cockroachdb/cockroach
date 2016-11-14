@@ -337,6 +337,9 @@ type Replica struct {
 		// Raft group). The replica ID will be non-zero whenever the replica is
 		// part of a Raft group.
 		replicaID roachpb.ReplicaID
+		// The minimum allowed ID for this replica. Initialized from
+		// RaftTombstone.NextReplicaID.
+		minReplicaID roachpb.ReplicaID
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
@@ -702,16 +705,25 @@ func (r *Replica) destroyDataRaftMuLocked() error {
 
 	// Save a tombstone. The range cannot be re-replicated onto this
 	// node without having a replica ID of at least desc.NextReplicaID.
+	ctx := r.AnnotateCtx(context.TODO())
+	if err := r.setTombstoneKey(ctx, batch, desc); err != nil {
+		return err
+	}
+	return batch.Commit()
+}
+
+func (r *Replica) setTombstoneKey(
+	ctx context.Context, eng engine.ReadWriter, desc *roachpb.RangeDescriptor,
+) error {
+	r.mu.Lock()
+	r.mu.minReplicaID = desc.NextReplicaID
+	r.mu.Unlock()
 	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: desc.NextReplicaID,
 	}
-	ctx := r.AnnotateCtx(context.TODO())
-	if err := engine.MVCCPutProto(ctx, batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
-		return err
-	}
-
-	return batch.Commit()
+	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
+		hlc.ZeroTimestamp, nil, tombstone)
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -722,16 +734,23 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 
 // setReplicaIDLocked requires that the replica lock is held.
 func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
-	if replicaID == 0 {
-		// If the incoming message didn't give us a new replica ID,
-		// there's nothing to do (this is only expected for preemptive snapshots).
+	if r.mu.replicaID == replicaID {
+		// The common case: the replica ID is unchanged.
 		return nil
 	}
-	if r.mu.replicaID == replicaID {
+	if replicaID == 0 {
+		// If the incoming message does not have a new replica ID it is a
+		// preemptive snapshot. We'll set a tombstone for the old replica ID if the
+		// snapshot is accepted.
 		return nil
-	} else if r.mu.replicaID > replicaID {
+	}
+	if replicaID < r.mu.minReplicaID {
+		return &roachpb.RaftGroupDeletedError{}
+	}
+	if r.mu.replicaID > replicaID {
 		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
-	} else if r.mu.replicaID != 0 {
+	}
+	if r.mu.replicaID != 0 {
 		// TODO(bdarnell): clean up previous raftGroup (update peers)
 	}
 
