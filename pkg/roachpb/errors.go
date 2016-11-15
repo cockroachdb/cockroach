@@ -339,17 +339,18 @@ func (e *RangeFrozenError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RangeFrozenError{}
 
-// NewAmbiguousResultError initializes a new AmbiguousResultError.
-func NewAmbiguousResultError() *AmbiguousResultError {
-	return &AmbiguousResultError{}
+// NewAmbiguousResultError initializes a new AmbiguousResultError with
+// an explanatory message.
+func NewAmbiguousResultError(msg string) *AmbiguousResultError {
+	return &AmbiguousResultError{Message: msg}
 }
 
 func (e *AmbiguousResultError) Error() string {
-	return "result is ambiguous"
+	return e.message(nil)
 }
 
 func (e *AmbiguousResultError) message(_ *Error) string {
-	return e.Error()
+	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
 }
 
 var _ ErrorDetailInterface = &AmbiguousResultError{}
