@@ -162,15 +162,27 @@ func updatesTimestampCache(r roachpb.Request) bool {
 	return updatesTimestampCacheMethods[m]
 }
 
-// proposalResult indicates the result of a proposal with the following semantics:
-// - If ShouldRetry is set, the proposal applied at a Lease index it was not
-//   legal for. The command should be retried.
-// - Otherwise, exactly one of the BatchResponse or the Error are set and
-//   represent the result of the proposal.
+type proposalRetryReason int
+
+const (
+	proposalNoRetry proposalRetryReason = iota
+	// proposalIllegalLeaseIndex indicates the proposal failed to apply at
+	// a Lease index it was not legal for. The command should be retried.
+	proposalIllegalLeaseIndex
+	// proposalReproposed indicates the proposal was re-proposed, meaning
+	// it should be retried. However, the original proposal may have succeeded,
+	// so if the retry does not succeed, care must be taken to correctly inform
+	// the caller via an AmbiguousResultError.
+	proposalReproposed
+)
+
+// proposalResult indicates the result of a proposal. Exactly one of
+// the BatchResponse or the Error are set and represent the result of
+// the proposal.
 type proposalResult struct {
-	Reply       *roachpb.BatchResponse
-	Err         *roachpb.Error
-	ShouldRetry bool
+	Reply         *roachpb.BatchResponse
+	Err           *roachpb.Error
+	ProposalRetry proposalRetryReason
 }
 
 type replicaChecksum struct {
@@ -1222,7 +1234,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest,
-) (func(*roachpb.BatchResponse, *roachpb.Error, bool) *roachpb.Error, error) {
+) (func(*roachpb.BatchResponse, *roachpb.Error, proposalRetryReason) *roachpb.Error, error) {
 	var cmdGlobal *cmd
 	var cmdLocal *cmd
 	// Don't use the command queue for inconsistent reads.
@@ -1341,8 +1353,10 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	return func(br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) *roachpb.Error {
-		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr, shouldRetry)
+	return func(
+		br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason,
+	) *roachpb.Error {
+		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr, retry)
 	}, nil
 }
 
@@ -1355,13 +1369,13 @@ func (r *Replica) endCmds(
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
-	shouldRetry bool,
+	retry proposalRetryReason,
 ) *roachpb.Error {
 	// Update the timestamp cache if the command succeeded and is not
 	// being retried. Each request is considered in turn; only those
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
-	if pErr == nil && !shouldRetry && ba.ReadConsistency != roachpb.INCONSISTENT {
+	if pErr == nil && retry == proposalNoRetry && ba.ReadConsistency != roachpb.INCONSISTENT {
 		cr := cacheRequest{
 			timestamp: ba.Timestamp,
 			txnID:     ba.GetTxnID(),
@@ -1567,7 +1581,9 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	endCmdsFunc := func(_ *roachpb.BatchResponse, pErr *roachpb.Error, _ bool) *roachpb.Error {
+	endCmdsFunc := func(
+		_ *roachpb.BatchResponse, pErr *roachpb.Error, _ proposalRetryReason,
+	) *roachpb.Error {
 		return pErr
 	}
 
@@ -1591,7 +1607,7 @@ func (r *Replica) addReadOnlyCmd(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		pErr = endCmdsFunc(br, pErr, false)
+		pErr = endCmdsFunc(br, pErr, proposalNoRetry)
 	}()
 
 	r.mu.Lock()
@@ -1640,8 +1656,49 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 // Range's replicated state. Requests taking this path are ultimately
 // serialized through Raft, but pass through additional machinery whose goal is
 // to allow commands which commute to be proposed in parallel. The naive
-// alternative (submitting requests to Raft one after another, paying massive
-// latency) is only taken for commands whose effects may overlap.
+// alternative, submitting requests to Raft one after another, paying massive
+// latency, is only taken for commands whose effects may overlap.
+//
+// Internally, multiple iterations of the above process are may take
+// place due to the Raft proposal failing retryably, possibly due to
+// proposal reordering or re-proposals.
+func (r *Replica) addWriteCmd(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	var ambiguousResult bool
+	for count := 0; ; count++ {
+		br, pErr, retry := r.tryAddWriteCmd(ctx, ba)
+		switch retry {
+		case proposalIllegalLeaseIndex:
+			continue
+		case proposalReproposed:
+			ambiguousResult = true
+			continue
+		}
+		if pErr != nil {
+			// If we've gotten an indication of possible ambiguous result,
+			// we must return an AmbiguousResultError as we can't be sure of
+			// the ultimate success of earlier attempts.
+			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok && ambiguousResult {
+				log.ErrEventf(ctx, "received error after %d retries; returning ambiguous result: %s",
+					count, pErr)
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("failed Raft re-proposal"))
+			}
+		}
+		return br, pErr
+	}
+}
+
+// tryAddWriteCmd is invoked by addWriteCmd, who will call this method
+// until the returned retry does not indicate a retry condition, in
+// which case a result of the proposal (which is either an error or a
+// successful response) is returned. Retries may happen if either the
+// proposal was submitted to Raft but did not end up in a legal log
+// position, or the proposal was submitted to Raft and then was
+// re-proposed. On re-proposals, the proposal may have applied
+// successfully and so the caller must be careful to indicate an
+// ambiguous result to the caller in the event proposalReproposed
+// is returned.
 //
 // Concretely,
 //
@@ -1664,40 +1721,18 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 //   registered with the timestamp cache, removed from the command queue, and
 //   its result (which could be an error) returned to the client.
 //
-// Internally, multiple iterations of the above process are may take place due
-// to the (rare) need to the Raft proposal failing retryably (usually due to
-// proposal reordering).
-//
 // TODO(tschottdorf): take special care with "special" commands and their
 // reorderings. For example, a batch of writes and a split could be in flight
 // in parallel without overlap, but if the writes hit the RHS, something must
 // prevent them from writing outside of the key range when they apply.
 // Similarly, a command proposed under lease A must not apply under lease B.
-func (r *Replica) addWriteCmd(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	for {
-		br, pErr, shouldRetry := r.tryAddWriteCmd(ctx, ba)
-		if !shouldRetry {
-			return br, pErr
-		}
-	}
-}
-
-// tryAddWriteCmd implements the logic outlined in its caller addWriteCmd, who
-// will call this method until the returned boolean is false, in which case
-// a result of the proposal (which is either an error or a successful response)
-// is returned. If the boolean is true, a proposal was submitted to Raft but
-// did not end up in a legal log position; it is guaranteed that the proposal
-// will never apply successfully and so the caller may and should retry the
-// same invocation of tryAddWriteCmd.
 //
 // NB: changing BatchRequest to a pointer here would have to be done cautiously
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) tryAddWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
+) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	isNonKV := ba.IsNonKV()
 	if !isNonKV {
 		// Add the write to the command queue to gate subsequent overlapping
@@ -1708,13 +1743,13 @@ func (r *Replica) tryAddWriteCmd(
 		log.Event(ctx, "command queue")
 		endCmdsFunc, err := r.beginCmds(ctx, &ba)
 		if err != nil {
-			return nil, roachpb.NewError(err), false
+			return nil, roachpb.NewError(err), proposalNoRetry
 		}
 
 		// Guarantee we remove the commands from the command queue. This is
 		// wrapped to delay pErr evaluation to its value when returning.
 		defer func() {
-			pErr = endCmdsFunc(br, pErr, shouldRetry)
+			pErr = endCmdsFunc(br, pErr, retry)
 		}()
 	}
 
@@ -1724,11 +1759,11 @@ func (r *Replica) tryAddWriteCmd(
 		// replica will propose it to get back to an active state.
 		if pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
-				return nil, pErr, false
+				return nil, pErr, proposalNoRetry
 			}
 			// Only continue if the batch appears freezing-related.
 			if !ba.IsFreeze() {
-				return nil, pErr, false
+				return nil, pErr, proposalNoRetry
 			}
 		}
 	}
@@ -1739,7 +1774,7 @@ func (r *Replica) tryAddWriteCmd(
 		// forward. Or, in the case of a transactional write, the txn
 		// timestamp and possible write-too-old bool.
 		if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
-			return nil, pErr, false
+			return nil, pErr, proposalNoRetry
 		} else if bumped {
 			// There is brittleness built into this system. If we bump the
 			// transaction's timestamp, we must absolutely tell the client in
@@ -1774,7 +1809,7 @@ func (r *Replica) tryAddWriteCmd(
 
 	ch, tryAbandon, err := r.propose(ctx, ba)
 	if err != nil {
-		return nil, roachpb.NewError(err), false
+		return nil, roachpb.NewError(err), proposalNoRetry
 	}
 
 	// If the command was accepted by raft, wait for the range to apply it.
@@ -1783,7 +1818,7 @@ func (r *Replica) tryAddWriteCmd(
 	for {
 		select {
 		case respWithErr := <-ch:
-			return respWithErr.Reply, respWithErr.Err, respWithErr.ShouldRetry
+			return respWithErr.Reply, respWithErr.Err, respWithErr.ProposalRetry
 		case <-ctxDone:
 			// We ignore cancelled contexts for running commands in order to
 			// properly update the timestamp and command queue. Exiting early,
@@ -1801,7 +1836,7 @@ func (r *Replica) tryAddWriteCmd(
 			// finish soon.
 			if tryAbandon() {
 				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("shutdown cancellation")), proposalNoRetry
 			}
 			shouldQuiesce = nil
 		}
@@ -2687,7 +2722,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		// The command's designated lease index range was filled up, so send it
 		// back to the proposer for a retry.
 		log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-		p.done <- proposalResult{ShouldRetry: true}
+		p.done <- proposalResult{ProposalRetry: proposalReproposed}
 		close(p.done)
 		numShouldRetry++
 	}
@@ -3038,7 +3073,7 @@ func (r *Replica) processRaftCommand(
 				// the client has been signaled.
 				ctx = nil
 
-				ch <- proposalResult{ShouldRetry: true}
+				ch <- proposalResult{ProposalRetry: proposalIllegalLeaseIndex}
 				close(ch)
 			}(cmd.done)
 			cmd.done = make(chan proposalResult, 1)
