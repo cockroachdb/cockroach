@@ -298,6 +298,42 @@ func TestHashJoiner(t *testing.T) {
 				{null, v[5], v[1]},
 			},
 		},
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0},
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightEqColumns: []uint32{0},
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_INNER,
+				OutputColumns: []uint32{0, 3, 4},
+				// Implicit $0 = $2 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[2], v[4]},
+					{v[3], v[1]},
+					{v[4], v[5]},
+					{v[5], v[5]},
+				},
+				{
+					{v[1], v[0], v[4]},
+					{v[3], v[4], v[1]},
+					{v[4], v[4], v[5]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
+			},
+		},
 	}
 
 	for _, c := range testCases {
