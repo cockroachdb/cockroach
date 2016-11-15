@@ -79,6 +79,52 @@ func newDistSQLPlanner(
 	return dsp
 }
 
+// distSQLExprCheckVisitor is a parser.Visitor that checks if expressions
+// contain things not supported by distSQL (like subqueries).
+type distSQLExprCheckVisitor struct {
+	err error
+}
+
+var _ parser.Visitor = &distSQLExprCheckVisitor{}
+
+func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	switch t := expr.(type) {
+	case *subquery, *parser.Subquery:
+		v.err = errors.Errorf("subqueries not supported yet")
+		return false, expr
+
+	case *parser.FuncExpr:
+		if t.IsContextDependent() {
+			v.err = errors.Errorf("context-dependent function %s not supported", t.Name)
+			return false, expr
+		}
+	case *parser.CastExpr:
+		switch t.Type.(type) {
+		case *parser.DateColType, *parser.TimestampTZColType:
+			// Casting to a Date or TimestampTZ involves the current timezone.
+			v.err = errors.Errorf("context-dependent cast to %s not supported", t.Type)
+			return false, expr
+		}
+	}
+	return true, expr
+}
+
+func (v *distSQLExprCheckVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+
+// checkExpr verifies that an expression doesn't contain things that are not yet
+// supported by distSQL, like subqueries.
+func checkExpr(expr parser.Expr) error {
+	if expr == nil {
+		return nil
+	}
+	v := distSQLExprCheckVisitor{}
+	parser.WalkExprConst(&v, expr)
+	return v.err
+}
+
 // CheckSupport looks at a planNode tree and decides if DistSQL is equipped to
 // handle the query.
 func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
@@ -102,10 +148,25 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 		if n.filter != nil {
 			return errors.Errorf("filter not supported at select level yet")
 		}
+		for i, e := range n.render {
+			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
+				typ.FamilyEqual(parser.TypeArray) {
+				return errors.Errorf("unsupported render type %s", typ)
+			}
+			if err := checkExpr(e); err != nil {
+				return err
+			}
+		}
 		return dsp.CheckSupport(n.source.plan)
 
-	case *indexJoinNode, *scanNode:
-		return nil
+	case *scanNode:
+		return checkExpr(n.filter)
+
+	case *indexJoinNode:
+		if err := dsp.CheckSupport(n.index); err != nil {
+			return err
+		}
+		return dsp.CheckSupport(n.index)
 
 	default:
 		return errors.Errorf("unsupported node %T", tree)
