@@ -139,7 +139,7 @@ func (s *Session) ClearStatementsAndPortals() {
 // remove all PreparedPortals from the session's PreparedPortals.
 // This is used by the "delete" message in the pgwire protocol; after DeleteAll
 // statements and portals can be added again.
-func (ps PreparedStatements) DeleteAll() {
+func (ps *PreparedStatements) DeleteAll() {
 	ps.closeAll(ps.session)
 	ps.stmts = make(map[string]*PreparedStatement)
 	ps.session.PreparedPortals.portals = make(map[string]*PreparedPortal)
