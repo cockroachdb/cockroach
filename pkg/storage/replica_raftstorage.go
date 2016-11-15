@@ -399,8 +399,6 @@ func snapshot(
 	eCache *raftEntryCache,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
-	start := timeutil.Now()
-
 	var desc roachpb.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
@@ -441,8 +439,8 @@ func snapshot(
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
 
-	log.Infof(ctx, "generated snapshot %s at index %d in %s.",
-		snapUUID.Short(), appliedIndex, timeutil.Since(start))
+	log.Infof(ctx, "generated snapshot %s at index %d",
+		snapUUID.Short(), appliedIndex)
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,
