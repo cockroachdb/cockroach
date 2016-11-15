@@ -6067,12 +6067,12 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		br, pErr, shouldRetry := tc.repl.tryAddWriteCmd(
+		br, pErr, retry := tc.repl.tryAddWriteCmd(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
-		if !shouldRetry {
-			t.Fatalf("expected retry, but got (%v, %v)", br, pErr)
+		if retry != proposalIllegalLeaseIndex {
+			t.Fatalf("expected retry from illegal lease index, but got (%v, %v, %d)", br, pErr, retry)
 		}
 		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
 			t.Fatalf("expected %d proposals, got %d", exp, act)
