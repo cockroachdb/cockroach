@@ -136,6 +136,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.AdvertiseAddr = util.TestAddr.String()
 		cfg.HTTPAddr = util.TestAddr.String()
 	}
+	if params.Addr != "" {
+		cfg.Addr = params.Addr
+		cfg.AdvertiseAddr = params.Addr
+	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
