@@ -40,7 +40,7 @@ version timestamp and an optional roachpb.Transaction message. If
 set, the most recent version of the MVCC value is a transactional
 "intent". It also contains some information on the size of the most
 recent version's key and value for efficient stat counter
-computations. Notice that it is not necessary to explicitly store the
+computations. Note that it is not necessary to explicitly store the
 MVCC metadata as its contents can be reconstructed from the most
 recent versioned value as long as an intent is not present. The
 implementation takes advantage of this and deletes the MVCC metadata
@@ -51,7 +51,7 @@ binary-encoded, but is suffixed with a decreasing, big-endian encoding
 of the timestamp (eight bytes for the nanosecond wall time, followed
 by four bytes for the logical time except for meta key value pairs,
 for which the timestamp is implicit). The MVCC version value is
-a message of type roachpb.Value. A deletion is is indicated by an
+a message of type roachpb.Value. A deletion is indicated by an
 empty value. Note that an empty roachpb.Value will encode to
 a non-empty byte slice. The decreasing encoding on the timestamp sorts
 the most recent version directly after the metadata key, which is

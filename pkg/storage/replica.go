@@ -1640,8 +1640,39 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 // Range's replicated state. Requests taking this path are ultimately
 // serialized through Raft, but pass through additional machinery whose goal is
 // to allow commands which commute to be proposed in parallel. The naive
-// alternative (submitting requests to Raft one after another, paying massive
-// latency) is only taken for commands whose effects may overlap.
+// alternative, submitting requests to Raft one after another, paying massive
+// latency, is only taken for commands whose effects may overlap.
+//
+// Internally, multiple iterations of the above process are may take place due
+// to the (rare) need to the Raft proposal failing retryably, possibly due to
+// proposal reordering or re-proposals.
+func (r *Replica) addWriteCmd(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	for count := 0; ; count++ {
+		br, pErr, shouldRetry := r.tryAddWriteCmd(ctx, ba)
+		if !shouldRetry {
+			// If we've retried and fetched an error, we must return an
+			// ambiguous result as we can't be sure of the ultimate success
+			// of earlier attempts.
+			if count > 0 && pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+					log.ErrEventf(ctx, "received error after retries; returning ambiguous result: %v", pErr)
+					return nil, roachpb.NewError(roachpb.NewAmbiguousResultError())
+				}
+			}
+			return br, pErr
+		}
+	}
+}
+
+// tryAddWriteCmd implements the logic outlined in its caller addWriteCmd, who
+// will call this method until the returned boolean is false, in which case
+// a result of the proposal (which is either an error or a successful response)
+// is returned. If the boolean is true, a proposal was submitted to Raft but
+// did not end up in a legal log position; it is guaranteed that the proposal
+// will never apply successfully and so the caller may and should retry the
+// same invocation of tryAddWriteCmd.
 //
 // Concretely,
 //
@@ -1664,33 +1695,11 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 //   registered with the timestamp cache, removed from the command queue, and
 //   its result (which could be an error) returned to the client.
 //
-// Internally, multiple iterations of the above process are may take place due
-// to the (rare) need to the Raft proposal failing retryably (usually due to
-// proposal reordering).
-//
 // TODO(tschottdorf): take special care with "special" commands and their
 // reorderings. For example, a batch of writes and a split could be in flight
 // in parallel without overlap, but if the writes hit the RHS, something must
 // prevent them from writing outside of the key range when they apply.
 // Similarly, a command proposed under lease A must not apply under lease B.
-func (r *Replica) addWriteCmd(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	for {
-		br, pErr, shouldRetry := r.tryAddWriteCmd(ctx, ba)
-		if !shouldRetry {
-			return br, pErr
-		}
-	}
-}
-
-// tryAddWriteCmd implements the logic outlined in its caller addWriteCmd, who
-// will call this method until the returned boolean is false, in which case
-// a result of the proposal (which is either an error or a successful response)
-// is returned. If the boolean is true, a proposal was submitted to Raft but
-// did not end up in a legal log position; it is guaranteed that the proposal
-// will never apply successfully and so the caller may and should retry the
-// same invocation of tryAddWriteCmd.
 //
 // NB: changing BatchRequest to a pointer here would have to be done cautiously
 // as this method makes the assumption that it operates on a shallow copy (see
