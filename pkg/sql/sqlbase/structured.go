@@ -1623,6 +1623,34 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
+// DatumTypeToColumnKind converts a parser Type to a ColumnType_Kind.
+func DatumTypeToColumnKind(typ parser.Type) ColumnType_Kind {
+	switch typ {
+	case parser.TypeBool:
+		return ColumnType_BOOL
+	case parser.TypeInt:
+		return ColumnType_INT
+	case parser.TypeFloat:
+		return ColumnType_FLOAT
+	case parser.TypeDecimal:
+		return ColumnType_DECIMAL
+	case parser.TypeBytes:
+		return ColumnType_BYTES
+	case parser.TypeString:
+		return ColumnType_STRING
+	case parser.TypeDate:
+		return ColumnType_DATE
+	case parser.TypeTimestamp:
+		return ColumnType_TIMESTAMP
+	case parser.TypeTimestampTZ:
+		return ColumnType_TIMESTAMPTZ
+	case parser.TypeInterval:
+		return ColumnType_INTERVAL
+	default:
+		panic(fmt.Sprintf("unsupported result type: %s", typ))
+	}
+}
+
 // ToDatumType converts the ColumnType_Kind to the correct type, or nil if there
 // is no correspondence.
 func (k ColumnType_Kind) ToDatumType() parser.Type {
