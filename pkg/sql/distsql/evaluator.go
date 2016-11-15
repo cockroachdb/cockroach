@@ -27,10 +27,13 @@ import (
 )
 
 type evaluator struct {
-	input  RowSource
-	output RowReceiver
-	ctx    context.Context
-	exprs  []exprHelper
+	flowCtx *FlowCtx
+	input   RowSource
+	output  RowReceiver
+	ctx     context.Context
+
+	specExprs []Expression
+	exprs     []exprHelper
 
 	// Buffer to store intermediate results when evaluating expressions per row
 	// to avoid reallocation.
@@ -42,18 +45,13 @@ func newEvaluator(
 	flowCtx *FlowCtx, spec *EvaluatorSpec, input RowSource, output RowReceiver,
 ) (*evaluator, error) {
 	ev := &evaluator{
-		input:  input,
-		output: output,
-		ctx:    log.WithLogTag(flowCtx.Context, "Evaluator", nil),
-		exprs:  make([]exprHelper, len(spec.Exprs)),
-		tuple:  make(parser.DTuple, len(spec.Exprs)),
-	}
-
-	for i, expr := range spec.Exprs {
-		err := ev.exprs[i].init(expr, spec.Types, flowCtx.evalCtx)
-		if err != nil {
-			return nil, err
-		}
+		flowCtx:   flowCtx,
+		input:     input,
+		output:    output,
+		specExprs: spec.Exprs,
+		ctx:       log.WithLogTag(flowCtx.Context, "Evaluator", nil),
+		exprs:     make([]exprHelper, len(spec.Exprs)),
+		tuple:     make(parser.DTuple, len(spec.Exprs)),
 	}
 
 	return ev, nil
@@ -73,11 +71,28 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting evaluator")
 	}
 
+	first := true
 	for {
 		row, err := ev.input.NextRow()
 		if err != nil || row == nil {
 			ev.output.Close(err)
 			return
+		}
+
+		if first {
+			first = false
+
+			types := make([]sqlbase.ColumnType_Kind, len(row))
+			for i := range types {
+				types[i] = row[i].Type
+			}
+			for i, expr := range ev.specExprs {
+				err := ev.exprs[i].init(expr, types, ev.flowCtx.evalCtx)
+				if err != nil {
+					ev.output.Close(err)
+					return
+				}
+			}
 		}
 
 		outRow, err := ev.eval(row)
