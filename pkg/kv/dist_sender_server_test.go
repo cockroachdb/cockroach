@@ -1348,9 +1348,9 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	// the panic.
 	for i := 0; i < 5; i++ {
 		_, pErr := client.SendWrappedWith(context.Background(), sender, hdr, req)
-		// Each attempt fails with "store 2 not found" because that is the
+		// Each attempt fails with "store 2 was not found" because that is the
 		// non-retryable error.
-		if !testutils.IsPError(pErr, "store 2 not found") {
+		if !testutils.IsPError(pErr, "store 2 was not found") {
 			t.Fatal(pErr)
 		}
 	}
