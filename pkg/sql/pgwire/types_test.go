@@ -82,26 +82,178 @@ func TestTimestampRoundtrip(t *testing.T) {
 	}
 }
 
-func BenchmarkWriteBinaryDecimal(b *testing.B) {
+func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
 
-	dec := new(parser.DDecimal)
-	s := "-1728718718271827121233.1212121212"
-	if _, ok := dec.SetString(s); !ok {
-		b.Fatalf("could not set %q on decimal", s)
+	writeMethod := buf.writeTextDatum
+	if format == formatBinary {
+		writeMethod = buf.writeBinaryDatum
 	}
 
 	// Warm up the buffer.
-	buf.writeBinaryDatum(dec, nil)
+	writeMethod(d, nil)
 	buf.wrapped.Reset()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StartTimer()
-		buf.writeBinaryDatum(dec, nil)
-		b.StopTimer()
+		// Starting and stopping the timer in each loop iteration causes this
+		// to take much longer. See http://stackoverflow.com/a/37624250/3435257.
+		// buf.wrapped.Reset() should be fast enough to be negligible.
+		writeMethod(d, nil)
 		buf.wrapped.Reset()
 	}
+}
+
+func benchmarkWriteBool(b *testing.B, format formatCode) {
+	benchmarkWriteType(b, parser.DBoolTrue, format)
+}
+
+func benchmarkWriteInt(b *testing.B, format formatCode) {
+	benchmarkWriteType(b, parser.NewDInt(1234), format)
+}
+
+func benchmarkWriteFloat(b *testing.B, format formatCode) {
+	benchmarkWriteType(b, parser.NewDFloat(12.34), format)
+}
+
+func benchmarkWriteDecimal(b *testing.B, format formatCode) {
+	dec := new(parser.DDecimal)
+	s := "-1728718718271827121233.1212121212"
+	if _, ok := dec.SetString(s); !ok {
+		b.Fatalf("could not set %q on decimal", format)
+	}
+	benchmarkWriteType(b, dec, formatText)
+}
+
+func benchmarkWriteBytes(b *testing.B, format formatCode) {
+	benchmarkWriteType(b, parser.NewDBytes("testing"), format)
+}
+
+func benchmarkWriteString(b *testing.B, format formatCode) {
+	benchmarkWriteType(b, parser.NewDString("testing"), format)
+}
+
+func benchmarkWriteDate(b *testing.B, format formatCode) {
+	d, err := parser.ParseDDate("2010-09-28", time.UTC)
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchmarkWriteType(b, d, format)
+}
+
+func benchmarkWriteTimestamp(b *testing.B, format formatCode) {
+	ts, err := parser.ParseDTimestamp("2010-09-28 12:00:00.1", time.Microsecond)
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchmarkWriteType(b, ts, format)
+}
+
+func benchmarkWriteTimestampTZ(b *testing.B, format formatCode) {
+	tstz, err := parser.ParseDTimestampTZ("2010-09-28 12:00:00.1", time.UTC, time.Microsecond)
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchmarkWriteType(b, tstz, format)
+}
+
+func benchmarkWriteInterval(b *testing.B, format formatCode) {
+	i, err := parser.ParseDInterval("PT12H2M")
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchmarkWriteType(b, i, format)
+}
+
+func benchmarkWriteTuple(b *testing.B, format formatCode) {
+	i := parser.NewDInt(1234)
+	f := parser.NewDFloat(12.34)
+	s := parser.NewDString("testing")
+	t := &parser.DTuple{i, f, s}
+	benchmarkWriteType(b, t, format)
+}
+
+func benchmarkWriteArray(b *testing.B, format formatCode) {
+	i1 := parser.NewDInt(1234)
+	i2 := parser.NewDInt(1234)
+	i3 := parser.NewDInt(1234)
+	a := &parser.DArray{i1, i2, i3}
+	benchmarkWriteType(b, a, format)
+}
+
+func BenchmarkWriteTextBool(b *testing.B) {
+	benchmarkWriteBool(b, formatText)
+}
+func BenchmarkWriteBinaryBool(b *testing.B) {
+	benchmarkWriteBool(b, formatBinary)
+}
+
+func BenchmarkWriteTextInt(b *testing.B) {
+	benchmarkWriteInt(b, formatText)
+}
+func BenchmarkWriteBinaryInt(b *testing.B) {
+	benchmarkWriteInt(b, formatBinary)
+}
+
+func BenchmarkWriteTextFloat(b *testing.B) {
+	benchmarkWriteFloat(b, formatText)
+}
+func BenchmarkWriteBinaryFloat(b *testing.B) {
+	benchmarkWriteFloat(b, formatBinary)
+}
+
+func BenchmarkWriteTextDecimal(b *testing.B) {
+	benchmarkWriteDecimal(b, formatText)
+}
+func BenchmarkWriteBinaryDecimal(b *testing.B) {
+	benchmarkWriteDecimal(b, formatBinary)
+}
+
+func BenchmarkWriteTextBytes(b *testing.B) {
+	benchmarkWriteBytes(b, formatText)
+}
+func BenchmarkWriteBinaryBytes(b *testing.B) {
+	benchmarkWriteBytes(b, formatBinary)
+}
+
+func BenchmarkWriteTextString(b *testing.B) {
+	benchmarkWriteString(b, formatText)
+}
+func BenchmarkWriteBinaryString(b *testing.B) {
+	benchmarkWriteString(b, formatBinary)
+}
+
+func BenchmarkWriteTextDate(b *testing.B) {
+	benchmarkWriteDate(b, formatText)
+}
+func BenchmarkWriteBinaryDate(b *testing.B) {
+	benchmarkWriteDate(b, formatBinary)
+}
+
+func BenchmarkWriteTextTimestamp(b *testing.B) {
+	benchmarkWriteTimestamp(b, formatText)
+}
+func BenchmarkWriteBinaryTimestamp(b *testing.B) {
+	benchmarkWriteTimestamp(b, formatBinary)
+}
+
+func BenchmarkWriteTextTimestampTZ(b *testing.B) {
+	benchmarkWriteTimestampTZ(b, formatText)
+}
+func BenchmarkWriteBinaryTimestampTZ(b *testing.B) {
+	benchmarkWriteTimestampTZ(b, formatBinary)
+}
+
+func BenchmarkWriteTextInterval(b *testing.B) {
+	benchmarkWriteInterval(b, formatText)
+}
+
+func BenchmarkWriteTextTuple(b *testing.B) {
+	benchmarkWriteTuple(b, formatText)
+}
+
+func BenchmarkWriteTextArray(b *testing.B) {
+	benchmarkWriteArray(b, formatText)
 }
 
 func BenchmarkDecodeBinaryDecimal(b *testing.B) {
