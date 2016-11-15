@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -370,32 +369,25 @@ func TestConcurrentBatch(t *testing.T) {
 		batches = append(batches, batch)
 	}
 
+	errChan := make(chan error, len(batches))
+
 	// Concurrently write all the batches.
-	start := timeutil.Now()
-	var wg sync.WaitGroup
-	wg.Add(len(batches))
 	for _, batch := range batches {
 		go func(batch Batch) {
-			if err := batch.Commit(); err != nil {
-				t.Fatal(err)
-			}
-			wg.Done()
+			errChan <- batch.Commit()
 		}(batch)
 	}
 
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		fmt.Printf("%d batches committed: %0.1fs\n", len(batches), timeutil.Since(start).Seconds())
-		close(done)
-	}()
-
 	// While the batch writes are in progress, try to write another key.
 	time.Sleep(100 * time.Millisecond)
-	for i := 0; true; i++ {
+	remainingBatches := len(batches)
+	for i := 0; remainingBatches > 0; i++ {
 		select {
-		case <-done:
-			return
+		case err := <-errChan:
+			if err != nil {
+				t.Fatal(err)
+			}
+			remainingBatches--
 		default:
 		}
 

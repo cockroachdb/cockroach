@@ -96,15 +96,14 @@ func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 		} else if err != nil {
 			return err
 		}
-		name, ok := vals[0].(string)
+		nameI, typI := vals[0], vals[1]
+		name, ok := nameI.(string)
 		if !ok {
-			return fmt.Errorf("unexpected value: %T", vals[1])
-
+			return fmt.Errorf("unexpected value: %T", nameI)
 		}
-		typ, ok := vals[1].(string)
+		typ, ok := typI.(string)
 		if !ok {
-			return fmt.Errorf("unexpected value: %T", vals[4])
-
+			return fmt.Errorf("unexpected value: %T", typI)
 		}
 		coltypes[name] = typ
 	}

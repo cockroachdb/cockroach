@@ -1122,7 +1122,6 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 	defer stopper.Stop()
 
 	now := store.Clock().Now()
-	var wg sync.WaitGroup
 
 	ts := func(i int) hlc.Timestamp {
 		return now.Add(0, int32(1000+i))
@@ -1130,32 +1129,32 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 
 	const num = 10
 
+	errChan := make(chan *roachpb.Error)
 	for i := 0; i < num; i++ {
-		wg.Add(1)
 		getStarted.Add(1)
 		go func(i int) {
-			defer wg.Done()
 			args := getArgs(key(i))
 			var h roachpb.Header
 			h.Timestamp = ts(i)
-			if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), h, &args); pErr != nil {
-				t.Fatal(pErr)
-			}
+			_, pErr := client.SendWrappedWith(context.Background(), rg1(store), h, &args)
+			errChan <- pErr
 		}(i)
 	}
 
 	getStarted.Wait()
 
-	wg.Add(1)
 	func() {
-		defer wg.Done()
 		args := adminSplitArgs(roachpb.KeyMin, splitKey)
 		if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}()
 
-	wg.Wait()
+	for i := 0; i < num; i++ {
+		if pErr := <-errChan; pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
 
 	for i := 0; i < num; i++ {
 		var h roachpb.Header
@@ -1394,14 +1393,12 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	mtc.replicateRange(leftRange.RangeID, 1)
 
 	for i := 0; i < 10; i++ {
-		var wg sync.WaitGroup
-		wg.Add(2)
+		errChan := make(chan *roachpb.Error)
 
 		// Closed when the split goroutine is done.
 		splitDone := make(chan struct{})
 
 		go func() {
-			defer wg.Done()
 			defer close(splitDone)
 
 			// Split the data range. The split keys are chosen so that they move
@@ -1409,12 +1406,11 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// range).
 			splitKey := roachpb.Key(encoding.EncodeVarintDescending([]byte("a"), int64(i)))
 			splitArgs := adminSplitArgs(keys.SystemMax, splitKey)
-			if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &splitArgs); pErr != nil {
-				t.Fatal(pErr)
-			}
+			_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &splitArgs)
+			errChan <- pErr
 		}()
 		go func() {
-			defer wg.Done()
+			defer func() { errChan <- nil }()
 
 			trigger := <-currentTrigger // our own copy
 			// Make sure the first node is first for convenience.
@@ -1456,7 +1452,11 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 				}
 			}
 		}()
-		wg.Wait()
+		for i := 0; i < 2; i++ {
+			if pErr := <-errChan; pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
 	}
 }
 

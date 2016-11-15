@@ -224,7 +224,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	waitFirstGet := make(chan struct{})
 	waitTxnRestart := make(chan struct{})
 	waitSecondGet := make(chan struct{})
-	waitTxnComplete := make(chan struct{})
+	errChan := make(chan error)
 
 	// Start the Writer.
 	go func() {
@@ -232,7 +232,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 			epoch++
 
 			if epoch == 1 {
@@ -263,15 +263,13 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			b := txn.NewBatch()
 			return txn.CommitInBatch(b)
-		}); err != nil {
-			t.Fatal(err)
-		}
+		})
 
 		if epoch != 2 {
-			t.Fatalf("unexpected number of txn retries: %d", epoch)
+			errChan <- errors.Errorf("unexpected number of txn retries: %d", epoch)
+		} else {
+			errChan <- nil
 		}
-
-		close(waitTxnComplete)
 	}()
 
 	<-waitPut
@@ -311,7 +309,11 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	}
 
 	close(waitSecondGet)
-	<-waitTxnComplete
+	for i := 0; i < 2; i++ {
+		if err := <-errChan; err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // TestRangeLookupUseReverse tests whether the results and the results count
