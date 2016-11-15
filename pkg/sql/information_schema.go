@@ -162,45 +162,35 @@ CREATE TABLE information_schema.key_column_usage (
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				type keyColumn struct {
-					name        string
-					columnNames []string
-					primaryKey  bool
-					foreignKey  bool
-					unique      bool
-				}
-				var columns []keyColumn
-				if table.IsPhysicalTable() {
-					columns = append(columns, keyColumn{
-						name:        table.PrimaryIndex.Name,
-						columnNames: table.PrimaryIndex.ColumnNames,
-						primaryKey:  true,
-					})
-				}
-				for _, index := range table.Indexes {
-					col := keyColumn{
-						name:        index.Name,
-						columnNames: index.ColumnNames,
-						unique:      index.Unique,
-						foreignKey:  index.ForeignKey.IsSet(),
+		return forEachTableDescWithTableLookup(p,
+			func(
+				db *sqlbase.DatabaseDescriptor,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				info, err := table.GetConstraintInfoWithLookup(func(id sqlbase.ID) (
+					*sqlbase.TableDescriptor, error,
+				) {
+					if _, t := tableLookup(id); t != nil {
+						return t, nil
 					}
-					if col.unique || col.foreignKey {
-						columns = append(columns, col)
-					}
+					return nil, errors.Errorf("could not find referenced table with ID %v", id)
+				})
+				if err != nil {
+					return err
 				}
-				for _, c := range columns {
-					for pos, column := range c.columnNames {
+
+				for name, c := range info {
+					for pos, column := range c.Columns {
 						ordinalPos := parser.NewDInt(parser.DInt(pos + 1))
 						uniquePos := parser.DNull
-						if c.foreignKey {
+						if c.Kind == sqlbase.ConstraintTypeFK {
 							uniquePos = ordinalPos
 						}
 						if err := addRow(
 							defString,                     // constraint_catalog
 							parser.NewDString(db.Name),    // constraint_schema
-							dStringOrNull(c.name),         // constraint_name
+							dStringOrNull(name),           // constraint_name
 							defString,                     // table_catalog
 							parser.NewDString(db.Name),    // table_schema
 							parser.NewDString(table.Name), // table_name
