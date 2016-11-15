@@ -1039,6 +1039,8 @@ func fillSkippedResponses(ba roachpb.BatchRequest, br *roachpb.BatchResponse, ne
 	}
 }
 
+var errMayHaveSucceededAtFailingReplica = roachpb.NewAmbiguousResultError("may have succeeded at failing replica")
+
 // sendToReplicas sends one or more RPCs to clients specified by the
 // slice of replicas. On success, Send returns the first successful
 // reply. If an error occurs which is not specific to a single
@@ -1123,7 +1125,7 @@ func (ds *DistSender) sendToReplicas(
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
 					if haveCommit && (pending > 0 || ambiguousResult) {
-						return nil, roachpb.NewAmbiguousResultError()
+						return nil, errMayHaveSucceededAtFailingReplica
 					}
 					return call.Reply, nil
 				}
@@ -1174,7 +1176,7 @@ func (ds *DistSender) sendToReplicas(
 			}
 			if pending == 0 {
 				if ambiguousResult {
-					err = roachpb.NewAmbiguousResultError()
+					err = errMayHaveSucceededAtFailingReplica
 				} else {
 					err = roachpb.NewSendError(
 						fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), err),
