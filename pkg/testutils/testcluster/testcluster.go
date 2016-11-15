@@ -161,16 +161,10 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			serverArgs = args.ServerArgs
 		}
 		serverArgs.PartOfCluster = true
-		serverArgs.Stopper = stop.NewStopper()
 		if i > 0 {
 			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
 		}
-		s, conn, _ := serverutils.StartServer(t, serverArgs)
-		tc.Servers = append(tc.Servers, s.(*server.TestServer))
-		tc.Conns = append(tc.Conns, conn)
-		tc.mu.Lock()
-		tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
-		tc.mu.Unlock()
+		tc.AddServer(t, serverArgs)
 	}
 
 	// Create a closer that will stop the individual server stoppers when the
@@ -187,6 +181,18 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		}
 	}
 	return tc
+}
+
+// AddServer creates a server with the specified arguments and appends it to
+// the TestCluster.
+func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
+	serverArgs.Stopper = stop.NewStopper()
+	s, conn, _ := serverutils.StartServer(t, serverArgs)
+	tc.Servers = append(tc.Servers, s.(*server.TestServer))
+	tc.Conns = append(tc.Conns, conn)
+	tc.mu.Lock()
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
+	tc.mu.Unlock()
 }
 
 // waitForStores waits for all of the store descriptors to be gossiped. Servers
@@ -538,7 +544,7 @@ type testClusterFactoryImpl struct{}
 // TestClusterFactory can be passed to serverutils.InitTestClusterFactory
 var TestClusterFactory serverutils.TestClusterFactory = testClusterFactoryImpl{}
 
-// New is part of TestClusterFactory interface.
+// StartTestCluster is part of TestClusterFactory interface.
 func (testClusterFactoryImpl) StartTestCluster(
 	t testing.TB, numNodes int, args base.TestClusterArgs,
 ) serverutils.TestClusterInterface {
