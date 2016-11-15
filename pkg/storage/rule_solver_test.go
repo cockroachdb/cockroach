@@ -119,24 +119,21 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "white list rule",
-			rule: rule{
-				weight: 1,
-				run: func(state solveState) (float64, bool) {
-					switch state.store.StoreID {
-					case storeRSa:
-						return 0, true
-					case storeFRabc:
-						return 1, true
-					default:
-						return 0, false
-					}
-				},
+			rule: func(state solveState) (float64, bool) {
+				switch state.store.StoreID {
+				case storeRSa:
+					return 0, true
+				case storeFRabc:
+					return 1, true
+				default:
+					return 0, false
+				}
 			},
 			expected: []roachpb.StoreID{storeFRabc, storeRSa},
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 2 available nodes",
-			rule: rule{weight: 1, run: ruleReplicasUniqueNodes},
+			rule: ruleReplicasUniqueNodes,
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: roachpb.NodeID(storeRSa)},
 				{NodeID: roachpb.NodeID(storeFRabc)},
@@ -145,7 +142,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 0 available nodes",
-			rule: rule{weight: 1, run: ruleReplicasUniqueNodes},
+			rule: ruleReplicasUniqueNodes,
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: roachpb.NodeID(storeRSa)},
 				{NodeID: roachpb.NodeID(storeRab)},
@@ -156,7 +153,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleConstraints - required constraints",
-			rule: rule{weight: 1, run: ruleConstraints},
+			rule: ruleConstraints,
 			c: config.Constraints{
 				Constraints: []config.Constraint{
 					{Value: "b", Type: config.Constraint_REQUIRED},
@@ -166,7 +163,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleConstraints - required locality constraints",
-			rule: rule{weight: 1, run: ruleConstraints},
+			rule: ruleConstraints,
 			c: config.Constraints{
 				Constraints: []config.Constraint{
 					{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
@@ -176,7 +173,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleConstraints - prohibited constraints",
-			rule: rule{weight: 1, run: ruleConstraints},
+			rule: ruleConstraints,
 			c: config.Constraints{
 				Constraints: []config.Constraint{
 					{Value: "b", Type: config.Constraint_PROHIBITED},
@@ -186,7 +183,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleConstraints - prohibited locality constraints",
-			rule: rule{weight: 1, run: ruleConstraints},
+			rule: ruleConstraints,
 			c: config.Constraints{
 				Constraints: []config.Constraint{
 					{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
@@ -196,7 +193,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleConstraints - positive constraints",
-			rule: rule{weight: 1, run: ruleConstraints},
+			rule: ruleConstraints,
 			c: config.Constraints{
 				Constraints: []config.Constraint{
 					{Value: "a"},
@@ -208,7 +205,7 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "ruleConstraints - positive locality constraints",
-			rule: rule{weight: 1, run: ruleConstraints},
+			rule: ruleConstraints,
 			c: config.Constraints{
 				Constraints: []config.Constraint{
 					{Key: "datacenter", Value: "eur"},
@@ -218,13 +215,13 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name:     "ruleDiversity - no existing replicas",
-			rule:     rule{weight: 1, run: ruleDiversity},
+			rule:     ruleDiversity,
 			existing: nil,
 			expected: []roachpb.StoreID{storeRSa, storeRab, storeFRabc, storeEurope},
 		},
 		{
 			name: "ruleDiversity - one existing replicas",
-			rule: rule{weight: 1, run: ruleDiversity},
+			rule: ruleDiversity,
 			existing: []roachpb.ReplicaDescriptor{
 				{StoreID: storeRSa},
 			},
@@ -232,18 +229,17 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name:     "ruleCapacity",
-			rule:     rule{weight: 1, run: ruleCapacity},
+			rule:     ruleCapacity,
 			expected: []roachpb.StoreID{storeRab, storeEurope, storeFRabc},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var rules []rule
-			if tc.rule.run != nil {
-				rules = []rule{tc.rule}
+			var solver ruleSolver
+			if tc.rule != nil {
+				solver = ruleSolver{tc.rule}
 			}
-			solver := makeRuleSolver(rules)
 			sl, _, _ := storePool.getStoreList(roachpb.RangeID(0))
 			candidates, err := solver.Solve(sl, tc.c, tc.existing)
 			if err != nil {
