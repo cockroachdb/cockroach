@@ -34,12 +34,12 @@ func TestEvaluator(t *testing.T) {
 		v[i].SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
 
-	dTrue, _ := parser.ParseDBool("true")
-	dFalse, _ := parser.ParseDBool("false")
-
 	b := [2]sqlbase.EncDatum{}
-	b[0].SetDatum(sqlbase.ColumnType_BOOL, dTrue)
-	b[1].SetDatum(sqlbase.ColumnType_BOOL, dFalse)
+	b[0].SetDatum(sqlbase.ColumnType_BOOL, parser.DBoolTrue)
+	b[1].SetDatum(sqlbase.ColumnType_BOOL, parser.DBoolFalse)
+
+	var nullInt sqlbase.EncDatum
+	nullInt.SetDatum(sqlbase.ColumnType_INT, parser.DNull)
 
 	testCases := []struct {
 		spec     EvaluatorSpec
@@ -56,6 +56,7 @@ func TestEvaluator(t *testing.T) {
 				{v[6], v[2]},
 				{v[7], v[2]},
 				{v[8], v[4]},
+				{nullInt, nullInt},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[1]},
@@ -63,6 +64,7 @@ func TestEvaluator(t *testing.T) {
 				{v[2], v[6]},
 				{v[2], v[7]},
 				{v[4], v[8]},
+				{nullInt, nullInt},
 			},
 		}, {
 			spec: EvaluatorSpec{
