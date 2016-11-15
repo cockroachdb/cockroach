@@ -6103,12 +6103,12 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		br, pErr, shouldRetry := tc.repl.tryAddWriteCmd(
+		br, pErr, retry := tc.repl.tryAddWriteCmd(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
-		if !shouldRetry {
-			t.Fatalf("expected retry, but got (%v, %v)", br, pErr)
+		if retry != proposalIllegalLeaseIndex {
+			t.Fatalf("expected retry from illegal lease index, but got (%v, %v, %d)", br, pErr, retry)
 		}
 		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
 			t.Fatalf("expected %d proposals, got %d", exp, act)
@@ -6405,6 +6405,131 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
 		}
+	}
+}
+
+// TestAmbiguousResultErrorOnReproposal verifies that when a batch
+// with EndTransaction(commit=true) is re-proposed, it will return
+// an AmbiguousResultError if it fails on the re-proposal. It also
+// verifies that EndTransaction(commit=false) will not return an
+// AmbiguousResultError.
+func TestAmbiguousResultErrorOnReproposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg := TestStoreConfig(nil)
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, cfg)
+	defer tc.Stop()
+
+	var baPuts roachpb.BatchRequest
+	{
+		key := roachpb.Key("put1")
+		put1 := putArgs(key, []byte("value1"))
+		put2 := putArgs(key, []byte("value2"))
+		baPuts.Add(&put1, &put2)
+	}
+	var ba1PCTxn roachpb.BatchRequest
+	{
+		key := roachpb.Key("1pc")
+		txn := newTransaction("1pc", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		bt, _ := beginTxnArgs(key, txn)
+		put := putArgs(key, []byte("value"))
+		et, etH := endTxnArgs(txn, true)
+		et.IntentSpans = []roachpb.Span{{Key: key}}
+		ba1PCTxn.Header = etH
+		ba1PCTxn.Add(&bt, &put, &et)
+	}
+	var baCommitTxn roachpb.BatchRequest
+	{
+		key := roachpb.Key("commit")
+		txn := newTransaction("commit", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		et, etH := endTxnArgs(txn, true)
+		baCommitTxn.Header = etH
+		baCommitTxn.Add(&et)
+	}
+	var baAbortTxn roachpb.BatchRequest
+	{
+		key := roachpb.Key("abort")
+		txn := newTransaction("abort", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		et, etH := endTxnArgs(txn, false)
+		baAbortTxn.Header = etH
+		baAbortTxn.Add(&et)
+	}
+
+	testCases := []struct {
+		name    string
+		ba      roachpb.BatchRequest
+		checkFn func(*roachpb.Error) error
+	}{
+		{
+			name: "batch-of-puts",
+			ba:   baPuts,
+			checkFn: func(pErr *roachpb.Error) error {
+				if pErr != nil {
+					// Note that this is successful because we don't provide replay
+					// protection for non-transactional commands, though this may
+					// change in the future.
+					return errors.Wrap(pErr.GoError(),
+						"expected success on re-proposal of puts-only batch")
+				}
+				return nil
+			},
+		},
+		{
+			name: "1PC-txn",
+			ba:   ba1PCTxn,
+			checkFn: func(pErr *roachpb.Error) error {
+				// The full one phase transaction may either succeed or fail,
+				// depending on whether the re-proposed command finishes first
+				// or the original command finishes first. Both happen in this
+				// unittest.
+				if pErr == nil {
+					return nil
+				}
+				detail := pErr.GetDetail()
+				if _, ok := detail.(*roachpb.AmbiguousResultError); !ok {
+					return errors.Wrapf(detail, "unexpected error %T", detail)
+				}
+				return nil
+			},
+		},
+	}
+
+	errCh := make(chan error, 1)
+
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			// Install a proposal function which delays the proposal.
+			tc.repl.mu.Lock()
+			tc.repl.mu.submitProposalFn = func(pd *ProposalData) error {
+				// Submit the proposal with a delay, waiting for proceed channel.
+				go func() {
+					// Manually refresh proposals.
+					tc.repl.mu.Lock()
+					// We are going to cheat here and increase the lease applied
+					// index to force the sort of re-proposal we're after.
+					origLeaseAppliedIndex := tc.repl.mu.state.LeaseAppliedIndex
+					tc.repl.mu.state.LeaseAppliedIndex += 10
+					tc.repl.refreshProposalsLocked(tc.store.cfg.RaftElectionTimeoutTicks, reasonTicks)
+					tc.repl.mu.state.LeaseAppliedIndex = origLeaseAppliedIndex
+					// Unset the custom proposal function so re-proposal proceeds
+					// without blocking.
+					tc.repl.mu.submitProposalFn = nil
+					errCh <- defaultSubmitProposalLocked(tc.repl, pd)
+					tc.repl.mu.Unlock()
+				}()
+				return nil // pretend we proposed though we haven't yet.
+			}
+			tc.repl.mu.Unlock()
+
+			_, pErr := tc.Sender().Send(context.Background(), c.ba)
+			if err := c.checkFn(pErr); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-errCh; err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

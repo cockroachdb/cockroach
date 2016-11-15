@@ -103,7 +103,7 @@ type LocalProposalData struct {
 // be counted on to invoke endCmds itself.
 func (lpd *LocalProposalData) finish(pr proposalResult) {
 	if lpd.endCmds != nil {
-		lpd.endCmds.done(pr.Reply, pr.Err, pr.ShouldRetry)
+		lpd.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		lpd.endCmds = nil
 	}
 	lpd.doneCh <- pr
