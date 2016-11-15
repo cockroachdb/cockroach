@@ -319,34 +319,6 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("TestIneffassign", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "ineffassign", ".")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`ineffectual assignment to sqlDollar`),
-			stream.GrepNot(`\.pb\.go`), // https://github.com/gogo/protobuf/issues/149
-		), func(s string) {
-			t.Errorf(s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestMisspell", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "ls-files")
@@ -510,7 +482,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field no|type No)Copy `),
+			stream.GrepNot(`pkg/sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field no|type No)Copy `),
 		), func(s string) {
 			t.Error(s)
 		}); err != nil {
@@ -565,7 +537,7 @@ func TestStyle(t *testing.T) {
 			stream.Grep(` (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context)$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
-			stream.GrepNot(`util/uuid: github\.com/satori/go\.uuid$`),
+			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
 			if strings.HasSuffix(s, " path") {
 				t.Errorf(`%s <- please use "path/filepath" instead of "path"`, s)
@@ -671,7 +643,16 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestGoSimple", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "gosimple", pkgScope)
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"gosimple",
+			"-ignore",
+			strings.Join([]string{
+				"github.com/cockroachdb/cockroach/pkg/ui/embedded.go:S1013",
+				"github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go:S1013",
+			}, " "),
+			pkgScope,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -680,10 +661,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`embedded\.go`),
-		), func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Error(s)
 		}); err != nil {
 			t.Error(err)
@@ -725,7 +703,17 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestStaticcheck", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "staticcheck", pkgScope)
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"staticcheck",
+			"-ignore",
+			// This reports as pkg/sql/parser/yaccpar, but the real file is sql.y.
+			strings.Join([]string{
+				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.y:SA4006",
+				"github.com/cockroachdb/cockroach/pkg/sql/errors.go:SA4004",
+			}, " "),
+			pkgScope,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

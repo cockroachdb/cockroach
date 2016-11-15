@@ -400,10 +400,10 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // guarantee by resolving the intents synchronously regardless of the
 // `wait` argument).
 func (ir *intentResolver) resolveIntents(
-	ctx context.Context, intents []roachpb.Intent, wait bool, poison bool,
+	ctx context.Context, intents []roachpb.Intent, _ bool, poison bool,
 ) error {
 	// Force synchronous operation; see above TODO.
-	wait = true
+	wait := true
 	if len(intents) == 0 {
 		return nil
 	}

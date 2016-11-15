@@ -3301,8 +3301,8 @@ func (r *Replica) applyRaftCommand(
 	rpd storagebase.ReplicatedProposalData,
 	writeBatch *storagebase.WriteBatch,
 ) (enginepb.MVCCStats, *roachpb.Error) {
-	if rpd.State.RaftAppliedIndex <= 0 {
-		log.Fatalf(ctx, "raft command index is <= 0")
+	if rpd.State.RaftAppliedIndex == 0 {
+		log.Fatalf(ctx, "raft command index is zero")
 	}
 
 	r.mu.Lock()
