@@ -19,7 +19,6 @@ package distsql
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -34,10 +33,8 @@ type evaluator struct {
 
 	specExprs []Expression
 	exprs     []exprHelper
+	exprTypes []sqlbase.ColumnType_Kind
 
-	// Buffer to store intermediate results when evaluating expressions per row
-	// to avoid reallocation.
-	tuple    parser.DTuple
 	rowAlloc sqlbase.EncDatumRowAlloc
 }
 
@@ -51,7 +48,7 @@ func newEvaluator(
 		specExprs: spec.Exprs,
 		ctx:       log.WithLogTag(flowCtx.Context, "Evaluator", nil),
 		exprs:     make([]exprHelper, len(spec.Exprs)),
-		tuple:     make(parser.DTuple, len(spec.Exprs)),
+		exprTypes: make([]sqlbase.ColumnType_Kind, len(spec.Exprs)),
 	}
 
 	return ev, nil
@@ -92,6 +89,7 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 					ev.output.Close(err)
 					return
 				}
+				ev.exprTypes[i] = sqlbase.DatumTypeToColumnKind(ev.exprs[i].expr.ResolvedType())
 			}
 		}
 
@@ -117,17 +115,15 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 }
 
 func (ev *evaluator) eval(row sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+	outRow := ev.rowAlloc.AllocRow(len(ev.exprs))
+
 	for i := range ev.exprs {
-		datum, err := (&ev.exprs[i]).eval(row)
+		datum, err := ev.exprs[i].eval(row)
 		if err != nil {
 			return nil, err
 		}
-		ev.tuple[i] = datum
+		outRow[i].SetDatum(ev.exprTypes[i], datum)
 	}
 
-	outRow := ev.rowAlloc.AllocRow(len(ev.tuple))
-	if err := sqlbase.DTupleToEncDatumRow(outRow, ev.tuple); err != nil {
-		return nil, err
-	}
 	return outRow, nil
 }
