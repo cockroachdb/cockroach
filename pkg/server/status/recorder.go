@@ -25,6 +25,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -245,6 +247,47 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		return nil
 	}
 
+	return mr.generateStatusSummaryLocked()
+}
+
+// WriteStatusSummary generates a summary and immediately writes it to the given
+// client.
+func (mr *MetricsRecorder) WriteStatusSummary(ctx context.Context, db *client.DB) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	if mr.mu.nodeRegistry == nil {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Warning(context.TODO(), "MetricsRecorder.WriteStatusSummary called before NodeID allocation.")
+		}
+		return nil
+	}
+
+	nodeStatus := mr.generateStatusSummaryLocked()
+	if nodeStatus != nil {
+		key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
+		// We use PutInline to store only a single version of the node status.
+		// There's not much point in keeping the historical versions as we keep
+		// all of the constituent data as timeseries. Further, due to the size
+		// of the build info in the node status, writing one of these every 10s
+		// will generate more versions than will easily fit into a range over
+		// the course of a day.
+		if err := db.PutInline(ctx, key, nodeStatus); err != nil {
+			return err
+		}
+		if log.V(2) {
+			statusJSON, err := json.Marshal(nodeStatus)
+			if err != nil {
+				log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
+			}
+			log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+		}
+	}
+	return nil
+}
+
+func (mr *MetricsRecorder) generateStatusSummaryLocked() *NodeStatus {
 	now := mr.mu.clock.PhysicalNow()
 
 	// Generate an node status with no store data.
