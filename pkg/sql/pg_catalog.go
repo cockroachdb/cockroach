@@ -57,6 +57,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogClassTable,
 		pgCatalogConstraintTable,
 		pgCatalogDatabaseTable,
+		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
@@ -560,6 +561,110 @@ CREATE TABLE pg_catalog.pg_database (
 				parser.DNull,               // datacl
 			)
 		})
+	},
+}
+var (
+	depTypeNormal        = parser.NewDString("n")
+	depTypeAuto          = parser.NewDString("a")
+	depTypeInternal      = parser.NewDString("i")
+	depTypeExtension     = parser.NewDString("e")
+	depTypeAutoExtension = parser.NewDString("x")
+	depTypePin           = parser.NewDString("p")
+
+	// Avoid unused warning for constants.
+	_ = depTypeAuto
+	_ = depTypeInternal
+	_ = depTypeExtension
+	_ = depTypeAutoExtension
+	_ = depTypePin
+)
+
+// See https://www.postgresql.org/docs/9.6/static/catalog-pg-depend.html
+//
+// pg_depend is a fairly complex table that details many different kinds of
+// relationships between database objects. We do not implement the vast
+// majority of this table, as it is mainly used by pgjdbc to address a
+// deficiency in pg_constraint that was removed in postgres v9.0 with the
+// addition of the conindid column. To provide backward compatibility with
+// pgjdbc drivers before https://github.com/pgjdbc/pgjdbc/pull/689, we
+// provide those rows in pg_depend that track the dependency of foreign key
+// constraints on their supporting index entries in pg_class.
+var pgCatalogDependTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_depend (
+  oid INT,
+  classid INT,
+  objid INT,
+  objsubid INT,
+  refclassid INT,
+  refobjid INT,
+  refobjsubid INT,
+  deptype CHAR
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		db, err := p.getDatabaseDesc("pg_catalog")
+		if err != nil {
+			return errors.New("could not find pg_catalog")
+		}
+		pgConstraintDesc, err := p.getTableDesc(&parser.TableName{DatabaseName: "pg_catalog", TableName: "pg_constraint"})
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_constraint")
+		}
+		pgConstraintTableOid := h.TableOid(db, pgConstraintDesc)
+
+		pgClassDesc, err := p.getTableDesc(&parser.TableName{DatabaseName: "pg_catalog", TableName: "pg_class"})
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_class")
+		}
+		pgClassTableOid := h.TableOid(db, pgClassDesc)
+
+		return forEachTableDescWithTableLookup(p,
+			func(
+				db *sqlbase.DatabaseDescriptor,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				info, err := table.GetConstraintInfoWithLookup(func(id sqlbase.ID) (
+					*sqlbase.TableDescriptor, error,
+				) {
+					if _, t := tableLookup(id); t != nil {
+						return t, nil
+					}
+					return nil, errors.Errorf("could not find referenced table with ID %v", id)
+				})
+				if err != nil {
+					return err
+				}
+				for _, c := range info {
+					if c.Kind != sqlbase.ConstraintTypeFK {
+						continue
+					}
+					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
+					if referencedDB == nil {
+						panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
+					}
+
+					oid := h.ForeignKeyDependencyOid(db, table, c.FK)
+					constraintOid := h.ForeignKeyConstraintOid(db, table, c.FK)
+					refObjID := h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
+
+					if err := addRow(
+						oid,                  // oid
+						pgConstraintTableOid, // classid
+						constraintOid,        // objid
+						zeroVal,              // objsubid
+						pgClassTableOid,      // refclassid
+						refObjID,             // refobjid
+						zeroVal,              // refobjsubid
+						depTypeNormal,        // deptype
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 	},
 }
 
@@ -1255,6 +1360,7 @@ const (
 	uniqueConstraintTypeTag
 	functionTypeTag
 	userTypeTag
+	dependencyTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -1371,6 +1477,16 @@ func (h oidHasher) UniqueConstraintOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
+	return h.getOid()
+}
+
+func (h oidHasher) ForeignKeyDependencyOid(
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, fk *sqlbase.ForeignKeyReference,
+) *parser.DInt {
+	h.writeTypeTag(dependencyTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeForeignKeyReference(fk)
 	return h.getOid()
 }
 
