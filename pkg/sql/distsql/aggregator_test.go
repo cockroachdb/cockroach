@@ -132,7 +132,7 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT SUM DISTINCT ($0), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
+				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:     AggregatorSpec_SUM,
@@ -155,7 +155,7 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT $0, GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
+				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:   AggregatorSpec_IDENT,

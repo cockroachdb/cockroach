@@ -72,6 +72,8 @@ func (jb *joinerBase) init(
 // both rows as specified by the provided output columns. We expect left or
 // right to be nil if there was no explicit "join" match, the filter is then
 // evaluated on a combinedRow with null values for the columns of the nil row.
+// render returns a nil row if no row is to be emitted (eg. if join type is
+// inner join and one of the given rows is nil).
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
 	switch jb.joinType {
 	case innerJoin:
