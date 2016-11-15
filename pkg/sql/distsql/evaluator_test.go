@@ -48,7 +48,6 @@ func TestEvaluator(t *testing.T) {
 	}{
 		{
 			spec: EvaluatorSpec{
-				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				Exprs: []Expression{{Expr: "$1"}, {Expr: "((($0)))"}},
 			},
 			input: sqlbase.EncDatumRows{
@@ -67,7 +66,6 @@ func TestEvaluator(t *testing.T) {
 			},
 		}, {
 			spec: EvaluatorSpec{
-				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				Exprs: []Expression{
 					{Expr: "$0 + $1"},
 					{Expr: "$0 - $1"},
@@ -90,7 +88,6 @@ func TestEvaluator(t *testing.T) {
 			},
 		}, {
 			spec: EvaluatorSpec{
-				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_BOOL, sqlbase.ColumnType_BOOL},
 				Exprs: []Expression{
 					{Expr: "$0 AND $0"},
 					{Expr: "$0 AND $1"},
@@ -106,7 +103,6 @@ func TestEvaluator(t *testing.T) {
 		},
 		{
 			spec: EvaluatorSpec{
-				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				Exprs: []Expression{{Expr: "1"}},
 			},
 			input: sqlbase.EncDatumRows{

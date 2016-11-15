@@ -134,7 +134,14 @@ func (eh *exprHelper) init(
 	eh.vars = parser.MakeIndexedVarHelper(eh, len(types))
 	var err error
 	eh.expr, err = processExpression(expr, &eh.vars)
-	return err
+	if err != nil {
+		return err
+	}
+	var p parser.Parser
+	if p.AggregateInExpr(eh.expr) {
+		return errors.Errorf("expression '%s' has aggregate", eh.expr)
+	}
+	return nil
 }
 
 // evalFilter is used for filter expressions; it evaluates the expression and
@@ -153,23 +160,7 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (parser.Datum, error) {
 	eh.row = row
 
-	//  TODO(irfansharif): eval here is very permissive, if expr is of type
-	//  *parser.FuncExpr for example expr.Eval doesn't make sense therefore is
-	//  explicitly tested for. There may very well be other expression types
-	//  where the same holds true but are not yet checked for.  The set of
-	//  verified parser expressions are:
-	//  ComparisonExpr, FuncExpr, AndExpr, BinaryExpr, NotExpr, OrExpr,
-	//  ParenExpr, UnaryExpr.
-	//
-	//  The list of unverified parser expressions are:
-	//  IsOfTypeExpr, AnnotateTypeExpr, CaseExpr, CastExpr, CoalesceExpr,
-	//  ExistsExpr, IfExpr, NullIfExpr.
-	switch eh.expr.(type) {
-	case *parser.FuncExpr:
-		return nil, errors.Errorf("aggregate functions not allowed")
-	default:
-		return eh.expr.Eval(eh.evalCtx)
-	}
+	return eh.expr.Eval(eh.evalCtx)
 }
 
 func (eh *exprHelper) indexToExpr(idx int) parser.Expr {

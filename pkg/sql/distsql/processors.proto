@@ -123,9 +123,7 @@ message SorterSpec {
 // etc., possibly optimizing if filtering on expressions common to the
 // 'program'.
 message EvaluatorSpec {
-  repeated sqlbase.ColumnType.Kind types = 1;
-
-  repeated Expression exprs = 2 [(gogoproto.nullable) = false];
+  repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 }
 
 message DistinctSpec {
