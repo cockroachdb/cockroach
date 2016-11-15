@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -24,11 +25,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -125,4 +128,36 @@ func TestGossipFirstRange(t *testing.T) {
 	// 		t.Fatalf("expected\n%+v\nbut found\n%+v", desc, gossiped)
 	// 	}
 	// }
+}
+
+func TestGossipHandlesReplacedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+		})
+	defer tc.Stopper().Stop()
+
+	newServerArgs := base.TestServerArgs{
+		Addr:          tc.Servers[0].ServingAddr(),
+		PartOfCluster: true,
+		JoinAddr:      tc.Servers[1].ServingAddr(),
+		Stopper:       stop.NewStopper(),
+	}
+	tc.StopServer(0)
+	tc.AddServer(t, newServerArgs)
+
+	// Ensure that all servers still running are responsive. If the two remaining
+	// original nodes don't refresh their connection to the address of the first
+	// node, they can get stuck here.
+	for i := 1; i < 4; i++ {
+		t.Run(fmt.Sprintf("node %d", i), func(t *testing.T) {
+			kvClient := tc.Server(i).KVClient().(*client.DB)
+			if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
+				t.Error(err)
+			}
+		})
+	}
 }
