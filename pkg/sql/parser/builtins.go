@@ -1250,6 +1250,20 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"current_schema": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: TypeString,
+			category:   categorySystemInfo,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				if len(ctx.Database) == 0 {
+					return DNull, nil
+				}
+				return NewDString(ctx.Database), nil
+			},
+		},
+	},
+
 	// For now, schemas are the same as databases. So, current_schemas returns the
 	// current database (if one has been set by the user) and, if the passed in
 	// parameter is true, the session's database search path.
