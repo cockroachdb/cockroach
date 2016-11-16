@@ -53,7 +53,6 @@ var _ typeList = ArgTypes{}
 var _ typeList = NamedArgTypes{}
 var _ typeList = AnyType{}
 var _ typeList = VariadicType{}
-var _ typeList = SingleType{}
 
 // ArgTypes is a typeList implementation that accepts a specific number of
 // argument types.
@@ -237,52 +236,6 @@ func (v VariadicType) Types() []Type {
 
 func (v VariadicType) String() string {
 	return fmt.Sprintf("%s...", v.Typ)
-}
-
-// SingleType is a typeList implementation which accepts a single
-// argument of type typ. It is logically identical to an ArgTypes
-// implementation with length 1, but avoids the slice allocation.
-type SingleType struct {
-	Typ Type
-}
-
-func (s SingleType) match(types ArgTypes) bool {
-	if len(types) != 1 {
-		return false
-	}
-	return s.matchAt(types[0], 0)
-}
-
-func (s SingleType) matchAt(typ Type, i int) bool {
-	if i != 0 {
-		return false
-	}
-	return typ.Equal(s.Typ)
-}
-
-func (s SingleType) matchLen(l int) bool {
-	return l == 1
-}
-
-func (s SingleType) getAt(i int) Type {
-	if i != 0 {
-		return nil
-	}
-	return s.Typ
-}
-
-// Length implements the typeList interface.
-func (s SingleType) Length() int {
-	return 1
-}
-
-// Types implements the typeList interface.
-func (s SingleType) Types() []Type {
-	return []Type{s.Typ}
-}
-
-func (s SingleType) String() string {
-	return s.Typ.String()
 }
 
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
