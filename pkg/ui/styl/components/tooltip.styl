@@ -1,0 +1,47 @@
+.tooltip, .timescale-selector
+  position absolute
+  z-index $tooltip-layer
+  padding 35px
+  border 1px solid $secondary-gray-1
+  box-shadow 2px 2px 0 $secondary-gray-15
+  border-radius 4px
+  opacity 0
+  visibility hidden
+  transition opacity .3s ease-in, visibility .5s ease-in
+  background-color white
+  top 20px
+  left 95%
+  right auto
+  white-space normal
+
+  .content, .warning
+    font-size 11px
+    color $secondary-gray-16
+    font-family Lato-Regular
+  .title, .warning-title
+    font-size 13px
+    color $main-navy
+    font-family Lato-Heavy
+    text-align center
+    width 100%
+    padding-bottom 5px
+
+  .warning .icon-warning
+    color $secondary-gold
+    font-size 50px
+    width 50px
+    line-height 50px
+    margin auto
+    margin-top 5px
+
+  dt
+    margin-top 10px
+    font-family Lato-Heavy
+
+&.viz-tooltip
+  width 250px
+
+.viz-info-icon:hover + .tooltip, .tooltip:hover
+  visibility visible
+  opacity 1
+  transition-duration 0s
