@@ -87,7 +87,7 @@ func (jr *joinReader) generateKey(
 		}
 	}
 
-	return sqlbase.MakeKeyFromEncDatums(row, index.ColumnDirections, primaryKeyPrefix, alloc)
+	return sqlbase.MakeKeyFromEncDatums(row, &jr.desc, index, primaryKeyPrefix, alloc)
 }
 
 // mainLoop runs the mainLoop and returns any error.
