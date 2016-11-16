@@ -76,9 +76,7 @@ func (node *SetTimeZone) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SET TIME ZONE ")
 	switch node.Value.(type) {
 	case *DInterval:
-		buf.WriteString("INTERVAL '")
 		FormatNode(buf, f, node.Value)
-		buf.WriteByte('\'')
 	default:
 		var s string
 		switch v := node.Value.(type) {

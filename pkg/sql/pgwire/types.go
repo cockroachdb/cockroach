@@ -187,7 +187,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.write(s)
 
 	case *parser.DInterval:
-		b.writeLengthPrefixedString(v.String())
+		b.writeLengthPrefixedString(v.ValueAsString())
 
 	case *parser.DTuple:
 		var tb bytes.Buffer
