@@ -627,6 +627,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// BatchResponse when finished.
 	var responseChs []chan response
 	defer func() {
+		if r := recover(); r != nil {
+			// If we're in the middle of a panic, don't wait on responseChs.
+			panic(r)
+		}
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
