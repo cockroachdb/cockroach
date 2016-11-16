@@ -50,6 +50,7 @@ pg_attribute
 pg_class
 pg_constraint
 pg_database
+pg_depend
 pg_description
 pg_indexes
 pg_namespace
@@ -499,6 +500,54 @@ ORDER BY con.oid
 conname  confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
 fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
 fk       {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
+
+## pg_catalog.pg_depend
+
+query IIIIIIT colnames
+SELECT classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype
+FROM pg_catalog.pg_depend
+ORDER BY objid
+----
+classid   objid       objsubid  refclassid  refobjid    refobjsubid  deptype
+71078581  1226447819  0         1652754864  1759889452  0            n
+71078581  1830805222  0         1652754864  1759889453  0            n
+
+# All entries in pg_depend are dependency links from the pg_constraint system
+# table to the pg_class system table.
+
+query IITT colnames
+SELECT DISTINCT classid, refclassid, cla.relname AS tablename, refcla.relname AS reftablename
+FROM pg_catalog.pg_depend
+JOIN pg_class cla ON classid=cla.oid
+JOIN pg_class refcla ON refclassid=refcla.oid
+----
+classid   refclassid  tablename      reftablename
+71078581  1652754864  pg_constraint  pg_class
+
+# All entries in pg_depend are foreign key constraints that reference an index
+# in pg_class.
+
+query TT colnames
+SELECT relname, relkind
+FROM pg_depend
+JOIN pg_class ON refobjid=pg_class.oid
+ORDER BY relname
+----
+relname    relkind
+index_key  i
+t1_a_key   i
+
+
+# All entries are pg_depend are linked to a foreign key constraint whose
+# supporting index is the referenced object id.
+
+query T colnames
+SELECT DISTINCT pg_constraint.contype
+FROM pg_depend
+JOIN pg_constraint ON objid=pg_constraint.oid AND refobjid=pg_constraint.conindid
+----
+contype
+f
 
 ## pg_catalog.pg_type
 
