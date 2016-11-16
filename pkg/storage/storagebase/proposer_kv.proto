@@ -161,7 +161,7 @@ message RaftCommand {
   // TODO(tschottdorf): using an extra message here (and not just `bytes`) to
   // allow the generated RaftCommand to be compared directly. If
   // this costs an extra large allocation, we need to do something different.
-  optional WriteBatch write_batch = 10011;
+  optional WriteBatch write_batch = 10014;
 
-  reserved 1, 10001 to 10010, 10012;
+  reserved 1, 10001 to 10012;
 }
