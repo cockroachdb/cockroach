@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -125,4 +127,41 @@ func TestGossipFirstRange(t *testing.T) {
 	// 		t.Fatalf("expected\n%+v\nbut found\n%+v", desc, gossiped)
 	// 	}
 	// }
+}
+
+// TestGossipHandlesReplacedNode tests that we can shut down a node and
+// replace it with a new node at the same address (simulating a node getting
+// restarted after losing its data) without the cluster breaking.
+func TestGossipHandlesReplacedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+		})
+	defer tc.Stopper().Stop()
+
+	// Take down the first node of the cluster and replace it with a new one.
+	// We replace the first node rather than the second or third to be adversarial
+	// because it typically has the most leases on it.
+	oldNodeIdx := 0
+	newServerArgs := base.TestServerArgs{
+		Addr:          tc.Servers[oldNodeIdx].ServingAddr(),
+		PartOfCluster: true,
+		JoinAddr:      tc.Servers[1].ServingAddr(),
+	}
+	tc.StopServer(oldNodeIdx)
+	tc.AddServer(t, newServerArgs)
+	tc.WaitForStores(t, tc.Server(1).Gossip())
+
+	// Ensure that all servers still running are responsive. If the two remaining
+	// original nodes don't refresh their connection to the address of the first
+	// node, they can get stuck here.
+	for i := 1; i < 4; i++ {
+		kvClient := tc.Server(i).KVClient().(*client.DB)
+		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
+			t.Errorf("failed Put to node %d: %s", i, err)
+		}
+	}
 }

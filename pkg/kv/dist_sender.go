@@ -1200,6 +1200,8 @@ func (ds *DistSender) handlePerReplicaError(
 	switch tErr := pErr.GetDetail().(type) {
 	case *roachpb.RangeNotFoundError:
 		return true
+	case *roachpb.StoreNotFoundError:
+		return true
 	case *roachpb.NodeUnavailableError:
 		return true
 	case *roachpb.NotLeaseHolderError:
