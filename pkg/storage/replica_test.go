@@ -6159,7 +6159,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 // in these commands applying at the computed indexes.
 func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/8422")
+
 	var tc testContext
 	tc.Start(t)
 	defer tc.Stop()
@@ -6188,8 +6188,6 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	expIndexes := make([]int, 0, num)
 	chs := func() []chan proposalResult {
-		tc.repl.mu.Lock()
-		defer tc.repl.mu.Unlock()
 		chs := make([]chan proposalResult, 0, num)
 
 		origIndexes := make([]int, 0, num)
@@ -6205,10 +6203,12 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				t.Fatal(pErr)
 			}
 
+			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
 			tc.repl.insertProposalLocked(cmd)
 			chs = append(chs, cmd.done)
 			tc.repl.mu.Unlock()
+			tc.repl.raftMu.Unlock()
 		}
 
 		tc.repl.mu.Lock()
@@ -6225,7 +6225,11 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
 		}
 
+		tc.repl.raftMu.Lock()
+		tc.repl.mu.Lock()
 		tc.repl.refreshProposalsLocked(0, reasonTicks)
+		tc.repl.mu.Unlock()
+		tc.repl.raftMu.Unlock()
 		return chs
 	}()
 	for _, ch := range chs {
