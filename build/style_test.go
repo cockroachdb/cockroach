@@ -641,39 +641,6 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("TestGoSimple", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkg.Dir,
-			"gosimple",
-			"-ignore",
-			strings.Join([]string{
-				"github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go:S1013",
-				"github.com/cockroachdb/cockroach/pkg/ui/embedded.go:S1013",
-			}, " "),
-			pkgScope,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Error(s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestUnconvert", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "unconvert", pkgScope)
@@ -701,14 +668,17 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("TestStaticcheck", func(t *testing.T) {
+	t.Run("TestMetacheck", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
-			"staticcheck",
+			"metacheck",
 			"-ignore",
 
 			strings.Join([]string{
+				"github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go:S1013",
+				"github.com/cockroachdb/cockroach/pkg/ui/embedded.go:S1013",
+
 				// Intentionally compare an unsigned integer <= 0 to avoid knowledge
 				// of the type at the caller and for consistency with convention.
 				"github.com/cockroachdb/cockroach/pkg/storage/replica.go:SA4003",

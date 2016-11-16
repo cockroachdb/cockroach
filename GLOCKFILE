@@ -3,6 +3,7 @@ cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/pkg/cmd/github-post
 cmd github.com/cockroachdb/cockroach/pkg/cmd/github-pull-request-make
 cmd github.com/cockroachdb/cockroach/pkg/cmd/glock-diff-parser
+cmd github.com/cockroachdb/cockroach/pkg/cmd/metacheck
 cmd github.com/cockroachdb/cockroach/pkg/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/cockroach/pkg/cmd/teamcity-trigger
 cmd github.com/cockroachdb/crlfmt
@@ -20,8 +21,6 @@ cmd github.com/wadey/gocovmerge
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/goyacc
 cmd golang.org/x/tools/cmd/stringer
-cmd honnef.co/go/simple/cmd/gosimple
-cmd honnef.co/go/staticcheck/cmd/staticcheck
 cmd honnef.co/go/unused/cmd/unused
 github.com/Azure/go-ansiterm fa152c58bc15761d0200cb75fe958b89a9d4888e
 github.com/Microsoft/go-winio 562bb09f6612d9a4e91597184709d1cdba95af93
