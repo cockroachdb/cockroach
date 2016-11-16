@@ -17,7 +17,6 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -706,27 +705,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 func (n *Node) writeSummaries(ctx context.Context) error {
 	var err error
 	if runErr := n.stopper.RunTask(func() {
-		nodeStatus := n.recorder.GetStatusSummary()
-		if nodeStatus != nil {
-			key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
-			// We use PutInline to store only a single version of the node
-			// status. There's not much point in keeping the historical
-			// versions as we keep all of the constituent data as
-			// timeseries. Further, due to the size of the build info in the
-			// node status, writing one of these every 10s will generate
-			// more versions than will easily fit into a range over the
-			// course of a day.
-			if err = n.storeCfg.DB.PutInline(ctx, key, nodeStatus); err != nil {
-				return
-			}
-			if log.V(2) {
-				statusJSON, err := json.Marshal(nodeStatus)
-				if err != nil {
-					log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
-				}
-				log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
-			}
-		}
+		err = n.recorder.WriteStatusSummary(ctx, n.storeCfg.DB)
 	}); runErr != nil {
 		err = runErr
 	}
