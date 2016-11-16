@@ -367,7 +367,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 
 	peerStopper = stop.NewStopper()
 	defer peerStopper.Stop()
-	peer = startGossipAtAddr(peerNodeID, peerAddr, peerStopper, t, metric.NewRegistry())
+	startGossipAtAddr(peerNodeID, peerAddr, peerStopper, t, metric.NewRegistry())
 
 	util.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {

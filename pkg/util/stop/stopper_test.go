@@ -46,26 +46,26 @@ func TestStopper(t *testing.T) {
 	})
 
 	go func() {
-		<-s.ShouldStop()
-		select {
-		case <-waiting:
-			t.Fatal("expected stopper to have blocked")
-		case <-time.After(1 * time.Millisecond):
-			// Expected.
-		}
-		close(running)
-		select {
-		case <-waiting:
-			// Success.
-		case <-time.After(100 * time.Millisecond):
-			t.Fatal("stopper should have finished waiting")
-		}
-		close(cleanup)
+		s.Stop()
+		close(waiting)
+		<-cleanup
 	}()
 
-	s.Stop()
-	close(waiting)
-	<-cleanup
+	<-s.ShouldStop()
+	select {
+	case <-waiting:
+		t.Fatal("expected stopper to have blocked")
+	case <-time.After(1 * time.Millisecond):
+		// Expected.
+	}
+	close(running)
+	select {
+	case <-waiting:
+		// Success.
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stopper should have finished waiting")
+	}
+	close(cleanup)
 }
 
 type blockingCloser struct {
@@ -376,41 +376,41 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	}
 
 	go func() {
-		// The ShouldQuiesce() channel should close as soon as the stopper is
-		// Stop()ed.
-		<-s.ShouldQuiesce()
-		// However, the ShouldStop() channel should still be blocked because the
-		// async task started above is still running, meaning we haven't quiesceed
-		// yet.
-		select {
-		case <-s.ShouldStop():
-			t.Fatal("expected ShouldStop() to block until quiesceing complete")
-		default:
-			// Expected.
-		}
-		// After completing the running task, the ShouldStop() channel should
-		// now close.
-		close(runningTask)
-		<-s.ShouldStop()
-		// However, the working running above prevents the call to Stop() from
-		// returning; it blocks until the runner's goroutine is finished. We
-		// use the "waiting" channel to detect this.
-		select {
-		case <-waiting:
-			t.Fatal("expected stopper to have blocked")
-		default:
-			// Expected.
-		}
-		// Finally, close the "running" channel, which should cause the original
-		// call to Stop() to return.
-		close(running)
-		<-waiting
-		close(cleanup)
+		s.Stop()
+		close(waiting)
+		<-cleanup
 	}()
 
-	s.Stop()
-	close(waiting)
-	<-cleanup
+	// The ShouldQuiesce() channel should close as soon as the stopper is
+	// Stop()ed.
+	<-s.ShouldQuiesce()
+	// However, the ShouldStop() channel should still be blocked because the
+	// async task started above is still running, meaning we haven't quiesceed
+	// yet.
+	select {
+	case <-s.ShouldStop():
+		t.Fatal("expected ShouldStop() to block until quiesceing complete")
+	default:
+		// Expected.
+	}
+	// After completing the running task, the ShouldStop() channel should
+	// now close.
+	close(runningTask)
+	<-s.ShouldStop()
+	// However, the working running above prevents the call to Stop() from
+	// returning; it blocks until the runner's goroutine is finished. We
+	// use the "waiting" channel to detect this.
+	select {
+	case <-waiting:
+		t.Fatal("expected stopper to have blocked")
+	default:
+		// Expected.
+	}
+	// Finally, close the "running" channel, which should cause the original
+	// call to Stop() to return.
+	close(running)
+	<-waiting
+	close(cleanup)
 }
 
 func TestStopperRunLimitedAsyncTask(t *testing.T) {

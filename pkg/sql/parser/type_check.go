@@ -184,12 +184,13 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CastExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 	returnDatum, validTypes := expr.castTypeAndValidArgTypes()
 
-	// The desired type provided to a CastExpr is ignored. Instead, NoTypePreference
-	// is passed to the child of the cast. There are two exceptions, described below.
-	desired = NoTypePreference
+	// The desired type provided to a CastExpr is ignored. Instead,
+	// NoTypePreference is passed to the child of the cast. There are two
+	// exceptions, described below.
+	desired := NoTypePreference
 	switch {
 	case isConstant(expr.Expr):
 		if canConstantBecome(expr.Expr.(Constant), returnDatum) {

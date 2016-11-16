@@ -1794,17 +1794,16 @@ func TestStoreScanIntents(t *testing.T) {
 		if !test.consistent {
 			consistency = roachpb.INCONSISTENT
 		}
-		done := make(chan struct{})
+		errChan := make(chan *roachpb.Error, 1)
 		go func() {
-			if reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{
+			reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{
 				Timestamp:       ts,
 				ReadConsistency: consistency,
-			}, &sArgs); pErr != nil {
-				t.Fatal(pErr)
-			} else {
+			}, &sArgs)
+			if pErr == nil {
 				sReply = reply.(*roachpb.ScanResponse)
 			}
-			close(done)
+			errChan <- pErr
 		}()
 
 		wait := 1 * time.Second
@@ -1812,7 +1811,10 @@ func TestStoreScanIntents(t *testing.T) {
 			wait = 10 * time.Millisecond
 		}
 		select {
-		case <-done:
+		case pErr := <-errChan:
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
 			if len(sReply.Rows) != 0 {
 				t.Errorf("expected empty scan result; got %+v", sReply.Rows)
 			}
@@ -1832,7 +1834,7 @@ func TestStoreScanIntents(t *testing.T) {
 				if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &etArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
-				<-done
+				<-errChan
 			}
 		}
 	}

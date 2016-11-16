@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -1185,46 +1184,51 @@ CREATE TABLE bench.insert_distinct (
 
 	b.ResetTimer()
 
-	var wg sync.WaitGroup
-	wg.Add(numUsers)
+	errChan := make(chan error)
 
 	var count int64
 	for i := 0; i < numUsers; i++ {
 		go func(i int) {
-			defer wg.Done()
-			var buf bytes.Buffer
+			errChan <- func() error {
+				var buf bytes.Buffer
 
-			rnd := rand.New(rand.NewSource(int64(i)))
-			// Article IDs are chosen from a zipf distribution. These values select
-			// articleIDs that are mostly <10000. The parameters were experimentally
-			// determined, but somewhat arbitrary.
-			zipf := rand.NewZipf(rnd, 2, 10000, 100000)
+				rnd := rand.New(rand.NewSource(int64(i)))
+				// Article IDs are chosen from a zipf distribution. These values select
+				// articleIDs that are mostly <10000. The parameters were experimentally
+				// determined, but somewhat arbitrary.
+				zipf := rand.NewZipf(rnd, 2, 10000, 100000)
 
-			for {
-				n := atomic.AddInt64(&count, 1)
-				if int(n) >= b.N {
-					return
-				}
-
-				// Insert between [1,100] articles in a batch.
-				numArticles := 1 + rnd.Intn(100)
-				buf.Reset()
-				buf.WriteString(`INSERT INTO bench.insert_distinct VALUES `)
-				for j := 0; j < numArticles; j++ {
-					if j > 0 {
-						buf.WriteString(", ")
+				for {
+					n := atomic.AddInt64(&count, 1)
+					if int(n) >= b.N {
+						return nil
 					}
-					fmt.Fprintf(&buf, "(%d, %d)", zipf.Uint64(), n)
-				}
 
-				if _, err := db.Exec(buf.String()); err != nil {
-					b.Fatal(err)
+					// Insert between [1,100] articles in a batch.
+					numArticles := 1 + rnd.Intn(100)
+					buf.Reset()
+					buf.WriteString(`INSERT INTO bench.insert_distinct VALUES `)
+					for j := 0; j < numArticles; j++ {
+						if j > 0 {
+							buf.WriteString(", ")
+						}
+						fmt.Fprintf(&buf, "(%d, %d)", zipf.Uint64(), n)
+					}
+
+					if _, err := db.Exec(buf.String()); err != nil {
+						return err
+					}
 				}
-			}
+			}()
 		}(i)
 	}
 
-	wg.Wait()
+	for i := 0; i < numUsers; i++ {
+		if err := <-errChan; err != nil {
+			b.Fatal(err)
+		}
+	}
+
 	b.StopTimer()
 }
 

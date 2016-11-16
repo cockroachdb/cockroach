@@ -448,7 +448,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		ent.Data = nil
 		return fmt.Sprintf("%s\n%s\n", &ent, &cmd), nil
 	}
-	return "", fmt.Errorf("Unknown log entry type: %s\n", &ent)
+	return "", fmt.Errorf("unknown log entry type: %s", &ent)
 }
 
 func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
