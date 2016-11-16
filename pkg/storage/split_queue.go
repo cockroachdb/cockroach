@@ -102,6 +102,11 @@ func (sq *splitQueue) process(
 	if len(splitKeys) > 0 {
 		log.Infof(ctx, "splitting at keys %v", splitKeys)
 		for _, splitKey := range splitKeys {
+			// Use AdminSplit() here because the zone config stipulates
+			// splitting at a specific key independent of which replica it
+			// lies on (the specific replica desc passed in can change before
+			// the command is applied). If a range was already split at this
+			// key, it returns an error.
 			if err := sq.db.AdminSplit(ctx, splitKey.AsRawKey()); err != nil {
 				return errors.Errorf("unable to split %s at key %q: %s", r, splitKey, err)
 			}
@@ -115,9 +120,11 @@ func (sq *splitQueue) process(
 		return err
 	}
 	size := r.GetMVCCStats().Total()
-	// FIXME: why is this implementation not the same as the one above?
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
+		// Do not use the AdminSplit() command because we are attempting to
+		// split a specific replica at a key. If this replica has already been
+		// split, even at a different key, an error is returned.
 		if _, pErr := client.SendWrappedWith(ctx, r, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{
