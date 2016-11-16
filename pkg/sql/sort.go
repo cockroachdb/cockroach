@@ -150,7 +150,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
-				if err := s.addRender(parser.SelectExpr{Expr: expr}, nil); err != nil {
+				err := s.addRender(parser.SelectExpr{Expr: expr}, parser.NoTypePreference)
+				if err != nil {
 					return nil, err
 				}
 				index = len(s.columns) - 1

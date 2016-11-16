@@ -1477,7 +1477,7 @@ type DArray []Datum
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() Type {
-	return TypeArray
+	return TypeStringArray
 }
 
 // Compare implements the Datum interface.

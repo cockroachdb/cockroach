@@ -174,7 +174,9 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, len(s.render)-origRenderLen)
-			if err := s.addRender(parser.SelectExpr{Expr: partition}, nil); err != nil {
+
+			err := s.addRender(parser.SelectExpr{Expr: partition}, parser.NoTypePreference)
+			if err != nil {
 				return err
 			}
 		}
@@ -190,7 +192,9 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 				Direction: direction,
 			}
 			windowFn.columnOrdering = append(windowFn.columnOrdering, ordering)
-			if err := s.addRender(parser.SelectExpr{Expr: orderBy.Expr}, nil); err != nil {
+
+			err := s.addRender(parser.SelectExpr{Expr: orderBy.Expr}, parser.NoTypePreference)
+			if err != nil {
 				return err
 			}
 		}

@@ -1188,7 +1188,7 @@ var Builtins = map[string][]Builtin{
 
 	"array_length": {
 		Builtin{
-			Types:      ArgTypes{TypeArray, TypeInt},
+			Types:      ArgTypes{TypeAnyArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -1205,7 +1205,7 @@ var Builtins = map[string][]Builtin{
 
 	"array_lower": {
 		Builtin{
-			Types:      ArgTypes{TypeArray, TypeInt},
+			Types:      ArgTypes{TypeAnyArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -1222,7 +1222,7 @@ var Builtins = map[string][]Builtin{
 
 	"array_upper": {
 		Builtin{
-			Types:      ArgTypes{TypeArray, TypeInt},
+			Types:      ArgTypes{TypeAnyArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -1256,7 +1256,7 @@ var Builtins = map[string][]Builtin{
 	"current_schemas": {
 		Builtin{
 			Types:      ArgTypes{TypeBool},
-			ReturnType: TypeArray,
+			ReturnType: TypeStringArray,
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				var schemas DArray

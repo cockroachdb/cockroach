@@ -60,7 +60,7 @@ func isNumericConstant(expr Expr) bool {
 
 func typeCheckConstant(c Constant, ctx *SemaContext, desired Type) (TypedExpr, error) {
 	avail := c.AvailableTypes()
-	if desired != nil {
+	if desired != NoTypePreference {
 		for _, typ := range avail {
 			if desired.Equal(typ) {
 				return c.ResolveAsType(ctx, desired)
@@ -501,7 +501,7 @@ var _ Visitor = constantTypeVisitor{}
 func (constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case Constant:
-		typedConst, err := t.TypeCheck(nil, nil)
+		typedConst, err := t.TypeCheck(nil, NoTypePreference)
 		if err != nil {
 			panic(err)
 		}
