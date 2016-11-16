@@ -550,10 +550,12 @@ func (a *Allocator) ShouldTransferLease(
 	return shouldTransferLease(sl, source)
 }
 
-var enableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", true)
+// EnableLeaseRebalancing controls whether lease rebalancing is enabled or
+// not. Exported for testing.
+var EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", false)
 
 func shouldTransferLease(sl StoreList, source roachpb.StoreDescriptor) bool {
-	if !enableLeaseRebalancing {
+	if !EnableLeaseRebalancing {
 		return false
 	}
 	// Allow lease transfer if we're above the overfull threshold, which is
