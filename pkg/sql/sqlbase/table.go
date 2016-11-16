@@ -281,22 +281,12 @@ func EncodeColumns(
 	return key, containsNull, nil
 }
 
-// MakeKeyFromEncDatums creates a key by concatenating keyPrefix with the
-// encodings of the given EncDatum values.
-func MakeKeyFromEncDatums(
-	values EncDatumRow, directions []IndexDescriptor_Direction, keyPrefix []byte, alloc *DatumAlloc,
-) (key roachpb.Key, err error) {
-	if len(values) != len(directions) {
-		return nil, errors.Errorf("%d values, %d directions", len(values), len(directions))
-	}
-	// We know we will append to the key which will cause the capacity to grow
-	// so make it bigger from the get-go.
-	key = make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
-	copy(key, keyPrefix)
-
+func appendEncDatumsToKey(
+	key roachpb.Key, values EncDatumRow, dirs []IndexDescriptor_Direction, alloc *DatumAlloc,
+) (roachpb.Key, error) {
 	for i, val := range values {
 		encoding := DatumEncoding_ASCENDING_KEY
-		if directions[i] == IndexDescriptor_DESC {
+		if dirs[i] == IndexDescriptor_DESC {
 			encoding = DatumEncoding_DESCENDING_KEY
 		}
 		var err error
@@ -306,6 +296,59 @@ func MakeKeyFromEncDatums(
 		}
 	}
 	return key, nil
+}
+
+// MakeKeyFromEncDatums creates a key by concatenating keyPrefix with the
+// encodings of the given EncDatum values. The values correspond to
+// index.ColumnIDs.
+//
+// If a table or index is interleaved, `encoding.encodedNullDesc` is used in
+// place of the family id (a varint) to signal the next component of the key.
+// An example of one level of interleaving (a parent):
+// /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
+//
+// Note that ImplicitColumnIDs are not encoded, so the result isn't always a
+// full index key.
+func MakeKeyFromEncDatums(
+	values EncDatumRow,
+	tableDesc *TableDescriptor,
+	index *IndexDescriptor,
+	keyPrefix []byte,
+	alloc *DatumAlloc,
+) (roachpb.Key, error) {
+	dirs := index.ColumnDirections
+	if len(values) != len(dirs) {
+		return nil, errors.Errorf("%d values, %d directions", len(values), len(dirs))
+	}
+	// We know we will append to the key which will cause the capacity to grow
+	// so make it bigger from the get-go.
+	key := make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
+	copy(key, keyPrefix)
+
+	if len(index.Interleave.Ancestors) > 0 {
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is assumed to already be encoded in keyPrefix.
+			if i != 0 {
+				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.TableID))
+				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.IndexID))
+			}
+
+			length := int(ancestor.SharedPrefixLen)
+			var err error
+			key, err = appendEncDatumsToKey(key, values[:length], dirs[:length], alloc)
+			if err != nil {
+				return nil, err
+			}
+			values, dirs = values[length:], dirs[length:]
+
+			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
+			key = encoding.EncodeNotNullDescending(key)
+		}
+
+		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
+		key = encoding.EncodeUvarintAscending(key, uint64(index.ID))
+	}
+	return appendEncDatumsToKey(key, values, dirs, alloc)
 }
 
 // EncodeDatum encodes a datum (order-preserving encoding, suitable for keys).
