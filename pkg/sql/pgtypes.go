@@ -80,6 +80,8 @@ func DatumToOid(typ parser.Type) (oid.Oid, bool) {
 			return oid.T__int8, true
 		case parser.TypeStringArray:
 			return oid.T__text, true
+		case parser.TypeAnyArray:
+			return oid.T_anyarray, true
 		}
 	}
 	return dOid, ok

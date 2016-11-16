@@ -231,7 +231,11 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := MakeSemaContext()
 		ctx.Placeholders.SetTypes(clonePlaceholderTypes(test.ptypes))
-		_, typ, err := typeCheckSameTypedExprs(&ctx, test.desired, buildExprs(exprs)...)
+		desired := NoTypePreference
+		if test.desired != nil {
+			desired = test.desired
+		}
+		_, typ, err := typeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...)
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
 		} else {
@@ -368,8 +372,12 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	for i, d := range testData {
 		ctx := MakeSemaContext()
 		ctx.Placeholders.SetTypes(d.ptypes)
+		desired := NoTypePreference
+		if d.desired != nil {
+			desired = d.desired
+		}
 		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
-			if _, _, err := typeCheckSameTypedExprs(&ctx, d.desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
+			if _, _, err := typeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 			}
 		})
