@@ -94,7 +94,7 @@ github.com/pkg/errors 248dadf4e9068a0b3e79f02ed0a610d935de5302
 github.com/prometheus/client_model fa8ad6fec33561be4280a8f0514318c79d7f6cb6
 github.com/prometheus/common 0d5de9d6d8629cb8bee6d4674da4127cd8b615a3
 github.com/rcrowley/go-metrics ab2277b1c5d15c3cba104e9cbddbdfc622df5ad8
-github.com/rubyist/circuitbreaker 7e3e7fbe9c62b943d487af023566a79d9eb22d3b
+github.com/rubyist/circuitbreaker af9583088c3453556f6e4f580693ba8606ca459a
 github.com/sasha-s/go-deadlock 09aefc0ac06ad74d91ca31acdb11fc981c159149
 github.com/satori/go.uuid b061729afc07e77a8aa4fad0a2fd840958f1942a
 github.com/spf13/cobra 6b74a60562f5c1c920299b8f02d153e16f4897fc
