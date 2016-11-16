@@ -65,6 +65,7 @@ func (b *bucket) AddRow(row parser.DTuple) {
 
 type buckets struct {
 	buckets      map[string]*bucket
+	memAcc       WrappableMemoryAccount
 	rowContainer *RowContainer
 }
 
@@ -72,23 +73,29 @@ func (b *buckets) Buckets() map[string]*bucket {
 	return b.buckets
 }
 
-func (b *buckets) AddRow(encoding []byte, row parser.DTuple) error {
+func (b *buckets) AddRow(s *Session, encoding []byte, row parser.DTuple) error {
 	bk, ok := b.buckets[string(encoding)]
 	if !ok {
 		bk = &bucket{}
 	}
+
 	rowCopy, err := b.rowContainer.AddRow(row)
 	if err != nil {
 		return err
 	}
+	if err := b.memAcc.Wtxn(s).Grow(sizeOfDTuple); err != nil {
+		return err
+	}
 	bk.AddRow(rowCopy)
+
 	if !ok {
 		b.buckets[string(encoding)] = bk
 	}
 	return nil
 }
 
-func (b *buckets) Close() {
+func (b *buckets) Close(s *Session) {
+	b.memAcc.Wtxn(s).Close()
 	b.rowContainer.Close()
 	b.rowContainer = nil
 	b.buckets = nil
@@ -102,6 +109,7 @@ func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
+	planner       *planner
 	joinType      joinType
 	joinAlgorithm joinAlgorithm
 
@@ -254,6 +262,7 @@ func (p *planner) makeJoin(
 	}
 
 	n := &joinNode{
+		planner:       p,
 		left:          left,
 		right:         right,
 		joinType:      typ,
@@ -272,6 +281,7 @@ func (p *planner) makeJoin(
 
 		n.buckets = buckets{
 			buckets:      make(map[string]*bucket),
+			memAcc:       p.session.TxnState.OpenAccount(),
 			rowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0),
 		}
 	}
@@ -447,7 +457,7 @@ func (n *joinNode) hashJoinStart() error {
 			return err
 		}
 
-		if err := n.buckets.AddRow(encoding, row); err != nil {
+		if err := n.buckets.AddRow(n.planner.session, encoding, row); err != nil {
 			return err
 		}
 
@@ -778,7 +788,7 @@ func (n *joinNode) Close() {
 	case hashJoin:
 		n.buffer.Close()
 		n.buffer = nil
-		n.buckets.Close()
+		n.buckets.Close(n.planner.session)
 	default:
 		panic("unsupported JOIN algorithm")
 	}
