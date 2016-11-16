@@ -316,7 +316,7 @@ func init() {
 		intFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
 	}
 
-	stringFlag(setUserCmd.Flags(), &password, cliflags.Password, "")
+	boolFlag(setUserCmd.Flags(), &password, cliflags.Password, false)
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, quitCmd, freezeClusterCmd, dumpCmd, /* startCmd is covered above */
