@@ -23,6 +23,7 @@ import (
 	"io"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/pkg/errors"
 )
@@ -153,7 +154,16 @@ func (b *readBuffer) getUint32() (uint32, error) {
 type writeBuffer struct {
 	wrapped bytes.Buffer
 	err     error
-	putbuf  [64]byte
+
+	// These two buffers are used as temporary storage. Use putbuf when the
+	// length of the required temp space is known. Use variablePutbuf when the length
+	// of the required temp space is unknown, or when a bytes.Buffer is needed.
+	//
+	// We keep both of these because there are operations that are only possible to
+	// perform (efficiently) with one or the other, such as strconv.AppendInt with
+	// putbuf or Datum.Format with variablePutbuf.
+	putbuf         [64]byte
+	variablePutbuf bytes.Buffer
 
 	// bytecount counts the number of bytes written across all pgwire connections, not just this
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
@@ -185,14 +195,33 @@ func (b *writeBuffer) nullTerminate() {
 	}
 }
 
-// writeString writes a length-prefixed string. The length is encoded as
-// an int32.
+// writeLengthPrefixedVariablePutbuf writes the current contents of
+// variablePutbuf with a length prefix. The function will reset
+// variablePutbuf.
+func (b *writeBuffer) writeLengthPrefixedVariablePutbuf() {
+	if b.err == nil {
+		b.putInt32(int32(b.variablePutbuf.Len()))
+
+		// bytes.Buffer.WriteTo resets the Buffer.
+		_, b.err = b.variablePutbuf.WriteTo(&b.wrapped)
+	}
+}
+
+// writeLengthPrefixedString writes a length-prefixed string. The
+// length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedString(s string) {
 	b.putInt32(int32(len(s)))
 	b.writeString(s)
 }
 
-// writeString writes a null-terminated string.
+// writeLengthPrefixedDatum writes a length-prefixed Datum in its
+// string representation. The length is encoded as an int32.
+func (b *writeBuffer) writeLengthPrefixedDatum(d parser.Datum) {
+	d.Format(&b.variablePutbuf, parser.FmtSimple)
+	b.writeLengthPrefixedVariablePutbuf()
+}
+
+// writeTerminatedString writes a null-terminated string.
 func (b *writeBuffer) writeTerminatedString(s string) {
 	b.writeString(s)
 	b.nullTerminate()
