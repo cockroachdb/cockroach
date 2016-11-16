@@ -2703,7 +2703,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	if log.V(1) && (numShouldRetry > 0 || len(reproposals) > 0) {
 		ctx := r.AnnotateCtx(context.TODO())
 		log.Infof(ctx,
-			"pending commands: sent %d back to client, reproposing %d (at %d.%d)k %s",
+			"pending commands: sent %d back to client, reproposing %d (at %d.%d) %s",
 			numShouldRetry, len(reproposals), r.mu.state.RaftAppliedIndex,
 			r.mu.state.LeaseAppliedIndex, reason)
 	}
