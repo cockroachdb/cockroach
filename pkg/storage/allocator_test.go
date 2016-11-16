@@ -943,6 +943,12 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	)
 	defer stopper.Stop()
 
+	// TODO(peter): Remove when lease rebalancing is the default.
+	defer func(v bool) {
+		EnableLeaseRebalancing = v
+	}(EnableLeaseRebalancing)
+	EnableLeaseRebalancing = true
+
 	// 3 stores where the lease count for each store is equal to 10x the store
 	// ID.
 	var stores []*roachpb.StoreDescriptor
@@ -999,6 +1005,12 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		/* useRuleSolver */ false,
 	)
 	defer stopper.Stop()
+
+	// TODO(peter): Remove when lease rebalancing is the default.
+	defer func(v bool) {
+		EnableLeaseRebalancing = v
+	}(EnableLeaseRebalancing)
+	EnableLeaseRebalancing = true
 
 	// 3 stores where the lease count for each store is equal to 10x the store
 	// ID.
