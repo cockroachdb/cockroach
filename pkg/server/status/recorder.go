@@ -25,6 +25,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -102,6 +104,10 @@ type MetricsRecorder struct {
 		lastNodeMetricCount  int
 		lastStoreMetricCount int
 	}
+	// WriteStatusSummary is a potentially long-running method (with a network
+	// round-trip) that requires a mutex to be safe for concurrent usage. We
+	// therefore give it its own mutex to avoid blocking other methods.
+	writeSummaryMu syncutil.Mutex
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
@@ -240,7 +246,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder.GetStatusSummary called before NodeID allocation.")
+			log.Warning(context.TODO(), "attempt to generate status summary before NodeID allocation.")
 		}
 		return nil
 	}
@@ -286,6 +292,35 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		mr.mu.lastStoreMetricCount = len(nodeStat.StoreStatuses[0].Metrics)
 	}
 	return nodeStat
+}
+
+// WriteStatusSummary generates a summary and immediately writes it to the given
+// client.
+func (mr *MetricsRecorder) WriteStatusSummary(ctx context.Context, db *client.DB) error {
+	mr.writeSummaryMu.Lock()
+	defer mr.writeSummaryMu.Unlock()
+
+	nodeStatus := mr.GetStatusSummary()
+	if nodeStatus != nil {
+		key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
+		// We use PutInline to store only a single version of the node status.
+		// There's not much point in keeping the historical versions as we keep
+		// all of the constituent data as timeseries. Further, due to the size
+		// of the build info in the node status, writing one of these every 10s
+		// will generate more versions than will easily fit into a range over
+		// the course of a day.
+		if err := db.PutInline(ctx, key, nodeStatus); err != nil {
+			return err
+		}
+		if log.V(2) {
+			statusJSON, err := json.Marshal(nodeStatus)
+			if err != nil {
+				log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
+			}
+			log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+		}
+	}
+	return nil
 }
 
 // registryRecorder is a helper class for recording time series datapoints
