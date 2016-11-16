@@ -189,7 +189,7 @@ func (rq *replicateQueue) process(
 		}
 
 		log.VEventf(ctx, 1, "adding replica to %+v due to under-replication", newReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
+		if err := rq.addReplica(ctx, repl, newReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorRemove:
@@ -231,7 +231,7 @@ func (rq *replicateQueue) process(
 			}
 		} else {
 			log.VEventf(ctx, 1, "removing replica %+v due to over-replication", removeReplica)
-			if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
+			if err := rq.removeReplica(ctx, repl, removeReplica, desc); err != nil {
 				return err
 			}
 		}
@@ -245,7 +245,7 @@ func (rq *replicateQueue) process(
 		}
 		deadReplica := deadReplicas[0]
 		log.VEventf(ctx, 1, "removing dead replica %+v from store", deadReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
+		if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorNoop:
@@ -288,7 +288,7 @@ func (rq *replicateQueue) process(
 			StoreID: rebalanceStore.StoreID,
 		}
 		log.VEventf(ctx, 1, "rebalancing to %+v", rebalanceReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
+		if err := rq.addReplica(ctx, repl, rebalanceReplica, desc); err != nil {
 			return err
 		}
 	}
@@ -296,6 +296,35 @@ func (rq *replicateQueue) process(
 	// Enqueue this replica again to see if there are more changes to be made.
 	rq.MaybeAdd(repl, rq.clock.Now())
 	return nil
+}
+
+func (rq *replicateQueue) addReplica(
+	ctx context.Context,
+	repl *Replica,
+	repDesc roachpb.ReplicaDescriptor,
+	desc *roachpb.RangeDescriptor,
+) error {
+	err := repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, repDesc, desc)
+	if IsPreemptiveSnapshotError(err) {
+		// If the ChangeReplicas failed because the preemptive snapshot failed, we
+		// log the error but then return success indicating we should retry the
+		// operation. The most likely causes of the preemptive snapshot failing are
+		// a declined reservation or the remote node being unavailable. In either
+		// case we don't want to wait another scanner cycle before reconsidering
+		// the range.
+		log.Info(ctx, err)
+		return nil
+	}
+	return err
+}
+
+func (rq *replicateQueue) removeReplica(
+	ctx context.Context,
+	repl *Replica,
+	repDesc roachpb.ReplicaDescriptor,
+	desc *roachpb.RangeDescriptor,
+) error {
+	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, repDesc, desc)
 }
 
 func (*replicateQueue) timer() time.Duration {

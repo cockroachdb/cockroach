@@ -2724,6 +2724,8 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
 		rep.Desc()); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
+	} else if !storage.IsPreemptiveSnapshotError(err) {
+		t.Fatalf("expected preemptive snapshot failed error; got %T: %v", err, err)
 	}
 }
 
