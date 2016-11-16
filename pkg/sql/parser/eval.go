@@ -1838,8 +1838,13 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	case *StringColType:
 		var s DString
 		switch t := d.(type) {
-		case *DBool, *DInt, *DFloat, *DDecimal, *DTimestamp, *DTimestampTZ, *DDate, *DInterval, dNull:
+		case *DBool, *DInt, *DFloat, *DDecimal, *DTimestamp, *DTimestampTZ, *DDate, dNull:
 			s = DString(d.String())
+		case *DInterval:
+			// When converting an interval to string, we need a string representation
+			// of the duration (e.g. "5s") and not of the interval itself (e.g.
+			// "INTERVAL '5s'").
+			s = DString(t.ValueAsString())
 		case *DString:
 			s = *t
 		case *DCollatedString:
