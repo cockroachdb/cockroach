@@ -29,12 +29,17 @@ import (
 var buildTypeID = flag.String("build", "Cockroach_Nightlies_Stress", "the TeamCity build ID to start")
 var branchName = flag.String("branch", "", "the VCS branch to build")
 
+const teamcityServerURLEnv = "TC_SERVER_URL"
 const teamcityAPIUserEnv = "TC_API_USER"
 const teamcityAPIPasswordEnv = "TC_API_PASSWORD"
 
 func main() {
 	flag.Parse()
 
+	host, ok := os.LookupEnv(teamcityServerURLEnv)
+	if !ok {
+		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
+	}
 	username, ok := os.LookupEnv(teamcityAPIUserEnv)
 	if !ok {
 		log.Fatalf("teamcity API username environment variable %s is not set", teamcityAPIUserEnv)
@@ -45,7 +50,7 @@ func main() {
 	}
 	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/..."})
 
-	client := teamcity.New("teamcity.cockroachdb.com", username, password)
+	client := teamcity.New(host, username, password)
 	// Queue a build per configuration per package.
 	for _, propEvalKV := range []bool{true, false} {
 		for _, params := range []map[string]string{
