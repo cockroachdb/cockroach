@@ -62,7 +62,7 @@ func TestTransactionString(t *testing.T) {
 	var txnEmpty roachpb.Transaction
 	_ = txnEmpty.String() // prevent regression of NPE
 
-	cmd := storagebase.ReplicatedProposalData{
+	cmd := storagebase.RaftCommand{
 		Cmd: &roachpb.BatchRequest{},
 	}
 	cmd.Cmd.Txn = &txn
