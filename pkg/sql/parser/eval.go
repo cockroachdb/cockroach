@@ -72,7 +72,7 @@ func (UnaryOp) preferred() bool {
 func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
-			impl.types = SingleType{impl.Typ}
+			impl.types = ArgTypes{impl.Typ}
 			UnaryOps[op][i] = impl
 		}
 	}
