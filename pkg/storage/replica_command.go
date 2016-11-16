@@ -53,10 +53,9 @@ import (
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
 
-// ErrMsgConflictUpdatingRangeDesc is an error message that is returned by
-// AdminSplit when it conflicts with some other process that updates range
-// descriptors.
-const ErrMsgConflictUpdatingRangeDesc = "conflict updating range descriptors"
+// errMsgConflictUpdatingRangeDesc is an error that is returned by AdminSplit
+// when it conflicts with some other process that updates range descriptors.
+var errMsgConflictUpdatingRangeDesc = errors.New("conflict updating range descriptors")
 
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
 // command. It returns the response, an error, and a post commit trigger which
@@ -2387,8 +2386,11 @@ func (r *Replica) AdminSplit(
 			// intents (see #9265).
 			log.Event(ctx, "updating LHS descriptor")
 			if err := txn.Run(b); err != nil {
+				// The ConditionFailedError can occur because the descriptor
+				// used as the expected value in the CPut used to update the
+				// left range descriptor is read outside of the transaction.
 				if _, ok := err.(*roachpb.ConditionFailedError); ok {
-					return errors.New(ErrMsgConflictUpdatingRangeDesc)
+					return errMsgConflictUpdatingRangeDesc
 				}
 				return err
 			}
@@ -2431,13 +2433,19 @@ func (r *Replica) AdminSplit(
 		// Commit txn with final batch (RHS descriptor and meta).
 		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
 		if err := txn.Run(b); err != nil {
+			// The ConditionFailedError can occur because another transaction
+			// could have created the right descriptor and a nil value is
+			// being used here as the expected value of the CPut.
 			if _, ok := err.(*roachpb.ConditionFailedError); ok {
-				return errors.New(ErrMsgConflictUpdatingRangeDesc)
+				return errMsgConflictUpdatingRangeDesc
 			}
 			return err
 		}
 		return nil
 	}); err != nil {
+		if err == errMsgConflictUpdatingRangeDesc {
+			return reply, roachpb.NewError(&roachpb.ConflictUpdatingRangeDesc{})
+		}
 		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
 

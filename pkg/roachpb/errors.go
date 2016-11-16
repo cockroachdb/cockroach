@@ -354,6 +354,16 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &AmbiguousResultError{}
 
+func (e *ConflictUpdatingRangeDesc) Error() string {
+	return "conflict updating range descriptor"
+}
+
+func (e *ConflictUpdatingRangeDesc) message(_ *Error) string {
+	return e.Error()
+}
+
+var _ ErrorDetailInterface = &ConflictUpdatingRangeDesc{}
+
 func (e *TransactionAbortedError) Error() string {
 	return "txn aborted"
 }
