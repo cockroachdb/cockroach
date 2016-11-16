@@ -108,3 +108,10 @@ SYNTAX                         Modern
 TIME ZONE                      UTC
 TRANSACTION ISOLATION LEVEL    SERIALIZABLE
 TRANSACTION PRIORITY           NORMAL
+
+statement ok
+SET APPLICATION_NAME = 'hello'
+
+statement ok
+SET EXTRA_FLOAT_DIGITS = 3
+

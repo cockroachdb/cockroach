@@ -82,6 +82,10 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
 
+	case `APPLICATION_NAME`:
+		// These settings are sent by the clients to improve query logging on the server,
+		// but we silently ignore them.
+
 	case `DEFAULT_TRANSACTION_ISOLATION`:
 		// It's unfortunate that clients want us to support both SET
 		// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the
