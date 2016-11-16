@@ -3024,6 +3024,21 @@ func (r *Replica) changeReplicasTrigger(
 	return pd
 }
 
+type preemptiveSnapshotFailed struct {
+	cause error
+}
+
+func (s *preemptiveSnapshotFailed) Error() string {
+	return s.cause.Error()
+}
+
+// IsPreemptiveSnapshotFailed returns true iff the error indicates a preemptive
+// snapshot failed.
+func IsPreemptiveSnapshotFailed(err error) bool {
+	_, ok := err.(*preemptiveSnapshotFailed)
+	return ok
+}
+
 // ChangeReplicas adds or removes a replica of a range. The change is performed
 // in a distributed transaction and takes effect when that transaction is committed.
 // When removing a replica, only the NodeID and StoreID fields of the Replica are used.
@@ -3104,7 +3119,6 @@ func (r *Replica) ChangeReplicas(
 	repDesc roachpb.ReplicaDescriptor,
 	desc *roachpb.RangeDescriptor,
 ) error {
-
 	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
@@ -3208,7 +3222,9 @@ func (r *Replica) ChangeReplicas(
 			}
 			if err := r.store.cfg.Transport.SendSnapshot(
 				ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
-				return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
+				return &preemptiveSnapshotFailed{
+					errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r),
+				}
 			}
 			return nil
 		}(); err != nil {
