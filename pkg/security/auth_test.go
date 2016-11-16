@@ -107,9 +107,9 @@ func TestAuthenticationHook(t *testing.T) {
 		// Secure mode, bad user.
 		{false, makeFakeTLSState([]string{"foo"}, []int{1}), goodRequest, true, false, false},
 		// Secure mode, node user.
-		{false, makeFakeTLSState([]string{security.NodeUser}, []int{1}), goodRequest, true, true, true},
+		{false, makeFakeTLSState([]string{security.NodeUser.Username()}, []int{1}), goodRequest, true, true, true},
 		// Secure mode, root user.
-		{false, makeFakeTLSState([]string{security.RootUser}, []int{1}), goodRequest, true, false, false},
+		{false, makeFakeTLSState([]string{security.RootUser.Username()}, []int{1}), goodRequest, true, false, false},
 	}
 
 	for tcNum, tc := range testCases {

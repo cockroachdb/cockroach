@@ -201,5 +201,5 @@ var _ security.RequestWithUser = &RaftMessageRequest{}
 // GetUser implements security.RequestWithUser.
 // Raft messages are always sent by the node user.
 func (*RaftMessageRequest) GetUser() string {
-	return security.NodeUser
+	return security.NodeUser.Username()
 }

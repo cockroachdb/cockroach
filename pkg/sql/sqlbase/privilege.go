@@ -99,7 +99,7 @@ func NewDefaultPrivilegeDescriptor() *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		Users: []UserPrivileges{
 			{
-				User:       security.RootUser,
+				User:       security.RootUser.Username(),
 				Privileges: privilege.ALL.Mask(),
 			},
 		},
@@ -168,9 +168,9 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
 func (p PrivilegeDescriptor) Validate(id ID) error {
-	userPriv, ok := p.findUser(security.RootUser)
+	userPriv, ok := p.findUser(security.RootUser.Username())
 	if !ok {
-		return fmt.Errorf("user %s does not have privileges", security.RootUser)
+		return fmt.Errorf("user %s does not have privileges", security.RootUser.Username())
 	}
 	if IsSystemConfigID(id) {
 		// System databases and tables have custom maximum allowed privileges.
@@ -183,7 +183,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 		allowedPrivileges := objectPrivileges.ToBitField()
 		if userPriv.Privileges&allowedPrivileges != allowedPrivileges {
 			return fmt.Errorf("user %s must have %s privileges on system objects",
-				security.RootUser, privilege.ListFromBitField(allowedPrivileges))
+				security.RootUser.Username(), privilege.ListFromBitField(allowedPrivileges))
 		}
 
 		// For all users (root included), no other privileges must be granted.
@@ -196,7 +196,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	} else if !isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		// Non-system databases and tables must preserve ALL
 		// privileges for the root user.
-		return fmt.Errorf("user %s does not have ALL privileges", security.RootUser)
+		return fmt.Errorf("user %s does not have ALL privileges", security.RootUser.Username())
 	}
 	return nil
 }

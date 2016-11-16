@@ -28,7 +28,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,7 +77,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		T:       t.T,
 		srv:     t.cluster.Server(nodeIdx),
 		db:      db,
-		user:    security.RootUser,
+		user:    security.RootUser.Username(),
 		verbose: testing.Verbose() || log.V(1),
 	}
 	if err := l.processTestFile(path); err != nil {
@@ -92,7 +91,7 @@ func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 		pgURL, cleanupFunc := sqlutils.PGUrl(t.T,
 			t.cluster.Server(nodeIdx).ServingAddr(),
 			"TestParallel",
-			url.User(security.RootUser))
+			security.RootUser)
 		db, err := gosql.Open("postgres", pgURL.String())
 		if err != nil {
 			t.Fatal(err)

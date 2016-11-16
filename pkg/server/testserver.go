@@ -19,6 +19,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"time"
 
@@ -44,14 +45,15 @@ import (
 )
 
 const (
-	// TestUser is a fixed user used in unittests.
-	// It has valid embedded client certs.
-	TestUser = "testuser"
 	// initialSplitsTimeout is the amount of time to wait for initial splits to
 	// occur on a freshly started server.
 	// Note: this needs to be fairly high or tests become flaky.
 	initialSplitsTimeout = 10 * time.Second
 )
+
+// TestUser is a fixed user used in unittests.
+// It has valid embedded client certs.
+var TestUser = url.User("testuser")
 
 // makeTestConfig returns a config for testing. It overrides the
 // Certs with the test certs directory.

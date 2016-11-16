@@ -18,6 +18,7 @@ package base_test
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"testing"
 
@@ -27,11 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func fillCertPaths(cfg *base.Config, user string) {
+func fillCertPaths(cfg *base.Config, user *url.Userinfo) {
 	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
 	cfg.SSLCAKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey)
-	cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
-	cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
+	cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user.Username()))
+	cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user.Username()))
 }
 
 func TestClientSSLSettings(t *testing.T) {
@@ -43,7 +44,7 @@ func TestClientSSLSettings(t *testing.T) {
 		// args
 		insecure bool
 		hasCerts bool
-		user     string
+		user     *url.Userinfo
 		// output
 		requestScheme string
 		configErr     string
@@ -51,11 +52,11 @@ func TestClientSSLSettings(t *testing.T) {
 		noCAs         bool
 	}{
 		{true, false, security.NodeUser, "http", "", true, false},
-		{true, true, "not-a-user", "http", "", true, false},
-		{false, true, "not-a-user", "https", assetNotFound, true, false},
+		{true, true, url.User("not-a-user"), "http", "", true, false},
+		{false, true, url.User("not-a-user"), "https", assetNotFound, true, false},
 		{false, false, security.NodeUser, "https", assetNotFound, false, true},
 		{false, true, security.NodeUser, "https", "", false, false},
-		{false, true, "bad-user", "https", assetNotFound, false, false},
+		{false, true, url.User("bad-user"), "https", assetNotFound, false, false},
 	}
 
 	for tcNum, tc := range testCases {

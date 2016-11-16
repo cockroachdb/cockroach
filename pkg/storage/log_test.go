@@ -20,7 +20,6 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -176,7 +175,7 @@ func TestLogRebalances(t *testing.T) {
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestLogRebalances", url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestLogRebalances", security.RootUser)
 	defer cleanupFn()
 
 	sqlDB, err := gosql.Open("postgres", pgURL.String())

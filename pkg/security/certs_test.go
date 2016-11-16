@@ -115,7 +115,7 @@ func TestUseCerts(t *testing.T) {
 		filepath.Join(certsDir, security.EmbeddedCAKey),
 		filepath.Join(certsDir, security.EmbeddedRootCert),
 		filepath.Join(certsDir, security.EmbeddedRootKey),
-		512, security.RootUser)
+		512, security.RootUser.Username())
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

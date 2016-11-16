@@ -33,7 +33,7 @@ var _ security.RequestWithUser = &PingRequest{}
 // GetUser implements security.RequestWithUser.
 // Heartbeat messages are always sent by the node user.
 func (*PingRequest) GetUser() string {
-	return security.NodeUser
+	return security.NodeUser.Username()
 }
 
 func (r RemoteOffset) measuredAt() time.Time {

@@ -653,7 +653,7 @@ func (l *LocalCluster) Start() {
 		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
 		filepath.Join(l.CertsDir, security.EmbeddedRootCert),
 		filepath.Join(l.CertsDir, security.EmbeddedRootKey),
-		512, security.RootUser))
+		512, security.RootUser.Username()))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
@@ -804,7 +804,6 @@ func (l *LocalCluster) InternalIP(i int) net.IP {
 
 // PGUrl returns a URL string for the given node postgres server.
 func (l *LocalCluster) PGUrl(i int) string {
-	certUser := security.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
 	options.Add("sslcert", filepath.Join(l.CertsDir, security.EmbeddedRootCert))
@@ -812,7 +811,7 @@ func (l *LocalCluster) PGUrl(i int) string {
 	options.Add("sslrootcert", filepath.Join(l.CertsDir, security.EmbeddedCACert))
 	pgURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.User(certUser),
+		User:     security.RootUser,
 		Host:     l.Nodes[i].Addr(DefaultTCP).String(),
 		RawQuery: options.Encode(),
 	}

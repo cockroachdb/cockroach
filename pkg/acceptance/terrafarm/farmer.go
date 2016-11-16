@@ -226,7 +226,7 @@ func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 // PGUrl returns a URL string for the given node postgres server.
 func (f *Farmer) PGUrl(i int) string {
 	host := f.Nodes()[i]
-	return fmt.Sprintf("postgresql://%s@%s:26257/system?sslmode=disable", security.RootUser, host)
+	return fmt.Sprintf("postgresql://%s@%s:26257/system?sslmode=disable", security.RootUser.Username(), host)
 }
 
 // InternalIP returns the address used for inter-node communication.
