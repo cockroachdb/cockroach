@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "chokidar-socket-emitter": "^0.5.4",
-    "jspm": "^0.16.33",
+    "jspm": "tamird/jspm-cli#dont-rewrite-package-json",
     "karma": "^1.1.2",
     "karma-chrome-launcher": "^2.0.0",
     "karma-jspm": "^2.1.1",
