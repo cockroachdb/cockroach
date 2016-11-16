@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 
@@ -32,13 +33,15 @@ import (
 
 const githubAPITokenEnv = "GITHUB_API_TOKEN"
 const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
+const teamcityBuildIDEnv = "TC_BUILD_ID"
+const teamcityServerURLEnv = "TC_SERVER_URL"
 
 // Based on the following observed API response:
 //
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body is too long (maximum is 65536 characters)}]
 //
 // Subtract some length just to be safe.
-const githubIssueBodyMaximumLength = 1<<16 - 1<<8
+const githubIssueBodyMaximumLength = 1<<16 - 1<<10
 
 func main() {
 	token, ok := os.LookupEnv(githubAPITokenEnv)
@@ -64,6 +67,26 @@ func runGH(
 		return errors.Errorf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
 	}
 
+	host, ok := os.LookupEnv(teamcityServerURLEnv)
+	if !ok {
+		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
+	}
+
+	buildID, ok := os.LookupEnv(teamcityBuildIDEnv)
+	if !ok {
+		log.Fatalf("teamcity build ID environment variable %s is not set", teamcityBuildIDEnv)
+	}
+
+	options := url.Values{}
+	options.Add("buildId", buildID)
+
+	u := (&url.URL{
+		Scheme:   "https",
+		Host:     host,
+		Path:     "viewLog.html",
+		RawQuery: options.Encode(),
+	}).String()
+
 	suites, err := lib.ParseGotest(input, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to parse `go test` output")
@@ -83,9 +106,9 @@ func runGH(
 				title := fmt.Sprintf("%s: %s failed under stress", suite.Name, test.Name)
 				body := fmt.Sprintf(`SHA: https://github.com/cockroachdb/cockroach/commits/%s
 
-Stress build found a failed test:
+Stress build found a failed test: %s
 
-%s`, sha, "```\n"+message+"\n```")
+%s`, sha, u, "```\n"+message+"\n```")
 
 				issueRequest := &github.IssueRequest{
 					Title: &title,
