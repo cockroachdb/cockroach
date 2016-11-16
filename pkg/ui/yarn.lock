@@ -1768,9 +1768,9 @@ jspm-registry@^0.4.0:
     rsvp "^3.0.18"
     semver "^4.3.3"
 
-jspm@^0.16.33:
-  version "0.16.46"
-  resolved "https://registry.yarnpkg.com/jspm/-/jspm-0.16.46.tgz#9da13a2ffcbe5fd6a0b4d461e90b584d8ffaa833"
+jspm@tamird/jspm-cli#dont-rewrite-package-json:
+  version "0.16.48"
+  resolved "https://codeload.github.com/tamird/jspm-cli/tar.gz/e8e007d1ede656038895957dd815be324c034fcd"
   dependencies:
     chalk "^1.1.1"
     core-js "^1.2.6"
@@ -1788,8 +1788,8 @@ jspm@^0.16.33:
     rimraf "^2.4.4"
     rsvp "^3.1.0"
     semver "^5.1.0"
-    systemjs "0.19.39"
-    systemjs-builder "0.15.32"
+    systemjs "0.19.41"
+    systemjs-builder "0.15.34"
     traceur "0.0.105"
     uglify-js "^2.6.1"
 
@@ -2814,7 +2814,7 @@ rmdir@^1.1.0:
   dependencies:
     node.flow "1.2.3"
 
-rollup@^0.36.0:
+rollup@^0.36.0, rollup@^0.36.3:
   version "0.36.3"
   resolved "https://registry.yarnpkg.com/rollup/-/rollup-0.36.3.tgz#c89ac479828924ff8f69c1d44541cb4ea2fc11fc"
   dependencies:
@@ -3127,7 +3127,7 @@ symbol@^0.2.1:
   version "0.2.3"
   resolved "https://registry.yarnpkg.com/symbol/-/symbol-0.2.3.tgz#3b9873b8a901e47c6efe21526a3ac372ef28bbc7"
 
-systemjs-builder@^0.15.0, systemjs-builder@0.15.32:
+systemjs-builder@^0.15.0:
   version "0.15.32"
   resolved "https://registry.yarnpkg.com/systemjs-builder/-/systemjs-builder-0.15.32.tgz#66795f104792b0302eba40950f29ed53a791cc3e"
   dependencies:
@@ -3147,9 +3147,35 @@ systemjs-builder@^0.15.0, systemjs-builder@0.15.32:
     traceur "0.0.105"
     uglify-js "^2.6.1"
 
-systemjs@^0.19.39, systemjs@0.19.39:
+systemjs-builder@0.15.34:
+  version "0.15.34"
+  resolved "https://registry.yarnpkg.com/systemjs-builder/-/systemjs-builder-0.15.34.tgz#6f1b7437e681e395bbdadb2e0b9d4bfd86f1ce56"
+  dependencies:
+    babel-core "^6.9.0"
+    babel-plugin-transform-cjs-system-wrapper "^0.2.1"
+    babel-plugin-transform-es2015-modules-systemjs "^6.6.5"
+    babel-plugin-transform-global-system-wrapper "0.0.1"
+    babel-plugin-transform-system-register "0.0.1"
+    bluebird "^3.3.4"
+    data-uri-to-buffer "0.0.4"
+    es6-template-strings "^2.0.0"
+    glob "^7.0.3"
+    mkdirp "^0.5.1"
+    rollup "^0.36.3"
+    source-map "^0.5.3"
+    systemjs "^0.19.41"
+    traceur "0.0.105"
+    uglify-js "^2.6.1"
+
+systemjs@^0.19.39:
   version "0.19.39"
   resolved "https://registry.yarnpkg.com/systemjs/-/systemjs-0.19.39.tgz#e513e6f91a25a37b8b607c51c7989ee0d67b9356"
+  dependencies:
+    when "^3.7.5"
+
+systemjs@^0.19.41, systemjs@0.19.41:
+  version "0.19.41"
+  resolved "https://registry.yarnpkg.com/systemjs/-/systemjs-0.19.41.tgz#835d2c0f10bf403b551fedc875f84bb44a02c4eb"
   dependencies:
     when "^3.7.5"
 
