@@ -72,16 +72,21 @@ func (b *buckets) Buckets() map[string]*bucket {
 	return b.buckets
 }
 
-func (b *buckets) AddRow(encoding []byte, row parser.DTuple) error {
+func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.DTuple) error {
 	bk, ok := b.buckets[string(encoding)]
 	if !ok {
 		bk = &bucket{}
 	}
+
 	rowCopy, err := b.rowContainer.AddRow(row)
 	if err != nil {
 		return err
 	}
+	if err := acc.Grow(sizeOfDTuple); err != nil {
+		return err
+	}
 	bk.AddRow(rowCopy)
+
 	if !ok {
 		b.buckets[string(encoding)] = bk
 	}
@@ -102,6 +107,7 @@ func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
+	planner       *planner
 	joinType      joinType
 	joinAlgorithm joinAlgorithm
 
@@ -144,7 +150,8 @@ type joinNode struct {
 	// Values().
 	buffer *RowBuffer
 
-	buckets buckets
+	buckets       buckets
+	bucketsMemAcc WrappableMemoryAccount
 
 	// emptyRight contain tuples of NULL values to use on the
 	// right for outer joins when the filter fails.
@@ -254,6 +261,7 @@ func (p *planner) makeJoin(
 	}
 
 	n := &joinNode{
+		planner:       p,
 		left:          left,
 		right:         right,
 		joinType:      typ,
@@ -270,6 +278,7 @@ func (p *planner) makeJoin(
 			RowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.Columns(), 0),
 		}
 
+		n.bucketsMemAcc = p.session.TxnState.OpenAccount()
 		n.buckets = buckets{
 			buckets:      make(map[string]*bucket),
 			rowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0),
@@ -433,6 +442,7 @@ func (n *joinNode) nestedLoopJoinStart() error {
 func (n *joinNode) hashJoinStart() error {
 	var scratch []byte
 	// Load all the rows from the right side and build our hashmap.
+	acc := n.bucketsMemAcc.Wtxn(n.planner.session)
 	for {
 		hasRow, err := n.right.plan.Next()
 		if err != nil {
@@ -447,7 +457,7 @@ func (n *joinNode) hashJoinStart() error {
 			return err
 		}
 
-		if err := n.buckets.AddRow(encoding, row); err != nil {
+		if err := n.buckets.AddRow(acc, encoding, row); err != nil {
 			return err
 		}
 
@@ -779,6 +789,7 @@ func (n *joinNode) Close() {
 		n.buffer.Close()
 		n.buffer = nil
 		n.buckets.Close()
+		n.bucketsMemAcc.Wtxn(n.planner.session).Close()
 	default:
 		panic("unsupported JOIN algorithm")
 	}
