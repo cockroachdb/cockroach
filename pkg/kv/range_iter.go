@@ -80,10 +80,13 @@ func (ri *RangeIterator) NeedAnother(rs roachpb.RSpan) bool {
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
-	if ri.isReverse {
-		return rs.Key != nil && rs.Key.Less(ri.desc.StartKey)
+	if rs.EndKey == nil {
+		panic("NeedAnother() undefined for spans representing a single key")
 	}
-	return rs.EndKey != nil && ri.desc.EndKey.Less(rs.EndKey)
+	if ri.isReverse {
+		return rs.Key.Less(ri.desc.StartKey)
+	}
+	return ri.desc.EndKey.Less(rs.EndKey)
 }
 
 // Valid returns whether the iterator is valid. To be valid, the
