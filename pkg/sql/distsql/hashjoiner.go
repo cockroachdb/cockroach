@@ -144,7 +144,7 @@ func (h *hashJoiner) probePhase() error {
 			if err != nil {
 				return err
 			}
-			if !h.output.PushRow(row) {
+			if row != nil && !h.output.PushRow(row) {
 				return nil
 			}
 		} else {
