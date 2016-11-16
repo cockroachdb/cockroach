@@ -1221,13 +1221,20 @@ func (d *DInterval) IsMin() bool {
 	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
+// ValueAsString returns the interval as a string (e.g. "1h2m").
+func (d *DInterval) ValueAsString() string {
 	if d.Months != 0 || d.Days != 0 {
-		buf.WriteString(d.Duration.String())
-	} else {
-		buf.WriteString((time.Duration(d.Duration.Nanos) * time.Nanosecond).String())
+		return d.Duration.String()
 	}
+	// TODO(radu): we should use Postgres syntax instead of converting to nanoseconds.
+	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
+}
+
+// Format implements the NodeFormatter interface. Example: "INTERVAL `1h2m`".
+func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("INTERVAL '")
+	buf.WriteString(d.ValueAsString())
+	buf.WriteByte('\'')
 }
 
 // Size implements the Datum interface.
