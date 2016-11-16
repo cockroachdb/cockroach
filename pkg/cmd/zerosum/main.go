@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -227,8 +226,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 		switch r.Intn(2) {
 		case 0:
 			if err := z.Split(z.RandNode(r.Intn), key); err != nil {
-				if strings.Contains(err.Error(), "range is already split at key") ||
-					strings.Contains(err.Error(), storage.ErrMsgConflictUpdatingRangeDesc) {
+				if strings.Contains(err.Error(), "range is already split at key") {
 					continue
 				}
 				z.maybeLogError(err)

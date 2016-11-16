@@ -933,6 +933,9 @@ func (ds *DistSender) sendPartialBatch(
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, isFirst)
 			return response{reply: reply, pErr: pErr}
+		case *roachpb.ConflictUpdatingRangeDescError:
+			log.Event(ctx, "retrying on conflict updating range descriptor error")
+			continue
 		}
 		break
 	}

@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"golang.org/x/net/context"
 
@@ -27,12 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 )
-
-const maxSplitRetries = 4
 
 // Split executes a KV split.
 // Privileges: INSERT on table.
@@ -136,19 +131,7 @@ func (n *splitNode) Start() error {
 	}
 	n.key = keys.MakeRowSentinelKey(key)
 
-	// We retry a few times if we hit a "conflict updating range descriptors"
-	// error; this can happen if we try to split right after table creation.
-	// TODO(radu): we should find a way to prevent this error, like waiting for
-	// whatever condition we need to wait.
-	for r := retry.Start(retry.Options{MaxRetries: maxSplitRetries}); ; {
-		err := n.p.execCfg.DB.AdminSplit(context.TODO(), n.key)
-		if err != nil &&
-			strings.Contains(err.Error(), storage.ErrMsgConflictUpdatingRangeDesc) &&
-			r.Next() {
-			continue
-		}
-		return err
-	}
+	return n.p.execCfg.DB.AdminSplit(context.TODO(), n.key)
 }
 
 func (n *splitNode) expandPlan() error {

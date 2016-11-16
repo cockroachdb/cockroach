@@ -115,6 +115,7 @@
 		ReplicaCorruptionError
 		ReplicaTooOldError
 		StoreNotFoundError
+		ConflictUpdatingRangeDescError
 		ErrorDetail
 		ErrPosition
 		Error

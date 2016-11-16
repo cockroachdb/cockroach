@@ -301,7 +301,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			// concurrently, the range is already split at the specified key or the
 			// split key is outside of the bounds for the range.
 			expected := strings.Join([]string{
-				storage.ErrMsgConflictUpdatingRangeDesc,
+				"conflict updating range descriptor",
 				"range is already split at key",
 				"key range .* outside of bounds of range",
 			}, "|")
