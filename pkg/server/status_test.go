@@ -196,7 +196,9 @@ func TestStatusLocalLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.EnableLogFileOutput(dir)
+	if err := log.EnableLogFileOutput(dir); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		log.DisableLogFileOutput()
 		if err := os.RemoveAll(dir); err != nil {

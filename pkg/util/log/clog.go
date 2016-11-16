@@ -718,7 +718,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 	}
 
-	if l.toStderr {
+	if l.toStderr || !logDir.isSet() {
 		l.outputToStderr(entry, stacks)
 	} else {
 		if s >= l.stderrThreshold.get() {
@@ -970,6 +970,20 @@ func (l *loggingT) removeFilesLocked() error {
 			}
 		}
 		l.file[s] = nil
+	}
+	return nil
+}
+
+func (l *loggingT) closeFilesLocked() error {
+	for s := Severity_FATAL; s >= Severity_INFO; s-- {
+		if l.file[s] != nil {
+			if sb, ok := l.file[s].(*syncBuffer); ok {
+				if err := sb.file.Close(); err != nil {
+					return err
+				}
+			}
+			l.file[s] = nil
+		}
 	}
 	return nil
 }
