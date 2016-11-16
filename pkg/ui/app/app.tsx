@@ -3,22 +3,66 @@
  *
  * ! = Potentially difficult to implement
  *
- * - Visualization Components
- *    - Graphs
- *      - Greyed-out display on error
- *    - Cluster health indicator
- * ! Notification Banners
- *    - Cockroach out of date
- * - Node Page
- *    ! Logs Page
- * - Layout Footer
- *
+ * - All Pages / Shared Components
+ *    - Left Navigation Bar Style
+ *      - New Icons
+ *      - Color
+ *      - Spacing
+ *    - Titles
+ *    - "Last Updated" on pages
+ *    - Per-page controls bar
+ *      - Fixed Scrolling
+ *      - Fix selector width
+ *      - CSS Polish
+ *    - Right-side Summary Sections
+ *      - CSS Polish
+ *    - Tables
+ *      - CSS Match to design
+ *      - Management of column widths
+ * - Cluster Page
+ *    - Fix widths of selectors
+ *    - Timespan Selector Styling
+ *    - Alert notifications
+ *      - Mismatched/Out-of-date Version
+ *      - Help us
+ *    - Right-side Summary Section
+ *      - Stats
+ *        - Total Nodes
+ *        - Capacity Used
+ *        - Unavailable Ranges
+ *        - Queries Per Second
+ *        - P50 Latency
+ *        - P99 Latency
+ *      - Events
+ *    - graphs
+ *      ! Appearance
+ *        - Ticks
+ *        - Grid
+ *        - Text
+ *        - COlors
+ *      - Show full domain for time span (#10362)
+ *    -
+ * - Databases Page
+ *    - Last Updated Column
+ *      - Retrieve/Filter events
+ *    - Single database page
+ *       - Table component row limit
+ *       - Route to single database
+ *    - Schema Change
+ *      - Retrieve information from backend
+ *      - Display in table list column
+ *      - Display alert on table details page
+ *    - Table details page
+ *      - Syntax highlighting colors
+ *      - Syntax highlighting keywords
+ * - Nodes page
+ *  - Table Style
+ *  - Add Summary Section
+ *  - Remove Link from Navigation Bar
+ * - Helpus Page
+ *  - *Pending design*
  *
  * NICE TO HAVE:
- *  - "generateCacheReducer()" method; most of our data reducers are extremely
- *  similar (storing read-only, cachable data queried from the server), we could
- *  cut down on a lot of boilerplate and testing by creating such a function.
- *
  *  - Create a "NodeStatusProvider" similar to "MetricsDataProvider", allowing
  *  different components to access nodes data.
  *
