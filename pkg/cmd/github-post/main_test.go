@@ -84,6 +84,9 @@ Stress build found a failed test:
 			if !issueBodyRe.MatchString(*issue.Body) {
 				t.Fatalf("got:\n%s\nexpected:\n%s", *issue.Body, issueBodyRe)
 			}
+			if length := len(*issue.Body); length > githubIssueBodyMaximumLength {
+				t.Fatalf("issue length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
+			}
 			return &github.Issue{ID: github.Int(issueID)}, nil, nil
 		},
 	); err != nil {

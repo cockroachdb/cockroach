@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"golang.org/x/oauth2"
 
@@ -31,6 +32,13 @@ import (
 
 const githubAPITokenEnv = "GITHUB_API_TOKEN"
 const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
+
+// Based on the following observed API response:
+//
+// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body is too long (maximum is 65536 characters)}]
+//
+// Subtract some length just to be safe.
+const githubIssueBodyMaximumLength = 1<<16 - 1<<8
 
 func main() {
 	token, ok := os.LookupEnv(githubAPITokenEnv)
@@ -62,6 +70,14 @@ func runGH(
 	}
 	for _, suite := range suites {
 		for _, test := range suite.Tests {
+			message := test.Message
+			for len(message) > githubIssueBodyMaximumLength {
+				if idx := strings.IndexByte(message, '\n'); idx != -1 {
+					message = message[idx+1:]
+				} else {
+					message = message[len(message)-githubIssueBodyMaximumLength:]
+				}
+			}
 			switch test.Status {
 			case lib.Failed:
 				title := fmt.Sprintf("%s: %s failed under stress", suite.Name, test.Name)
@@ -69,7 +85,7 @@ func runGH(
 
 Stress build found a failed test:
 
-%s`, sha, "```\n"+test.Message+"\n```")
+%s`, sha, "```\n"+message+"\n```")
 
 				issueRequest := &github.IssueRequest{
 					Title: &title,
@@ -82,7 +98,6 @@ Stress build found a failed test:
 				if _, _, err := createIssue("cockroachdb", "cockroach", issueRequest); err != nil {
 					return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 				}
-
 			}
 		}
 	}
