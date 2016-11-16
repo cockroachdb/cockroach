@@ -23,6 +23,9 @@ import (
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
+// If an object that wishes to implement this interface has lost the
+// textual name that an IndexedVar originates from, it can use the
+// ordinal column reference syntax: fmt.Fprintf(buf, "@%d", idx)
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
 	IndexedVarResolvedType(idx int) Type

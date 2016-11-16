@@ -547,6 +547,19 @@ func (DefaultVal) ResolvedType() Type { return nil }
 
 var _ VariableExpr = &Placeholder{}
 
+// OrdinalReference represents an ordinal column reference.  This is
+// the syntactic representation of IndexedVar before resolution has
+// verified the reference is valid for the current data source.
+type OrdinalReference int
+
+// Variable implements the VariableExpr interface.
+func (OrdinalReference) Variable() {}
+
+// Format implements the NodeFormatter interface.
+func (r OrdinalReference) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, "@%d", r)
+}
+
 // Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
@@ -652,11 +665,6 @@ func (*Subquery) Variable() {}
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Select)
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (*Subquery) ResolvedType() Type {
-	return TypeNull
 }
 
 // BinaryOperator represents a binary operator.
@@ -1094,6 +1102,7 @@ func (node *NotExpr) String() string          { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }
 func (node *OrExpr) String() string           { return AsString(node) }
+func (node OrdinalReference) String() string  { return AsString(node) }
 func (node *ParenExpr) String() string        { return AsString(node) }
 func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }

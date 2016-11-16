@@ -26,7 +26,10 @@ import (
     "go/token"
 
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
- )
+)
+
+const maxUint = ^uint(0)
+const maxInt = int(^uint(0) >> 1)
 
 func unimplemented(sqllex sqlLexer) int {
     sqllex.Error("unimplemented")
@@ -3677,6 +3680,19 @@ c_expr:
     $$.val = $1.unresolvedName()
   }
 | a_expr_const
+| '@' ICONST
+  {
+    colNum, err := $2.numVal().asInt64()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    if colNum > int64(maxInt) {
+      sqllex.Error(fmt.Sprintf("column reference too large: %d", colNum))
+      return 1
+    }
+    $$.val = OrdinalReference(int(colNum))
+  }
 | PLACEHOLDER
   {
     $$.val = NewPlaceholder($1)

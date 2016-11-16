@@ -642,6 +642,10 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 	return expr, nil
 }
 
+func (expr OrdinalReference) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) {
+	panic("ordinal reference nodes must be replaced before type checking")
+}
+
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DBool) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }

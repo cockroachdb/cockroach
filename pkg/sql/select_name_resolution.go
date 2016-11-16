@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/pkg/errors"
 )
 
 // invalidSrcIdx is the srcIdx value returned by findColumn() when there is no match.
@@ -49,6 +50,17 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 	}
 
 	switch t := expr.(type) {
+	case parser.OrdinalReference:
+		// An OrdinalReference is just a straightforward IndexedVar in disguise.
+		// However because SQL commonly uses 1-based indexing, we do this here too.
+		idx := int(t)
+		if idx < 1 || idx > v.ivarHelper.NumVars() {
+			v.err = errors.Errorf("invalid column reference: %s", t)
+			return false, expr
+		}
+		ivar := v.ivarHelper.IndexedVar(idx - 1)
+		return true, ivar
+
 	case *parser.IndexedVar:
 		// We allow resolving IndexedVars on expressions that have already been resolved by this
 		// resolver. This is used in some cases when adding render targets for grouping or sorting.
