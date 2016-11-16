@@ -102,6 +102,11 @@ func (sq *splitQueue) process(
 	if len(splitKeys) > 0 {
 		log.Infof(ctx, "splitting at keys %v", splitKeys)
 		for _, splitKey := range splitKeys {
+			// Use AdminSplit() here because the zone config stipulates
+			// splitting at a specific key independent of which range it lies
+			// on (the specific replica desc passed in can change before the
+			// command is applied). If any range was already split at this
+			// key, it returns an error.
 			if err := sq.db.AdminSplit(ctx, splitKey.AsRawKey()); err != nil {
 				return errors.Errorf("unable to split %s at key %q: %s", r, splitKey, err)
 			}
@@ -115,9 +120,17 @@ func (sq *splitQueue) process(
 		return err
 	}
 	size := r.GetMVCCStats().Total()
-	// FIXME: why is this implementation not the same as the one above?
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
+		// We cannot use the AdminSplit() command here because it can only be
+		// used to split the range holding a specific key without specifying
+		// the range itself. We are attempting to split a specific range
+		// somewhere along its midpoint without specifying a key and use an
+		// AdminSplitRequest. An alternative is to compute the midpoint key
+		// here and pass it into AdminSplit().
+		//
+		// Note: another split can occur between the time the range size is
+		// computed above and the following request is processed.
 		if _, pErr := client.SendWrappedWith(ctx, r, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{

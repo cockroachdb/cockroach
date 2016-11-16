@@ -209,6 +209,12 @@ message StoreNotFoundError {
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
+// ConflictUpdatingRangeDescError is returned by an AdminSplit command
+// when it conflicts with some other process that updates the
+// range descriptors.
+message ConflictUpdatingRangeDescError {
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -232,6 +238,7 @@ message ErrorDetail {
   optional RangeFrozenError range_frozen = 25;
   optional AmbiguousResultError ambiguous_result = 26;
   optional StoreNotFoundError store_not_found = 27;
+  optional ConflictUpdatingRangeDescError conflict_updating_range_desc = 28;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
