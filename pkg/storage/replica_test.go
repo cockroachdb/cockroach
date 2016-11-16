@@ -6122,14 +6122,14 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := repl.evaluateProposal(
-				context.Background(), propEvalKV, makeIDKey(), repDesc, ba,
+			cmd, pErr := repl.requestToProposal(
+				context.Background(), makeIDKey(), repDesc, ba,
 			)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
 			repl.mu.Lock()
-			repl.insertProposalLocked(cmd)
+			repl.insertProposalLocked(cmd, repDesc)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
 			// the command and it isn't reproposed due to the
@@ -6200,13 +6200,13 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := tc.repl.evaluateProposal(ctx, propEvalKV, makeIDKey(), repDesc, ba)
+			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), repDesc, ba)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
 
 			tc.repl.mu.Lock()
-			tc.repl.insertProposalLocked(cmd)
+			tc.repl.insertProposalLocked(cmd, repDesc)
 			chs = append(chs, cmd.done)
 			tc.repl.mu.Unlock()
 		}
@@ -6311,7 +6311,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
-		cmd, pErr := r.evaluateProposal(context.Background(), propEvalKV,
+		cmd, pErr := r.requestToProposal(context.Background(),
 			storagebase.CmdIDKey(id), repDesc, ba)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -6322,7 +6322,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		dropProposals.Unlock()
 
 		r.mu.Lock()
-		r.insertProposalLocked(cmd)
+		r.insertProposalLocked(cmd, repDesc)
 		if err := r.submitProposalLocked(cmd); err != nil {
 			t.Error(err)
 		}
