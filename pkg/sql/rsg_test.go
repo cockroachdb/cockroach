@@ -215,7 +215,10 @@ func testRandomSyntax(
 		t.Fatal(err)
 	}
 	// Broadcast channel for all workers.
-	done := time.After(*flagRSGTime)
+	done := make(chan struct{})
+	time.AfterFunc(*flagRSGTime, func() {
+		close(done)
+	})
 	var wg sync.WaitGroup
 	var countsMu struct {
 		syncutil.Mutex
