@@ -20,6 +20,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/abourget/teamcity"
 	"github.com/kisielk/gotool"
@@ -46,18 +47,21 @@ func main() {
 
 	client := teamcity.New("teamcity.cockroachdb.com", username, password)
 	// Queue a build per configuration per package.
-	for _, params := range []map[string]string{
-		{}, // uninstrumented
-		{"env.GOFLAGS": "-race"},
-		{"env.TAGS": "deadlock"},
-	} {
-		for _, importPath := range importPaths {
-			params["env.PKG"] = importPath
-			build, err := client.QueueBuild(*buildTypeID, *branchName, params)
-			if err != nil {
-				log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, err)
+	for _, propEvalKV := range []bool{true, false} {
+		for _, params := range []map[string]string{
+			{}, // uninstrumented
+			{"env.GOFLAGS": "-race"},
+			{"env.TAGS": "deadlock"},
+		} {
+			for _, importPath := range importPaths {
+				params["env.PKG"] = importPath
+				params["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
+				build, err := client.QueueBuild(*buildTypeID, *branchName, params)
+				if err != nil {
+					log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, err)
+				}
+				log.Printf("created teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, build)
 			}
-			log.Printf("created teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, build)
 		}
 	}
 }
