@@ -33,7 +33,10 @@ import (
 type CreateDatabase struct {
 	IfNotExists bool
 	Name        Name
+	Template    *StrVal
 	Encoding    *StrVal
+	Collate     *StrVal
+	CType       *StrVal
 }
 
 // Format implements the NodeFormatter interface.
@@ -43,9 +46,21 @@ func (node *CreateDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, node.Name)
+	if node.Template != nil {
+		buf.WriteString(" TEMPLATE = ")
+		Name((*node.Template).s).Format(buf, f)
+	}
 	if node.Encoding != nil {
-		buf.WriteString(" ENCODING=")
+		buf.WriteString(" ENCODING = ")
 		node.Encoding.Format(buf, f)
+	}
+	if node.Collate != nil {
+		buf.WriteString(" LC_COLLATE = ")
+		node.Collate.Format(buf, f)
+	}
+	if node.CType != nil {
+		buf.WriteString(" LC_CTYPE = ")
+		node.CType.Format(buf, f)
 	}
 }
 
