@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -210,6 +210,7 @@ type ExecutorConfig struct {
 	DB           *client.DB
 	Gossip       *gossip.Gossip
 	DistSender   *kv.DistSender
+	RPCContext   *rpc.Context
 	LeaseManager *LeaseManager
 	Clock        *hlc.Clock
 	DistSQLSrv   *distsql.ServerImpl
@@ -262,7 +263,7 @@ type ExecutorTestingKnobs struct {
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
-	exec := &Executor{
+	return &Executor{
 		cfg:     cfg,
 		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
@@ -280,17 +281,6 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
 	}
-
-	return exec
-}
-
-// NewDummyExecutor creates an empty Executor that is used for certain tests.
-func NewDummyExecutor() *Executor {
-	return &Executor{
-		cfg: ExecutorConfig{
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		},
-	}
 }
 
 // Start starts workers for the executor and initializes the distSQLPlanner.
@@ -300,7 +290,7 @@ func (e *Executor) Start(
 	ctx = e.AnnotateCtx(ctx)
 	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
 	e.distSQLPlanner = newDistSQLPlanner(
-		nodeDesc, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
+		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
 	)
 
 	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
@@ -1179,6 +1169,8 @@ func commitSQLTransaction(
 	return result, err
 }
 
+// exectDistSQL converts a classic plan to a distributed SQL physical plan and
+// runs it.
 func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
 	recv := distSQLReceiver{rows: result.Rows}
@@ -1193,6 +1185,72 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 		result.RowsAffected = int(recv.numRows)
 	}
 	return nil
+}
+
+// execClassic runs a plan using the classic (non-distributed) SQL
+// implementation.
+func (e *Executor) execClassic(plan planNode, result *Result) error {
+	if err := plan.Start(); err != nil {
+		return err
+	}
+
+	switch result.Type {
+	case parser.RowsAffected:
+		count, err := countRowsAffected(plan)
+		if err != nil {
+			return err
+		}
+		result.RowsAffected += count
+
+	case parser.Rows:
+		next, err := plan.Next()
+		for ; next; next, err = plan.Next() {
+			// The plan.Values DTuple needs to be copied on each iteration.
+			values := plan.Values()
+
+			for _, val := range values {
+				if err := checkResultType(val.ResolvedType()); err != nil {
+					return err
+				}
+			}
+			if _, err := result.Rows.AddRow(values); err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// shouldUseDistSQL determines whether we should use DistSQL for a plan, based
+// on the session settings.
+func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, error) {
+	distSQLMode := testDistSQL
+	if session.DistSQLMode != distSQLOff {
+		distSQLMode = session.DistSQLMode
+	}
+
+	if distSQLMode == distSQLOff {
+		return false, nil
+	}
+	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
+	if _, ok := plan.(*emptyNode); ok {
+		return false, nil
+	}
+
+	if err := e.distSQLPlanner.CheckSupport(plan); err != nil {
+		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
+		if distSQLMode == distSQLAlways {
+			return false, err
+		}
+		// Don't use distSQL for this request.
+		log.Infof(session.Ctx(), "query not supported for distSQL: %s", err)
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // The current transaction might have been committed/rolled back when this returns.
@@ -1221,58 +1279,16 @@ func (e *Executor) execStmt(
 		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
 	}
 
-	distSQLMode := testDistSQL
-	if planMaker.session.DistSQLMode != distSQLOff {
-		distSQLMode = planMaker.session.DistSQLMode
-	}
-
-	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if _, empty := plan.(*emptyNode); !empty && distSQLMode != distSQLOff {
-		if err := e.distSQLPlanner.CheckSupport(plan); err != nil {
-			if distSQLMode == distSQLAlways {
-				return result, err
-			}
-			// Don't use distSQL for this request.
-			log.Infof(planMaker.session.Ctx(), "query not supported for distSQL: %s", err)
-			// Fall through below.
-		} else {
-			err := e.execDistSQL(planMaker, plan, &result)
-			return result, err
-		}
-	}
-
-	if err := plan.Start(); err != nil {
+	useDistSQL, err := e.shouldUseDistSQL(planMaker.session, plan)
+	if err != nil {
 		return result, err
 	}
-
-	switch result.Type {
-	case parser.RowsAffected:
-		count, err := countRowsAffected(plan)
-		if err != nil {
-			return result, err
-		}
-		result.RowsAffected += count
-
-	case parser.Rows:
-		next, err := plan.Next()
-		for ; next; next, err = plan.Next() {
-			// The plan.Values DTuple needs to be copied on each iteration.
-			values := plan.Values()
-
-			for _, val := range values {
-				if err := checkResultType(val.ResolvedType()); err != nil {
-					return result, err
-				}
-			}
-			if _, err := result.Rows.AddRow(values); err != nil {
-				return result, err
-			}
-		}
-		if err != nil {
-			return result, err
-		}
+	if useDistSQL {
+		err = e.execDistSQL(planMaker, plan, &result)
+	} else {
+		err = e.execClassic(plan, &result)
 	}
-	return result, nil
+	return result, err
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
