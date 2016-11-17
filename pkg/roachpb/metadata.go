@@ -234,6 +234,41 @@ func (Locality) Type() string {
 	return "Locality"
 }
 
+// DiversityScore returns a score comparing the two localities which ranges from
+// 1, meaning completely diverse, to 0 which means not diverse at all (that
+// their localities match). This function ignores the locality tier key names
+// and only considers differences in their values.
+// All localities are sorted from most global to most local so any localities
+// after any different values are irrelevant.
+// While we recommend that all nodes have the same locality keys and same
+// total number of keys, there's nothing wrong with having different locality
+// keys as long as the immediately next keys are all the same for each value.
+// For example:
+// region:USA -> state:NY -> ...
+// region:USA -> state:WA -> ...
+// region:EUR -> country:UK -> ...
+// region:EUR -> country:France -> ...
+// is perfectly fine, but just harder to recommend. And this holds true at each
+// level lower.
+// There is also a need to consider the cases where the localities have
+// different lengths. For these cases, we treat the missing key on one side as
+// different.
+func (l Locality) DiversityScore(other Locality) float64 {
+	length := len(l.Tiers)
+	if len(other.Tiers) < length {
+		length = len(other.Tiers)
+	}
+	for i := 0; i < length; i++ {
+		if l.Tiers[i].Value != other.Tiers[i].Value {
+			return float64(length-i) / float64(length)
+		}
+	}
+	if len(l.Tiers) != len(other.Tiers) {
+		return 1.0 / float64(length+1)
+	}
+	return 0
+}
+
 // Set sets the value of the Locality. It is the important part of
 // pflag's value interface.
 func (l *Locality) Set(value string) error {
