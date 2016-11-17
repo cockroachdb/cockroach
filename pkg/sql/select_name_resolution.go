@@ -38,7 +38,7 @@ type nameResolutionVisitor struct {
 	err        error
 	sources    multiSourceInfo
 	colOffsets []int
-	ivarHelper parser.IndexedVarHelper
+	iVarHelper parser.IndexedVarHelper
 }
 
 var _ parser.Visitor = &nameResolutionVisitor{}
@@ -52,7 +52,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 	case *parser.IndexedVar:
 		// We allow resolving IndexedVars on expressions that have already been resolved by this
 		// resolver. This is used in some cases when adding render targets for grouping or sorting.
-		v.ivarHelper.AssertSameContainer(t)
+		v.iVarHelper.AssertSameContainer(t)
 		return true, expr
 
 	case parser.UnresolvedName:
@@ -69,7 +69,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 			v.err = err
 			return false, expr
 		}
-		ivar := v.ivarHelper.IndexedVar(v.colOffsets[srcIdx] + colIdx)
+		ivar := v.iVarHelper.IndexedVar(v.colOffsets[srcIdx] + colIdx)
 		return true, ivar
 
 	case *parser.FuncExpr:
@@ -135,7 +135,7 @@ func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, error) {
 }
 
 // resolveNames walks the provided expression and resolves all names
-// using the tableInfo and ivarHelper.
+// using the tableInfo and iVarHelper.
 func (p *planner) resolveNames(
 	expr parser.Expr, sources multiSourceInfo, ivarHelper parser.IndexedVarHelper,
 ) (parser.Expr, error) {
@@ -147,7 +147,7 @@ func (p *planner) resolveNames(
 		err:        nil,
 		sources:    sources,
 		colOffsets: make([]int, len(sources)),
-		ivarHelper: ivarHelper,
+		iVarHelper: ivarHelper,
 	}
 	colOffset := 0
 	for i, s := range sources {

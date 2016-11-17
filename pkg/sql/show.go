@@ -78,7 +78,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				for _, vName := range varNames {
 					gen := varGen[vName]
 					value := gen(p)
-					if err := v.rows.AddRow(
+					if _, err := v.rows.AddRow(
 						parser.DTuple{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
 						v.rows.Close()
@@ -90,7 +90,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// check above.
 				gen := varGen[name]
 				value := gen(p)
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
+				if _, err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -143,7 +143,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 					parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
 					defaultExpr,
 				}
-				if err := v.rows.AddRow(newRow); err != nil {
+				if _, err := v.rows.AddRow(newRow); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -276,7 +276,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			}
 			buf.WriteString(interleave)
 
-			if err := v.rows.AddRow(parser.DTuple{
+			if _, err := v.rows.AddRow(parser.DTuple{
 				parser.NewDString(n.Table.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
@@ -366,7 +366,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
-			if err := v.rows.AddRow(parser.DTuple{
+			if _, err := v.rows.AddRow(parser.DTuple{
 				parser.NewDString(n.View.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
@@ -401,7 +401,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 			}
 			v := p.newContainerValuesNode(columns, 0)
 			for _, db := range p.session.virtualSchemas.orderedNames {
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
+				if _, err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -413,7 +413,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 					v.rows.Close()
 					return nil, err
 				}
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
+				if _, err := v.rows.AddRow(parser.DTuple{parser.NewDString(name)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -475,7 +475,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 						parser.NewDString(userPriv.User),
 						parser.NewDString(userPriv.PrivilegeString()),
 					}
-					if err := v.rows.AddRow(newRow); err != nil {
+					if _, err := v.rows.AddRow(newRow); err != nil {
 						v.rows.Close()
 						return nil, err
 					}
@@ -532,7 +532,8 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 					parser.NewDString(direction),
 					parser.MakeDBool(parser.DBool(isStored)),
 				}
-				return v.rows.AddRow(newRow)
+				_, err := v.rows.AddRow(newRow)
+				return err
 			}
 
 			for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
@@ -614,7 +615,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 					columnsDatum,
 					detailsDatum,
 				}
-				if err := v.rows.AddRow(newRow); err != nil {
+				if _, err := v.rows.AddRow(newRow); err != nil {
 					v.Close()
 					return nil, err
 				}
@@ -681,7 +682,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 					}
 				}
 
-				if err := v.rows.AddRow(parser.DTuple{parser.NewDString(tableName)}); err != nil {
+				if _, err := v.rows.AddRow(parser.DTuple{parser.NewDString(tableName)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -732,7 +733,7 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 					parser.NewDString(f.Category()),
 					parser.NewDString(f.Info),
 				}
-				if err := v.rows.AddRow(row); err != nil {
+				if _, err := v.rows.AddRow(row); err != nil {
 					v.Close()
 					return nil, err
 				}

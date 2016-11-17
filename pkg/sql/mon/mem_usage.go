@@ -370,7 +370,7 @@ type MemoryAccount struct {
 }
 
 // OpenAccount creates a new empty account.
-func (mm *MemoryMonitor) OpenAccount(_ context.Context, acc *MemoryAccount) {
+func (mm *MemoryMonitor) OpenAccount(_ context.Context, _ *MemoryAccount) {
 	// TODO(knz): conditionally track accounts in the memory monitor
 	// (#9122).
 }

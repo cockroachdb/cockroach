@@ -44,7 +44,7 @@ func TestRowContainer(t *testing.T) {
 					for j := range row {
 						row[j] = parser.NewDInt(parser.DInt(i*numCols + j))
 					}
-					if err := rc.AddRow(row); err != nil {
+					if _, err := rc.AddRow(row); err != nil {
 						t.Fatal(err)
 					}
 				}

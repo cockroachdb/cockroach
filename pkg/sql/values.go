@@ -158,7 +158,7 @@ func (n *valuesNode) Start() error {
 				return err
 			}
 		}
-		if err := n.rows.AddRow(row); err != nil {
+		if _, err := n.rows.AddRow(row); err != nil {
 			return err
 		}
 	}
@@ -250,7 +250,7 @@ var _ heap.Interface = (*valuesNode)(nil)
 
 // Push implements the heap.Interface interface.
 func (n *valuesNode) Push(x interface{}) {
-	n.err = n.rows.AddRow(n.tmpValues)
+	_, n.err = n.rows.AddRow(n.tmpValues)
 }
 
 // PushValues pushes the given DTuple value into the heap representation

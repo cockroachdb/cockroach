@@ -1593,7 +1593,7 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 	)
 }
 
-// analyzeExpr performs semantic analysis of an axpression, including:
+// analyzeExpr performs semantic analysis of an expression, including:
 // - replacing sub-queries by a sql.subquery node;
 // - resolving names (optional);
 // - type checking (with optional type enforcement);
@@ -1604,7 +1604,7 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 func (p *planner) analyzeExpr(
 	raw parser.Expr,
 	sources multiSourceInfo,
-	ivarHelper parser.IndexedVarHelper,
+	iVarHelper parser.IndexedVarHelper,
 	expectedType parser.Type,
 	requireType bool,
 	typingContext string,
@@ -1624,7 +1624,7 @@ func (p *planner) analyzeExpr(
 	if sources == nil {
 		resolved = replaced
 	} else {
-		resolved, err = p.resolveNames(replaced, sources, ivarHelper)
+		resolved, err = p.resolveNames(replaced, sources, iVarHelper)
 		if err != nil {
 			return nil, err
 		}
