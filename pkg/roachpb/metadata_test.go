@@ -17,6 +17,7 @@
 package roachpb
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -138,5 +139,162 @@ func TestLocalityConversions(t *testing.T) {
 		if !reflect.DeepEqual(l, tc.expected) {
 			t.Errorf("%d: Locality.Set(%q) = %+v; not %+v", i, tc.in, l, tc.expected)
 		}
+	}
+}
+
+func TestDiversityScore(t *testing.T) {
+	// Keys are not considered for score, just the order, so we don't need to
+	// specify them.
+	generateLocality := func(values []string) Locality {
+		var locality Locality
+		for i, value := range values {
+			locality.Tiers = append(locality.Tiers, Tier{
+				Key:   fmt.Sprintf("%d", i),
+				Value: value,
+			})
+		}
+		return locality
+	}
+
+	getFraction := func(num, den int) float64 {
+		return float64(num) / float64(den)
+	}
+
+	testCases := []struct {
+		name     string
+		left     []string // These will use generateLocality to produce a
+		right    []string // Locality.
+		expected float64
+	}{
+		{
+			name:     "both empty",
+			expected: 0,
+		},
+		{
+			name:     "only one side",
+			left:     []string{"a", "b", "c"},
+			expected: 0,
+		},
+		{
+			name:     "1 level, 1st different",
+			left:     []string{"a"},
+			right:    []string{"b"},
+			expected: 1,
+		},
+		{
+			name:     "2 levels, 1st different",
+			left:     []string{"a", "aa"},
+			right:    []string{"b", "bb"},
+			expected: 1,
+		},
+		{
+			name:     "3 levels, 1st different",
+			left:     []string{"a", "aa", "aaa"},
+			right:    []string{"b", "bb", "bbb"},
+			expected: 1,
+		},
+		{
+			name:     "3 levels, 1st different, all other values the same",
+			left:     []string{"a", "aa", "aaa"},
+			right:    []string{"b", "aa", "aaa"},
+			expected: 1,
+		},
+		{
+			name:     "1 level, all same",
+			left:     []string{"a"},
+			right:    []string{"a"},
+			expected: 0,
+		},
+		{
+			name:     "2 levels, all same",
+			left:     []string{"a", "aa"},
+			right:    []string{"a", "aa"},
+			expected: 0,
+		},
+		{
+			name:     "3 levels, all same",
+			left:     []string{"a", "aa", "aaa"},
+			right:    []string{"a", "aa", "aaa"},
+			expected: 0,
+		},
+		{
+			name:     "2 levels, 2nd different",
+			left:     []string{"a", "aa"},
+			right:    []string{"a", "bb"},
+			expected: getFraction(1, 2),
+		},
+		{
+			name:     "3 levels, 2nd different",
+			left:     []string{"a", "aa", "aaa"},
+			right:    []string{"a", "bb", "bbb"},
+			expected: getFraction(2, 3),
+		},
+		{
+			name:     "3 levels, 2nd different, rest same",
+			left:     []string{"a", "aa", "aaa"},
+			right:    []string{"a", "bb", "aaa"},
+			expected: getFraction(2, 3),
+		},
+		{
+			name:     "3 levels, 3rd different",
+			left:     []string{"a", "aa", "aaa"},
+			right:    []string{"a", "aa", "bbb"},
+			expected: getFraction(1, 3),
+		},
+		{
+			name:     "4 levels, 1st different, rest same",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"b", "aa", "aaa", "aaaa"},
+			expected: 1,
+		},
+		{
+			name:     "4 levels, 2nd different, rest same",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"a", "bb", "aaa", "aaaa"},
+			expected: getFraction(3, 4),
+		},
+		{
+			name:     "4 levels, 3nd different, rest same",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"a", "aa", "bbb", "aaaa"},
+			expected: getFraction(2, 4),
+		},
+		{
+			name:     "4 levels, 4th different",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"a", "aa", "aaa", "bbbb"},
+			expected: getFraction(1, 4),
+		},
+		{
+			name:     "2 and 4 levels, same",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"b", "aa"},
+			expected: 1,
+		},
+		{
+			name:     "2 and 4 levels, 1st different",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"b", "aa"},
+			expected: 1,
+		},
+		{
+			name:     "2 and 4 levels, 2nd different",
+			left:     []string{"a", "aa", "aaa", "aaaa"},
+			right:    []string{"a", "bb"},
+			expected: getFraction(1, 2),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			left := generateLocality(testCase.left)
+			right := generateLocality(testCase.right)
+			if a := left.DiversityScore(right); a != testCase.expected {
+				t.Fatalf("expected %f, got %f", testCase.expected, a)
+			}
+			if a := right.DiversityScore(left); a != testCase.expected {
+				t.Fatalf("expected %f, got %f", testCase.expected, a)
+			}
+		})
 	}
 }

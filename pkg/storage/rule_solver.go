@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -36,12 +37,11 @@ type candidate struct {
 
 // solveState is used to pass solution state information into a rule.
 type solveState struct {
-	constraints config.Constraints
-	store       roachpb.StoreDescriptor
-	existing    []roachpb.ReplicaDescriptor
-	sl          StoreList
-	tiers       map[roachpb.StoreID]map[string]roachpb.Tier
-	tierOrder   []string
+	constraints            config.Constraints
+	store                  roachpb.StoreDescriptor
+	sl                     StoreList
+	existing               []roachpb.ReplicaDescriptor
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality
 }
 
 // rule is a function that given a solveState will score and possibly
@@ -64,15 +64,17 @@ var defaultRuleSolver = ruleSolver{
 // Solve runs the rules against the stores in the store list and returns all
 // passing stores and their scores ordered from best to worst score.
 func (rs ruleSolver) Solve(
-	sl StoreList, c config.Constraints, existing []roachpb.ReplicaDescriptor,
+	sl StoreList,
+	c config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) ([]candidate, error) {
 	candidates := make([]candidate, 0, len(sl.stores))
 	state := solveState{
-		constraints: c,
-		existing:    existing,
-		sl:          sl,
-		tierOrder:   canonicalTierOrder(sl),
-		tiers:       storeTierMap(sl),
+		constraints:            c,
+		sl:                     sl,
+		existing:               existing,
+		existingNodeLocalities: existingNodeLocalities,
 	}
 
 	for _, store := range sl.stores {
@@ -157,26 +159,17 @@ func ruleConstraints(state solveState) (float64, bool) {
 // ruleDiversity returns higher scores for stores with the fewest locality tiers
 // in common with already existing replicas. It always returns true.
 func ruleDiversity(state solveState) (float64, bool) {
-	storeTiers := state.tiers[state.store.StoreID]
-	var maxScore, score float64
-	for i, tierKey := range state.tierOrder {
-		storeTier, ok := storeTiers[tierKey]
-		if !ok {
-			continue
-		}
-		tierScore := 1 / (float64(i) + 1)
-		for _, existing := range state.existing {
-			existingTier, ok := state.tiers[existing.StoreID][tierKey]
-			if ok && existingTier.Value != storeTier.Value {
-				score += tierScore
-			}
-			maxScore += tierScore
+	minScore := math.Inf(0)
+	for _, locality := range state.existingNodeLocalities {
+		if newScore := state.store.Node.Locality.DiversityScore(locality); newScore < minScore {
+			minScore = newScore
 		}
 	}
-	if maxScore == 0 {
-		return 0, true
+
+	if !math.IsInf(minScore, 0) {
+		return minScore * ruleDiversityWeight, true
 	}
-	return score / maxScore * ruleDiversityWeight, true
+	return 0, true
 }
 
 // ruleCapacity returns true iff a new replica won't overfill the store. The
@@ -190,58 +183,6 @@ func ruleCapacity(state solveState) (float64, bool) {
 	}
 
 	return ruleCapacityWeight / float64(state.store.Capacity.RangeCount+1), true
-}
-
-// canonicalTierOrder returns the most common key at each tier level in
-// order from the most broad tier down to the most local tier. If a majority of
-// the stores' nodes have no tier at any level, all subsequent levels are
-// ignored.
-func canonicalTierOrder(sl StoreList) []string {
-	maxTierCount := 0
-	for _, store := range sl.stores {
-		if count := len(store.Node.Locality.Tiers); maxTierCount < count {
-			maxTierCount = count
-		}
-	}
-
-	// Might have up to maxTierCount of tiers.
-	keys := make([]string, 0, maxTierCount)
-	for i := 0; i < maxTierCount; i++ {
-		// At each tier, count the number of occurrences of each key.
-		counts := map[string]int{}
-		maxKey := ""
-		for _, store := range sl.stores {
-			key := ""
-			if i < len(store.Node.Locality.Tiers) {
-				key = store.Node.Locality.Tiers[i].Key
-			}
-			counts[key]++
-			if counts[key] > counts[maxKey] {
-				maxKey = key
-			}
-		}
-		// Don't add the tier if most nodes don't have that many tiers.
-		if maxKey != "" {
-			keys = append(keys, maxKey)
-		} else {
-			break
-		}
-	}
-	return keys
-}
-
-// storeTierMap indexes a store list so it can be used to look up the locality
-// tier value from store ID and tier key.
-func storeTierMap(sl StoreList) map[roachpb.StoreID]map[string]roachpb.Tier {
-	m := map[roachpb.StoreID]map[string]roachpb.Tier{}
-	for _, store := range sl.stores {
-		sm := map[string]roachpb.Tier{}
-		m[store.StoreID] = sm
-		for _, tier := range store.Node.Locality.Tiers {
-			sm[tier.Key] = tier
-		}
-	}
-	return m
 }
 
 // byScore implements sort.Interface to sort by scores.

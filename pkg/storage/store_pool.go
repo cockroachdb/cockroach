@@ -214,8 +214,9 @@ type StorePool struct {
 		syncutil.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
 		// pointers are used so that data can be kept in sync.
-		storeDetails map[roachpb.StoreID]*storeDetail
-		queue        storePoolPQ
+		storeDetails   map[roachpb.StoreID]*storeDetail
+		queue          storePoolPQ
+		nodeLocalities map[roachpb.NodeID]roachpb.Locality
 	}
 }
 
@@ -244,6 +245,7 @@ func NewStorePool(
 	}
 	sp.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
 	heap.Init(&sp.mu.queue)
+	sp.mu.nodeLocalities = make(map[roachpb.NodeID]roachpb.Locality)
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
 	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
@@ -297,6 +299,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	// Does this storeDetail exist yet?
 	detail := sp.getStoreDetailLocked(storeDesc.StoreID)
 	detail.markAlive(sp.clock.Now(), &storeDesc)
+	sp.mu.nodeLocalities[storeDesc.Node.NodeID] = storeDesc.Node.Locality
 	sp.mu.queue.enqueue(detail)
 }
 
@@ -604,4 +607,23 @@ func (sp *StorePool) updateRemoteCapacityEstimate(
 		// TODO(jordan,bram): Consider updating the full capacity here.
 		desc.Capacity.RangeCount = capacity.RangeCount
 	}
+}
+
+// getNodeLocalities returns the localities for the provided nodeIDs.
+// TODO(bram): consider storing a full list of all node to node diversity
+// scores for faster lookups.
+func (sp *StorePool) getNodeLocalities(
+	nodeIDs []roachpb.NodeID,
+) map[roachpb.NodeID]roachpb.Locality {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	localities := make(map[roachpb.NodeID]roachpb.Locality)
+	for _, nodeID := range nodeIDs {
+		if locality, ok := sp.mu.nodeLocalities[nodeID]; ok {
+			localities[nodeID] = locality
+		} else {
+			localities[nodeID] = roachpb.Locality{}
+		}
+	}
+	return localities
 }

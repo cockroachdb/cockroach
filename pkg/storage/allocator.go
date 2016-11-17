@@ -200,6 +200,16 @@ func (a *Allocator) ComputeAction(
 	return AllocatorNoop, 0
 }
 
+// getNodeIDsForReplicas returns a list of node IDs based on the passed in
+// list of replica descriptors.
+func getNodeIDsForReplicas(replicas []roachpb.ReplicaDescriptor) []roachpb.NodeID {
+	nodeIDs := make([]roachpb.NodeID, len(replicas))
+	for i, replica := range replicas {
+		nodeIDs[i] = replica.NodeID
+	}
+	return nodeIDs
+}
+
 // AllocateTarget returns a suitable store for a new allocation with the
 // required attributes. Nodes already accommodating existing replicas are ruled
 // out as targets. The range ID of the replica being allocated for is also
@@ -221,7 +231,12 @@ func (a *Allocator) AllocateTarget(
 			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
-		candidates, err := a.ruleSolver.Solve(sl, constraints, existing)
+		candidates, err := a.ruleSolver.Solve(
+			sl,
+			constraints,
+			existing,
+			a.storePool.getNodeLocalities(getNodeIDsForReplicas(existing)),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -305,12 +320,11 @@ func (a Allocator) RemoveTarget(
 			}
 
 			candidate, valid := a.ruleSolver.computeCandidate(solveState{
-				constraints: constraints,
-				store:       desc,
-				existing:    nil,
-				sl:          sl,
-				tierOrder:   canonicalTierOrder(sl),
-				tiers:       storeTierMap(sl),
+				constraints:            constraints,
+				store:                  desc,
+				sl:                     sl,
+				existing:               nil,
+				existingNodeLocalities: a.storePool.getNodeLocalities(getNodeIDsForReplicas(existing)),
 			})
 			// When a candidate is not valid, it means that it can be
 			// considered the worst existing replica.
@@ -427,11 +441,11 @@ func (a Allocator) RebalanceTarget(
 		existingStoreList := makeStoreList(existingDescs)
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil)
+		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil)
+		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}

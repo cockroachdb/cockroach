@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"reflect"
 	"sort"
 	"testing"
 
@@ -50,13 +49,13 @@ func TestRuleSolver(t *testing.T) {
 	)
 	defer stopper.Stop()
 
-	storeRSa := roachpb.StoreID(1)   // datacenter (us), rack, slot + a
-	storeRab := roachpb.StoreID(2)   // datacenter (us), rack + a,b
-	storeFRabc := roachpb.StoreID(3) // datacenter (us), floor, rack + a,b,c
+	storeUSa15 := roachpb.StoreID(1) // us-a-1-5
+	storeUSa1 := roachpb.StoreID(2)  // us-a-1
+	storeUSb := roachpb.StoreID(3)   // us-b
 	storeDead := roachpb.StoreID(4)
-	storeEurope := roachpb.StoreID(5) // datacenter (eur), rack
+	storeEurope := roachpb.StoreID(5) // eur-a-1-5
 
-	mockStorePool(storePool, []roachpb.StoreID{storeRSa, storeRab, storeFRabc, storeEurope}, []roachpb.StoreID{storeDead}, nil)
+	mockStorePool(storePool, []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope}, []roachpb.StoreID{storeDead}, nil)
 
 	// tierSetup returns a tier struct constructed using the passed in values.
 	// If any value is an empty string, it is not included.
@@ -89,20 +88,24 @@ func TestRuleSolver(t *testing.T) {
 
 	storePool.mu.Lock()
 
-	storePool.mu.storeDetails[storeRSa].desc.Attrs.Attrs = []string{"a"}
-	storePool.mu.storeDetails[storeRSa].desc.Node.Locality.Tiers = tierSetup("us", "", "1", "5")
-	storePool.mu.storeDetails[storeRSa].desc.Capacity = capacitySetup(1, 99)
+	storePool.mu.storeDetails[storeUSa15].desc.Attrs.Attrs = []string{"a"}
+	storePool.mu.storeDetails[storeUSa15].desc.Node.Locality.Tiers = tierSetup("us", "a", "1", "5")
+	storePool.mu.storeDetails[storeUSa15].desc.Capacity = capacitySetup(1, 99)
+	storePool.mu.nodeLocalities[roachpb.NodeID(storeUSa15)] = storePool.mu.storeDetails[storeUSa15].desc.Node.Locality
 
-	storePool.mu.storeDetails[storeRab].desc.Attrs.Attrs = []string{"a", "b"}
-	storePool.mu.storeDetails[storeRab].desc.Node.Locality.Tiers = tierSetup("us", "", "1", "")
-	storePool.mu.storeDetails[storeRab].desc.Capacity = capacitySetup(100, 0)
+	storePool.mu.storeDetails[storeUSa1].desc.Attrs.Attrs = []string{"a", "b"}
+	storePool.mu.storeDetails[storeUSa1].desc.Node.Locality.Tiers = tierSetup("us", "a", "1", "")
+	storePool.mu.storeDetails[storeUSa1].desc.Capacity = capacitySetup(100, 0)
+	storePool.mu.nodeLocalities[roachpb.NodeID(storeUSa1)] = storePool.mu.storeDetails[storeUSa1].desc.Node.Locality
 
-	storePool.mu.storeDetails[storeFRabc].desc.Attrs.Attrs = []string{"a", "b", "c"}
-	storePool.mu.storeDetails[storeFRabc].desc.Node.Locality.Tiers = tierSetup("us", "1", "2", "")
-	storePool.mu.storeDetails[storeFRabc].desc.Capacity = capacitySetup(50, 50)
+	storePool.mu.storeDetails[storeUSb].desc.Attrs.Attrs = []string{"a", "b", "c"}
+	storePool.mu.storeDetails[storeUSb].desc.Node.Locality.Tiers = tierSetup("us", "b", "", "")
+	storePool.mu.storeDetails[storeUSb].desc.Capacity = capacitySetup(50, 50)
+	storePool.mu.nodeLocalities[roachpb.NodeID(storeUSb)] = storePool.mu.storeDetails[storeUSb].desc.Node.Locality
 
-	storePool.mu.storeDetails[storeEurope].desc.Node.Locality.Tiers = tierSetup("eur", "", "1", "")
+	storePool.mu.storeDetails[storeEurope].desc.Node.Locality.Tiers = tierSetup("eur", "a", "1", "5")
 	storePool.mu.storeDetails[storeEurope].desc.Capacity = capacitySetup(60, 40)
+	storePool.mu.nodeLocalities[roachpb.NodeID(storeEurope)] = storePool.mu.storeDetails[storeEurope].desc.Node.Locality
 
 	storePool.mu.Unlock()
 
@@ -115,38 +118,38 @@ func TestRuleSolver(t *testing.T) {
 	}{
 		{
 			name:     "no constraints or rules",
-			expected: []roachpb.StoreID{storeRSa, storeRab, storeFRabc, storeEurope},
+			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope},
 		},
 		{
 			name: "white list rule",
 			rule: func(state solveState) (float64, bool) {
 				switch state.store.StoreID {
-				case storeRSa:
+				case storeUSa15:
 					return 0, true
-				case storeFRabc:
+				case storeUSb:
 					return 1, true
 				default:
 					return 0, false
 				}
 			},
-			expected: []roachpb.StoreID{storeFRabc, storeRSa},
+			expected: []roachpb.StoreID{storeUSb, storeUSa15},
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 2 available nodes",
 			rule: ruleReplicasUniqueNodes,
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: roachpb.NodeID(storeRSa)},
-				{NodeID: roachpb.NodeID(storeFRabc)},
+				{NodeID: roachpb.NodeID(storeUSa15)},
+				{NodeID: roachpb.NodeID(storeUSb)},
 			},
-			expected: []roachpb.StoreID{storeRab, storeEurope},
+			expected: []roachpb.StoreID{storeUSa1, storeEurope},
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 0 available nodes",
 			rule: ruleReplicasUniqueNodes,
 			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: roachpb.NodeID(storeRSa)},
-				{NodeID: roachpb.NodeID(storeRab)},
-				{NodeID: roachpb.NodeID(storeFRabc)},
+				{NodeID: roachpb.NodeID(storeUSa15)},
+				{NodeID: roachpb.NodeID(storeUSa1)},
+				{NodeID: roachpb.NodeID(storeUSb)},
 				{NodeID: roachpb.NodeID(storeEurope)},
 			},
 			expected: nil,
@@ -159,7 +162,7 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "b", Type: config.Constraint_REQUIRED},
 				},
 			},
-			expected: []roachpb.StoreID{storeRab, storeFRabc},
+			expected: []roachpb.StoreID{storeUSa1, storeUSb},
 		},
 		{
 			name: "ruleConstraints - required locality constraints",
@@ -169,7 +172,7 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
 				},
 			},
-			expected: []roachpb.StoreID{storeRSa, storeRab, storeFRabc},
+			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb},
 		},
 		{
 			name: "ruleConstraints - prohibited constraints",
@@ -179,7 +182,7 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "b", Type: config.Constraint_PROHIBITED},
 				},
 			},
-			expected: []roachpb.StoreID{storeRSa, storeEurope},
+			expected: []roachpb.StoreID{storeUSa15, storeEurope},
 		},
 		{
 			name: "ruleConstraints - prohibited locality constraints",
@@ -201,7 +204,7 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "c"},
 				},
 			},
-			expected: []roachpb.StoreID{storeFRabc, storeRab, storeRSa, storeEurope},
+			expected: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15, storeEurope},
 		},
 		{
 			name: "ruleConstraints - positive locality constraints",
@@ -211,26 +214,35 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "eur"},
 				},
 			},
-			expected: []roachpb.StoreID{storeEurope, storeRSa, storeRab, storeFRabc},
+			expected: []roachpb.StoreID{storeEurope, storeUSa15, storeUSa1, storeUSb},
 		},
 		{
 			name:     "ruleDiversity - no existing replicas",
 			rule:     ruleDiversity,
 			existing: nil,
-			expected: []roachpb.StoreID{storeRSa, storeRab, storeFRabc, storeEurope},
+			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope},
 		},
 		{
 			name: "ruleDiversity - one existing replicas",
 			rule: ruleDiversity,
 			existing: []roachpb.ReplicaDescriptor{
-				{StoreID: storeRSa},
+				{NodeID: roachpb.NodeID(storeUSa15)},
 			},
-			expected: []roachpb.StoreID{storeEurope, storeFRabc, storeRSa, storeRab},
+			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa15, storeUSa1},
+		},
+		{
+			name: "ruleDiversity - two existing replicas",
+			rule: ruleDiversity,
+			existing: []roachpb.ReplicaDescriptor{
+				{NodeID: roachpb.NodeID(storeUSa15)},
+				{NodeID: roachpb.NodeID(storeEurope)},
+			},
+			expected: []roachpb.StoreID{storeUSb, storeUSa15, storeUSa1, storeEurope},
 		},
 		{
 			name:     "ruleCapacity",
 			rule:     ruleCapacity,
-			expected: []roachpb.StoreID{storeRab, storeEurope, storeFRabc},
+			expected: []roachpb.StoreID{storeUSa1, storeEurope, storeUSb},
 		},
 	}
 
@@ -241,7 +253,12 @@ func TestRuleSolver(t *testing.T) {
 				solver = ruleSolver{tc.rule}
 			}
 			sl, _, _ := storePool.getStoreList(roachpb.RangeID(0))
-			candidates, err := solver.Solve(sl, tc.c, tc.existing)
+			candidates, err := solver.Solve(
+				sl,
+				tc.c,
+				tc.existing,
+				storePool.getNodeLocalities(getNodeIDsForReplicas(tc.existing)),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -254,95 +271,6 @@ func TestRuleSolver(t *testing.T) {
 					t.Errorf("candidates[%d].store.StoreID = %d; not %d; %+v",
 						i, actual, expected, candidates)
 				}
-			}
-		})
-	}
-}
-
-func TestCanonicalTierOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		name          string
-		tiersPerStore [][]roachpb.Tier
-		expected      []string
-	}{
-		{
-			name:          "no tiers at all",
-			tiersPerStore: nil,
-			expected:      []string{},
-		},
-		{
-			name:          "one store with two empty tiers",
-			tiersPerStore: [][]roachpb.Tier{nil, nil},
-			expected:      []string{},
-		},
-		{
-			name: "one store with three tiers",
-			tiersPerStore: [][]roachpb.Tier{
-				{
-					{Key: "a"},
-					{Key: "b"},
-					{Key: "c"},
-				},
-			},
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			name: "3 stores with the same tiers, one with an extra one",
-			tiersPerStore: [][]roachpb.Tier{
-				{
-					{Key: "a"},
-					{Key: "b"},
-					{Key: "c"},
-				},
-				{
-					{Key: "a"},
-					{Key: "b"},
-					{Key: "c"},
-				},
-				{
-					{Key: "b"},
-					{Key: "c"},
-					{Key: "a"},
-					{Key: "d"},
-				},
-			},
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			name: "two stores with completely different tiers",
-			tiersPerStore: [][]roachpb.Tier{
-				{
-					{Key: "a"},
-					{Key: "b"},
-					{Key: "c"},
-				},
-				{
-					{Key: "e"},
-					{Key: "f"},
-					{Key: "g"},
-				},
-			},
-			expected: []string{"a", "b", "c"},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			var descriptors []roachpb.StoreDescriptor
-			for _, tiers := range tc.tiersPerStore {
-				descriptors = append(descriptors, roachpb.StoreDescriptor{
-					Node: roachpb.NodeDescriptor{
-						Locality: roachpb.Locality{Tiers: tiers},
-					},
-				})
-			}
-
-			sl := makeStoreList(descriptors)
-			if actual := canonicalTierOrder(sl); !reflect.DeepEqual(actual, tc.expected) {
-				t.Errorf("canonicalTierOrder(%+v) = %+v; not %+v",
-					tc.tiersPerStore, actual, tc.expected)
 			}
 		})
 	}

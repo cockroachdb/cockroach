@@ -526,3 +526,62 @@ func TestStorePoolThrottle(t *testing.T) {
 		}
 	}
 }
+
+func TestGetNodeLocalities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDead, false /* deterministic */)
+	defer stopper.Stop()
+	sg := gossiputil.NewStoreGossiper(g)
+
+	setLocality := func(in string) roachpb.Locality {
+		var locality roachpb.Locality
+		if err := locality.Set(in); err != nil {
+			t.Fatal(err)
+		}
+		return locality
+	}
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID:   1,
+				Locality: setLocality("1=1"),
+			},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID:   2,
+				Locality: setLocality("2=2,2=2"),
+			},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID:   3,
+				Locality: setLocality("3=3,3=3,3=3"),
+			},
+		},
+		{
+			StoreID: 4,
+			Node: roachpb.NodeDescriptor{
+				NodeID:   2,
+				Locality: setLocality("2=2,2=2"),
+			},
+		},
+	}
+
+	sg.GossipStores(stores, t)
+
+	localities := sp.getNodeLocalities([]roachpb.NodeID{1, 2, 3, 1})
+	for _, store := range stores {
+		locality, ok := localities[store.Node.NodeID]
+		if !ok {
+			t.Fatalf("could not find locality for node %d", store.Node.NodeID)
+		}
+		if e, a := int(store.Node.NodeID), len(locality.Tiers); e != a {
+			t.Fatalf("for node %d, expected %d tiers, only got %d", store.Node.NodeID, e, a)
+		}
+	}
+}
