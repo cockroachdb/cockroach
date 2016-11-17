@@ -29,7 +29,10 @@ if [ $# -ne 2 ]; then
 fi
 
 # ~/.config/gcloud may be erroneously owned by root, so fix that.
-sudo chown -R "${USER}" "${HOME}/.config/gcloud"
+GCLOUD_DIR="${HOME}/.config/gcloud"
+if [[ -d "${GCLOUD_DIR}" ]]; then
+    sudo chown -R "${USER}" "${GCLOUD_DIR}"
+fi
 
 # CockroachDB nodes are named blah-cockroach-[0-9]*, so extract the final
 # numeric part.
