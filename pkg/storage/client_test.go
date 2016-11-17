@@ -36,7 +36,6 @@ import (
 
 	"github.com/cenk/backoff"
 	"github.com/coreos/etcd/raft"
-	"github.com/facebookgo/clock"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
@@ -276,22 +275,11 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, m.clock,
 			m.transportStopper)
-		// Create breaker options which retry very quickly and use a "real"
-		// clock so breakers retry without requiring the manual clock to be
-		// incremented manually to untrip the breaker.
+		// Create a breaker which never trips and never backs off to avoid
+		// introducing timing-based flakes.
 		m.rpcContext.BreakerFactory = func() *circuit.Breaker {
-			b := &backoff.ExponentialBackOff{
-				InitialInterval:     1 * time.Millisecond,
-				RandomizationFactor: 0.25,
-				Multiplier:          2,
-				MaxInterval:         20 * time.Millisecond,
-				MaxElapsedTime:      0,
-				Clock:               clock.New(),
-			}
-			b.Reset()
 			return circuit.NewBreakerWithOptions(&circuit.Options{
-				BackOff:    b,
-				ShouldTrip: circuit.ThresholdTripFunc(1),
+				BackOff: &backoff.ZeroBackOff{},
 			})
 		}
 	}
@@ -839,18 +827,6 @@ func (m *multiTestContext) restartStore(i int) {
 	}
 	// The sender is assumed to still exist.
 	m.senders[i].AddStore(m.stores[i])
-}
-
-// disableCircuitBreakersToStore ensures that no store's RaftTransport will
-// reject requests just because past connections to the given store have failed.
-// If you're stopping store and restarting them, you may want to use this to
-// ensure that errors from when the store was down don't cause other nodes to
-// avoid opening new connections to it.
-func (m *multiTestContext) disableCircuitBreakersToStore(i int) {
-	nodeID := roachpb.NodeID(i + 1)
-	for _, transport := range m.transports {
-		transport.GetCircuitBreaker(nodeID).ShouldTrip = nil
-	}
 }
 
 func (m *multiTestContext) Store(i int) *storage.Store {
