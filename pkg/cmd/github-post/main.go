@@ -17,6 +17,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -60,6 +61,17 @@ func main() {
 	}
 }
 
+func trimIssueRequestBody(message string) string {
+	for len(message) > githubIssueBodyMaximumLength {
+		if idx := strings.IndexByte(message, '\n'); idx != -1 {
+			message = message[idx+1:]
+		} else {
+			message = message[len(message)-githubIssueBodyMaximumLength:]
+		}
+	}
+	return message
+}
+
 func runGH(
 	input io.Reader,
 	createIssue func(owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error),
@@ -79,6 +91,9 @@ func runGH(
 		log.Fatalf("teamcity build ID environment variable %s is not set", teamcityBuildIDEnv)
 	}
 
+	var inputBuf bytes.Buffer
+	input = io.TeeReader(input, &inputBuf)
+
 	options := url.Values{}
 	options.Add("buildId", buildID)
 
@@ -89,10 +104,29 @@ func runGH(
 		RawQuery: options.Encode(),
 	}).String()
 
+	newIssueRequest := func(packageName, testName, message string) *github.IssueRequest {
+		title := fmt.Sprintf("%s: %s failed under stress", packageName, testName)
+		body := fmt.Sprintf(`SHA: https://github.com/cockroachdb/cockroach/commits/%s
+
+Stress build found a failed test: %s
+
+%s`, sha, u, "```\n"+trimIssueRequestBody(message)+"\n```")
+
+		return &github.IssueRequest{
+			Title: &title,
+			Body:  &body,
+			Labels: &[]string{
+				"Robot",
+				"test-failure",
+			},
+		}
+	}
+
 	suites, err := lib.ParseGotest(input, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to parse `go test` output")
 	}
+	posted := false
 	for _, suite := range suites {
 		packageName := suite.Name
 		if packageName == "" {
@@ -103,35 +137,21 @@ func runGH(
 			}
 		}
 		for _, test := range suite.Tests {
-			message := test.Message
-			for len(message) > githubIssueBodyMaximumLength {
-				if idx := strings.IndexByte(message, '\n'); idx != -1 {
-					message = message[idx+1:]
-				} else {
-					message = message[len(message)-githubIssueBodyMaximumLength:]
-				}
-			}
 			switch test.Status {
 			case lib.Failed:
-				title := fmt.Sprintf("%s: %s failed under stress", packageName, test.Name)
-				body := fmt.Sprintf(`SHA: https://github.com/cockroachdb/cockroach/commits/%s
-
-Stress build found a failed test: %s
-
-%s`, sha, u, "```\n"+message+"\n```")
-
-				issueRequest := &github.IssueRequest{
-					Title: &title,
-					Body:  &body,
-					Labels: &[]string{
-						"Robot",
-						"test-failure",
-					},
-				}
+				issueRequest := newIssueRequest(packageName, test.Name, test.Message)
 				if _, _, err := createIssue("cockroachdb", "cockroach", issueRequest); err != nil {
 					return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 				}
+				posted = true
 			}
+		}
+	}
+
+	if !posted {
+		issueRequest := newIssueRequest("(unknown)", "(unknown)", inputBuf.String())
+		if _, _, err := createIssue("cockroachdb", "cockroach", issueRequest); err != nil {
+			return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 		}
 	}
 
