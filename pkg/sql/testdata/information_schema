@@ -538,7 +538,9 @@ DROP DATABASE other_db
 ## This test case will be moved up into the correct order when #8497 is fixed.
 
 query TTTTTT colnames
-SELECT * FROM information_schema.table_constraints
+SELECT *
+FROM information_schema.table_constraints
+ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
 CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA  TABLE_NAME  CONSTRAINT_TYPE
 def                 system             primary          system        descriptor  PRIMARY KEY
@@ -568,15 +570,18 @@ CREATE TABLE constraint_db.t2 (
 )
 
 query TTTTTT colnames
-SELECT * FROM information_schema.table_constraints WHERE constraint_schema = 'constraint_db'
+SELECT *
+FROM information_schema.table_constraints
+WHERE constraint_schema = 'constraint_db'
+ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
 CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA   TABLE_NAME  CONSTRAINT_TYPE
-def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
-def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
 def                 constraint_db      c2               constraint_db  t1          CHECK
 def                 constraint_db      check_a          constraint_db  t1          CHECK
+def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
+def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
+def                 constraint_db      fk               constraint_db  t2          FOREIGN KEY
 def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
-def                 constraint_db      t2_t1_ID_idx     constraint_db  t2          FOREIGN KEY
 
 # TODO(nvanbenschoten) blocked on #8497.
 #statement ok
@@ -593,7 +598,7 @@ CREATE TABLE constraint_column.t1 (
   p FLOAT PRIMARY KEY,
   a INT UNIQUE,
   b INT,
-  c INT,
+  c INT CHECK(c > 0),
   UNIQUE INDEX index_key(b, c)
 )
 

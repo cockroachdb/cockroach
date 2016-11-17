@@ -168,19 +168,21 @@ CREATE TABLE information_schema.key_column_usage (
 				table *sqlbase.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
-				info, err := table.GetConstraintInfoWithLookup(func(id sqlbase.ID) (
-					*sqlbase.TableDescriptor, error,
-				) {
-					if _, t := tableLookup(id); t != nil {
-						return t, nil
-					}
-					return nil, errors.Errorf("could not find referenced table with ID %v", id)
-				})
+				info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 				if err != nil {
 					return err
 				}
 
 				for name, c := range info {
+					// Only Primary Key, Foreign Key, and Unique constraints are included.
+					switch c.Kind {
+					case sqlbase.ConstraintTypePK:
+					case sqlbase.ConstraintTypeFK:
+					case sqlbase.ConstraintTypeUnique:
+					default:
+						continue
+					}
+
 					for pos, column := range c.Columns {
 						ordinalPos := parser.NewDInt(parser.DInt(pos + 1))
 						uniquePos := parser.DNull
@@ -324,14 +326,6 @@ CREATE TABLE information_schema.statistics (
 	},
 }
 
-var (
-	constraintTypeCheck      = parser.NewDString("CHECK")
-	constraintTypeForeignKey = parser.NewDString("FOREIGN KEY")
-	constraintTypePrimaryKey = parser.NewDString("PRIMARY KEY")
-	constraintTypeUnique     = parser.NewDString("UNIQUE")
-)
-
-// TODO(dt): switch using common GetConstraintInfo helper.
 var informationSchemaTableConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_constraints (
@@ -343,44 +337,25 @@ CREATE TABLE information_schema.table_constraints (
 	CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
 );`,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				type constraint struct {
-					name string
-					typ  parser.Datum
+		return forEachTableDescWithTableLookup(p,
+			func(
+				db *sqlbase.DatabaseDescriptor,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+				if err != nil {
+					return err
 				}
-				var constraints []constraint
-				if table.IsPhysicalTable() {
-					constraints = append(constraints, constraint{
-						name: table.PrimaryIndex.Name,
-						typ:  constraintTypePrimaryKey,
-					})
-				}
-				for _, index := range table.Indexes {
-					c := constraint{name: index.Name}
-					switch {
-					case index.Unique:
-						c.typ = constraintTypeUnique
-						constraints = append(constraints, c)
-					case index.ForeignKey.IsSet():
-						c.typ = constraintTypeForeignKey
-						constraints = append(constraints, c)
-					}
-				}
-				for _, check := range table.Checks {
-					constraints = append(constraints, constraint{
-						name: check.Name,
-						typ:  constraintTypeCheck,
-					})
-				}
-				for _, c := range constraints {
+
+				for name, c := range info {
 					if err := addRow(
-						defString,                     // constraint_catalog
-						parser.NewDString(db.Name),    // constraint_schema
-						dStringOrNull(c.name),         // constraint_name
-						parser.NewDString(db.Name),    // table_schema
-						parser.NewDString(table.Name), // table_name
-						c.typ, // constraint_type
+						defString,                         // constraint_catalog
+						parser.NewDString(db.Name),        // constraint_schema
+						dStringOrNull(name),               // constraint_name
+						parser.NewDString(db.Name),        // table_schema
+						parser.NewDString(table.Name),     // table_name
+						parser.NewDString(string(c.Kind)), // constraint_type
 					); err != nil {
 						return err
 					}
@@ -564,6 +539,13 @@ func forEachTableDesc(
 // database descriptor using the table's ID. Both descriptors will be nil if a
 // table with the provided ID was not found.
 type tableLookupFn func(tableID sqlbase.ID) (*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor)
+
+func (fn tableLookupFn) tableOrErr(id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
+	if _, t := fn(id); t != nil {
+		return t, nil
+	}
+	return nil, errors.Errorf("could not find referenced table with ID %v", id)
+}
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
 // tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
