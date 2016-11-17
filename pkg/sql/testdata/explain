@@ -126,7 +126,7 @@ query ITT
 EXPLAIN SHOW DATABASES
 ----
 0 virtual table SHOW DATABASES
-1 values 1 column, 5 rows
+1 values 1 column, 6 rows
 
 query ITT
 EXPLAIN SHOW TABLES

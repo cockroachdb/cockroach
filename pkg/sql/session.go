@@ -58,6 +58,8 @@ const keyFor7881Sample = "found#7881"
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
+	Client string
+
 	Database string
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
@@ -70,7 +72,8 @@ type Session struct {
 	Syntax      int32
 	DistSQLMode distSQLExecMode
 
-	virtualSchemas virtualSchemaHolder
+	sessionRegistry *sessionRegistry
+	virtualSchemas  virtualSchemaHolder
 
 	// Info about the open transaction (if any).
 	TxnState txnState
@@ -119,13 +122,18 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
+	client := "<internal>"
+	if remote != nil {
+		client = remote.String()
+	}
 	s := &Session{
-		Database:       args.Database,
-		SearchPath:     []string{"pg_catalog"},
-		User:           args.User,
-		Location:       time.UTC,
-		virtualSchemas: e.virtualSchemas,
-		memMetrics:     memMetrics,
+		Database:        args.Database,
+		SearchPath:      []string{"pg_catalog"},
+		User:            args.User,
+		Location:        time.UTC,
+		virtualSchemas:  e.virtualSchemas,
+		memMetrics:      memMetrics,
+		sessionRegistry: &e.sessionRegistry,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
@@ -139,21 +147,20 @@ func NewSession(
 	s.PreparedPortals = makePreparedPortals(s)
 
 	if opentracing.SpanFromContext(ctx) == nil {
-		remoteStr := "<admin>"
-		if remote != nil {
-			remoteStr = remote.String()
-		}
 		// Set up an EventLog for session events.
-		ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
+		ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), client)
 		s.finishEventLog = true
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
 
+	s.sessionRegistry.register(s)
 	return s
 }
 
 // Finish releases resources held by the Session.
 func (s *Session) Finish(e *Executor) {
+	s.sessionRegistry.deregister(s)
+
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State.kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(

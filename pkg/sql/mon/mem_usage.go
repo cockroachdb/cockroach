@@ -591,3 +591,8 @@ func (mm *MemoryMonitor) adjustBudget(ctx context.Context) {
 		mm.pool.ShrinkAccount(ctx, &mm.mu.curBudget, mm.mu.curBudget.curAllocated-neededBytes)
 	}
 }
+
+// CurAllocated exposes the current curAllocated member.
+func (mm *MemoryMonitor) CurAllocated() int64 {
+	return mm.mu.curBudget.curAllocated
+}

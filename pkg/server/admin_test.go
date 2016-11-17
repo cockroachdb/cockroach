@@ -251,7 +251,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedDBs := []string{"information_schema", "pg_catalog", "system", testdb}
+	expectedDBs := []string{"crdb_internal", "information_schema", "pg_catalog", "system", testdb}
 	if a, e := len(resp.Databases), len(expectedDBs); a != e {
 		t.Fatalf("length of result %d != expected %d", a, e)
 	}
