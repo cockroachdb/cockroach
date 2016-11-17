@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -114,10 +115,6 @@ const (
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
 
-	// DefaultGossipStoresInterval is the default interval for gossiping storage-
-	// related info.
-	DefaultGossipStoresInterval = 5 * time.Second
-
 	unknownNodeID roachpb.NodeID = 0
 )
 
@@ -129,6 +126,12 @@ var (
 	MetaInfosReceivedRates       = metric.Metadata{Name: "gossip.infos.received"}
 	MetaBytesSentRates           = metric.Metadata{Name: "gossip.bytes.sent"}
 	MetaBytesReceivedRates       = metric.Metadata{Name: "gossip.bytes.received"}
+)
+
+var (
+	// GossipStoresInterval is the interval for gossipping storage-related info.
+	GossipStoresInterval = envutil.EnvOrDefaultDuration("COCKROACH_GOSSIP_STORES_INTERVAL",
+		5*time.Second)
 )
 
 // Storage is an interface which allows the gossip instance

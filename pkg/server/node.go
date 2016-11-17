@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -600,10 +599,8 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 			panic(err)
 		}
 
-		gossipStoresInterval := envutil.EnvOrDefaultDuration("COCKROACH_GOSSIP_STORES_INTERVAL",
-			gossip.DefaultGossipStoresInterval)
 		statusTicker := time.NewTicker(gossipStatusInterval)
-		storesTicker := time.NewTicker(gossipStoresInterval)
+		storesTicker := time.NewTicker(gossip.GossipStoresInterval)
 		nodeTicker := time.NewTicker(gossipNodeDescriptorInterval)
 		defer storesTicker.Stop()
 		defer nodeTicker.Stop()
