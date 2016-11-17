@@ -428,7 +428,8 @@ func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
 }
 
 func (ss *sortAllStrategy) Add(values parser.DTuple) error {
-	return ss.vNode.rows.AddRow(values)
+	_, err := ss.vNode.rows.AddRow(values)
+	return err
 }
 
 func (ss *sortAllStrategy) Finish() {
@@ -474,7 +475,8 @@ func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
 }
 
 func (ss *iterativeSortStrategy) Add(values parser.DTuple) error {
-	return ss.vNode.rows.AddRow(values)
+	_, err := ss.vNode.rows.AddRow(values)
+	return err
 }
 
 func (ss *iterativeSortStrategy) Finish() {

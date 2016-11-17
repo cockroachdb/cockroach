@@ -90,6 +90,8 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	window.replaceIndexedVars(s)
 	indexedVarCols := s.columns[len(renderCols)+len(windowDefCols):]
 
+	// Despite appearances we are in fact using three separate bound accounts
+	// for each of the following row containers.
 	acc := p.session.TxnState.makeBoundAccount()
 	window.wrappedRenderVals = NewRowContainer(acc, renderCols, 0)
 	window.wrappedWindowDefVals = NewRowContainer(acc, windowDefCols, 0)
@@ -443,15 +445,15 @@ func (n *windowNode) Next() (bool, error) {
 		renderEnd := n.wrappedRenderVals.NumCols()
 		windowDefEnd := renderEnd + n.wrappedWindowDefVals.NumCols()
 		renderVals := values[:renderEnd]
-		if err := n.wrappedRenderVals.AddRow(renderVals); err != nil {
+		if _, err := n.wrappedRenderVals.AddRow(renderVals); err != nil {
 			return false, err
 		}
 		windowDefVals := values[renderEnd:windowDefEnd]
-		if err := n.wrappedWindowDefVals.AddRow(windowDefVals); err != nil {
+		if _, err := n.wrappedWindowDefVals.AddRow(windowDefVals); err != nil {
 			return false, err
 		}
 		indexedVarVals := values[windowDefEnd:]
-		if err := n.wrappedIndexedVarVals.AddRow(indexedVarVals); err != nil {
+		if _, err := n.wrappedIndexedVarVals.AddRow(indexedVarVals); err != nil {
 			return false, err
 		}
 
@@ -724,7 +726,7 @@ func (n *windowNode) populateValues() error {
 			}
 		}
 
-		if err := n.values.rows.AddRow(row); err != nil {
+		if _, err := n.values.rows.AddRow(row); err != nil {
 			return err
 		}
 	}
