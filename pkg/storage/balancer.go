@@ -26,7 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-const allocatorRandomCount = 10
+// The number of random candidates to select from a larger list of possible
+// candidates. Because the allocator heuristics are being run on every node it
+// is actually not desirable to set this value higher. Doing so can lead to
+// situations where the allocator determistically selects the "best" node for a
+// decision and all of the nodes pile on allocations to that node. See "power
+// of two random choices":
+// https://brooker.co.za/blog/2012/01/17/two-random.html and
+// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
+const allocatorRandomCount = 2
 
 type nodeIDSet map[roachpb.NodeID]struct{}
 
