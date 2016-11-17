@@ -18,12 +18,13 @@ package storage_test
 
 import (
 	"math"
-	"os"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -40,14 +41,10 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	// Set the gossip stores interval lower to speed up rebalancing. With the
 	// default of 5s we have to wait ~5s for the rebalancing to start.
-	if err := os.Setenv("COCKROACH_GOSSIP_STORES_INTERVAL", "100ms"); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.Unsetenv("COCKROACH_GOSSIP_STORES_INTERVAL"); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer func(v time.Duration) {
+		gossip.GossipStoresInterval = v
+	}(gossip.GossipStoresInterval)
+	gossip.GossipStoresInterval = 100 * time.Millisecond
 
 	// TODO(peter): Remove when lease rebalancing is the default.
 	defer func(v bool) {
