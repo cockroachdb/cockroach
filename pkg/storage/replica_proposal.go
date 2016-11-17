@@ -57,7 +57,10 @@ type LocalProposalData struct {
 	// the common case, this field is nil.
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
-	done  chan proposalResult // Used to signal waiting RPC handler
+	// Called after command execution to update the timestamp cache &
+	// command queue.
+	endCmds *endCmds
+	doneCh  chan proposalResult // Used to signal waiting RPC handler
 
 	Batch engine.Batch
 
@@ -91,6 +94,20 @@ type LocalProposalData struct {
 	maybeAddToSplitQueue bool
 	// Call maybeGossipNodeLiveness with the specified Span, if set.
 	maybeGossipNodeLiveness *roachpb.Span
+}
+
+// finish first invokes the endCmds function and then sends the
+// specified proposalResult on the lpd's done channel. endCmds is
+// invoked here in order to allow the original client to be cancelled
+// and possibly no longer listening to this done channel, and so can't
+// be counted on to invoke endCmds itself.
+func (lpd *LocalProposalData) finish(pr proposalResult) {
+	if lpd.endCmds != nil {
+		lpd.endCmds.done(pr.Reply, pr.Err, pr.ShouldRetry)
+		lpd.endCmds = nil
+	}
+	lpd.doneCh <- pr
+	close(lpd.doneCh)
 }
 
 // ProposalData is the result of preparing a Raft proposal. That is, the
@@ -578,7 +595,8 @@ func (r *Replica) handleLocalProposalData(
 	{
 		lpd.idKey = storagebase.CmdIDKey("")
 		lpd.Batch = nil
-		lpd.done = nil
+		lpd.endCmds = nil
+		lpd.doneCh = nil
 		lpd.ctx = nil
 		lpd.Err = nil
 		lpd.proposedAtTicks = 0
