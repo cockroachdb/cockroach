@@ -409,7 +409,7 @@ func (u *sqlSymUnion) window() Window {
 %type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
-%type <UnresolvedName> indirection
+%type <UnresolvedName> indirection opt_indirection
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
@@ -453,6 +453,7 @@ func (u *sqlSymUnion) window() Window {
 %type <NamePart> glob_indirection
 %type <NamePart> name_indirection
 %type <NamePart> indirection_elem
+%type <Expr> opt_slice_bound
 %type <*IndexHints> opt_index_hints
 %type <*IndexHints> index_hints_param
 %type <*IndexHints> index_hints_param_list
@@ -657,7 +658,7 @@ func (u *sqlSymUnion) window() Window {
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH, NOT_REGIMATCH NOT_LA
+%nonassoc  BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
@@ -3677,13 +3678,29 @@ c_expr:
     $$.val = $1.unresolvedName()
   }
 | a_expr_const
-| PLACEHOLDER
+| PLACEHOLDER opt_indirection
   {
-    $$.val = NewPlaceholder($1)
+    placeholder := NewPlaceholder($1)
+    if indirection := $2.unresolvedName(); indirection != nil {
+      $$.val = &IndirectionExpr{
+        Expr: placeholder,
+        Indirection: indirection,
+      }
+    } else {
+      $$.val = placeholder
+    }
   }
-| '(' a_expr ')'
+| '(' a_expr ')' opt_indirection
   {
-    $$.val = &ParenExpr{Expr: $2.expr()}
+    paren := &ParenExpr{Expr: $2.expr()}
+    if indirection := $4.unresolvedName(); indirection != nil {
+      $$.val = &IndirectionExpr{
+        Expr: paren,
+        Indirection: indirection,
+      }
+    } else {
+      $$.val = paren
+    }
   }
 | case_expr
 | func_expr
@@ -3693,7 +3710,10 @@ c_expr:
   }
 | select_with_parens indirection
   {
-    $$.val = &Subquery{Select: $1.selectStmt()}
+    $$.val = &IndirectionExpr{
+      Expr: &Subquery{Select: $1.selectStmt()},
+      Indirection: $2.unresolvedName(),
+    }
   }
 | EXISTS select_with_parens
   {
@@ -4278,9 +4298,16 @@ indirection_elem:
   {
     $$.val = &ArraySubscript{Begin: $2.expr()}
   }
-| '[' a_expr ':' a_expr ']'
+| '[' opt_slice_bound ':' opt_slice_bound ']'
   {
-    $$.val = &ArraySubscript{Begin: $2.expr(), End: $4.expr()}
+    $$.val = &ArraySubscript{Begin: $2.expr(), End: $4.expr(), Slice: true}
+  }
+
+opt_slice_bound:
+  a_expr
+| /*EMPTY*/
+  {
+    $$.val = Expr(nil)
   }
 
 name_indirection:
@@ -4301,6 +4328,16 @@ indirection:
     $$.val = UnresolvedName{$1.namePart()}
   }
 | indirection indirection_elem
+  {
+    $$.val = append($1.unresolvedName(), $2.namePart())
+  }
+
+opt_indirection:
+  /* EMPTY */
+  {
+    $$.val = UnresolvedName(nil)
+  }
+| opt_indirection indirection_elem
   {
     $$.val = append($1.unresolvedName(), $2.namePart())
   }

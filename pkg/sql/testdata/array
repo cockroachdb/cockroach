@@ -1,3 +1,5 @@
+# array construction
+
 query error cannot determine type of empty array
 SELECT ARRAY[]
 
@@ -17,3 +19,72 @@ SELECT ARRAY['a', 'b', 'c']
 # SELECT ARRAY[]:::int[]
 # ----
 # {}
+
+# array subscript access
+
+query T
+SELECT (ARRAY['a', 'b', 'c'])[-1]
+----
+NULL
+
+query T
+SELECT (ARRAY['a', 'b', 'c'])[0]
+----
+NULL
+
+query T
+SELECT (ARRAY['a', 'b', 'c'])[2]
+----
+b
+
+query T
+SELECT (ARRAY['a', 'b', 'c'])[4]
+----
+NULL
+
+query T
+SELECT ((SELECT ARRAY['a', 'b', 'c']))[3]
+----
+c
+
+query T
+SELECT (ARRAY['a', 'b', 'c'])[1.5 + 1.5]
+----
+c
+
+query error unimplemented: multidimensional ARRAY
+SELECT (ARRAY['a', 'b', 'c'])[4][2]
+
+query error incompatible ARRAY subscript type: decimal
+SELECT (ARRAY['a', 'b', 'c'])[3.5]
+
+query error incompatible ARRAY subscript type: string
+SELECT (ARRAY['a', 'b', 'c'])['abc']
+
+query error cannot subscript type int because it is not an array
+SELECT (123)[2]
+
+# array slicing
+
+query error unimplemented: ARRAY slicing
+SELECT (ARRAY['a', 'b', 'c'])[:]
+
+query error unimplemented: ARRAY slicing
+SELECT (ARRAY['a', 'b', 'c'])[1:]
+
+query error unimplemented: ARRAY slicing
+SELECT (ARRAY['a', 'b', 'c'])[1:2]
+
+query error unimplemented: ARRAY slicing
+SELECT (ARRAY['a', 'b', 'c'])[:2]
+
+query error unimplemented: ARRAY slicing
+SELECT (ARRAY['a', 'b', 'c'])[2:1]
+
+# other forms of indirection
+
+query error syntax not yet supported: name
+SELECT (ARRAY['a', 'b', 'c']).name
+
+query error syntax not yet supported: *
+SELECT (ARRAY['a', 'b', 'c']).*
