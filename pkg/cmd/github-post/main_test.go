@@ -60,6 +60,8 @@ Stress build found a failed test: %s
 		teamcityVCSNumberEnv: sha,
 		teamcityServerURLEnv: serverURL,
 		teamcityBuildIDEnv:   strconv.Itoa(buildID),
+
+		pkgEnv: pkg,
 	} {
 		if val, ok := os.LookupEnv(key); ok {
 			defer func() {
@@ -91,9 +93,7 @@ Stress build found a failed test: %s
 			if repo != expRepo {
 				t.Fatalf("got %s, expected %s", repo, expRepo)
 			}
-			// TODO(tamird): why is the package name blank?
-			_ = pkg // suppress unused warning
-			if expected := fmt.Sprintf("%s: %s failed under stress", "", "TestReplicateQueueRebalance"); *issue.Title != expected {
+			if expected := fmt.Sprintf("%s: %s failed under stress", pkg, "TestReplicateQueueRebalance"); *issue.Title != expected {
 				t.Fatalf("got %s, expected %s", *issue.Title, expected)
 			}
 			if !issueBodyRe.MatchString(*issue.Body) {
