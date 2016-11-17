@@ -222,7 +222,12 @@ func (a *Allocator) AllocateTarget(
 			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
-		candidates, err := a.ruleSolver.Solve(sl, constraints, existing)
+		candidates, err := a.ruleSolver.Solve(
+			sl,
+			constraints,
+			existing,
+			a.storePool.getNodeLocalities(existing),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -306,12 +311,11 @@ func (a Allocator) RemoveTarget(
 			}
 
 			candidate, valid := a.ruleSolver.computeCandidate(solveState{
-				constraints: constraints,
-				store:       desc,
-				existing:    nil,
-				sl:          sl,
-				tierOrder:   canonicalTierOrder(sl),
-				tiers:       storeTierMap(sl),
+				constraints:            constraints,
+				store:                  desc,
+				sl:                     sl,
+				existing:               nil,
+				existingNodeLocalities: a.storePool.getNodeLocalities(existing),
 			})
 			// When a candidate is not valid, it means that it can be
 			// considered the worst existing replica.
@@ -428,11 +432,11 @@ func (a Allocator) RebalanceTarget(
 		existingStoreList := makeStoreList(existingDescs)
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil)
+		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil)
+		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
