@@ -2363,6 +2363,16 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
+	// Disable the raft transport circuit breakers from ever tripping in order to
+	// prevent errors from when a store is down from causing a connection attempt
+	// to get rejected after the store is back up. This is needed because
+	// mtc.replicateRange calls log.Fatal if any single attempt to send an
+	// ADD_REPLICA request fails.
+	downedStoreIdx := 2
+	for _, transport := range mtc.transports {
+		transport.GetCircuitBreaker(roachpb.NodeID(downedStoreIdx + 1)).ShouldTrip = nil
+	}
+
 	// First put the range on all three nodes.
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1, 2)
@@ -2378,7 +2388,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 
 	// Stop node 2; while it is down remove the range from it. Since the node is
 	// down it won't see the removal and clean up its replica.
-	mtc.stopStore(2)
+	mtc.stopStore(downedStoreIdx)
 	mtc.unreplicateRange(raftID, 2)
 
 	// Perform another write.
@@ -2395,8 +2405,8 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	// replica gets recreated, the replica ID is changed by this
 	// process. An ill-timed GC has been known to cause bugs including
 	// https://github.com/cockroachdb/cockroach/issues/2873.
-	mtc.restartStore(2)
-	mtc.replicateRange(raftID, 2)
+	mtc.restartStore(downedStoreIdx)
+	mtc.replicateRange(raftID, downedStoreIdx)
 
 	// The range should be synced back up.
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 16})
