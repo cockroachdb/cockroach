@@ -398,14 +398,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 				table *sqlbase.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
-				info, err := table.GetConstraintInfoWithLookup(func(id sqlbase.ID) (
-					*sqlbase.TableDescriptor, error,
-				) {
-					if _, t := tableLookup(id); t != nil {
-						return t, nil
-					}
-					return nil, errors.Errorf("could not find referenced table with ID %v", id)
-				})
+				info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 				if err != nil {
 					return err
 				}
@@ -631,14 +624,7 @@ CREATE TABLE pg_catalog.pg_depend (
 				table *sqlbase.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
-				info, err := table.GetConstraintInfoWithLookup(func(id sqlbase.ID) (
-					*sqlbase.TableDescriptor, error,
-				) {
-					if _, t := tableLookup(id); t != nil {
-						return t, nil
-					}
-					return nil, errors.Errorf("could not find referenced table with ID %v", id)
-				})
+				info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 				if err != nil {
 					return err
 				}
