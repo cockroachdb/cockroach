@@ -262,7 +262,7 @@ type ExecutorTestingKnobs struct {
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
-	exec := &Executor{
+	return &Executor{
 		cfg:     cfg,
 		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
@@ -280,8 +280,6 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
 	}
-
-	return exec
 }
 
 // NewDummyExecutor creates an empty Executor that is used for certain tests.
