@@ -1246,7 +1246,28 @@ SELECT current_schemas(false), array_upper(current_schemas(false), 1);
 {}  NULL
 
 statement ok
+SET DATABASE = ''
+
+query T
+SELECT current_schema()
+----
+NULL
+
+statement ok
 SET DATABASE = 'test'
+
+query T
+SELECT current_schema()
+----
+test
+
+statement ok
+SET DATABASE = ''
+
+query T
+SELECT current_schema()
+----
+NULL
 
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
