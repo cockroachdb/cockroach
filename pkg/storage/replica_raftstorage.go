@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -329,8 +330,18 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, e
 // ErrSnapshotTemporaryUnavailable. The caller is directly responsible for
 // calling r.CloseOutSnap.
 func (r *Replica) GetSnapshot(ctx context.Context) (*OutgoingSnapshot, error) {
-	for i := 0; ; i++ {
+	// Use shorter-than-usual backoffs because this rarely succeeds on
+	// the first attempt and this method is used a lot in tests.
+	// Unsuccessful attempts are cheap, so we can have a low MaxBackoff.
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		Multiplier:     2,
+	}
+	i := 0
+	for retry := retry.Start(retryOpts); retry.Next(); {
 		log.Eventf(ctx, "snapshot retry loop pass %d", i)
+		i++
 
 		r.mu.Lock()
 		doneChan := r.mu.outSnapDone
@@ -350,6 +361,7 @@ func (r *Replica) GetSnapshot(ctx context.Context) (*OutgoingSnapshot, error) {
 			return snap, err
 		}
 	}
+	return nil, errors.New("retries exhausted")
 }
 
 // OutgoingSnapshot contains the data required to stream a snapshot to a
