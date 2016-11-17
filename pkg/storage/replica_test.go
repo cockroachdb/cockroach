@@ -430,7 +430,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
-	ch, _, err := r.propose(context.TODO(), ba)
+	ch, _, err := r.propose(context.TODO(), ba, nil)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1099,7 +1099,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, err := tc.repl.propose(context.Background(), ba)
+	ch, _, err := tc.repl.propose(context.Background(), ba, nil)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -1781,9 +1781,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
 						delete(tc.repl.mu.proposals, cmd.idKey)
-						cmd.done <- proposalResult{
-							Err: roachpb.NewErrorf(origMsg),
-						}
+						cmd.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, cmd); err != nil {
@@ -3263,7 +3261,7 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft replay) and
 		// also avoid updating the timestamp cache; verify WriteTooOldError.
 		ba.Timestamp = txn.OrigTimestamp
-		ch, _, err := tc.repl.propose(context.Background(), ba)
+		ch, _, err := tc.repl.propose(context.Background(), ba, nil)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -5753,28 +5751,66 @@ func TestGCIncorrectRange(t *testing.T) {
 
 // TestReplicaCancelRaft checks that it is possible to safely abandon Raft
 // commands via a cancelable context.Context.
+
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(spencerkimball): https://github.com/cockroachdb/cockroach/issues/10488")
-	// Pick a key unlikely to be used by background processes.
-	key := []byte("acdfg")
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.GetRequest{
-		Span: roachpb.Span{Key: key},
-	})
-	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
-		t.Fatal(err)
-	}
-	// Quiesce the stopper. Note that calling `Stop()` here would let the
-	// test panic as we still need the engine open (at least with proposer-
-	// evaluated KV).
-	tc.stopper.Quiesce()
-	_, pErr := tc.repl.addWriteCmd(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
-		t.Fatalf("expected an ambiguous result error; got %v", pErr)
+	for _, cancelEarly := range []bool{true, false} {
+		func() {
+			// Pick a key unlikely to be used by background processes.
+			key := []byte("acdfg")
+			ctx, cancel := context.WithCancel(context.Background())
+			cfg := TestStoreConfig(nil)
+			if !cancelEarly {
+				cfg.TestingKnobs.TestingCommandFilter =
+					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+						if !filterArgs.Req.Header().Key.Equal(key) {
+							return nil
+						}
+						cancel()
+						return nil
+					}
+
+			}
+			tc := testContext{}
+			tc.StartWithStoreConfig(t, cfg)
+			defer tc.Stop()
+			if cancelEarly {
+				cancel()
+				tc.repl.mu.Lock()
+				tc.repl.mu.submitProposalFn = func(*ProposalData) error {
+					return nil
+				}
+				tc.repl.mu.Unlock()
+			}
+			var ba roachpb.BatchRequest
+			ba.Add(&roachpb.GetRequest{
+				Span: roachpb.Span{Key: key},
+			})
+			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+				t.Fatal(err)
+			}
+			br, pErr := tc.repl.addWriteCmd(ctx, ba)
+			if pErr == nil {
+				if !cancelEarly {
+					// We cancelled the context while the command was already
+					// being processed, so the client had to wait for successful
+					// execution.
+					return
+				}
+				t.Fatalf("expected an error, but got successful response %+v", br)
+			}
+			// If we cancelled the context early enough, we expect to receive a
+			// corresponding error and not wait for the command.
+			if cancelEarly {
+				if !testutils.IsPError(pErr, context.Canceled.Error()) {
+					t.Errorf("unexpected error: %s", pErr)
+				}
+			} else {
+				if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+					t.Errorf("expected an ambiguous result error; got %v", pErr)
+				}
+			}
+		}()
 	}
 }
 
@@ -5990,7 +6026,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 			Key: roachpb.Key("a"),
 		},
 	})
-	_, _, err := repl.propose(context.Background(), ba)
+	_, _, err := repl.propose(context.Background(), ba, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6123,7 +6159,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			cmd, pErr := repl.requestToProposal(
-				context.Background(), makeIDKey(), repDesc, ba,
+				context.Background(), makeIDKey(), repDesc, ba, nil,
 			)
 			if pErr != nil {
 				t.Fatal(pErr)
@@ -6140,7 +6176,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			} else if err := repl.submitProposalLocked(cmd); err != nil {
 				t.Error(err)
 			} else {
-				chs = append(chs, cmd.done)
+				chs = append(chs, cmd.doneCh)
 			}
 			repl.mu.Unlock()
 		}
@@ -6198,7 +6234,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), repDesc, ba)
+			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), repDesc, ba, nil)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -6206,7 +6242,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
 			tc.repl.insertProposalLocked(cmd, repDesc)
-			chs = append(chs, cmd.done)
+			chs = append(chs, cmd.doneCh)
 			tc.repl.mu.Unlock()
 			tc.repl.raftMu.Unlock()
 		}
@@ -6315,8 +6351,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
-		cmd, pErr := r.requestToProposal(context.Background(),
-			storagebase.CmdIDKey(id), repDesc, ba)
+		cmd, pErr := r.requestToProposal(
+			context.Background(), storagebase.CmdIDKey(id), repDesc, ba, nil,
+		)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
