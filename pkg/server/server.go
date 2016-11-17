@@ -265,6 +265,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DB:                    s.db,
 		Gossip:                s.gossip,
 		DistSender:            s.distSender,
+		RPCContext:            s.rpcContext,
 		LeaseManager:          s.leaseMgr,
 		Clock:                 s.clock,
 		DistSQLSrv:            s.distSQLServer,
