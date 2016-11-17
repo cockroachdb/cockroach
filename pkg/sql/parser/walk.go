@@ -16,7 +16,10 @@
 
 package parser
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 // Visitor defines methods that are called for nodes during an expression or statement walk.
 type Visitor interface {
@@ -46,6 +49,17 @@ func (expr *AndExpr) Walk(v Visitor) Expr {
 		exprCopy := *expr
 		exprCopy.Left = left
 		exprCopy.Right = right
+		return &exprCopy
+	}
+	return expr
+}
+
+// Walk implements the Expr interface.
+func (expr *AnnotateTypeExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
 		return &exprCopy
 	}
 	return expr
@@ -112,17 +126,6 @@ func (expr *CaseExpr) Walk(v Visitor) Expr {
 
 // Walk implements the Expr interface.
 func (expr *CastExpr) Walk(v Visitor) Expr {
-	e, changed := WalkExpr(v, expr.Expr)
-	if changed {
-		exprCopy := *expr
-		exprCopy.Expr = e
-		return &exprCopy
-	}
-	return expr
-}
-
-// Walk implements the Expr interface.
-func (expr *AnnotateTypeExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Expr)
 	if changed {
 		exprCopy := *expr
@@ -238,6 +241,67 @@ func (expr *IfExpr) Walk(v Visitor) Expr {
 		return &exprCopy
 	}
 	return expr
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (expr *IndirectionExpr) CopyNode() *IndirectionExpr {
+	exprCopy := *expr
+	exprCopy.Indirection = append(UnresolvedName(nil), exprCopy.Indirection...)
+	for i, part := range exprCopy.Indirection {
+		switch t := part.(type) {
+		case Name:
+		case UnqualifiedStar:
+		case *ArraySubscript:
+			subscriptCopy := *t
+			exprCopy.Indirection[i] = &subscriptCopy
+		default:
+			panic(fmt.Sprintf("unexpected NamePart type %T", t))
+		}
+	}
+	return &exprCopy
+}
+
+// Walk implements the Expr interface.
+func (expr *IndirectionExpr) Walk(v Visitor) Expr {
+	ret := expr
+
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		if ret == expr {
+			ret = expr.CopyNode()
+		}
+		ret.Expr = e
+	}
+
+	for i, part := range expr.Indirection {
+		switch t := part.(type) {
+		case Name:
+		case UnqualifiedStar:
+		case *ArraySubscript:
+			if t.Begin != nil {
+				e, changed := WalkExpr(v, t.Begin)
+				if changed {
+					if ret == expr {
+						ret = expr.CopyNode()
+					}
+					ret.Indirection[i].(*ArraySubscript).Begin = e
+				}
+			}
+			if t.End != nil {
+				e, changed := WalkExpr(v, t.End)
+				if changed {
+					if ret == expr {
+						ret = expr.CopyNode()
+					}
+					ret.Indirection[i].(*ArraySubscript).End = e
+				}
+			}
+		default:
+			panic(fmt.Sprintf("unexpected NamePart type %T", t))
+		}
+	}
+
+	return ret
 }
 
 // Walk implements the Expr interface.
