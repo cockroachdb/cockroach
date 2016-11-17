@@ -354,6 +354,7 @@ pg_constraint
 pg_database
 pg_depend
 pg_description
+pg_index
 pg_indexes
 pg_namespace
 pg_proc
@@ -394,6 +395,7 @@ pg_roles
 pg_proc
 pg_namespace
 pg_indexes
+pg_index
 pg_description
 pg_depend
 pg_database
@@ -427,6 +429,7 @@ def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
+def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
@@ -476,6 +479,7 @@ def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
+def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
@@ -514,6 +518,7 @@ def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
+def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
