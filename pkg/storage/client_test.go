@@ -841,6 +841,18 @@ func (m *multiTestContext) restartStore(i int) {
 	m.senders[i].AddStore(m.stores[i])
 }
 
+// disableCircuitBreakersToStore ensures that no store's RaftTransport will
+// reject requests just because past connections to the given store have failed.
+// If you're stopping store and restarting them, you may want to use this to
+// ensure that errors from when the store was down don't cause other nodes to
+// avoid opening new connections to it.
+func (m *multiTestContext) disableCircuitBreakersToStore(i int) {
+	nodeID := roachpb.NodeID(i + 1)
+	for _, transport := range m.transports {
+		transport.GetCircuitBreaker(nodeID).ShouldTrip = nil
+	}
+}
+
 func (m *multiTestContext) Store(i int) *storage.Store {
 	m.mu.Lock()
 	defer m.mu.Unlock()
