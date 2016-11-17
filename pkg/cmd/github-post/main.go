@@ -36,6 +36,8 @@ const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
 const teamcityBuildIDEnv = "TC_BUILD_ID"
 const teamcityServerURLEnv = "TC_SERVER_URL"
 
+const pkgEnv = "PKG"
+
 // Based on the following observed API response:
 //
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body is too long (maximum is 65536 characters)}]
@@ -92,6 +94,14 @@ func runGH(
 		return errors.Wrap(err, "failed to parse `go test` output")
 	}
 	for _, suite := range suites {
+		packageName := suite.Name
+		if packageName == "" {
+			var ok bool
+			packageName, ok = os.LookupEnv(pkgEnv)
+			if !ok {
+				log.Fatalf("package name environment variable %s is not set", pkgEnv)
+			}
+		}
 		for _, test := range suite.Tests {
 			message := test.Message
 			for len(message) > githubIssueBodyMaximumLength {
@@ -103,7 +113,7 @@ func runGH(
 			}
 			switch test.Status {
 			case lib.Failed:
-				title := fmt.Sprintf("%s: %s failed under stress", suite.Name, test.Name)
+				title := fmt.Sprintf("%s: %s failed under stress", packageName, test.Name)
 				body := fmt.Sprintf(`SHA: https://github.com/cockroachdb/cockroach/commits/%s
 
 Stress build found a failed test: %s
