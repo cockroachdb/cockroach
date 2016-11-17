@@ -359,7 +359,7 @@ func (r *Replica) GetSnapshot(ctx context.Context) (*OutgoingSnapshot, error) {
 			return snap, err
 		}
 	}
-	return nil, errors.New("retries exhausted")
+	return nil, ctx.Err() // the only loop exit condition
 }
 
 // OutgoingSnapshot contains the data required to stream a snapshot to a
