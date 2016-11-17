@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -36,15 +37,25 @@ const (
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
+
+	// minLeaseTransferInterval controls how frequently leases can be transferred
+	// for rebalancing. It does not prevent transferring leases in order to allow
+	// a replica to be removed from a range. The value should be some reasonable
+	// fraction of the store descriptor gossip interval which currently
+	//
+	// TODO(peter): It would be good to set this value based on the actual gossip
+	// interval, not just the default.
+	minLeaseTransferInterval = gossip.DefaultGossipStoresInterval / 5
 )
 
 // replicateQueue manages a queue of replicas which may need to add an
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
-	allocator  Allocator
-	clock      *hlc.Clock
-	updateChan chan struct{}
+	allocator         Allocator
+	clock             *hlc.Clock
+	updateChan        chan struct{}
+	lastLeaseTransfer time.Time
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
@@ -119,8 +130,8 @@ func (rq *replicateQueue) shouldQueue(
 	var leaseStoreID roachpb.StoreID
 	if lease, _ := repl.getLease(); lease != nil && lease.Covers(now) {
 		leaseStoreID = lease.Replica.StoreID
-		if rq.allocator.ShouldTransferLease(
-			zone.Constraints, leaseStoreID, desc.RangeID) {
+		if rq.canTransferLease() &&
+			rq.allocator.ShouldTransferLease(zone.Constraints, leaseStoreID, desc.RangeID) {
 			if log.V(2) {
 				log.Infof(ctx, "%s lease transfer needed, enqueuing", repl)
 			}
@@ -226,6 +237,7 @@ func (rq *replicateQueue) process(
 				if err := repl.AdminTransferLease(target.StoreID); err != nil {
 					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 				}
+				rq.lastLeaseTransfer = timeutil.Now()
 				// Do not requeue as we transferred our lease away.
 				return nil
 			}
@@ -253,18 +265,21 @@ func (rq *replicateQueue) process(
 		// rebalance. Attempt to find a rebalancing target.
 		log.Event(ctx, "considering a rebalance")
 
-		// We require the lease in order to process replicas, so
-		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		target := rq.allocator.TransferLeaseTarget(
-			zone.Constraints, desc.Replicas, repl.store.StoreID(), desc.RangeID,
-			true /* checkTransferLeaseSource */)
-		if target.StoreID != 0 {
-			log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-			if err := repl.AdminTransferLease(target.StoreID); err != nil {
-				return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+		if rq.canTransferLease() {
+			// We require the lease in order to process replicas, so
+			// repl.store.StoreID() corresponds to the lease-holder's store ID.
+			target := rq.allocator.TransferLeaseTarget(
+				zone.Constraints, desc.Replicas, repl.store.StoreID(), desc.RangeID,
+				true /* checkTransferLeaseSource */)
+			if target.StoreID != 0 {
+				log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+				if err := repl.AdminTransferLease(target.StoreID); err != nil {
+					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+				}
+				rq.lastLeaseTransfer = timeutil.Now()
+				// Do not requeue as we transferred our lease away.
+				return nil
 			}
-			// Do not requeue as we transferred our lease away.
-			return nil
 		}
 
 		rebalanceStore, err := rq.allocator.RebalanceTarget(
@@ -325,6 +340,10 @@ func (rq *replicateQueue) removeReplica(
 	desc *roachpb.RangeDescriptor,
 ) error {
 	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, repDesc, desc)
+}
+
+func (rq *replicateQueue) canTransferLease() bool {
+	return timeutil.Since(rq.lastLeaseTransfer) > minLeaseTransferInterval
 }
 
 func (*replicateQueue) timer() time.Duration {
