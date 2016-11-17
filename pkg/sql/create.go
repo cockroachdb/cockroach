@@ -44,6 +44,18 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
+	if n.Template != nil {
+		template, err := n.Template.ResolveAsType(&p.semaCtx, parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+		templateStr := string(*template.(*parser.DString))
+		// See https://www.postgresql.org/docs/current/static/manage-ag-templatedbs.html
+		if !strings.EqualFold(templateStr, "template0") {
+			return nil, fmt.Errorf("unsupported template: %s", templateStr)
+		}
+	}
+
 	if n.Encoding != nil {
 		encoding, err := n.Encoding.ResolveAsType(&p.semaCtx, parser.TypeString)
 		if err != nil {
@@ -54,7 +66,31 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		if !(strings.EqualFold(encodingStr, "UTF8") ||
 			strings.EqualFold(encodingStr, "UTF-8") ||
 			strings.EqualFold(encodingStr, "UNICODE")) {
-			return nil, fmt.Errorf("%s is not a supported encoding", encoding)
+			return nil, fmt.Errorf("unsupported encoding: %s", encoding)
+		}
+	}
+
+	if n.Collate != nil {
+		collate, err := n.Collate.ResolveAsType(&p.semaCtx, parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+		collateStr := string(*collate.(*parser.DString))
+		// We only support C and C.UTF-8.
+		if collateStr != "C" && collateStr != "C.UTF-8" {
+			return nil, fmt.Errorf("unsupported collation: %s", collate)
+		}
+	}
+
+	if n.CType != nil {
+		ctype, err := n.CType.ResolveAsType(&p.semaCtx, parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+		ctypeStr := string(*ctype.(*parser.DString))
+		// We only support C and C.UTF-8.
+		if ctypeStr != "C" && ctypeStr != "C.UTF-8" {
+			return nil, fmt.Errorf("unsupported character classification: %s", ctype)
 		}
 	}
 
