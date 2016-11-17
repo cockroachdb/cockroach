@@ -1220,6 +1220,63 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 	return nil
 }
 
+// endCmds holds necessary information to end a batch after Raft command
+// processing: global and local command queue
+type endCmds struct {
+	repl      *Replica
+	cmdGlobal *cmd
+	cmdLocal  *cmd
+	ba        roachpb.BatchRequest
+}
+
+// done removes pending commands from the command queue and updates
+// the timestamp cache using the final timestamp of each command.  The
+// returned error replaces the supplied error.
+func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
+	if ec == nil {
+		return
+	}
+	// Update the timestamp cache if the command succeeded and is not
+	// being retried. Each request is considered in turn; only those
+	// marked as affecting the cache are processed. Inconsistent reads
+	// are excluded.
+	if pErr == nil && !shouldRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
+		cr := cacheRequest{
+			timestamp: ec.ba.Timestamp,
+			txnID:     ec.ba.GetTxnID(),
+		}
+
+		for _, union := range ec.ba.Requests {
+			args := union.GetInner()
+			if updatesTimestampCache(args) {
+				header := args.Header()
+				switch args.(type) {
+				case *roachpb.DeleteRangeRequest:
+					// DeleteRange adds to the write timestamp cache to prevent
+					// subsequent writes from rewriting history.
+					cr.writes = append(cr.writes, header)
+				case *roachpb.EndTransactionRequest:
+					// EndTransaction adds to the write timestamp cache to ensure replays
+					// create a transaction record with WriteTooOld set.
+					key := keys.TransactionKey(header.Key, *cr.txnID)
+					cr.txn = roachpb.Span{Key: key}
+				default:
+					cr.reads = append(cr.reads, header)
+				}
+			}
+		}
+
+		ec.repl.mu.Lock()
+		ec.repl.mu.tsCache.AddRequest(cr)
+		ec.repl.mu.Unlock()
+	}
+
+	ec.repl.cmdQMu.Lock()
+	ec.repl.cmdQMu.global.remove(ec.cmdGlobal)
+	ec.repl.cmdQMu.local.remove(ec.cmdLocal)
+	ec.repl.cmdQMu.Unlock()
+}
+
 // beginCmds waits for any overlapping, already-executing commands via
 // the command queue and adds itself to queues based on keys affected by the
 // batched commands. This gates subsequent commands with overlapping keys or
@@ -1227,9 +1284,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // already in the queue. Returns a cleanup function to be called when the
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
-func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (func(*roachpb.BatchResponse, *roachpb.Error, bool) *roachpb.Error, error) {
+func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*endCmds, error) {
 	var cmdGlobal *cmd
 	var cmdLocal *cmd
 	// Don't use the command queue for inconsistent reads.
@@ -1348,62 +1403,13 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	return func(br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) *roachpb.Error {
-		return r.endCmds(cmdGlobal, cmdLocal, ba, br, pErr, shouldRetry)
-	}, nil
-}
-
-// endCmds removes pending commands from the command queue and updates
-// the timestamp cache using the final timestamp of each command.
-// The returned error replaces the supplied error.
-func (r *Replica) endCmds(
-	cmdGlobal *cmd,
-	cmdLocal *cmd,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
-	shouldRetry bool,
-) *roachpb.Error {
-	// Update the timestamp cache if the command succeeded and is not
-	// being retried. Each request is considered in turn; only those
-	// marked as affecting the cache are processed. Inconsistent reads
-	// are excluded.
-	if pErr == nil && !shouldRetry && ba.ReadConsistency != roachpb.INCONSISTENT {
-		cr := cacheRequest{
-			timestamp: ba.Timestamp,
-			txnID:     ba.GetTxnID(),
-		}
-
-		for _, union := range ba.Requests {
-			args := union.GetInner()
-			if updatesTimestampCache(args) {
-				header := args.Header()
-				switch args.(type) {
-				case *roachpb.DeleteRangeRequest:
-					// DeleteRange adds to the write timestamp cache to prevent
-					// subsequent writes from rewriting history.
-					cr.writes = append(cr.writes, header)
-				case *roachpb.EndTransactionRequest:
-					// EndTransaction adds to the write timestamp cache to ensure replays
-					// create a transaction record with WriteTooOld set.
-					key := keys.TransactionKey(header.Key, *cr.txnID)
-					cr.txn = roachpb.Span{Key: key}
-				default:
-					cr.reads = append(cr.reads, header)
-				}
-			}
-		}
-
-		r.mu.Lock()
-		r.mu.tsCache.AddRequest(cr)
-		r.mu.Unlock()
+	ec := &endCmds{
+		repl:      r,
+		cmdGlobal: cmdGlobal,
+		cmdLocal:  cmdLocal,
+		ba:        *ba,
 	}
-
-	r.cmdQMu.Lock()
-	r.cmdQMu.global.remove(cmdGlobal)
-	r.cmdQMu.local.remove(cmdLocal)
-	r.cmdQMu.Unlock()
-	return pErr
+	return ec, nil
 }
 
 // applyTimestampCache moves the batch timestamp forward depending on
@@ -1574,16 +1580,14 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	endCmdsFunc := func(_ *roachpb.BatchResponse, pErr *roachpb.Error, _ bool) *roachpb.Error {
-		return pErr
-	}
+	var endCmds *endCmds
 
 	if !ba.IsNonKV() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
 		log.Event(ctx, "command queue")
 		var err error
-		endCmdsFunc, err = r.beginCmds(ctx, &ba)
+		endCmds, err = r.beginCmds(ctx, &ba)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -1598,7 +1602,7 @@ func (r *Replica) addReadOnlyCmd(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		pErr = endCmdsFunc(br, pErr, false)
+		endCmds.done(br, pErr, false)
 	}()
 
 	r.mu.Lock()
@@ -1706,6 +1710,7 @@ func (r *Replica) tryAddWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
 	isNonKV := ba.IsNonKV()
+	var endCmds *endCmds
 	if !isNonKV {
 		// Add the write to the command queue to gate subsequent overlapping
 		// commands until this command completes. Note that this must be
@@ -1713,7 +1718,8 @@ func (r *Replica) tryAddWriteCmd(
 		// timestamp cache is only updated after preceding commands have
 		// been run to successful completion.
 		log.Event(ctx, "command queue")
-		endCmdsFunc, err := r.beginCmds(ctx, &ba)
+		var err error
+		endCmds, err = r.beginCmds(ctx, &ba)
 		if err != nil {
 			return nil, roachpb.NewError(err), false
 		}
@@ -1721,7 +1727,7 @@ func (r *Replica) tryAddWriteCmd(
 		// Guarantee we remove the commands from the command queue. This is
 		// wrapped to delay pErr evaluation to its value when returning.
 		defer func() {
-			pErr = endCmdsFunc(br, pErr, shouldRetry)
+			endCmds.done(br, pErr, shouldRetry)
 		}()
 	}
 
@@ -1779,7 +1785,7 @@ func (r *Replica) tryAddWriteCmd(
 
 	log.Event(ctx, "raft")
 
-	ch, tryAbandon, err := r.propose(ctx, ba)
+	ch, tryAbandon, err := r.propose(ctx, ba, endCmds)
 	if err != nil {
 		return nil, roachpb.NewError(err), false
 	}
@@ -1789,23 +1795,31 @@ func (r *Replica) tryAddWriteCmd(
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
 	for {
 		select {
-		case respWithErr := <-ch:
-			return respWithErr.Reply, respWithErr.Err, respWithErr.ShouldRetry
+		case propResult := <-ch:
+			endCmds = nil // these will have been invoked post-Raft.
+			return propResult.Reply, propResult.Err, propResult.ShouldRetry
 		case <-ctxDone:
-			// We ignore cancelled contexts for running commands in order to
-			// properly update the timestamp and command queue. Exiting early,
-			// before knowing the final disposition of the command would make
-			// those updates impossible, leading to potential inconsistencies.
-			// TODO(spencer): move updates to the timestamp cache to raft
-			// command execution.
-			log.Warningf(ctx, "ignoring cancelled context for command %s", ba)
+			// If our context was cancelled, return an AmbiguousResultError
+			// to indicate to caller that the command may have executed.
+			// However, we proceed only if the command isn't already being
+			// executed and using our context, in which case we expect it to
+			// finish soon.
+			if tryAbandon() {
+				log.Warningf(ctx, "context cancellation of command %s", ba)
+				endCmds = nil
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
+			}
 			ctxDone = nil
 		case <-shouldQuiesce:
 			// If we're shutting down, return an AmbiguousResultError to
 			// indicate to caller that the command may have executed.
-			// However, we proceed only if the command isn't already being
-			// executed and using our context, in which case we expect it to
-			// finish soon.
+			// tryAbandon indicates whether the command is already executing
+			// with our context. Note that in the shutdown case, we *do not*
+			// set the endCmds var to nil. We have no expectation during
+			// shutdown that Raft will continue processing, so we need to
+			// free up the command queue so other waiters can proceed. This
+			// is safe because with the stopper quiescing, no new commands
+			// can be proposed to Raft successfully.
 			if tryAbandon() {
 				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
@@ -1822,6 +1836,7 @@ func (r *Replica) requestToProposal(
 	idKey storagebase.CmdIDKey,
 	replica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
+	endCmds *endCmds,
 ) (*ProposalData, *roachpb.Error) {
 	if propEvalKV {
 		return r.evaluateProposal(ctx, idKey, replica, ba)
@@ -1829,9 +1844,10 @@ func (r *Replica) requestToProposal(
 	return &ProposalData{
 		Cmd: &ba,
 		LocalProposalData: LocalProposalData{
-			ctx:   ctx,
-			idKey: idKey,
-			done:  make(chan proposalResult, 1),
+			ctx:     ctx,
+			idKey:   idKey,
+			endCmds: endCmds,
+			doneCh:  make(chan proposalResult, 1),
 		},
 	}, nil
 }
@@ -1884,7 +1900,7 @@ func (r *Replica) evaluateProposal(
 
 	pd.ctx = ctx
 	pd.idKey = idKey
-	pd.done = make(chan proposalResult, 1)
+	pd.doneCh = make(chan proposalResult, 1)
 	pd.IsLeaseRequest = ba.IsLeaseRequest()
 	pd.IsFreeze = ba.IsFreeze()
 	pd.IsConsistencyRelated = ba.IsConsistencyRelated()
@@ -1945,7 +1961,7 @@ func makeIDKey() storagebase.CmdIDKey {
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) propose(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba roachpb.BatchRequest, endCmds *endCmds,
 ) (chan proposalResult, func() bool, error) {
 	r.mu.Lock()
 	if err := r.mu.destroyed; err != nil {
@@ -1976,7 +1992,7 @@ func (r *Replica) propose(
 	defer r.raftMu.Unlock()
 
 	idKey := makeIDKey()
-	pCmd, pErr := r.requestToProposal(ctx, idKey, repDesc, ba)
+	pCmd, pErr := r.requestToProposal(ctx, idKey, repDesc, ba, endCmds)
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
@@ -2006,7 +2022,7 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 		return ok
 	}
-	return pCmd.done, tryAbandon, nil
+	return pCmd.doneCh, tryAbandon, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
@@ -2696,8 +2712,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		// The command's designated lease index range was filled up, so send it
 		// back to the proposer for a retry.
 		log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-		p.done <- proposalResult{ShouldRetry: true}
-		close(p.done)
+		p.sendDone(proposalResult{ShouldRetry: true})
 		numShouldRetry++
 	}
 	if log.V(1) && (numShouldRetry > 0 || len(reproposals) > 0) {
@@ -2720,8 +2735,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
 		if err := r.submitProposalLocked(p); err != nil {
 			delete(r.mu.proposals, p.idKey)
-			p.done <- proposalResult{Err: roachpb.NewError(err)}
-			close(p.done)
+			p.sendDone(proposalResult{Err: roachpb.NewError(err)})
 		}
 	}
 }
@@ -3053,15 +3067,16 @@ func (r *Replica) processRaftCommand(
 			// use the context any more once we signal the client, so we make
 			// sure we signal it at the end of this method, when the context
 			// has been fully used.
-			defer func(ch chan proposalResult) {
+			defer func(cmd ProposalData) {
 				// Assert against another defer trying to use the context after
 				// the client has been signaled.
 				ctx = nil
-
-				ch <- proposalResult{ShouldRetry: true}
-				close(ch)
-			}(cmd.done)
-			cmd.done = make(chan proposalResult, 1)
+				cmd.sendDone(proposalResult{ShouldRetry: true})
+			}(*cmd)
+			// Clear the endCmds and doneCh so that when
+			// ProposalData.sendDone() is a noop when invoked below.
+			cmd.endCmds = nil
+			cmd.doneCh = make(chan proposalResult, 1)
 		}
 	}
 	// When frozen, the Range only applies freeze- and consistency-related
@@ -3114,9 +3129,11 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedProposalData = &innerPD.ReplicatedProposalData
 			writeBatch = innerPD.WriteBatch
 			if cmdProposedLocally {
-				done := cmd.LocalProposalData.done
+				endCmds := cmd.LocalProposalData.endCmds
+				doneCh := cmd.LocalProposalData.doneCh
 				cmd.LocalProposalData = innerPD.LocalProposalData
-				cmd.done = done
+				cmd.endCmds = endCmds
+				cmd.doneCh = doneCh
 				cmd.ctx = nil // already have ctx
 			}
 			// Proposals which would failfast with proposer-evaluated KV now
@@ -3191,8 +3208,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if cmdProposedLocally {
-		cmd.done <- response
-		close(cmd.done)
+		cmd.sendDone(response)
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.Cmd, response.Err)
 	}
