@@ -52,6 +52,7 @@ pg_constraint
 pg_database
 pg_depend
 pg_description
+pg_index
 pg_indexes
 pg_namespace
 pg_proc
@@ -384,6 +385,44 @@ t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t2 (rowi
 t2         t2_t1_ID_idx  CREATE INDEX t2_t1_ID_idx ON constraint_db.t2 (t1_ID ASC)
 t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t3 (rowid ASC)
 t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.t3 (a ASC, b DESC) STORING (c)
+
+## pg_catalog.pg_index
+
+query IIIBBB colnames
+SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
+from pg_catalog.pg_index
+WHERE indnatts = 2
+----
+indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
+1759889453  2265044713  2         true         false         false
+4171047644  2064007441  2         false        false         false
+1957505477  512379281   2         true         true          false
+1657267940  4118504190  2         true         true          false
+2471030497  2866928465  2         true         true          false
+
+query IBBBBB colnames
+SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
+from pg_catalog.pg_index
+WHERE indnatts = 2
+----
+indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
+1759889453  true          false           true        false         false
+4171047644  false         false           true        false         false
+1957505477  true          false           true        false         false
+1657267940  true          false           true        false         false
+2471030497  true          false           true        false         false
+
+query IIBBTIIITT colnames
+SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
+from pg_catalog.pg_index
+WHERE indnatts = 2
+----
+indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
+1759889453  2265044713  true       false           {3,4}   0             0         0          NULL      NULL
+4171047644  2064007441  true       false           {1,2}   0             0         0          NULL      NULL
+1957505477  512379281   true       false           {1,6}   0             0         0          NULL      NULL
+1657267940  4118504190  true       false           {1,2}   0             0         0          NULL      NULL
+2471030497  2866928465  true       false           {1,7}   0             0         0          NULL      NULL
 
 ## pg_catalog.pg_constraint
 ##

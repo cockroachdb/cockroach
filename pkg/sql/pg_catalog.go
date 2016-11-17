@@ -59,6 +59,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogDatabaseTable,
 		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
+		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogProcTable,
@@ -684,6 +685,77 @@ CREATE TABLE pg_catalog.pg_description (
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		// Comments on database objects are not currently supported.
 		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
+var pgCatalogIndexTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_index (
+    indexrelid INT,
+    indrelid INT,
+    indnatts INT,
+    indisunique BOOL,
+    indisprimary BOOL,
+    indisexclusion BOOL,
+    indimmediate BOOL,
+    indisclustered BOOL,
+    indisvalid BOOL,
+    indcheckxmin BOOL,
+    indisready BOOL,
+    indislive BOOL,
+    indisreplident BOOL,
+    indkey STRING,
+    indcollation INT,
+    indclass INT,
+    indoption INT,
+    indexprs STRING,
+    indpred STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				tableOid := h.TableOid(db, table)
+				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+					isValid := true
+					isReady := false
+					for _, mutation := range table.Mutations {
+						if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
+							if mutationIndex.ID == index.ID {
+								isValid = false
+								if mutation.State == sqlbase.DescriptorMutation_WRITE_ONLY {
+									isReady = true
+								}
+								break
+							}
+						}
+					}
+					return addRow(
+						h.IndexOid(db, table, index), // indexrelid
+						tableOid,                     // indrelid
+						parser.NewDInt(parser.DInt(len(index.ColumnNames))),                                          // indnatts
+						parser.MakeDBool(parser.DBool(index.Unique)),                                                 // indisunique
+						parser.MakeDBool(parser.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
+						parser.MakeDBool(false),                      // indisexclusion
+						parser.MakeDBool(parser.DBool(index.Unique)), // indimmediate
+						parser.MakeDBool(false),                      // indisclustered
+						parser.MakeDBool(parser.DBool(isValid)),      // indisvalid
+						parser.MakeDBool(false),                      // indcheckxmin
+						parser.MakeDBool(parser.DBool(isReady)),      // indisready
+						parser.MakeDBool(true),                       // indislive
+						parser.MakeDBool(false),                      // indisreplident
+						colIDArrayToDatum(index.ColumnIDs),           // indkey
+						zeroVal,      // indcollation
+						zeroVal,      // indclass
+						zeroVal,      // indoption
+						parser.DNull, // indexprs
+						parser.DNull, // indpred
+					)
+				})
+			},
+		)
 	},
 }
 
