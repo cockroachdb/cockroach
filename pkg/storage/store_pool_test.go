@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -523,6 +524,64 @@ func TestStorePoolThrottle(t *testing.T) {
 		if !detail.throttledUntil.Equal(expected) {
 			t.Errorf("expected store to have been throttled to %v, found %v",
 				expected, detail.throttledUntil)
+		}
+	}
+}
+
+func TestGetNodeLocalities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDead, false /* deterministic */)
+	defer stopper.Stop()
+	sg := gossiputil.NewStoreGossiper(g)
+
+	// Creates a node with a locality with the number of tiers passed in. The
+	// NodeID is the same as the tier count.
+	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
+		nodeDescriptor := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(tierCount)}
+		for i := 1; i <= tierCount; i++ {
+			value := fmt.Sprintf("%d", i)
+			nodeDescriptor.Locality.Tiers = append(nodeDescriptor.Locality.Tiers, roachpb.Tier{
+				Key:   value,
+				Value: value,
+			})
+		}
+		return nodeDescriptor
+	}
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    createDescWithLocality(1),
+		},
+		{
+			StoreID: 2,
+			Node:    createDescWithLocality(2),
+		},
+		{
+			StoreID: 3,
+			Node:    createDescWithLocality(3),
+		},
+		{
+			StoreID: 4,
+			Node:    createDescWithLocality(2),
+		},
+	}
+
+	sg.GossipStores(stores, t)
+
+	var existingReplicas []roachpb.ReplicaDescriptor
+	for _, store := range stores {
+		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
+	}
+
+	localities := sp.getNodeLocalities(existingReplicas)
+	for _, store := range stores {
+		locality, ok := localities[store.Node.NodeID]
+		if !ok {
+			t.Fatalf("could not find locality for node %d", store.Node.NodeID)
+		}
+		if e, a := int(store.Node.NodeID), len(locality.Tiers); e != a {
+			t.Fatalf("for node %d, expected %d tiers, only got %d", store.Node.NodeID, e, a)
 		}
 	}
 }
