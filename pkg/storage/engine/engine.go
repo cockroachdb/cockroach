@@ -171,6 +171,10 @@ type Engine interface {
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
 	NewBatch() Batch
+	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
+	// this engine. A write-only batch accumulates all mutations and applies them
+	// atomically on a call to Commit(). Read operations return an error.
+	NewWriteOnlyBatch() Batch
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
