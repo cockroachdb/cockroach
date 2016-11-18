@@ -467,35 +467,6 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("TestUnused", func(t *testing.T) {
-		t.Parallel()
-		// NB: this doesn't use `pkgScope` because `unused` produces many false
-		// positives unless it inspects all our packages.
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "unused", "-reflect=false", "-exported", "./...")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`pkg/sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field no|type No)Copy `),
-		), func(s string) {
-			t.Error(s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestForbiddenImports", func(t *testing.T) {
 		t.Parallel()
 		filter := stream.FilterFunc(func(arg stream.Arg) error {
@@ -567,7 +538,13 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestErrCheck", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "errcheck", "-ignore", "bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close", pkgScope)
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"errcheck",
+			"-exclude",
+			filepath.Join(filepath.Dir(pkg.Dir), "build", "errcheck_excludes.txt"),
+			pkgScope,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -695,8 +672,12 @@ func TestStyle(t *testing.T) {
 				//
 				// Reported as pkg/sql/parser/yaccpar, but the real file is sql.y.
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.y:SA4006",
+				// Generated file containing many unused postgres error codes.
+				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",
 			}, " "),
-			pkgScope,
+			// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
+			// produces many false positives unless it inspects all our packages.
+			"./...",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -706,7 +687,10 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`: (field no|type No)Copy is unused \(U1000\)$`),
+		), func(s string) {
 			t.Error(s)
 		}); err != nil {
 			t.Error(err)
