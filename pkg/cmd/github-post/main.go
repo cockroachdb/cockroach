@@ -38,6 +38,9 @@ const teamcityBuildIDEnv = "TC_BUILD_ID"
 const teamcityServerURLEnv = "TC_SERVER_URL"
 
 const pkgEnv = "PKG"
+const propEvalKVEnv = "COCKROACH_PROPOSER_EVALUATED_KV"
+const tagsEnv = "TAGS"
+const goFlagsEnv = "GOFLAGS"
 
 // Based on the following observed API response:
 //
@@ -106,13 +109,30 @@ func runGH(
 	var inputBuf bytes.Buffer
 	input = io.TeeReader(input, &inputBuf)
 
+	var parameters []string
+	for _, parameter := range []string{
+		propEvalKVEnv,
+		tagsEnv,
+		goFlagsEnv,
+	} {
+		if val, ok := os.LookupEnv(parameter); ok {
+			parameters = append(parameters, parameter+"="+val)
+		}
+	}
+	// We insert a raw "%s" above so we can figure out the length of the body so far, without
+	// the actual error text. We need this length so we can calculate the maximum amount of
+	// error text we can include in the issue without exceeding GitHub's limit. We replace that
+	// %s in the following Sprintf.
 	newIssueRequest := func(packageName, testName, message string) *github.IssueRequest {
 		title := fmt.Sprintf("%s: %s failed under stress", packageName, testName)
 		body := fmt.Sprintf(`SHA: https://github.com/cockroachdb/cockroach/commits/%s
 
+Parameters:
+%s
+
 Stress build found a failed test: %s
 
-%s`, sha, u.String(), "```\n%s\n```")
+%s`, sha, "```\n"+strings.Join(parameters, "\n")+"\n```", u.String(), "```\n%s\n```")
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
 		// can calculate the maximum amount of error text we can include in the
