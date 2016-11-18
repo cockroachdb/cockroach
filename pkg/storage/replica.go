@@ -1366,7 +1366,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// out before their prerequisites, so we still have to wait it
 					// out.
 					for _, ch := range chans {
-						<-ch
+						select {
+						case <-ch:
+						case <-r.store.stopper.ShouldQuiesce():
+						}
 					}
 					r.cmdQMu.Lock()
 					r.cmdQMu.global.remove(cmdGlobal)
