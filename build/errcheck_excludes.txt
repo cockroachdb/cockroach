@@ -1,0 +1,6 @@
+(*database/sql.DB).Close
+(*database/sql.Rows).Close
+(*database/sql.Stmt).Close
+(*os.File).Close
+(io.Closer).Close
+(net.Conn).Close
