@@ -1742,3 +1742,16 @@ func (desc *Descriptor) GetName() string {
 func (f ForeignKeyReference) IsSet() bool {
 	return f.Table != 0
 }
+
+// InvalidateFKConstraints sets all FK constraints to un-validated.
+func (desc *TableDescriptor) InvalidateFKConstraints() {
+	// We don't use GetConstraintInfo because we want to edit the passed desc.
+	if desc.PrimaryIndex.ForeignKey.IsSet() {
+		desc.PrimaryIndex.ForeignKey.Validity = ConstraintValidity_Unvalidated
+	}
+	for i := range desc.Indexes {
+		if desc.Indexes[i].ForeignKey.IsSet() {
+			desc.Indexes[i].ForeignKey.Validity = ConstraintValidity_Unvalidated
+		}
+	}
+}
