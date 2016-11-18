@@ -376,6 +376,7 @@ func TestCommonMethods(t *testing.T) {
 		{dbType, "Txn"}:                     {},
 		{dbType, "GetSender"}:               {},
 		{dbType, "PutInline"}:               {},
+		{dbType, "WriteBatch"}:              {},
 		{txnType, "Commit"}:                 {},
 		{txnType, "CommitInBatch"}:          {},
 		{txnType, "CommitOrCleanup"}:        {},

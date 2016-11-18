@@ -262,6 +262,11 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 // memory and other resources. At least one kv entry must have been added.
 DBStatus DBSstFileWriterClose(DBSstFileWriter* fw);
 
+// DBBatchReprVerify asserts that all keys in a BatchRepr are between the
+// specified start and end keys and computes the MVCCStatsResult for it.
+DBStatus DBBatchReprVerify(
+  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

@@ -106,6 +106,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.LeaseInfo:          {Eval: evalLeaseInfo},
 	roachpb.ComputeChecksum:    {Eval: evalComputeChecksum},
 	roachpb.ChangeFrozen:       {Eval: evalChangeFrozen},
+	roachpb.WriteBatch:         makeDelegatedCommand(&writeBatchCmd),
 
 	roachpb.DeprecatedVerifyChecksum: {Eval: func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
 		return EvalResult{}, nil
@@ -2113,6 +2114,30 @@ func evalChangeFrozen(
 		pd.Replicated.State.Frozen = storagebase.ReplicaState_UNFROZEN
 	}
 	return pd, nil
+}
+
+func makeDelegatedCommand(cmd *Command) Command {
+	return Command{Eval: func(
+		ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	) (EvalResult, error) {
+		return cmd.Eval(ctx, batch, cArgs, resp)
+	}}
+}
+
+func makeUnimplementedCommand(method roachpb.Method) Command {
+	return Command{Eval: func(
+		_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
+	) (EvalResult, error) {
+		return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
+	}}
+}
+
+var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
+
+// SetWriteBatchCmd allows setting the function that will be called as the
+// implementation of the WriteBatch command.
+func SetWriteBatchCmd(cmd Command) {
+	writeBatchCmd.Eval = cmd.Eval
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
