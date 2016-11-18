@@ -511,7 +511,9 @@ func runBenchmarkUpsert(b *testing.B, db *gosql.DB, count int) {
 			key++
 		}
 		insertBuf.WriteString(`; `)
-		updateBuf.WriteTo(&insertBuf)
+		if _, err := updateBuf.WriteTo(&insertBuf); err != nil {
+			b.Fatal(err)
+		}
 		if _, err := db.Exec(insertBuf.String()); err != nil {
 			b.Fatal(err)
 		}

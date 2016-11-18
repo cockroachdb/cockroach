@@ -23,16 +23,20 @@ import (
 	"honnef.co/go/lint/lintutil"
 	"honnef.co/go/simple"
 	"honnef.co/go/staticcheck"
+	"honnef.co/go/unused"
 )
 
 func main() {
-	funcs := make(map[string]lint.Func)
+	checker := unused.NewChecker(unused.CheckAll)
+	checker.WholeProgram = true
+	funcs := map[string]lint.Func{
+		"U1000": unused.NewLintRunner(checker),
+	}
 	for n, f := range staticcheck.Funcs {
 		funcs[n] = f
 	}
 	for n, f := range simple.Funcs {
 		funcs[n] = f
 	}
-
 	lintutil.ProcessArgs("metacheck", funcs, os.Args[1:])
 }

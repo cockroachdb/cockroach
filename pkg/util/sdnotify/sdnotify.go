@@ -62,7 +62,7 @@ func notify(path, msg string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer net.Conn(conn).Close()
 
 	_, err = conn.Write([]byte(msg))
 	return err
@@ -150,6 +150,6 @@ func (l listener) wait() error {
 }
 
 func (l listener) close() error {
-	l.conn.Close()
+	net.Conn(l.conn).Close()
 	return os.RemoveAll(l.tempDir)
 }
