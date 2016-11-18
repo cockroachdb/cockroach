@@ -26,8 +26,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -328,6 +332,47 @@ func TestDB_Put_insecure(t *testing.T) {
 	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
+func TestDB_WriteBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop()
+	ctx := context.Background()
+
+	batch := engine.NewStandaloneBatch()
+	defer batch.Close()
+	key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	if err := batch.Put(key, roachpb.MakeValueFromString("1").RawBytes); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	data := batch.Repr()
+
+	if err := db.WriteBatch(ctx, "b", "c", data); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	result, err := db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	checkResult(t, []byte("1"), result.ValueBytes())
+
+	// Key is before the range in the request span.
+	if err := db.WriteBatch(ctx, "d", "e", data); !testutils.IsError(err, "request range") {
+		t.Fatalf("expected request range error got: %+v", err)
+	}
+	// Key is after the range in the request span.
+	if err := db.WriteBatch(ctx, "a", "b", data); !testutils.IsError(err, "request range") {
+		t.Fatalf("expected request range error got: %+v", err)
+	}
+
+	// Key range in request span is not empty
+	if err := db.Put(ctx, "cc", 2); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if err := db.WriteBatch(ctx, "c", "d", nil); !testutils.IsError(err, "empty range") {
+		t.Fatalf("expected empty range error got: %+v", err)
+	}
+}
+
 func TestDebugName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
@@ -376,6 +421,7 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "Txn"}:                     {},
 		key{dbType, "GetSender"}:               {},
 		key{dbType, "PutInline"}:               {},
+		key{dbType, "WriteBatch"}:              {},
 		key{txnType, "Commit"}:                 {},
 		key{txnType, "CommitInBatch"}:          {},
 		key{txnType, "CommitOrCleanup"}:        {},

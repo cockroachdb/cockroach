@@ -166,6 +166,9 @@ func (r *Replica) executeCmd(
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
 		*resp, pd, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
+	case *roachpb.WriteBatchRequest:
+		resp := reply.(*roachpb.WriteBatchResponse)
+		*resp, err = r.WriteBatch(ctx, batch, ms, h, *tArgs)
 	default:
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
@@ -3329,6 +3332,39 @@ func (r *Replica) ChangeReplicas(
 	}
 	log.Event(ctx, "txn complete")
 	return nil
+}
+
+// WriteBatch TODO(dan)
+func (r *Replica) WriteBatch(
+	ctx context.Context,
+	batch engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	h roachpb.Header,
+	args roachpb.WriteBatchRequest,
+) (roachpb.WriteBatchResponse, error) {
+	mvccStartKey := engine.MVCCKey{Key: args.Key}
+	mvccEndKey := engine.MVCCKey{Key: args.EndKey}
+
+	// Verify that the keys in the batch are within the range specified by the
+	// request header.
+	msBatch, err := engine.VerifyRepr(args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	if err != nil {
+		return roachpb.WriteBatchResponse{}, err
+	}
+	ms.Add(msBatch)
+
+	// Verify that the key range specified in the request span is empty.
+	iter := batch.NewIterator(false)
+	defer iter.Close()
+	iter.Seek(mvccStartKey)
+	if iter.Valid() && iter.Key().Less(mvccEndKey) {
+		return roachpb.WriteBatchResponse{}, errors.New("WriteBatch can only be called on empty ranges")
+	}
+
+	if err := batch.ApplyBatchRepr(args.Data); err != nil {
+		return roachpb.WriteBatchResponse{}, err
+	}
+	return roachpb.WriteBatchResponse{}, nil
 }
 
 // replicaSetsEqual is used in AdminMerge to ensure that the ranges are
