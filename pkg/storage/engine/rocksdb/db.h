@@ -136,7 +136,7 @@ DBEngine* DBNewSnapshot(DBEngine* db);
 // atomically. Use DBCommitBatch() on the returned engine to apply the
 // batch to the database. It is the caller's responsibility to call
 // DBClose().
-DBEngine* DBNewBatch(DBEngine* db);
+DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 
 // Creates a new database iterator. When prefix is true, Seek will use
 // the user-key prefix of the key supplied to DBIterSeek() to restrict

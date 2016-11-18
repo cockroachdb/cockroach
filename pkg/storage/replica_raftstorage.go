@@ -391,6 +391,7 @@ type IncomingSnapshot struct {
 	Batches [][]byte
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
+	State      *storagebase.ReplicaState
 }
 
 // CloseOutSnap closes the Replica's outgoing snapshot, freeing its resources
@@ -629,7 +630,17 @@ func (r *Replica) applySnapshot(
 			stats.commit.Sub(stats.entries).Seconds()*1000)
 	}(timeutil.Now())
 
-	batch := r.store.Engine().NewBatch()
+	// If inSnap.State is present, we don't need to read from the batch and can
+	// use a more efficient write-only batch.
+	var batch engine.Batch
+	if inSnap.State != nil {
+		batch = r.store.Engine().NewWriteOnlyBatch()
+	} else {
+		// TODO(peter): This can only happen if the sender is running code before
+		// the support for sending the replica state was added. Remove after a few
+		// beta releases have passed (i.e. mid-December 2016).
+		batch = r.store.Engine().NewBatch()
+	}
 	defer batch.Close()
 
 	// Clear the range using a distinct batch in order to prevent the iteration
@@ -639,7 +650,7 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, r.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := distinctBatch.Clear(iter.Key()); err != nil {
@@ -692,9 +703,18 @@ func (r *Replica) applySnapshot(
 	// the read below.
 	distinctBatch.Close()
 
-	s, err := loadState(ctx, batch, &desc)
-	if err != nil {
-		return err
+	var s storagebase.ReplicaState
+	if inSnap.State != nil {
+		s = *inSnap.State
+	} else {
+		// TODO(peter): This can only happen if the sender is running code before
+		// the support for sending the replica state was added. Remove after a few
+		// beta releases have passed (i.e. mid-December 2016).
+		var err error
+		s, err = loadState(ctx, batch, &desc)
+		if err != nil {
+			return err
+		}
 	}
 
 	if s.Desc.RangeID != r.RangeID {

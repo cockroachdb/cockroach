@@ -2605,6 +2605,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 				RangeDescriptor: header.RangeDescriptor,
 				Batches:         batches,
 				LogEntries:      logEntries,
+				State:           req.State,
 			}
 
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
@@ -3107,14 +3108,12 @@ func sendSnapshot(
 		}
 	}
 
-	rangeID := header.RangeDescriptor.RangeID
-
-	truncState, err := loadTruncatedState(ctx, snap.EngineSnap, rangeID)
+	state, err := loadState(ctx, snap.EngineSnap, &header.RangeDescriptor)
 	if err != nil {
 		return err
 	}
-	firstIndex := truncState.Index + 1
 
+	firstIndex := state.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
 	logEntries := make([][]byte, 0, endIndex-firstIndex)
 
@@ -3126,10 +3125,16 @@ func sendSnapshot(
 		return false, err
 	}
 
+	rangeID := header.RangeDescriptor.RangeID
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}
-	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
+	req := &SnapshotRequest{
+		LogEntries: logEntries,
+		State:      &state,
+		Final:      true,
+	}
+	if err := stream.Send(req); err != nil {
 		return err
 	}
 	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d",

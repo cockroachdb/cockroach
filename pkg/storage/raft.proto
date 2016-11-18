@@ -20,6 +20,7 @@ option go_package = "storage";
 
 import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/storage/storagebase/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -126,6 +127,9 @@ message SnapshotRequest {
   // roundtripping through memory. They are separate from the kv_batch to
   // allow flexibility in log implementations.
   repeated bytes log_entries = 3;
+
+  // The replica state at the time the snapshot was generated.
+  optional storagebase.ReplicaState state = 5;
 
   optional bool final = 4 [(gogoproto.nullable) = false];
 }
