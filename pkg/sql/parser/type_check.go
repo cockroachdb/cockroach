@@ -35,6 +35,11 @@ type SemaContext struct {
 
 	// Location references the *Location on the current Session.
 	Location **time.Location
+
+	// SearchPath indicates where to search for unqualified function
+	// names. The path elements must be normalized via Name.Normalize()
+	// already.
+	SearchPath []string
 }
 
 // MakeSemaContext initializes a simple SemaContext suitable
@@ -333,35 +338,22 @@ func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	fname, err := expr.Name.Normalize()
+	var searchPath []string
+	if ctx != nil {
+		searchPath = ctx.SearchPath
+	}
+	def, err := expr.Func.Resolve(searchPath)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(fname.Context) > 0 {
-		// We don't support qualified function names (yet).
-		return nil, fmt.Errorf("unknown function: %s", fname)
-	}
-
-	name := string(fname.FunctionName)
-	// Optimize for the case where name is already normalized to upper/lower
-	// case. Note that the Builtins map contains duplicate entries for
-	// upper/lower case names.
-	candidates, ok := Builtins[name]
-	if !ok {
-		candidates, ok = Builtins[strings.ToLower(name)]
-	}
-	if !ok {
-		return nil, fmt.Errorf("unknown function: %s", name)
-	}
-
-	overloads := make([]overloadImpl, len(candidates))
-	for i := range candidates {
-		overloads[i] = candidates[i]
+	overloads := make([]overloadImpl, len(def.Definition))
+	for i, d := range def.Definition {
+		overloads[i] = d
 	}
 	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Exprs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", name, err)
+		return nil, fmt.Errorf("%s(): %v", def.Name, err)
 	} else if fn == nil {
 		typeNames := make([]string, 0, len(expr.Exprs))
 		for _, expr := range typedSubExprs {
@@ -371,8 +363,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		if desired != nil {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
-		return nil, fmt.Errorf("unknown signature for %s: %s(%s)%s",
-			expr.Name, expr.Name, strings.Join(typeNames, ", "), desStr)
+		return nil, fmt.Errorf("unknown signature: %s(%s)%s",
+			expr.Func, strings.Join(typeNames, ", "), desStr)
 	}
 
 	if expr.WindowDef != nil {
@@ -393,14 +385,14 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		case AggregateClass:
 		case WindowClass:
 		default:
-			return nil, fmt.Errorf("OVER specified, but %s is not a window function nor an "+
-				"aggregate function", expr.Name)
+			return nil, fmt.Errorf("OVER specified, but %s() is neither a window function nor an "+
+				"aggregate function", expr.Func)
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
 		switch builtin.class {
 		case WindowClass:
-			return nil, fmt.Errorf("window function %s requires an OVER clause", expr.Name)
+			return nil, fmt.Errorf("window function %s() requires an OVER clause", expr.Func)
 		}
 	}
 
@@ -409,7 +401,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	}
 	expr.fn = builtin
 	returnType := fn.returnType()
-	if _, ok = expr.fn.params().(AnyType); ok {
+	if _, ok := expr.fn.params().(AnyType); ok {
 		if len(typedSubExprs) > 0 {
 			returnType = typedSubExprs[0].ResolvedType()
 		} else {

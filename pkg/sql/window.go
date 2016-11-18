@@ -828,14 +828,14 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr parser.Expr) (recurse bool, ne
 			// Check if a parent node above this window function is an aggregate.
 			if len(v.aggregatesSeen) > 0 {
 				v.err = errors.Errorf("aggregate function calls cannot contain window function "+
-					"call %s", t.Name)
+					"call %s()", t.Func)
 				return false, expr
 			}
 
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = fmt.Errorf("window function calls cannot be nested under %s", t.Name)
+					v.err = fmt.Errorf("window function calls cannot be nested under %s()", t.Func)
 					return false, expr
 				}
 			}

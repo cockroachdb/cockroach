@@ -218,7 +218,7 @@ SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
 query error aggregate functions are not allowed in WHERE
 SELECT k FROM kv WHERE AVG(k) > 1
 
-query error aggregate function calls cannot be nested under MAX
+query error aggregate function calls cannot be nested under max()
 SELECT MAX(AVG(k)) FROM kv
 
 # Test case from #2761.
@@ -251,7 +251,7 @@ SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
 ----
 8 2
 
-query error aggregate function calls cannot be nested under MAX
+query error aggregate function calls cannot be nested under max()
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
 
 query error argument of HAVING must be type bool, not type int
@@ -292,7 +292,7 @@ SELECT COUNT(1) from kv;
 ----
 6
 
-query error unknown signature for COUNT: COUNT\(int, int\)
+query error unknown signature: count\(int, int\)
 SELECT COUNT(k, v) FROM kv
 
 query II
@@ -427,7 +427,7 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 query ITT
 EXPLAIN SELECT COUNT(k) FROM kv
 ----
-0 group COUNT(k)
+0 group count(k)
 1 scan  kv@primary
 
 statement ok
@@ -445,7 +445,7 @@ INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::
 query ITT
 EXPLAIN SELECT MIN(a) FROM abc
 ----
-0 group MIN(a)
+0 group min(a)
 1 scan  abc@primary - (max 1 row)
 
 query TRBR
@@ -463,22 +463,22 @@ SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
 ----
 1.75 3.5 3.0500000000000000 6.1
 
-query error unknown signature for AVG: AVG\(string\)
+query error unknown signature: avg\(string\)
 SELECT AVG(a) FROM abc
 
-query error unknown signature for AVG: AVG\(bool\)
+query error unknown signature: avg\(bool\)
 SELECT AVG(c) FROM abc
 
-query error unknown signature for AVG: AVG\(tuple{string, bool}\)
+query error unknown signature: avg\(tuple{string, bool}\)
 SELECT AVG((a,c)) FROM abc
 
-query error unknown signature for SUM: SUM\(string\)
+query error unknown signature: sum\(string\)
 SELECT SUM(a) FROM abc
 
-query error unknown signature for SUM: SUM\(bool\)
+query error unknown signature: sum\(bool\)
 SELECT SUM(c) FROM abc
 
-query error unknown signature for SUM: SUM\(tuple{string, bool}\)
+query error unknown signature: sum\(tuple{string, bool}\)
 SELECT SUM((a,c)) FROM abc
 
 statement ok
@@ -504,7 +504,7 @@ SELECT MIN(x) FROM xyz
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz
 ----
-0 group MIN(x)
+0 group min(x)
 1 scan  xyz@xy - (max 1 row)
 
 query I
@@ -515,7 +515,7 @@ SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-0 group MIN(x)
+0 group min(x)
 1 scan  xyz@xy /0-/1 /4-/5 /7-/8 (max 1 row)
 
 query I
@@ -526,7 +526,7 @@ SELECT MAX(x) FROM xyz
 query ITT
 EXPLAIN SELECT MAX(x) FROM xyz
 ----
-0 group    MAX(x)
+0 group    max(x)
 1 revscan  xyz@xy - (max 1 row)
 
 query I
@@ -537,7 +537,7 @@ SELECT MIN(y) FROM xyz WHERE x = 1
 query ITT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 1
 ----
-0 group MIN(y)
+0 group min(y)
 1 scan  xyz@xy /1/#-/2 (max 1 row)
 
 query I
@@ -548,7 +548,7 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 query ITT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 1
 ----
-0 group   MAX(y)
+0 group   max(y)
 1 revscan xyz@xy /1/#-/2 (max 1 row)
 
 query I
@@ -559,7 +559,7 @@ NULL
 query ITT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 7
 ----
-0 group MIN(y)
+0 group min(y)
 1 scan  xyz@xy /7/#-/8 (max 1 row)
 
 query I
@@ -570,7 +570,7 @@ NULL
 query ITT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 7
 ----
-0 group   MAX(y)
+0 group   max(y)
 1 revscan xyz@xy /7/#-/8 (max 1 row)
 
 query I
@@ -581,7 +581,7 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-0 group MIN(x)
+0 group min(x)
 1 scan  xyz@zyx /3/2/#-/3/3 (max 1 row)
 
 query ITTT
@@ -598,7 +598,7 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 query ITT
 EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-0 group   MAX(x)
+0 group   max(x)
 1 revscan xyz@zyx /3/2/#-/3/3 (max 1 row)
 
 query RRR
@@ -632,7 +632,7 @@ NULL
 query ITT
 EXPLAIN SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
-0 group VARIANCE(x)
+0 group variance(x)
 1 scan xyz@xy /1-/2
 
 query RRR
@@ -740,7 +740,7 @@ INSERT INTO ab VALUES
 query ITT
 EXPLAIN SELECT MIN(a) FROM abc
 ----
-0 group MIN(a)
+0 group min(a)
 1 scan  abc@primary - (max 1 row)
 
 # Verify we only buffer one row.
@@ -754,7 +754,7 @@ EXPLAIN (DEBUG) SELECT MIN(a) FROM ab
 query ITT
 EXPLAIN SELECT MAX(a) FROM abc
 ----
-0 group   MAX(a)
+0 group   max(a)
 1 revscan abc@primary - (max 1 row)
 
 # Verify we only buffer one row.

@@ -15,7 +15,7 @@ SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
 ----
 9 13
 
-statement error unknown signature for LENGTH: LENGTH\(int\)
+statement error unknown signature: length\(int\)
 SELECT LENGTH(23)
 
 query II
@@ -29,7 +29,7 @@ SELECT UPPER('roacH7')
 UPPER('roacH7')
 ROACH7
 
-statement error unknown signature for UPPER: UPPER\(decimal\)
+statement error unknown signature: upper\(decimal\)
 SELECT UPPER(2.2)
 
 query T colnames
@@ -38,7 +38,7 @@ SELECT LOWER('RoacH7')
 LOWER('RoacH7')
 roach7
 
-statement error unknown signature for LOWER: LOWER\(int\)
+statement error unknown signature: lower\(int\)
 SELECT LOWER(32)
 
 # Multiplying by zero so the result is deterministic.
@@ -58,7 +58,7 @@ SELECT CONCAT('RoacH', NULL)
 ----
 RoacH
 
-statement error unknown signature for CONCAT: CONCAT\(string, bool, decimal, bool\)
+statement error unknown signature: concat\(string, bool, decimal, bool\)
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
 ----
 
@@ -127,7 +127,7 @@ SELECT SUBSTR('12345', -2, 77)
 ----
 12345
 
-statement error SUBSTR: negative substring length -1 not allowed
+statement error substr\(\): negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
 
 query T
@@ -155,13 +155,13 @@ SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')
 ----
 a
 
-query error SUBSTRING: error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
+query error substring\(\): error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
 SELECT SUBSTRING('f(oabaroob' from '\(o(.)b' for '+')
 
-query error unknown signature for SUBSTRING: SUBSTRING()
+query error unknown signature: substring\(\)
 SELECT SUBSTRING()
 
-query error unknown signature for CONCAT_WS: CONCAT_WS()
+query error unknown signature: concat_ws\(\)
 SELECT CONCAT_WS()
 
 query T
@@ -179,7 +179,7 @@ SELECT CONCAT_WS(',', 'abcde', '2')
 ----
 abcde,2
 
-statement error unknown signature for CONCAT_WS: CONCAT_WS\(string, string, int, NULL, int\)
+statement error unknown signature: concat_ws\(string, string, int, NULL, int\)
 SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
 ----
 
@@ -198,7 +198,7 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-statement error pq: repeat: runtime error: makeslice: len out of range
+statement error pq: repeat\(\): runtime error: makeslice: len out of range
 SELECT repeat('s', 9223372036854775807)
 
 query I
@@ -211,7 +211,7 @@ select ascii('禅');
 ----
 31109
 
-query error ascii: the input string must not be empty
+query error ascii\(\): the input string must not be empty
 select ascii('');
 
 query T
@@ -259,7 +259,7 @@ SELECT position('a' in 'high')
 ----
 0
 
-query error unknown signature for STRPOS: STRPOS()
+query error unknown signature: strpos\(\)
 SELECT position()
 
 query T
@@ -416,7 +416,7 @@ SELECT abs(-1.2::float), abs(1.2::float), abs(-0.0::float), abs(0), abs(1), abs(
 ----
 1.2 1.2 0 0 1 1.2121
 
-query error abs: abs of min integer value \(-9223372036854775808\) not defined
+query error abs\(\): abs of min integer value \(-9223372036854775808\) not defined
 SELECT abs(-9223372036854775808)
 
 query I
@@ -484,10 +484,10 @@ SELECT degrees(-0.5), degrees(0.5)
 ----
 -28.64788975654116 28.64788975654116
 
-query error div: division by zero
+query error div\(\): division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
 
-query error div: division by zero
+query error div\(\): division by zero
 SELECT div(1::int, 0::int)
 
 query RRR
@@ -533,10 +533,10 @@ SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal,
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
-query error mod: zero modulus
+query error mod\(\): zero modulus
 SELECT mod(5, 0)
 
-query error mod: zero modulus
+query error mod\(\): zero modulus
 SELECT mod(5::decimal, 0::decimal)
 
 query II
@@ -850,7 +850,7 @@ SELECT regexp_replace('foobarbaz', 'nope', 'NO')
 ----
 foobarbaz
 
-query error regexp_replace: invalid regexp flag: 'z'
+query error regexp_replace\(\): invalid regexp flag: 'z'
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 
 query T
@@ -1014,10 +1014,10 @@ SELECT LEAST(NULL, NULL, NULL)
 ----
 NULL
 
-query error GREATEST: expected 2 to be of type string, found type int
+query error greatest\(\): expected 2 to be of type string, found type int
 SELECT GREATEST(2, '4')
 
-query error LEAST: expected 2 to be of type string, found type int
+query error least\(\): expected 2 to be of type string, found type int
 SELECT LEAST(2, '4')
 
 query T
@@ -1122,7 +1122,7 @@ SELECT strpos(version(), 'CockroachDB')
 1
 
 # Don't panic during incorrect use of * (#7727)
-query error pq: COS: cannot use "\*" in this context
+query error pq: cos\(\): cannot use "\*" in this context
 SELECT COS(*) FROM system.namespace
 
 # Don't panic with invalid names (#8045)
@@ -1156,7 +1156,7 @@ SELECT CURRENT_SCHEMAS(false)
 ----
 {'test'}
 
-query error pq: unknown signature for CURRENT_SCHEMAS: CURRENT_SCHEMAS()
+query error pq: unknown signature: current_schemas()
 SELECT CURRENT_SCHEMAS()
 
 query T
@@ -1285,16 +1285,16 @@ select FROM_IP(TO_IP('2001:0db8:85a3:0000:0000:8a2e:0370:7334'))
 ----
 2001:db8:85a3::8a2e:370:7334
 
-query error pq: unknown signature for TO_IP: TO_IP()
+query error pq: unknown signature: to_ip()
 SELECT TO_IP()
 
-query error pq: FROM_IP: Zero length IP
+query error pq: from_ip\(\): zero length IP
 SELECT FROM_IP(b'')
 
-query error pq: TO_IP: Invalid IP format: ''
+query error pq: to_ip\(\): invalid IP format: ''
 SELECT TO_IP('')
 
-query error pq: TO_IP: Invalid IP format: 'asdf'
+query error pq: to_ip\(\): invalid IP format: 'asdf'
 select TO_IP('asdf')
 
 query R

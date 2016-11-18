@@ -265,10 +265,8 @@ func (ag *aggregator) extractFunc(
 	// See pkg/sql/parser/aggregate_builtins.go for the aggregate builtins we
 	// are repurposing.
 	p := &parser.FuncExpr{
-		Name: parser.NormalizableFunctionName{
-			FunctionName: &parser.QualifiedFunctionName{
-				FunctionName: parser.Name(expr.Func.String()),
-			},
+		Func: parser.ResolvableFunctionReference{
+			FunctionReference: parser.UnresolvedName{parser.Name(expr.Func.String())},
 		},
 		Exprs: []parser.Expr{eh.indexToExpr(int(expr.ColIdx))},
 	}

@@ -144,7 +144,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			for i := range s1 {
 				if s1[i] != s2[i] {
 					t.Fatalf(
-						"mismatch between %sv:\npkg:\n\t%#v\npartial-gen\n\t%#v\ngen\n\t%#v",
+						"mismatch between %s:\npkg:\n\t%#v\npartial-gen\n\t%#v\ngen\n\t%#v",
 						test.pkg.Name, s1[:i+3], s2[:i+3], gen)
 				}
 			}

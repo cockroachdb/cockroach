@@ -18,12 +18,11 @@ package parser
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/pkg/errors"
 )
 
-func init() {
+func initWindowBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range windows {
 		for _, w := range v {
@@ -39,8 +38,7 @@ func init() {
 					"found %v", w))
 			}
 		}
-		Builtins[strings.ToUpper(k)] = v
-		Builtins[strings.ToLower(k)] = v
+		Builtins[k] = v
 	}
 }
 
@@ -338,7 +336,7 @@ func newNtileWindow() WindowFunc {
 	return &ntileWindow{}
 }
 
-var errInvalidArgumentForNtile = errors.Errorf("argument of ntile must be greater than zero")
+var errInvalidArgumentForNtile = errors.Errorf("argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
 	if w.ntile == nil {
@@ -459,7 +457,7 @@ func newNthValueWindow() WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = errors.Errorf("argument of nth_value must be greater than zero")
+var errInvalidArgumentForNthValue = errors.Errorf("argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(wf WindowFrame) (Datum, error) {
 	arg := wf.args()[1]

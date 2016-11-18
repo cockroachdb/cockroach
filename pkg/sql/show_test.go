@@ -47,14 +47,14 @@ func TestShowCreateTable(t *testing.T) {
 	i INT,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT NOW(),
+	t TIMESTAMP DEFAULT now(),
 	CHECK (i > 0)
 )`,
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT NOW(),
+	t TIMESTAMP NULL DEFAULT now(),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -65,13 +65,13 @@ func TestShowCreateTable(t *testing.T) {
 	i INT CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT NOW()
+	t TIMESTAMP DEFAULT now()
 )`,
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT NOW(),
+	t TIMESTAMP NULL DEFAULT now(),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -191,8 +191,8 @@ func TestShowCreateView(t *testing.T) {
 		`CREATE VIEW %s AS SELECT i, s, t FROM d.t`,
 		`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM d.t`,
 		`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
-		`CREATE VIEW %s AS SELECT COUNT(*) FROM d.t`,
-		`CREATE VIEW %s AS SELECT s, COUNT(*) FROM d.t GROUP BY s HAVING COUNT(*) > 3`,
+		`CREATE VIEW %s AS SELECT count(*) FROM d.t`,
+		`CREATE VIEW %s AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3`,
 		`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
 		`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
 	}
