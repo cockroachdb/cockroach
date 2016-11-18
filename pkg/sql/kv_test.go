@@ -27,7 +27,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -151,6 +154,94 @@ func (kv *kvNative) prep(rows int, initData bool) error {
 }
 
 func (kv *kvNative) done() {
+	kv.doneFn()
+}
+
+type kvWriteBatch struct {
+	db     *client.DB
+	epoch  int
+	prefix string
+	doneFn func()
+}
+
+func newKVWriteBatch(b *testing.B) kvInterface {
+	enableTracing := tracing.Disable()
+	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+
+	// TestServer.KVClient() returns the TxnCoordSender wrapped client. But that
+	// isn't a fair comparison with SQL as we want these client requests to be
+	// sent over the network.
+	rpcContext := s.RPCContext()
+
+	conn, err := rpcContext.GRPCDial(s.ServingAddr())
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	return &kvWriteBatch{
+		db: client.NewDB(client.NewSender(conn)),
+		doneFn: func() {
+			s.Stopper().Stop()
+			enableTracing()
+		},
+	}
+}
+
+func (kv *kvWriteBatch) insert(rows, run int) error {
+	batch := engine.NewStandaloneBatch()
+	defer batch.Close()
+
+	firstRow := rows * run
+	lastRow := rows * (run + 1)
+	for i := firstRow; i < lastRow; i++ {
+		ts := hlc.Timestamp{WallTime: 1}
+		key := engine.MVCCKey{Key: []byte(fmt.Sprintf("%s%06d", kv.prefix, i)), Timestamp: ts}
+		var v roachpb.Value
+		v.SetInt(int64(i))
+		if err := batch.Put(key, v.RawBytes); err != nil {
+			return err
+		}
+	}
+	data := batch.Repr()
+
+	startKey := fmt.Sprintf("%s%06d", kv.prefix, firstRow)
+	endKey := fmt.Sprintf("%s%06d", kv.prefix, lastRow)
+
+	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		return txn.WriteBatch(startKey, endKey, data)
+	})
+	return err
+}
+
+func (kv *kvWriteBatch) update(rows, run int) error {
+	panic("unimplemented")
+}
+
+func (kv *kvWriteBatch) del(rows, run int) error {
+	panic("unimplemented")
+}
+
+func (kv *kvWriteBatch) scan(rows, run int) error {
+	panic("unimplemented")
+}
+
+func (kv *kvWriteBatch) prep(rows int, initData bool) error {
+	kv.epoch++
+	kv.prefix = fmt.Sprintf("%d/", kv.epoch)
+	if !initData {
+		return nil
+	}
+	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		b := txn.NewBatch()
+		for i := 0; i < rows; i++ {
+			b.Put(fmt.Sprintf("%s%06d", kv.prefix, i), i)
+		}
+		return txn.CommitInBatch(b)
+	})
+	return err
+}
+
+func (kv *kvWriteBatch) done() {
 	kv.doneFn()
 }
 
@@ -281,6 +372,8 @@ func runKVBenchmark(b *testing.B, typ, op string, rows int) {
 		kv = newKVNative(b)
 	case "SQL":
 		kv = newKVSQL(b)
+	case "WriteBatch":
+		kv = newKVWriteBatch(b)
 	default:
 		b.Fatalf("unknown implementation: %s", typ)
 	}
@@ -348,6 +441,10 @@ func BenchmarkKVInsert10000_Native(b *testing.B) {
 
 func BenchmarkKVInsert10000_SQL(b *testing.B) {
 	runKVBenchmark(b, "SQL", "insert", 10000)
+}
+
+func BenchmarkKVInsert10000_WriteBatch(b *testing.B) {
+	runKVBenchmark(b, "WriteBatch", "insert", 10000)
 }
 
 func BenchmarkKVUpdate1_Native(b *testing.B) {

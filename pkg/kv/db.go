@@ -47,6 +47,7 @@ var allExternalMethods = [...]roachpb.Request{
 	roachpb.AdminTransferLease: &roachpb.AdminTransferLeaseRequest{},
 	roachpb.CheckConsistency:   &roachpb.CheckConsistencyRequest{},
 	roachpb.RangeLookup:        &roachpb.RangeLookupRequest{},
+	roachpb.WriteBatch:         &roachpb.WriteBatchRequest{},
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.

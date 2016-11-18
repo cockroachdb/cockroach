@@ -747,3 +747,10 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 	}
 	return br, pErr
 }
+
+// WriteBatch TODO(dan)
+func (txn *Txn) WriteBatch(begin, end interface{}, data []byte) error {
+	b := txn.NewBatch()
+	b.WriteBatch(begin, end, data)
+	return getOneErr(txn.Run(b), b)
+}

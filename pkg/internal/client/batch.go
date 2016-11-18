@@ -18,8 +18,10 @@ package client
 
 import (
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -256,6 +258,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
 			case *roachpb.ChangeFrozenRequest:
+			case *roachpb.WriteBatchRequest:
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
@@ -597,6 +600,30 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 		},
 		Target: target,
 	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// WriteBatch TODO(dan)
+func (b *Batch) WriteBatch(s, e interface{}, data []byte) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.WriteBatchRequest{
+		Span: roachpb.Span{
+			Key:    begin,
+			EndKey: end,
+		},
+		Data: data,
+	}
+	log.Infof(context.TODO(), "constructed WriteBatchRequest with data of len %d", len(data))
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }
