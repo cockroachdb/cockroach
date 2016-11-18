@@ -123,4 +123,6 @@ const (
 	// ChangeFrozen freezes or unfreezes all Ranges with StartKey in a given
 	// key span.
 	ChangeFrozen
+	// WriteBatch applies the operations encoded in a BatchRepr.
+	WriteBatch
 )
