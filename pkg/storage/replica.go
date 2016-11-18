@@ -1366,7 +1366,14 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// out before their prerequisites, so we still have to wait it
 					// out.
 					for _, ch := range chans {
-						<-ch
+						select {
+						case <-ch:
+						case <-r.store.stopper.ShouldQuiesce():
+							// If the process is shutting down, we return without
+							// removing this command from queue. This avoids
+							// dropping out before prerequisites.
+							return
+						}
 					}
 					r.cmdQMu.Lock()
 					r.cmdQMu.global.remove(cmdGlobal)
@@ -1802,10 +1809,10 @@ func (r *Replica) tryAddWriteCmd(
 			return propResult.Reply, propResult.Err, propResult.ShouldRetry
 		case <-ctxDone:
 			// If our context was cancelled, return an AmbiguousResultError
-			// to indicate to caller that the command may have executed.
-			// However, we proceed only if the command isn't already being
-			// executed and using our context, in which case we expect it to
-			// finish soon.
+			// if the command isn't already being executed and using our
+			// context, in which case we expect it to finish soon. The
+			// AmbiguousResultError indicates to caller that the command may
+			// have executed.
 			if tryAbandon() {
 				log.Warningf(ctx, "context cancellation of command %s", ba)
 				// Set endCmds to nil because they will be invoked in processRaftCommand.
@@ -1814,9 +1821,12 @@ func (r *Replica) tryAddWriteCmd(
 			}
 			ctxDone = nil
 		case <-shouldQuiesce:
-			// If shutting down, return immediately if tryAbandon succeeds.
-			// We return an AmbiguousResultError to indicate to caller that
-			// the command may have executed.
+			// If shutting down, return an AmbiguousResultError if the
+			// command isn't already being executed and using our context,
+			// in which case we expect it to finish soon. AmbiguousResultError
+			// indicates to caller that the command may have executed. If
+			// tryAbandon fails, we iterate through the loop again to wait
+			// for the command to finish.
 			//
 			// Note that in the shutdown case, we *do not* set the endCmds
 			// var to nil. We have no expectation during shutdown that Raft
@@ -3145,7 +3155,9 @@ func (r *Replica) processRaftCommand(
 				cmd.LocalProposalData = innerPD.LocalProposalData
 				cmd.LocalProposalData.endCmds = endCmds
 				cmd.LocalProposalData.doneCh = doneCh
-				cmd.ctx = nil // already have ctx
+				// Avoid confusion by unsetting the context; we already have one
+				// on the stack which is the correct one to use.
+				cmd.ctx = nil
 			}
 			// Proposals which would failfast with proposer-evaluated KV now
 			// go this route, writing an empty entry and returning this error
