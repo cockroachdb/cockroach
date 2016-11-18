@@ -1230,8 +1230,7 @@ type endCmds struct {
 }
 
 // done removes pending commands from the command queue and updates
-// the timestamp cache using the final timestamp of each command.  The
-// returned error replaces the supplied error.
+// the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
 	// Update the timestamp cache if the command succeeded and is not
 	// being retried. Each request is considered in turn; only those
@@ -1797,7 +1796,9 @@ func (r *Replica) tryAddWriteCmd(
 	for {
 		select {
 		case propResult := <-ch:
-			endCmds = nil // these will have been invoked post-Raft.
+			// Set endCmds to nil because they have already been invoked
+			// in processRaftCommand.
+			endCmds = nil
 			return propResult.Reply, propResult.Err, propResult.ShouldRetry
 		case <-ctxDone:
 			// If our context was cancelled, return an AmbiguousResultError
@@ -1807,20 +1808,22 @@ func (r *Replica) tryAddWriteCmd(
 			// finish soon.
 			if tryAbandon() {
 				log.Warningf(ctx, "context cancellation of command %s", ba)
+				// Set endCmds to nil because they will be invoked in processRaftCommand.
 				endCmds = nil
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
 			}
 			ctxDone = nil
 		case <-shouldQuiesce:
-			// If we're shutting down, return an AmbiguousResultError to
-			// indicate to caller that the command may have executed.
-			// tryAbandon indicates whether the command is already executing
-			// with our context. Note that in the shutdown case, we *do not*
-			// set the endCmds var to nil. We have no expectation during
-			// shutdown that Raft will continue processing, so we need to
-			// free up the command queue so other waiters can proceed. This
-			// is safe because with the stopper quiescing, no new commands
-			// can be proposed to Raft successfully.
+			// If shutting down, return immediately if tryAbandon succeeds.
+			// We return an AmbiguousResultError to indicate to caller that
+			// the command may have executed.
+			//
+			// Note that in the shutdown case, we *do not* set the endCmds
+			// var to nil. We have no expectation during shutdown that Raft
+			// will continue processing, so we need to free up the command
+			// queue so other waiters can proceed. This is safe because with
+			// the stopper quiescing, no new commands can be proposed to
+			// Raft successfully.
 			if tryAbandon() {
 				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
@@ -3140,8 +3143,8 @@ func (r *Replica) processRaftCommand(
 				endCmds := cmd.LocalProposalData.endCmds
 				doneCh := cmd.LocalProposalData.doneCh
 				cmd.LocalProposalData = innerPD.LocalProposalData
-				cmd.endCmds = endCmds
-				cmd.doneCh = doneCh
+				cmd.LocalProposalData.endCmds = endCmds
+				cmd.LocalProposalData.doneCh = doneCh
 				cmd.ctx = nil // already have ctx
 			}
 			// Proposals which would failfast with proposer-evaluated KV now
