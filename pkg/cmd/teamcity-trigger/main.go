@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"log"
+	"net/url"
 	"os"
 	"strconv"
 
@@ -36,9 +37,13 @@ const teamcityAPIPasswordEnv = "TC_API_PASSWORD"
 func main() {
 	flag.Parse()
 
-	host, ok := os.LookupEnv(teamcityServerURLEnv)
+	serverURL, ok := os.LookupEnv(teamcityServerURLEnv)
 	if !ok {
 		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
+	}
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		log.Fatal(err)
 	}
 	username, ok := os.LookupEnv(teamcityAPIUserEnv)
 	if !ok {
@@ -50,7 +55,7 @@ func main() {
 	}
 	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/..."})
 
-	client := teamcity.New(host, username, password)
+	client := teamcity.New(u.Host, username, password)
 	// Queue a build per configuration per package.
 	for _, propEvalKV := range []bool{true, false} {
 		for _, params := range []map[string]string{
