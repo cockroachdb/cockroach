@@ -5773,11 +5773,6 @@ func TestReplicaCancelRaft(t *testing.T) {
 			defer tc.Stop()
 			if cancelEarly {
 				cancel()
-				tc.repl.mu.Lock()
-				tc.repl.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.repl.mu.Unlock()
 			}
 			var ba roachpb.BatchRequest
 			ba.Add(&roachpb.GetRequest{
@@ -5788,13 +5783,14 @@ func TestReplicaCancelRaft(t *testing.T) {
 			}
 			br, pErr := tc.repl.addWriteCmd(ctx, ba)
 			if pErr == nil {
-				if !cancelEarly {
+				if cancelEarly {
+					t.Fatalf("expected an error, but got successful response %+v", br)
+				} else {
 					// We cancelled the context while the command was already
 					// being processed, so the client had to wait for successful
 					// execution.
 					return
 				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
 			}
 			// If we cancelled the context early enough, we expect to receive a
 			// corresponding error and not wait for the command.
