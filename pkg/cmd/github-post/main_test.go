@@ -33,7 +33,7 @@ func TestRunGH(t *testing.T) {
 		expRepo   = "cockroach"
 		envPkg    = "foo/bar/baz"
 		sha       = "abcd123"
-		serverURL = "teamcity.example.com"
+		serverURL = "https://teamcity.example.com"
 		buildID   = 8008135
 		issueID   = 1337
 	)
@@ -95,7 +95,7 @@ Stress build found a failed test: %s
 %s
 `,
 					regexp.QuoteMeta(sha),
-					regexp.QuoteMeta(fmt.Sprintf("https://%s/viewLog.html?buildId=%d", serverURL, buildID)),
+					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d", serverURL, buildID)),
 					regexp.QuoteMeta(expectations.body),
 				),
 			)

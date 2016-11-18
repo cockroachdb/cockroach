@@ -81,28 +81,29 @@ func runGH(
 		return errors.Errorf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
 	}
 
-	host, ok := os.LookupEnv(teamcityServerURLEnv)
-	if !ok {
-		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
-	}
-
 	buildID, ok := os.LookupEnv(teamcityBuildIDEnv)
 	if !ok {
 		log.Fatalf("teamcity build ID environment variable %s is not set", teamcityBuildIDEnv)
 	}
 
-	var inputBuf bytes.Buffer
-	input = io.TeeReader(input, &inputBuf)
+	serverURL, ok := os.LookupEnv(teamcityServerURLEnv)
+	if !ok {
+		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
+	}
 
 	options := url.Values{}
 	options.Add("buildId", buildID)
 
-	u := (&url.URL{
-		Scheme:   "https",
-		Host:     host,
-		Path:     "viewLog.html",
-		RawQuery: options.Encode(),
-	}).String()
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	u.Scheme = "https"
+	u.Path = "viewLog.html"
+	u.RawQuery = options.Encode()
+
+	var inputBuf bytes.Buffer
+	input = io.TeeReader(input, &inputBuf)
 
 	newIssueRequest := func(packageName, testName, message string) *github.IssueRequest {
 		title := fmt.Sprintf("%s: %s failed under stress", packageName, testName)
@@ -110,7 +111,7 @@ func runGH(
 
 Stress build found a failed test: %s
 
-%s`, sha, u, "```\n"+trimIssueRequestBody(message)+"\n```")
+%s`, sha, u.String(), "```\n"+trimIssueRequestBody(message)+"\n```")
 
 		return &github.IssueRequest{
 			Title: &title,
