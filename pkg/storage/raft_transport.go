@@ -349,6 +349,11 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 					Status:  SnapshotResponse_ERROR,
 					Message: "client error: no header in first snapshot request message"})
 			}
+			if req.Header.State == nil {
+				return stream.Send(&SnapshotResponse{
+					Status:  SnapshotResponse_ERROR,
+					Message: "client error: no replica state in header"})
+			}
 			rmr := req.Header.RaftMessageRequest
 			t.recvMu.Lock()
 			handler, ok := t.recvMu.handlers[rmr.ToReplica.StoreID]

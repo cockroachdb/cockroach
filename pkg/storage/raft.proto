@@ -20,6 +20,7 @@ option go_package = "storage";
 
 import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/storage/storagebase/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -104,6 +105,13 @@ message RaftMessageResponse {
 message SnapshotRequest {
   message Header {
     optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+
+    // The replica state at the time the snapshot was generated. Note
+    // that ReplicaState.Desc differs from the above range_descriptor
+    // field which holds the updated descriptor after the new replica
+    // has been added while ReplicaState.Desc holds the descriptor
+    // before the new replica has been added.
+    optional storagebase.ReplicaState state = 5;
 
     // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
     optional RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
