@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-github/github"
@@ -29,13 +30,16 @@ import (
 
 func TestRunGH(t *testing.T) {
 	const (
-		expOwner  = "cockroachdb"
-		expRepo   = "cockroach"
-		envPkg    = "foo/bar/baz"
-		sha       = "abcd123"
-		serverURL = "https://teamcity.example.com"
-		buildID   = 8008135
-		issueID   = 1337
+		expOwner      = "cockroachdb"
+		expRepo       = "cockroach"
+		envPkg        = "foo/bar/baz"
+		envPropEvalKV = "true"
+		envTags       = "deadlock"
+		envGoFlags    = "race"
+		sha           = "abcd123"
+		serverURL     = "https://teamcity.example.com"
+		buildID       = 8008135
+		issueID       = 1337
 	)
 
 	for key, value := range map[string]string{
@@ -43,7 +47,10 @@ func TestRunGH(t *testing.T) {
 		teamcityServerURLEnv: serverURL,
 		teamcityBuildIDEnv:   strconv.Itoa(buildID),
 
-		pkgEnv: envPkg,
+		pkgEnv:        envPkg,
+		propEvalKVEnv: envPropEvalKV,
+		tagsEnv:       envTags,
+		goFlagsEnv:    envGoFlags,
 	} {
 		if val, ok := os.LookupEnv(key); ok {
 			defer func() {
@@ -63,6 +70,12 @@ func TestRunGH(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	parameters := "```\n" + strings.Join([]string{
+		propEvalKVEnv + "=" + envPropEvalKV,
+		tagsEnv + "=" + envTags,
+		goFlagsEnv + "=" + envGoFlags,
+	}, "\n") + "\n```"
 
 	for fileName, expectations := range map[string]struct {
 		packageName string
@@ -89,12 +102,16 @@ func TestRunGH(t *testing.T) {
 			issueBodyRe, err := regexp.Compile(
 				fmt.Sprintf(`(?s)\ASHA: https://github.com/cockroachdb/cockroach/commits/%s
 
+Parameters:
+%s
+
 Stress build found a failed test: %s
 
 .*
 %s
 `,
 					regexp.QuoteMeta(sha),
+					regexp.QuoteMeta(parameters),
 					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)),
 					regexp.QuoteMeta(expectations.body),
 				),
