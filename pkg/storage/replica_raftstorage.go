@@ -391,6 +391,7 @@ type IncomingSnapshot struct {
 	Batches [][]byte
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
+	State      *storagebase.ReplicaState
 }
 
 // CloseOutSnap closes the Replica's outgoing snapshot, freeing its resources
@@ -629,7 +630,9 @@ func (r *Replica) applySnapshot(
 			stats.commit.Sub(stats.entries).Seconds()*1000)
 	}(timeutil.Now())
 
-	batch := r.store.Engine().NewBatch()
+	// Use a more efficient write-only batch because we don't need to do any
+	// reads from the batch.
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
 	// Clear the range using a distinct batch in order to prevent the iteration
@@ -639,7 +642,7 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, r.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := distinctBatch.Clear(iter.Key()); err != nil {
@@ -692,11 +695,7 @@ func (r *Replica) applySnapshot(
 	// the read below.
 	distinctBatch.Close()
 
-	s, err := loadState(ctx, batch, &desc)
-	if err != nil {
-		return err
-	}
-
+	s := *inSnap.State
 	if s.Desc.RangeID != r.RangeID {
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
