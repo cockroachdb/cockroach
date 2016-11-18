@@ -561,7 +561,13 @@ func (r *RocksDB) NewSnapshot() Reader {
 
 // NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Batch {
-	return newRocksDBBatch(r)
+	return newRocksDBBatch(r, false /* writeOnly */)
+}
+
+// NewWriteOnlyBatch returns a new write-only batch wrapping this rocksdb
+// engine.
+func (r *RocksDB) NewWriteOnlyBatch() Batch {
+	return newRocksDBBatch(r, true /* writeOnly */)
 }
 
 // GetSSTables retrieves metadata about this engine's live sstables.
@@ -861,12 +867,14 @@ type rocksDBBatch struct {
 	distinct           distinctBatch
 	distinctOpen       bool
 	distinctNeedsFlush bool
+	writeOnly          bool
 }
 
-func newRocksDBBatch(parent *RocksDB) *rocksDBBatch {
+func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
 	r := &rocksDBBatch{
-		parent: parent,
-		batch:  C.DBNewBatch(parent.rdb),
+		parent:    parent,
+		batch:     C.DBNewBatch(parent.rdb, C.bool(writeOnly)),
+		writeOnly: writeOnly,
 	}
 	r.distinct.rocksDBBatch = r
 	return r
@@ -920,6 +928,9 @@ func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
 }
 
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
+	if r.writeOnly {
+		panic("write-only batch")
+	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -930,6 +941,9 @@ func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 func (r *rocksDBBatch) GetProto(
 	key MVCCKey, msg proto.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
+	if r.writeOnly {
+		panic("write-only batch")
+	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -938,6 +952,9 @@ func (r *rocksDBBatch) GetProto(
 }
 
 func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	if r.writeOnly {
+		panic("write-only batch")
+	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -959,6 +976,9 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
 func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
+	if r.writeOnly {
+		panic("write-only batch")
+	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}

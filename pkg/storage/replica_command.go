@@ -3215,7 +3215,7 @@ func (r *Replica) ChangeReplicas(
 			}
 
 			req := SnapshotRequest_Header{
-				RangeDescriptor: updatedDesc,
+				State: snap.State,
 				RaftMessageRequest: RaftMessageRequest{
 					RangeID:     r.RangeID,
 					FromReplica: fromRepDesc,
