@@ -803,7 +803,7 @@ func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name      NormalizableFunctionName
+	Func      ResolvableFunctionReference
 	Type      funcType
 	Exprs     Exprs
 	WindowDef *WindowDef
@@ -856,7 +856,7 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Type != 0 {
 		typ = funcTypeName[node.Type] + " "
 	}
-	FormatNode(buf, f, node.Name)
+	FormatNode(buf, f, node.Func)
 	buf.WriteByte('(')
 	buf.WriteString(typ)
 	FormatNode(buf, f, node.Exprs)
