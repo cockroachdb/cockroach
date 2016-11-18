@@ -5773,11 +5773,6 @@ func TestReplicaCancelRaft(t *testing.T) {
 			defer tc.Stop()
 			if cancelEarly {
 				cancel()
-				tc.repl.mu.Lock()
-				tc.repl.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.repl.mu.Unlock()
 			}
 			var ba roachpb.BatchRequest
 			ba.Add(&roachpb.GetRequest{
@@ -5786,25 +5781,20 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
 			}
-			br, pErr := tc.repl.addWriteCmd(ctx, ba)
-			if pErr == nil {
-				if !cancelEarly {
+			_, pErr := tc.repl.addWriteCmd(ctx, ba)
+			if cancelEarly {
+				if !testutils.IsPError(pErr, context.Canceled.Error()) {
+					t.Fatalf("expected canceled error; got %v", pErr)
+				}
+			} else {
+				if pErr == nil {
 					// We cancelled the context while the command was already
 					// being processed, so the client had to wait for successful
 					// execution.
 					return
 				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
-			}
-			// If we cancelled the context early enough, we expect to receive a
-			// corresponding error and not wait for the command.
-			if cancelEarly {
-				if !testutils.IsPError(pErr, context.Canceled.Error()) {
-					t.Errorf("unexpected error: %s", pErr)
-				}
-			} else {
-				if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
-					t.Errorf("expected an ambiguous result error; got %v", pErr)
+				if err, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+					t.Fatalf("expected AmbiguousResultError error; got %s (%T)", err, err)
 				}
 			}
 		}()
