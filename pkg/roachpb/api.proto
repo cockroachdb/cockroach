@@ -739,6 +739,22 @@ message ExportStorage {
   optional S3 S3Config = 5;
 }
 
+// WriteBatchRequest is arguments to the WriteBatch() method, to apply the
+// operations encoded in a BatchRepr.
+message WriteBatchRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The span of keys encoded in data, duplicated because the header span can
+  // be modified by DistSender and we use this one to fail fast.
+  optional Span data_span = 2 [(gogoproto.nullable) = false];
+  // A BatchRepr, the serialized form of a RocksDB Batch.
+  optional bytes data = 3;
+}
+
+// WriteBatchResponse is the response to a WriteBatch() operation.
+message WriteBatchResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -782,6 +798,7 @@ message RequestUnion {
   optional ChangeFrozenRequest change_frozen = 27;
   optional TransferLeaseRequest transfer_lease = 28;
   optional LeaseInfoRequest lease_info = 30;
+  optional WriteBatchRequest write_batch = 31;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -824,6 +841,7 @@ message ResponseUnion {
   optional ChangeFrozenResponse change_frozen = 27;
   reserved 28; // TransferLease and RequestLease both use RequestLeaseResponse
   optional LeaseInfoResponse lease_info = 30;
+  optional WriteBatchResponse write_batch = 31;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
