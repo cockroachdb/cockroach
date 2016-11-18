@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -54,7 +55,7 @@ type replicateQueue struct {
 	allocator         Allocator
 	clock             *hlc.Clock
 	updateChan        chan struct{}
-	lastLeaseTransfer time.Time
+	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
@@ -236,7 +237,7 @@ func (rq *replicateQueue) process(
 				if err := repl.AdminTransferLease(target.StoreID); err != nil {
 					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 				}
-				rq.lastLeaseTransfer = timeutil.Now()
+				rq.lastLeaseTransfer.Store(timeutil.Now())
 				// Do not requeue as we transferred our lease away.
 				return nil
 			}
@@ -275,7 +276,7 @@ func (rq *replicateQueue) process(
 				if err := repl.AdminTransferLease(target.StoreID); err != nil {
 					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 				}
-				rq.lastLeaseTransfer = timeutil.Now()
+				rq.lastLeaseTransfer.Store(timeutil.Now())
 				// Do not requeue as we transferred our lease away.
 				return nil
 			}
@@ -342,7 +343,10 @@ func (rq *replicateQueue) removeReplica(
 }
 
 func (rq *replicateQueue) canTransferLease() bool {
-	return timeutil.Since(rq.lastLeaseTransfer) > minLeaseTransferInterval
+	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
+		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minLeaseTransferInterval
+	}
+	return true
 }
 
 func (*replicateQueue) timer() time.Duration {
