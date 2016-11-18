@@ -38,6 +38,7 @@ func makeIndexDescriptor(name string, columnNames []string) IndexDescriptor {
 		dirs = append(dirs, IndexDescriptor_ASC)
 	}
 	idx := IndexDescriptor{
+		ID:               IndexID(0),
 		Name:             name,
 		ColumnNames:      columnNames,
 		ColumnDirections: dirs,
@@ -1021,5 +1022,45 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 		if test.verify != nil {
 			test.verify(i, desc)
 		}
+	}
+}
+
+func TestUnvalidateConstraints(t *testing.T) {
+	desc := TableDescriptor{
+		Name:          "test",
+		ParentID:      ID(1),
+		Columns:       []ColumnDescriptor{{Name: "a"}, {Name: "b"}, {Name: "c"}},
+		FormatVersion: FamilyFormatVersion,
+		Indexes:       []IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
+		Privileges:    NewDefaultPrivilegeDescriptor(),
+	}
+	desc.Indexes[0].ForeignKey = ForeignKeyReference{
+		Name:     "fk",
+		Table:    ID(1),
+		Index:    IndexID(1),
+		Validity: ConstraintValidity_Validated,
+	}
+	if err := desc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+	lookup := func(_ ID) (*TableDescriptor, error) {
+		return &desc, nil
+	}
+
+	before, err := desc.GetConstraintInfoWithLookup(lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := before["fk"]; !ok || c.Unvalidated {
+		t.Fatalf("expected to find a validated constraint fk before, found %v", c)
+	}
+	desc.InvalidateFKConstraints()
+
+	after, err := desc.GetConstraintInfoWithLookup(lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := after["fk"]; !ok || !c.Unvalidated {
+		t.Fatalf("expected to find a unvalididated constraint fk before, found %v", c)
 	}
 }
