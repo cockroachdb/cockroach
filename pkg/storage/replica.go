@@ -2955,7 +2955,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 					ctx,
 					r.store.allocator.storePool,
 					SnapshotRequest_Header{
-						RangeDescriptor: *r.Desc(),
+						State: snap.State,
 						RaftMessageRequest: RaftMessageRequest{
 							RangeID:     r.RangeID,
 							FromReplica: fromReplica,
