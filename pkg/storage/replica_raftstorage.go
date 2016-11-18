@@ -591,13 +591,33 @@ func (r *Replica) applySnapshot(
 		snapType = "Raft"
 	}
 
+	var stats struct {
+		clear   time.Time
+		batch   time.Time
+		entries time.Time
+		commit  time.Time
+	}
+
+	var size int
+	for _, b := range inSnap.Batches {
+		size += len(b)
+	}
+	for _, e := range inSnap.LogEntries {
+		size += len(e)
+	}
+
 	log.Infof(ctx, "applying %s snapshot at index %d "+
 		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
 		snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-		len(snap.Data), len(inSnap.Batches), len(inSnap.LogEntries))
+		size, len(inSnap.Batches), len(inSnap.LogEntries))
 	defer func(start time.Time) {
-		log.Infof(ctx, "applied %s snapshot in %.3fs",
-			snapType, timeutil.Since(start).Seconds())
+		now := timeutil.Now()
+		log.Infof(ctx, "applied %s snapshot in %0.0fms [clear=%0.0fms batch=%0.0fms entries=%0.0fms commit=%0.0fms]",
+			snapType, now.Sub(start).Seconds()*1000,
+			stats.clear.Sub(start).Seconds()*1000,
+			stats.batch.Sub(stats.clear).Seconds()*1000,
+			stats.entries.Sub(stats.batch).Seconds()*1000,
+			stats.commit.Sub(stats.entries).Seconds()*1000)
 	}(timeutil.Now())
 
 	batch := r.store.Engine().NewBatch()
@@ -619,6 +639,7 @@ func (r *Replica) applySnapshot(
 	}
 
 	distinctBatch.Close()
+	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.
 	for _, batchRepr := range inSnap.Batches {
@@ -630,6 +651,7 @@ func (r *Replica) applySnapshot(
 	// The log entries are all written to distinct keys so we can use a
 	// distinct batch.
 	distinctBatch = batch.Distinct()
+	stats.batch = timeutil.Now()
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {
@@ -642,6 +664,7 @@ func (r *Replica) applySnapshot(
 	if err != nil {
 		return err
 	}
+	stats.entries = timeutil.Now()
 
 	if !raft.IsEmptyHardState(hs) {
 		if err := setHardState(ctx, distinctBatch, r.RangeID, hs); err != nil {
@@ -679,6 +702,7 @@ func (r *Replica) applySnapshot(
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+	stats.commit = timeutil.Now()
 
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
