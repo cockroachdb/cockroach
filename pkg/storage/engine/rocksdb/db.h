@@ -134,9 +134,12 @@ DBEngine* DBNewSnapshot(DBEngine* db);
 
 // Creates a new batch for performing a series of operations
 // atomically. Use DBCommitBatch() on the returned engine to apply the
-// batch to the database. It is the caller's responsibility to call
-// DBClose().
-DBEngine* DBNewBatch(DBEngine* db);
+// batch to the database. The writeOnly parameter controls whether the
+// batch can be used for reads or only for writes. A writeOnly batch
+// does not need to index keys for reading and can be faster if the
+// number of keys is large (and reads are not necessary). It is the
+// caller's responsibility to call DBClose().
+DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 
 // Creates a new database iterator. When prefix is true, Seek will use
 // the user-key prefix of the key supplied to DBIterSeek() to restrict

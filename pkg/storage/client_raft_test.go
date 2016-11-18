@@ -685,9 +685,9 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	header := storage.SnapshotRequest_Header{
-		CanDecline:      true,
-		RangeSize:       100,
-		RangeDescriptor: *rep.Desc(),
+		CanDecline: true,
+		RangeSize:  100,
+		State:      storagebase.ReplicaState{Desc: rep.Desc()},
 	}
 	// Cause this stream to return an error as soon as we ask it for something.
 	// This injects an error into HandleSnapshotStream when we try to send the

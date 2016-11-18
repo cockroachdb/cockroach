@@ -528,6 +528,49 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	log.Infof(context.Background(), "live_bytes: %d", stats.LiveBytes)
 }
 
+func runBatchApplyBatchRepr(
+	emk engineMaker, writeOnly bool, valueSize, batchSize int, b *testing.B,
+) {
+	rng, _ := randutil.NewPseudoRand()
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	eng := emk(b, fmt.Sprintf("batch_apply_batch_repr_%d_%d", valueSize, batchSize))
+	defer eng.Close()
+
+	var repr []byte
+	{
+		batch := eng.NewBatch()
+		for i := 0; i < batchSize; i++ {
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+			ts := makeTS(timeutil.Now().UnixNano(), 0)
+			if err := MVCCPut(context.Background(), batch, nil, key, ts, value, nil); err != nil {
+				b.Fatal(err)
+			}
+		}
+		repr = batch.Repr()
+		batch.Close()
+	}
+
+	b.SetBytes(int64(len(repr)))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		var batch Batch
+		if writeOnly {
+			batch = eng.NewWriteOnlyBatch()
+		} else {
+			batch = eng.NewBatch()
+		}
+		if err := batch.ApplyBatchRepr(repr); err != nil {
+			b.Fatal(err)
+		}
+		batch.Close()
+	}
+
+	b.StopTimer()
+}
+
 func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 	rocksdb := setupMVCCInMemRocksDB(b, "put_delete")
 	defer rocksdb.Close()

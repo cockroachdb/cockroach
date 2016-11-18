@@ -378,6 +378,8 @@ type OutgoingSnapshot struct {
 	EngineSnap engine.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *ReplicaDataIterator
+	// The replica state within the snapshot.
+	State storagebase.ReplicaState
 	// True if a goroutine has scheduled a call to CloseOutSnap for this snap.
 	claimed bool
 }
@@ -385,12 +387,12 @@ type OutgoingSnapshot struct {
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
-	// The target RangeDescriptor for this snapshot.
-	RangeDescriptor roachpb.RangeDescriptor
 	// The RocksDB BatchReprs that make up this snapshot.
 	Batches [][]byte
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
+	// The replica state at the time the snapshot was generated (never nil).
+	State *storagebase.ReplicaState
 }
 
 // CloseOutSnap closes the Replica's outgoing snapshot, freeing its resources
@@ -450,6 +452,11 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
+	state, err := loadState(ctx, snap, &desc)
+	if err != nil {
+		return OutgoingSnapshot{}, err
+	}
+
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
@@ -460,6 +467,7 @@ func snapshot(
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,
+		State:      state,
 		SnapUUID:   snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
@@ -569,8 +577,10 @@ const (
 func (r *Replica) applySnapshot(
 	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
 ) (err error) {
-	// Extract the updated range descriptor.
-	desc := inSnap.RangeDescriptor
+	s := *inSnap.State
+	if s.Desc.RangeID != r.RangeID {
+		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
+	}
 
 	r.mu.Lock()
 	replicaID := r.mu.replicaID
@@ -629,7 +639,9 @@ func (r *Replica) applySnapshot(
 			stats.commit.Sub(stats.entries).Seconds()*1000)
 	}(timeutil.Now())
 
-	batch := r.store.Engine().NewBatch()
+	// Use a more efficient write-only batch because we don't need to do any
+	// reads from the batch.
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
 	// Clear the range using a distinct batch in order to prevent the iteration
@@ -639,7 +651,7 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(s.Desc, r.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := distinctBatch.Clear(iter.Key()); err != nil {
@@ -692,15 +704,6 @@ func (r *Replica) applySnapshot(
 	// the read below.
 	distinctBatch.Close()
 
-	s, err := loadState(ctx, batch, &desc)
-	if err != nil {
-		return err
-	}
-
-	if s.Desc.RangeID != r.RangeID {
-		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
-	}
-
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
 	if s.RaftAppliedIndex != snap.Metadata.Index {
@@ -736,11 +739,11 @@ func (r *Replica) applySnapshot(
 	// will correctly set the fields, there is no order guarantee in
 	// ApplySnapshot.
 	// TODO: should go through the standard store lock when adding a replica.
-	if err := r.updateRangeInfo(&desc); err != nil {
+	if err := r.updateRangeInfo(s.Desc); err != nil {
 		panic(err)
 	}
 
-	r.setDescWithoutProcessUpdate(&desc)
+	r.setDescWithoutProcessUpdate(s.Desc)
 	return nil
 }
 

@@ -261,6 +261,14 @@ func BenchmarkMVCCDeleteRange1Version256Bytes_RocksDB(b *testing.B) {
 	runMVCCDeleteRange(setupMVCCRocksDB, 256, b)
 }
 
+func BenchmarkBatchApplyBatchRepr(b *testing.B) {
+	runBatchApplyBatchRepr(setupMVCCInMemRocksDB, false /* writeOnly */, 10, 1000000, b)
+}
+
+func BenchmarkWriteOnlyBatchApplyBatchRepr(b *testing.B) {
+	runBatchApplyBatchRepr(setupMVCCInMemRocksDB, true /* writeOnly */, 10, 1000000, b)
+}
+
 func BenchmarkBatchBuilderPut(b *testing.B) {
 	value := make([]byte, 10)
 	for i := range value {

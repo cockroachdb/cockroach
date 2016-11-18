@@ -2568,7 +2568,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 				StoreID: s.StoreID(),
 			},
 			RangeSize: header.RangeSize,
-			RangeID:   header.RangeDescriptor.RangeID,
+			RangeID:   header.State.Desc.RangeID,
 		})
 		if !resp.Reserved {
 			return stream.Send(&SnapshotResponse{
@@ -2576,7 +2576,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 				StoreCapacity: capacity,
 			})
 		}
-		defer s.bookie.Fill(ctx, header.RangeDescriptor.RangeID)
+		defer s.bookie.Fill(ctx, header.State.Desc.RangeID)
 	}
 
 	// Check to see if the snapshot can be applied but don't attempt to add
@@ -2584,10 +2584,10 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	_, err = s.canApplySnapshot(ctx, &header.RangeDescriptor)
+	_, err = s.canApplySnapshot(ctx, header.State.Desc)
 	if err != nil {
 		return sendSnapError(
-			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.RangeDescriptor.RangeID),
+			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
 		)
 	}
 
@@ -2619,10 +2619,10 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:        snapUUID,
-				RangeDescriptor: header.RangeDescriptor,
-				Batches:         batches,
-				LogEntries:      logEntries,
+				SnapUUID:   snapUUID,
+				Batches:    batches,
+				LogEntries: logEntries,
+				State:      &header.State,
 			}
 
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
@@ -2771,7 +2771,7 @@ func (s *Store) processRaftRequest(
 		if earlyReturn := func() bool {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(ctx, &inSnap.RangeDescriptor)
+			placeholder, err := s.canApplySnapshotLocked(ctx, inSnap.State.Desc)
 			if err != nil {
 				// If the storage cannot accept the snapshot, drop it before
 				// passing it to RawNode.Step, since our error handling
@@ -3073,26 +3073,26 @@ func sendSnapshot(
 				declinedMsg = resp.Message
 			}
 			return errors.Errorf("range=%s: remote declined snapshot: %s",
-				header.RangeDescriptor.RangeID, declinedMsg)
+				header.State.Desc.RangeID, declinedMsg)
 		}
 		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
-			header.RangeDescriptor.RangeID, resp.Message)
+			header.State.Desc.RangeID, resp.Message)
 	case SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: remote couldn't accept snapshot with error: %s",
-			header.RangeDescriptor.RangeID, resp.Message)
+			header.State.Desc.RangeID, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:
 		storePool.throttle(throttleFailed, storeID)
 		return errors.Errorf("range=%s: server sent an invalid status during negotiation: %s",
-			header.RangeDescriptor.RangeID, resp.Status)
+			header.State.Desc.RangeID, resp.Status)
 	}
 
 	// Determine the unreplicated key prefix so we can drop any
 	// unreplicated keys from the snapshot.
-	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.RangeDescriptor.RangeID)
+	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.State.Desc.RangeID)
 	var alloc bufalloc.ByteAllocator
 	// TODO(jordan) make this configurable. For now, 1MB.
 	const batchSize = 1 << 20
@@ -3134,14 +3134,7 @@ func sendSnapshot(
 		}
 	}
 
-	rangeID := header.RangeDescriptor.RangeID
-
-	truncState, err := loadTruncatedState(ctx, snap.EngineSnap, rangeID)
-	if err != nil {
-		return err
-	}
-	firstIndex := truncState.Index + 1
-
+	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
 	logEntries := make([][]byte, 0, endIndex-firstIndex)
 
@@ -3153,10 +3146,15 @@ func sendSnapshot(
 		return false, err
 	}
 
+	rangeID := header.State.Desc.RangeID
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}
-	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
+	req := &SnapshotRequest{
+		LogEntries: logEntries,
+		Final:      true,
+	}
+	if err := stream.Send(req); err != nil {
 		return err
 	}
 	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d",
@@ -3164,24 +3162,24 @@ func sendSnapshot(
 
 	resp, err = stream.Recv()
 	if err != nil {
-		return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", header.RangeDescriptor.RangeID)
+		return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", rangeID)
 	}
 	// NB: wait for EOF which ensures that all processing on the server side has
 	// completed (such as defers that might be run after the previous message was
 	// received).
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
 		return errors.Errorf("range=%s: expected EOF, got resp=%v err=%v",
-			header.RangeDescriptor.RangeID, unexpectedResp, err)
+			rangeID, unexpectedResp, err)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
 		return errors.Errorf("range=%s: remote failed to apply snapshot for reason %s",
-			header.RangeDescriptor.RangeID, resp.Message)
+			rangeID, resp.Message)
 	case SnapshotResponse_APPLIED:
 		return nil
 	default:
 		return errors.Errorf("range=%s: server sent an invalid status during finalization: %s",
-			header.RangeDescriptor.RangeID, resp.Status)
+			rangeID, resp.Status)
 	}
 }
 
