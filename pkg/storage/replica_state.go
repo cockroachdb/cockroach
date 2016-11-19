@@ -90,7 +90,7 @@ func loadState(
 //
 // TODO(tschottdorf): test and assert that none of the optional values are
 // missing when- ever saveState is called. Optional values should be reserved
-// strictly for use in ProposalData. Do before merge.
+// strictly for use in EvalResult. Do before merge.
 func saveState(
 	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
 ) (enginepb.MVCCStats, error) {
