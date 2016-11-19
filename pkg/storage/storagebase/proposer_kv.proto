@@ -59,9 +59,9 @@ message ChangeReplicas {
     (gogoproto.embed) = true];
 }
 
-// ReplicatedProposalData is the structured information which together with
+// ReplicatedEvalResult is the structured information which together with
 // a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
-// KV. For the majority of proposals, we expect ReplicatedProposalData to be
+// KV. For the majority of proposals, we expect ReplicatedEvalResult to be
 // trivial; only changes to the metadata state (splits, merges, rebalances,
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
@@ -69,7 +69,7 @@ message ChangeReplicas {
 // TODO(tschottdorf): We may need to add a lease identifier to allow the
 // followers to reliably produce errors for proposals which apply after a
 // lease change.
-message ReplicatedProposalData {
+message ReplicatedEvalResult {
   // Whether to block concurrent readers while processing the proposal data.
   optional bool block_reads = 10001 [(gogoproto.nullable) = false];
   // Updates to the Replica's ReplicaState. By convention and as outlined on
@@ -97,14 +97,14 @@ message ReplicatedProposalData {
 // batch. A wrapper message is used so that the absence of the field
 // can be distinguished from a zero-length batch, and so structs
 // containing pointers to it can be compared with the == operator (we
-// rely on this in storage.ProposalData)
+// rely on this in storage.EvalResult)
 message WriteBatch {
   optional bytes data = 1;
 }
 
 // RaftCommand is the message written to the raft log. It contains
 // some metadata about the proposal itself, then either a BatchRequest
-// (legacy mode) or a ReplicatedProposalData + WriteBatch
+// (legacy mode) or a ReplicatedEvalResult + WriteBatch
 // (proposer-evaluated KV mode).
 message RaftCommand {
   // Metadata about the proposal itself. These fields exist at
@@ -145,10 +145,10 @@ message RaftCommand {
 
   // Legacy mode (post-raft evaluation):
 
-  // cmd is the KV command to apply.
+  // batch_request is the KV command to apply.
   // TODO(bdarnell): Should not be set when propEvalKV is used, but is currently
   // required to support test filters.
-  optional roachpb.BatchRequest cmd = 3;
+  optional roachpb.BatchRequest batch_request = 3;
 
   // Proposer-evaluated KV mode.
   // These are not stable. While general proto compatibility rules
@@ -157,7 +157,7 @@ message RaftCommand {
   // These fields are only populated if proposer-evaluated KV was in effect when
   // the command was proposed.
 
-  optional ReplicatedProposalData replicated_proposal_data = 10013;
+  optional ReplicatedEvalResult replicated_eval_result = 10013;
   // TODO(tschottdorf): using an extra message here (and not just `bytes`) to
   // allow the generated RaftCommand to be compared directly. If
   // this costs an extra large allocation, we need to do something different.
