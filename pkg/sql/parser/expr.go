@@ -654,11 +654,6 @@ func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Select)
 }
 
-// ResolvedType implements the TypedExpr interface.
-func (*Subquery) ResolvedType() Type {
-	return TypeNull
-}
-
 // BinaryOperator represents a binary operator.
 type BinaryOperator int
 

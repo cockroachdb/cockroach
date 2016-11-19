@@ -378,6 +378,19 @@ func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []pl
 		}
 		f.Format(&buf, parser.FmtSimple)
 	}
+	if n.plan != nil {
+		sourceColumns := n.plan.Columns()
+		if len(sourceColumns) > len(n.funcs) {
+			buf.WriteString(" GROUP BY (")
+			for i := len(n.funcs); i < len(sourceColumns); i++ {
+				if i > len(n.funcs) {
+					buf.WriteString(", ")
+				}
+				fmt.Fprintf(&buf, "@%d", i+1)
+			}
+			buf.WriteByte(')')
+		}
+	}
 
 	subplans := []planNode{n.plan}
 	for _, e := range n.render {
