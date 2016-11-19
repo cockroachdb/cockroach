@@ -18,10 +18,14 @@
 
 package syncutil
 
-import deadlock "github.com/sasha-s/go-deadlock"
+import (
+	"time"
+
+	deadlock "github.com/sasha-s/go-deadlock"
+)
 
 func init() {
-	deadlock.Opts.DeadlockTimeout = 0
+	deadlock.Opts.DeadlockTimeout = 5 * time.Minute
 }
 
 // A Mutex is a mutual exclusion lock.
