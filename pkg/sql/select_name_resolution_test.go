@@ -57,7 +57,7 @@ func TestRetryResolveNames(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
-		newExpr, err := s.resolveNames(expr)
+		newExpr, _, err := s.resolveNames(expr)
 		if err != nil {
 			t.Fatal(err)
 		}

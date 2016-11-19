@@ -98,7 +98,7 @@ query ITT colnames
 EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
 Level  Type     Description
-0      distinct
+0      distinct y + z
 1      sort     +"y + z"
 2      scan     xyz@foo -
 

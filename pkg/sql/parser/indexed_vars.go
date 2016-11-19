@@ -65,6 +65,10 @@ func (v *IndexedVar) ResolvedType() Type {
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.symbolicVars {
+		fmt.Fprintf(buf, "@%d", v.Idx+1)
+		return
+	}
 	v.container.IndexedVarFormat(buf, f, v.Idx)
 }
 
