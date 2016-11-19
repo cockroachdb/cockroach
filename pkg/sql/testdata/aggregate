@@ -97,16 +97,16 @@ SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
 query error aggregate functions are not allowed in VALUES
 INSERT INTO kv (k, v) VALUES (99, COUNT(1))
 
-query error invalid column index: 5 not in range \[1, 2\]
+query error GROUP BY position 5 is not in select list
 SELECT COUNT(*), k FROM kv GROUP BY 5
 
-query error invalid column index: 0 not in range \[1, 2\]
+query error GROUP BY position 0 is not in select list
 SELECT COUNT(*), k FROM kv GROUP BY 0
 
-query error invalid column index: -4 not in range \[1, 2\]
+query error non-integer constant in GROUP BY
 SELECT COUNT(*), k FROM kv GROUP BY -4
 
-query error non-integer constant column index
+query error non-integer constant in GROUP BY
 SELECT 1 GROUP BY 'a'
 
 # Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.

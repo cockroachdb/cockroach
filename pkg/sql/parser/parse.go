@@ -109,6 +109,11 @@ func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Type, op string) 
 	return typedExpr, nil
 }
 
+// IsConstExpr returns true if and only if the expression is constant.
+func (p *Parser) IsConstExpr(expr Expr) bool {
+	return p.normalizeVisitor.isConstVisitor.run(expr)
+}
+
 // NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
 // a normalizeVisitor.
 func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr, error) {

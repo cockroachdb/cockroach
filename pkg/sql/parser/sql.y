@@ -26,7 +26,12 @@ import (
     "go/token"
 
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
- )
+)
+
+// MaxUint is the maximum value of an uint.
+const MaxUint = ^uint(0)
+// MaxInt is the maximum value of an int.
+const MaxInt = int(MaxUint >> 1)
 
 func unimplemented(sqllex sqlLexer) int {
     sqllex.Error("unimplemented")
@@ -3077,7 +3082,7 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    prec, err := $2.numVal().asInt64()
+    prec, err := $2.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -3086,12 +3091,12 @@ opt_numeric_modifiers:
   }
 | '(' ICONST ',' ICONST ')'
   {
-    prec, err := $2.numVal().asInt64()
+    prec, err := $2.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    scale, err := $4.numVal().asInt64()
+    scale, err := $4.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -3135,7 +3140,7 @@ numeric:
   }
 | FLOAT opt_float
   {
-    prec, err := $2.numVal().asInt64()
+    prec, err := $2.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -3207,7 +3212,7 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    n, err := $4.numVal().asInt64()
+    n, err := $4.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -3239,7 +3244,7 @@ const_character:
 character_with_length:
   character_base '(' ICONST ')'
   {
-    n, err := $3.numVal().asInt64()
+    n, err := $3.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1

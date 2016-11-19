@@ -132,11 +132,11 @@ func (expr *NumVal) Format(buf *bytes.Buffer, f FmtFlags) {
 //  1.1 = no
 //  123...overflow...456 = no
 func (expr *NumVal) canBeInt64() bool {
-	_, err := expr.asInt64()
+	_, err := expr.AsInt64()
 	return err == nil
 }
 
-// shouldBeInt64 checks if the value naturally is an int64:
+// ShouldBeInt64 checks if the value naturally is an int64:
 //  1   = yes
 //  1.0 = no
 //  1.1 = no
@@ -144,19 +144,19 @@ func (expr *NumVal) canBeInt64() bool {
 //
 // Currently unused so commented out, but useful even just for
 // its documentation value.
-// func (expr *NumVal) shouldBeInt64() bool {
-// 	return expr.Kind() == constant.Int && expr.canBeInt64()
-// }
+func (expr *NumVal) ShouldBeInt64() bool {
+	return expr.Kind() == constant.Int && expr.canBeInt64()
+}
 
 // These errors are statically allocated, because they are returned in the
-// common path of asInt64.
+// common path of AsInt64.
 var errConstNotInt = errors.New("cannot represent numeric constant as an int")
 var errConstOutOfRange = errors.New("numeric constant out of int64 range")
 
-// asInt64 returns the value as a 64-bit integer if possible, or returns an
+// AsInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible. The method will set expr.resInt to the value of
 // this int64 if it is successful, avoiding the need to call the method again.
-func (expr *NumVal) asInt64() (int64, error) {
+func (expr *NumVal) AsInt64() (int64, error) {
 	intVal, ok := expr.asConstantInt()
 	if !ok {
 		return 0, errConstNotInt
@@ -202,9 +202,9 @@ func (expr *NumVal) AvailableTypes() []Type {
 func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	switch typ {
 	case TypeInt:
-		// We may have already set expr.resInt in asInt64.
+		// We may have already set expr.resInt in AsInt64.
 		if expr.resInt == 0 {
-			if _, err := expr.asInt64(); err != nil {
+			if _, err := expr.AsInt64(); err != nil {
 				return nil, err
 			}
 		}
@@ -430,7 +430,7 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 				}
 				if token, ok := binaryShiftOpToToken[t.Operator]; ok {
 					if lInt, ok := l.asConstantInt(); ok {
-						if rInt64, err := r.asInt64(); err == nil && rInt64 >= 0 {
+						if rInt64, err := r.AsInt64(); err == nil && rInt64 >= 0 {
 							return &NumVal{Value: constant.Shift(lInt, token, uint(rInt64))}
 						}
 					}
@@ -490,41 +490,4 @@ func foldConstantLiterals(expr Expr) (Expr, error) {
 	v := constantFolderVisitor{}
 	expr, _ = WalkExpr(v, expr)
 	return expr, nil
-}
-
-type constantTypeVisitor struct {
-	cfv constantFolderVisitor
-}
-
-var _ Visitor = constantTypeVisitor{}
-
-func (constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case Constant:
-		typedConst, err := t.TypeCheck(nil, nil)
-		if err != nil {
-			panic(err)
-		}
-		return false, typedConst
-	}
-	return true, expr
-}
-
-func (constantTypeVisitor) VisitPost(expr Expr) (retExpr Expr) { return expr }
-
-// TypeConstants type checks all Constant literal expressions, resolving
-// them as the Datum representations of their values. Before doing so,
-// it first folds all numeric constants.
-//
-// This means that Constants will become TypedExprs so that they can be
-// used in contexts which expect a TypedExpr tree (such as Normalization).
-// As such, the function is primarily intended for use while testing
-// expressions where full type checking is not desired.
-//
-// TODO(nvanbenschoten) Can this visitor be preallocated (like normalizeVisitor)?
-func TypeConstants(expr Expr) (TypedExpr, error) {
-	v := constantTypeVisitor{}
-	expr, _ = WalkExpr(v.cfv, expr)
-	expr, _ = WalkExpr(v, expr)
-	return expr.(TypedExpr), nil
 }

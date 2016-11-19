@@ -278,7 +278,7 @@ func TestScanPlaceholder(t *testing.T) {
 		if id != PLACEHOLDER {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, id)
 		}
-		if i, err := lval.union.numVal().asInt64(); err != nil {
+		if i, err := lval.union.numVal().AsInt64(); err != nil {
 			t.Errorf("%s: expected success, but found %v", d.sql, err)
 		} else if d.expected != i {
 			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, i)

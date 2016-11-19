@@ -24,6 +24,7 @@ import (
 type fmtFlags struct {
 	showTypes        bool
 	showTableAliases bool
+	symbolicVars     bool
 	// tableNameNormalizer will be called on all NormalizableTableNames if it is
 	// non-nil. Its results will be used if they are non-nil, or ignored if they
 	// are nil.
@@ -45,6 +46,11 @@ var FmtQualify FmtFlags = &fmtFlags{showTableAliases: true}
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
 var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
+
+// FmtSymbolicVars instructs the pretty-printer to
+// print indexedVars using symbolic notation, to
+// disambiguate columns.
+var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.

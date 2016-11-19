@@ -472,68 +472,6 @@ func (src *dataSourceInfo) expandStar(
 	return columns, exprs, nil
 }
 
-// findUnaliasedColumn looks up the column specified by a VarName, not
-// taking column renames into account (but table renames will be taken
-// into account). That is, given a table "blah" with single column "y",
-// findUnaliasedColumn("y") returns a valid index even in the context
-// of:
-//     SELECT * FROM blah as foo(x)
-// If the VarName specifies a table name, only columns that have that
-// name as their source alias are considered. If the VarName does not
-// specify a table name, all columns in the data source are
-// considered.  If no column is found, invalidColIdx is returned with
-// no error.
-func (p *planDataSource) findUnaliasedColumn(c *parser.ColumnItem) (colIdx int, err error) {
-	colName := c.ColumnName.Normalize()
-	tableName := c.TableName.NormalizedTableName()
-
-	if tableName.Table() != "" {
-		tn, err := p.info.checkDatabaseName(tableName)
-		if err != nil {
-			return invalidColIdx, nil
-		}
-		tableName = tn
-	}
-
-	colIdx = invalidColIdx
-	planColumns := p.plan.Columns()
-
-	selCol := func(colIdx int, idx int) (int, error) {
-		col := planColumns[idx]
-		if parser.ReNormalizeName(col.Name) == colName {
-			if colIdx != invalidColIdx {
-				return invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
-			}
-			colIdx = idx
-		}
-		return colIdx, nil
-	}
-
-	if tableName.Table() == "" {
-		for idx := 0; idx < len(p.info.sourceColumns); idx++ {
-			colIdx, err = selCol(colIdx, idx)
-			if err != nil {
-				return colIdx, err
-			}
-		}
-	} else {
-		colRange, ok := p.info.sourceAliases[tableName]
-		if !ok {
-			// A table name is specified, but there is no column with this
-			// table name.
-			return invalidColIdx, nil
-		}
-		for _, idx := range colRange {
-			colIdx, err = selCol(colIdx, idx)
-			if err != nil {
-				return colIdx, err
-			}
-		}
-	}
-
-	return colIdx, nil
-}
-
 type multiSourceInfo []*dataSourceInfo
 
 // checkDatabaseName checks whether the given TableName is unambiguous
