@@ -545,14 +545,14 @@ func (node DefaultVal) Format(buf *bytes.Buffer, f FmtFlags) {
 // ResolvedType implements the TypedExpr interface.
 func (DefaultVal) ResolvedType() Type { return nil }
 
-var _ VariableExpr = &Placeholder{}
-
 // Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
 
 	typeAnnotation
 }
+
+var _ VariableExpr = &Placeholder{}
 
 // NewPlaceholder allocates a Placeholder.
 func NewPlaceholder(name string) *Placeholder {
@@ -652,11 +652,6 @@ func (*Subquery) Variable() {}
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Select)
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (*Subquery) ResolvedType() Type {
-	return TypeNull
 }
 
 // BinaryOperator represents a binary operator.

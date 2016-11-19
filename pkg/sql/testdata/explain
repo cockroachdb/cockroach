@@ -65,8 +65,8 @@ query ITTTT colnames
 EXPLAIN(VERBOSE) EXPLAIN(TRACE) SELECT 1
 ----
 Level  Type                  Description             Columns                                                                                                  Ordering
-0      select                                        ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +9,+"Span Pos"
-1      sort                  +Timestamp,+"Span Pos"  ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +9,+"Span Pos"
+0      select                                        ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
+1      sort                  +Timestamp,+"Span Pos"  ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
 2      explain               trace                   ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition, Timestamp)
 3      select                                        ("1")
 4      render/filter(debug)  from ()                 ("1")
