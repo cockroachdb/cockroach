@@ -51,24 +51,26 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		// been modified by upper layers.
 		rawExpr := groupBy[i]
 
-		// We do not need to fully analyze the GROUP BY expression here
-		// (as per analyzeExpr) because this is taken care of by addRender
-		// below.
-		resolved, err := p.resolveNames(groupBy[i], s.sourceInfo, s.ivarHelper)
+		expr := parser.StripParens(rawExpr)
+
+		// Check whether the GROUP BY clause refers to a rendered column
+		// specified in the original query.
+		col, err := p.colIndex(s.numOriginalCols, expr, "GROUP BY")
 		if err != nil {
 			return nil, err
 		}
 
-		// If a col index is specified, replace it with that expression first.
-		// NB: This is not a deep copy, and thus when extractAggregatesVisitor runs
-		// on s.render, the GroupBy expressions can contain wrapped IndexedVars.
-		// aggregateFuncHolder's Eval() method handles being called during grouping.
-		if col, err := colIndex(s.numOriginalCols, resolved); err != nil {
-			return nil, err
-		} else if col >= 0 {
+		if col != -1 {
 			groupBy[i] = s.render[col]
 			rawExpr = n.Exprs[col].Expr
 		} else {
+			// We do not need to fully analyze the GROUP BY expression here
+			// (as per analyzeExpr) because this is taken care of by addRender
+			// below.
+			resolved, _, err := p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
+			if err != nil {
+				return nil, err
+			}
 			groupBy[i] = resolved
 		}
 
