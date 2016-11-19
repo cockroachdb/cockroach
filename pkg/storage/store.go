@@ -2009,7 +2009,7 @@ func (s *Store) removeReplicaImpl(
 			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
 		}
 		for _, p := range rep.mu.proposals {
-			p.finish(resp)
+			p.Local.finish(resp)
 		}
 	}
 	// Clear the map.

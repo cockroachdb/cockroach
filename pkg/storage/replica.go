@@ -1630,9 +1630,10 @@ func (r *Replica) addReadOnlyCmd(
 		// described in #2231.
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
-	if result.intents != nil && len(*result.intents) > 0 {
-		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(*result.intents))
-		r.store.intentResolver.processIntentsAsync(r, *result.intents)
+	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
+		log.Eventf(ctx, "submitting %d intents to asynchronous processing",
+			len(*result.Local.intents))
+		r.store.intentResolver.processIntentsAsync(r, *result.Local.intents)
 	}
 	if pErr != nil {
 		log.ErrEvent(ctx, pErr.String())
@@ -1855,7 +1856,7 @@ func (r *Replica) requestToProposal(
 	}
 	return &EvalResult{
 		Request: &ba,
-		LocalEvalResult: LocalEvalResult{
+		Local: LocalEvalResult{
 			ctx:     ctx,
 			idKey:   idKey,
 			endCmds: endCmds,
@@ -1898,33 +1899,33 @@ func (r *Replica) evaluateProposal(
 	// applies.
 	result.Request = &ba
 
-	if result.Err != nil {
+	if result.Local.Err != nil {
 		// Failed proposals (whether they're failfast or not) can't have any
 		// EvalResult except what's whitelisted here.
-		result.LocalEvalResult = LocalEvalResult{
-			intents:            result.LocalEvalResult.intents,
-			Err:                r.maybeSetCorrupt(ctx, result.Err),
-			leaseMetricsResult: result.leaseMetricsResult,
+		result.Local = LocalEvalResult{
+			intents:            result.Local.intents,
+			Err:                r.maybeSetCorrupt(ctx, result.Local.Err),
+			leaseMetricsResult: result.Local.leaseMetricsResult,
 		}
 		if result.WriteBatch == nil {
-			result.ReplicatedEvalResult.Strip()
+			result.Replicated.Strip()
 		}
 	}
 
-	result.ctx = ctx
-	result.idKey = idKey
-	result.endCmds = endCmds
-	result.doneCh = make(chan proposalResult, 1)
-	result.IsLeaseRequest = ba.IsLeaseRequest()
-	result.IsFreeze = ba.IsFreeze()
-	result.IsConsistencyRelated = ba.IsConsistencyRelated()
-	result.Timestamp = ba.Timestamp
+	result.Local.ctx = ctx
+	result.Local.idKey = idKey
+	result.Local.endCmds = endCmds
+	result.Local.doneCh = make(chan proposalResult, 1)
+	result.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
+	result.Replicated.IsFreeze = ba.IsFreeze()
+	result.Replicated.IsConsistencyRelated = ba.IsConsistencyRelated()
+	result.Replicated.Timestamp = ba.Timestamp
 
 	if result.WriteBatch == nil {
-		if result.Err == nil {
+		if result.Local.Err == nil {
 			log.Fatalf(ctx, "proposal must fail fast with an error: %+v", ba)
 		}
-		return &result, result.Err
+		return &result, result.Local.Err
 	}
 
 	// If there is an error, it will be returned to the client when the
@@ -1946,15 +1947,15 @@ func (r *Replica) insertProposalLocked(result *EvalResult, originReplica roachpb
 	result.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	result.OriginReplica = originReplica
 	if log.V(4) {
-		log.Infof(result.ctx, "submitting proposal %x: maxLeaseIndex=%d",
-			result.idKey, result.MaxLeaseIndex)
+		log.Infof(result.Local.ctx, "submitting proposal %x: maxLeaseIndex=%d",
+			result.Local.idKey, result.MaxLeaseIndex)
 	}
 
-	if _, ok := r.mu.proposals[result.idKey]; ok {
+	if _, ok := r.mu.proposals[result.Local.idKey]; ok {
 		ctx := r.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "pending command already exists for %s", result.idKey)
+		log.Fatalf(ctx, "pending command already exists for %s", result.Local.idKey)
 	}
-	r.mu.proposals[result.idKey] = result
+	r.mu.proposals[result.Local.idKey] = result
 }
 
 func makeIDKey() storagebase.CmdIDKey {
@@ -2010,9 +2011,7 @@ func (r *Replica) propose(
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
-		r.handleEvalResult(
-			ctx, repDesc, pCmd.LocalEvalResult, pCmd.ReplicatedEvalResult,
-		)
+		r.handleEvalResult(ctx, repDesc, pCmd.Local, pCmd.Replicated)
 		if endCmds != nil {
 			endCmds.done(nil, pErr, false)
 		}
@@ -2027,7 +2026,7 @@ func (r *Replica) propose(
 	r.insertProposalLocked(pCmd, repDesc)
 
 	if err := r.submitProposalLocked(pCmd); err != nil {
-		delete(r.mu.proposals, pCmd.idKey)
+		delete(r.mu.proposals, pCmd.Local.idKey)
 		return nil, nil, err
 	}
 	// Must not use `pCmd` in the closure below as a proposal which is not
@@ -2039,13 +2038,13 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 		return ok
 	}
-	return pCmd.doneCh, tryAbandon, nil
+	return pCmd.Local.doneCh, tryAbandon, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
 // The replica lock must be held.
 func (r *Replica) submitProposalLocked(p *EvalResult) error {
-	p.proposedAtTicks = r.mu.ticks
+	p.Local.proposedAtTicks = r.mu.ticks
 
 	if r.mu.submitProposalFn != nil {
 		return r.mu.submitProposalFn(p)
@@ -2066,8 +2065,8 @@ func defaultSubmitProposalLocked(r *Replica, p *EvalResult) error {
 		OriginReplica: p.OriginReplica,
 		MaxLeaseIndex: p.MaxLeaseIndex,
 	}
-	if p.ReplicatedEvalResult != (storagebase.ReplicatedEvalResult{}) {
-		raftCmd.ReplicatedEvalResult = &p.ReplicatedEvalResult
+	if p.Replicated != (storagebase.ReplicatedEvalResult{}) {
+		raftCmd.ReplicatedEvalResult = &p.Replicated
 		raftCmd.WriteBatch = p.WriteBatch
 	}
 
@@ -2078,8 +2077,8 @@ func defaultSubmitProposalLocked(r *Replica, p *EvalResult) error {
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
 	var changeReplicas *storagebase.ChangeReplicas
-	if p.ReplicatedEvalResult != (storagebase.ReplicatedEvalResult{}) {
-		changeReplicas = p.ChangeReplicas
+	if p.Replicated != (storagebase.ReplicatedEvalResult{}) {
+		changeReplicas = p.Replicated.ChangeReplicas
 	} else {
 		if union, ok := p.Request.GetArg(roachpb.EndTransaction); ok {
 			ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
@@ -2099,7 +2098,7 @@ func defaultSubmitProposalLocked(r *Replica, p *EvalResult) error {
 			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
 
 		confChangeCtx := ConfChangeContext{
-			CommandID: string(p.idKey),
+			CommandID: string(p.Local.idKey),
 			Payload:   data,
 			Replica:   crt.Replica,
 		}
@@ -2123,12 +2122,12 @@ func defaultSubmitProposalLocked(r *Replica, p *EvalResult) error {
 
 	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if log.V(4) {
-			log.Infof(ctx, "proposing command %x", p.idKey)
+			log.Infof(ctx, "proposing command %x", p.Local.idKey)
 		}
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
 		r.unquiesceLocked()
-		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encodeRaftCommand(p.idKey, data))
+		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encodeRaftCommand(p.Local.idKey, data))
 	})
 }
 
@@ -2716,7 +2715,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
 		if p.MaxLeaseIndex > maxMustRetryCommandIndex {
-			if p.proposedAtTicks > refreshAtTicks {
+			if p.Local.proposedAtTicks > refreshAtTicks {
 				// The command was proposed too recently, don't bother reproprosing
 				// it yet. Note that if refreshAtDelta is 0, refreshAtTicks will be
 				// r.mu.ticks making the above condition impossible.
@@ -2728,8 +2727,8 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		delete(r.mu.proposals, idKey)
 		// The command's designated lease index range was filled up, so send it
 		// back to the proposer for a retry.
-		log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-		p.finish(proposalResult{ShouldRetry: true})
+		log.Eventf(p.Local.ctx, "retry proposal %x: %s", p.Local.idKey, reason)
+		p.Local.finish(proposalResult{ShouldRetry: true})
 		numShouldRetry++
 	}
 	if log.V(1) && (numShouldRetry > 0 || len(reproposals) > 0) {
@@ -2749,10 +2748,10 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	// TODO(tschottdorf): evaluate whether `r.mu.proposals` should be a list/slice.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
-		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
+		log.Eventf(p.Local.ctx, "re-submitting command %x to Raft: %s", p.Local.idKey, reason)
 		if err := r.submitProposalLocked(p); err != nil {
-			delete(r.mu.proposals, p.idKey)
-			p.finish(proposalResult{Err: roachpb.NewError(err)})
+			delete(r.mu.proposals, p.Local.idKey)
+			p.Local.finish(proposalResult{Err: roachpb.NewError(err)})
 		}
 	}
 }
@@ -3027,8 +3026,8 @@ func (r *Replica) processRaftCommand(
 	// TODO(tschottdorf): consider the Trace situation here.
 	if cmdProposedLocally {
 		// We initiated this command, so use the caller-supplied context.
-		ctx = cmd.ctx
-		cmd.ctx = nil // avoid confusion
+		ctx = cmd.Local.ctx
+		cmd.Local.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
@@ -3078,7 +3077,7 @@ func (r *Replica) processRaftCommand(
 			log.VEventf(
 				ctx, 1,
 				"retry proposal %x: applied at lease index %d, required <= %d",
-				cmd.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
+				cmd.Local.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
 			// Send to the client only at the end of this invocation. We can't
 			// use the context any more once we signal the client, so we make
@@ -3087,13 +3086,13 @@ func (r *Replica) processRaftCommand(
 			copyCmd := *cmd
 			// Clear the endCmds and doneCh so that EvalResult.finish()
 			// is a noop when invoked below.
-			cmd.endCmds = nil
-			cmd.doneCh = make(chan proposalResult, 1)
+			cmd.Local.endCmds = nil
+			cmd.Local.doneCh = make(chan proposalResult, 1)
 			defer func() {
 				// Assert against another defer trying to use the context after
 				// the client has been signaled.
 				ctx = nil
-				copyCmd.finish(proposalResult{ShouldRetry: true})
+				copyCmd.Local.finish(proposalResult{ShouldRetry: true})
 			}()
 		}
 	}
@@ -3145,17 +3144,17 @@ func (r *Replica) processRaftCommand(
 			// Note that this (intentionally) overwrites the LocalEvalResult,
 			// so we must salvage the done channel if we have a client waiting
 			// on it.
-			raftCmd.ReplicatedEvalResult = &innerResult.ReplicatedEvalResult
+			raftCmd.ReplicatedEvalResult = &innerResult.Replicated
 			writeBatch = innerResult.WriteBatch
 			if cmdProposedLocally {
-				endCmds := cmd.LocalEvalResult.endCmds
-				doneCh := cmd.LocalEvalResult.doneCh
-				cmd.LocalEvalResult = innerResult.LocalEvalResult
-				cmd.LocalEvalResult.endCmds = endCmds
-				cmd.LocalEvalResult.doneCh = doneCh
+				endCmds := cmd.Local.endCmds
+				doneCh := cmd.Local.doneCh
+				cmd.Local = innerResult.Local
+				cmd.Local.endCmds = endCmds
+				cmd.Local.doneCh = doneCh
 				// Avoid confusion by unsetting the context; we already have one
 				// on the stack which is the correct one to use.
-				cmd.ctx = nil
+				cmd.Local.ctx = nil
 			}
 			// Proposals which would failfast with proposer-evaluated KV now
 			// go this route, writing an empty entry and returning this error
@@ -3208,16 +3207,16 @@ func (r *Replica) processRaftCommand(
 				// for instance due to its log position) or the Replica is now
 				// corrupted.
 				response.Err = pErr
-			} else if cmd.Err != nil {
+			} else if cmd.Local.Err != nil {
 				// Everything went as expected, but this proposal should return
 				// an error to the client.
-				response.Err = cmd.Err
-			} else if cmd.Reply != nil {
-				response.Reply = cmd.Reply
+				response.Err = cmd.Local.Err
+			} else if cmd.Local.Reply != nil {
+				response.Reply = cmd.Local.Reply
 			} else {
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd)
 			}
-			lResult = cmd.LocalEvalResult
+			lResult = cmd.Local
 		}
 
 		// Handle the EvalResult, executing any side effects of the last
@@ -3229,7 +3228,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if cmdProposedLocally {
-		cmd.finish(response)
+		cmd.Local.finish(response)
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
 	}
@@ -3428,7 +3427,7 @@ func (r *Replica) applyRaftCommandInBatch(
 		// though still confusing).
 		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
 			var result EvalResult
-			result.Err = pErr
+			result.Local.Err = pErr
 			return result
 		}
 	}
@@ -3448,25 +3447,25 @@ func (r *Replica) applyRaftCommandInBatch(
 		var br *roachpb.BatchResponse
 		var btch engine.Batch
 		btch, ms, br, result, pErr = r.executeWriteBatch(ctx, idKey, ba)
-		result.Delta = ms
-		result.Batch = btch
-		result.Reply = br
-		result.Err = pErr
+		result.Replicated.Delta = ms
+		result.Local.Batch = btch
+		result.Local.Reply = br
+		result.Local.Err = pErr
 	}
 
-	if result.Err != nil && ba.IsWrite() {
-		if _, ok := result.Err.GetDetail().(*roachpb.TransactionRetryError); !ok {
+	if result.Local.Err != nil && ba.IsWrite() {
+		if _, ok := result.Local.Err.GetDetail().(*roachpb.TransactionRetryError); !ok {
 			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
 			// roachpb.Response{With->Or}Error.
-			result.Reply = &roachpb.BatchResponse{}
+			result.Local.Reply = &roachpb.BatchResponse{}
 			// Reset the batch to clear out partial execution. Don't set
 			// a WriteBatch to signal to the caller that we fail-fast this
 			// proposal.
-			result.Batch.Close()
-			result.Batch = nil
+			result.Local.Batch.Close()
+			result.Local.Batch = nil
 			// Restore the original txn's Writing bool if pd.Err specifies
 			// a transaction.
-			if txn := result.Err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
+			if txn := result.Local.Err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
 				txn.Writing = wasWriting
 				// TODO(tschottdorf): we're mutating the client's original
 				// memory erroneously when proposer-evaluated KV is on, failing
@@ -3485,17 +3484,17 @@ func (r *Replica) applyRaftCommandInBatch(
 		// mutations in the batch engine should still be applied so that
 		// intents are laid down in preparation for the retry. However,
 		// no reply is sent back.
-		result.Reply = nil
+		result.Local.Reply = nil
 	}
 
 	result.WriteBatch = &storagebase.WriteBatch{
-		Data: result.Batch.Repr(),
+		Data: result.Local.Batch.Repr(),
 	}
 	// TODO(tschottdorf): could keep this open and commit as the proposal
 	// applies, saving work on the proposer. Take care to discard batches
 	// properly whenever the command leaves `r.mu.proposals` without coming
 	// back.
-	result.Batch.Close()
+	result.Local.Batch.Close()
 	return result
 }
 
@@ -4070,8 +4069,8 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 		log.Errorf(ctx, "couldn't scan node liveness records in span %s: %s", span, pErr.GoError())
 		return
 	}
-	if result.intents != nil && len(*result.intents) > 0 {
-		log.Errorf(ctx, "unexpected intents on node liveness span %s: %+v", span, *result.intents)
+	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
+		log.Errorf(ctx, "unexpected intents on node liveness span %s: %+v", span, *result.Local.intents)
 		return
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
@@ -4154,11 +4153,11 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}
-	if result.intents != nil && len(*result.intents) > 0 {
+	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		r.store.intentResolver.processIntentsAsync(r, *result.intents)
+		r.store.intentResolver.processIntentsAsync(r, *result.Local.intents)
 		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows

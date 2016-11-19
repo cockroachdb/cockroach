@@ -120,12 +120,12 @@ func (lResult *LocalEvalResult) finish(pr proposalResult) {
 // c) data which isn't sent to the followers but the proposer needs for tasks
 //    it must run when the command has applied (such as resolving intents).
 type EvalResult struct {
-	LocalEvalResult
+	Local         LocalEvalResult
 	MaxLeaseIndex uint64
 	OriginReplica roachpb.ReplicaDescriptor
 	Request       *roachpb.BatchRequest
-	storagebase.ReplicatedEvalResult
-	WriteBatch *storagebase.WriteBatch
+	Replicated    storagebase.ReplicatedEvalResult
+	WriteBatch    *storagebase.WriteBatch
 }
 
 // coalesceBool ORs rhs into lhs and then zeroes rhs.
@@ -140,120 +140,113 @@ func coalesceBool(lhs *bool, rhs *bool) {
 //
 // The passed EvalResult must not be used once passed to Merge.
 func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
-	// ==================
-	// ReplicatedEvalResult.
-	// ==================
-	if q.State.RaftAppliedIndex != 0 {
+	if q.Replicated.State.RaftAppliedIndex != 0 {
 		return errors.New("must not specify RaftApplyIndex")
 	}
-	if q.State.LeaseAppliedIndex != 0 {
+	if q.Replicated.State.LeaseAppliedIndex != 0 {
 		return errors.New("must not specify RaftApplyIndex")
 	}
-	if p.State.Desc == nil {
-		p.State.Desc = q.State.Desc
-	} else if q.State.Desc != nil {
+	if p.Replicated.State.Desc == nil {
+		p.Replicated.State.Desc = q.Replicated.State.Desc
+	} else if q.Replicated.State.Desc != nil {
 		return errors.New("conflicting RangeDescriptor")
 	}
-	q.State.Desc = nil
+	q.Replicated.State.Desc = nil
 
-	if p.State.Lease == nil {
-		p.State.Lease = q.State.Lease
-	} else if q.State.Lease != nil {
+	if p.Replicated.State.Lease == nil {
+		p.Replicated.State.Lease = q.Replicated.State.Lease
+	} else if q.Replicated.State.Lease != nil {
 		return errors.New("conflicting Lease")
 	}
-	q.State.Lease = nil
+	q.Replicated.State.Lease = nil
 
-	if p.State.TruncatedState == nil {
-		p.State.TruncatedState = q.State.TruncatedState
-	} else if q.State.TruncatedState != nil {
+	if p.Replicated.State.TruncatedState == nil {
+		p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
+	} else if q.Replicated.State.TruncatedState != nil {
 		return errors.New("conflicting TruncatedState")
 	}
-	q.State.TruncatedState = nil
+	q.Replicated.State.TruncatedState = nil
 
-	p.State.GCThreshold.Forward(q.State.GCThreshold)
-	q.State.GCThreshold = hlc.ZeroTimestamp
-	p.State.TxnSpanGCThreshold.Forward(q.State.TxnSpanGCThreshold)
-	q.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+	p.Replicated.State.GCThreshold.Forward(q.Replicated.State.GCThreshold)
+	q.Replicated.State.GCThreshold = hlc.ZeroTimestamp
+	p.Replicated.State.TxnSpanGCThreshold.Forward(q.Replicated.State.TxnSpanGCThreshold)
+	q.Replicated.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
 
-	if (q.State.Stats != enginepb.MVCCStats{}) {
+	if (q.Replicated.State.Stats != enginepb.MVCCStats{}) {
 		return errors.New("must not specify Stats")
 	}
 
-	if p.State.Frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
-		p.State.Frozen = q.State.Frozen
-	} else if q.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+	if p.Replicated.State.Frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+		p.Replicated.State.Frozen = q.Replicated.State.Frozen
+	} else if q.Replicated.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
 		return errors.New("conflicting FrozenStatus")
 	}
-	q.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
+	q.Replicated.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
 
-	p.BlockReads = p.BlockReads || q.BlockReads
-	q.BlockReads = false
+	p.Replicated.BlockReads = p.Replicated.BlockReads || q.Replicated.BlockReads
+	q.Replicated.BlockReads = false
 
-	if p.Split == nil {
-		p.Split = q.Split
-	} else if q.Split != nil {
+	if p.Replicated.Split == nil {
+		p.Replicated.Split = q.Replicated.Split
+	} else if q.Replicated.Split != nil {
 		return errors.New("conflicting Split")
 	}
-	q.Split = nil
+	q.Replicated.Split = nil
 
-	if p.Merge == nil {
-		p.Merge = q.Merge
-	} else if q.Merge != nil {
+	if p.Replicated.Merge == nil {
+		p.Replicated.Merge = q.Replicated.Merge
+	} else if q.Replicated.Merge != nil {
 		return errors.New("conflicting Merge")
 	}
-	q.Merge = nil
+	q.Replicated.Merge = nil
 
-	if p.ChangeReplicas == nil {
-		p.ChangeReplicas = q.ChangeReplicas
-	} else if q.ChangeReplicas != nil {
+	if p.Replicated.ChangeReplicas == nil {
+		p.Replicated.ChangeReplicas = q.Replicated.ChangeReplicas
+	} else if q.Replicated.ChangeReplicas != nil {
 		return errors.New("conflicting ChangeReplicas")
 	}
-	q.ChangeReplicas = nil
+	q.Replicated.ChangeReplicas = nil
 
-	if p.ComputeChecksum == nil {
-		p.ComputeChecksum = q.ComputeChecksum
-	} else if q.ComputeChecksum != nil {
+	if p.Replicated.ComputeChecksum == nil {
+		p.Replicated.ComputeChecksum = q.Replicated.ComputeChecksum
+	} else if q.Replicated.ComputeChecksum != nil {
 		return errors.New("conflicting ComputeChecksum")
 	}
-	q.ComputeChecksum = nil
+	q.Replicated.ComputeChecksum = nil
 
-	// ==================
-	// LocalEvalResult.
-	// ==================
-
-	if p.raftLogSize == nil {
-		p.raftLogSize = q.raftLogSize
-	} else if q.raftLogSize != nil {
+	if p.Local.raftLogSize == nil {
+		p.Local.raftLogSize = q.Local.raftLogSize
+	} else if q.Local.raftLogSize != nil {
 		return errors.New("conflicting raftLogSize")
 	}
-	q.raftLogSize = nil
+	q.Local.raftLogSize = nil
 
-	if q.intents != nil {
-		if p.intents == nil {
-			p.intents = q.intents
+	if q.Local.intents != nil {
+		if p.Local.intents == nil {
+			p.Local.intents = q.Local.intents
 		} else {
-			*p.intents = append(*p.intents, *q.intents...)
+			*p.Local.intents = append(*p.Local.intents, *q.Local.intents...)
 		}
 	}
-	q.intents = nil
+	q.Local.intents = nil
 
-	if p.leaseMetricsResult == nil {
-		p.leaseMetricsResult = q.leaseMetricsResult
-	} else if q.leaseMetricsResult != nil {
+	if p.Local.leaseMetricsResult == nil {
+		p.Local.leaseMetricsResult = q.Local.leaseMetricsResult
+	} else if q.Local.leaseMetricsResult != nil {
 		return errors.New("conflicting leaseMetricsResult")
 	}
-	q.leaseMetricsResult = nil
+	q.Local.leaseMetricsResult = nil
 
-	if p.maybeGossipNodeLiveness == nil {
-		p.maybeGossipNodeLiveness = q.maybeGossipNodeLiveness
-	} else if q.maybeGossipNodeLiveness != nil {
+	if p.Local.maybeGossipNodeLiveness == nil {
+		p.Local.maybeGossipNodeLiveness = q.Local.maybeGossipNodeLiveness
+	} else if q.Local.maybeGossipNodeLiveness != nil {
 		return errors.New("conflicting maybeGossipNodeLiveness")
 	}
-	q.maybeGossipNodeLiveness = nil
+	q.Local.maybeGossipNodeLiveness = nil
 
-	coalesceBool(&p.gossipFirstRange, &q.gossipFirstRange)
-	coalesceBool(&p.maybeGossipSystemConfig, &q.maybeGossipSystemConfig)
-	coalesceBool(&p.maybeAddToSplitQueue, &q.maybeAddToSplitQueue)
+	coalesceBool(&p.Local.gossipFirstRange, &q.Local.gossipFirstRange)
+	coalesceBool(&p.Local.maybeGossipSystemConfig, &q.Local.maybeGossipSystemConfig)
+	coalesceBool(&p.Local.maybeAddToSplitQueue, &q.Local.maybeAddToSplitQueue)
 
 	if (q != EvalResult{}) {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))

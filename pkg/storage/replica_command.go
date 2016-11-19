@@ -219,7 +219,7 @@ func (r *Replica) executeCmd(
 func intentsToEvalResult(intents []roachpb.Intent, args roachpb.Request) EvalResult {
 	var pd EvalResult
 	if len(intents) > 0 {
-		pd.intents = &[]intentsWithArg{{args: args, intents: intents}}
+		pd.Local.intents = &[]intentsWithArg{{args: args, intents: intents}}
 	}
 	return pd
 }
@@ -872,7 +872,7 @@ func (r *Replica) runCommitTrigger(
 			if r.ContainsKey(keys.SystemConfigSpan.Key) {
 				if err := pd.MergeAndDestroy(
 					EvalResult{
-						LocalEvalResult: LocalEvalResult{
+						Local: LocalEvalResult{
 							maybeGossipSystemConfig: true,
 						},
 					},
@@ -888,7 +888,7 @@ func (r *Replica) runCommitTrigger(
 		if nlSpan := ct.ModifiedSpanTrigger.NodeLivenessSpan; nlSpan != nil {
 			if err := pd.MergeAndDestroy(
 				EvalResult{
-					LocalEvalResult: LocalEvalResult{
+					Local: LocalEvalResult{
 						maybeGossipNodeLiveness: nlSpan,
 					},
 				},
@@ -1219,8 +1219,8 @@ func (r *Replica) GC(
 	r.mu.Unlock()
 
 	var pd EvalResult
-	pd.State.GCThreshold = newThreshold
-	pd.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
+	pd.Replicated.State.GCThreshold = newThreshold
+	pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
 
 	if err := setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold); err != nil {
 		return reply, EvalResult{}, err
@@ -1608,15 +1608,15 @@ func (r *Replica) TruncateLog(
 	}
 
 	var pd EvalResult
-	pd.State.TruncatedState = tState
-	pd.raftLogSize = &raftLogSize
+	pd.Replicated.State.TruncatedState = tState
+	pd.Local.raftLogSize = &raftLogSize
 
 	return reply, pd, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
 }
 
 func newFailedLeaseTrigger() EvalResult {
 	var trigger EvalResult
-	trigger.leaseMetricsResult = new(bool)
+	trigger.Local.leaseMetricsResult = new(bool)
 	return trigger
 }
 
@@ -1779,15 +1779,15 @@ func (r *Replica) applyNewLeaseLocked(
 	//
 	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
 	// through potential consequences.
-	pd.BlockReads = !isExtension
-	pd.State.Lease = &lease
-	pd.leaseMetricsResult = proto.Bool(true)
-	pd.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
+	pd.Replicated.BlockReads = !isExtension
+	pd.Replicated.State.Lease = &lease
+	pd.Local.leaseMetricsResult = proto.Bool(true)
+	pd.Local.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
 	// TODO(tschottdorf): having traced the origin of this call back to
 	// rev 6281926, it seems that we should only be doing this when the
 	// lease holder has changed. However, it's likely not a big deal to
 	// do it always.
-	pd.maybeGossipSystemConfig = true
+	pd.Local.maybeGossipSystemConfig = true
 	return reply, pd, nil
 }
 
@@ -2005,7 +2005,7 @@ func (r *Replica) ComputeChecksum(
 		return roachpb.ComputeChecksumResponse{}, EvalResult{}, nil
 	}
 	var pd EvalResult
-	pd.ComputeChecksum = &args
+	pd.Replicated.ComputeChecksum = &args
 	return roachpb.ComputeChecksumResponse{}, pd, nil
 }
 
@@ -2133,9 +2133,9 @@ func (r *Replica) ChangeFrozen(
 
 	var pd EvalResult
 	if args.Frozen {
-		pd.State.Frozen = storagebase.ReplicaState_FROZEN
+		pd.Replicated.State.Frozen = storagebase.ReplicaState_FROZEN
 	} else {
-		pd.State.Frozen = storagebase.ReplicaState_UNFROZEN
+		pd.Replicated.State.Frozen = storagebase.ReplicaState_UNFROZEN
 	}
 	return resp, pd, nil
 }
@@ -2785,8 +2785,8 @@ func (r *Replica) splitTrigger(
 	rightDeltaMS.Subtract(leftDeltaMS)
 	var pd EvalResult
 	// This makes sure that no reads are happening in parallel; see #3148.
-	pd.BlockReads = true
-	pd.Split = &storagebase.Split{
+	pd.Replicated.BlockReads = true
+	pd.Replicated.Split = &storagebase.Split{
 		SplitTrigger: *split,
 		RHSDelta:     rightDeltaMS,
 	}
@@ -2984,8 +2984,8 @@ func (r *Replica) mergeTrigger(
 	*ms = mergedMS
 
 	var pd EvalResult
-	pd.BlockReads = true
-	pd.ReplicatedEvalResult.Merge = &storagebase.Merge{
+	pd.Replicated.BlockReads = true
+	pd.Replicated.Merge = &storagebase.Merge{
 		MergeTrigger: *merge,
 	}
 	return pd, nil
@@ -3001,7 +3001,7 @@ func (r *Replica) changeReplicasTrigger(
 	// if the split occurs concurrently with the replicas change the split
 	// can fail and won't retry until the next scanner cycle. Re-queuing
 	// the replica here removes that latency.
-	pd.maybeAddToSplitQueue = true
+	pd.Local.maybeAddToSplitQueue = true
 
 	// Gossip the first range whenever the range descriptor changes. We also
 	// gossip the first range whenever the lease holder changes, but that might
@@ -3009,15 +3009,15 @@ func (r *Replica) changeReplicasTrigger(
 	// replica was being removed. Note that we attempt the gossiping even from
 	// the removed replica in case it was the lease-holder and it is still
 	// holding the lease.
-	pd.gossipFirstRange = r.IsFirstRange()
+	pd.Local.gossipFirstRange = r.IsFirstRange()
 
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
 	cpy.NextReplicaID = change.NextReplicaID
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
-	pd.State.Desc = &cpy
-	pd.ChangeReplicas = &storagebase.ChangeReplicas{
+	pd.Replicated.State.Desc = &cpy
+	pd.Replicated.ChangeReplicas = &storagebase.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
 	}
 
