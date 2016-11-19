@@ -3742,6 +3742,19 @@ c_expr:
     $$.val = $1.unresolvedName()
   }
 | a_expr_const
+| '@' ICONST
+  {
+    colNum, err := $2.numVal().AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    if colNum < 1 || colNum > int64(MaxInt) {
+      sqllex.Error(fmt.Sprintf("invalid column ordinal: @%d", colNum))
+      return 1
+    }
+    $$.val = NewOrdinalReference(int(colNum-1))
+  }
 | PLACEHOLDER opt_indirection
   {
     placeholder := NewPlaceholder($1)
