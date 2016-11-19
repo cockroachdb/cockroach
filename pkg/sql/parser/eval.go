@@ -2271,13 +2271,6 @@ func (expr *RangeCond) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr *Subquery) Eval(_ *EvalContext) (Datum, error) {
-	// Subquery expressions are handled during subquery expansion.
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
-	return nil, errors.Errorf("unhandled type %T", expr)
-}
-
-// Eval implements the TypedExpr interface.
 func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {

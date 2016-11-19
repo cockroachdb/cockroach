@@ -1,0 +1,87 @@
+statement ok
+CREATE TABLE foo(a INT, b CHAR)
+
+statement ok
+INSERT INTO foo(a, b) VALUES (1,'c'), (2,'b'), (3,'a')
+
+query error invalid column ordinal
+SELECT @0 FROM foo
+
+query error invalid column ordinal
+SELECT @42 FROM foo
+
+query TI
+SELECT @2, @1 FROM foo
+----
+c 1
+b 2
+a 3
+
+# Traditional SQL ordinals refer to the render list.
+query TI
+SELECT b, a FROM foo ORDER BY 1
+----
+a 3
+b 2
+c 1
+
+# CockroachDB column ordinals refer to the data source.
+query TI
+SELECT b, a FROM foo ORDER BY @1
+----
+c 1
+b 2
+a 3
+
+query TI
+SELECT b, a FROM foo ORDER BY @1 % 2, a
+----
+b 2
+c 1
+a 3
+
+# Check that sort by ordinal picks up the existing render.
+query ITTTT
+EXPLAIN(VERBOSE) SELECT b, a FROM foo ORDER BY @1
+----
+0  select                                                         (b, a)                 +a
+1  sort           +a                                              (b, a)                 +a
+2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (b, a)
+3  scan           foo@primary -                                   (a, b, rowid[hidden])  +rowid,unique
+
+statement ok
+INSERT INTO foo(a, b) VALUES (4, 'c'), (5, 'c'), (6, 'c')
+
+query R
+SELECT SUM(a) AS s FROM foo GROUP BY @1 ORDER BY s
+----
+1
+2
+3
+4
+5
+6
+
+query R
+SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
+----
+2
+3
+16
+
+# Check that GROUP BY picks up column ordinals.
+query ITTTT
+EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
+----
+0  select                                                         (m)
+1  group          min(a) GROUP BY (@2)                            (m)
+2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (m, a)
+3  scan           foo@primary -                                   (a, b, rowid[hidden])  +rowid,unique
+
+query ITTTT
+EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2;
+----
+0  select                                                         (m)
+1  group          min(a) GROUP BY (@2)                            (m)
+2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (m, b)
+3  scan           foo@primary -                                   (a, b, rowid[hidden])  +rowid,unique
