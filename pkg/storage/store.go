@@ -2013,7 +2013,7 @@ func (s *Store) removeReplicaImpl(
 		}
 	}
 	// Clear the map.
-	rep.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	rep.mu.proposals = map[storagebase.CmdIDKey]*EvalResult{}
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()

@@ -780,7 +780,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(*ProposalData) error {
+	repl.mu.submitProposalFn = func(*EvalResult) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -1760,8 +1760,8 @@ func TestLeaseConcurrent(t *testing.T) {
 
 			var seen int32
 			tc.repl.mu.Lock()
-			tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-				ll, ok := cmd.Cmd.Requests[0].
+			tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
+				ll, ok := cmd.Request.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
 					return defaultSubmitProposalLocked(tc.repl, cmd)
@@ -5226,7 +5226,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock propose to return an roachpb.RaftGroupDeletedError.
-	submitProposalFn := func(*ProposalData) error {
+	submitProposalFn := func(*EvalResult) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 
@@ -5777,7 +5777,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if cancelEarly {
 				cancel()
 				tc.repl.mu.Lock()
-				tc.repl.mu.submitProposalFn = func(*ProposalData) error {
+				tc.repl.mu.submitProposalFn = func(*EvalResult) error {
 					return nil
 				}
 				tc.repl.mu.Unlock()
@@ -6014,7 +6014,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 
 	// Stop the command from being proposed to the raft group and being removed.
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *ProposalData) error { return nil }
+	repl.mu.submitProposalFn = func(p *EvalResult) error { return nil }
 	repl.mu.Unlock()
 
 	// Add a command to the pending list.
@@ -6035,8 +6035,8 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// re-proposed.
 	commandProposed := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *ProposalData) error {
-		if p.Cmd.Timestamp.Equal(magicTS) {
+	repl.mu.submitProposalFn = func(p *EvalResult) error {
+		if p.Request.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
@@ -6065,7 +6065,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
+	tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
 				cmd.MaxLeaseIndex = wrongLeaseIndex
@@ -6210,7 +6210,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	var seenCmds []int
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
+	tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(cmd.MaxLeaseIndex))
 		}
@@ -6328,12 +6328,12 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 	var dropProposals struct {
 		syncutil.Mutex
-		m map[*ProposalData]struct{}
+		m map[*EvalResult]struct{}
 	}
-	dropProposals.m = make(map[*ProposalData]struct{})
+	dropProposals.m = make(map[*EvalResult]struct{})
 
 	r.mu.Lock()
-	r.mu.submitProposalFn = func(pd *ProposalData) error {
+	r.mu.submitProposalFn = func(pd *EvalResult) error {
 		dropProposals.Lock()
 		defer dropProposals.Unlock()
 		if _, ok := dropProposals.m[pd]; !ok {
@@ -6383,7 +6383,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 
-		var reproposed []*ProposalData
+		var reproposed []*EvalResult
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
 		dropProposals.Lock()
 		for p := range dropProposals.m {

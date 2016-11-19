@@ -429,7 +429,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 				return "", err
 			}
 			ent.Data = nil
-			return fmt.Sprintf("%s by %v\n%s\n%s\n", &ent, cmd.OriginReplica, cmd.Cmd, &cmd), nil
+			return fmt.Sprintf("%s by %v\n%s\n%s\n", &ent, cmd.OriginReplica, cmd.BatchRequest, &cmd), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
@@ -441,7 +441,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if err := ctx.Unmarshal(cc.Context); err != nil {
 			return "", err
 		}
-		var cmd storagebase.ReplicatedProposalData
+		var cmd storagebase.ReplicatedEvalResult
 		if err := cmd.Unmarshal(ctx.Payload); err != nil {
 			return "", err
 		}
