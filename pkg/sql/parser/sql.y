@@ -361,7 +361,7 @@ func (u *sqlSymUnion) window() Window {
 
 %type <ValidationBehavior> opt_validate_behavior
 
-%type <*StrVal> opt_encoding_clause
+%type <*StrVal> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 
 %type <*StrVal> opt_password
 
@@ -597,7 +597,7 @@ func (u *sqlSymUnion) window() Window {
 
 %token <str>   KEY KEYS
 
-%token <str>   LATERAL
+%token <str>   LATERAL LC_CTYPE LC_COLLATE
 %token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
@@ -624,7 +624,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   START STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
-%token <str>   TABLE TABLES TEXT THEN
+%token <str>   TABLE TABLES TEMPLATE TEXT THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
@@ -2148,23 +2148,69 @@ transaction_iso_level:
   }
 
 create_database_stmt:
-  CREATE DATABASE name opt_encoding_clause
+  CREATE DATABASE name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
   {
-    $$.val = &CreateDatabase{Name: Name($3), Encoding: $4.strVal()}
+    $$.val = &CreateDatabase{
+      Name: Name($3),
+      Template: $5.strVal(),
+      Encoding: $6.strVal(),
+      Collate: $7.strVal(),
+      CType: $8.strVal(),
+    }
   }
-| CREATE DATABASE IF NOT EXISTS name opt_encoding_clause
+| CREATE DATABASE IF NOT EXISTS name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
   {
-    $$.val = &CreateDatabase{IfNotExists: true, Name: Name($6), Encoding: $7.strVal()}
+    $$.val = &CreateDatabase{
+      IfNotExists: true,
+      Name: Name($6),
+      Template: $8.strVal(),
+      Encoding: $9.strVal(),
+      Collate: $10.strVal(),
+      CType: $11.strVal(),
+    }
   }
 
-opt_encoding_clause:
-  ENCODING '=' SCONST
+opt_template_clause:
+  TEMPLATE opt_equal IDENT
   {
     $$.val = &StrVal{s: $3}
   }
-| /* EMPTY */ {
+| /* EMPTY */
+  {
     $$.val = (*StrVal)(nil)
   }
+
+opt_encoding_clause:
+  ENCODING opt_equal SCONST
+  {
+    $$.val = &StrVal{s: $3}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*StrVal)(nil)
+  }
+
+opt_lc_collate_clause:
+  LC_COLLATE opt_equal SCONST
+  {
+    $$.val = &StrVal{s: $3}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*StrVal)(nil)
+  }
+
+opt_lc_ctype_clause:
+  LC_CTYPE opt_equal SCONST
+  {
+    $$.val = &StrVal{s: $3}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*StrVal)(nil)
+  }
+
+opt_equal: '=' | ;
 
 // TODO(dan): While RETURNING is not supported with UPSERT and ON CONFLICT
 // (#6637), we do some gymnastics with the grammar to make the diagrams in the
@@ -4687,6 +4733,8 @@ unreserved_keyword:
 | ISOLATION
 | KEY
 | KEYS
+| LC_COLLATE
+| LC_CTYPE
 | LEVEL
 | LOCAL
 | LOW
@@ -4741,6 +4789,7 @@ unreserved_keyword:
 | SPLIT
 | SYSTEM
 | TABLES
+| TEMPLATE
 | TEXT
 | TRANSACTION
 | TRUNCATE
