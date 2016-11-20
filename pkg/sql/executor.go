@@ -507,6 +507,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	for len(stmts) > 0 {
 		// Each iteration consumes a transaction's worth of statements.
 
+		txnState.PreState = txnState.State
 		inTxn := txnState.State != NoTxn
 		execOpt := client.TxnExecOptions{
 			Clock: e.cfg.Clock,

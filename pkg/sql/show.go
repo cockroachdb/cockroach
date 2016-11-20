@@ -36,6 +36,7 @@ var varGen = map[string]func(p *planner) string{
 	`TIME ZONE`:                     func(p *planner) string { return p.session.Location.String() },
 	`TRANSACTION ISOLATION LEVEL`:   func(p *planner) string { return p.txn.Proto.Isolation.String() },
 	`TRANSACTION PRIORITY`:          func(p *planner) string { return p.txn.UserPriority.String() },
+	`TRANSACTION STATUS`:            func(p *planner) string { return p.session.TxnState.PreState.String() },
 	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
 }
 var varNames = func() []string {

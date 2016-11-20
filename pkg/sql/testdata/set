@@ -108,6 +108,7 @@ SYNTAX                         Modern
 TIME ZONE                      UTC
 TRANSACTION ISOLATION LEVEL    SERIALIZABLE
 TRANSACTION PRIORITY           NORMAL
+TRANSACTION STATUS             NoTxn
 
 statement ok
 SET APPLICATION_NAME = 'hello'

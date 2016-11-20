@@ -227,8 +227,9 @@ func (s TxnStateEnum) kvTxnIsOpen() bool {
 // For interactive transactions (open across batches of SQL commands sent by a
 // user), txnState is intended to be stored as part of a user Session.
 type txnState struct {
-	txn   *client.Txn
-	State TxnStateEnum
+	txn      *client.Txn
+	PreState TxnStateEnum
+	State    TxnStateEnum
 
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
