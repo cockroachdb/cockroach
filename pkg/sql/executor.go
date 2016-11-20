@@ -783,25 +783,30 @@ func (e *Executor) execStmtsInCurrentTxn(
 			// statements to not change from what the client sends.
 			stmtStrBefore = stmt.String()
 		}
+
 		var res Result
 		var err error
-		switch txnState.State {
-		case Open:
-			res, err = e.execStmtInOpenTxn(
-				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-				txnState)
-		case Aborted, RestartWait:
-			res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
-		case CommitWait:
-			res, err = e.execStmtInCommitWaitTxn(stmt, txnState)
-		default:
-			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
-		}
-		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
-			(e.cfg.TestingKnobs.StatementFilter != nil) {
-			if after := stmt.String(); after != stmtStrBefore {
-				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
-					stmtStrBefore, after))
+		if s, ok := stmt.(*parser.Show); ok && s.Name == stmtTxnStatus {
+			res, err = showTransactionState(txnState, implicitTxn, planMaker)
+		} else {
+			switch txnState.State {
+			case Open:
+				res, err = e.execStmtInOpenTxn(
+					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+					txnState)
+			case Aborted, RestartWait:
+				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
+			case CommitWait:
+				res, err = e.execStmtInCommitWaitTxn(stmt, txnState)
+			default:
+				panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
+			}
+			if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+				(e.cfg.TestingKnobs.StatementFilter != nil) {
+				if after := stmt.String(); after != stmtStrBefore {
+					panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
+						stmtStrBefore, after))
+				}
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)
@@ -1076,6 +1081,29 @@ func (e *Executor) noTransactionHelper(txnState *txnState) (Result, error) {
 	// Clean up the KV txn and set the SQL state to Aborted.
 	txnState.updateStateAndCleanupOnErr(errNoTransactionInProgress, e)
 	return Result{Err: errNoTransactionInProgress}, errNoTransactionInProgress
+}
+
+const (
+	stmtTxnStatus = `TRANSACTION STATUS`
+)
+
+// showTransactionState returns the state of current transaction.
+func showTransactionState(txnState *txnState, implicitTxn bool, planMaker *planner) (Result, error) {
+	var result Result
+	result.PGTag = (*parser.Show)(nil).StatementTag()
+	result.Type = (*parser.Show)(nil).StatementType()
+	result.Columns = ResultColumns{{Name: stmtTxnStatus, Typ: parser.TypeString}}
+	result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+	state := txnState.State
+	if implicitTxn {
+		state = NoTxn
+	}
+	if _, err := result.Rows.AddRow(parser.DTuple{parser.NewDString(state.String())}); err != nil {
+		result.Rows.Close()
+		result.Err = err
+		return result, err
+	}
+	return result, nil
 }
 
 // rollbackSQLTransaction rolls back a transaction. All errors are swallowed.

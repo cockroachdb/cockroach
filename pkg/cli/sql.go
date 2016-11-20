@@ -18,6 +18,7 @@ package cli
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -346,9 +348,36 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
+const (
+	txnUnknown = `unknown`
+)
+
+// refreshPrompts refresh the prompts of client depending on
+// the status of current transaction.
+func (c *cliState) refreshPrompts() {
+	query := makeQuery(`SHOW TRANSACTION STATUS;`)
+	rows, err := query(c.conn)
+	if err != nil {
+		c.fullPrompt, _ = preparePrompts(c.conn.url, txnUnknown)
+		return
+	}
+	if len(rows.Columns()) == 0 {
+		fmt.Fprintf(osStderr, "invalid transaction status")
+		return
+	}
+	val := make([]driver.Value, len(rows.Columns()))
+	err = rows.Next(val)
+	if err != nil {
+		fmt.Fprintf(osStderr, "invalid transaction status")
+		return
+	}
+	rowString := formatVal(val[0], false, false)
+	c.fullPrompt, _ = preparePrompts(c.conn.url, rowString)
+}
+
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
-func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
+func preparePrompts(dbURL string, txnState string) (fullPrompt string, continuePrompt string) {
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
 	fullPrompt = dbURL
@@ -368,7 +397,20 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 
 	continuePrompt = strings.Repeat(" ", len(fullPrompt)-1) + "-"
 
-	fullPrompt += "> "
+	switch txnState {
+	case sql.Aborted.String():
+		fullPrompt += " ERROR> "
+	case sql.CommitWait.String():
+		fullPrompt += "  DONE> "
+	case sql.RestartWait.String():
+		fullPrompt += " RETRY> "
+	case sql.Open.String():
+		fullPrompt += "  OPEN> "
+	case txnUnknown:
+		fullPrompt += " ?????> "
+	default:
+		fullPrompt += "> "
+	}
 	continuePrompt += "> "
 
 	return fullPrompt, continuePrompt
@@ -399,7 +441,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	c.partialLines = []string{}
 
 	if isInteractive {
-		c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
+		c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url, sql.NoTxn.String())
 
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
@@ -472,6 +514,7 @@ func (c *cliState) doStartLine(nextState cliStateEnum) cliStateEnum {
 	c.partialStmtsLen = 0
 
 	if isInteractive {
+		c.refreshPrompts()
 		c.ins.SetPrompt(c.fullPrompt)
 	}
 
@@ -554,7 +597,12 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 	// In this case ignore empty lines, and recognize "help" specially.
 	switch c.lastInputLine {
 	case "":
-		// Ignore empty lines, just continue reading.
+		// Ignore empty lines, just continue reading if it isn't interactive mode.
+		// Refresh the prompts if it's interactive mode.
+		if isInteractive {
+			c.refreshPrompts()
+			c.ins.SetPrompt(c.fullPrompt)
+		}
 		return startState
 
 	case "help", "quit", "exit":
