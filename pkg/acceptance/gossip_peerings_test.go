@@ -46,7 +46,7 @@ type checkGossipFunc func(map[string]gossip.Info) error
 func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration, f checkGossipFunc) {
 	err := util.RetryForDuration(d, func() error {
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			t.Fatalf("interrupted")
 			return nil
 		case <-time.After(1 * time.Second):
@@ -106,7 +106,9 @@ func TestGossipPeerings(t *testing.T) {
 	runTestOnConfigs(t, testGossipPeeringsInner)
 }
 
-func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testGossipPeeringsInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	num := c.NumNodes()
 
 	deadline := timeutil.Now().Add(cfg.Duration)
@@ -120,7 +122,7 @@ func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCo
 		checkGossip(t, c, waitTime, hasPeers(num))
 
 		// Restart the first node.
-		log.Infof(context.Background(), "restarting node 0")
+		log.Infof(ctx, "restarting node 0")
 		if err := c.Restart(0); err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +133,7 @@ func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCo
 		if num > 1 {
 			pickedNode = rand.Intn(num-1) + 1
 		}
-		log.Infof(context.Background(), "restarting node %d", pickedNode)
+		log.Infof(ctx, "restarting node %d", pickedNode)
 		if err := c.Restart(pickedNode); err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +150,9 @@ func TestGossipRestart(t *testing.T) {
 	runTestOnConfigs(t, testGossipRestartInner)
 }
 
-func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testGossipRestartInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
@@ -165,39 +169,39 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 	}
 
 	for timeutil.Now().Before(deadline) {
-		log.Infof(context.Background(), "waiting for initial gossip connections")
+		log.Infof(ctx, "waiting for initial gossip connections")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)
 		checkGossip(t, c, waitTime, hasSentinel)
 
-		log.Infof(context.Background(), "killing all nodes")
+		log.Infof(ctx, "killing all nodes")
 		for i := 0; i < num; i++ {
 			if err := c.Kill(i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		log.Infof(context.Background(), "restarting all nodes")
+		log.Infof(ctx, "restarting all nodes")
 		for i := 0; i < num; i++ {
 			if err := c.Restart(i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		log.Infof(context.Background(), "waiting for gossip to be connected")
+		log.Infof(ctx, "waiting for gossip to be connected")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)
 		checkGossip(t, c, waitTime, hasSentinel)
 
 		for i := 0; i < num; i++ {
-			db, dbStopper := c.NewClient(t, i)
+			db := c.NewClient(t, i)
 			if i == 0 {
-				if err := db.Del(context.Background(), "count"); err != nil {
+				if err := db.Del(ctx, "count"); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var kv client.KeyValue
-			if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := db.Txn(ctx, func(txn *client.Txn) error {
 				var err error
 				kv, err = txn.Inc("count", 1)
 				return err
@@ -206,7 +210,6 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 			} else if v := kv.ValueInt(); v != int64(i+1) {
 				t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
 			}
-			dbStopper.Stop()
 		}
 	}
 }

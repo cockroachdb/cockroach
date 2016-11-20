@@ -20,26 +20,30 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/docker/docker/api/types/container"
 )
 
-func runReferenceTestWithScript(t *testing.T, script string) {
+func runReferenceTestWithScript(ctx context.Context, t *testing.T, script string) {
 	containerConfig := container.Config{
 		Image: postgresTestImage,
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
-	if err := testDockerOneShot(t, "reference", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, "reference", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
 	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
-	if err := testDockerOneShot(t, "reference", containerConfig); err != nil {
+	if err := testDockerOneShot(ctx, t, "reference", containerConfig); err != nil {
 		t.Error(err)
 	}
 }
 
-func runReadWriteReferenceTest(t *testing.T, referenceBinPath string, backwardReferenceTest string) {
+func runReadWriteReferenceTest(
+	ctx context.Context, t *testing.T, referenceBinPath string, backwardReferenceTest string,
+) {
 	referenceTestScript := fmt.Sprintf(`
 set -xe
 mkdir /old
@@ -95,10 +99,12 @@ echo "Read the modified data using the reference binary again."
 bin=/%s/cockroach
 %s
 `, referenceBinPath, referenceBinPath, backwardReferenceTest)
-	runReferenceTestWithScript(t, referenceTestScript)
+	runReferenceTestWithScript(ctx, t, referenceTestScript)
 }
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	backwardReferenceTest := `
 touch out
 function finish() {
@@ -113,10 +119,12 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 diff new.everything old.everything
 $bin quit && wait
 `
-	runReadWriteReferenceTest(t, `bidirectional-reference-version`, backwardReferenceTest)
+	runReadWriteReferenceTest(ctx, t, `bidirectional-reference-version`, backwardReferenceTest)
 }
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	backwardReferenceTest := `
 touch out
 function finish() {
@@ -130,10 +138,12 @@ until $bin sql -e "SELECT 1"; do sleep 1; done
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 3, but this client only supports version 1"
 $bin quit && wait
 `
-	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
+	runReadWriteReferenceTest(ctx, t, `forward-reference-version`, backwardReferenceTest)
 }
 
 func TestDockerMigration_7429(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	script := `
 set -eux
 bin=/cockroach/cockroach
@@ -149,5 +159,5 @@ $bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference
 $bin debug kv scan
 $bin quit
 `
-	runReferenceTestWithScript(t, script)
+	runReferenceTestWithScript(ctx, t, script)
 }

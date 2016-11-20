@@ -43,13 +43,13 @@ func TestFreezeCluster(t *testing.T) {
 }
 
 func postFreeze(
-	c cluster.Cluster, freeze bool, timeout time.Duration,
+	ctx context.Context, c cluster.Cluster, freeze bool, timeout time.Duration,
 ) (serverpb.ClusterFreezeResponse, error) {
 	httpClient := cluster.HTTPClient
 	httpClient.Timeout = timeout
 
 	var resp serverpb.ClusterFreezeResponse
-	log.Infof(context.Background(), "requesting: freeze=%t, timeout=%s", freeze, timeout)
+	log.Infof(ctx, "requesting: freeze=%t, timeout=%s", freeze, timeout)
 	cb := func(v proto.Message) {
 		oldNum := resp.RangesAffected
 		resp = *v.(*serverpb.ClusterFreezeResponse)
@@ -57,7 +57,7 @@ func postFreeze(
 			resp.RangesAffected = oldNum
 		}
 		if (resp != serverpb.ClusterFreezeResponse{}) {
-			log.Infof(context.Background(), "%+v", &resp)
+			log.Infof(ctx, "%+v", &resp)
 		}
 	}
 	err := httputil.StreamJSON(
@@ -70,14 +70,16 @@ func postFreeze(
 	return resp, err
 }
 
-func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testFreezeClusterInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	minAffected := int64(server.ExpectedInitialRangeCount())
 
 	const long = time.Minute
 	const short = 10 * time.Second
 
 	mustPost := func(freeze bool) serverpb.ClusterFreezeResponse {
-		reply, err := postFreeze(c, freeze, long)
+		reply, err := postFreeze(ctx, c, freeze, long)
 		if err != nil {
 			t.Fatal(errors.Errorf("%v", err))
 		}
@@ -124,7 +126,7 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		// unknown fields, unfortunately in map order.
 		"unknown field .*",
 	}, "|")
-	if reply, err := postFreeze(c, true, short); !testutils.IsError(err, acceptErrs) {
+	if reply, err := postFreeze(ctx, c, true, short); !testutils.IsError(err, acceptErrs) {
 		t.Fatalf("expected timeout, got %v: %v", err, reply)
 	}
 
@@ -144,7 +146,7 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 	// a little bit) since each node tries to unfreeze everything when it
 	// starts.
 	if err := util.RetryForDuration(time.Minute, func() error {
-		if _, err := postFreeze(c, false, short); err != nil {
+		if _, err := postFreeze(ctx, c, false, short); err != nil {
 			if testutils.IsError(err, "404 Not Found") {
 				// It can take a bit until the endpoint is available.
 				return err
@@ -160,10 +162,9 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		//
 		// Perhaps the cluster updates the address too late after restarting
 		// the node.
-		db, dbStopper := c.NewClient(t, 0)
-		defer dbStopper.Stop()
+		db := c.NewClient(t, 0)
 
-		if _, err := db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := db.Scan(ctx, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -172,7 +173,7 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 	}
 
 	// Unfreezing again should be a no-op.
-	if reply, err := postFreeze(c, false, long); err != nil {
+	if reply, err := postFreeze(ctx, c, false, long); err != nil {
 		t.Fatal(err)
 	} else if reply.RangesAffected > 0 {
 		t.Fatalf("still %d frozen ranges", reply.RangesAffected)

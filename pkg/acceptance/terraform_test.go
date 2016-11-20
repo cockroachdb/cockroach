@@ -28,7 +28,7 @@ import (
 // the `terrafarm` package.
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
-	f := farmer(t, "baby")
+	f := farmer(t, "baby", stopper)
 	defer f.CollectLogs()
 	if err := f.Resize(1); err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestBuildBabyCluster(t *testing.T) {
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform'
 func TestFiveNodesAndWriters(t *testing.T) {
 	deadline := time.After(*flagDuration)
-	f := farmer(t, "write-5n5w")
+	f := farmer(t, "write-5n5w", stopper)
 	defer f.MustDestroy(t)
 	assertClusterUp := func() {
 		f.Assert(t)

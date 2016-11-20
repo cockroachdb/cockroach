@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -34,7 +36,9 @@ func TestAdminLossOfQuorum(t *testing.T) {
 	runTestOnConfigs(t, testAdminLossOfQuorumInner)
 }
 
-func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testAdminLossOfQuorumInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	if c.NumNodes() < 2 {
 		t.Logf("skipping test %s because given cluster has too few nodes", cfg.Name)
 		return

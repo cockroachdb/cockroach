@@ -38,14 +38,15 @@ func TestSingleKey(t *testing.T) {
 	runTestOnConfigs(t, testSingleKeyInner)
 }
 
-func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testSingleKeyInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	num := c.NumNodes()
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	initDB, initDBStopper := c.NewClient(t, 0)
-	defer initDBStopper.Stop()
-	if err := initDB.Put(context.TODO(), key, 0); err != nil {
+	initDB := c.NewClient(t, 0)
+	if err := initDB.Put(ctx, key, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -62,13 +63,12 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < num; i++ {
-		db, dbStopper := c.NewClient(t, i)
-		defer dbStopper.Stop()
+		db := c.NewClient(t, i)
 		go func() {
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+				err := db.Txn(ctx, func(txn *client.Txn) error {
 					minExp := atomic.LoadInt64(&expected)
 					r, err := txn.Get(key)
 					if err != nil {
@@ -104,7 +104,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	var results []result
 	for len(results) < num {
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			t.Fatalf("interrupted")
 		case r := <-resultCh:
 			if r.err != nil {
@@ -114,12 +114,12 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			log.Infof(context.Background(), "%d", atomic.LoadInt64(&expected))
+			log.Infof(ctx, "%d", atomic.LoadInt64(&expected))
 		}
 	}
 
 	// Verify the resulting value stored at the key is what we expect.
-	r, err := initDB.Get(context.TODO(), key)
+	r, err := initDB.Get(ctx, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,5 +131,5 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	for _, r := range results {
 		maxLatency = append(maxLatency, r.maxLatency)
 	}
-	log.Infof(context.Background(), "%d increments: %s", v, maxLatency)
+	log.Infof(ctx, "%d increments: %s", v, maxLatency)
 }

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,7 +37,9 @@ func TestEventLog(t *testing.T) {
 	runTestOnConfigs(t, testEventLogInner)
 }
 
-func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testEventLogInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	num := c.NumNodes()
 	if num <= 0 {
 		t.Fatalf("%d nodes in cluster", num)

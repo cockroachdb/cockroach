@@ -36,9 +36,8 @@ func TestPut(t *testing.T) {
 	runTestOnConfigs(t, testPutInner)
 }
 
-func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	db, dbStopper := c.NewClient(t, 0)
-	defer dbStopper.Stop()
+func testPutInner(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+	db := c.NewClient(t, 0)
 
 	errs := make(chan error, c.NumNodes())
 	start := timeutil.Now()
@@ -52,7 +51,7 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 			for timeutil.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)
 				v := value[:r.Intn(len(value))]
-				if err := db.Put(context.TODO(), fmt.Sprintf("%08d", k), v); err != nil {
+				if err := db.Put(ctx, fmt.Sprintf("%08d", k), v); err != nil {
 					errs <- err
 					return
 				}
@@ -64,7 +63,7 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	for i := 0; i < c.NumNodes(); {
 		baseCount := atomic.LoadInt64(&count)
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			t.Fatalf("interrupted")
 		case err := <-errs:
 			if err != nil {
@@ -75,12 +74,12 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 			// Periodically print out progress so that we know the test is still
 			// running.
 			loadedCount := atomic.LoadInt64(&count)
-			log.Infof(context.Background(), "%d (%d/s)", loadedCount, loadedCount-baseCount)
+			log.Infof(ctx, "%d (%d/s)", loadedCount, loadedCount-baseCount)
 			c.Assert(t)
-			cluster.Consistent(t, c)
+			cluster.Consistent(ctx, t, c)
 		}
 	}
 
 	elapsed := timeutil.Since(start)
-	log.Infof(context.Background(), "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(ctx, "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }

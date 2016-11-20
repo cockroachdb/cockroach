@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,13 +32,15 @@ func TestBuildInfo(t *testing.T) {
 	runTestOnConfigs(t, testBuildInfoInner)
 }
 
-func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testBuildInfoInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))
 
 	var details serverpb.DetailsResponse
 	util.SucceedsSoon(t, func() error {
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			t.Fatalf("interrupted")
 		default:
 		}

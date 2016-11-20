@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/iptables"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func mustGetHosts(t *testing.T, c cluster.Cluster) ([]iptables.IP, map[iptables.IP]int) {
@@ -50,28 +51,30 @@ func randomBidirectionalPartition(numNodes int) [][]int {
 
 // A NemesisFn runs a nemesis on the given cluster, shutting down in a timely
 // manner when the stop channel is closed.
-type NemesisFn func(t *testing.T, stop <-chan struct{}, c cluster.Cluster)
+type NemesisFn func(ctx context.Context, t *testing.T, c cluster.Cluster, stopper *stop.Stopper)
 
 // BidirectionalPartitionNemesis is a nemesis which randomly severs the network
 // symmetrically between two random groups of nodes. Partitioned and connected
 // mode take alternating turns, with random durations of up to 15s.
-func BidirectionalPartitionNemesis(t *testing.T, stop <-chan struct{}, c cluster.Cluster) {
+func BidirectionalPartitionNemesis(
+	ctx context.Context, t *testing.T, c cluster.Cluster, stopper *stop.Stopper,
+) {
 	randSec := func() time.Duration { return time.Duration(rand.Int63n(15 * int64(time.Second))) }
-	log.Infof(context.Background(), "cleaning up any previous rules")
+	log.Infof(ctx, "cleaning up any previous rules")
 	_ = restoreNetwork(t, c) // clean up any potential leftovers
-	log.Infof(context.Background(), "starting partition nemesis")
+	log.Infof(ctx, "starting partition nemesis")
 	for {
 		ch := make(chan struct{})
 		go func() {
 			select {
 			case <-time.After(randSec()):
-			case <-stop:
+			case <-stopper.ShouldStop():
 			}
 			close(ch)
 		}()
-		cutNetwork(t, c, ch, randomBidirectionalPartition(c.NumNodes())...)
+		cutNetwork(ctx, t, c, ch, randomBidirectionalPartition(c.NumNodes())...)
 		select {
-		case <-stop:
+		case <-stopper.ShouldStop():
 			return
 		case <-time.After(randSec()):
 		}
@@ -92,7 +95,9 @@ func restoreNetwork(t *testing.T, c cluster.Cluster) []error {
 	return errs
 }
 
-func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partitions ...[]int) {
+func cutNetwork(
+	ctx context.Context, t *testing.T, c cluster.Cluster, closer <-chan struct{}, partitions ...[]int,
+) {
 	defer func() {
 		if errs := restoreNetwork(t, c); len(errs) > 0 {
 			t.Fatalf("errors restoring the network: %+v", errs)
@@ -107,7 +112,7 @@ func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partiti
 		}
 		ipPartitions = append(ipPartitions, ipPartition)
 	}
-	log.Warningf(context.TODO(), "partitioning: %v (%v)", partitions, ipPartitions)
+	log.Warningf(ctx, "partitioning: %v (%v)", partitions, ipPartitions)
 	for host, cmds := range iptables.Rules(iptables.Bidirectional(ipPartitions...)) {
 		for _, cmd := range cmds {
 			if err := c.ExecRoot(addrsToNode[host], cmd); err != nil {
@@ -116,5 +121,5 @@ func cutNetwork(t *testing.T, c cluster.Cluster, closer <-chan struct{}, partiti
 		}
 	}
 	<-closer
-	log.Warningf(context.TODO(), "resolved all partitions")
+	log.Warningf(ctx, "resolved all partitions")
 }
