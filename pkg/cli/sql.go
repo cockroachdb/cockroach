@@ -353,9 +353,13 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 	// continued statement prompt is: "        -> "
 	fullPrompt = dbURL
 	if parsedURL, err := url.Parse(dbURL); err == nil {
+		username := ""
+		if parsedURL.User != nil {
+			username = parsedURL.User.Username()
+		}
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.
-		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User.Username(), parsedURL.Host)
+		fullPrompt = fmt.Sprintf("%s@%s", username, parsedURL.Host)
 	}
 
 	if len(fullPrompt) == 0 {
