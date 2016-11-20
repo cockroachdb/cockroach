@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 type keepClusterVar string
@@ -121,7 +122,9 @@ var flagCLTMinQPS = flag.Float64("clt.min-qps", 5.0,
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
-var stopper = make(chan struct{})
+var stopper = stop.NewStopper()
+
+var ctxTimeOut = 10 * time.Minute
 
 func runTests(m *testing.M) {
 	randutil.SeedForTests()
@@ -131,11 +134,11 @@ func runTests(m *testing.M) {
 		signal.Notify(sig, os.Interrupt)
 		<-sig
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 		default:
 			// There is a very tiny race here: the cluster might be closing
 			// the stopper simultaneously.
-			close(stopper)
+			stopper.Stop()
 		}
 	}()
 	os.Exit(m.Run())
@@ -162,7 +165,7 @@ func getRandomName() string {
 	return strings.Replace(namesgenerator.GetRandomName(0), "_", "", -1)
 }
 
-func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
+func farmer(t *testing.T, prefix string, stopper *stop.Stopper) *terrafarm.Farmer {
 	SkipUnlessRemote(t)
 
 	if *flagKeyName == "" {
@@ -245,6 +248,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		StateFile:   name + ".tfstate",
 		AddVars:     terraformVars,
 		KeepCluster: flagTFKeepCluster.String(),
+		Stopper:     stopper,
 	}
 	log.Infof(context.Background(), "logging to %s", logDir)
 	return f
@@ -301,21 +305,25 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 	return configs
 }
 
-type configTestRunner func(*testing.T, cluster.Cluster, cluster.TestConfig)
+type configTestRunner func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig)
 
 // runTestOnConfigs retrieves the full list of test configurations and runs the
 // passed in test against each on serially.
-func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
+func runTestOnConfigs(
+	t *testing.T, testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
+) {
 	cfgs := getConfigs(t)
 	if len(cfgs) == 0 {
 		t.Fatal("no config defined so most tests won't run")
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	for _, cfg := range cfgs {
 		func() {
-			cluster := StartCluster(t, cfg)
-			log.Infof(context.Background(), "cluster started successfully")
+			cluster := StartCluster(ctx, t, cfg)
+			log.Infof(ctx, "cluster started successfully")
 			defer cluster.AssertAndStop(t)
-			testFunc(t, cluster, cfg)
+			testFunc(ctx, t, cluster, cfg)
 		}()
 	}
 }
@@ -323,7 +331,7 @@ func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, c
 // StartCluster starts a cluster from the relevant flags. All test clusters
 // should be created through this command since it sets up the logging in a
 // unified way.
-func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
+func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	var completed bool
 	defer func() {
 		if !completed && c != nil {
@@ -331,7 +339,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 		}
 	}()
 	if *flagRemote {
-		f := farmer(t, "")
+		f := farmer(t, "", stopper)
 		c = f
 		if err := f.Resize(*flagNodes); err != nil {
 			t.Fatal(err)
@@ -355,7 +363,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 				panic("no caller matching Test(.*) in stack trace")
 			}(logDir)
 		}
-		l := cluster.CreateLocal(cfg, logDir, *flagPrivileged, stopper)
+		l := cluster.CreateLocal(ctx, cfg, logDir, *flagPrivileged, stopper)
 		l.Start()
 		c = l
 	}
@@ -367,13 +375,12 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	// Looks silly, but we actually start zero-node clusters in the
 	// reference tests.
 	if wantedReplicas > 0 {
-		ctx := context.TODO()
 
 		log.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
 
 		util.SucceedsSoon(t, func() error {
 			select {
-			case <-stopper:
+			case <-stopper.ShouldStop():
 				t.Fatal("interrupted")
 			case <-time.After(time.Second):
 			}
@@ -381,20 +388,16 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 			// Reconnect on every iteration; gRPC will eagerly tank the connection
 			// on transport errors. Always talk to node 0 because it's guaranteed
 			// to exist.
-			client, dbStopper := c.NewClient(t, 0)
-			defer dbStopper.Stop()
-
-			ctxWithTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
+			client := c.NewClient(t, 0)
 
 			var desc roachpb.RangeDescriptor
-			if err := client.GetProto(ctxWithTimeout, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
+			if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
 				return err
 			}
 			foundReplicas := len(desc.Replicas)
 
 			if log.V(1) {
-				log.Infof(ctxWithTimeout, "found %d replicas", foundReplicas)
+				log.Infof(ctx, "found %d replicas", foundReplicas)
 			}
 
 			if foundReplicas < wantedReplicas {
@@ -449,19 +452,19 @@ func defaultContainerConfig() container.Config {
 }
 
 // testDockerFail ensures the specified docker cmd fails.
-func testDockerFail(t *testing.T, name string, cmd []string) {
+func testDockerFail(ctx context.Context, t *testing.T, name string, cmd []string) {
 	containerConfig := defaultContainerConfig()
 	containerConfig.Cmd = cmd
-	if err := testDockerSingleNode(t, name, containerConfig); err == nil {
+	if err := testDockerSingleNode(ctx, t, name, containerConfig); err == nil {
 		t.Error("expected failure")
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
-func testDockerSuccess(t *testing.T, name string, cmd []string) {
+func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []string) {
 	containerConfig := defaultContainerConfig()
 	containerConfig.Cmd = cmd
-	if err := testDockerSingleNode(t, name, containerConfig); err != nil {
+	if err := testDockerSingleNode(ctx, t, name, containerConfig); err != nil {
 		t.Error(err)
 	}
 }
@@ -474,14 +477,16 @@ const (
 	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag
 )
 
-func testDocker(t *testing.T, num int32, name string, containerConfig container.Config) error {
+func testDocker(
+	ctx context.Context, t *testing.T, num int32, name string, containerConfig container.Config,
+) error {
 	SkipUnlessLocal(t)
 	cfg := cluster.TestConfig{
 		Name:     name,
 		Duration: *flagDuration,
 		Nodes:    []cluster.NodeConfig{{Count: num, Stores: []cluster.StoreConfig{{Count: 1}}}},
 	}
-	l := StartCluster(t, cfg).(*cluster.LocalCluster)
+	l := StartCluster(ctx, t, cfg).(*cluster.LocalCluster)
 	defer l.AssertAndStop(t)
 
 	if len(l.Nodes) > 0 {
@@ -491,10 +496,14 @@ func testDocker(t *testing.T, num int32, name string, containerConfig container.
 	return l.OneShot(postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
 }
 
-func testDockerSingleNode(t *testing.T, name string, containerConfig container.Config) error {
-	return testDocker(t, 1, name, containerConfig)
+func testDockerSingleNode(
+	ctx context.Context, t *testing.T, name string, containerConfig container.Config,
+) error {
+	return testDocker(ctx, t, 1, name, containerConfig)
 }
 
-func testDockerOneShot(t *testing.T, name string, containerConfig container.Config) error {
-	return testDocker(t, 0, name, containerConfig)
+func testDockerOneShot(
+	ctx context.Context, t *testing.T, name string, containerConfig container.Config,
+) error {
+	return testDocker(ctx, t, 0, name, containerConfig)
 }

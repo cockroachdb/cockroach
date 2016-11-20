@@ -383,14 +383,12 @@ type retryingDockerClient struct {
 func retry(
 	ctx context.Context,
 	attempts int,
-	timeout time.Duration,
 	name string,
 	retryErrorsRE string,
 	f func(ctx context.Context) error,
 ) error {
 	for i := 0; i < attempts; i++ {
-		timeoutCtx, _ := context.WithTimeout(ctx, timeout)
-		err := f(timeoutCtx)
+		err := f(ctx)
 		if err != nil {
 			if err == context.DeadlineExceeded {
 				continue
@@ -404,7 +402,7 @@ func retry(
 		}
 		return err
 	}
-	return fmt.Errorf("%s: exceeded %d tries with a %s timeout", name, attempts, timeout)
+	return fmt.Errorf("%s: exceeded %d tries", name, attempts)
 }
 
 func (cli retryingDockerClient) ContainerCreate(
@@ -415,7 +413,7 @@ func (cli retryingDockerClient) ContainerCreate(
 	containerName string,
 ) (container.ContainerCreateCreatedBody, error) {
 	var ret container.ContainerCreateCreatedBody
-	err := retry(ctx, cli.attempts, cli.timeout,
+	err := retry(ctx, cli.attempts,
 		"ContainerCreate", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
@@ -429,7 +427,7 @@ func (cli retryingDockerClient) ContainerCreate(
 func (cli retryingDockerClient) ContainerStart(
 	ctx context.Context, container string, options types.ContainerStartOptions,
 ) error {
-	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
+	return retry(ctx, cli.attempts, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
 			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, options)
 		})
@@ -438,14 +436,14 @@ func (cli retryingDockerClient) ContainerStart(
 func (cli retryingDockerClient) ContainerRemove(
 	ctx context.Context, container string, options types.ContainerRemoveOptions,
 ) error {
-	return retry(ctx, cli.attempts, cli.timeout, "ContainerRemove", "No such container",
+	return retry(ctx, cli.attempts, "ContainerRemove", "No such container",
 		func(timeoutCtx context.Context) error {
 			return cli.resilientDockerClient.ContainerRemove(timeoutCtx, container, options)
 		})
 }
 
 func (cli retryingDockerClient) ContainerKill(ctx context.Context, container, signal string) error {
-	return retry(ctx, cli.attempts, cli.timeout, "ContainerKill",
+	return retry(ctx, cli.attempts, "ContainerKill",
 		"Container .* is not running",
 		func(timeoutCtx context.Context) error {
 			return cli.resilientDockerClient.ContainerKill(timeoutCtx, container, signal)
@@ -454,7 +452,7 @@ func (cli retryingDockerClient) ContainerKill(ctx context.Context, container, si
 
 func (cli retryingDockerClient) ContainerWait(ctx context.Context, container string) (int64, error) {
 	var ret int64
-	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerWait", matchNone,
+	return ret, retry(ctx, cli.attempts, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.resilientDockerClient.ContainerWait(timeoutCtx, container)
@@ -467,7 +465,7 @@ func (cli retryingDockerClient) ImageList(
 	ctx context.Context, options types.ImageListOptions,
 ) ([]types.ImageSummary, error) {
 	var ret []types.ImageSummary
-	return ret, retry(ctx, cli.attempts, cli.timeout, "ImageList", matchNone,
+	return ret, retry(ctx, cli.attempts, "ImageList", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.resilientDockerClient.ImageList(timeoutCtx, options)
@@ -479,16 +477,11 @@ func (cli retryingDockerClient) ImageList(
 func (cli retryingDockerClient) ImagePull(
 	ctx context.Context, ref string, options types.ImagePullOptions,
 ) (io.ReadCloser, error) {
-	// Image pulling is potentially slow. Make sure the timeout is sufficient.
-	timeout := cli.timeout
-	if minTimeout := 2 * time.Minute; timeout < minTimeout {
-		timeout = minTimeout
-	}
 	var ret io.ReadCloser
-	return ret, retry(ctx, cli.attempts, timeout, "ImagePull", matchNone,
-		func(timeoutCtx context.Context) error {
+	return ret, retry(ctx, cli.attempts, "ImagePull", matchNone,
+		func(ctx context.Context) error {
 			var err error
-			ret, err = cli.resilientDockerClient.ImagePull(timeoutCtx, ref, options)
+			ret, err = cli.resilientDockerClient.ImagePull(ctx, ref, options)
 			_ = ret // silence incorrect unused warning
 			return err
 		})

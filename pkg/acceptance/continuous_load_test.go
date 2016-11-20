@@ -110,9 +110,8 @@ func (cl continuousLoadTest) startLoad(f *terrafarm.Farmer) error {
 // generator constitutes a test failure. The test runs for the duration given
 // by the `test.timeout` flag, minus the time it takes to reliably tear down
 // the test cluster.
-func (cl continuousLoadTest) Run(t *testing.T) {
-	f := farmer(t, cl.Prefix+cl.shortTestTimeout())
-	ctx := context.Background()
+func (cl continuousLoadTest) Run(ctx context.Context, t *testing.T) {
+	f := farmer(t, cl.Prefix+cl.shortTestTimeout(), stopper)
 	// If the timeout flag was set, calculate an appropriate lower timeout by
 	// subtracting expected cluster creation and teardown times to allow for
 	// proper shutdown at the end of the test.
@@ -125,10 +124,6 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 		// larger duration to account for outliers and setup time.
 		if setupTeardownDuration := 10 * time.Minute; timeout <= setupTeardownDuration {
 			t.Fatalf("test.timeout must be greater than create/destroy interval %s", setupTeardownDuration)
-		} else {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, timeout-setupTeardownDuration)
-			defer cancel()
 		}
 	}
 	if deadline, ok := ctx.Deadline(); ok {
@@ -192,7 +187,7 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 				t.Error(err)
 			}
 			return
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			t.Fatal("interrupted")
 		}
 	}
@@ -223,21 +218,25 @@ func (cl continuousLoadTest) assert(t *testing.T, f *terrafarm.Farmer) {
 }
 
 func TestContinuousLoad_BlockWriter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	continuousLoadTest{
 		Prefix:              "bwriter",
 		BenchmarkPrefix:     "BenchmarkBlockWriter",
 		NumNodes:            *flagNodes,
 		Process:             "block_writer",
 		CockroachDiskSizeGB: 200,
-	}.Run(t)
+	}.Run(ctx, t)
 }
 
 func TestContinuousLoad_Photos(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	continuousLoadTest{
 		Prefix:              "photos",
 		BenchmarkPrefix:     "BenchmarkPhotos",
 		NumNodes:            *flagNodes,
 		Process:             "photos",
 		CockroachDiskSizeGB: 200,
-	}.Run(t)
+	}.Run(ctx, t)
 }

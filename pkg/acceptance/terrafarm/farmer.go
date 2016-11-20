@@ -62,6 +62,7 @@ type Farmer struct {
 	AddVars     map[string]string
 	KeepCluster string
 	nodes       []string
+	Stopper     *stop.Stopper
 }
 
 func (f *Farmer) refresh() {
@@ -210,17 +211,16 @@ func (f *Farmer) Exec(i int, cmd string) error {
 }
 
 // NewClient implements the Cluster interface.
-func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
+func (f *Farmer) NewClient(t *testing.T, i int) *client.DB {
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
 		Insecure: true,
 		User:     security.NodeUser,
-	}, nil, stopper)
+	}, nil, f.Stopper)
 	conn, err := rpcContext.GRPCDial(f.Addr(i, base.DefaultPort))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(client.NewSender(conn)), stopper
+	return client.NewDB(client.NewSender(conn))
 }
 
 // PGUrl returns a URL string for the given node postgres server.

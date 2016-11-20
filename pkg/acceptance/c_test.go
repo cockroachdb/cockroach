@@ -19,11 +19,15 @@ package acceptance
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestDockerC(t *testing.T) {
-	testDockerSuccess(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7", 1)})
-	testDockerFail(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
+	testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7", 1)})
+	testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
 }
 
 const c = `

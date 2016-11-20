@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 )
@@ -76,7 +78,9 @@ type mtClient struct {
 	ID int
 }
 
-func testMonotonicInsertsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testMonotonicInsertsInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	var clients []mtClient
 	for i := 0; i < c.NumNodes(); i++ {
 		clients = append(clients, mtClient{ID: i, DB: makePGClient(t, c.PGUrl(i))})
@@ -197,7 +201,7 @@ RETURNING val, sts, node, tb`,
 	for {
 		select {
 		case sem <- struct{}{}:
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			return
 		case <-timer:
 			return

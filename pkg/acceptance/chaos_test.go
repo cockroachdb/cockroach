@@ -159,7 +159,9 @@ func verifyAccounts(t *testing.T, client *testClient) {
 }
 
 // Continuously transfers money until done().
-func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) {
+func transferMoneyLoop(
+	ctx context.Context, idx int, state *testState, numAccounts, maxTransfer int,
+) {
 	client := &state.clients[idx]
 	for !state.done() {
 		if err := transferMoney(client, numAccounts, maxTransfer); err != nil {
@@ -174,18 +176,24 @@ func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) 
 			atomic.AddUint64(&client.count, 1)
 		}
 	}
-	log.Infof(context.Background(), "client %d shutting down", idx)
+	log.Infof(ctx, "client %d shutting down", idx)
 	state.errChan <- nil
 }
 
 // chaosMonkey picks a set of nodes and restarts them. If stopClients is set
 // all the clients are locked before the nodes are restarted.
-func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNodes func() []int) {
+func chaosMonkey(
+	ctx context.Context,
+	state *testState,
+	c cluster.Cluster,
+	stopClients bool,
+	pickNodes func() []int,
+) {
 	defer close(state.teardown)
 	for curRound := uint64(1); !state.done(); curRound++ {
 		atomic.StoreUint64(&state.monkeyIteration, curRound)
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			return
 		default:
 		}
@@ -199,18 +207,18 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 				state.clients[i].Lock()
 			}
 		}
-		log.Infof(context.Background(), "round %d: restarting nodes %v", curRound, nodes)
+		log.Infof(ctx, "round %d: restarting nodes %v", curRound, nodes)
 		for _, i := range nodes {
 			// Two early exit conditions.
 			select {
-			case <-stopper:
+			case <-stopper.ShouldStop():
 				break
 			default:
 			}
 			if state.done() {
 				break
 			}
-			log.Infof(context.Background(), "round %d: restarting %d", curRound, i)
+			log.Infof(ctx, "round %d: restarting %d", curRound, i)
 			if err := c.Kill(i); err != nil {
 				state.t.Error(err)
 			}
@@ -241,7 +249,7 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		}
 
 		// Sleep until at least one client is writing successfully.
-		log.Warningf(context.Background(), "round %d: monkey sleeping while cluster recovers...", curRound)
+		log.Warningf(ctx, "round %d: monkey sleeping while cluster recovers...", curRound)
 		for !state.done() && !madeProgress() {
 			time.Sleep(time.Second)
 		}
@@ -249,12 +257,12 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		// TODO(peter): Disabled until https://github.com/grpc/grpc-go/pull/818 (or
 		// similar) goes in.
 		// cluster.Consistent(state.t, c)
-		log.Warningf(context.Background(), "round %d: cluster recovered", curRound)
+		log.Warningf(ctx, "round %d: cluster recovered", curRound)
 	}
 }
 
 // Wait until all clients have stopped.
-func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
+func waitClientsStop(ctx context.Context, num int, state *testState, stallDuration time.Duration) {
 	prevRound := atomic.LoadUint64(&state.monkeyIteration)
 	stallTime := timeutil.Now().Add(stallDuration)
 	var prevOutput string
@@ -262,7 +270,7 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 	for numShutClients := 0; numShutClients < num; {
 		select {
 		case <-state.teardown:
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			state.t.Fatal("interrupted")
 
 		case err := <-state.errChan:
@@ -297,7 +305,7 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 			}
 			// This just stops the logs from being a bit too spammy.
 			if newOutput != prevOutput {
-				log.Infof(context.Background(), newOutput)
+				log.Infof(ctx, newOutput)
 				prevOutput = newOutput
 			}
 		}
@@ -313,7 +321,9 @@ func TestClusterRecovery(t *testing.T) {
 	runTestOnConfigs(t, testClusterRecoveryInner)
 }
 
-func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testClusterRecoveryInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	num := c.NumNodes()
 
 	// One client for each node.
@@ -332,7 +342,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 		state.clients[i].Lock()
 		state.initClient(t, c, i)
 		state.clients[i].Unlock()
-		go transferMoneyLoop(i, &state, *numAccounts, *maxTransfer)
+		go transferMoneyLoop(ctx, i, &state, *numAccounts, *maxTransfer)
 	}
 
 	defer func() {
@@ -341,13 +351,13 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
-	log.Warningf(context.Background(), "monkey starts (seed %d)", seed)
+	log.Warningf(ctx, "monkey starts (seed %d)", seed)
 	pickNodes := func() []int {
 		return rnd.Perm(num)[:rnd.Intn(num)+1]
 	}
-	go chaosMonkey(&state, c, true, pickNodes)
+	go chaosMonkey(ctx, &state, c, true, pickNodes)
 
-	waitClientsStop(num, &state, stall)
+	waitClientsStop(ctx, num, &state, stall)
 
 	// Verify accounts.
 	verifyAccounts(t, &state.clients[0])
@@ -358,7 +368,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 	for _, c := range counts {
 		count += c
 	}
-	log.Infof(context.Background(), "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(ctx, "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }
 
 // TestNodeRestart starts up a cluster with an "accounts" table.
@@ -370,7 +380,9 @@ func TestNodeRestart(t *testing.T) {
 	runTestOnConfigs(t, testNodeRestartInner)
 }
 
-func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testNodeRestartInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	num := c.NumNodes()
 	if minNum := 3; num < minNum {
 		t.Skipf("need at least %d nodes, got %d", minNum, num)
@@ -392,7 +404,7 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	client.Lock()
 	client.db = makePGClient(t, c.PGUrl(num-1))
 	client.Unlock()
-	go transferMoneyLoop(0, &state, *numAccounts, *maxTransfer)
+	go transferMoneyLoop(ctx, 0, &state, *numAccounts, *maxTransfer)
 
 	defer func() {
 		<-state.teardown
@@ -400,18 +412,18 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
-	log.Warningf(context.Background(), "monkey starts (seed %d)", seed)
+	log.Warningf(ctx, "monkey starts (seed %d)", seed)
 	pickNodes := func() []int {
 		return []int{rnd.Intn(num - 1)}
 	}
-	go chaosMonkey(&state, c, false, pickNodes)
+	go chaosMonkey(ctx, &state, c, false, pickNodes)
 
-	waitClientsStop(1, &state, stall)
+	waitClientsStop(ctx, 1, &state, stall)
 
 	// Verify accounts.
 	verifyAccounts(t, client)
 
 	elapsed := timeutil.Since(start)
 	count := atomic.LoadUint64(&client.count)
-	log.Infof(context.Background(), "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(ctx, "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }

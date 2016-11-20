@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -35,15 +34,13 @@ import (
 func TestPartitionNemesis(t *testing.T) {
 	t.Skip("only enabled for manually playing with the partitioning agent")
 	SkipUnlessLocal(t)
-	runTestOnConfigs(t, func(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-		s := stop.NewStopper()
-		defer s.Stop()
-		s.RunWorker(func() {
-			BidirectionalPartitionNemesis(t, s.ShouldQuiesce(), c)
+	runTestOnConfigs(t, func(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+		stopper.RunWorker(func() {
+			BidirectionalPartitionNemesis(ctx, t, c, stopper)
 		})
 		select {
 		case <-time.After(*flagDuration):
-		case <-stopper:
+		case <-stopper.ShouldStop():
 		}
 	})
 }
@@ -166,27 +163,25 @@ func (b *Bank) Invoke(i int) {
 }
 
 func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
-	return func(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+	return func(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 		const (
 			concurrency = 5
 			accounts    = 10
 		)
 		deadline := timeutil.Now().Add(cfg.Duration)
-		s := stop.NewStopper()
-		defer s.Stop()
 		b := NewBank(t, c)
 		b.Init(accounts, 10)
 		for _, nemesis := range nemeses {
-			s.RunWorker(func() {
-				nemesis(t, s.ShouldQuiesce(), c)
+			stopper.RunWorker(func() {
+				nemesis(ctx, t, c, stopper)
 			})
 		}
 		for i := 0; i < concurrency; i++ {
 			localI := i
-			if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
+			if err := stopper.RunAsyncTask(ctx, func(_ context.Context) {
 				for timeutil.Now().Before(deadline) {
 					select {
-					case <-s.ShouldQuiesce():
+					case <-stopper.ShouldQuiesce():
 						return
 					default:
 					}
@@ -197,10 +192,10 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 			}
 		}
 		select {
-		case <-stopper:
+		case <-stopper.ShouldStop():
 		case <-time.After(cfg.Duration):
 		}
-		log.Warningf(context.Background(), "finishing test")
+		log.Warningf(ctx, "finishing test")
 		b.Verify()
 	}
 }

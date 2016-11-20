@@ -19,11 +19,15 @@ package acceptance
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestDockerNodeJS(t *testing.T) {
-	testDockerSuccess(t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", "3", 1)})
-	testDockerFail(t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", `'a'`, 1)})
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
+	testDockerSuccess(ctx, t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", "3", 1)})
+	testDockerFail(ctx, t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", `'a'`, 1)})
 }
 
 const nodeJS = `

@@ -135,7 +135,7 @@ func (at *allocatorTest) Cleanup(t *testing.T) {
 }
 
 func (at *allocatorTest) Run(t *testing.T) {
-	at.f = farmer(t, at.Prefix)
+	at.f = farmer(t, at.Prefix, stopper)
 
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
@@ -373,7 +373,7 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 			assertTimer.Read = true
 			at.f.Assert(t)
 			assertTimer.Reset(time.Minute)
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			return errors.New("interrupted")
 		}
 	}
