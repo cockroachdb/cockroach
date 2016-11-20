@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -62,15 +61,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for i := 0; i < newRanges; i++ {
 		tableID := keys.MaxReservedDescID + i + 1
 		splitKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableID)))
-		for {
-			if _, _, err := tc.SplitRange(splitKey); err != nil {
-				if testutils.IsError(err, "split at key .* failed: conflict updating range descriptors") ||
-					testutils.IsError(err, "range is already split at key") {
-					continue
-				}
-				t.Fatal(err)
-			}
-			break
+		if _, _, err := tc.SplitRange(splitKey); err != nil {
+			t.Fatal(err)
 		}
 	}
 
