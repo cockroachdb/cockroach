@@ -19,11 +19,14 @@ package acceptance
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestDockerPython(t *testing.T) {
-	testDockerSuccess(t, "python", []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
-	testDockerFail(t, "python", []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})
+	ctx := context.Background()
+	testDockerSuccess(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
+	testDockerFail(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})
 }
 
 const python = `

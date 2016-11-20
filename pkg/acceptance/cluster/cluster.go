@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.
@@ -34,47 +33,46 @@ type Cluster interface {
 	// NumNodes returns the number of nodes in the cluster, running or not.
 	NumNodes() int
 	// NewClient returns a kv client for the given node.
-	NewClient(*testing.T, int) (*client.DB, *stop.Stopper)
+	NewClient(context.Context, *testing.T, int) *client.DB
 	// PGUrl returns a URL string for the given node postgres server.
-	PGUrl(int) string
+	PGUrl(context.Context, int) string
 	// InternalIP returns the address used for inter-node communication.
-	InternalIP(i int) net.IP
+	InternalIP(ctx context.Context, i int) net.IP
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.
-	Assert(*testing.T)
+	Assert(context.Context, *testing.T)
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
-	AssertAndStop(*testing.T)
+	AssertAndStop(context.Context, *testing.T)
 	// ExecRoot executes the given command with super-user privileges.
-	ExecRoot(i int, cmd []string) error
+	ExecRoot(ctx context.Context, i int, cmd []string) error
 	// Kill terminates the cockroach process running on the given node number.
 	// The given integer must be in the range [0,NumNodes()-1].
-	Kill(int) error
+	Kill(context.Context, int) error
 	// Restart terminates the cockroach process running on the given node
 	// number, unless it is already stopped, and restarts it.
 	// The given integer must be in the range [0,NumNodes()-1].
-	Restart(int) error
+	Restart(context.Context, int) error
 	// URL returns the HTTP(s) endpoint.
-	URL(int) string
+	URL(context.Context, int) string
 	// Addr returns the host and port from the node in the format HOST:PORT.
-	Addr(i int, port string) string
+	Addr(ctx context.Context, i int, port string) string
 	// Hostname returns a node's hostname.
 	Hostname(i int) string
 }
 
 // Consistent performs a replication consistency check on all the ranges
 // in the cluster. It depends on a majority of the nodes being up.
-func Consistent(t *testing.T, c Cluster) {
+func Consistent(ctx context.Context, t *testing.T, c Cluster) {
 	if c.NumNodes() <= 0 {
 		return
 	}
 	// Always connect to the first node in the cluster.
-	kvClient, kvStopper := c.NewClient(t, 0)
-	defer kvStopper.Stop()
+	kvClient := c.NewClient(ctx, t, 0)
 	// Set withDiff to false because any failure results in a second consistency check
 	// being called with withDiff=true.
-	if err := kvClient.CheckConsistency(context.TODO(), keys.LocalMax,
+	if err := kvClient.CheckConsistency(ctx, keys.LocalMax,
 		keys.MaxKey, false /* withDiff*/); err != nil {
 		t.Fatal(err)
 	}

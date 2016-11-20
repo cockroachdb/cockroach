@@ -57,11 +57,11 @@ func newDynamicClient(cluster cluster.Cluster, stopper *stop.Stopper) *dynamicCl
 
 // Close closes all connected database clients. Close implements the Closer
 // interface.
-func (dc *dynamicClient) Close() {
+func (dc *dynamicClient) Close(ctx context.Context) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for i, client := range dc.mu.clients {
-		log.Infof(context.TODO(), "closing connection to %s", dc.cluster.Addr(i, base.DefaultPort))
+		log.Infof(ctx, "closing connection to %s", dc.cluster.Addr(ctx, i, base.DefaultPort))
 		client.Close()
 		delete(dc.mu.clients, i)
 	}
@@ -70,9 +70,11 @@ func (dc *dynamicClient) Close() {
 var errTestFinished = errors.New("test is shutting down")
 
 // exec calls exec on a client using a preexisting or new connection.
-func (dc *dynamicClient) exec(query string, args ...interface{}) (gosql.Result, error) {
+func (dc *dynamicClient) exec(
+	ctx context.Context, query string, args ...interface{},
+) (gosql.Result, error) {
 	for dc.isRunning() {
-		client, err := dc.getClient()
+		client, err := dc.getClient(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -87,9 +89,11 @@ func (dc *dynamicClient) exec(query string, args ...interface{}) (gosql.Result, 
 
 // queryRowScan performs first a QueryRow and follows that up with a Scan using
 // a preexisting or new connection.
-func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interface{}) error {
+func (dc *dynamicClient) queryRowScan(
+	ctx context.Context, query string, queryArgs, destArgs []interface{},
+) error {
 	for dc.isRunning() {
-		client, err := dc.getClient()
+		client, err := dc.getClient(ctx)
 		if err != nil {
 			return err
 		}
@@ -103,7 +107,7 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 }
 
 // getClient returns open client to a random node from the cluster.
-func (dc *dynamicClient) getClient() (*gosql.DB, error) {
+func (dc *dynamicClient) getClient(ctx context.Context) (*gosql.DB, error) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 
@@ -112,13 +116,13 @@ func (dc *dynamicClient) getClient() (*gosql.DB, error) {
 		if client, ok := dc.mu.clients[index]; ok {
 			return client, nil
 		}
-		client, err := gosql.Open("postgres", dc.cluster.PGUrl(index))
+		client, err := gosql.Open("postgres", dc.cluster.PGUrl(ctx, index))
 		if err != nil {
-			log.Infof(context.TODO(), "could not establish connection to %s: %s", dc.cluster.Addr(index, base.DefaultPort), err)
+			log.Infof(ctx, "could not establish connection to %s: %s", dc.cluster.Addr(ctx, index, base.DefaultPort), err)
 			continue
 		}
-		log.Infof(context.TODO(), "connection established to %s",
-			dc.cluster.Addr(index, base.DefaultPort))
+		log.Infof(ctx, "connection established to %s",
+			dc.cluster.Addr(ctx, index, base.DefaultPort))
 		dc.mu.clients[index] = client
 		return client, nil
 	}

@@ -77,9 +77,9 @@ func (c Container) Name() string {
 	return c.name
 }
 
-func hasImage(l *LocalCluster, ref string) bool {
+func hasImage(ctx context.Context, l *LocalCluster, ref string) bool {
 	name := strings.Split(ref, ":")[0]
-	images, err := l.client.ImageList(context.Background(), types.ImageListOptions{MatchName: name})
+	images, err := l.client.ImageList(ctx, types.ImageListOptions{MatchName: name})
 	if err != nil {
 		log.Fatal(context.TODO(), err)
 	}
@@ -99,19 +99,21 @@ func hasImage(l *LocalCluster, ref string) bool {
 	return false
 }
 
-func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) error {
+func pullImage(
+	ctx context.Context, l *LocalCluster, ref string, options types.ImagePullOptions,
+) error {
 	// HACK: on CircleCI, docker pulls the image on the first access from an
 	// acceptance test even though that image is already present. So we first
 	// check to see if our image is present in order to avoid this slowness.
-	if hasImage(l, ref) {
-		log.Infof(context.TODO(), "ImagePull %s already exists", ref)
+	if hasImage(ctx, l, ref) {
+		log.Infof(ctx, "ImagePull %s already exists", ref)
 		return nil
 	}
 
-	log.Infof(context.TODO(), "ImagePull %s starting", ref)
-	defer log.Infof(context.TODO(), "ImagePull %s complete", ref)
+	log.Infof(ctx, "ImagePull %s starting", ref)
+	defer log.Infof(ctx, "ImagePull %s complete", ref)
 
-	rc, err := l.client.ImagePull(context.Background(), ref, options)
+	rc, err := l.client.ImagePull(ctx, ref, options)
 	if err != nil {
 		return err
 	}
@@ -129,6 +131,7 @@ func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) erro
 // will be augmented with the necessary settings to use the network
 // defined by l.createNetwork().
 func createContainer(
+	ctx context.Context,
 	l *LocalCluster,
 	containerConfig container.Config,
 	hostConfig container.HostConfig,
@@ -138,7 +141,7 @@ func createContainer(
 	// Disable DNS search under the host machine's domain. This can
 	// catch upstream wildcard DNS matching and result in odd behavior.
 	hostConfig.DNSSearch = []string{"."}
-	resp, err := l.client.ContainerCreate(context.Background(), &containerConfig, &hostConfig, nil, containerName)
+	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, containerName)
 	if err != nil {
 		return nil, err
 	}
@@ -157,19 +160,19 @@ func maybePanic(err error) {
 
 // Remove removes the container from docker. It is an error to remove a running
 // container.
-func (c *Container) Remove() error {
-	return c.cluster.client.ContainerRemove(context.Background(), c.id, types.ContainerRemoveOptions{
+func (c *Container) Remove(ctx context.Context) error {
+	return c.cluster.client.ContainerRemove(ctx, c.id, types.ContainerRemoveOptions{
 		RemoveVolumes: true,
 		Force:         true,
 	})
 }
 
 // Kill stops a running container, without removing it.
-func (c *Container) Kill() error {
+func (c *Container) Kill(ctx context.Context) error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
-	_ = c.Unpause()
-	if err := c.cluster.client.ContainerKill(context.Background(), c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
+	_ = c.Unpause(ctx)
+	if err := c.cluster.client.ContainerKill(ctx, c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
 	c.cluster.expectEvent(c, eventDie)
@@ -179,13 +182,13 @@ func (c *Container) Kill() error {
 // Start starts a non-running container.
 //
 // TODO(pmattis): Generalize the setting of parameters here.
-func (c *Container) Start() error {
-	return c.cluster.client.ContainerStart(context.Background(), c.id, types.ContainerStartOptions{})
+func (c *Container) Start(ctx context.Context) error {
+	return c.cluster.client.ContainerStart(ctx, c.id, types.ContainerStartOptions{})
 }
 
 // Pause pauses a running container.
-func (c *Container) Pause() error {
-	return c.cluster.client.ContainerPause(context.Background(), c.id)
+func (c *Container) Pause(ctx context.Context) error {
+	return c.cluster.client.ContainerPause(ctx, c.id)
 }
 
 // TODO(pmattis): Container.Pause is neither used or tested. Silence unused
@@ -193,20 +196,20 @@ func (c *Container) Pause() error {
 var _ = (*Container).Pause
 
 // Unpause resumes a paused container.
-func (c *Container) Unpause() error {
-	return c.cluster.client.ContainerUnpause(context.Background(), c.id)
+func (c *Container) Unpause(ctx context.Context) error {
+	return c.cluster.client.ContainerUnpause(ctx, c.id)
 }
 
 // Restart restarts a running container.
 // Container will be killed after 'timeout' seconds if it fails to stop.
-func (c *Container) Restart(timeout *time.Duration) error {
+func (c *Container) Restart(ctx context.Context, timeout *time.Duration) error {
 	var exp []string
-	if ci, err := c.Inspect(); err != nil {
+	if ci, err := c.Inspect(ctx); err != nil {
 		return err
 	} else if ci.State.Running {
 		exp = append(exp, eventDie)
 	}
-	if err := c.cluster.client.ContainerRestart(context.Background(), c.id, timeout); err != nil {
+	if err := c.cluster.client.ContainerRestart(ctx, c.id, timeout); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, append(exp, eventRestart)...)
@@ -214,8 +217,8 @@ func (c *Container) Restart(timeout *time.Duration) error {
 }
 
 // Stop a running container.
-func (c *Container) Stop(timeout *time.Duration) error {
-	if err := c.cluster.client.ContainerStop(context.Background(), c.id, timeout); err != nil {
+func (c *Container) Stop(ctx context.Context, timeout *time.Duration) error {
+	if err := c.cluster.client.ContainerStop(ctx, c.id, timeout); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, eventDie)
@@ -227,22 +230,22 @@ func (c *Container) Stop(timeout *time.Duration) error {
 var _ = (*Container).Stop
 
 // Wait waits for a running container to exit.
-func (c *Container) Wait() error {
-	exitCode, err := c.cluster.client.ContainerWait(context.Background(), c.id)
+func (c *Container) Wait(ctx context.Context) error {
+	exitCode, err := c.cluster.client.ContainerWait(ctx, c.id)
 	if err == nil && exitCode != 0 {
 		err = errors.Errorf("non-zero exit code: %d", exitCode)
 	}
 	if err != nil {
-		if err := c.Logs(os.Stderr); err != nil {
-			log.Warning(context.TODO(), err)
+		if err := c.Logs(ctx, os.Stderr); err != nil {
+			log.Warning(ctx, err)
 		}
 	}
 	return err
 }
 
 // Logs outputs the containers logs to the given io.Writer.
-func (c *Container) Logs(w io.Writer) error {
-	rc, err := c.cluster.client.ContainerLogs(context.Background(), c.id, types.ContainerLogsOptions{
+func (c *Container) Logs(ctx context.Context, w io.Writer) error {
+	rc, err := c.cluster.client.ContainerLogs(ctx, c.id, types.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 	})
@@ -271,13 +274,13 @@ func (c *Container) Logs(w io.Writer) error {
 }
 
 // Inspect retrieves detailed info about a container.
-func (c *Container) Inspect() (types.ContainerJSON, error) {
-	return c.cluster.client.ContainerInspect(context.Background(), c.id)
+func (c *Container) Inspect(ctx context.Context) (types.ContainerJSON, error) {
+	return c.cluster.client.ContainerInspect(ctx, c.id)
 }
 
 // Addr returns the TCP address to connect to.
-func (c *Container) Addr(port nat.Port) *net.TCPAddr {
-	containerInfo, err := c.Inspect()
+func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
+	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
 		log.Error(context.TODO(), err)
 		return nil
