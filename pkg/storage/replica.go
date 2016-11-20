@@ -1230,8 +1230,7 @@ type endCmds struct {
 }
 
 // done removes pending commands from the command queue and updates
-// the timestamp cache using the final timestamp of each command.  The
-// returned error replaces the supplied error.
+// the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, shouldRetry bool) {
 	// Update the timestamp cache if the command succeeded and is not
 	// being retried. Each request is considered in turn; only those
@@ -1367,7 +1366,14 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// out before their prerequisites, so we still have to wait it
 					// out.
 					for _, ch := range chans {
-						<-ch
+						select {
+						case <-ch:
+						case <-r.store.stopper.ShouldQuiesce():
+							// If the process is shutting down, we return without
+							// removing this command from queue. This avoids
+							// dropping out before prerequisites.
+							return
+						}
 					}
 					r.cmdQMu.Lock()
 					r.cmdQMu.global.remove(cmdGlobal)
@@ -1797,30 +1803,37 @@ func (r *Replica) tryAddWriteCmd(
 	for {
 		select {
 		case propResult := <-ch:
-			endCmds = nil // these will have been invoked post-Raft.
+			// Set endCmds to nil because they have already been invoked
+			// in processRaftCommand.
+			endCmds = nil
 			return propResult.Reply, propResult.Err, propResult.ShouldRetry
 		case <-ctxDone:
 			// If our context was cancelled, return an AmbiguousResultError
-			// to indicate to caller that the command may have executed.
-			// However, we proceed only if the command isn't already being
-			// executed and using our context, in which case we expect it to
-			// finish soon.
+			// if the command isn't already being executed and using our
+			// context, in which case we expect it to finish soon. The
+			// AmbiguousResultError indicates to caller that the command may
+			// have executed.
 			if tryAbandon() {
 				log.Warningf(ctx, "context cancellation of command %s", ba)
+				// Set endCmds to nil because they will be invoked in processRaftCommand.
 				endCmds = nil
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
 			}
 			ctxDone = nil
 		case <-shouldQuiesce:
-			// If we're shutting down, return an AmbiguousResultError to
-			// indicate to caller that the command may have executed.
-			// tryAbandon indicates whether the command is already executing
-			// with our context. Note that in the shutdown case, we *do not*
-			// set the endCmds var to nil. We have no expectation during
-			// shutdown that Raft will continue processing, so we need to
-			// free up the command queue so other waiters can proceed. This
-			// is safe because with the stopper quiescing, no new commands
-			// can be proposed to Raft successfully.
+			// If shutting down, return an AmbiguousResultError if the
+			// command isn't already being executed and using our context,
+			// in which case we expect it to finish soon. AmbiguousResultError
+			// indicates to caller that the command may have executed. If
+			// tryAbandon fails, we iterate through the loop again to wait
+			// for the command to finish.
+			//
+			// Note that in the shutdown case, we *do not* set the endCmds
+			// var to nil. We have no expectation during shutdown that Raft
+			// will continue processing, so we need to free up the command
+			// queue so other waiters can proceed. This is safe because with
+			// the stopper quiescing, no new commands can be proposed to
+			// Raft successfully.
 			if tryAbandon() {
 				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError()), false
@@ -3140,9 +3153,11 @@ func (r *Replica) processRaftCommand(
 				endCmds := cmd.LocalProposalData.endCmds
 				doneCh := cmd.LocalProposalData.doneCh
 				cmd.LocalProposalData = innerPD.LocalProposalData
-				cmd.endCmds = endCmds
-				cmd.doneCh = doneCh
-				cmd.ctx = nil // already have ctx
+				cmd.LocalProposalData.endCmds = endCmds
+				cmd.LocalProposalData.doneCh = doneCh
+				// Avoid confusion by unsetting the context; we already have one
+				// on the stack which is the correct one to use.
+				cmd.ctx = nil
 			}
 			// Proposals which would failfast with proposer-evaluated KV now
 			// go this route, writing an empty entry and returning this error

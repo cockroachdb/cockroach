@@ -5751,7 +5751,6 @@ func TestGCIncorrectRange(t *testing.T) {
 
 // TestReplicaCancelRaft checks that it is possible to safely abandon Raft
 // commands via a cancelable context.Context.
-
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, cancelEarly := range []bool{true, false} {
@@ -5763,24 +5762,17 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if !cancelEarly {
 				cfg.TestingKnobs.TestingCommandFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						if !filterArgs.Req.Header().Key.Equal(key) {
-							return nil
+						if filterArgs.Req.Header().Key.Equal(key) {
+							cancel()
 						}
-						cancel()
 						return nil
 					}
-
 			}
 			tc := testContext{}
 			tc.StartWithStoreConfig(t, cfg)
 			defer tc.Stop()
 			if cancelEarly {
 				cancel()
-				tc.repl.mu.Lock()
-				tc.repl.mu.submitProposalFn = func(*ProposalData) error {
-					return nil
-				}
-				tc.repl.mu.Unlock()
 			}
 			var ba roachpb.BatchRequest
 			ba.Add(&roachpb.GetRequest{
@@ -5789,25 +5781,21 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
 			}
-			br, pErr := tc.repl.addWriteCmd(ctx, ba)
-			if pErr == nil {
-				if !cancelEarly {
+			_, pErr := tc.repl.addWriteCmd(ctx, ba)
+			if cancelEarly {
+				if !testutils.IsPError(pErr, context.Canceled.Error()) {
+					t.Fatalf("expected canceled error; got %v", pErr)
+				}
+			} else {
+				if pErr == nil {
 					// We cancelled the context while the command was already
 					// being processed, so the client had to wait for successful
 					// execution.
 					return
 				}
-				t.Fatalf("expected an error, but got successful response %+v", br)
-			}
-			// If we cancelled the context early enough, we expect to receive a
-			// corresponding error and not wait for the command.
-			if cancelEarly {
-				if !testutils.IsPError(pErr, context.Canceled.Error()) {
-					t.Errorf("unexpected error: %s", pErr)
-				}
-			} else {
-				if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
-					t.Errorf("expected an ambiguous result error; got %v", pErr)
+				detail := pErr.GetDetail()
+				if _, ok := detail.(*roachpb.AmbiguousResultError); !ok {
+					t.Fatalf("expected AmbiguousResultError error; got %s (%T)", detail, detail)
 				}
 			}
 		}()
