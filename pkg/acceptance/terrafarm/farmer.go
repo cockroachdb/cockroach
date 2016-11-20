@@ -27,11 +27,12 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
@@ -62,6 +63,8 @@ type Farmer struct {
 	AddVars     map[string]string
 	KeepCluster string
 	nodes       []string
+	RPCContext  *rpc.Context
+	Stopper     *stop.Stopper
 }
 
 func (f *Farmer) refresh() {
@@ -210,27 +213,22 @@ func (f *Farmer) Exec(i int, cmd string) error {
 }
 
 // NewClient implements the Cluster interface.
-func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		Insecure: true,
-		User:     security.NodeUser,
-	}, nil, stopper)
-	conn, err := rpcContext.GRPCDial(f.Addr(i, base.DefaultPort))
+func (f *Farmer) NewClient(ctx context.Context, t *testing.T, i int) *client.DB {
+	conn, err := f.RPCContext.GRPCDial(f.Addr(ctx, i, base.DefaultPort))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(client.NewSender(conn)), stopper
+	return client.NewDB(client.NewSender(conn))
 }
 
 // PGUrl returns a URL string for the given node postgres server.
-func (f *Farmer) PGUrl(i int) string {
+func (f *Farmer) PGUrl(ctx context.Context, i int) string {
 	host := f.Nodes()[i]
 	return fmt.Sprintf("postgresql://%s@%s:26257/system?sslmode=disable", security.RootUser, host)
 }
 
 // InternalIP returns the address used for inter-node communication.
-func (f *Farmer) InternalIP(i int) net.IP {
+func (f *Farmer) InternalIP(ctx context.Context, i int) net.IP {
 	// TODO(tschottdorf): This is specific to GCE. On AWS, the following
 	// might do it: `curl -sS http://instance-data/latest/meta-data/public-ipv4`.
 	// See https://flummox-engineering.blogspot.com/2014/01/get-ip-address-of-google-compute-engine.html
@@ -280,7 +278,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
 // TODO(cuongdo): doesn't handle load generators (photos, block_writer)
-func (f *Farmer) Assert(t *testing.T) {
+func (f *Farmer) Assert(ctx context.Context, t *testing.T) {
 	for _, item := range []struct {
 		typ   string
 		hosts []string
@@ -288,14 +286,14 @@ func (f *Farmer) Assert(t *testing.T) {
 		{"cockroach", f.Nodes()},
 	} {
 		for _, host := range item.hosts {
-			f.AssertState(t, host, item.typ, "RUNNING")
+			f.AssertState(ctx, t, host, item.typ, "RUNNING")
 		}
 	}
 }
 
 // AssertState verifies that on the specified host, the given process (managed
 // by supervisord) is in the expected state.
-func (f *Farmer) AssertState(t *testing.T, host, proc, expState string) {
+func (f *Farmer) AssertState(ctx context.Context, t *testing.T, host, proc, expState string) {
 	out, _, err := f.execSupervisor(host, "status "+proc)
 	if err != nil {
 		t.Fatal(err)
@@ -307,13 +305,13 @@ func (f *Farmer) AssertState(t *testing.T, host, proc, expState string) {
 
 // AssertAndStop performs the same test as Assert but then proceeds to
 // dismantle the cluster.
-func (f *Farmer) AssertAndStop(t *testing.T) {
-	f.Assert(t)
+func (f *Farmer) AssertAndStop(ctx context.Context, t *testing.T) {
+	f.Assert(ctx, t)
 	f.MustDestroy(t)
 }
 
 // ExecRoot executes the given command with super-user privileges.
-func (f *Farmer) ExecRoot(i int, cmd []string) error {
+func (f *Farmer) ExecRoot(ctx context.Context, i int, cmd []string) error {
 	// TODO(tschottdorf): This doesn't handle escapes properly. May it never
 	// have to.
 	return f.Exec(i, "sudo "+strings.Join(cmd, " "))
@@ -321,40 +319,40 @@ func (f *Farmer) ExecRoot(i int, cmd []string) error {
 
 // Kill terminates the cockroach process running on the given node number.
 // The given integer must be in the range [0,NumNodes()-1].
-func (f *Farmer) Kill(i int) error {
+func (f *Farmer) Kill(ctx context.Context, i int) error {
 	return f.Exec(i, "pkill -9 cockroach")
 }
 
 // Restart terminates the cockroach process running on the given node
 // number, unless it is already stopped, and restarts it.
 // The given integer must be in the range [0,NumNodes()-1].
-func (f *Farmer) Restart(i int) error {
-	_ = f.Kill(i)
+func (f *Farmer) Restart(ctx context.Context, i int) error {
+	_ = f.Kill(ctx, i)
 	// supervisorctl is horrible with exit codes (cockroachdb/cockroach-prod#59).
 	_, _, err := f.execSupervisor(f.Nodes()[i], "start cockroach")
 	return err
 }
 
 // Start starts the given process on the ith node.
-func (f *Farmer) Start(i int, process string) error {
+func (f *Farmer) Start(ctx context.Context, i int, process string) error {
 	_, _, err := f.execSupervisor(f.Nodes()[i], "start "+process)
 	return err
 }
 
 // Stop stops the given process on the ith node. This is useful for terminating
 // a load generator cleanly to get stats outputted upon process termination.
-func (f *Farmer) Stop(i int, process string) error {
+func (f *Farmer) Stop(ctx context.Context, i int, process string) error {
 	_, _, err := f.execSupervisor(f.Nodes()[i], "stop "+process)
 	return err
 }
 
 // URL returns the HTTP(s) endpoint.
-func (f *Farmer) URL(i int) string {
+func (f *Farmer) URL(ctx context.Context, i int) string {
 	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
 }
 
 // Addr returns the host and port from the node in the format HOST:PORT.
-func (f *Farmer) Addr(i int, port string) string {
+func (f *Farmer) Addr(ctx context.Context, i int, port string) string {
 	return net.JoinHostPort(f.Nodes()[i], port)
 }
 

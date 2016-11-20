@@ -35,6 +35,7 @@ import (
 type dynamicClient struct {
 	cluster cluster.Cluster
 	stopper *stop.Stopper
+	ctx     context.Context
 
 	mu struct {
 		syncutil.Mutex
@@ -46,10 +47,13 @@ type dynamicClient struct {
 
 // newDynamicClient creates a dynamic client. `close()` must be called after
 // the dynamic client is no longer needed.
-func newDynamicClient(cluster cluster.Cluster, stopper *stop.Stopper) *dynamicClient {
+func newDynamicClient(
+	ctx context.Context, cluster cluster.Cluster, stopper *stop.Stopper,
+) *dynamicClient {
 	dc := &dynamicClient{
 		cluster: cluster,
 		stopper: stopper,
+		ctx:     ctx,
 	}
 	dc.mu.clients = make(map[int]*gosql.DB)
 	return dc
@@ -61,7 +65,7 @@ func (dc *dynamicClient) Close() {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for i, client := range dc.mu.clients {
-		log.Infof(context.TODO(), "closing connection to %s", dc.cluster.Addr(i, base.DefaultPort))
+		log.Infof(context.Background(), "closing connection to %s", dc.cluster.Addr(dc.ctx, i, base.DefaultPort))
 		client.Close()
 		delete(dc.mu.clients, i)
 	}
@@ -112,13 +116,13 @@ func (dc *dynamicClient) getClient() (*gosql.DB, error) {
 		if client, ok := dc.mu.clients[index]; ok {
 			return client, nil
 		}
-		client, err := gosql.Open("postgres", dc.cluster.PGUrl(index))
+		client, err := gosql.Open("postgres", dc.cluster.PGUrl(dc.ctx, index))
 		if err != nil {
-			log.Infof(context.TODO(), "could not establish connection to %s: %s", dc.cluster.Addr(index, base.DefaultPort), err)
+			log.Infof(context.Background(), "could not establish connection to %s: %s", dc.cluster.Addr(dc.ctx, index, base.DefaultPort), err)
 			continue
 		}
-		log.Infof(context.TODO(), "connection established to %s",
-			dc.cluster.Addr(index, base.DefaultPort))
+		log.Infof(context.Background(), "connection established to %s",
+			dc.cluster.Addr(dc.ctx, index, base.DefaultPort))
 		dc.mu.clients[index] = client
 		return client, nil
 	}

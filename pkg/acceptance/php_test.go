@@ -19,11 +19,15 @@ package acceptance
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestDockerPHP(t *testing.T) {
-	testDockerSuccess(t, "php", []string{"php", "-r", strings.Replace(php, "%v", "3", 1)})
-	testDockerFail(t, "php", []string{"php", "-r", strings.Replace(php, "%v", `"a"`, 1)})
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
+	testDockerSuccess(ctx, t, "php", []string{"php", "-r", strings.Replace(php, "%v", "3", 1)})
+	testDockerFail(ctx, t, "php", []string{"php", "-r", strings.Replace(php, "%v", `"a"`, 1)})
 }
 
 const php = `

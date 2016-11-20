@@ -27,7 +27,7 @@ import (
 
 // insertLoad add a very basic load that inserts into a unique table and checks
 // that the inserted values are indeed correct.
-func insertLoad(t *testing.T, dc *dynamicClient, ID int) {
+func insertLoad(ctx context.Context, t *testing.T, dc *dynamicClient, ID int) {
 	// Initialize the db.
 	if _, err := dc.exec(`CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ CREATE TABLE %s (
 		}
 
 		if timeutil.Now().After(nextUpdate) {
-			log.Infof(context.TODO(), "Insert %d: inserted and checked %d values", ID, valueInsert)
+			log.Infof(ctx, "Insert %d: inserted and checked %d values", ID, valueInsert)
 			nextUpdate = timeutil.Now().Add(time.Second)
 		}
 	}

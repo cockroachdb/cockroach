@@ -19,11 +19,15 @@ package acceptance
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 func TestDockerRuby(t *testing.T) {
-	testDockerSuccess(t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
-	testDockerFail(t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
+	testDockerSuccess(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
+	testDockerFail(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
 }
 
 const ruby = `

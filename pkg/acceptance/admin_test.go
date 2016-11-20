@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -34,7 +36,9 @@ func TestAdminLossOfQuorum(t *testing.T) {
 	runTestOnConfigs(t, testAdminLossOfQuorumInner)
 }
 
-func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testAdminLossOfQuorumInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	if c.NumNodes() < 2 {
 		t.Logf("skipping test %s because given cluster has too few nodes", cfg.Name)
 		return
@@ -44,7 +48,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	nodeIDs := make([]roachpb.NodeID, c.NumNodes())
 	for i := 0; i < c.NumNodes(); i++ {
 		var details serverpb.DetailsResponse
-		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
 		nodeIDs[i] = details.NodeID
@@ -52,20 +56,20 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 
 	// Leave only the first node alive.
 	for i := 1; i < c.NumNodes(); i++ {
-		if err := c.Kill(i); err != nil {
+		if err := c.Kill(ctx, i); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Retrieve node statuses.
 	var nodes serverpb.NodesResponse
-	if err := httputil.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes", &nodes); err != nil {
+	if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, 0)+"/_status/nodes", &nodes); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, nodeID := range nodeIDs {
 		var nodeStatus status.NodeStatus
-		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(0)+"/_status/nodes/"+strconv.Itoa(int(nodeID)), &nodeStatus); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, 0)+"/_status/nodes/"+strconv.Itoa(int(nodeID)), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -80,7 +84,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 		},
 	}
 	var queryResponse tspb.TimeSeriesQueryResponse
-	if err := httputil.PostJSON(cluster.HTTPClient, c.URL(0)+"/ts/query",
+	if err := httputil.PostJSON(cluster.HTTPClient, c.URL(ctx, 0)+"/ts/query",
 		&queryRequest, &queryResponse); err != nil {
 		t.Fatal(err)
 	}
