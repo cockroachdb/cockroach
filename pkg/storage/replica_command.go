@@ -47,16 +47,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
-
-// ErrMsgConflictUpdatingRangeDesc is an error message that is returned by
-// AdminSplit when it conflicts with some other process that updates range
-// descriptors.
-const ErrMsgConflictUpdatingRangeDesc = "conflict updating range descriptors"
 
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
 // command. It returns the response, an error, and a post commit trigger which
@@ -2278,14 +2274,34 @@ func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 	return diff
 }
 
-// AdminSplit divides the range into into two ranges, using either
-// args.SplitKey (if provided) or an internally computed key that aims
-// to roughly equipartition the range by size. The split is done
-// inside of a distributed txn which writes updated left and new right
-// hand side range descriptors, and updates the range addressing
-// metadata. The handover of responsibility for the reassigned key
-// range is carried out seamlessly through a split trigger carried out
-// as part of the commit of that transaction.
+// AdminSplit divides the range into into two ranges using args.SplitKey.
+func (r *Replica) AdminSplit(
+	ctx context.Context, args roachpb.AdminSplitRequest,
+) (roachpb.AdminSplitResponse, *roachpb.Error) {
+	var reply roachpb.AdminSplitResponse
+
+	if len(args.SplitKey) == 0 {
+		return reply, roachpb.NewErrorf("cannot split range with no key provided")
+	}
+	for retryable := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); retryable.Next(); {
+		resp, pErr := r.adminSplitWithDescriptor(ctx, args, r.Desc())
+		// On seeing a ConditionFailedError, retry the command with the
+		// updated descriptor.
+		if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
+			return resp, pErr
+		}
+	}
+	return reply, nil
+}
+
+// adminSplitWithDescriptor divides the range into into two ranges, using
+// either args.SplitKey (if provided) or an internally computed key that aims
+// to roughly equipartition the range by size. The split is done inside of a
+// distributed txn which writes updated left and new right hand side range
+// descriptors, and updates the range addressing metadata. The handover of
+// responsibility for the reassigned key range is carried out seamlessly
+// through a split trigger carried out as part of the commit of that
+// transaction.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. An
 // operation which might split a range should obtain a copy of the range's
@@ -2296,7 +2312,7 @@ func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 // TODO(tschottdorf): should assert that split key is not a local key.
 //
 // See the comment on splitTrigger for details on the complexities.
-func (r *Replica) AdminSplit(
+func (r *Replica) adminSplitWithDescriptor(
 	ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.AdminSplitResponse, *roachpb.Error) {
 	var reply roachpb.AdminSplitResponse
@@ -2387,9 +2403,6 @@ func (r *Replica) AdminSplit(
 			// intents (see #9265).
 			log.Event(ctx, "updating LHS descriptor")
 			if err := txn.Run(b); err != nil {
-				if _, ok := err.(*roachpb.ConditionFailedError); ok {
-					return errors.New(ErrMsgConflictUpdatingRangeDesc)
-				}
 				return err
 			}
 		}
@@ -2430,17 +2443,18 @@ func (r *Replica) AdminSplit(
 
 		// Commit txn with final batch (RHS descriptor and meta).
 		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
-		if err := txn.Run(b); err != nil {
-			if _, ok := err.(*roachpb.ConditionFailedError); ok {
-				return errors.New(ErrMsgConflictUpdatingRangeDesc)
-			}
-			return err
-		}
-		return nil
+		return txn.Run(b)
 	}); err != nil {
+		// The ConditionFailedError can occur because the descriptors acting
+		// as expected values in the CPuts used to update the left or right
+		// range descriptors are picked outside the transaction. Return
+		// ConditionFailedError in the error detail so that the command can be
+		// retried.
+		if failure, ok := err.(*roachpb.ConditionFailedError); ok {
+			return reply, roachpb.NewError(failure)
+		}
 		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
-
 	return reply, nil
 }
 

@@ -102,7 +102,7 @@ func (sq *splitQueue) process(
 	if len(splitKeys) > 0 {
 		log.Infof(ctx, "splitting at keys %v", splitKeys)
 		for _, splitKey := range splitKeys {
-			if _, pErr := r.AdminSplit(
+			if _, pErr := r.adminSplitWithDescriptor(
 				ctx,
 				roachpb.AdminSplitRequest{
 					SplitKey: splitKey.AsRawKey(),
@@ -123,7 +123,7 @@ func (sq *splitQueue) process(
 	size := r.GetMVCCStats().Total()
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
-		if _, pErr := r.AdminSplit(
+		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{},
 			desc,
