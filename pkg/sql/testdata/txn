@@ -466,3 +466,43 @@ SNAPSHOT
 
 statement ok
 COMMIT
+
+# SHOW TRANSACTION STATUS
+
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
+
+statement ok
+BEGIN
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
+
+statement ok
+COMMIT
+
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
+
+statement ok
+BEGIN
+
+query error pq: database "t" does not exist
+SELECT a FROM t.b
+
+query error pq: current transaction is aborted, commands ignored until end of transaction block
+SHOW TRANSACTION STATUS
+
+statement ok
+ROLLBACK
+
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
