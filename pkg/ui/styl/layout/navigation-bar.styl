@@ -30,7 +30,7 @@ $subnav-hover-color   = $main-dark-gray
 
 $subnav-underline-height = 3px
 
-#header
+.navigation-bar
   position fixed
   top 0
   left 0
@@ -45,78 +45,76 @@ $subnav-underline-height = 3px
   padding 0
   display block
 
-header
-  ul.nav
+.navigation-bar__list
+  width 100%
+
+  &--bottom
+    position absolute
+    bottom 0
+
+  li
     width 100%
+    padding 0
+    border 0
+    font-family Lato-Heavy
+    font-size 8px
+    text-transform uppercase
+    float left
+    color $main-nav-inactive
+    list-style-type none
+    line-height 1.8rem
 
-    &.bottom
-      position absolute
-      bottom 0
+    &.normal
+      path
+        fill $main-nav-inactive
 
-    li
-      width 100%
-      padding 0
-      border 0
-      font-family Lato-Heavy
-      font-size 8px
-      text-transform uppercase
-      float left
-      color $main-nav-inactive
-      list-style-type none
-      line-height 1.8rem
+      &.active, &.active:hover
+        color $main-nav-active-font
+        background-color $main-nav-active-bg
+        position relative
+        right -1px
+        border-right 2px solid $main-nav-active-bg
 
-      &.normal
         path
-          fill $main-nav-inactive
+          fill $main-nav-active-icon
 
-        &.active, &.active:hover
-          color $main-nav-active-font
-          background-color $main-nav-active-bg
-          position relative
-          right -1px
-          border-right 2px solid $main-nav-active-bg
+      &:hover
+        color $main-nav-hover
 
-          path
-            fill $main-nav-active-icon
+        path
+          fill $main-nav-hover
 
-        &:hover
-          color $main-nav-hover
-
-          path
-            fill $main-nav-hover
-
-        #Fill-6, #Fill-7
-          fill $navbar-bg
-
-        &.active
-          #Fill-6, #Fill-7
-            fill $main-nav-active-bg
-
-      &.cockroach
-        padding-top 10px
-        height $top-bar-height
-        border-bottom 1px solid $navbar-border
+      #Fill-6, #Fill-7
+        fill $navbar-bg
 
       &.active
-        background-color $navbar-bg
+        #Fill-6, #Fill-7
+          fill $main-nav-active-bg
 
-      a
+    &.cockroach
+      padding-top 10px
+      border-bottom 1px solid $navbar-border
+
+    &.active
+      background-color $navbar-bg
+
+    a
+      width 100%
+      height 80px
+      padding 20px 0
+      display block
+      color inherit
+      text-decoration none
+      &:hover
+      &:visited
+      &:active
+        color @color
+
+      div
+        margin auto
         width 100%
-        height 80px
-        padding 20px 0
-        display block
-        color inherit
-        text-decoration none
-        &:hover
-        &:visited
-        &:active
-          color @color
-
-        div
-          margin auto
-          width 100%
-          text-align center
-          letter-spacing 1px
+        text-align center
+        letter-spacing 1px
 
 .nav-container
     ul.nav

@@ -23,7 +23,7 @@ class IconLink extends React.Component<IconLinkProps, {}> {
       className: this.props.className,
     };
     return <ListLink {...passProps} >
-      <div className=".image-container"
+      <div className="image-container"
            dangerouslySetInnerHTML={trustIcon(this.props.icon)}/>
       <div>{this.props.title}</div>
     </ListLink>;
@@ -37,18 +37,16 @@ class IconLink extends React.Component<IconLinkProps, {}> {
  */
 export default class extends React.Component<{}, {}> {
   render() {
-    return <div id="header">
-      <header>
-        <ul className="nav">
-          <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster" />
-          <IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
-          <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
-          <IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
-        </ul>
-        <ul className="nav bottom">
-          <IconLink to="/" icon={Icons.cockroachIcon} className="cockroach" />
-        </ul>
-      </header>
-    </div>;
+    return <nav className="navigation-bar">
+      <ul className="navigation-bar__list">
+        <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster" />
+        <IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
+        <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
+        <IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
+      </ul>
+      <ul className="navigation-bar__list navigation-bar__list--bottom">
+        <IconLink to="/" icon={Icons.cockroachIcon} className="cockroach" />
+      </ul>
+    </nav>;
   }
 }
