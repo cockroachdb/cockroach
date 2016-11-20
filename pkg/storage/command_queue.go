@@ -205,7 +205,9 @@ func (cq *CommandQueue) getWait(readOnly bool, spans ...roachpb.Span) (chans []<
 		// interval tree and add all of its children.
 		restart := false
 		for _, c := range overlaps {
-			restart = restart || cq.expand(c, true /* isInserted */)
+			// Operand order matters: call cq.expand() for its side effects
+			// even if `restart` is already true.
+			restart = cq.expand(c, true /* isInserted */) || restart
 		}
 		if restart {
 			i--
