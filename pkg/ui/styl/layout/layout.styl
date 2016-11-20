@@ -20,25 +20,11 @@ $topbar-border      = $secondary-gray-1
 $last-updated-color = $secondary-gray-2
 $subnav-background  = $secondary-gray-4
 
-*
-  margin 0
-  padding 0
-  box-sizing border-box
-
-html
-body
-  height 100%
-  background-color $secondary-gray-4
-  min-width 700px
-
-#page-container
+.page
   position relative
   min-height 100vh
   display table // so the page will stretch if the window is small but the content exceeds the window
   min-width 100%
-
-#root
-  position relative
   padding-left $nav-width
   min-height "calc(100vh - %s - 1px)" % $footer-height // 1 more than footer height to account for the border
   @media (max-height: 415px) // handles the case where the height is smaller than the side-nav
@@ -51,9 +37,6 @@ body
 
 #content
   min-height 100%
-
-.page
-  position relative
 
 .page.help-us
   height 100%
@@ -71,16 +54,10 @@ body
     padding-top $top-bar-height + 10px
     width 100%
 
-  .nav-container + &
-    padding-top "calc(%s + 3rem)" % ($top-bar-height + $subnav-height)
-
   &.table
     margin 0
     padding-left 0
     padding-right 0
-
-    .nav-container + &
-      padding-top $top-bar-height + $subnav-height
 
   h1
     font-family Lato-Medium
@@ -237,7 +214,7 @@ span.icon
     strong
       font-family Lato-Bold
 
-.page .nav-container
+.nav-container
   padding 0 3rem 1rem
   background-color $subnav-background
   text-transform uppercase
