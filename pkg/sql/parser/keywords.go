@@ -216,6 +216,7 @@ var keywords = map[string]int{
 	"SPLIT":             SPLIT,
 	"SQL":               SQL,
 	"START":             START,
+	"STATUS":            STATUS,
 	"STDIN":             STDIN,
 	"STORING":           STORING,
 	"STRICT":            STRICT,

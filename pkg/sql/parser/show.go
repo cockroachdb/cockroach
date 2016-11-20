@@ -136,6 +136,15 @@ func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.View)
 }
 
+// ShowTransactionStatus represents a SHOW TRANSACTION STATUS statement.
+type ShowTransactionStatus struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTransactionStatus) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW TRANSACTION STATUS")
+}
+
 // ShowUsers represents a SHOW USERS statement.
 type ShowUsers struct {
 }
