@@ -47,16 +47,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
-
-// ErrMsgConflictUpdatingRangeDesc is an error message that is returned by
-// AdminSplit when it conflicts with some other process that updates range
-// descriptors.
-const ErrMsgConflictUpdatingRangeDesc = "conflict updating range descriptors"
 
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
 // command. It returns the response, an error, and a post commit trigger which
@@ -2301,146 +2297,150 @@ func (r *Replica) AdminSplit(
 ) (roachpb.AdminSplitResponse, *roachpb.Error) {
 	var reply roachpb.AdminSplitResponse
 
-	// Determine split key if not provided with args. This scan is
-	// allowed to be relatively slow because admin commands don't block
-	// other commands.
-	log.Event(ctx, "split begins")
-	var splitKey roachpb.RKey
-	{
-		foundSplitKey := args.SplitKey
-		if len(foundSplitKey) == 0 {
-			snap := r.store.NewSnapshot()
-			defer snap.Close()
-			var err error
-			targetSize := r.GetMaxBytes() / 2
-			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize, nil /* logFn */)
-			if err != nil {
-				return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
-			}
-		} else if !r.ContainsKey(foundSplitKey) {
-			return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
-		}
+	keyProvided := len(args.SplitKey) != 0
 
-		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
-		if err != nil {
-			return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
-				args.SplitKey, err)
-		}
-
-		splitKey, err = keys.Addr(foundSplitKey)
-		if err != nil {
-			return reply, roachpb.NewError(err)
-		}
-		if !splitKey.Equal(foundSplitKey) {
-			return reply, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
-		}
-		if !engine.IsValidSplitKey(foundSplitKey) {
-			return reply, roachpb.NewErrorf("cannot split range at key %s", splitKey)
-		}
-	}
-
-	// First verify this condition so that it will not return
-	// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
-	// otherwise it will cause infinite retry loop.
-	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
-		return reply, roachpb.NewErrorf("range is already split at key %s", splitKey)
-	}
-	log.Event(ctx, "found split key")
-
-	// Create right hand side range descriptor with the newly-allocated Range ID.
-	rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
-	if err != nil {
-		return reply, roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
-	}
-
-	// Init updated version of existing range descriptor.
-	leftDesc := *desc
-	leftDesc.EndKey = splitKey
-
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
-		splitKey, rightDesc.RangeID)
-
-	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
-		log.Event(ctx, "split closure begins")
-		defer log.Event(ctx, "split closure ends")
-		// Update existing range descriptor for left hand side of
-		// split. Note that we mutate the descriptor for the left hand
-		// side of the split first to locate the txn record there.
+	for retryable := retry.StartWithCtx(ctx, retry.Options{}); retryable.Next(); {
+		// Determine split key if not provided with args. This scan is
+		// allowed to be relatively slow because admin commands don't block
+		// other commands.
+		log.Event(ctx, "split begins")
+		var splitKey roachpb.RKey
 		{
-			b := txn.NewBatch()
-			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, desc, leftDesc); err != nil {
-				return err
-			}
-			// Commit this batch first to ensure that the transaction record
-			// is created in the right place (split trigger relies on this),
-			// but also to ensure the transaction record is created _before_
-			// intents for the RHS range descriptor or addressing records.
-			// Keep in mind that the BeginTransaction request is injected
-			// to accompany the first write request, but if part of a batch
-			// which spans ranges, the dist sender does not guarantee the
-			// order which parts of the split batch arrive.
-			//
-			// Sending the batch containing only the first write guarantees
-			// the transaction record is written first, preventing cases
-			// where splits are aborted early due to conflicts with meta
-			// intents (see #9265).
-			log.Event(ctx, "updating LHS descriptor")
-			if err := txn.Run(b); err != nil {
-				if _, ok := err.(*roachpb.ConditionFailedError); ok {
-					return errors.New(ErrMsgConflictUpdatingRangeDesc)
+			foundSplitKey := args.SplitKey
+			if !keyProvided {
+				snap := r.store.NewSnapshot()
+				defer snap.Close()
+				var err error
+				targetSize := r.GetMaxBytes() / 2
+				foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize, nil /* logFn */)
+				if err != nil {
+					return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
 				}
+			} else if !r.ContainsKey(foundSplitKey) {
+				return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
+			}
+
+			foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
+			if err != nil {
+				return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
+					args.SplitKey, err)
+			}
+
+			splitKey, err = keys.Addr(foundSplitKey)
+			if err != nil {
+				return reply, roachpb.NewError(err)
+			}
+			if !splitKey.Equal(foundSplitKey) {
+				return reply, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
+			}
+			if !engine.IsValidSplitKey(foundSplitKey) {
+				return reply, roachpb.NewErrorf("cannot split range at key %s", splitKey)
+			}
+		}
+
+		// First verify this condition so that it will not return
+		// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
+		// otherwise it will cause infinite retry loop.
+		if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
+			return reply, roachpb.NewErrorf("range is already split at key %s", splitKey)
+		}
+		log.Event(ctx, "found split key")
+
+		// Create right hand side range descriptor with the newly-allocated Range ID.
+		rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
+		if err != nil {
+			return reply, roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
+		}
+
+		// Init updated version of existing range descriptor.
+		leftDesc := *desc
+		leftDesc.EndKey = splitKey
+
+		log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
+			splitKey, rightDesc.RangeID)
+
+		if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
+			log.Event(ctx, "split closure begins")
+			defer log.Event(ctx, "split closure ends")
+			// Update existing range descriptor for left hand side of
+			// split. Note that we mutate the descriptor for the left hand
+			// side of the split first to locate the txn record there.
+			{
+				b := txn.NewBatch()
+				leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+				if err := updateRangeDescriptor(b, leftDescKey, desc, leftDesc); err != nil {
+					return err
+				}
+				// Commit this batch first to ensure that the transaction record
+				// is created in the right place (split trigger relies on this),
+				// but also to ensure the transaction record is created _before_
+				// intents for the RHS range descriptor or addressing records.
+				// Keep in mind that the BeginTransaction request is injected
+				// to accompany the first write request, but if part of a batch
+				// which spans ranges, the dist sender does not guarantee the
+				// order which parts of the split batch arrive.
+				//
+				// Sending the batch containing only the first write guarantees
+				// the transaction record is written first, preventing cases
+				// where splits are aborted early due to conflicts with meta
+				// intents (see #9265).
+				log.Event(ctx, "updating LHS descriptor")
+				if err := txn.Run(b); err != nil {
+					return err
+				}
+			}
+
+			// Log the split into the range event log.
+			// TODO(spencer): event logging API should accept a batch
+			// instead of a transaction; there's no reason this logging
+			// shouldn't be done in parallel via the batch with the updated
+			// range addressing.
+			if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
 				return err
 			}
-		}
 
-		// Log the split into the range event log.
-		// TODO(spencer): event logging API should accept a batch
-		// instead of a transaction; there's no reason this logging
-		// shouldn't be done in parallel via the batch with the updated
-		// range addressing.
-		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
-			return err
-		}
+			b := txn.NewBatch()
 
-		b := txn.NewBatch()
-
-		// Create range descriptor for right hand side of the split.
-		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-		if err := updateRangeDescriptor(b, rightDescKey, nil, *rightDesc); err != nil {
-			return err
-		}
-
-		// Update range descriptor addressing record(s).
-		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
-			return err
-		}
-
-		// End the transaction manually, instead of letting RunTransaction
-		// loop do it, in order to provide a split trigger.
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
-			Commit: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				SplitTrigger: &roachpb.SplitTrigger{
-					LeftDesc:  leftDesc,
-					RightDesc: *rightDesc,
-				},
-			},
-		})
-
-		// Commit txn with final batch (RHS descriptor and meta).
-		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
-		if err := txn.Run(b); err != nil {
-			if _, ok := err.(*roachpb.ConditionFailedError); ok {
-				return errors.New(ErrMsgConflictUpdatingRangeDesc)
+			// Create range descriptor for right hand side of the split.
+			rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
+			if err := updateRangeDescriptor(b, rightDescKey, nil, *rightDesc); err != nil {
+				return err
 			}
-			return err
-		}
-		return nil
-	}); err != nil {
-		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
-	}
 
+			// Update range descriptor addressing record(s).
+			if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
+				return err
+			}
+
+			// End the transaction manually, instead of letting RunTransaction
+			// loop do it, in order to provide a split trigger.
+			b.AddRawRequest(&roachpb.EndTransactionRequest{
+				Commit: true,
+				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+					SplitTrigger: &roachpb.SplitTrigger{
+						LeftDesc:  leftDesc,
+						RightDesc: *rightDesc,
+					},
+				},
+			})
+
+			// Commit txn with final batch (RHS descriptor and meta).
+			log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
+			return txn.Run(b)
+		}); err != nil {
+			// The ConditionFailedError can occur because the descriptors
+			// acting as expected values in the CPuts used to update the left
+			// or right range descriptors are picked outside the transaction.
+			// Retry the command with the updated descriptor only if the split
+			// key was provided to the AdminSplit command.
+			if _, ok := err.(*roachpb.ConditionFailedError); ok && keyProvided {
+				desc = r.Desc()
+				continue
+			}
+			return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
+		}
+		break
+	}
 	return reply, nil
 }
 
