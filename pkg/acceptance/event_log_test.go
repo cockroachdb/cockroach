@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,7 +37,9 @@ func TestEventLog(t *testing.T) {
 	runTestOnConfigs(t, testEventLogInner)
 }
 
-func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testEventLogInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	num := c.NumNodes()
 	if num <= 0 {
 		t.Fatalf("%d nodes in cluster", num)
@@ -52,7 +55,7 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 	// We expect there to eventually be one such message for each node in the
 	// cluster, and each message must be correctly formatted.
 	util.SucceedsSoon(t, func() error {
-		db := makePGClient(t, c.PGUrl(0))
+		db := makePGClient(t, c.PGUrl(ctx, 0))
 		defer db.Close()
 
 		// Query all node join events. There should be one for each node in the
@@ -115,15 +118,15 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 	})
 
 	// Stop and Start Node 0, and verify the node restart message.
-	if err := c.Kill(0); err != nil {
+	if err := c.Kill(ctx, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Restart(0); err != nil {
+	if err := c.Restart(ctx, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	util.SucceedsSoon(t, func() error {
-		db := makePGClient(t, c.PGUrl(0))
+		db := makePGClient(t, c.PGUrl(ctx, 0))
 		defer db.Close()
 
 		// Query all node restart events. There should only be one.

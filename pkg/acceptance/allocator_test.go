@@ -134,27 +134,27 @@ func (at *allocatorTest) Cleanup(t *testing.T) {
 	}
 }
 
-func (at *allocatorTest) Run(t *testing.T) {
-	at.f = farmer(t, at.Prefix)
+func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
+	at.f = farmer(t, at.Prefix, stopper)
 
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
 	}
 
-	log.Infof(context.Background(), "creating cluster with %d node(s)", at.StartNodes)
+	log.Infof(ctx, "creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
-	at.f.Assert(t)
+	checkGossip(ctx, t, at.f, longWaitTime, hasPeers(at.StartNodes))
+	at.f.Assert(ctx, t)
 	log.Info(context.Background(), "initial cluster is up")
 
 	// We must stop the cluster because a) `nodectl` pokes at the data directory
 	// and, more importantly, b) we don't want the cluster above and the cluster
 	// below to ever talk to each other (see #7224).
-	log.Info(context.Background(), "stopping cluster")
+	log.Info(ctx, "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
-		if err := at.f.Kill(i); err != nil {
+		if err := at.f.Kill(ctx, i); err != nil {
 			t.Fatalf("error stopping node %d: %s", i, err)
 		}
 	}
@@ -174,29 +174,29 @@ func (at *allocatorTest) Run(t *testing.T) {
 
 	log.Info(context.Background(), "restarting cluster with archived store(s)")
 	for i := 0; i < at.f.NumNodes(); i++ {
-		if err := at.f.Restart(i); err != nil {
+		if err := at.f.Restart(ctx, i); err != nil {
 			t.Fatalf("error restarting node %d: %s", i, err)
 		}
 	}
-	at.f.Assert(t)
+	at.f.Assert(ctx, t)
 
-	log.Infof(context.Background(), "resizing cluster to %d nodes", at.EndNodes)
+	log.Infof(ctx, "resizing cluster to %d nodes", at.EndNodes)
 	if err := at.f.Resize(at.EndNodes); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))
-	at.f.Assert(t)
+	checkGossip(ctx, t, at.f, longWaitTime, hasPeers(at.EndNodes))
+	at.f.Assert(ctx, t)
 
-	log.Info(context.Background(), "waiting for rebalance to finish")
-	if err := at.WaitForRebalance(t); err != nil {
+	log.Info(ctx, "waiting for rebalance to finish")
+	if err := at.WaitForRebalance(ctx, t); err != nil {
 		t.Fatal(err)
 	}
-	at.f.Assert(t)
+	at.f.Assert(ctx, t)
 }
 
-func (at *allocatorTest) RunAndCleanup(t *testing.T) {
+func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
 	defer at.Cleanup(t)
-	at.Run(t)
+	at.Run(ctx, t)
 }
 
 func (at *allocatorTest) stdDev() (float64, error) {
@@ -329,10 +329,10 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
-func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
+func (at *allocatorTest) WaitForRebalance(ctx context.Context, t *testing.T) error {
 	const statsInterval = 20 * time.Second
 
-	db, err := gosql.Open("postgres", at.f.PGUrl(0))
+	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
 		return err
 	}
@@ -355,7 +355,7 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 				return err
 			}
 
-			log.Info(context.Background(), stats)
+			log.Info(ctx, stats)
 			if StableInterval <= stats.ElapsedSinceLastEvent {
 				host := at.f.Nodes()[0]
 				log.Infof(context.Background(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
@@ -371,9 +371,9 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 			statsTimer.Reset(statsInterval)
 		case <-assertTimer.C:
 			assertTimer.Read = true
-			at.f.Assert(t)
+			at.f.Assert(ctx, t)
 			assertTimer.Reset(time.Minute)
-		case <-stopper:
+		case <-stopper.ShouldStop():
 			return errors.New("interrupted")
 		}
 	}
@@ -382,30 +382,36 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 // TestUpreplicate_1To3Small tests up-replication, starting with 1 node
 // containing 10 GiB of data and growing to 3 nodes.
 func TestUpreplicate_1To3Small(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   3,
 		StoreURL:   urlStore1s,
 		Prefix:     "uprep-1to3s",
 	}
-	at.RunAndCleanup(t)
+	at.RunAndCleanup(ctx, t)
 }
 
 // TestRebalance3to5Small tests rebalancing, starting with 3 nodes (each
 // containing 10 GiB of data) and growing to 5 nodes.
 func TestRebalance_3To5Small(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	at := allocatorTest{
 		StartNodes: 3,
 		EndNodes:   5,
 		StoreURL:   urlStore3s,
 		Prefix:     "rebal-3to5s",
 	}
-	at.RunAndCleanup(t)
+	at.RunAndCleanup(ctx, t)
 }
 
 // TestUpreplicate_1To3Medium tests up-replication, starting with 1 node
 // containing 108 GiB of data and growing to 3 nodes.
 func TestUpreplicate_1To3Medium(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            3,
@@ -413,13 +419,15 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 		Prefix:              "uprep-1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.RunAndCleanup(t)
+	at.RunAndCleanup(ctx, t)
 }
 
 // TestUpreplicate_1To6Medium tests up-replication (and, to a lesser extent,
 // rebalancing), starting with 1 node containing 108 GiB of data and growing to
 // 6 nodes.
 func TestUpreplicate_1To6Medium(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            6,
@@ -427,7 +435,7 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 		Prefix:              "uprep-1to6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.RunAndCleanup(t)
+	at.RunAndCleanup(ctx, t)
 }
 
 // TestSteady_6Medium is useful for creating a medium-size balanced cluster
@@ -435,6 +443,8 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 // TODO(tschottdorf): use for tests which run schema changes or drop large
 // amounts of data.
 func TestSteady_6Medium(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeOut)
+	defer cancel()
 	at := allocatorTest{
 		StartNodes:          6,
 		EndNodes:            6,
@@ -442,5 +452,5 @@ func TestSteady_6Medium(t *testing.T) {
 		Prefix:              "steady-6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.RunAndCleanup(t)
+	at.RunAndCleanup(ctx, t)
 }
