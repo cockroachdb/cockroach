@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -30,24 +32,24 @@ func TestRepair(t *testing.T) {
 	runTestOnConfigs(t, testRepairInner)
 }
 
-func testRepairInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	testStopper := stop.NewStopper()
-	dc := newDynamicClient(c, testStopper)
-	testStopper.AddCloser(dc)
-	defer testStopper.Stop()
+func testRepairInner(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+	dc := newDynamicClient(c, stopper)
+	stopper.AddCloser(stop.CloserFn(func() {
+		dc.Close(ctx)
+	}))
 
 	// Add some loads.
 	for i := 0; i < c.NumNodes()*2; i++ {
 		ID := i
-		testStopper.RunWorker(func() {
-			insertLoad(t, dc, ID)
+		stopper.RunWorker(func() {
+			insertLoad(ctx, t, dc, ID)
 		})
 	}
 
 	// TODO(bram): #5345 add repair mechanism.
 
 	select {
-	case <-stopper:
+	case <-stopper.ShouldStop():
 	case <-time.After(cfg.Duration):
 	}
 }
