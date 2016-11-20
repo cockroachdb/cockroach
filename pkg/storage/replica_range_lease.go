@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -143,15 +142,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// Send result of lease to all waiter channels.
 		replica.mu.Lock()
 		defer replica.mu.Unlock()
-		for i, llChan := range p.llChans {
-			// Don't send the same pErr object twice; this can lead to races. We could
-			// clone every time but it's more efficient to send pErr itself to one of
-			// the channels (the last one; if we send it earlier the race can still
-			// happen).
-			if i == len(p.llChans)-1 {
-				llChan <- pErr
+		for _, llChan := range p.llChans {
+			// Don't send the same transaction object twice; this can lead to races.
+			if pErr != nil {
+				pErrClone := *pErr
+				pErrClone.SetTxn(pErr.GetTxn())
+				llChan <- &pErrClone
 			} else {
-				llChan <- protoutil.Clone(pErr).(*roachpb.Error) // works with `nil`
+				llChan <- nil
 			}
 		}
 		p.llChans = p.llChans[:0]
