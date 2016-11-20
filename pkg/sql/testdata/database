@@ -21,13 +21,46 @@ system
 test
 
 statement ok
-CREATE DATABASE b ENCODING='UTF8'
+CREATE DATABASE b TEMPLATE=template0
 
-statement error 'NOPE' is not a supported encoding
+statement error unsupported template: NOPE
+CREATE DATABASE c TEMPLATE=NOPE
+
+statement error unsupported template: NOPE
+CREATE DATABASE IF NOT EXISTS c TEMPLATE=NOPE
+
+statement ok
+CREATE DATABASE b2 ENCODING='UTF8'
+
+statement error unsupported encoding: 'NOPE'
 CREATE DATABASE c ENCODING='NOPE'
 
-statement error 'NOPE' is not a supported encoding
+statement error unsupported encoding: 'NOPE'
 CREATE DATABASE IF NOT EXISTS c ENCODING='NOPE'
+
+statement ok
+CREATE DATABASE b3 LC_COLLATE='C.UTF-8'
+
+statement error unsupported collation: 'NOPE'
+CREATE DATABASE c LC_COLLATE='NOPE'
+
+statement error unsupported collation: 'NOPE'
+CREATE DATABASE IF NOT EXISTS c LC_COLLATE='NOPE'
+
+statement ok
+CREATE DATABASE b4 LC_CTYPE='C.UTF-8'
+
+statement error unsupported character classification: 'NOPE'
+CREATE DATABASE c LC_CTYPE='NOPE'
+
+statement error unsupported character classification: 'NOPE'
+CREATE DATABASE IF NOT EXISTS c LC_CTYPE='NOPE'
+
+statement ok
+CREATE DATABASE b5 TEMPLATE=template0 ENCODING='UTF8' LC_COLLATE='C.UTF-8' LC_CTYPE='C.UTF-8'
+
+statement ok
+CREATE DATABASE b6 TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'
 
 statement ok
 CREATE DATABASE c
@@ -39,6 +72,11 @@ information_schema
 pg_catalog
 a
 b
+b2
+b3
+b4
+b5
+b6
 c
 system
 test
@@ -67,6 +105,9 @@ DROP DATABASE b
 
 statement ok
 DROP DATABASE IF EXISTS b
+
+statement ok
+DROP DATABASE b2; DROP DATABASE b3; DROP DATABASE b4; DROP DATABASE b5; DROP DATABASE b6
 
 statement error empty database name
 DROP DATABASE ""
