@@ -38,11 +38,15 @@ func TestCloneProto(t *testing.T) {
 		pb          proto.Message
 		shouldPanic bool
 	}{
-		{&roachpb.StoreIdent{}, false},
+		// StoreIdent contains a UUID by value, so it is always uncloneable.
+		{&roachpb.StoreIdent{}, true},
 		{&roachpb.StoreIdent{ClusterID: uuid.MakeV4()}, true},
+		// TxnMeta contains a UUID by pointer, so it is cloneable if the id is nil.
 		{&enginepb.TxnMeta{}, false},
 		{&enginepb.TxnMeta{ID: &u}, true},
 		{&roachpb.Transaction{}, false},
+		{&roachpb.Error{}, false},
+		{&roachpb.Error{UnexposedTxn: &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u}}}, true},
 		{&config.ZoneConfig{RangeMinBytes: 123, RangeMaxBytes: 456}, false},
 	}
 	for _, tc := range testCases {
@@ -58,12 +62,14 @@ func TestCloneProto(t *testing.T) {
 		if tc.shouldPanic {
 			if panicObj == nil {
 				t.Errorf("%T: expected panic but didn't get one", tc.pb)
-			}
-		} else {
-			if panicObj != nil {
+			} else {
 				if panicStr := fmt.Sprint(panicObj); !strings.Contains(panicStr, "attempt to clone") {
 					t.Errorf("%T: got unexpected panic %s", tc.pb, panicStr)
 				}
+			}
+		} else {
+			if panicObj != nil {
+				t.Errorf("%T: got unexpected panic %v", tc.pb, panicObj)
 			}
 		}
 
