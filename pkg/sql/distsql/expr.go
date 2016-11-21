@@ -20,7 +20,6 @@ package distsql
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,30 +27,30 @@ import (
 	"github.com/pkg/errors"
 )
 
-// valArgsConvert is a parser.Visitor that converts Placeholders ($0, $1, etc.)
-// to IndexedVars.
-type valArgsConvert struct {
+// ivarBinder is a parser.Visitor that binds ordinal references
+// (IndexedVars represented by @1, @2, ...) to an IndexedVarContainer.
+type ivarBinder struct {
 	h   *parser.IndexedVarHelper
 	err error
 }
 
-func (v *valArgsConvert) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if val, ok := expr.(*parser.Placeholder); ok {
-		idx, err := strconv.Atoi(val.Name)
-		if err != nil || idx < 0 || idx >= v.h.NumVars() {
-			v.err = errors.Errorf("invalid variable index %s", val.Name)
-			return false, expr
+func (v *ivarBinder) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	if ivar, ok := expr.(*parser.IndexedVar); ok {
+		if err := v.h.BindIfUnbound(ivar); err != nil {
+			v.err = err
 		}
-
-		return false, v.h.IndexedVar(idx)
+		return false, expr
 	}
 	return true, expr
 }
 
-func (*valArgsConvert) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*ivarBinder) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 // processExpression parses the string expression inside an Expression,
-// interpreting $0, $1, etc as indexed variables.
+// and associates ordinal references (@1, @2, etc) with the given helper.
 func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
@@ -61,9 +60,9 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 		return nil, err
 	}
 
-	// Convert Placeholders to IndexedVars
-	v := valArgsConvert{h: h, err: nil}
-	expr, _ = parser.WalkExpr(&v, expr)
+	// Bind IndexedVars to our eh.vars.
+	v := ivarBinder{h: h, err: nil}
+	parser.WalkExprConst(&v, expr)
 	if v.err != nil {
 		return nil, v.err
 	}
@@ -152,22 +151,13 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 }
 
 // Given a row, eval evaluates the wrapped expression and returns the
-// resulting datum needed for rendering for eg. given a row (1, 2, 3, 4, 5):
-//  '$1' would return '2'
-//  '$1 + $4' would return '7'
-//  '$0' would return '1'
-//  '$1 + 10' would return '12'
+// resulting datum. For example, given a row (1, 2, 3, 4, 5):
+//  '@2' would return '2'
+//  '@2 + @5' would return '7'
+//  '@1' would return '1'
+//  '@2 + 10' would return '12'
 func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (parser.Datum, error) {
 	eh.row = row
 
 	return eh.expr.Eval(eh.evalCtx)
-}
-
-func (eh *exprHelper) indexToExpr(idx int) parser.Expr {
-	p := &parser.Placeholder{Name: strconv.Itoa(idx)}
-
-	// Convert Placeholders to IndexedVars
-	v := valArgsConvert{h: &eh.vars, err: nil}
-	expr, _ := parser.WalkExpr(&v, p)
-	return expr
 }
