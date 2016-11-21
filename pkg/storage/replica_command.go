@@ -1793,15 +1793,16 @@ func (r *Replica) applyNewLeaseLocked(
 //
 // TODO(tschottdorf): We should call this AdminCheckConsistency.
 func (r *Replica) CheckConsistency(
-	ctx context.Context, args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
+	ctx context.Context, args roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
+	desc := r.Desc()
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
 	// Send a ComputeChecksum to all the replicas of the range.
 	{
 		var ba roachpb.BatchRequest
-		ba.RangeID = r.Desc().RangeID
+		ba.RangeID = desc.RangeID
 		checkArgs := &roachpb.ComputeChecksumRequest{
 			Span: roachpb.Span{
 				Key:    key,
@@ -1835,7 +1836,7 @@ func (r *Replica) CheckConsistency(
 	var inconsistencyCount uint32
 	var wg sync.WaitGroup
 	sp := r.store.cfg.StorePool
-	for _, replica := range r.Desc().Replicas {
+	for _, replica := range desc.Replicas {
 		if replica == localReplica {
 			continue
 		}
@@ -2819,10 +2820,11 @@ func (r *Replica) splitTrigger(
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(
-	ctx context.Context, args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor,
+	ctx context.Context, args roachpb.AdminMergeRequest,
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
+	origLeftDesc := r.Desc()
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
 		return reply, roachpb.NewErrorf("cannot merge final range")
