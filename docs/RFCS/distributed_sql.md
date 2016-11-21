@@ -164,8 +164,9 @@ model than MapReduce.
 
 1. A predefined set of *aggregators*, performing functionality required by SQL.
    Most aggregators are configurable, but not fully programmable.
-2. One special aggregator is programmable using a very simple language, but
-   the program is restricted to operating on one row of data at a time.
+2. One special aggregator, the 'evaluator', is programmable using a very simple
+   language, but is restricted to operating on one row of data at
+   a time.
 3. A routing of the results of an aggregator to the next aggregator in the
    query pipeline.
 4. A logical model that allows for SQL to be compiled in a data-location-agnostic
@@ -239,11 +240,11 @@ aggregators was considered; that approach makes it much harder to support outer
 joins, where the `ON` expression evaluation must be part of the internal join
 logic and not just a filter on the output.)
 
-A special type of aggregator is the **program** aggregator which is a
+A special type of aggregator is the **evaluator** aggregator which is a
 "programmable" aggregator which processes the input stream sequentially (one
 element at a time), potentially emitting output elements. This is an aggregator
 with no grouping (group key is the full set of columns); the processing of each
-row independent. A program can be used, for example, to generate new values from
+row independent. An evaluator can be used, for example, to generate new values from
 arbitrary expressions (like the `a+b` in `SELECT a+b FROM ..`); or to filter
 rows according to a predicate.
 
@@ -303,7 +304,7 @@ AGGREGATOR summer
   Group Key: Cid
   Ordering characterization: if input ordered by Cid, output ordered by Cid
 
-PROGRAM sortval
+EVALUATOR sortval
   Input schema: Cid:INT, ValueSum:DECIMAL
   Output schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL
   Ordering characterization:
@@ -458,8 +459,8 @@ Composition: src -> countdistinctmin -> final
   with spans of a table or index and the schema that it needs to read.
   Like every other aggregator, it can be configured with a programmable output
   filter.
-- `PROGRAM` is a fully programmable no-grouping aggregator. It runs a "program"
-  on each individual row. The program can drop the row, or modify it
+- `EVALUATOR` is a fully programmable no-grouping aggregator. It runs a "program"
+  on each individual row. The evaluator can drop the row, or modify it
   arbitrarily.
 - `JOIN` performs a join on two streams, with equality constraints between
   certain columns. The aggregator is grouped on the columns that are
@@ -541,7 +542,7 @@ We can distribute using a few simple rules:
  - sorting aggregators apply to each physical stream corresponding to the
    logical stream it is sorting. A sort aggregator by itself will *not* result
    in coalescing results into a single node. This is implicit from the fact that
-   (like programs) it requires no grouping.
+   (like evaluators) it requires no grouping.
 
 It is important to note that correctly distributing the work along range
 boundaries is not necessary for correctness - if a range gets split or moved
@@ -568,7 +569,7 @@ AGGREGATOR summer
   Group Key: Cid
   Ordering characterization: if input ordered by Cid, output ordered by Cid
 
-PROGRAM sortval
+EVALUATOR sortval
   Input schema: Cid:INT, ValueSum:DECIMAL
   Output schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL
   Ordering characterization: if input ordered by [Cid,]ValueSum[,Cid], output ordered by [Cid,]-ValueSum[,Cid]
