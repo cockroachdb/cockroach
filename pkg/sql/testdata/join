@@ -207,10 +207,10 @@ SELECT * FROM onecolumn AS a RIGHT OUTER JOIN empty AS b USING(x)
 query II colnames
 SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
-x    y
-NULL 44
-NULL NULL
-NULL 42
+x     y
+NULL  44
+NULL  NULL
+NULL  42
 
 query I colnames
 SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
@@ -278,12 +278,45 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
+# Check EXPLAIN.
+query ITT 
+EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
+----
+0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+1  scan  twocolumn@primary
+1  scan  twocolumn@primary
+
+# Check EXPLAIN.
+query ITT 
+EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
+----
+0  join  NESTED LOOP JOIN, INNER ON a.x = 44
+1  scan  twocolumn@primary
+1  scan  twocolumn@primary
+
+# Check EXPLAIN.
+query ITT 
+EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
+----
+0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+1  scan  onecolumn@primary
+1  scan  twocolumn@primary
+
+# Check EXPLAIN.
+query ITT 
+EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
+----
+0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+1  scan  onecolumn@primary
+1  scan  twocolumn@primary
+
+
 query ITT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit  count: 1
 1  join   NESTED LOOP JOIN, INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
-2  join   NESTED LOOP JOIN, INNER ON a.b = test.twocolumn.x
+2  join   HASH JOIN, INNER ON EQUALS((x),(b))
 3  join   NESTED LOOP JOIN, CROSS
 4  scan   onecolumn@primary
 4  scan   twocolumn@primary
