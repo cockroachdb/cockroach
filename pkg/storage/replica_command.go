@@ -3177,11 +3177,11 @@ func (r *Replica) ChangeReplicas(
 		// complete. See #10409.
 		if err := func() error {
 			snap, err := r.GetSnapshot(ctx, snapTypePreemptive)
-			defer r.CloseOutSnap()
-			log.Event(ctx, "generated snapshot")
 			if err != nil {
 				return errors.Wrapf(err, "%s: change replicas failed", r)
 			}
+			defer r.CloseOutSnap()
+			log.Event(ctx, "generated snapshot")
 
 			fromRepDesc, err := r.GetReplicaDescriptor()
 			if err != nil {
