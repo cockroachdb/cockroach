@@ -1735,15 +1735,6 @@ func TestLeaseConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const num = 5
 
-	// The test was written to test this individual block below. The worry
-	// was that this would NPE (it does not; proto.Clone is unusual in that it
-	// returns the input value instead).
-	{
-		if protoutil.Clone((*roachpb.Error)(nil)).(*roachpb.Error) != nil {
-			t.Fatal("could not clone nil *Error")
-		}
-	}
-
 	// Testing concurrent range lease requests is still a good idea. We check
 	// that they work and clone *Error, which prevents regression of #6111.
 	const origMsg = "boom"
