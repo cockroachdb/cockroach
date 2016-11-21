@@ -28,9 +28,9 @@ STATIC :=
 PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
+BENCHES      := -
 TESTTIMEOUT  := 2m
 RACETIMEOUT  := 10m
-BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  := -stderr -maxfails 1
 DUPLFLAGS    := -t 100
@@ -98,7 +98,7 @@ gotestdashi:
 
 .PHONY: test
 test: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testrace: GOFLAGS += -race
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
@@ -107,7 +107,7 @@ testrace: test
 .PHONY: testslow
 testslow: TESTFLAGS += -v
 testslow: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
 testraceslow: GOFLAGS += -race
@@ -126,21 +126,16 @@ testraceslow: testslow
 .PHONY: stress
 stress:
 	$(GO) list -tags '$(TAGS)' -f \
-	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | \
-	$(SHELL)
+	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | \ $(SHELL)
 
 .PHONY: stressrace
 stressrace: GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 stressrace: stress
 
-.PHONY: bench
-bench: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run - -bench "$(TESTS)" -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
-
 .PHONY: coverage
 coverage: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" -bench "$(BENCHES)" $(PKG) $(TESTFLAGS)
 
 .PHONY: upload-coverage
 upload-coverage:
