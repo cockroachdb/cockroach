@@ -195,11 +195,14 @@ func (s *adminServer) Databases(
 	var resp serverpb.DatabasesResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		dbname, ok := row[0].(*parser.DString)
+		dbDatum, ok := row[0].(*parser.DString)
 		if !ok {
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
-		resp.Databases = append(resp.Databases, string(*dbname))
+		dbName := string(*dbDatum)
+		if !s.server.sqlExecutor.IsVirtualDatabase(dbName) {
+			resp.Databases = append(resp.Databases, dbName)
+		}
 	}
 
 	return &resp, nil
@@ -214,11 +217,15 @@ func (s *adminServer) DatabaseDetails(
 	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
+	escDBName := parser.Name(req.Database).String()
+	if err := s.assertNotVirtualSchema(escDBName); err != nil {
+		return nil, err
+	}
+
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
 	//
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
-	escDBName := parser.Name(req.Database).String()
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer r.Close()
@@ -309,9 +316,13 @@ func (s *adminServer) TableDetails(
 	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
+	escDBName := parser.Name(req.Database).String()
+	if err := s.assertNotVirtualSchema(escDBName); err != nil {
+		return nil, err
+	}
+
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
-	escDBName := parser.Name(req.Database).String()
 	escTableName := parser.Name(req.Table).String()
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
@@ -443,65 +454,62 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
-	// Range and ZoneConfig information is not applicable to virtual schemas.
-	if !s.server.sqlExecutor.IsVirtualDatabase(req.Database) {
-		// Get the number of ranges in the table. We get the key span for the table
-		// data. Then, we count the number of ranges that make up that key span.
-		{
-			iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
-			var tableSpan roachpb.Span
-			if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
-				var err error
-				tableSpan, err = iexecutor.GetTableSpan(
-					s.getUser(req), txn, req.Database, req.Table,
-				)
-				return err
-			}); err != nil {
-				return nil, s.serverError(err)
-			}
-			tableRSpan := roachpb.RSpan{}
+	// Get the number of ranges in the table. We get the key span for the table
+	// data. Then, we count the number of ranges that make up that key span.
+	{
+		iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
+		var tableSpan roachpb.Span
+		if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 			var err error
-			tableRSpan.Key, err = keys.Addr(tableSpan.Key)
-			if err != nil {
-				return nil, s.serverError(err)
-			}
-			tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
-			if err != nil {
-				return nil, s.serverError(err)
-			}
-			rangeCount, err := s.server.distSender.CountRanges(ctx, tableRSpan)
-			if err != nil {
-				return nil, s.serverError(err)
-			}
-			resp.RangeCount = rangeCount
+			tableSpan, err = iexecutor.GetTableSpan(
+				s.getUser(req), txn, req.Database, req.Table,
+			)
+			return err
+		}); err != nil {
+			return nil, s.serverError(err)
+		}
+		tableRSpan := roachpb.RSpan{}
+		var err error
+		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		rangeCount, err := s.server.distSender.CountRanges(ctx, tableRSpan)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		resp.RangeCount = rangeCount
+	}
+
+	// Query the descriptor ID and zone configuration for this table.
+	{
+		path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		resp.DescriptorID = int64(path[2])
+
+		id, zone, zoneExists, err := s.queryZonePath(session, path)
+		if err != nil {
+			return nil, s.serverError(err)
 		}
 
-		// Query the descriptor ID and zone configuration for this table.
-		{
-			path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
-			if err != nil {
-				return nil, s.serverError(err)
-			}
-			resp.DescriptorID = int64(path[2])
+		if !zoneExists {
+			zone = config.DefaultZoneConfig()
+		}
+		resp.ZoneConfig = zone
 
-			id, zone, zoneExists, err := s.queryZonePath(session, path)
-			if err != nil {
-				return nil, s.serverError(err)
-			}
-
-			if !zoneExists {
-				zone = config.DefaultZoneConfig()
-			}
-			resp.ZoneConfig = zone
-
-			switch id {
-			case path[1]:
-				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
-			case path[2]:
-				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
-			default:
-				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
-			}
+		switch id {
+		case path[1]:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+		case path[2]:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
+		default:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
 		}
 	}
 
@@ -513,6 +521,11 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
+	escDBName := parser.Name(req.Database).String()
+	if err := s.assertNotVirtualSchema(escDBName); err != nil {
+		return nil, err
+	}
+
 	// Get table span.
 	var tableSpan roachpb.Span
 	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
@@ -1421,4 +1434,13 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+// assertNotVirtualSchema checks if the provided database name corresponds to a
+// virtual schema, and if so, returns an error.
+func (s *adminServer) assertNotVirtualSchema(dbName string) error {
+	if s.server.sqlExecutor.IsVirtualDatabase(dbName) {
+		return grpc.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
+	}
+	return nil
 }
