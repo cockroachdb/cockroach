@@ -17,6 +17,8 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -25,16 +27,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type byScoreAndID []candidate
+type byScoreAndID candidateList
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].score == c[j].score {
+	if c[i].constraint == c[j].constraint &&
+		c[i].balance == c[j].balance &&
+		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
-	return c[i].score > c[j].score
+	return c[i].less(c[j])
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
+
+func (c candidate) String() string {
+	return fmt.Sprintf("StoreID:%d, valid:%t, con:%.2f, bal:%.2f",
+		c.store.StoreID, c.valid, c.constraint, c.balance)
+}
+
+func (cl candidateList) String() string {
+	var buffer bytes.Buffer
+	buffer.WriteRune('[')
+	for i, c := range cl {
+		if i != 0 {
+			buffer.WriteString("; ")
+		}
+		buffer.WriteString(c.String())
+	}
+	buffer.WriteRune(']')
+	return buffer.String()
+}
 
 // TODO(bram): This test suite is not even close to exhaustive. The scores are
 // not checked and each rule should have many more test cases. Also add a
@@ -111,29 +133,31 @@ func TestRuleSolver(t *testing.T) {
 	storePool.mu.Unlock()
 
 	testCases := []struct {
-		name     string
-		rule     rule
-		c        config.Constraints
-		existing []roachpb.ReplicaDescriptor
-		expected []roachpb.StoreID
+		name            string
+		rule            rule
+		c               config.Constraints
+		existing        []roachpb.ReplicaDescriptor
+		expectedValid   []roachpb.StoreID
+		expectedInvalid []roachpb.StoreID
 	}{
 		{
-			name:     "no constraints or rules",
-			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope},
+			name:          "no constraints or rules",
+			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "white list rule",
-			rule: func(state solveState) (float64, bool) {
-				switch state.store.StoreID {
+			rule: func(store roachpb.StoreDescriptor, _ solveState) (bool, float64, float64) {
+				switch store.StoreID {
 				case storeUSa15:
-					return 0, true
+					return true, 0, 0
 				case storeUSb:
-					return 1, true
+					return true, 1, 0
 				default:
-					return 0, false
+					return false, 0, 0
 				}
 			},
-			expected: []roachpb.StoreID{storeUSb, storeUSa15},
+			expectedValid:   []roachpb.StoreID{storeUSb, storeUSa15},
+			expectedInvalid: []roachpb.StoreID{storeEurope, storeUSa1},
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 2 available nodes",
@@ -142,7 +166,8 @@ func TestRuleSolver(t *testing.T) {
 				{NodeID: roachpb.NodeID(storeUSa15)},
 				{NodeID: roachpb.NodeID(storeUSb)},
 			},
-			expected: []roachpb.StoreID{storeUSa1, storeEurope},
+			expectedValid:   []roachpb.StoreID{storeEurope, storeUSa1},
+			expectedInvalid: []roachpb.StoreID{storeUSb, storeUSa15},
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 0 available nodes",
@@ -153,7 +178,8 @@ func TestRuleSolver(t *testing.T) {
 				{NodeID: roachpb.NodeID(storeUSb)},
 				{NodeID: roachpb.NodeID(storeEurope)},
 			},
-			expected: nil,
+			expectedValid:   nil,
+			expectedInvalid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleConstraints - required constraints",
@@ -163,7 +189,8 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "b", Type: config.Constraint_REQUIRED},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSa1, storeUSb},
+			expectedValid:   []roachpb.StoreID{storeUSb, storeUSa1},
+			expectedInvalid: []roachpb.StoreID{storeEurope, storeUSa15},
 		},
 		{
 			name: "ruleConstraints - required locality constraints",
@@ -173,7 +200,8 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb},
+			expectedValid:   []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15},
+			expectedInvalid: []roachpb.StoreID{storeEurope},
 		},
 		{
 			name: "ruleConstraints - prohibited constraints",
@@ -183,7 +211,8 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "b", Type: config.Constraint_PROHIBITED},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSa15, storeEurope},
+			expectedValid:   []roachpb.StoreID{storeEurope, storeUSa15},
+			expectedInvalid: []roachpb.StoreID{storeUSb, storeUSa1},
 		},
 		{
 			name: "ruleConstraints - prohibited locality constraints",
@@ -193,7 +222,8 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
 				},
 			},
-			expected: []roachpb.StoreID{storeEurope},
+			expectedValid:   []roachpb.StoreID{storeEurope},
+			expectedInvalid: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleConstraints - positive constraints",
@@ -205,7 +235,7 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "c"},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15, storeEurope},
+			expectedValid: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15, storeEurope},
 		},
 		{
 			name: "ruleConstraints - positive locality constraints",
@@ -215,13 +245,12 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "eur"},
 				},
 			},
-			expected: []roachpb.StoreID{storeEurope, storeUSa15, storeUSa1, storeUSb},
+			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
-			name:     "ruleDiversity - no existing replicas",
-			rule:     ruleDiversity,
-			existing: nil,
-			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope},
+			name:          "ruleDiversity - no existing replicas",
+			rule:          ruleDiversity,
+			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleDiversity - one existing replicas",
@@ -229,7 +258,7 @@ func TestRuleSolver(t *testing.T) {
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: roachpb.NodeID(storeUSa15)},
 			},
-			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
+			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleDiversity - two existing replicas",
@@ -238,12 +267,18 @@ func TestRuleSolver(t *testing.T) {
 				{NodeID: roachpb.NodeID(storeUSa15)},
 				{NodeID: roachpb.NodeID(storeEurope)},
 			},
-			expected: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15, storeEurope},
+			expectedValid: []roachpb.StoreID{storeUSb, storeUSa1, storeEurope, storeUSa15},
 		},
 		{
-			name:     "ruleCapacity",
-			rule:     ruleCapacity,
-			expected: []roachpb.StoreID{storeUSa1, storeEurope, storeUSb},
+			name:            "ruleCapacityMax",
+			rule:            ruleCapacityMax,
+			expectedValid:   []roachpb.StoreID{storeEurope, storeUSb, storeUSa1},
+			expectedInvalid: []roachpb.StoreID{storeUSa15},
+		},
+		{
+			name:          "ruleCapacity",
+			rule:          ruleCapacity,
+			expectedValid: []roachpb.StoreID{storeUSa1, storeEurope, storeUSb, storeUSa15},
 		},
 	}
 
@@ -254,24 +289,73 @@ func TestRuleSolver(t *testing.T) {
 				solver = ruleSolver{tc.rule}
 			}
 			sl, _, _ := storePool.getStoreList(roachpb.RangeID(0))
-			candidates, err := solver.Solve(
+			candidates := solver.Solve(
 				sl,
 				tc.c,
 				tc.existing,
 				storePool.getNodeLocalities(tc.existing),
 			)
-			if err != nil {
-				t.Fatal(err)
+			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+			valid := candidates.onlyValid()
+			invalid := candidates[len(valid):]
+
+			if len(valid) != len(tc.expectedValid) {
+				t.Fatalf("length of valid %+v should match %+v", valid, tc.expectedValid)
 			}
-			sort.Sort(byScoreAndID(candidates))
-			if len(candidates) != len(tc.expected) {
-				t.Fatalf("length of %+v should match %+v", candidates, tc.expected)
-			}
-			for i, expected := range tc.expected {
-				if actual := candidates[i].store.StoreID; actual != expected {
-					t.Errorf("candidates[%d].store.StoreID = %d; not %d; %+v",
-						i, actual, expected, candidates)
+			for i, expected := range tc.expectedValid {
+				if actual := valid[i].store.StoreID; actual != expected {
+					t.Errorf("valid[%d].store.StoreID = %d; not %d; %+v",
+						i, actual, expected, valid)
 				}
+			}
+			if len(invalid) != len(tc.expectedInvalid) {
+				t.Fatalf("length of invalids %+v should match %+v", invalid, tc.expectedInvalid)
+			}
+			for i, expected := range tc.expectedInvalid {
+				if actual := invalid[i].store.StoreID; actual != expected {
+					t.Errorf("invalid[%d].store.StoreID = %d; not %d; %+v",
+						i, actual, expected, invalid)
+				}
+			}
+		})
+	}
+}
+
+func TestOnlyValid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		valid, invalid int
+	}{
+		{0, 0},
+		{1, 0},
+		{0, 1},
+		{1, 1},
+		{2, 0},
+		{2, 1},
+		{2, 2},
+		{1, 2},
+		{0, 2},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%d,%d", tc.valid, tc.invalid), func(t *testing.T) {
+			var cl candidateList
+			// Order these in backward to ensure sorting works correctly.
+			for i := 0; i < tc.invalid; i++ {
+				cl = append(cl, candidate{})
+			}
+			for i := 0; i < tc.valid; i++ {
+				cl = append(cl, candidate{valid: true})
+			}
+			sort.Sort(sort.Reverse(byScore(cl)))
+
+			valid := cl.onlyValid()
+			if a, e := len(valid), tc.valid; a != e {
+				t.Errorf("expected %d valid, actual %d", e, a)
+			}
+			if a, e := len(cl)-len(valid), tc.invalid; a != e {
+				t.Errorf("expected %d invalid, actual %d", e, a)
 			}
 		})
 	}
