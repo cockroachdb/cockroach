@@ -29,10 +29,10 @@ type byScoreAndID []candidate
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].score == c[j].score {
+	if c[i].constraint == c[j].constraint && c[i].balance == c[j].balance {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
-	return c[i].score > c[j].score
+	return c[j].less(c[i])
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
@@ -122,14 +122,14 @@ func TestRuleSolver(t *testing.T) {
 		},
 		{
 			name: "white list rule",
-			rule: func(state solveState) (float64, bool) {
-				switch state.store.StoreID {
+			rule: func(store roachpb.StoreDescriptor, _ solveState) (bool, float64, float64) {
+				switch store.StoreID {
 				case storeUSa15:
-					return 0, true
+					return true, 0, 0
 				case storeUSb:
-					return 1, true
+					return true, 1, 0
 				default:
-					return 0, false
+					return false, 0, 0
 				}
 			},
 			expected: []roachpb.StoreID{storeUSb, storeUSa15},
