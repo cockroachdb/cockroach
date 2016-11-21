@@ -269,6 +269,7 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	r.mu.AssertHeld()
 	ctx := r.AnnotateCtx(context.TODO())
 	snap, err := r.SnapshotWithContext(ctx)
 	if err != nil {
@@ -280,7 +281,9 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 // SnapshotWithContext is the main implementation for Snapshot() but it takes
 // a context to allow tracing. If this method returns without error, callers
 // must eventually call CloseOutSnap to ready this replica for more snapshots.
+// r.mu must be held.
 func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, error) {
+	r.mu.AssertHeld()
 	rangeID := r.RangeID
 
 	if r.exceedsDoubleSplitSizeLocked() {
