@@ -21,7 +21,7 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 // Use an enum because proto3 does not give nullable primitive values, and we
-// need to be able to send ProposalData which don't specify frozen.
+// need to be able to send EvalResults which don't specify frozen.
 type ReplicaState_FrozenEnum int32
 
 const (
