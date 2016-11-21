@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -470,66 +471,65 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 		layeredIntervalTestCase4,
 		layeredIntervalTestCase5,
 	} {
-		t.Logf("test case %d", testCaseIdx+1)
+		t.Run(strconv.Itoa(testCaseIdx), func(t *testing.T) {
+			// In simultaneous runs, each span in the test case is given the same
+			// time. Otherwise each gets a distinct timestamp (in the order of
+			// definition).
+			for _, simultaneous := range []bool{false, true} {
+				t.Run(fmt.Sprintf("simultaneous=%t", simultaneous), func(t *testing.T) {
+					// In reverse runs, spans are inserted into the timestamp cache out
+					// of order (so spans with higher timestamps are inserted before
+					// those with lower timestamps). In simultaneous+reverse runs,
+					// timestamps are all the same, but running in both directions is
+					// still necessary to exercise all branches in the code.
+					for _, reverse := range []bool{false, true} {
+						t.Run(fmt.Sprintf("reverse=%t", reverse), func(t *testing.T) {
+							// In sameTxn runs, all spans are inserted as a part of the same
+							// transaction; otherwise each is a separate transaction.
+							for _, sameTxn := range []bool{false, true} {
+								t.Run(fmt.Sprintf("sameTxn=%t", sameTxn), func(t *testing.T) {
+									txns := make([]txnState, len(testCase.spans))
+									if sameTxn {
+										id := uuid.MakeV4()
+										for i := range testCase.spans {
+											txns[i].id = &id
+										}
+									} else {
+										for i := range testCase.spans {
+											u := uuid.MakeV4()
+											txns[i].id = &u
+										}
+									}
 
-		// In simultaneous runs, each span in the test case is given the
-		// same time. Otherwise each gets a distinct timestamp (in the
-		// order of definition).
-		for _, simultaneous := range []bool{false, true} {
-			t.Logf("simultaneous: %v", simultaneous)
+									tc.Clear(clock.Now())
+									if simultaneous {
+										now := clock.Now()
+										for i := range txns {
+											txns[i].ts = now
+										}
+									} else {
+										for i := range txns {
+											txns[i].ts = clock.Now()
+										}
+									}
 
-			// In reverse runs, spans are inserted into the timestamp cache
-			// out of order (so spans with higher timestamps are inserted
-			// before those with lower timestamps). In simultaneous+reverse
-			// runs, timestamps are all the same, but running in both
-			// directions is still necessary to exercise all branches in the
-			// code.
-			for _, reverse := range []bool{false, true} {
-				t.Logf("reverse: %v", reverse)
-
-				// In sameTxn runs, all spans are inserted as a part of the
-				// same transaction; otherwise each is a separate transaction.
-				for _, sameTxn := range []bool{false, true} {
-					t.Logf("sameTxn: %v", sameTxn)
-
-					txns := make([]txnState, len(testCase.spans))
-					if sameTxn {
-						id := uuid.MakeV4()
-						for i := range testCase.spans {
-							txns[i].id = &id
-						}
-					} else {
-						for i := range testCase.spans {
-							u := uuid.MakeV4()
-							txns[i].id = &u
-						}
+									if reverse {
+										for i := len(testCase.spans) - 1; i >= 0; i-- {
+											tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+										}
+									} else {
+										for i := range testCase.spans {
+											tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+										}
+									}
+									testCase.validator(t, tc, txns)
+								})
+							}
+						})
 					}
-
-					tc.Clear(clock.Now())
-					if simultaneous {
-						now := clock.Now()
-						for i := range txns {
-							txns[i].ts = now
-						}
-					} else {
-						for i := range txns {
-							txns[i].ts = clock.Now()
-						}
-					}
-
-					if reverse {
-						for i := len(testCase.spans) - 1; i >= 0; i-- {
-							tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
-						}
-					} else {
-						for i := range testCase.spans {
-							tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
-						}
-					}
-					testCase.validator(t, tc, txns)
-				}
+				})
 			}
-		}
+		})
 	}
 }
 
