@@ -1560,7 +1560,7 @@ func (r *Replica) addAdminCmd(
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
 		var reply roachpb.AdminSplitResponse
-		reply, pErr = r.AdminSplit(ctx, *tArgs, r.Desc())
+		reply, pErr = r.AdminSplit(ctx, *tArgs)
 		resp = &reply
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
