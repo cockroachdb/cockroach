@@ -17,6 +17,7 @@ package syncutil
 import (
 	"runtime"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -26,8 +27,9 @@ import (
 // whenever a lock is unlocked after having been held for longer than the
 // supplied duration, which must be strictly positive.
 type TimedMutex struct {
-	mu       *Mutex    // intentionally pointer to make zero value unusable
-	lockedAt time.Time // protected by mu
+	mu       *Mutex       // intentionally pointer to make zero value unusable
+	lockedAt time.Time    // protected by mu
+	isLocked atomic.Value // contains a bool, or nil before first use
 
 	// Non-mutable fields.
 	cb TimingFn
@@ -82,12 +84,37 @@ func MakeTimedMutex(cb TimingFn) TimedMutex {
 // Lock implements sync.Locker.
 func (tm *TimedMutex) Lock() {
 	tm.mu.Lock()
+	tm.isLocked.Store(true)
 	tm.lockedAt = time.Now()
 }
 
 // Unlock implements sync.Locker.
 func (tm *TimedMutex) Unlock() {
 	lockedAt := tm.lockedAt
+	tm.isLocked.Store(false)
 	tm.mu.Unlock()
-	tm.cb(time.Since(lockedAt))
+	if tm.cb != nil {
+		tm.cb(time.Since(lockedAt))
+	}
+}
+
+// AssertHeld may panic if the mutex is not locked (but it is not
+// required to do so). Functions which require that their callers hold
+// a particular lock may use this to enforce this requirement more
+// directly than relying on the race detector.
+//
+// Note that we do not require the lock to be held by any particular
+// thread, just that some thread holds the lock. This is both more
+// efficient and allows for rare cases where a mutex is locked in one
+// thread and used in another.
+//
+// TODO(bdarnell): Add an equivalent method to syncutil.Mutex
+// (possibly a no-op depending on a build tag)
+func (tm *TimedMutex) AssertHeld() {
+	isLocked := tm.isLocked.Load()
+	if isLocked == nil {
+		panic("mutex has never been locked")
+	} else if !isLocked.(bool) {
+		panic("mutex is not locked")
+	}
 }
