@@ -270,25 +270,27 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	snap, err := r.SnapshotWithContext(ctx)
+	snap, err := r.snapshotWithContext(ctx, "Raft")
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
 	return snap.RaftSnap, err
 }
 
-// SnapshotWithContext is the main implementation for Snapshot() but it takes
+// snapshotWithContext is the main implementation for Snapshot() but it takes
 // a context to allow tracing. If this method returns without error, callers
 // must eventually call CloseOutSnap to ready this replica for more snapshots.
-func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, error) {
+func (r *Replica) snapshotWithContext(
+	ctx context.Context, snapType string,
+) (*OutgoingSnapshot, error) {
 	rangeID := r.RangeID
 
 	if r.exceedsDoubleSplitSizeLocked() {
 		maxBytes := r.mu.maxBytes
 		size := r.mu.state.Stats.Total()
 		log.Infof(ctx,
-			"%s: not generating snapshot because replica is too large: %d > 2 * %d",
-			r, size, maxBytes)
+			"not generating %s snapshot because replica is too large: %d > 2 * %d",
+			snapType, size, maxBytes)
 		return &OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
@@ -313,7 +315,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, e
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	snapData, err := snapshot(ctx, snap, rangeID, r.store.raftEntryCache, startKey)
+	snapData, err := snapshot(ctx, snapType, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
@@ -348,7 +350,7 @@ func (r *Replica) GetSnapshot(ctx context.Context) (*OutgoingSnapshot, error) {
 		<-doneChan
 
 		r.mu.Lock()
-		snap, err := r.SnapshotWithContext(ctx)
+		snap, err := r.snapshotWithContext(ctx, "preemptive")
 		if err == nil {
 			r.mu.outSnap.claimed = true
 		}
@@ -390,9 +392,13 @@ type IncomingSnapshot struct {
 
 // CloseOutSnap closes the Replica's outgoing snapshot, freeing its resources
 // and readying the Replica to send more snapshots. Must be called after any
-// invocation of SnapshotWithContext.
+// invocation of snapshotWithContext.
 func (r *Replica) CloseOutSnap() {
 	r.mu.Lock()
+	if r.mu.outSnap.Iter == nil {
+		r.mu.Unlock()
+		log.Fatalf(r.AnnotateCtx(context.TODO()), "snapshot already closed")
+	}
 	r.mu.outSnap.Iter.Close()
 	r.mu.outSnap.EngineSnap.Close()
 	r.mu.outSnap = OutgoingSnapshot{}
@@ -404,6 +410,7 @@ func (r *Replica) CloseOutSnap() {
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
 func snapshot(
 	ctx context.Context,
+	snapType string,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
@@ -449,8 +456,8 @@ func snapshot(
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
 
-	log.Infof(ctx, "generated snapshot %s at index %d",
-		snapUUID.Short(), appliedIndex)
+	log.Infof(ctx, "generated %s snapshot %s at index %d",
+		snapType, snapUUID.Short(), appliedIndex)
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,
@@ -557,7 +564,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
 func (r *Replica) applySnapshot(
 	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
-) error {
+) (err error) {
 	// Extract the updated range descriptor.
 	desc := inSnap.RangeDescriptor
 
@@ -567,9 +574,8 @@ func (r *Replica) applySnapshot(
 	r.mu.Unlock()
 
 	isPreemptive := replicaID == 0 // only used for accounting and log format
-	var appliedSuccessfully bool
 	defer func() {
-		if appliedSuccessfully {
+		if err == nil {
 			if !isPreemptive {
 				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
 			} else {
@@ -582,7 +588,6 @@ func (r *Replica) applySnapshot(
 		// Raft discarded the snapshot, indicating that our local state is
 		// already ahead of what the snapshot provides. But we count it for
 		// stats (see the defer above).
-		appliedSuccessfully = true
 		return nil
 	}
 
@@ -660,7 +665,7 @@ func (r *Replica) applySnapshot(
 		}
 	}
 	// Write the snapshot's Raft log into the range.
-	_, raftLogSize, err := r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
+	_, raftLogSize, err = r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
 	if err != nil {
 		return err
 	}
@@ -732,8 +737,6 @@ func (r *Replica) applySnapshot(
 	}
 
 	r.setDescWithoutProcessUpdate(&desc)
-
-	appliedSuccessfully = true
 	return nil
 }
 

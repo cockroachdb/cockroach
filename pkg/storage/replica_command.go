@@ -3177,9 +3177,6 @@ func (r *Replica) ChangeReplicas(
 		// complete. See #10409.
 		if err := func() error {
 			snap, err := r.GetSnapshot(ctx)
-			r.mu.Lock()
-			r.mu.outSnap.claimed = true
-			r.mu.Unlock()
 			defer r.CloseOutSnap()
 			log.Event(ctx, "generated snapshot")
 			if err != nil {
