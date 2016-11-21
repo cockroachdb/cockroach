@@ -103,7 +103,7 @@ type LocalEvalResult struct {
 // be counted on to invoke endCmds itself.
 func (lResult *LocalEvalResult) finish(pr proposalResult) {
 	if lResult.endCmds != nil {
-		lResult.endCmds.done(pr.Reply, pr.Err, pr.ShouldRetry)
+		lResult.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		lResult.endCmds = nil
 	}
 	lResult.doneCh <- pr

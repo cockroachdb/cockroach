@@ -180,6 +180,7 @@ message SendError {
 // may have succeeded or failed, but the response was not received and
 // the final result is ambiguous.
 message AmbiguousResultError {
+  optional string message = 1 [(gogoproto.nullable) = false];
 }
 
 // A RaftGroupDeletedError indicates a raft group has been deleted for
