@@ -239,7 +239,7 @@ aggregators was considered; that approach makes it much harder to support outer
 joins, where the `ON` expression evaluation must be part of the internal join
 logic and not just a filter on the output.)
 
-A special type of aggregator is the **program** aggregator which is a
+A special type of aggregator is the **evaluator** aggregator which is a
 "programmable" aggregator which processes the input stream sequentially (one
 element at a time), potentially emitting output elements. This is an aggregator
 with no grouping (group key is the full set of columns); the processing of each
@@ -303,7 +303,7 @@ AGGREGATOR summer
   Group Key: Cid
   Ordering characterization: if input ordered by Cid, output ordered by Cid
 
-PROGRAM sortval
+EVALUATOR sortval
   Input schema: Cid:INT, ValueSum:DECIMAL
   Output schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL
   Ordering characterization:
@@ -458,7 +458,7 @@ Composition: src -> countdistinctmin -> final
   with spans of a table or index and the schema that it needs to read.
   Like every other aggregator, it can be configured with a programmable output
   filter.
-- `PROGRAM` is a fully programmable no-grouping aggregator. It runs a "program"
+- `EVALUATOR` is a fully programmable no-grouping aggregator. It runs a "program"
   on each individual row. The program can drop the row, or modify it
   arbitrarily.
 - `JOIN` performs a join on two streams, with equality constraints between
@@ -541,7 +541,7 @@ We can distribute using a few simple rules:
  - sorting aggregators apply to each physical stream corresponding to the
    logical stream it is sorting. A sort aggregator by itself will *not* result
    in coalescing results into a single node. This is implicit from the fact that
-   (like programs) it requires no grouping.
+   (like evaluators) it requires no grouping.
 
 It is important to note that correctly distributing the work along range
 boundaries is not necessary for correctness - if a range gets split or moved
@@ -568,7 +568,7 @@ AGGREGATOR summer
   Group Key: Cid
   Ordering characterization: if input ordered by Cid, output ordered by Cid
 
-PROGRAM sortval
+EVALUATOR sortval
   Input schema: Cid:INT, ValueSum:DECIMAL
   Output schema: SortVal:DECIMAL, Cid:INT, ValueSum:DECIMAL
   Ordering characterization: if input ordered by [Cid,]ValueSum[,Cid], output ordered by [Cid,]-ValueSum[,Cid]
