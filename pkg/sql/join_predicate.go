@@ -149,8 +149,44 @@ func (p *onPredicate) explainTypes(regTypes func(string, string)) {
 	}
 }
 
-// makeOnPredicate constructs a joinPredicate object for joins with a
-// ON clause.
+// optimizeOnPredicate tries to turn an onPredicate into an
+// equalityPredicate, which enables faster joins.
+// The concatInfos argument, if provided, must be a precomputed
+// concatenation of the left and right dataSourceInfos.
+func (p *planner) optimizeOnPredicate(
+	pred *onPredicate, left, right *dataSourceInfo, concatInfos *dataSourceInfo,
+) (joinPredicate, *dataSourceInfo, error) {
+	c, ok := pred.filter.(*parser.ComparisonExpr)
+	if !ok || c.Operator != parser.EQ {
+		return pred, pred.info, nil
+	}
+	lhs, ok := c.Left.(*parser.IndexedVar)
+	if !ok {
+		return pred, pred.info, nil
+	}
+	rhs, ok := c.Right.(*parser.IndexedVar)
+	if !ok {
+		return pred, pred.info, nil
+	}
+	if (lhs.Idx >= len(left.sourceColumns) && rhs.Idx >= len(left.sourceColumns)) ||
+		(lhs.Idx < len(left.sourceColumns) && rhs.Idx < len(left.sourceColumns)) {
+		// Both variables are on the same side of the join (e.g. `a JOIN b ON a.x = a.y`).
+		return pred, pred.info, nil
+	}
+
+	if lhs.Idx > rhs.Idx {
+		tmp := lhs
+		lhs = rhs
+		rhs = tmp
+	}
+
+	leftColNames := parser.NameList{parser.Name(left.sourceColumns[lhs.Idx].Name)}
+	rightColNames := parser.NameList{parser.Name(right.sourceColumns[rhs.Idx-len(left.sourceColumns)].Name)}
+
+	return p.makeEqualityPredicate(left, right, leftColNames, rightColNames, false, concatInfos)
+}
+
+// makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
 func (p *planner) makeOnPredicate(
 	left, right *dataSourceInfo, expr parser.Expr,
 ) (joinPredicate, *dataSourceInfo, error) {
@@ -174,30 +210,38 @@ func (p *planner) makeOnPredicate(
 	}
 	pred.filter = filter
 
-	return pred, info, nil
+	return p.optimizeOnPredicate(pred, left, right, info)
 }
 
 // equalityPredicate implements the predicate logic for joins with a USING clause.
 type equalityPredicate struct {
-	// The list of leftColumn names given to USING.
-	leftColNames parser.NameList
-	// The list of rightColumn names given to USING.
-	rightColNames parser.NameList
+	p *planner
 
 	// The comparison function to use for each column. We need
 	// different functions because each USING column may have a different
 	// type (and they may be heterogeneous between left and right).
 	usingCmp []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error)
-	// evalCtx is needed to evaluate the functions in usingCmp.
-	evalCtx *parser.EvalContext
 
-	// left/rightUsingIndices give the position of USING columns
+	// left/rightEqualityIndices give the position of USING columns
 	// on the left and right input row arrays, respectively.
-	leftUsingIndices  []int
-	rightUsingIndices []int
+	leftEqualityIndices  []int
+	rightEqualityIndices []int
 
-	// left/rightUsingIndices give the position of non-USING columns on
-	// the left and right input row arrays, respectively.
+	// The list of names for the columns listed in leftEqualityIndices.
+	// Used mainly for pretty-printing.
+	leftColNames parser.NameList
+	// The list of names for the columns listed in rightEqualityIndices.
+	// Used mainly for pretty-printing.
+	rightColNames parser.NameList
+
+	// mergeEqualityColumns specifies that the result row must only
+	// contain one column for every pair of columns tested for equality.
+	// This is the desired behavior for USING and NATURAL JOIN.
+	mergeEqualityColumns bool
+
+	// left/rightEqualityIndices give the position of non-merged columns on
+	// the left and right input row arrays, respectively. This is used
+	// when mergeEqualityColumns is true.
 	leftRestIndices  []int
 	rightRestIndices []int
 }
@@ -213,41 +257,48 @@ func (p *equalityPredicate) start() error                        { return nil }
 func (p *equalityPredicate) expand() error                       { return nil }
 func (p *equalityPredicate) explainTypes(_ func(string, string)) {}
 
-// eval for equalityPredicate compares the USING columns, returning true
-// if and only if all USING columns are equal on both sides.
+// eval for equalityPredicate compares the columns that participate in
+// the equality, returning true if and only if all predicate columns
+// compare equal.
 func (p *equalityPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, error) {
-	eq := true
-	for i := range p.leftColNames {
-		leftVal := leftRow[p.leftUsingIndices[i]]
-		rightVal := rightRow[p.rightUsingIndices[i]]
+	for i := range p.leftEqualityIndices {
+		leftVal := leftRow[p.leftEqualityIndices[i]]
+		rightVal := rightRow[p.rightEqualityIndices[i]]
 		if leftVal == parser.DNull || rightVal == parser.DNull {
-			eq = false
-			break
+			return false, nil
 		}
-		res, err := p.usingCmp[i](p.evalCtx, leftVal, rightVal)
+		res, err := p.usingCmp[i](&p.p.evalCtx, leftVal, rightVal)
 		if err != nil {
 			return false, err
 		}
-		if res != parser.DBool(true) {
-			eq = false
-			break
+		if res != *parser.DBoolTrue {
+			return false, nil
 		}
 	}
-	return eq, nil
+	return true, nil
 }
 
-// prepareRow for equalityPredicate has more work to do than for ON
+// prepareRow for equalityPredicate. First, we should check if this
+// equalityPredicate is generated by makeUsingPredicate,
+// in this situation we'll have more work to do than for ON
 // clauses and CROSS JOIN: a result row contains first the values for
 // the USING columns; then the non-USING values from the left input
 // row, then the non-USING values from the right input row.
 func (p *equalityPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
+	if !p.mergeEqualityColumns {
+		// Columns are not merged, simply emit them all.
+		copy(result[:len(leftRow)], leftRow)
+		copy(result[len(leftRow):], rightRow)
+		return
+	}
+
 	d := 0
-	for k, j := range p.leftUsingIndices {
-		// The result for USING columns must be computed as per COALESCE().
+	for k, j := range p.leftEqualityIndices {
+		// The result for merged columns must be computed as per COALESCE().
 		if leftRow[j] != parser.DNull {
 			result[d] = leftRow[j]
 		} else {
-			result[d] = rightRow[p.rightUsingIndices[k]]
+			result[d] = rightRow[p.rightEqualityIndices[k]]
 		}
 		d++
 	}
@@ -265,9 +316,9 @@ func (p *equalityPredicate) encode(b []byte, row parser.DTuple, side int) ([]byt
 	var cols []int
 	switch side {
 	case rightSide:
-		cols = p.rightUsingIndices
+		cols = p.rightEqualityIndices
 	case leftSide:
-		cols = p.leftUsingIndices
+		cols = p.leftEqualityIndices
 	default:
 		panic("invalid side provided, only leftSide or rightSide applicable")
 	}
@@ -308,7 +359,7 @@ func pickUsingColumn(cols ResultColumns, colName string, context string) (int, p
 // makeUsingPredicate constructs a joinPredicate object for joins with
 // a USING clause.
 func (p *planner) makeUsingPredicate(
-	left *dataSourceInfo, right *dataSourceInfo, colNames parser.NameList,
+	left, right *dataSourceInfo, colNames parser.NameList,
 ) (joinPredicate, *dataSourceInfo, error) {
 	seenNames := make(map[string]struct{})
 
@@ -320,32 +371,45 @@ func (p *planner) makeUsingPredicate(
 		}
 		seenNames[colName] = struct{}{}
 	}
-	return p.makeEqualityPredicate(left, right, colNames, colNames)
+
+	return p.makeEqualityPredicate(left, right, colNames, colNames, true, nil)
 }
 
 // makeEqualityPredicate constructs a joinPredicate object for joins.
 func (p *planner) makeEqualityPredicate(
-	left *dataSourceInfo,
-	right *dataSourceInfo,
-	leftColNames parser.NameList,
-	rightColNames parser.NameList,
-) (joinPredicate, *dataSourceInfo, error) {
+	left, right *dataSourceInfo,
+	leftColNames, rightColNames parser.NameList,
+	mergeEqualityColumns bool,
+	concatInfos *dataSourceInfo,
+) (resPred joinPredicate, info *dataSourceInfo, err error) {
 	if len(leftColNames) != len(rightColNames) {
 		panic(fmt.Errorf("left columns' length %q doesn't match right columns' length %q in EqualityPredicate",
 			len(leftColNames), len(rightColNames)))
 	}
+
+	// Prepare the arrays populated below.
 	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error), len(leftColNames))
-	leftUsingIndices := make([]int, len(leftColNames))
-	rightUsingIndices := make([]int, len(rightColNames))
-	usedLeft := make([]int, len(left.sourceColumns))
-	for i := range usedLeft {
-		usedLeft[i] = invalidColIdx
+	leftEqualityIndices := make([]int, len(leftColNames))
+	rightEqualityIndices := make([]int, len(rightColNames))
+
+	// usedLeft represents the list of indices that participate in the
+	// equality predicate. They are collected in order to determine
+	// below which columns remain after the equality; this is used
+	// only when merging result columns.
+	var usedLeft, usedRight []int
+	var columns ResultColumns
+	if mergeEqualityColumns {
+		usedLeft = make([]int, len(left.sourceColumns))
+		for i := range usedLeft {
+			usedLeft[i] = invalidColIdx
+		}
+		usedRight = make([]int, len(right.sourceColumns))
+		for i := range usedRight {
+			usedRight[i] = invalidColIdx
+		}
+		nResultColumns := len(left.sourceColumns) + len(right.sourceColumns) - len(leftColNames)
+		columns = make(ResultColumns, 0, nResultColumns)
 	}
-	usedRight := make([]int, len(right.sourceColumns))
-	for i := range usedRight {
-		usedRight[i] = invalidColIdx
-	}
-	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns)-len(leftColNames))
 
 	// Find out which columns are involved in EqualityPredicate.
 	for i := range leftColNames {
@@ -357,18 +421,16 @@ func (p *planner) makeEqualityPredicate(
 		if err != nil {
 			return nil, nil, err
 		}
-		usedLeft[leftIdx] = i
 
 		// Find the column name on the right.
 		rightIdx, rightType, err := pickUsingColumn(right.sourceColumns, rightColName, "right")
 		if err != nil {
 			return nil, nil, err
 		}
-		usedRight[rightIdx] = i
 
 		// Remember the indices.
-		leftUsingIndices[i] = leftIdx
-		rightUsingIndices[i] = rightIdx
+		leftEqualityIndices[i] = leftIdx
+		rightEqualityIndices[i] = rightIdx
 
 		// Memoize the comparison function.
 		fn, found := parser.FindEqualComparisonFunction(leftType, rightType)
@@ -378,59 +440,81 @@ func (p *planner) makeEqualityPredicate(
 		}
 		cmpOps[i] = fn
 
-		// Prepare the output column for EqualityPredicate.
-		columns = append(columns, left.sourceColumns[leftIdx])
-	}
+		if mergeEqualityColumns {
+			usedLeft[leftIdx] = i
+			usedRight[rightIdx] = i
 
-	// Find out which columns are not involved in the EqualityPredicate.
-	leftRestIndices := make([]int, 0, len(left.sourceColumns)-1)
-	for i := range left.sourceColumns {
-		if usedLeft[i] == invalidColIdx {
-			leftRestIndices = append(leftRestIndices, i)
-			usedLeft[i] = len(columns)
-			columns = append(columns, left.sourceColumns[i])
-		}
-	}
-	rightRestIndices := make([]int, 0, len(right.sourceColumns)-1)
-	for i := range right.sourceColumns {
-		if usedRight[i] == invalidColIdx {
-			rightRestIndices = append(rightRestIndices, i)
-			usedRight[i] = len(columns)
-			columns = append(columns, right.sourceColumns[i])
+			// Merged columns come first in the results.
+			columns = append(columns, left.sourceColumns[leftIdx])
 		}
 	}
 
-	// Merge the mappings from table aliases to column sets from both
-	// sides into a new alias-columnset mapping for the result rows.
-	aliases := make(sourceAliases)
-	for alias, colRange := range left.sourceAliases {
-		newRange := make([]int, len(colRange))
-		for i, colIdx := range colRange {
-			newRange[i] = usedLeft[colIdx]
-		}
-		aliases[alias] = newRange
-	}
-	for alias, colRange := range right.sourceAliases {
-		newRange := make([]int, len(colRange))
-		for i, colIdx := range colRange {
-			newRange[i] = usedRight[colIdx]
-		}
-		aliases[alias] = newRange
-	}
+	var leftRestIndices, rightRestIndices []int
 
-	info := &dataSourceInfo{
-		sourceColumns: columns,
-		sourceAliases: aliases,
+	if mergeEqualityColumns {
+		// Find out which columns are not involved in the predicate.
+		leftRestIndices = make([]int, 0, len(left.sourceColumns)-1)
+		for i := range left.sourceColumns {
+			if usedLeft[i] == invalidColIdx {
+				leftRestIndices = append(leftRestIndices, i)
+				usedLeft[i] = len(columns)
+				columns = append(columns, left.sourceColumns[i])
+			}
+		}
+
+		rightRestIndices = make([]int, 0, len(right.sourceColumns)-1)
+		for i := range right.sourceColumns {
+			if usedRight[i] == invalidColIdx {
+				rightRestIndices = append(rightRestIndices, i)
+				usedRight[i] = len(columns)
+				columns = append(columns, right.sourceColumns[i])
+			}
+		}
+
+		// Merge the mappings from table aliases to column sets from both
+		// sides into a new alias-columnset mapping for the result rows.
+		aliases := make(sourceAliases)
+		for alias, colRange := range left.sourceAliases {
+			newRange := make([]int, len(colRange))
+			for i, colIdx := range colRange {
+				newRange[i] = usedLeft[colIdx]
+			}
+			aliases[alias] = newRange
+		}
+
+		for alias, colRange := range right.sourceAliases {
+			newRange := make([]int, len(colRange))
+			for i, colIdx := range colRange {
+				newRange[i] = usedRight[colIdx]
+			}
+			aliases[alias] = newRange
+		}
+
+		info = &dataSourceInfo{
+			sourceColumns: columns,
+			sourceAliases: aliases,
+		}
+	} else {
+		// Columns are not merged; result columns are simply the
+		// concatenations of left and right columns.
+		info = concatInfos
+		if info == nil {
+			info, err = concatDataSourceInfos(left, right)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 
 	return &equalityPredicate{
-		evalCtx:           &p.evalCtx,
-		leftColNames:      leftColNames,
-		rightColNames:     rightColNames,
-		usingCmp:          cmpOps,
-		leftUsingIndices:  leftUsingIndices,
-		rightUsingIndices: rightUsingIndices,
-		leftRestIndices:   leftRestIndices,
-		rightRestIndices:  rightRestIndices,
+		p:                    p,
+		leftColNames:         leftColNames,
+		rightColNames:        rightColNames,
+		mergeEqualityColumns: mergeEqualityColumns,
+		usingCmp:             cmpOps,
+		leftEqualityIndices:  leftEqualityIndices,
+		rightEqualityIndices: rightEqualityIndices,
+		leftRestIndices:      leftRestIndices,
+		rightRestIndices:     rightRestIndices,
 	}, info, nil
 }
