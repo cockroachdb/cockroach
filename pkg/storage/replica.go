@@ -2267,11 +2267,15 @@ func (r *Replica) maybeAbandonSnapshot(ctx context.Context) {
 	}
 }
 
+type handleRaftReadyStats struct {
+	processed int
+}
+
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
 // peers. It takes a non-empty IncomingSnapshot to indicate that it is
 // about to process a snapshot.
-func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) error {
+func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) (handleRaftReadyStats, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(inSnap)
@@ -2279,7 +2283,11 @@ func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) error {
 
 // handleRaftReadyLocked is the same as handleRaftReady but requires that the
 // replica's raftMu be held.
-func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
+func (r *Replica) handleRaftReadyRaftMuLocked(
+	inSnap IncomingSnapshot,
+) (handleRaftReadyStats, error) {
+	var stats handleRaftReadyStats
+
 	ctx := r.AnnotateCtx(context.TODO())
 	var hasReady bool
 	var rd raft.Ready
@@ -2296,11 +2304,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 	})
 	r.mu.Unlock()
 	if err != nil {
-		return err
+		return stats, err
 	}
 
 	if !hasReady {
-		return nil
+		return stats, nil
 	}
 
 	logRaftReady(ctx, rd)
@@ -2326,7 +2334,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
 		if err != nil {
-			return errors.Wrap(err, "invalid snapshot id")
+			return stats, errors.Wrap(err, "invalid snapshot id")
 		}
 		if inSnap.SnapUUID == (uuid.UUID{}) {
 			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
@@ -2336,7 +2344,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		}
 
 		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
-			return err
+			return stats, err
 		}
 
 		// handleRaftReady is called under the processRaftMu lock, so it is
@@ -2353,11 +2361,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 			}
 			return nil
 		}(); err != nil {
-			return err
+			return stats, err
 		}
 
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
-			return err
+			return stats, err
 		}
 		// We refresh pending commands after applying a snapshot because this
 		// replica may have been temporarily partitioned from the Raft group and
@@ -2381,16 +2389,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		// last index.
 		var err error
 		if lastIndex, raftLogSize, err = r.append(ctx, writer, lastIndex, raftLogSize, rd.Entries); err != nil {
-			return err
+			return stats, err
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := setHardState(ctx, writer, r.RangeID, rd.HardState); err != nil {
-			return err
+			return stats, err
 		}
 	}
 	if err := batch.Commit(); err != nil {
-		return err
+		return stats, err
 	}
 
 	// Update protected state (last index, raft log size and raft leader
@@ -2433,26 +2441,27 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 				var encodedCommand []byte
 				commandID, encodedCommand = DecodeRaftCommand(e.Data)
 				if err := command.Unmarshal(encodedCommand); err != nil {
-					return err
+					return stats, err
 				}
 			}
 
 			// Discard errors from processRaftCommand. The error has been sent
 			// to the client that originated it, where it will be handled.
 			_ = r.processRaftCommand(ctx, commandID, e.Index, command)
+			stats.processed++
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			if err := cc.Unmarshal(e.Data); err != nil {
-				return err
+				return stats, err
 			}
 			var ccCtx ConfChangeContext
 			if err := ccCtx.Unmarshal(cc.Context); err != nil {
-				return err
+				return stats, err
 			}
 			var command storagebase.RaftCommand
 			if err := command.Unmarshal(ccCtx.Payload); err != nil {
-				return err
+				return stats, err
 			}
 			if pErr := r.processRaftCommand(
 				ctx, storagebase.CmdIDKey(ccCtx.CommandID), e.Index, command,
@@ -2460,11 +2469,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 				// If processRaftCommand failed, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
 			}
+			stats.processed++
 			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
 			}); err != nil {
-				return err
+				return stats, err
 			}
 		default:
 			log.Fatalf(ctx, "unexpected Raft entry: %v", e)
@@ -2479,7 +2489,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	return stats, r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
 		return true, nil
 	})
