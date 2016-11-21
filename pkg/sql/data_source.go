@@ -148,6 +148,10 @@ type columnRange []int
 // in the result row of a data source.
 type sourceAliases map[parser.TableName]columnRange
 
+// anonymousTable is the empty table name, used when a data source
+// has no own name, e.g. VALUES, subqueries or the empty source.
+var anonymousTable = parser.TableName{}
+
 // fillColumnRange creates a single range that refers to all the
 // columns between firstIdx and lastIdx, inclusive.
 func fillColumnRange(firstIdx, lastIdx int) columnRange {
@@ -176,7 +180,7 @@ func (p *planner) getSources(
 	case 0:
 		plan := &emptyNode{results: true}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(parser.TableName{}, plan.Columns()),
+			info: newSourceInfoForSingleTable(anonymousTable, plan.Columns()),
 			plan: plan,
 		}, nil
 
@@ -268,6 +272,14 @@ func (p *planner) getDataSource(
 		src, err := p.getDataSource(t.Expr, t.Hints, scanVisibility)
 		if err != nil {
 			return src, err
+		}
+
+		if t.Ordinality {
+			// The WITH ORDINALITY clause numbers the rows coming out of the
+			// data source. See the comments next to the definition of
+			// `ordinalityNode` in particular how this restricts
+			// optimizations.
+			src = p.wrapOrdinality(src)
 		}
 
 		var tableAlias parser.TableName
@@ -421,7 +433,7 @@ func (p *planner) getSubqueryPlan(
 		cols = plan.Columns()
 	}
 	return planDataSource{
-		info: newSourceInfoForSingleTable(parser.TableName{}, cols),
+		info: newSourceInfoForSingleTable(anonymousTable, cols),
 		plan: plan,
 	}, nil
 }

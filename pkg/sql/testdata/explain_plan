@@ -47,11 +47,12 @@ Level  Type    Description
 0      values  1 column, 1 row
 
 query ITT colnames
-EXPLAIN SELECT * FROM t LIMIT 1 OFFSET 1
+EXPLAIN SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
 Level  Type    Description
 0      limit   count: 1, offset:  1
-1      scan    t@primary (max 2 rows)
+1      ordinality
+2      scan    t@primary (max 2 rows)
 
 query ITT colnames
 EXPLAIN SELECT DISTINCT * FROM t

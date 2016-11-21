@@ -415,3 +415,39 @@ EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(
 4  render/filter  from ("".c.x)     (x)
 5  select                           (column1)
 6  values         1 column, 3 rows  (column1)
+
+query ITT
+EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC;
+----
+0 ordinality
+1 values 1 column, 3 rows
+
+query ITT
+EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC;
+----
+0 sort -ordinality
+1 ordinality
+2 values 1 column, 3 rows
+
+query ITTTT
+EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY;
+----
+0  select                                           (x, ordinality)  +ordinality,unique
+1  render/filter  from (""."".x, ""."".ordinality)  (x, ordinality)  +ordinality,unique
+2  ordinality                                       (x, ordinality)  +ordinality,unique
+3  select                                           (x)
+4  render/filter  from ("".c.x)                     (x)
+5  select                                           (column1)
+6  values         1 column, 3 rows                  (column1)
+
+query ITTTT
+EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY;
+----
+0  select                                           (x, ordinality)  +x
+1  render/filter  from (""."".x, ""."".ordinality)  (x, ordinality)  +x
+2  ordinality                                       (x, ordinality)  +x
+3  select                                           (x)              +x
+4  sort           +x                                (x)              +x
+5  render/filter  from ("".c.x)                     (x)
+6  select                                           (column1)
+7  values         1 column, 3 rows                  (column1)
