@@ -2211,7 +2211,9 @@ opt_lc_ctype_clause:
     $$.val = (*StrVal)(nil)
   }
 
-opt_equal: '=' | ;
+opt_equal:
+  '=' {}
+| /* EMPTY */ {}
 
 // TODO(dan): While RETURNING is not supported with UPSERT and ON CONFLICT
 // (#6637), we do some gymnastics with the grammar to make the diagrams in the
