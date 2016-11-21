@@ -1564,14 +1564,14 @@ func (r *Replica) addAdminCmd(
 		resp = &reply
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
-		reply, pErr = r.AdminMerge(ctx, *tArgs, r.Desc())
+		reply, pErr = r.AdminMerge(ctx, *tArgs)
 		resp = &reply
 	case *roachpb.AdminTransferLeaseRequest:
 		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
-		reply, pErr = r.CheckConsistency(ctx, *tArgs, r.Desc())
+		reply, pErr = r.CheckConsistency(ctx, *tArgs)
 		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)

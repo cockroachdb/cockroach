@@ -358,9 +358,8 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	mtc.replicateRange(rangeC.RangeID, 1, 2)
 
 	// Attempt to merge.
-	rangeADesc = rangeA.Desc()
 	argsMerge := adminMergeArgs(roachpb.Key(rangeADesc.StartKey))
-	if _, pErr := rangeA.AdminMerge(context.Background(), argsMerge, rangeADesc); !testutils.IsPError(pErr, "ranges not collocated") {
+	if _, pErr := rangeA.AdminMerge(context.Background(), argsMerge); !testutils.IsPError(pErr, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", pErr)
 	}
 }
