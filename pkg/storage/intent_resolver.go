@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -38,6 +39,11 @@ import (
 // TODO(bdarnell): how to determine best value?
 const intentResolverTaskLimit = 100
 
+type resolveTask struct {
+	r       *Replica
+	intents []intentsWithArg
+}
+
 // intentResolver manages the process of pushing transactions and
 // resolving intents.
 type intentResolver struct {
@@ -50,15 +56,46 @@ type intentResolver struct {
 		// Maps transaction ids to a refcount.
 		inFlight map[uuid.UUID]int
 	}
+
+	resolveWorkCh chan struct{}
+	resolveWorkMu struct {
+		syncutil.Mutex
+		tasks []resolveTask
+	}
 }
 
 func newIntentResolver(store *Store) *intentResolver {
 	ir := &intentResolver{
-		store: store,
-		sem:   make(chan struct{}, intentResolverTaskLimit),
+		store:         store,
+		sem:           make(chan struct{}, intentResolverTaskLimit),
+		resolveWorkCh: make(chan struct{}, 1),
 	}
 	ir.mu.inFlight = map[uuid.UUID]int{}
 	return ir
+}
+
+func (ir *intentResolver) Start(stopper *stop.Stopper) {
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case <-ir.resolveWorkCh:
+				for {
+					ir.resolveWorkMu.Lock()
+					tasks := ir.resolveWorkMu.tasks
+					ir.resolveWorkMu.tasks = nil
+					ir.resolveWorkMu.Unlock()
+					if len(tasks) == 0 {
+						break
+					}
+					for _, task := range tasks {
+						ir.processIntents(task.r, task.intents)
+					}
+				}
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // processWriteIntentError tries to push the conflicting
@@ -268,6 +305,23 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 	if len(intents) == 0 {
 		return
 	}
+	ir.resolveWorkMu.Lock()
+	ir.resolveWorkMu.tasks = append(ir.resolveWorkMu.tasks, resolveTask{r, intents})
+	ir.resolveWorkMu.Unlock()
+	select {
+	case ir.resolveWorkCh <- struct{}{}:
+	default:
+	}
+}
+
+// processIntents asynchronously processes intents which were
+// encountered during another command but did not interfere with the
+// execution of that command. This occurs in two cases: inconsistent
+// reads and EndTransaction (which queues its own external intents for
+// processing via this method). The two cases are handled somewhat
+// differently and would be better served by different entry points,
+// but combining them simplifies the plumbing necessary in Replica.
+func (ir *intentResolver) processIntents(r *Replica, intents []intentsWithArg) {
 	now := r.store.Clock().Now()
 	ctx := context.TODO()
 	stopper := r.store.Stopper()
