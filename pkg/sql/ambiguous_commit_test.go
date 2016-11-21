@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,9 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 // TestAmbiguousCommitDueToLeadershipChange verifies that an ambiguous
@@ -45,7 +44,6 @@ import (
 // duplicate key violations. See #6053, #7604, and #10023.
 func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#10341")
 
 	// Create a command filter which prevents EndTransaction from
 	// returning a response.
@@ -93,20 +91,10 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	tableID := sqlutils.QueryTableID(t, tc.Conns[0], "test", "t")
 	tableStartKey.Store(keys.MakeTablePrefix(tableID))
 
-	// Wait for new table to split.
-	util.SucceedsSoon(t, func() error {
-		startKey := tableStartKey.Load().([]byte)
-
-		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(startKey))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !desc.StartKey.Equal(startKey) {
-			return errors.Errorf("expected range start key %s; got %s",
-				startKey, desc.StartKey)
-		}
-		return nil
-	})
+	// Wait for new table to split & replication.
+	if err := tc.WaitForSplitAndReplication(tableStartKey.Load().([]byte), 15*time.Second); err != nil {
+		t.Fatal(err)
+	}
 
 	// Lookup the lease.
 	tableRangeDesc, err := tc.LookupRange(keys.MakeRowSentinelKey(tableStartKey.Load().([]byte)))
