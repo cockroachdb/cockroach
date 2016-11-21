@@ -10,6 +10,7 @@ export interface SelectorOption {
 }
 
 interface SelectorOwnProps {
+  title: string;
   urlKey: string; // The URL key used to retrieve/save the state.
   options: SelectorOption[];
   onChange?: (selected: SelectorOption) => void; // Callback when the value changes.
@@ -72,6 +73,9 @@ export default class Selector extends React.Component<SelectorOwnProps, Selector
   render() {
     let selected = this.props.options && _.isNumber(this.state.selected) && this.props.options[this.state.selected] || null;
     let options = this.props.options || [];
-    return <Select clearable={false} options={options} value={selected} onChange={this.onChange} />;
+    return <div className="dropdown-option">
+      <span className="dropdown-option__title">{ this.props.title }:</span>
+      <Select className="dropdown-option__select" clearable={false} options={options} value={selected} onChange={this.onChange} />
+    </div>;
   }
 }

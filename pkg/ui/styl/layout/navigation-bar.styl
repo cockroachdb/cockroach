@@ -117,68 +117,79 @@ $subnav-underline-height = 3px
         letter-spacing 1px
 
 .nav-container
-    ul.nav
-      display flex
-      flex-flow row nowrap
-      justify-content flex-start
-      modular-font-size '1'
-      color $subnav-text-color
-      list-style-type none
-      line-height $subnav-height - $subnav-underline-height
+  padding 0 3rem 1rem
+  background-color $subnav-background
+  text-transform uppercase
+  letter-spacing 2.17px
+  height $subnav-height
+  left $nav-width
+  top $top-bar-height
+  right 0
+  width 100%
+  z-index 1
 
-      font-family Lato-Bold
-      font-size 1.1rem
-      max-width calc(100vw - 80px)
-      @media (min-width: 1300px)
-        max-width 1300px
+  ul.nav
+    display flex
+    flex-flow row nowrap
+    justify-content flex-start
+    modular-font-size '1'
+    color $subnav-text-color
+    list-style-type none
+    line-height $subnav-height - $subnav-underline-height
 
-      li
-        display inline-block
-        margin-right 3rem
-        height $subnav-height
+    font-family Lato-Bold
+    font-size 1.1rem
+    max-width calc(100vw - 80px)
+    @media (min-width: 1300px)
+      max-width 1300px
 
-        &.title
+    li
+      display inline-block
+      margin-right 3rem
+      height $subnav-height
 
-        &.selector
-          padding-right 0
-          margin-right 3em
+      &.title
 
-        &.active, &.active:hover
-          color $subnav-active-color
-          font-weight 600
-          border-bottom $subnav-underline-height solid $subnav-active-color
+      &.selector
+        padding-right 0
+        margin-right 3em
 
+      &.active, &.active:hover
+        color $subnav-active-color
+        font-weight 600
+        border-bottom $subnav-underline-height solid $subnav-active-color
+
+      &:hover
+        color $main-nav-hover
+      a
+        height 100%
+        display block
+        color inherit
+        text-decoration none
         &:hover
-          color $main-nav-hover
-        a
-          height 100%
-          display block
-          color inherit
-          text-decoration none
-          &:hover
-          &:visited
-          &:active
-            color @color
+        &:visited
+        &:active
+          color @color
 
-          div
-            display inline
+        div
+          display inline
 
-        &.timescale-button
+      &.timescale-button
+        align-self flex-start
+        flex-basis 100%
+        // width 100%
+        display flex
+        justify-content flex-start
+        flex-flow row nowrap
+        align-items flex-start
+
+        button
+          margin-top auto
+          margin-bottom auto
           align-self flex-start
-          flex-basis 100%
-          // width 100%
-          display flex
-          justify-content flex-start
-          flex-flow row nowrap
-          align-items flex-start
-
-          button
-            margin-top auto
-            margin-bottom auto
-            align-self flex-start
-            text-transform none
-            &:focus
-              outline 0
+          text-transform none
+          &:focus
+            outline 0
 
 ul.pagination
   letter-spacing 2.17px
