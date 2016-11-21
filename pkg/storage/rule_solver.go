@@ -24,21 +24,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-const (
-	ruleDiversityWeight = 0.1
-	ruleCapacityWeight  = 0.01
-)
-
 // candidate store for allocation.
 type candidate struct {
-	store roachpb.StoreDescriptor
-	score float64
+	store      roachpb.StoreDescriptor
+	constraint float64 // Score used to pick the top candidates.
+	balance    float64 // Score used to choose between top candidates.
+}
+
+// less first compares constraint scores, then balance scores.
+func (c candidate) less(o candidate) bool {
+	if c.constraint != o.constraint {
+		return c.constraint < o.constraint
+	}
+	return c.balance < o.balance
 }
 
 // solveState is used to pass solution state information into a rule.
 type solveState struct {
 	constraints            config.Constraints
-	store                  roachpb.StoreDescriptor
 	sl                     StoreList
 	existing               []roachpb.ReplicaDescriptor
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality
@@ -48,7 +51,7 @@ type solveState struct {
 // disqualify a store. The store in solveState can be disqualified by
 // returning false. Unless disqualified, the higher the returned score, the
 // more likely the store will be picked as a candidate.
-type rule func(state solveState) (float64, bool)
+type rule func(roachpb.StoreDescriptor, solveState) (bool, float64, float64)
 
 // ruleSolver is used to test a collection of rules against stores.
 type ruleSolver []rule
@@ -78,8 +81,7 @@ func (rs ruleSolver) Solve(
 	}
 
 	for _, store := range sl.stores {
-		state.store = store
-		if cand, ok := rs.computeCandidate(state); ok {
+		if cand, ok := rs.computeCandidate(store, state); ok {
 			candidates = append(candidates, cand)
 		}
 	}
@@ -89,27 +91,36 @@ func (rs ruleSolver) Solve(
 
 // computeCandidate runs the rules against a candidate store using the provided
 // state and returns each candidate's score and if the candidate is valid.
-func (rs ruleSolver) computeCandidate(state solveState) (candidate, bool) {
-	var totalScore float64
+func (rs ruleSolver) computeCandidate(
+	store roachpb.StoreDescriptor, state solveState,
+) (candidate, bool) {
+	var totalConstraintScore, totalBalanceScore float64
 	for _, rule := range rs {
-		score, valid := rule(state)
+		valid, constraintScore, balanceScore := rule(store, state)
 		if !valid {
 			return candidate{}, false
 		}
-		totalScore += score
+		totalConstraintScore += constraintScore
+		totalBalanceScore += balanceScore
 	}
-	return candidate{store: state.store, score: totalScore}, true
+	return candidate{
+		store:      store,
+		constraint: totalConstraintScore,
+		balance:    totalBalanceScore,
+	}, true
 }
 
 // ruleReplicasUniqueNodes returns true iff no existing replica is present on
-// the candidate's node.
-func ruleReplicasUniqueNodes(state solveState) (float64, bool) {
+// the candidate's node. All other scores are always 0.
+func ruleReplicasUniqueNodes(
+	store roachpb.StoreDescriptor, state solveState,
+) (bool, float64, float64) {
 	for _, r := range state.existing {
-		if r.NodeID == state.store.Node.NodeID {
-			return 0, false
+		if r.NodeID == store.Node.NodeID {
+			return false, 0, 0
 		}
 	}
-	return 0, true
+	return true, 0, 0
 }
 
 // storeHasConstraint returns whether a store descriptor attributes or locality
@@ -136,53 +147,55 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool
 // ruleConstraints returns true iff all required and prohibited constraints are
 // satisfied. Stores with attributes or localities that match the most positive
 // constraints return higher scores.
-func ruleConstraints(state solveState) (float64, bool) {
+func ruleConstraints(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
 	if len(state.constraints.Constraints) == 0 {
-		return 0, true
+		return true, 0, 0
 	}
 	matched := 0
 	for _, c := range state.constraints.Constraints {
-		hasConstraint := storeHasConstraint(state.store, c)
+		hasConstraint := storeHasConstraint(store, c)
 		switch {
-		case c.Type == config.Constraint_POSITIVE && hasConstraint:
-			matched++
 		case c.Type == config.Constraint_REQUIRED && !hasConstraint:
-			return 0, false
+			return false, 0, 0
 		case c.Type == config.Constraint_PROHIBITED && hasConstraint:
-			return 0, false
+			return false, 0, 0
+		case (c.Type == config.Constraint_POSITIVE && hasConstraint) ||
+			(c.Type == config.Constraint_REQUIRED && hasConstraint) ||
+			(c.Type == config.Constraint_PROHIBITED && !hasConstraint):
+			matched++
 		}
 	}
 
-	return float64(matched) / float64(len(state.constraints.Constraints)), true
+	return true, float64(matched) / float64(len(state.constraints.Constraints)), 0
 }
 
 // ruleDiversity returns higher scores for stores with the fewest locality tiers
 // in common with already existing replicas. It always returns true.
-func ruleDiversity(state solveState) (float64, bool) {
+func ruleDiversity(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
 	minScore := math.Inf(0)
 	for _, locality := range state.existingNodeLocalities {
-		if newScore := state.store.Node.Locality.DiversityScore(locality); newScore < minScore {
+		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
 			minScore = newScore
 		}
 	}
 
 	if !math.IsInf(minScore, 0) {
-		return minScore * ruleDiversityWeight, true
+		return true, minScore, 0
 	}
-	return 0, true
+	return true, 0, 0
 }
 
 // ruleCapacity returns true iff a new replica won't overfill the store. The
 // score returned is inversely proportional to the number of ranges on the
 // candidate store, with the most empty nodes having the highest scores.
 // TODO(bram): consider splitting this into two rules.
-func ruleCapacity(state solveState) (float64, bool) {
+func ruleCapacity(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
 	// Don't overfill stores.
-	if state.store.Capacity.FractionUsed() > maxFractionUsedThreshold {
-		return 0, false
+	if store.Capacity.FractionUsed() > maxFractionUsedThreshold {
+		return false, 0, 0
 	}
 
-	return ruleCapacityWeight / float64(state.store.Capacity.RangeCount+1), true
+	return true, 0, 1 / float64(store.Capacity.RangeCount+1)
 }
 
 // byScore implements sort.Interface to sort by scores.
@@ -191,5 +204,5 @@ type byScore []candidate
 var _ sort.Interface = byScore(nil)
 
 func (c byScore) Len() int           { return len(c) }
-func (c byScore) Less(i, j int) bool { return c[i].score < c[j].score }
+func (c byScore) Less(i, j int) bool { return c[i].less(c[j]) }
 func (c byScore) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
