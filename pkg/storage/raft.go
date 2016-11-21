@@ -188,7 +188,7 @@ func raftEntryFormatter(data []byte) string {
 	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
 	}
-	s := cmd.Cmd.String()
+	s := cmd.BatchRequest.String()
 	maxLen := 300
 	if len(s) > maxLen {
 		s = s[:maxLen]

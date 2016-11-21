@@ -33,14 +33,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// LocalProposalData is data belonging to a proposal that is only relevant
+// LocalEvalResult is data belonging to a proposal that is only relevant
 // on the node on which the command was proposed.
 //
 // TODO(tschottdorf): once the WriteBatch is available in the replicated
 // proposal data (i.e. once we really do proposer-evaluted KV), experiment with
 // holding on to the proposer's constructed engine.Batch in this struct, which
 // could give a performance gain.
-type LocalProposalData struct {
+type LocalEvalResult struct {
 	// TODO(andreimatei): idKey is legacy at this point: We could easily key
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
 	// the-world migration. However, various test facilities depend on the
@@ -97,35 +97,35 @@ type LocalProposalData struct {
 }
 
 // finish first invokes the endCmds function and then sends the
-// specified proposalResult on the lpd's done channel. endCmds is
+// specified proposalResult on the lResult's done channel. endCmds is
 // invoked here in order to allow the original client to be cancelled
 // and possibly no longer listening to this done channel, and so can't
 // be counted on to invoke endCmds itself.
-func (lpd *LocalProposalData) finish(pr proposalResult) {
-	if lpd.endCmds != nil {
-		lpd.endCmds.done(pr.Reply, pr.Err, pr.ShouldRetry)
-		lpd.endCmds = nil
+func (lResult *LocalEvalResult) finish(pr proposalResult) {
+	if lResult.endCmds != nil {
+		lResult.endCmds.done(pr.Reply, pr.Err, pr.ShouldRetry)
+		lResult.endCmds = nil
 	}
-	lpd.doneCh <- pr
-	close(lpd.doneCh)
+	lResult.doneCh <- pr
+	close(lResult.doneCh)
 }
 
-// ProposalData is the result of preparing a Raft proposal. That is, the
+// EvalResult is the result of evaluating a KV request. That is, the
 // proposer (which holds the lease, at least in the case in which the command
-// will complete successfully) has evaluated the proposal and is holding on to:
+// will complete successfully) has evaluated the request and is holding on to:
 //
 // a) changes to be written to disk when applying the command
 // b) changes to the state which may require special handling (i.e. code
 //    execution) on all Replicas
 // c) data which isn't sent to the followers but the proposer needs for tasks
 //    it must run when the command has applied (such as resolving intents).
-type ProposalData struct {
-	LocalProposalData
+type EvalResult struct {
+	Local         LocalEvalResult
 	MaxLeaseIndex uint64
 	OriginReplica roachpb.ReplicaDescriptor
-	Cmd           *roachpb.BatchRequest
-	storagebase.ReplicatedProposalData
-	WriteBatch *storagebase.WriteBatch
+	Request       *roachpb.BatchRequest
+	Replicated    storagebase.ReplicatedEvalResult
+	WriteBatch    *storagebase.WriteBatch
 }
 
 // coalesceBool ORs rhs into lhs and then zeroes rhs.
@@ -134,129 +134,122 @@ func coalesceBool(lhs *bool, rhs *bool) {
 	*rhs = false
 }
 
-// MergeAndDestroy absorbs the supplied ProposalData while validating that the
-// resulting ProposalData makes sense. For example, it is forbidden to absorb
+// MergeAndDestroy absorbs the supplied EvalResult while validating that the
+// resulting EvalResult makes sense. For example, it is forbidden to absorb
 // two lease updates or log truncations, or multiple splits and/or merges.
 //
-// The passed ProposalData must not be used once passed to Merge.
-func (p *ProposalData) MergeAndDestroy(q ProposalData) error {
-	// ==================
-	// ReplicatedProposalData.
-	// ==================
-	if q.State.RaftAppliedIndex != 0 {
+// The passed EvalResult must not be used once passed to Merge.
+func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
+	if q.Replicated.State.RaftAppliedIndex != 0 {
 		return errors.New("must not specify RaftApplyIndex")
 	}
-	if q.State.LeaseAppliedIndex != 0 {
+	if q.Replicated.State.LeaseAppliedIndex != 0 {
 		return errors.New("must not specify RaftApplyIndex")
 	}
-	if p.State.Desc == nil {
-		p.State.Desc = q.State.Desc
-	} else if q.State.Desc != nil {
+	if p.Replicated.State.Desc == nil {
+		p.Replicated.State.Desc = q.Replicated.State.Desc
+	} else if q.Replicated.State.Desc != nil {
 		return errors.New("conflicting RangeDescriptor")
 	}
-	q.State.Desc = nil
+	q.Replicated.State.Desc = nil
 
-	if p.State.Lease == nil {
-		p.State.Lease = q.State.Lease
-	} else if q.State.Lease != nil {
+	if p.Replicated.State.Lease == nil {
+		p.Replicated.State.Lease = q.Replicated.State.Lease
+	} else if q.Replicated.State.Lease != nil {
 		return errors.New("conflicting Lease")
 	}
-	q.State.Lease = nil
+	q.Replicated.State.Lease = nil
 
-	if p.State.TruncatedState == nil {
-		p.State.TruncatedState = q.State.TruncatedState
-	} else if q.State.TruncatedState != nil {
+	if p.Replicated.State.TruncatedState == nil {
+		p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
+	} else if q.Replicated.State.TruncatedState != nil {
 		return errors.New("conflicting TruncatedState")
 	}
-	q.State.TruncatedState = nil
+	q.Replicated.State.TruncatedState = nil
 
-	p.State.GCThreshold.Forward(q.State.GCThreshold)
-	q.State.GCThreshold = hlc.ZeroTimestamp
-	p.State.TxnSpanGCThreshold.Forward(q.State.TxnSpanGCThreshold)
-	q.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+	p.Replicated.State.GCThreshold.Forward(q.Replicated.State.GCThreshold)
+	q.Replicated.State.GCThreshold = hlc.ZeroTimestamp
+	p.Replicated.State.TxnSpanGCThreshold.Forward(q.Replicated.State.TxnSpanGCThreshold)
+	q.Replicated.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
 
-	if (q.State.Stats != enginepb.MVCCStats{}) {
+	if (q.Replicated.State.Stats != enginepb.MVCCStats{}) {
 		return errors.New("must not specify Stats")
 	}
 
-	if p.State.Frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
-		p.State.Frozen = q.State.Frozen
-	} else if q.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+	if p.Replicated.State.Frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+		p.Replicated.State.Frozen = q.Replicated.State.Frozen
+	} else if q.Replicated.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
 		return errors.New("conflicting FrozenStatus")
 	}
-	q.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
+	q.Replicated.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
 
-	p.BlockReads = p.BlockReads || q.BlockReads
-	q.BlockReads = false
+	p.Replicated.BlockReads = p.Replicated.BlockReads || q.Replicated.BlockReads
+	q.Replicated.BlockReads = false
 
-	if p.Split == nil {
-		p.Split = q.Split
-	} else if q.Split != nil {
+	if p.Replicated.Split == nil {
+		p.Replicated.Split = q.Replicated.Split
+	} else if q.Replicated.Split != nil {
 		return errors.New("conflicting Split")
 	}
-	q.Split = nil
+	q.Replicated.Split = nil
 
-	if p.Merge == nil {
-		p.Merge = q.Merge
-	} else if q.Merge != nil {
+	if p.Replicated.Merge == nil {
+		p.Replicated.Merge = q.Replicated.Merge
+	} else if q.Replicated.Merge != nil {
 		return errors.New("conflicting Merge")
 	}
-	q.Merge = nil
+	q.Replicated.Merge = nil
 
-	if p.ChangeReplicas == nil {
-		p.ChangeReplicas = q.ChangeReplicas
-	} else if q.ChangeReplicas != nil {
+	if p.Replicated.ChangeReplicas == nil {
+		p.Replicated.ChangeReplicas = q.Replicated.ChangeReplicas
+	} else if q.Replicated.ChangeReplicas != nil {
 		return errors.New("conflicting ChangeReplicas")
 	}
-	q.ChangeReplicas = nil
+	q.Replicated.ChangeReplicas = nil
 
-	if p.ComputeChecksum == nil {
-		p.ComputeChecksum = q.ComputeChecksum
-	} else if q.ComputeChecksum != nil {
+	if p.Replicated.ComputeChecksum == nil {
+		p.Replicated.ComputeChecksum = q.Replicated.ComputeChecksum
+	} else if q.Replicated.ComputeChecksum != nil {
 		return errors.New("conflicting ComputeChecksum")
 	}
-	q.ComputeChecksum = nil
+	q.Replicated.ComputeChecksum = nil
 
-	// ==================
-	// LocalProposalData.
-	// ==================
-
-	if p.raftLogSize == nil {
-		p.raftLogSize = q.raftLogSize
-	} else if q.raftLogSize != nil {
+	if p.Local.raftLogSize == nil {
+		p.Local.raftLogSize = q.Local.raftLogSize
+	} else if q.Local.raftLogSize != nil {
 		return errors.New("conflicting raftLogSize")
 	}
-	q.raftLogSize = nil
+	q.Local.raftLogSize = nil
 
-	if q.intents != nil {
-		if p.intents == nil {
-			p.intents = q.intents
+	if q.Local.intents != nil {
+		if p.Local.intents == nil {
+			p.Local.intents = q.Local.intents
 		} else {
-			*p.intents = append(*p.intents, *q.intents...)
+			*p.Local.intents = append(*p.Local.intents, *q.Local.intents...)
 		}
 	}
-	q.intents = nil
+	q.Local.intents = nil
 
-	if p.leaseMetricsResult == nil {
-		p.leaseMetricsResult = q.leaseMetricsResult
-	} else if q.leaseMetricsResult != nil {
+	if p.Local.leaseMetricsResult == nil {
+		p.Local.leaseMetricsResult = q.Local.leaseMetricsResult
+	} else if q.Local.leaseMetricsResult != nil {
 		return errors.New("conflicting leaseMetricsResult")
 	}
-	q.leaseMetricsResult = nil
+	q.Local.leaseMetricsResult = nil
 
-	if p.maybeGossipNodeLiveness == nil {
-		p.maybeGossipNodeLiveness = q.maybeGossipNodeLiveness
-	} else if q.maybeGossipNodeLiveness != nil {
+	if p.Local.maybeGossipNodeLiveness == nil {
+		p.Local.maybeGossipNodeLiveness = q.Local.maybeGossipNodeLiveness
+	} else if q.Local.maybeGossipNodeLiveness != nil {
 		return errors.New("conflicting maybeGossipNodeLiveness")
 	}
-	q.maybeGossipNodeLiveness = nil
+	q.Local.maybeGossipNodeLiveness = nil
 
-	coalesceBool(&p.gossipFirstRange, &q.gossipFirstRange)
-	coalesceBool(&p.maybeGossipSystemConfig, &q.maybeGossipSystemConfig)
-	coalesceBool(&p.maybeAddToSplitQueue, &q.maybeAddToSplitQueue)
+	coalesceBool(&p.Local.gossipFirstRange, &q.Local.gossipFirstRange)
+	coalesceBool(&p.Local.maybeGossipSystemConfig, &q.Local.maybeGossipSystemConfig)
+	coalesceBool(&p.Local.maybeAddToSplitQueue, &q.Local.maybeAddToSplitQueue)
 
-	if (q != ProposalData{}) {
-		log.Fatalf(context.TODO(), "unhandled ProposalData: %s", pretty.Diff(q, ProposalData{}))
+	if (q != EvalResult{}) {
+		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
 	}
 
 	return nil
@@ -412,60 +405,60 @@ func (r *Replica) maybeTransferRaftLeadership(
 	}
 }
 
-func (r *Replica) handleReplicatedProposalData(
-	ctx context.Context, rpd storagebase.ReplicatedProposalData,
+func (r *Replica) handleReplicatedEvalResult(
+	ctx context.Context, rResult storagebase.ReplicatedEvalResult,
 ) (shouldAssert bool) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
-		rpd.IsLeaseRequest = false
-		rpd.IsConsistencyRelated = false
-		rpd.IsFreeze = false
-		rpd.Timestamp = hlc.ZeroTimestamp
+		rResult.IsLeaseRequest = false
+		rResult.IsConsistencyRelated = false
+		rResult.IsFreeze = false
+		rResult.Timestamp = hlc.ZeroTimestamp
 	}
 
-	if rpd.BlockReads {
+	if rResult.BlockReads {
 		r.readOnlyCmdMu.Lock()
 		defer r.readOnlyCmdMu.Unlock()
-		rpd.BlockReads = false
+		rResult.BlockReads = false
 	}
 
 	// Update MVCC stats and Raft portion of ReplicaState.
 	r.mu.Lock()
-	r.mu.state.Stats.Add(rpd.Delta)
-	if rpd.State.RaftAppliedIndex != 0 {
-		r.mu.state.RaftAppliedIndex = rpd.State.RaftAppliedIndex
+	r.mu.state.Stats.Add(rResult.Delta)
+	if rResult.State.RaftAppliedIndex != 0 {
+		r.mu.state.RaftAppliedIndex = rResult.State.RaftAppliedIndex
 	}
-	if rpd.State.LeaseAppliedIndex != 0 {
-		r.mu.state.LeaseAppliedIndex = rpd.State.LeaseAppliedIndex
+	if rResult.State.LeaseAppliedIndex != 0 {
+		r.mu.state.LeaseAppliedIndex = rResult.State.LeaseAppliedIndex
 	}
 	needsSplitBySize := r.needsSplitBySizeLocked()
 	r.mu.Unlock()
 
-	r.store.metrics.addMVCCStats(rpd.Delta)
-	rpd.Delta = enginepb.MVCCStats{}
+	r.store.metrics.addMVCCStats(rResult.Delta)
+	rResult.Delta = enginepb.MVCCStats{}
 
 	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
-	if rpd.State.RaftAppliedIndex%raftLogCheckFrequency == 1 {
+	if rResult.State.RaftAppliedIndex%raftLogCheckFrequency == 1 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 	if needsSplitBySize {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
-	rpd.State.Stats = enginepb.MVCCStats{}
-	rpd.State.LeaseAppliedIndex = 0
-	rpd.State.RaftAppliedIndex = 0
+	rResult.State.Stats = enginepb.MVCCStats{}
+	rResult.State.LeaseAppliedIndex = 0
+	rResult.State.RaftAppliedIndex = 0
 
 	// The above are always present, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert = (rpd != storagebase.ReplicatedProposalData{})
+	shouldAssert = (rResult != storagebase.ReplicatedEvalResult{})
 
 	// Process Split or Merge. This needs to happen after stats update because
 	// of the ContainsEstimates hack.
 
-	if rpd.Split != nil {
+	if rResult.Split != nil {
 		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
 		// machinery update our stats for the left-hand side. But there is no
 		// way to pass up an MVCCStats object that will clear out the
@@ -485,33 +478,33 @@ func (r *Replica) handleReplicatedProposalData(
 
 		splitPostApply(
 			r.AnnotateCtx(ctx),
-			rpd.Split.RHSDelta,
-			&rpd.Split.SplitTrigger,
+			rResult.Split.RHSDelta,
+			&rResult.Split.SplitTrigger,
 			r,
 		)
-		rpd.Split = nil
+		rResult.Split = nil
 	}
 
-	if rpd.Merge != nil {
-		if err := r.store.MergeRange(ctx, r, rpd.Merge.LeftDesc.EndKey,
-			rpd.Merge.RightDesc.RangeID,
+	if rResult.Merge != nil {
+		if err := r.store.MergeRange(ctx, r, rResult.Merge.LeftDesc.EndKey,
+			rResult.Merge.RightDesc.RangeID,
 		); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf(ctx, "failed to update store after merging range: %s", err)
 		}
-		rpd.Merge = nil
+		rResult.Merge = nil
 	}
 
 	// Update the remaining ReplicaState.
 
-	if rpd.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+	if rResult.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
 		r.mu.Lock()
-		r.mu.state.Frozen = rpd.State.Frozen
+		r.mu.state.Frozen = rResult.State.Frozen
 		r.mu.Unlock()
 	}
-	rpd.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
+	rResult.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
 
-	if newDesc := rpd.State.Desc; newDesc != nil {
+	if newDesc := rResult.State.Desc; newDesc != nil {
 		if err := r.setDesc(newDesc); err != nil {
 			// Log the error. There's not much we can do because the commit may
 			// have already occurred at this point.
@@ -521,10 +514,10 @@ func (r *Replica) handleReplicatedProposalData(
 				newDesc, err,
 			)
 		}
-		rpd.State.Desc = nil
+		rResult.State.Desc = nil
 	}
 
-	if change := rpd.ChangeReplicas; change != nil {
+	if change := rResult.ChangeReplicas; change != nil {
 		if change.ChangeType == roachpb.REMOVE_REPLICA &&
 			r.store.StoreID() == change.Replica.StoreID {
 			// This wants to run as late as possible, maximizing the chances
@@ -536,11 +529,11 @@ func (r *Replica) handleReplicatedProposalData(
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 			}
 		}
-		rpd.ChangeReplicas = nil
+		rResult.ChangeReplicas = nil
 	}
 
-	if newLease := rpd.State.Lease; newLease != nil {
-		rpd.State.Lease = nil // for assertion
+	if newLease := rResult.State.Lease; newLease != nil {
+		rResult.State.Lease = nil // for assertion
 
 		r.mu.Lock()
 		replicaID := r.mu.replicaID
@@ -551,8 +544,8 @@ func (r *Replica) handleReplicatedProposalData(
 		r.leasePostApply(ctx, newLease, replicaID, prevLease)
 	}
 
-	if newTruncState := rpd.State.TruncatedState; newTruncState != nil {
-		rpd.State.TruncatedState = nil // for assertion
+	if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
+		rResult.State.TruncatedState = nil // for assertion
 		r.mu.Lock()
 		r.mu.state.TruncatedState = newTruncState
 		r.mu.Unlock()
@@ -561,46 +554,46 @@ func (r *Replica) handleReplicatedProposalData(
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
 	}
 
-	if newThresh := rpd.State.GCThreshold; newThresh != hlc.ZeroTimestamp {
+	if newThresh := rResult.State.GCThreshold; newThresh != hlc.ZeroTimestamp {
 		r.mu.Lock()
 		r.mu.state.GCThreshold = newThresh
 		r.mu.Unlock()
-		rpd.State.GCThreshold = hlc.ZeroTimestamp
+		rResult.State.GCThreshold = hlc.ZeroTimestamp
 	}
 
-	if newThresh := rpd.State.TxnSpanGCThreshold; newThresh != hlc.ZeroTimestamp {
+	if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != hlc.ZeroTimestamp {
 		r.mu.Lock()
 		r.mu.state.TxnSpanGCThreshold = newThresh
 		r.mu.Unlock()
-		rpd.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+		rResult.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
 	}
 
-	if rpd.ComputeChecksum != nil {
-		r.computeChecksumPostApply(ctx, *rpd.ComputeChecksum)
-		rpd.ComputeChecksum = nil
+	if rResult.ComputeChecksum != nil {
+		r.computeChecksumPostApply(ctx, *rResult.ComputeChecksum)
+		rResult.ComputeChecksum = nil
 	}
 
-	if (rpd != storagebase.ReplicatedProposalData{}) {
-		log.Fatalf(ctx, "unhandled field in ReplicatedProposalData: %s", pretty.Diff(rpd, storagebase.ReplicatedProposalData{}))
+	if (rResult != storagebase.ReplicatedEvalResult{}) {
+		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))
 	}
 	return shouldAssert
 }
 
-func (r *Replica) handleLocalProposalData(
-	ctx context.Context, originReplica roachpb.ReplicaDescriptor, lpd LocalProposalData,
+func (r *Replica) handleLocalEvalResult(
+	ctx context.Context, originReplica roachpb.ReplicaDescriptor, lResult LocalEvalResult,
 ) (shouldAssert bool) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
-		lpd.idKey = storagebase.CmdIDKey("")
-		lpd.Batch = nil
-		lpd.endCmds = nil
-		lpd.doneCh = nil
-		lpd.ctx = nil
-		lpd.Err = nil
-		lpd.proposedAtTicks = 0
-		lpd.Reply = nil
+		lResult.idKey = storagebase.CmdIDKey("")
+		lResult.Batch = nil
+		lResult.endCmds = nil
+		lResult.doneCh = nil
+		lResult.ctx = nil
+		lResult.Err = nil
+		lResult.proposedAtTicks = 0
+		lResult.Reply = nil
 	}
 
 	// ======================
@@ -616,25 +609,25 @@ func (r *Replica) handleLocalProposalData(
 		// a slight chance that an error between the origin of that intents
 		// slice and here still results in that intent slice arriving here
 		// without the EndTransaction having committed. We should clearly
-		// separate the part of the ProposalData which also applies on errors.
-		if lpd.intents != nil {
-			r.store.intentResolver.processIntentsAsync(r, *lpd.intents)
+		// separate the part of the EvalResult which also applies on errors.
+		if lResult.intents != nil {
+			r.store.intentResolver.processIntentsAsync(r, *lResult.intents)
 		}
 	}
-	lpd.intents = nil
+	lResult.intents = nil
 
 	// The above are present too often, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert = (lpd != LocalProposalData{})
+	shouldAssert = (lResult != LocalEvalResult{})
 
-	if lpd.raftLogSize != nil {
+	if lResult.raftLogSize != nil {
 		r.mu.Lock()
-		r.mu.raftLogSize = *lpd.raftLogSize
+		r.mu.raftLogSize = *lResult.raftLogSize
 		r.mu.Unlock()
-		lpd.raftLogSize = nil
+		lResult.raftLogSize = nil
 	}
 
-	if lpd.gossipFirstRange {
+	if lResult.gossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
 		// the range lease and we'll deadlock if we try to acquire it while
 		// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
@@ -653,48 +646,48 @@ func (r *Replica) handleLocalProposalData(
 		}); err != nil {
 			log.Infof(ctx, "unable to gossip first range: %s", err)
 		}
-		lpd.gossipFirstRange = false
+		lResult.gossipFirstRange = false
 	}
 
-	if lpd.maybeAddToSplitQueue {
+	if lResult.maybeAddToSplitQueue {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
-		lpd.maybeAddToSplitQueue = false
+		lResult.maybeAddToSplitQueue = false
 	}
 
-	if lpd.maybeGossipSystemConfig {
+	if lResult.maybeGossipSystemConfig {
 		r.maybeGossipSystemConfig()
-		lpd.maybeGossipSystemConfig = false
+		lResult.maybeGossipSystemConfig = false
 	}
 
 	if originReplica.StoreID == r.store.StoreID() {
-		if lpd.leaseMetricsResult != nil {
-			r.store.metrics.leaseRequestComplete(*lpd.leaseMetricsResult)
+		if lResult.leaseMetricsResult != nil {
+			r.store.metrics.leaseRequestComplete(*lResult.leaseMetricsResult)
 		}
-		if lpd.maybeGossipNodeLiveness != nil {
-			r.maybeGossipNodeLiveness(*lpd.maybeGossipNodeLiveness)
+		if lResult.maybeGossipNodeLiveness != nil {
+			r.maybeGossipNodeLiveness(*lResult.maybeGossipNodeLiveness)
 		}
 	}
 	// Satisfy the assertions for all of the items processed only on the
 	// proposer (the block just above).
-	lpd.leaseMetricsResult = nil
-	lpd.maybeGossipNodeLiveness = nil
+	lResult.leaseMetricsResult = nil
+	lResult.maybeGossipNodeLiveness = nil
 
-	if (lpd != LocalProposalData{}) {
-		log.Fatalf(ctx, "unhandled field in LocalProposalData: %s", pretty.Diff(lpd, LocalProposalData{}))
+	if (lResult != LocalEvalResult{}) {
+		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, LocalEvalResult{}))
 	}
 
 	return shouldAssert
 }
 
-func (r *Replica) handleProposalData(
+func (r *Replica) handleEvalResult(
 	ctx context.Context,
 	originReplica roachpb.ReplicaDescriptor,
-	lpd LocalProposalData,
-	rpd storagebase.ReplicatedProposalData,
+	lResult LocalEvalResult,
+	rResult storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
-	shouldAssert := r.handleReplicatedProposalData(ctx, rpd)
-	shouldAssert = r.handleLocalProposalData(ctx, originReplica, lpd) || shouldAssert
+	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
+	shouldAssert = r.handleLocalEvalResult(ctx, originReplica, lResult) || shouldAssert
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the side effects.

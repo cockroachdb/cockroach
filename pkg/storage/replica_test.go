@@ -780,7 +780,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(*ProposalData) error {
+	repl.mu.submitProposalFn = func(*EvalResult) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -1760,8 +1760,8 @@ func TestLeaseConcurrent(t *testing.T) {
 
 			var seen int32
 			tc.repl.mu.Lock()
-			tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-				ll, ok := cmd.Cmd.Requests[0].
+			tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
+				ll, ok := cmd.Request.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
 					return defaultSubmitProposalLocked(tc.repl, cmd)
@@ -1780,8 +1780,8 @@ func TestLeaseConcurrent(t *testing.T) {
 						// When we complete the command, we have to remove it from the map;
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
-						delete(tc.repl.mu.proposals, cmd.idKey)
-						cmd.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						delete(tc.repl.mu.proposals, cmd.Local.idKey)
+						cmd.Local.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, cmd); err != nil {
@@ -5226,7 +5226,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock propose to return an roachpb.RaftGroupDeletedError.
-	submitProposalFn := func(*ProposalData) error {
+	submitProposalFn := func(*EvalResult) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 
@@ -5813,14 +5813,14 @@ func TestComputeChecksumVersioning(t *testing.T) {
 
 	if _, pct, _ := repl.ComputeChecksum(context.TODO(), nil, nil, roachpb.Header{},
 		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion},
-	); pct.ComputeChecksum == nil {
+	); pct.Replicated.ComputeChecksum == nil {
 		t.Error("right checksum version: expected post-commit trigger")
 	}
 
 	if _, pct, _ := repl.ComputeChecksum(context.TODO(), nil, nil, roachpb.Header{},
 		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion + 1},
-	); pct.ComputeChecksum != nil {
-		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.ComputeChecksum)
+	); pct.Replicated.ComputeChecksum != nil {
+		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.Replicated.ComputeChecksum)
 	}
 }
 
@@ -6002,7 +6002,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 
 	// Stop the command from being proposed to the raft group and being removed.
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *ProposalData) error { return nil }
+	repl.mu.submitProposalFn = func(p *EvalResult) error { return nil }
 	repl.mu.Unlock()
 
 	// Add a command to the pending list.
@@ -6023,8 +6023,8 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// re-proposed.
 	commandProposed := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *ProposalData) error {
-		if p.Cmd.Timestamp.Equal(magicTS) {
+	repl.mu.submitProposalFn = func(p *EvalResult) error {
+		if p.Request.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
 		return nil
@@ -6053,8 +6053,8 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-		if v := cmd.ctx.Value(magicKey{}); v != nil {
+	tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
+		if v := cmd.Local.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
 				cmd.MaxLeaseIndex = wrongLeaseIndex
 			}
@@ -6160,11 +6160,11 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
-				delete(repl.mu.proposals, cmd.idKey)
+				delete(repl.mu.proposals, cmd.Local.idKey)
 			} else if err := repl.submitProposalLocked(cmd); err != nil {
 				t.Error(err)
 			} else {
-				chs = append(chs, cmd.doneCh)
+				chs = append(chs, cmd.Local.doneCh)
 			}
 			repl.mu.Unlock()
 		}
@@ -6198,8 +6198,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	var seenCmds []int
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-		if v := cmd.ctx.Value(magicKey{}); v != nil {
+	tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
+		if v := cmd.Local.ctx.Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(cmd.MaxLeaseIndex))
 		}
 		return defaultSubmitProposalLocked(tc.repl, cmd)
@@ -6230,14 +6230,14 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
 			tc.repl.insertProposalLocked(cmd, repDesc)
-			chs = append(chs, cmd.doneCh)
+			chs = append(chs, cmd.Local.doneCh)
 			tc.repl.mu.Unlock()
 			tc.repl.raftMu.Unlock()
 		}
 
 		tc.repl.mu.Lock()
 		for _, p := range tc.repl.mu.proposals {
-			if v := p.ctx.Value(magicKey{}); v != nil {
+			if v := p.Local.ctx.Value(magicKey{}); v != nil {
 				origIndexes = append(origIndexes, int(p.MaxLeaseIndex))
 			}
 		}
@@ -6316,12 +6316,12 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 	var dropProposals struct {
 		syncutil.Mutex
-		m map[*ProposalData]struct{}
+		m map[*EvalResult]struct{}
 	}
-	dropProposals.m = make(map[*ProposalData]struct{})
+	dropProposals.m = make(map[*EvalResult]struct{})
 
 	r.mu.Lock()
-	r.mu.submitProposalFn = func(pd *ProposalData) error {
+	r.mu.submitProposalFn = func(pd *EvalResult) error {
 		dropProposals.Lock()
 		defer dropProposals.Unlock()
 		if _, ok := dropProposals.m[pd]; !ok {
@@ -6358,7 +6358,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// Build the map of expected reproposals at this stage.
 		m := map[storagebase.CmdIDKey]int{}
 		for id, p := range r.mu.proposals {
-			m[id] = p.proposedAtTicks
+			m[id] = p.Local.proposedAtTicks
 		}
 		r.mu.Unlock()
 
@@ -6371,11 +6371,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 
-		var reproposed []*ProposalData
+		var reproposed []*EvalResult
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
 		dropProposals.Lock()
 		for p := range dropProposals.m {
-			if p.proposedAtTicks >= ticks {
+			if p.Local.proposedAtTicks >= ticks {
 				reproposed = append(reproposed, p)
 			}
 		}

@@ -36,7 +36,7 @@ type FilterArgs struct {
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
-	ReplicatedProposalData
+	ReplicatedEvalResult
 	CmdID   CmdIDKey
 	RangeID roachpb.RangeID
 	StoreID roachpb.StoreID
