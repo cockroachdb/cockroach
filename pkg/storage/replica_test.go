@@ -1731,12 +1731,14 @@ func TestAcquireLease(t *testing.T) {
 	}
 }
 
+// TestLeaseConcurrent requests the lease multiple times, all of which
+// will join the same LeaseRequest command. This exercises the cloning of
+// the *roachpb.Error to ensure that each requestor gets a distinct
+// error object (which prevents regression of #6111)
 func TestLeaseConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const num = 5
 
-	// Testing concurrent range lease requests is still a good idea. We check
-	// that they work and clone *Error, which prevents regression of #6111.
 	const origMsg = "boom"
 	for _, withError := range []bool{false, true} {
 		func(withError bool) {

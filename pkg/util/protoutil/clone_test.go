@@ -25,25 +25,37 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestCloneProto(t *testing.T) {
-	u := uuid.MakeV4()
-
 	testCases := []struct {
 		pb          proto.Message
 		shouldPanic bool
 	}{
-		{&roachpb.StoreIdent{}, false},
-		{&roachpb.StoreIdent{ClusterID: uuid.MakeV4()}, true},
-		{&enginepb.TxnMeta{}, false},
-		{&enginepb.TxnMeta{ID: &u}, true},
-		{&roachpb.Transaction{}, false},
-		{&config.ZoneConfig{RangeMinBytes: 123, RangeMaxBytes: 456}, false},
+		// Uncloneable types (all contain UUID fields).
+		{&roachpb.StoreIdent{}, true},
+		{&enginepb.TxnMeta{}, true},
+		{&roachpb.Transaction{}, true},
+		{&roachpb.Error{}, true},
+
+		// Cloneable types. This includes all types for which a
+		// protoutil.Clone call exists in the codebase as of 2016-11-21.
+		{&config.ZoneConfig{}, false},
+		{&gossip.Info{}, false},
+		{&gossip.BootstrapInfo{}, false},
+		{&tracing.SpanContextCarrier{}, false},
+		{&sqlbase.IndexDescriptor{}, false},
+		{&roachpb.SplitTrigger{}, false},
+		{&roachpb.Value{}, false},
+		{&storagebase.ReplicaState{}, false},
+		{&roachpb.RangeDescriptor{}, false},
 	}
 	for _, tc := range testCases {
 		var clone proto.Message
@@ -58,12 +70,14 @@ func TestCloneProto(t *testing.T) {
 		if tc.shouldPanic {
 			if panicObj == nil {
 				t.Errorf("%T: expected panic but didn't get one", tc.pb)
-			}
-		} else {
-			if panicObj != nil {
+			} else {
 				if panicStr := fmt.Sprint(panicObj); !strings.Contains(panicStr, "attempt to clone") {
 					t.Errorf("%T: got unexpected panic %s", tc.pb, panicStr)
 				}
+			}
+		} else {
+			if panicObj != nil {
+				t.Errorf("%T: got unexpected panic %v", tc.pb, panicObj)
 			}
 		}
 
