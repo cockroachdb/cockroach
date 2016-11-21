@@ -168,9 +168,17 @@ func newRaftConfig(
 		PreVote:     enablePreVote,
 		CheckQuorum: !enablePreVote,
 
-		// TODO(bdarnell): make these configurable; evaluate defaults.
-		MaxSizePerMsg:   1024 * 1024,
-		MaxInflightMsgs: 256,
+		// MaxSizePerMsg controls how many Raft log entries the leader will send to
+		// followers in a single MsgApp.
+		MaxSizePerMsg: 16 * 1024,
+		// MaxInflightMsgs controls how many "inflight" messages Raft will send to
+		// a follower without hearing a response. The total number of Raft log
+		// entries is a combination of this setting and MaxSizePerMsg. The current
+		// settings provide for up to 64 KB of raft log to be sent without
+		// acknowledgement. With an average entry size of 1 KB that translates to
+		// ~64 commands that might be executed in the handling of a single
+		// raft.Ready operation.
+		MaxInflightMsgs: 4,
 	}
 }
 
@@ -2952,7 +2960,7 @@ func (s *Store) processRaftRequest(
 		removePlaceholder = false
 	} else {
 		// Force the replica to deal with this snapshot right now.
-		if err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
+		if _, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
 			// mimic the behavior in processRaft.
 			panic(err)
 		}
@@ -3200,19 +3208,20 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	s.mu.Unlock()
 
 	if ok {
-		if err := r.handleRaftReady(IncomingSnapshot{}); err != nil {
+		stats, err := r.handleRaftReady(IncomingSnapshot{})
+		if err != nil {
 			panic(err) // TODO(bdarnell)
 		}
 		elapsed := timeutil.Since(start)
 		s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
-		// If Raft processing took longer than 10x the raft tick interval something
-		// bad is going on. Such long processing time means we'll have starved
-		// local replicas of ticks and remote replicas will likely start
-		// campaigning.
-		var warnDuration = 10 * s.cfg.RaftTickInterval
-		if elapsed >= warnDuration {
+		// Warn if Raft processing took too long. We use the same duration as we
+		// use for warning about excessive raft mutex lock hold times. Long
+		// processing time means we'll have starved local replicas of ticks and
+		// remote replicas will likely start campaigning.
+		if elapsed >= defaultReplicaRaftMuWarnThreshold {
 			ctx := r.AnnotateCtx(context.TODO())
-			log.Warningf(ctx, "handle raft ready: %.1fs", elapsed.Seconds())
+			log.Warningf(ctx, "handle raft ready: %.1fs [processed=%d]",
+				elapsed.Seconds(), stats.processed)
 		}
 		if !r.IsInitialized() {
 			// Only an uninitialized replica can have a placeholder since, by
