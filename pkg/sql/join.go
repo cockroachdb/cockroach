@@ -246,7 +246,12 @@ func (p *planner) makeJoin(
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
 			pred, info, err = p.makeOnPredicate(leftInfo, rightInfo, t.Expr)
-			algorithm = nestedLoopJoin
+			switch pred.(type) {
+			case *equalityPredicate:
+				algorithm = hashJoin
+			default:
+				algorithm = nestedLoopJoin
+			}
 		case parser.NaturalJoinCond:
 			cols := commonColumns(leftInfo, rightInfo)
 			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, cols)
