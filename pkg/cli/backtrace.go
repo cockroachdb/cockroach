@@ -34,7 +34,15 @@ import (
 	"github.com/backtrace-labs/go-bcd"
 )
 
+// Currently disabled as backtrace appears to be obscuring problems when test
+// clusters encounter panics. See #10872.
+const backtraceEnabled = false
+
 func initBacktrace(logDir string) *stop.Stopper {
+	if !backtraceEnabled {
+		return stop.NewStopper()
+	}
+
 	const ptracePath = "/opt/backtrace/bin/ptrace"
 	if _, err := os.Stat(ptracePath); err != nil {
 		log.Infof(context.TODO(), "backtrace disabled: %s", err)
