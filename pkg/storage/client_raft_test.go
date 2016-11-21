@@ -789,7 +789,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	// Split the range.
 	splitKey := roachpb.Key("m")
 	splitArgs := adminSplitArgs(splitKey, splitKey)
-	if _, err := rep1.AdminSplit(context.Background(), splitArgs, rep1.Desc()); err != nil {
+	if _, err := rep1.AdminSplit(context.Background(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1166,9 +1166,8 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	{
 		replica := store0.LookupReplica(roachpb.RKeyMin, nil)
 		mtc.replicateRange(replica.RangeID, 1, 2)
-		desc := replica.Desc()
 		splitArgs := adminSplitArgs(splitKey, splitKey)
-		if _, err := replica.AdminSplit(context.Background(), splitArgs, desc); err != nil {
+		if _, err := replica.AdminSplit(context.Background(), splitArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
