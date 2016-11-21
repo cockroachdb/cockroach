@@ -28,26 +28,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestCloneProto(t *testing.T) {
-	u := uuid.MakeV4()
-
 	testCases := []struct {
 		pb          proto.Message
 		shouldPanic bool
 	}{
-		// StoreIdent contains a UUID by value, so it is always uncloneable.
+		// Uncloneable types (all contain UUID fields).
 		{&roachpb.StoreIdent{}, true},
-		{&roachpb.StoreIdent{ClusterID: uuid.MakeV4()}, true},
-		// TxnMeta contains a UUID by pointer, so it is cloneable if the id is nil.
-		{&enginepb.TxnMeta{}, false},
-		{&enginepb.TxnMeta{ID: &u}, true},
-		{&roachpb.Transaction{}, false},
-		{&roachpb.Error{}, false},
-		{&roachpb.Error{UnexposedTxn: &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u}}}, true},
-		{&config.ZoneConfig{RangeMinBytes: 123, RangeMaxBytes: 456}, false},
+		{&enginepb.TxnMeta{}, true},
+		{&roachpb.Transaction{}, true},
+		{&roachpb.Error{}, true},
+
+		// Cloneable types.
+		{&config.ZoneConfig{}, false},
 	}
 	for _, tc := range testCases {
 		var clone proto.Message
