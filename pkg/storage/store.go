@@ -2277,12 +2277,12 @@ func (s *Store) Send(
 			// this node.
 			if pErr != nil {
 				pErr.OriginNode = ba.Replica.NodeID
-				txn := pErr.GetTxn()
-				if txn == nil {
-					txn = ba.Txn
+				if txn := pErr.GetTxn(); txn != nil {
+					pErr.SetTxn(txn)
+				} else {
+					pErr.SetTxn(ba.Txn)
 				}
-				txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
-				pErr.SetTxn(txn)
+				pErr.GetTxn().UpdateObservedTimestamp(ba.Replica.NodeID, now)
 			} else {
 				if br.Txn == nil {
 					br.Txn = ba.Txn
