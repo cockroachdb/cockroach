@@ -790,80 +790,79 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
 		// Each test case defines the range counts for the test stores and whether we
 		// should rebalance from the store.
-		testCases := [][]testStore{
+		testCases := []struct {
+			name    string
+			cluster []testStore
+		}{
 			// An evenly balanced cluster should not rebalance.
-			{{5, false}, {5, false}, {5, false}, {5, false}},
-			// A very nearly balanced cluster should not rebalance.
-			{{5, false}, {5, false}, {5, false}, {6, false}},
+			{"balanced", []testStore{{5, false}, {5, false}, {5, false}, {5, false}}},
 			// Adding an empty node to a 3-node cluster triggers rebalancing from
 			// existing nodes.
-			{{100, true}, {100, true}, {100, true}, {0, false}},
+			{"empty-node", []testStore{{100, true}, {100, true}, {100, true}, {0, false}}},
 			// A cluster where all range counts are within RebalanceThreshold should
 			// not rebalance. This assumes RebalanceThreshold > 2%.
-			{{98, false}, {99, false}, {101, false}, {102, false}},
+			{"within-threshold", []testStore{{98, false}, {99, false}, {101, false}, {102, false}}},
 
-			// 5-nodes, each with a single store above the rebalancer target range
-			// count.
-			oneStoreAboveRebalanceTarget(100, 5),
-			oneStoreAboveRebalanceTarget(1000, 5),
-			oneStoreAboveRebalanceTarget(10000, 5),
+			{"5-stores-mean-100-one-above", oneStoreAboveRebalanceTarget(100, 5)},
+			{"5-stores-mean-1000-one-above", oneStoreAboveRebalanceTarget(1000, 5)},
+			{"5-stores-mean-10000-one-above", oneStoreAboveRebalanceTarget(10000, 5)},
 
-			oneUnderusedStore(1000, 5),
-			oneUnderusedStore(1000, 10),
+			{"5-stores-mean-1000-one-underused", oneUnderusedStore(1000, 5)},
+			{"10-stores-mean-1000-one-underused", oneUnderusedStore(1000, 10)},
 		}
-		for i, tc := range testCases {
-			t.Logf("test case %d: %v", i, tc)
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// It doesn't make sense to test sets of stores containing fewer than 4
+				// stores, because 4 stores is the minimum number of stores needed to
+				// trigger rebalancing with the default replication factor of 3. Also, the
+				// above local functions need a minimum number of stores to properly create
+				// the desired distribution of range counts.
+				const minStores = 4
+				if numStores := len(tc.cluster); numStores < minStores {
+					t.Fatalf("numStores %d < min %d", numStores, minStores)
+				}
+				// Deterministic is required when stressing as test case 8 may rebalance
+				// to different configurations.
+				stopper, g, _, a, _ := createTestAllocator(
+					/* deterministic */ true,
+					/* UseRuleSolver */ useRuleSolver,
+				)
+				defer stopper.Stop()
 
-			// It doesn't make sense to test sets of stores containing fewer than 4
-			// stores, because 4 stores is the minimum number of stores needed to
-			// trigger rebalancing with the default replication factor of 3. Also, the
-			// above local functions need a minimum number of stores to properly create
-			// the desired distribution of range counts.
-			const minStores = 4
-			if numStores := len(tc); numStores < minStores {
-				t.Fatalf("%d: numStores %d < min %d", i, numStores, minStores)
-			}
-			// Deterministic is required when stressing as test case 8 may rebalance
-			// to different configurations.
-			stopper, g, _, a, _ := createTestAllocator(
-				/* deterministic */ true,
-				/* UseRuleSolver */ useRuleSolver,
-			)
-			defer stopper.Stop()
+				// Create stores with the range counts from the test case and gossip them.
+				var stores []*roachpb.StoreDescriptor
+				for j, store := range tc.cluster {
+					stores = append(stores, &roachpb.StoreDescriptor{
+						StoreID:  roachpb.StoreID(j + 1),
+						Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(j + 1)},
+						Capacity: roachpb.StoreCapacity{Capacity: 1, Available: 1, RangeCount: store.rangeCount},
+					})
+				}
+				gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
-			// Create stores with the range counts from the test case and gossip them.
-			var stores []*roachpb.StoreDescriptor
-			for j, store := range tc {
-				stores = append(stores, &roachpb.StoreDescriptor{
-					StoreID:  roachpb.StoreID(j + 1),
-					Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(j + 1)},
-					Capacity: roachpb.StoreCapacity{Capacity: 1, Available: 1, RangeCount: store.rangeCount},
+				// Ensure gossiped store descriptor changes have propagated.
+				util.SucceedsSoon(t, func() error {
+					sl, _, _ := a.storePool.getStoreList(firstRange)
+					for j, s := range sl.stores {
+						if a, e := s.Capacity.RangeCount, tc.cluster[j].rangeCount; a != e {
+							return errors.Errorf("range count for %d = %d != expected %d", j, a, e)
+						}
+					}
+					return nil
 				})
-			}
-			gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
-
-			// Ensure gossiped store descriptor changes have propagated.
-			util.SucceedsSoon(t, func() error {
 				sl, _, _ := a.storePool.getStoreList(firstRange)
-				for j, s := range sl.stores {
-					if a, e := s.Capacity.RangeCount, tc[j].rangeCount; a != e {
-						return errors.Errorf("tc %d: range count for %d = %d != expected %d", i, j, a, e)
+
+				// Verify shouldRebalance returns the expected value.
+				for j, store := range stores {
+					desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+					if !ok {
+						t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
+					}
+					if a, e := a.shouldRebalance(desc, sl), tc.cluster[j].shouldRebalanceFrom; a != e {
+						t.Errorf("[store %d]: shouldRebalance %t != expected %t", store.StoreID, a, e)
 					}
 				}
-				return nil
 			})
-			sl, _, _ := a.storePool.getStoreList(firstRange)
-
-			// Verify shouldRebalance returns the expected value.
-			for j, store := range stores {
-				desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
-				if !ok {
-					t.Fatalf("[tc %d,store %d]: unable to get store %d descriptor", i, j, store.StoreID)
-				}
-				if a, e := a.shouldRebalance(desc, sl), tc[j].shouldRebalanceFrom; a != e {
-					t.Errorf("[tc %d,store %d]: shouldRebalance %t != expected %t", i, store.StoreID, a, e)
-				}
-			}
 		}
 	})
 }
