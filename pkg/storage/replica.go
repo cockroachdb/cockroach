@@ -1393,6 +1393,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					r.cmdQMu.Unlock()
 				}()
 				return nil, err
+			case <-r.store.stopper.ShouldQuiesce():
+				// While shutting down, commands may have been added to the
+				// command queue that will never finish.
+				return nil, &roachpb.NodeUnavailableError{}
 			}
 		}
 		if numChans > 0 {
