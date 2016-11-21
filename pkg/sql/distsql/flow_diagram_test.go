@@ -60,7 +60,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	jr := JoinReaderSpec{
 		Table:         *desc,
 		OutputColumns: []uint32{2},
-		Filter:        Expression{Expr: "$0+$1<$2"},
+		Filter:        Expression{Expr: "@1+@2<@3"},
 	}
 
 	f1 := FlowSpec{
@@ -129,7 +129,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","0,1"]},"outputs":[]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","0,1"]},"outputs":[]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","0,1"]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["1+"]}],"core":{"title":"JoinReader","details":["primary@Table","2","$0+$1\u003c$2"]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["1+"]}],"core":{"title":"JoinReader","details":["primary@Table","2","@1+@2\u003c@3"]},"outputs":[]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 			],
 			"edges":[
@@ -164,7 +164,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		LeftEqColumns:  []uint32{0, 2},
 		RightEqColumns: []uint32{2, 1},
 		OutputColumns:  []uint32{0, 1, 2, 3, 4, 5},
-		Expr:           Expression{Expr: "$0+$1<$5"},
+		Expr:           Expression{Expr: "@1+@2<@6"},
 	}
 
 	f1 := FlowSpec{
@@ -318,11 +318,11 @@ func TestPlanDiagramJoin(t *testing.T) {
 			"processors":[
 				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","0,1,3"]},"outputs":[{"title":"by hash","details":["0,1"]}]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","0,1,3"]},"outputs":[{"title":"by hash","details":["0,1"]}]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(0,2)=right(2,1)","0,1,2,3,4,5","$0+$1\u003c$5"]},"outputs":[]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(0,2)=right(2,1)","0,1,2,3,4,5","@1+@2\u003c@6"]},"outputs":[]},
 				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","0,1,3"]},"outputs":[{"title":"by hash","details":["0,1"]}]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","1,2,4"]},"outputs":[{"title":"by hash","details":["2,1"]}]},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(0,2)=right(2,1)","0,1,2,3,4,5","$0+$1\u003c$5"]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(0,2)=right(2,1)","0,1,2,3,4,5","@1+@2\u003c@6"]},"outputs":[]},
 				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","1,2,4"]},"outputs":[{"title":"by hash","details":["2,1"]}]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 			],

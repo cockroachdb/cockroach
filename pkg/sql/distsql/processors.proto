@@ -54,8 +54,8 @@ message TableReaderSpec {
   repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
 
   // The filter expression references the columns in the table (table.columns)
-  // via $0, $1, etc. If a secondary index is used, the columns that are not
-  // available as part of the index cannot be referenced.
+  // via ordinal references (@1, @2, etc). If a secondary index is used, the
+  // columns that are not available as part of the index cannot be referenced.
   optional Expression filter = 5 [(gogoproto.nullable) = false];
 
   // The table reader will only produce values for these columns, referenced by
@@ -82,8 +82,8 @@ message JoinReaderSpec {
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
   // The filter expression references the columns in the table (table.columns)
-  // via $0, $1, etc. If a secondary index is used, the columns that are not
-  // available as part of the index cannot be referenced.
+  // via ordinal references (@1, @2, etc). If a secondary index is used, the
+  // columns that are not available as part of the index cannot be referenced.
   optional Expression filter = 3 [(gogoproto.nullable) = false];
 
   // The table reader will only produce values for these columns, referenced by
@@ -119,7 +119,7 @@ message SorterSpec {
 // expressions on the input row.
 //
 // TODO(irfansharif): Add support for an optional output filter expression.
-// The filter expression would reference the columns in the row via $0, $1,
+// The filter expression would reference the columns in the row via @1, @2,
 // etc., possibly optimizing if filtering on expressions common to the
 // 'program'.
 message EvaluatorSpec {
@@ -164,9 +164,9 @@ message MergeJoinerSpec {
 
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
-  // stream has M columns, in this expression variables $0 to $(N-1) refer to
-  // columns of the left stream and variables $N to $(N+M-1) refer to columns in
-  // the right stream.
+  // stream has M columns, in this expression ordinal references @1 to @N refer
+  // to columns of the left stream and variables @(N+1) to @(N+M) refer to
+  // columns in the right stream.
   optional Expression expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
@@ -197,8 +197,8 @@ message HashJoinerSpec {
 
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
-  // stream has M columns, in this expression variables $0 to $(N-1) refer to
-  // columns of the left stream and variables $N to $(N+M-1) refer to columns in
+  // stream has M columns, in this expression variables @1 to @N refer to
+  // columns of the left stream and variables @N to @(N+M) refer to columns in
   // the right stream.
   optional Expression expr = 5 [(gogoproto.nullable) = false];
 

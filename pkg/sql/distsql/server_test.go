@@ -53,7 +53,7 @@ func TestServer(t *testing.T) {
 		IndexIdx:      0,
 		Reverse:       false,
 		Spans:         nil,
-		Filter:        Expression{Expr: "$0 != 2"}, // a != 2
+		Filter:        Expression{Expr: "@1 != 2"}, // a != 2
 		OutputColumns: []uint32{0, 1},              // a
 	}
 

@@ -48,7 +48,7 @@ func TestEvaluator(t *testing.T) {
 	}{
 		{
 			spec: EvaluatorSpec{
-				Exprs: []Expression{{Expr: "$1"}, {Expr: "((($0)))"}},
+				Exprs: []Expression{{Expr: "@2"}, {Expr: "(((@1)))"}},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[2]},
@@ -69,9 +69,9 @@ func TestEvaluator(t *testing.T) {
 		}, {
 			spec: EvaluatorSpec{
 				Exprs: []Expression{
-					{Expr: "$0 + $1"},
-					{Expr: "$0 - $1"},
-					{Expr: "$0 >= 8"},
+					{Expr: "@1 + @2"},
+					{Expr: "@1 - @2"},
+					{Expr: "@1 >= 8"},
 				},
 			},
 			input: sqlbase.EncDatumRows{
@@ -91,9 +91,9 @@ func TestEvaluator(t *testing.T) {
 		}, {
 			spec: EvaluatorSpec{
 				Exprs: []Expression{
-					{Expr: "$0 AND $0"},
-					{Expr: "$0 AND $1"},
-					{Expr: "NOT $0"},
+					{Expr: "@1 AND @1"},
+					{Expr: "@1 AND @2"},
+					{Expr: "NOT @1"},
 				},
 			},
 			input: sqlbase.EncDatumRows{

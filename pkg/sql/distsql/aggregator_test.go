@@ -50,7 +50,7 @@ func TestAggregator(t *testing.T) {
 		expected sqlbase.EncDatumRows
 	}{
 		{
-			// SELECT $1, COUNT($0), GROUP BY $1.
+			// SELECT @2, COUNT(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				Types:     []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				GroupCols: []uint32{1},
@@ -77,7 +77,7 @@ func TestAggregator(t *testing.T) {
 				{v[2], v[3]},
 			},
 		}, {
-			// SELECT $1, SUM($0), GROUP BY $1.
+			// SELECT @2, SUM(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				Types:     []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				GroupCols: []uint32{1},
@@ -104,7 +104,7 @@ func TestAggregator(t *testing.T) {
 				{v[4], v[11]},
 			},
 		}, {
-			// SELECT COUNT($0), SUM($0), GROUP BY [] (empty group key).
+			// SELECT COUNT(@1), SUM(@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				Exprs: []AggregatorSpec_Expr{
@@ -130,7 +130,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT SUM DISTINCT ($0), GROUP BY [] (empty group key).
+			// SELECT SUM DISTINCT (@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT},
 				Exprs: []AggregatorSpec_Expr{
@@ -153,7 +153,7 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
-			// SELECT $0, GROUP BY [] (empty group key).
+			// SELECT @1, GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT},
 				Exprs: []AggregatorSpec_Expr{
@@ -172,7 +172,7 @@ func TestAggregator(t *testing.T) {
 				{v[1]},
 			},
 		}, {
-			// SELECT MAX($0), MIN($1), COUNT($1), COUNT DISTINCT ($1), GROUP BY [] (empty group key).
+			// SELECT MAX(@1), MIN(@2), COUNT(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
 				Exprs: []AggregatorSpec_Expr{
