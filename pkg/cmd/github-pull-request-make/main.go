@@ -165,7 +165,7 @@ func main() {
 				target,
 				fmt.Sprintf("PKG=./%s", name),
 				fmt.Sprintf("TESTS=%s", tests),
-				fmt.Sprintf("TESTFLAGS=-test.bench %s", benchmarks),
+				fmt.Sprintf("BENCHES=%s", benchmarks),
 				fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 			)
 			cmd.Dir = crdb.Dir
