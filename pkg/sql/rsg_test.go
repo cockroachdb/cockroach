@@ -163,7 +163,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		select {
 		case err := <-funcdone:
 			return err
-		case <-time.After(time.Second * 5):
+		case <-time.After(time.Second * 10):
 			panic(fmt.Sprintf("func exec timeout: %s", s))
 		}
 	})
