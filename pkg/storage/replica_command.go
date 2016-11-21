@@ -3176,10 +3176,7 @@ func (r *Replica) ChangeReplicas(
 		// progress which might be required for this ChangeReplicas operation to
 		// complete. See #10409.
 		if err := func() error {
-			snap, err := r.GetSnapshot(ctx)
-			r.mu.Lock()
-			r.mu.outSnap.claimed = true
-			r.mu.Unlock()
+			snap, err := r.GetSnapshot(ctx, snapTypePreemptive)
 			defer r.CloseOutSnap()
 			log.Event(ctx, "generated snapshot")
 			if err != nil {
