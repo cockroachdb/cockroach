@@ -70,31 +70,14 @@ func createTestNode(
 	cfg.ScanInterval = 10 * time.Hour
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	serverCfg := makeTestConfig()
 	cfg.Gossip = gossip.NewTest(
 		0,
 		nodeRPCContext,
 		grpcServer,
-		serverCfg.GossipBootstrapResolvers,
+		nil,
 		stopper,
 		metric.NewRegistry(),
 	)
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gossipBS != nil {
-		// Handle possibility of a :0 port specification.
-		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
-			gossipBS = ln.Addr()
-		}
-		r, err := resolver.NewResolverFromAddress(gossipBS)
-		if err != nil {
-			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
-		}
-		cfg.Gossip.SetResolvers([]resolver.Resolver{r})
-		cfg.Gossip.Start(ln.Addr())
-	}
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
@@ -117,6 +100,22 @@ func createTestNode(
 	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
+	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gossipBS != nil {
+		// Handle possibility of a :0 port specification.
+		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
+			gossipBS = ln.Addr()
+		}
+		r, err := resolver.NewResolverFromAddress(gossipBS)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Gossip.SetResolvers([]resolver.Resolver{r})
+		cfg.Gossip.Start(ln.Addr())
+	}
 	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
 
