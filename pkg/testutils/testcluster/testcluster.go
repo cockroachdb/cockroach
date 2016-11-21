@@ -491,6 +491,39 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	return ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
 }
 
+func (tc *TestCluster) WaitForSplitAndReplication(startKey roachpb.Key) error {
+	return util.RetryForDuration(util.DefaultSucceedsSoonDuration, func() error {
+		desc, err := tc.LookupRange(startKey)
+		if err != nil {
+			return errors.Wrapf(err, "unable to lookup range for %s", startKey)
+		}
+		// Verify the split first.
+		if !desc.StartKey.Equal(startKey) {
+			return errors.Errorf("expected range start key %s; got %s",
+				startKey, desc.StartKey)
+		}
+		// Once we've verified the split, make sure that replicas exist.
+		for _, rDesc := range desc.Replicas {
+			store, err := tc.findMemberStore(rDesc.StoreID)
+			if err != nil {
+				return err
+			}
+			repl, err := store.GetReplica(desc.RangeID)
+			if err != nil {
+				return err
+			}
+			actualReplicaDesc, err := repl.GetReplicaDescriptor()
+			if err != nil {
+				return err
+			}
+			if actualReplicaDesc != rDesc {
+				return errors.Errorf("expected replica %s; got %s", rDesc, actualReplicaDesc)
+			}
+		}
+		return nil
+	})
+}
+
 // findMemberStore returns the store containing a given replica.
 func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store, error) {
 	for _, server := range tc.Servers {
