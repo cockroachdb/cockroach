@@ -42,9 +42,7 @@ const pkgEnv = "PKG"
 // Based on the following observed API response:
 //
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body is too long (maximum is 65536 characters)}]
-//
-// Subtract some length just to be safe.
-const githubIssueBodyMaximumLength = 1<<16 - 1<<10
+const githubIssueBodyMaximumLength = 1<<16 - 1
 
 func main() {
 	token, ok := os.LookupEnv(githubAPITokenEnv)
@@ -61,12 +59,14 @@ func main() {
 	}
 }
 
-func trimIssueRequestBody(message string) string {
-	for len(message) > githubIssueBodyMaximumLength {
+func trimIssueRequestBody(message string, usedCharacters int) string {
+	maxLength := githubIssueBodyMaximumLength - usedCharacters
+
+	for len(message) > maxLength {
 		if idx := strings.IndexByte(message, '\n'); idx != -1 {
 			message = message[idx+1:]
 		} else {
-			message = message[len(message)-githubIssueBodyMaximumLength:]
+			message = message[len(message)-maxLength:]
 		}
 	}
 	return message
@@ -93,6 +93,7 @@ func runGH(
 
 	options := url.Values{}
 	options.Add("buildId", buildID)
+	options.Add("tab", "buildLog")
 
 	u, err := url.Parse(serverURL)
 	if err != nil {
@@ -111,7 +112,13 @@ func runGH(
 
 Stress build found a failed test: %s
 
-%s`, sha, u.String(), "```\n"+trimIssueRequestBody(message)+"\n```")
+%s`, sha, u.String(), "```\n%s\n```")
+		// We insert a raw "%s" above so we can figure out the length of the
+		// body so far, without the actual error text. We need this length so we
+		// can calculate the maximum amount of error text we can include in the
+		// issue without exceeding GitHub's limit. We replace that %s in the
+		// following Sprintf.
+		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
 
 		return &github.IssueRequest{
 			Title: &title,
