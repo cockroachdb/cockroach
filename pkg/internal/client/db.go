@@ -202,7 +202,7 @@ func NewDBWithContext(sender Sender, ctx DBContext) *DB {
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
-// error.
+// error. It is not considered an error for the key not to exist.
 //
 //   r, err := db.Get("a")
 //   // string(r.Key) == "a"
@@ -215,7 +215,7 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
-// message.
+// message. If the key doesn't exist, the proto will simply be reset.
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetProto(ctx context.Context, key interface{}, msg proto.Message) error {
@@ -253,6 +253,8 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue. Note that this must be an interface{}(nil), not a
 // typed nil value (e.g. []byte(nil)).
+//
+// Returns an error if the existing value is not equal to expValue.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
