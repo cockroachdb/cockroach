@@ -2233,7 +2233,7 @@ func (r *Replica) maybeAbandonSnapshot(ctx context.Context) {
 	r.mu.Unlock()
 
 	if !claimed && snapUUID != (uuid.UUID{}) {
-		// There is an unclaimed by valid snapshot. If it is not currently being
+		// There is an unclaimed but valid snapshot. If it is not currently being
 		// generated (i.e. doneChan is closed) then close it.
 		select {
 		// We can read from this without the replica lock because we're holding the
