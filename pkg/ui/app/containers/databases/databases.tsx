@@ -3,8 +3,9 @@
 import _ from "lodash";
 import * as React from "react";
 import { connect } from "react-redux";
+import { IRouter, IInjectedProps } from "react-router";
 
-import { ListLink } from "../../components/listLink";
+import Selector, { SelectorOption } from "../../components/selector";
 
 import { AdminUIState } from "../../redux/state";
 import { refreshDatabases } from "../../redux/apiReducers";
@@ -22,15 +23,32 @@ const excludedTableList = {
   "pg_catalog": true,
 };
 
-// DatabaseListNav is a pure-function component that renders the navigation
-// element specific to the databases tab.
-function DatabaseListNav(props: {children?: any}) {
-  return <div className="nav-container">
-    <ul className="nav">
-    <ListLink to="/databases/tables">Tables</ListLink>
-    <ListLink to="/databases/grants">Grants</ListLink>
+let databasePages = [
+  { value: "tables", label: "Tables" },
+  { value: "grants", label: "Grants" },
+];
+
+// DatabaseListNav displays the database page navigation bar.
+class DatabaseListNav extends React.Component<{selected: string}, {}> {
+  // Magic to add react router to the context.
+  // See https://github.com/ReactTraining/react-router/issues/975
+  static contextTypes = {
+    router: React.PropTypes.object.isRequired,
+  };
+  context: { router?: IRouter & IInjectedProps; };
+
+  render() {
+    return <div className="page-config">
+      <ul className="page-config__list">
+        <li className="page-config__item">
+          <Selector title="View" options={databasePages} selected={this.props.selected}
+                    onChange={(selected: SelectorOption) => {
+                      this.context.router.push(`databases/${selected.value}`);
+                    }} />
+        </li>
       </ul>
-  </div>;
+    </div>;
+  }
 }
 
 // DatabaseListData describes properties which should be passed to the
@@ -51,7 +69,7 @@ type DatabaseListProps = DatabaseListData & DatabaseListActions;
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
 class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
   static title() {
-    return <h2>Database Tables</h2>;
+    return "Databases";
   }
 
   componentWillMount() {
@@ -60,7 +78,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 
   render() {
     return <div>
-      <DatabaseListNav/>
+      <DatabaseListNav selected="tables"/>
       <div className="section databases">
         { _.map(this.props.databaseNames, (n) => {
           if (excludedTableList.hasOwnProperty(n)) {
@@ -76,7 +94,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 // DatabaseTablesList displays the "Grants" sub-tab of the main database page.
 class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
   static title() {
-    return <h2>Database Grants</h2>;
+    return "Databases";
   }
 
   componentWillMount() {
@@ -85,7 +103,7 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
 
   render() {
     return <div>
-      <DatabaseListNav/>
+      <DatabaseListNav selected="grants"/>
       <div className="section databases">
         { _.map(this.props.databaseNames, (n) => {
           if (excludedTableList.hasOwnProperty(n)) {

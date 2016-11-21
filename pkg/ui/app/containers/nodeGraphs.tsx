@@ -1,5 +1,11 @@
+import _ from "lodash";
 import * as React from "react";
 import * as d3 from "d3";
+import { IInjectedProps } from "react-router";
+
+import {
+  nodeIDAttr, dashboardNameAttr,
+} from "../util/constants";
 
 import GraphGroup from "../components/graphGroup";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
@@ -12,20 +18,22 @@ interface NodeGraphsOwnProps {
   nodeIds: string[];
 }
 
+type NodeGraphsProps = NodeGraphsOwnProps & IInjectedProps;
+
 /**
  * Renders the main content of the help us page.
  */
-export default class NodeGraphs extends React.Component<NodeGraphsOwnProps, {}> {
+export default class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   static displayTimeScale = true;
   render() {
-    let sources: string[] = this.props.nodeIds || null;
+    let nodeID = this.props.params[nodeIDAttr];
+    let sources: string[] =  (_.isString(nodeID) && nodeID !== "") ? [nodeID] : null;
+    let dashboard = this.props.params[dashboardNameAttr];
     let specifier = (sources && sources.length === 1) ? `on node ${sources[0]}` : "across all nodes";
 
     return <div className="section node">
       <div className="charts">
-        <GraphGroup groupId="node.activity" hide={this.props.groupId !== "node.activity"}>
-          <h2>Activity</h2>
-
+        <GraphGroup groupId="node.activity" hide={dashboard !== "activity"}>
           <LineGraph title="SQL Connections" sources={sources} tooltip={`The total number of active SQL connections ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.conns" title="Client Connections" />
@@ -77,8 +85,7 @@ export default class NodeGraphs extends React.Component<NodeGraphsOwnProps, {}> 
             </LineGraph>
 
           </GraphGroup>
-        <GraphGroup groupId="node.queries" hide={this.props.groupId !== "node.queries"}>
-          <h2>SQL Queries</h2>
+        <GraphGroup groupId="node.queries" hide={dashboard !== "queries"}>
             <LineGraph title="Reads" sources={sources} tooltip={`The average number of SELECT statements per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
@@ -109,7 +116,7 @@ export default class NodeGraphs extends React.Component<NodeGraphsOwnProps, {}> 
 
           </GraphGroup>
 
-          <GraphGroup groupId="node.resources" hide={this.props.groupId !== "node.resources"}>
+          <GraphGroup groupId="node.resources" hide={dashboard !== "resources"}>
             <h2>System Resources</h2>
             <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
@@ -154,8 +161,7 @@ export default class NodeGraphs extends React.Component<NodeGraphsOwnProps, {}> 
 
           </GraphGroup>
 
-          <GraphGroup groupId="node.internals" hide={this.props.groupId !== "node.internals"}>
-            <h2>Advanced Internals</h2>
+          <GraphGroup groupId="node.internals" hide={dashboard !== "internals"}>
             <StackedAreaGraph title="Key/Value Transactions" sources={sources}>
               <Axis label="transactions/sec" format={ d3.format(".1f") }>
                 <Metric name="cr.node.txn.commits-count" title="Commits" nonNegativeRate />
