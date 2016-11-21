@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -273,7 +274,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	//
 	// It is important that no logging occur before this point or the log files
 	// will be created in $TMPDIR instead of their expected location.
-	f := flag.Lookup("log-dir")
+	pf := cockroachCmd.PersistentFlags()
+	f := pf.Lookup(logflags.LogDirName)
 	if !log.DirSet() {
 		for _, spec := range serverCfg.Stores.Specs {
 			if spec.InMemory {
@@ -286,12 +288,40 @@ func runStart(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	// Make sure the path exists.
 	logDir := f.Value.String()
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return err
+	vf := pf.Lookup(logflags.AlsoLogToStderrName)
+	if !vf.Changed {
+		if logDir == "" {
+			// If the verbosity was not set yet, raise it -- the default set
+			// in flags.go is WARNING, suitable for all commands other than
+			// `start`.
+			if err := vf.Value.Set(log.Severity_INFO.String()); err != nil {
+				return err
+			}
+		} else {
+			// If we have a log directory, then we can silence all logging to stderr
+			// (unless verbosity was explicitly set).
+			ls := pf.Lookup(logflags.LogToStderrName)
+			if !ls.Changed {
+				if err := vf.Value.Set(log.Severity_NONE.String()); err != nil {
+					return err
+				}
+			}
+		}
 	}
-	log.Eventf(startCtx, "created log directory %s", logDir)
+
+	// Make sure the path exists.
+	if logDir != "" {
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return err
+		}
+		log.Eventf(startCtx, "created log directory %s", logDir)
+	} else {
+		// The backtrace generator below wants an output directory.  If
+		// there is none configured, simply emit the backtraces to the
+		// current directory.
+		logDir = "."
+	}
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
