@@ -297,8 +297,8 @@ func (a Allocator) RemoveTarget(
 		// as we are removing a replica and not trying to add one.
 		sl, _, _ := a.storePool.getStoreList(roachpb.RangeID(0))
 
-		var worst roachpb.ReplicaDescriptor
-		worstScore := math.Inf(0)
+		worstCandidate := candidate{constraint: math.Inf(0)}
+		var worstReplica roachpb.ReplicaDescriptor
 		for _, exist := range existing {
 			if exist.StoreID == leaseStoreID {
 				continue
@@ -308,9 +308,8 @@ func (a Allocator) RemoveTarget(
 				continue
 			}
 
-			candidate, valid := removeRuleSolver.computeCandidate(solveState{
+			currentCandidate, valid := removeRuleSolver.computeCandidate(desc, solveState{
 				constraints:            constraints,
-				store:                  desc,
 				sl:                     sl,
 				existing:               nil,
 				existingNodeLocalities: a.storePool.getNodeLocalities(existing),
@@ -321,15 +320,15 @@ func (a Allocator) RemoveTarget(
 				return exist, nil
 			}
 
-			if candidate.score < worstScore {
-				worstScore = candidate.score
-				worst = exist
+			if currentCandidate.less(worstCandidate) {
+				worstCandidate = currentCandidate
+				worstReplica = exist
 			}
 
 		}
 
-		if !math.IsInf(worstScore, 0) {
-			return worst, nil
+		if !math.IsInf(worstCandidate.constraint, 0) {
+			return worstReplica, nil
 		}
 
 		return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
@@ -440,17 +439,17 @@ func (a Allocator) RebalanceTarget(
 		}
 
 		// Find all candidates that are better than the worst existing store.
-		var worstCandidateStore float64
+		var worstCandidate candidate
 		// If any store from existing is not included in existingCandidates, it
 		// is because it no longer meets the constraints. If so, its score is
 		// considered to be 0.
 		if len(existingCandidates) == len(existing) {
-			worstCandidateStore = existingCandidates[len(existingCandidates)-1].score
+			worstCandidate = existingCandidates[len(existingCandidates)-1]
 		}
 
 		// TODO(bram): #10275 Need some randomness here!
 		for _, cand := range candidates {
-			if cand.score > worstCandidateStore {
+			if worstCandidate.less(cand) {
 				return &candidates[0].store, nil
 			}
 		}
