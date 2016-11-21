@@ -2177,7 +2177,9 @@ func (r *Replica) maybeAbandonSnapshot(ctx context.Context) {
 	snapUUID := r.mu.outSnap.SnapUUID
 	r.mu.Unlock()
 
-	if !claimed {
+	if !claimed && snapUUID != (uuid.UUID{}) {
+		// There is an unclaimed by valid snapshot. If it is not currently being
+		// generated (i.e. doneChan is closed) then close it.
 		select {
 		// We can read from this without the replica lock because we're holding the
 		// raft lock, which protects modification of the snapshot data.
@@ -2327,15 +2329,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 	r.mu.leaderID = leaderID
 	r.mu.Unlock()
 
-	sendingSnapshot := false
 	for _, msg := range rd.Messages {
-		if !raft.IsEmptySnap(msg.Snapshot) {
-			sendingSnapshot = true
-		}
 		r.sendRaftMessage(ctx, msg)
-	}
-	if !sendingSnapshot {
-		r.maybeAbandonSnapshot(ctx)
 	}
 
 	for _, e := range rd.CommittedEntries {

@@ -44,7 +44,7 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := rep.GetSnapshot(context.Background()); err != nil {
+		if _, err := rep.GetSnapshot(context.Background(), "bench"); err != nil {
 			b.Fatal(err)
 		}
 		rep.CloseOutSnap()
