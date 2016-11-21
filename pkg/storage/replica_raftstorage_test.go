@@ -87,7 +87,10 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 
 	fillTestRange(t, rep, snapSize*2)
 
-	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
+	rep.mu.Lock()
+	_, err = rep.Snapshot()
+	rep.mu.Unlock()
+	if err != raft.ErrSnapshotTemporarilyUnavailable {
 		rep.mu.Lock()
 		after := rep.mu.state.Stats.Total()
 		rep.mu.Unlock()
