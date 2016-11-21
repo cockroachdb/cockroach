@@ -44,7 +44,7 @@ const pkgEnv = "PKG"
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body is too long (maximum is 65536 characters)}]
 //
 // Subtract some length just to be safe.
-const githubIssueBodyMaximumLength = 1<<16 - 1<<10
+const githubIssueBodyMaximumLength = 1<<16 - 1<<11
 
 func main() {
 	token, ok := os.LookupEnv(githubAPITokenEnv)
@@ -93,6 +93,7 @@ func runGH(
 
 	options := url.Values{}
 	options.Add("buildId", buildID)
+	options.Add("tab", "buildLog")
 
 	u, err := url.Parse(serverURL)
 	if err != nil {

@@ -95,7 +95,7 @@ Stress build found a failed test: %s
 %s
 `,
 					regexp.QuoteMeta(sha),
-					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d", serverURL, buildID)),
+					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)),
 					regexp.QuoteMeta(expectations.body),
 				),
 			)
