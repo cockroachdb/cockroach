@@ -176,8 +176,14 @@ Stress build found a failed test: %s
 		}
 	}
 
+	const unknown = "(unknown)"
+
 	if !posted {
-		issueRequest := newIssueRequest("(unknown)", "(unknown)", inputBuf.String())
+		packageName, ok := os.LookupEnv(pkgEnv)
+		if !ok {
+			packageName = unknown
+		}
+		issueRequest := newIssueRequest(packageName, unknown, inputBuf.String())
 		if _, _, err := createIssue("cockroachdb", "cockroach", issueRequest); err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 		}
