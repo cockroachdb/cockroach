@@ -37,7 +37,7 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
   state = new ClusterOverviewState();
 
   static title() {
-    return <h2>Nodes</h2>;
+    return "Cluster Overview";
   }
 
   componentWillMount() {
@@ -45,7 +45,7 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
   }
 
   componentWillReceiveProps(props: ClusterOverviewProps) {
-    let base = [{ value: "", label: "All nodes"}];
+    let base = [{ value: "", label: "Cluster"}];
     if (props.nodes) {
       this.setState({
         nodeOptions: base.concat(_.map(props.nodes, (n) => { return { value: n.desc.node_id.toString(), label: n.desc.address.address_field }; })),
@@ -82,20 +82,19 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
     // TODO(mrtracy): this outer div is used to spare the children
     // `nav-container's styling. Should those styles apply only to `nav`?
     return <div>
-      <div className="nav-container">
-        <ul className="nav">
-          <li className="title">Nodes:</li>
-          <li className="selector" style={{ width: 250 }}>
-            <Selector urlKey={nodeQueryString} options={this.state.nodeOptions} onChange={this.nodeChange} /></li>
-          <li className="title">Dashboard:</li>
-          <li className="selector" style={{ width: 200 }}>
-            <Selector urlKey={dashQueryString} options={dashboards} onChange={this.dashChange} />
+      <section className="page-config">
+        <ul className="page-config__list">
+          <li className="page-config__item">
+            <Selector title="Graph" urlKey={nodeQueryString} options={this.state.nodeOptions} onChange={this.nodeChange} />
           </li>
-          <li className="title">View:</li>
-          {/* <li>Last 6 Hours</li> */}
-          {displayTimescale ? <TimeScaleSelector /> : null }
+          <li className="page-config__item">
+            <Selector title="Dashboard" urlKey={dashQueryString} options={dashboards} onChange={this.dashChange} />
+          </li>
+          <li className="page-config__item">
+              {displayTimescale ? <TimeScaleSelector /> : null }
+          </li>
         </ul>
-      </div>
+      </section>
       { childWithProps }
     </div>;
   }

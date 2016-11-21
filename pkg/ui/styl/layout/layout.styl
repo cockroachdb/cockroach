@@ -35,8 +35,23 @@ $subnav-background  = $secondary-gray-4
     display table
     clear both
 
-#content
-  min-height 100%
+.page-config
+  padding-left 24px
+  &__list
+    clearfix
+
+  &__item
+    float left
+    list-style none
+    margin-right 2rem
+
+.header
+  color $dark-blue
+  font-size 24px
+  padding 24px
+  text-transform uppercase
+  font-face lato
+  letter-spacing 5px
 
 .page.help-us
   height 100%
@@ -213,19 +228,6 @@ span.icon
 
     strong
       font-family Lato-Bold
-
-.nav-container
-  padding 0 3rem 1rem
-  background-color $subnav-background
-  text-transform uppercase
-  letter-spacing 2.17px
-  height $subnav-height
-  position fixed
-  left $nav-width
-  top $top-bar-height
-  right 0
-  width 100%
-  z-index 1
 
 a.toggle
   font Lato-Bold
