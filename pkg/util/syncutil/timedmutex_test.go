@@ -83,3 +83,23 @@ func TestTimedMutex(t *testing.T) {
 
 	}
 }
+
+func TestAssertHeld(t *testing.T) {
+	tm := syncutil.MakeTimedMutex(nil)
+
+	// The normal, successful case.
+	tm.Lock()
+	tm.AssertHeld()
+	tm.Unlock()
+
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("did not get expected panic")
+			} else if a, e := r.(string), "mutex is not locked"; a != e {
+				t.Fatalf("got %q, expected %q", a, e)
+			}
+		}()
+		tm.AssertHeld()
+	}()
+}
