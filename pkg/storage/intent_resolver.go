@@ -79,6 +79,11 @@ func (ir *intentResolver) Start(stopper *stop.Stopper) {
 		for {
 			select {
 			case <-ir.resolveWorkCh:
+				// Loop while there is work to do rather than waiting to be signalled
+				// by the channel. This inner loop isn't necessary for correctness with
+				// the current code structure, but mirrors the code structure you would
+				// use with a condition variable: loop while the condition is true,
+				// only blocking when the condition is false.
 				for {
 					ir.resolveWorkMu.Lock()
 					tasks := ir.resolveWorkMu.tasks
