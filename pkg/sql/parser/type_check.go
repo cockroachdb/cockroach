@@ -637,15 +637,17 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		return nil, err
 	}
 
-	// TODO(nvanbenschoten): For now we only support text arrays.
-	if !typ.Equal(TypeString) {
+	switch typ {
+	case TypeInt:
+		expr.typ = TypeIntArray
+	case TypeString:
+		expr.typ = TypeStringArray
+	default:
 		return nil, errors.Errorf("unhandled parameterized array type %T", typ)
 	}
-
 	for i := range typedSubExprs {
 		expr.Exprs[i] = typedSubExprs[i]
 	}
-	expr.typ = tArray{typ}
 	return expr, nil
 }
 
