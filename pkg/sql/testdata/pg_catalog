@@ -860,3 +860,26 @@ syntax                         NULL    NULL     NULL     NULL        NULL
 time zone                      NULL    NULL     NULL     NULL        NULL
 transaction isolation level    NULL    NULL     NULL     NULL        NULL
 transaction priority           NULL    NULL     NULL     NULL        NULL
+
+
+# Verify proper functionality of system information functions.
+
+query T
+SELECT pg_catalog.pg_get_expr('1', 0)
+----
+1
+
+query T
+SELECT pg_catalog.pg_get_expr('1', 0, true)
+----
+1
+
+query ITT
+SELECT def.oid, c.relname, pg_catalog.pg_get_expr(def.adbin, def.adrelid)
+FROM pg_catalog.pg_attrdef def
+JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+1889966686  t1  12
+390509283   t3  'FOO'
