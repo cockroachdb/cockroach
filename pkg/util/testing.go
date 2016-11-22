@@ -98,7 +98,9 @@ func CleanupDir(dir string) {
 	_ = os.RemoveAll(dir)
 }
 
-const defaultSucceedsSoonDuration = 45 * time.Second
+// DefaultSucceedsSoonDuration is the maximum amount of time unittests
+// will wait for a condition to become true. See SucceedsSoon().
+const DefaultSucceedsSoonDuration = 45 * time.Second
 
 // SucceedsSoon fails the test (with t.Fatal) unless the supplied
 // function runs without error within a preset maximum duration. The
@@ -112,9 +114,9 @@ func SucceedsSoon(t Tester, fn func() error) {
 // SucceedsSoonDepth is like SucceedsSoon() but with an additional
 // stack depth offset.
 func SucceedsSoonDepth(depth int, t Tester, fn func() error) {
-	if err := RetryForDuration(defaultSucceedsSoonDuration, fn); err != nil {
+	if err := RetryForDuration(DefaultSucceedsSoonDuration, fn); err != nil {
 		file, line, _ := caller.Lookup(depth + 1)
-		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s", file, line, defaultSucceedsSoonDuration, err)
+		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s", file, line, DefaultSucceedsSoonDuration, err)
 	}
 }
 
