@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
@@ -402,6 +403,18 @@ func init() {
 
 // extraFlagInit is a standalone function so we can test more easily.
 func extraFlagInit() {
+	// If no log directory has been set, reduce the logging verbosity by default.
+	// `start` increases it again as a special case.
+	if !log.DirSet() {
+		pf := cockroachCmd.PersistentFlags()
+		f := pf.Lookup(logflags.AlsoLogToStderrName)
+		if !f.Changed {
+			if err := f.Value.Set(log.Severity_WARNING.String()); err != nil {
+				panic(err)
+			}
+		}
+	}
+
 	// If any of the security flags have been set, clear the insecure
 	// setting. Note that we do the inverse when the --insecure flag is
 	// set. See insecureValue.Set().
