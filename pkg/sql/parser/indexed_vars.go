@@ -19,10 +19,15 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
+// If an object that wishes to implement this interface has lost the
+// textual name that an IndexedVar originates from, it can use the
+// ordinal column reference syntax: fmt.Fprintf(buf, "@%d", idx)
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
 	IndexedVarResolvedType(idx int) Type
@@ -55,27 +60,56 @@ func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) 
 
 // Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
+	if v.container == nil {
+		panic("indexed var must be bound to a container before evaluation")
+	}
 	return v.container.IndexedVarEval(v.Idx, ctx)
 }
 
 // ResolvedType is part of the TypedExpr interface.
 func (v *IndexedVar) ResolvedType() Type {
+	if v.container == nil {
+		panic("indexed var must be bound to a container before type resolution")
+	}
 	return v.container.IndexedVarResolvedType(v.Idx)
 }
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
-	if f.symbolicVars {
+	if f.symbolicVars || v.container == nil {
 		fmt.Fprintf(buf, "@%d", v.Idx+1)
 		return
 	}
 	v.container.IndexedVarFormat(buf, f, v.Idx)
 }
 
-// IndexedVarHelper is a structure that helps with initialization of IndexVars.
+// NewOrdinalReference is a helper routine to create a standalone
+// IndexedVar with the given index value. This needs to undergo
+// BindIfUnbound() below before it can be fully used.
+func NewOrdinalReference(r int) *IndexedVar {
+	return &IndexedVar{Idx: r, container: nil}
+}
+
+// IndexedVarHelper is a structure that helps with initialization of IndexedVars.
 type IndexedVarHelper struct {
 	vars      []IndexedVar
 	container IndexedVarContainer
+}
+
+// BindIfUnbound attaches an IndexedVar to an existing container.
+// This is needed for standalone column ordinals created during parsing.
+func (h *IndexedVarHelper) BindIfUnbound(ivar *IndexedVar) error {
+	if ivar.container != nil {
+		return nil
+	}
+	if ivar.Idx < 0 || ivar.Idx >= len(h.vars) {
+		return errors.Errorf("invalid column ordinal: @%d", ivar.Idx+1)
+	}
+	// This container must also remember it has "seen" the variable
+	// so that IndexedVarUsed() below returns the right results.
+	// The IndexedVar() method ensures this.
+	*ivar = *h.IndexedVar(ivar.Idx)
+	return nil
 }
 
 // MakeIndexedVarHelper initializes an IndexedVarHelper structure.

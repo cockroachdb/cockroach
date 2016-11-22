@@ -90,10 +90,10 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns ResultColumns) {
 			prefix = '-'
 		}
 		buf.WriteByte(prefix)
-		if columns == nil || o.ColIdx >= len(columns) {
-			fmt.Fprintf(buf, "%d", o.ColIdx)
-		} else {
+		if columns != nil && o.ColIdx < len(columns) {
 			parser.Name(columns[o.ColIdx].Name).Format(buf, parser.FmtSimple)
+		} else {
+			fmt.Fprintf(buf, "@%d", o.ColIdx+1)
 		}
 	}
 

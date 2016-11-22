@@ -57,9 +57,17 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		v.foundDependentVars = true
 
 	case *parser.IndexedVar:
+		// If the indexed var is a standalone ordinal reference, ensure it
+		// becomes a fully bound indexed var.
+		if err := v.iVarHelper.BindIfUnbound(t); err != nil {
+			v.err = err
+			return false, expr
+		}
+
 		// We allow resolving IndexedVars on expressions that have already been resolved by this
 		// resolver. This is used in some cases when adding render targets for grouping or sorting.
 		v.iVarHelper.AssertSameContainer(t)
+
 		v.foundDependentVars = true
 		return true, expr
 
