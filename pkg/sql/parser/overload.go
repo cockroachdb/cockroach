@@ -242,22 +242,24 @@ func (v VariadicType) String() string {
 // expression parameters, along with an optional desired return type. It returns the expression
 // parameters after being type checked, along with the chosen overloadImpl. If an overloaded
 // function implementation could not be determined, the overloadImpl return value will be nil.
+// When this happens, the []overloadImpl return value indicates whether the search failed
+// because no candidate was available (nil) or there were too many candidates (non-nil).
 func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired Type, overloads []overloadImpl, exprs ...Expr,
-) ([]TypedExpr, overloadImpl, error) {
+) ([]TypedExpr, overloadImpl, []overloadImpl, error) {
 	// Special-case the AnyType overload. We determine its return type by checking that
 	// all parameters have the same type.
 	for _, overload := range overloads {
 		// Only one overload can be provided if it has parameters with AnyType.
 		if _, ok := overload.params().(AnyType); ok {
 			if len(overloads) > 1 {
-				return nil, nil, fmt.Errorf("only one overload can have parameters with AnyType")
+				return nil, nil, overloads, fmt.Errorf("only one overload can have parameters with AnyType")
 			}
 			typedExprs, _, err := typeCheckSameTypedExprs(ctx, desired, exprs...)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
-			return typedExprs, overload, nil
+			return typedExprs, overload, nil, nil
 		}
 	}
 
@@ -307,14 +309,14 @@ func typeCheckOverloadedExprs(
 		for _, expr := range resolvableExprs {
 			typ, err := expr.e.TypeCheck(ctx, nil)
 			if err != nil {
-				return nil, nil, fmt.Errorf("error type checking resolved expression: %v", err)
+				return nil, nil, nil, fmt.Errorf("error type checking resolved expression: %v", err)
 			}
 			typedExprs[expr.i] = typ
 		}
 		if err := defaultTypeCheck(false); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return typedExprs, nil, nil
+		return typedExprs, nil, nil, nil
 	}
 
 	// Function to filter overloads which return false from the provided closure.
@@ -356,7 +358,7 @@ func typeCheckOverloadedExprs(
 		}
 		typ, err := expr.e.TypeCheck(ctx, paramDesired)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		typedExprs[expr.i] = typ
 		filterOverloads(func(o overloadImpl) bool {
@@ -406,7 +408,7 @@ func typeCheckOverloadedExprs(
 	// In case there is more than one candidate remaining, the following code uses
 	// heuristics to find a most preferable candidate.
 	if ok, fn, err := checkReturn(); ok {
-		return typedExprs, fn, err
+		return typedExprs, fn, nil, err
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
@@ -415,7 +417,7 @@ func typeCheckOverloadedExprs(
 			return o.returnType().Equal(desired)
 		})
 		if ok, fn, err := checkReturn(); ok {
-			return typedExprs, fn, err
+			return typedExprs, fn, nil, err
 		}
 	}
 
@@ -455,7 +457,7 @@ func typeCheckOverloadedExprs(
 		}
 		if len(overloads) == 1 {
 			if ok, fn, err := checkReturn(); ok {
-				return typedExprs, fn, err
+				return typedExprs, fn, nil, err
 			}
 		}
 		// Restore the expressions if this did not work.
@@ -473,7 +475,7 @@ func typeCheckOverloadedExprs(
 		}
 		if len(overloads) == 1 {
 			if ok, fn, err := checkReturn(); ok {
-				return typedExprs, fn, err
+				return typedExprs, fn, nil, err
 			}
 		}
 		// Restore the expressions if this did not work.
@@ -488,7 +490,7 @@ func typeCheckOverloadedExprs(
 			})
 		}
 		if ok, fn, err := checkReturn(); ok {
-			return typedExprs, fn, err
+			return typedExprs, fn, nil, err
 		}
 		if homogeneousTyp != nil {
 			if !homogeneousTyp.Equal(bestConstType) {
@@ -509,22 +511,46 @@ func typeCheckOverloadedExprs(
 			})
 		}
 		if ok, fn, err := checkReturn(); ok {
-			return typedExprs, fn, err
+			return typedExprs, fn, nil, err
 		}
 	}
 
 	if err := defaultTypeCheck(len(overloads) > 0); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var preferred overloadImpl
 	for _, c := range overloads {
 		if c.preferred() {
 			if preferred != nil {
-				return typedExprs, nil, nil
+				return typedExprs, nil, overloads, nil
 			}
 			preferred = c
 		}
 	}
-	return typedExprs, preferred, nil
+	return typedExprs, preferred, overloads, nil
+}
+
+func formatCandidates(prefix string, list []overloadImpl) string {
+	var buf bytes.Buffer
+	for _, candidate := range list {
+		buf.WriteString(prefix)
+		buf.WriteByte('(')
+		params := candidate.params()
+		tLen := params.Length()
+		for i := 0; i < tLen; i++ {
+			t := params.getAt(i)
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(t.String())
+		}
+		buf.WriteString(") -> ")
+		buf.WriteString(candidate.returnType().String())
+		if candidate.preferred() {
+			buf.WriteString(" [preferred]")
+		}
+		buf.WriteByte('\n')
+	}
+	return buf.String()
 }
