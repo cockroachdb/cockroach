@@ -338,7 +338,7 @@ func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	var searchPath []string
+	var searchPath SearchPath
 	if ctx != nil {
 		searchPath = ctx.SearchPath
 	}

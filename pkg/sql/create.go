@@ -22,6 +22,8 @@ import (
 	"reflect"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1078,7 +1080,8 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(p.ColumnNames) > i {
 			columnTableDef.Name = p.ColumnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
+		// We pass an empty search path here because there are no names to resolve.
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil)
 		if err != nil {
 			return desc, err
 		}
@@ -1138,7 +1141,8 @@ func makeTableDescIfAs(
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
+		// We pass an empty search path here because we do not have any expressions to resolve.
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil)
 		if err != nil {
 			return desc, err
 		}
@@ -1176,7 +1180,7 @@ func (p *planner) makeTableDesc(
 				}
 			}
 
-			col, idx, err := sqlbase.MakeColumnDefDescs(d)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, p.session.SearchPath)
 			if err != nil {
 				return desc, err
 			}
@@ -1293,7 +1297,7 @@ func (p *planner) makeTableDesc(
 			// pass, handled above.
 
 		case *parser.CheckConstraintTableDef:
-			ck, err := makeCheckConstraint(desc, d, generatedNames)
+			ck, err := makeCheckConstraint(desc, d, generatedNames, p.session.SearchPath)
 			if err != nil {
 				return desc, err
 			}
@@ -1366,7 +1370,10 @@ func (d dummyColumnItem) ResolvedType() parser.Type {
 }
 
 func makeCheckConstraint(
-	desc sqlbase.TableDescriptor, d *parser.CheckConstraintTableDef, inuseNames map[string]struct{},
+	desc sqlbase.TableDescriptor,
+	d *parser.CheckConstraintTableDef,
+	inuseNames map[string]struct{},
+	searchPath parser.SearchPath,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	// CHECK expressions seem to vary across databases. Wikipedia's entry on
 	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
@@ -1420,11 +1427,11 @@ func makeCheckConstraint(
 	}
 
 	var p parser.Parser
-	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions"); err != nil {
+	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions", searchPath); err != nil {
 		return nil, err
 	}
 
-	if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+	if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK", searchPath); err != nil {
 		return nil, err
 	}
 	if generateName {
@@ -1461,7 +1468,7 @@ func CreateTestTableDescriptor(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
-	var p planner
+	p := planner{session: &Session{context: context.Background()}}
 	return p.makeTableDesc(stmt.(*parser.CreateTable), parentID, id, privileges, nil)
 }
 

@@ -59,7 +59,9 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if err := p.parser.AssertNoAggregationOrWindowing(datum.src, datum.name); err != nil {
+			if err := p.parser.AssertNoAggregationOrWindowing(
+				datum.src, datum.name, p.session.SearchPath,
+			); err != nil {
 				return nil, err
 			}
 

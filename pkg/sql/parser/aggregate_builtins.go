@@ -663,7 +663,7 @@ var _ Visitor = &IsAggregateVisitor{}
 type IsAggregateVisitor struct {
 	Aggregated bool
 	// searchPath is used to search for unqualified function names.
-	searchPath []string
+	searchPath SearchPath
 }
 
 // VisitPre satisfies the Visitor interface.
@@ -699,8 +699,9 @@ func (v *IsAggregateVisitor) Reset() {
 }
 
 // AggregateInExpr determines if an Expr contains an aggregate function.
-func (p *Parser) AggregateInExpr(expr Expr) bool {
+func (p *Parser) AggregateInExpr(expr Expr, searchPath SearchPath) bool {
 	if expr != nil {
+		p.isAggregateVisitor.searchPath = searchPath
 		defer p.isAggregateVisitor.Reset()
 		WalkExprConst(&p.isAggregateVisitor, expr)
 		if p.isAggregateVisitor.Aggregated {
@@ -711,7 +712,7 @@ func (p *Parser) AggregateInExpr(expr Expr) bool {
 }
 
 // IsAggregate determines if SelectClause contains an aggregate function.
-func (p *Parser) IsAggregate(n *SelectClause, searchPath []string) bool {
+func (p *Parser) IsAggregate(n *SelectClause, searchPath SearchPath) bool {
 	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
@@ -729,8 +730,8 @@ func (p *Parser) IsAggregate(n *SelectClause, searchPath []string) bool {
 
 // AssertNoAggregationOrWindowing checks if the provided expression contains either
 // aggregate functions or window functions, returning an error in either case.
-func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
-	if p.AggregateInExpr(expr) {
+func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string, searchPath SearchPath) error {
+	if p.AggregateInExpr(expr, searchPath) {
 		return fmt.Errorf("aggregate functions are not allowed in %s", op)
 	}
 	if p.WindowFuncInExpr(expr) {

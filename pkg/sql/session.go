@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,7 +66,7 @@ type Session struct {
 	//
 	// NOTE: If we allow the user to set this, we'll need to handle the case where
 	// the session database or pg_catalog are in this path.
-	SearchPath  []string
+	SearchPath  parser.SearchPath
 	User        string
 	Syntax      int32
 	DistSQLMode distSQLExecMode
@@ -121,7 +122,7 @@ func NewSession(
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
 		Database:       args.Database,
-		SearchPath:     []string{"pg_catalog"},
+		SearchPath:     parser.SearchPath{"pg_catalog"},
 		User:           args.User,
 		Location:       time.UTC,
 		virtualSchemas: e.virtualSchemas,
