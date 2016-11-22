@@ -570,8 +570,10 @@ func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 }
 
 func init() {
-	// Default stderrThreshold to log nothing.
-	logging.stderrThreshold = Severity_NONE
+	// Default stderrThreshold to log everything.
+	// This will be the default in tests unless overridden; the CLI
+	// commands set their default separately in cli/flags.go
+	logging.stderrThreshold = Severity_INFO
 
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit

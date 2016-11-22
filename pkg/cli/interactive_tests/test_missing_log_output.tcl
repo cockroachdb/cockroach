@@ -18,15 +18,79 @@ sleep 1
 send "\003"
 eexpect ":/# "
 
+# Check that a server started with --logtostderr
+# logs even info messages to stderr.
+send "$argv start --logtostderr\r"
+eexpect "CockroachDB"
+eexpect "starting cockroach node"
+
+# Stop it.
+send "\003"
+sleep 1
+send "\003"
+eexpect ":/# "
+
+# Check that --alsologtostderr can override the threshold
+# regardless of what --logtostderr has set.
+send "echo marker; $argv start --alsologtostderr=ERROR\r"
+eexpect "marker\r\nCockroachDB node starting"
+
+# Stop it.
+send "\003"
+sleep 1
+send "\003"
+eexpect ":/# "
+
+send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr\r"
+eexpect "marker\r\nCockroachDB node starting"
+
+# Stop it.
+send "\003"
+sleep 1
+send "\003"
+eexpect ":/# "
+
+send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false\r"
+eexpect "marker\r\nCockroachDB node starting"
+
+# Stop it.
+send "\003"
+sleep 1
+send "\003"
+eexpect ":/# "
+
 # Start a regular server
 send "$argv start >/dev/null 2>&1 & sleep 1\r"
 
-# Now stop this server, and test that `quit` does not emit logging
-# output between the point the command starts until it prints the
-# final ok message.
+# Now test `quit` as non-start command, and test that `quit` does not
+# emit logging output between the point the command starts until it
+# prints the final ok message.
 send "echo marker; $argv quit\r"
 set timeout 20
 eexpect "marker\r\nok\r\n:/# "
+set timeout 5
+
+# Test quit as non-start command, this time with --logtostderr. Test
+# that the default logging level is WARNING, so that no INFO messages
+# are printed between the marker and the (first line) error message
+# from quit. Quit will error out because the server is already stopped.
+send "echo marker; $argv quit --logtostderr\r"
+eexpect "marker\r\nError"
+eexpect ":/# "
+
+# Now check that `--alsologtostderr` can override the default
+# properly, with or without `--logtostderr`.
+send "$argv quit --alsologtostderr=INFO --logtostderr\r"
+eexpect "stop has been called"
+eexpect ":/# "
+
+send "$argv quit --alsologtostderr=INFO --logtostderr=false\r"
+eexpect "stop has been called"
+eexpect ":/# "
+
+send "$argv quit --alsologtostderr=INFO\r"
+eexpect "stop has been called"
+eexpect ":/# "
 
 send "exit\r"
 eexpect eof
