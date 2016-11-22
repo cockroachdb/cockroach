@@ -1849,7 +1849,7 @@ func (s *Store) MergeRange(
 	// Remove and destroy the subsumed range. Note that we were called
 	// (indirectly) from raft processing so we must call removeReplicaImpl
 	// directly to avoid deadlocking on Replica.raftMu.
-	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc, false); err != nil {
+	if err := s.removeReplicaImpl(ctx, subsumedRng, *subsumedDesc, false); err != nil {
 		return errors.Errorf("cannot remove range %s", err)
 	}
 
@@ -1972,17 +1972,19 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 // and the removal is aborted if the replica ID has changed since
 // then. If `destroy` is true, all data belonging to the replica will be
 // deleted. In either case a tombstone record will be written.
-func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
+func (s *Store) RemoveReplica(
+	ctx context.Context, rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool,
+) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	return s.removeReplicaImpl(rep, origDesc, destroy)
+	return s.removeReplicaImpl(ctx, rep, origDesc, destroy)
 }
 
 // removeReplicaImpl is the implementation of RemoveReplica, which is sometimes
 // called directly when the necessary lock is already held. It requires that
 // Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(
-	rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool,
+	ctx context.Context, rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool,
 ) error {
 	desc := rep.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
@@ -1996,7 +1998,6 @@ func (s *Store) removeReplicaImpl(
 		return err
 	}
 	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
-		ctx := rep.AnnotateCtx(context.TODO())
 		// This is a fatal error because uninitialized replicas shouldn't make it
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
@@ -2035,7 +2036,7 @@ func (s *Store) removeReplicaImpl(
 	rep.readOnlyCmdMu.Unlock()
 
 	if destroyData {
-		if err := rep.destroyDataRaftMuLocked(); err != nil {
+		if err := rep.destroyDataRaftMuLocked(ctx); err != nil {
 			return err
 		}
 	}
@@ -2046,7 +2047,6 @@ func (s *Store) removeReplicaImpl(
 	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
 	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
-		ctx := rep.AnnotateCtx(context.TODO())
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
 		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
