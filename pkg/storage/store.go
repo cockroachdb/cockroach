@@ -2877,6 +2877,7 @@ func (s *Store) processRaftRequest(
 			// would limit the effectiveness of RaftTransport.SendSync for
 			// preemptive snapshots.
 			r.mu.internalRaftGroup = nil
+			needTombstone := r.mu.state.Desc.NextReplicaID != 0
 			r.mu.Unlock()
 
 			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
@@ -2909,6 +2910,14 @@ func (s *Store) processRaftRequest(
 			var ready raft.Ready
 			if raftGroup.HasReady() {
 				ready = raftGroup.Ready()
+			}
+
+			if needTombstone {
+				// Write a tombstone key in order to prevent the replica from receiving
+				// messages from its previous incarnation.
+				if err := r.setTombstoneKey(ctx, r.store.Engine(), r.mu.state.Desc); err != nil {
+					return roachpb.NewError(err)
+				}
 			}
 
 			// Apply the snapshot, as Raft told us to.
@@ -3490,6 +3499,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
+	repl.mu.minReplicaID = tombstone.NextReplicaID
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
