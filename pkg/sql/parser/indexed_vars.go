@@ -55,6 +55,15 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 
 // TypeCheck is part of the Expr interface.
 func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+	if v.container == nil {
+		// A more technically correct message would be to say that the
+		// reference is unbound and thus cannot be typed. However this is
+		// a tad bit too technical for the average SQL use case and
+		// instead we acknowledge that we only get here if someone has
+		// used a column reference in a place where it's not allowed by
+		// the docs, so just say that instead.
+		return nil, errors.Errorf("column reference %s not allowed in this context", v)
+	}
 	return v, nil
 }
 
