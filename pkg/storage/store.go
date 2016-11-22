@@ -1924,6 +1924,8 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
 		return errors.Errorf("%s has ID collision with existing KeyRange %s", placeholder, exRng)
 	}
+	ctx := s.AnnotateCtx(context.TODO())
+	log.Infof(ctx, "ADD %s", rangeID)
 	s.mu.replicaPlaceholders[rangeID] = placeholder
 	return nil
 }
@@ -2052,6 +2054,7 @@ func (s *Store) removeReplicaImpl(
 		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
 	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
+	log.Infof(ctx, "DEL %s", rep.RangeID)
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
 	return nil
@@ -2801,6 +2804,7 @@ func (s *Store) processRaftRequest(
 			defer func() {
 				if removePlaceholder {
 					if s.removePlaceholder(req.RangeID) {
+						log.Infof(ctx, "DEL %s", req.RangeID)
 						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
 					}
 				}
@@ -2824,6 +2828,7 @@ func (s *Store) processRaftRequest(
 					if !s.removePlaceholderLocked(req.RangeID) {
 						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
 					}
+					log.Infof(ctx, "DEL %s", req.RangeID)
 					if pErr == nil {
 						atomic.AddInt32(&s.counts.filledPlaceholders, 1)
 					} else {
@@ -3244,6 +3249,8 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 			// placeholder itself, that isn't guaranteed and so this invocation
 			// here is crucial (i.e. don't remove it).
 			if s.removePlaceholder(r.RangeID) {
+				ctx := s.AnnotateCtx(context.TODO())
+				log.Infof(ctx, "DEL %s", r.RangeID)
 				atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
 			}
 		}
