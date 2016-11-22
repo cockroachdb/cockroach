@@ -164,7 +164,7 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	if !ok {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
-	ctx := s.AnnotateCtx(context.TODO())
+	ctx := repl.AnnotateCtx(context.TODO())
 	return s.gcQueue.process(ctx, s.Clock().Now(), repl, cfg)
 }
 
