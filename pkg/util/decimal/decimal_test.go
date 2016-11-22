@@ -17,6 +17,7 @@
 package decimal
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var floatDecimalEqualities = map[float64]*inf.Dec{
@@ -80,36 +82,54 @@ func testDecimalSingleArgFunc(
 	s inf.Scale,
 	tests []decimalOneArgTestCase,
 ) {
-	for i, tc := range tests {
-		x, exp := new(inf.Dec), new(inf.Dec)
-		x.SetString(tc.input)
-		exp.SetString(tc.expected)
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%s=%s", tc.input, tc.expected), func(t *testing.T) {
+			x, exp := new(inf.Dec), new(inf.Dec)
+			x.SetString(tc.input)
+			exp.SetString(tc.expected)
 
-		// Test allocated return value.
-		z, err := f(nil, x, s)
-		if err != nil {
-			if tc.expected != err.Error() {
-				t.Errorf("%d: expected error %s, got %s", i, tc.expected, err)
+			// Test allocated return value.
+			var z *inf.Dec
+			var err error
+			done := make(chan struct{}, 1)
+			start := timeutil.Now()
+			go func() {
+				z, err = f(nil, x, s)
+				done <- struct{}{}
+			}()
+			var tm timeutil.Timer
+			tm.Reset(testFuncTimeout)
+			select {
+			case <-done:
+				tm.Stop()
+				t.Logf("execute duration: %s", timeutil.Since(start))
+			case <-tm.C:
+				t.Fatalf("timedout after %s", testFuncTimeout)
 			}
-			continue
-		}
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
+			if err != nil {
+				if tc.expected != err.Error() {
+					t.Errorf("expected error %s, got %s", tc.expected, err)
+				}
+				return
+			}
+			if exp.Cmp(z) != 0 {
+				t.Errorf("expected %s, got %s", exp, z)
+			}
 
-		// Test provided decimal mutation.
-		z.SetString("0.0")
-		_, _ = f(z, x, s)
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
+			// Test provided decimal mutation.
+			z.SetString("0.0")
+			_, _ = f(z, x, s)
+			if exp.Cmp(z) != 0 {
+				t.Errorf("expected %s, got %s", exp, z)
+			}
 
-		// Test same arg mutation.
-		_, _ = f(x, x, s)
-		if exp.Cmp(x) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, x)
-		}
-		x.SetString(tc.input)
+			// Test same arg mutation.
+			_, _ = f(x, x, s)
+			if exp.Cmp(x) != 0 {
+				t.Errorf("expected %s, got %s", exp, x)
+			}
+			x.SetString(tc.input)
+		})
 	}
 }
 
@@ -135,71 +155,87 @@ func testDecimalDoubleArgFunc(
 	s inf.Scale,
 	tests []decimalTwoArgsTestCase,
 ) {
-	for i, tc := range tests {
-		x, y, exp := new(inf.Dec), new(inf.Dec), new(inf.Dec)
-		if _, ok := x.SetString(tc.input1); !ok {
-			t.Errorf("could not set decimal: %s", tc.input1)
-			continue
-		}
-		if _, ok := y.SetString(tc.input2); !ok {
-			t.Errorf("could not set decimal: %s", tc.input2)
-			continue
-		}
-
-		// Test allocated return value.
-		z, err := f(nil, x, y, s)
-		if err != nil {
-			if tc.expected != err.Error() {
-				t.Errorf("%d: expected error %s, got %s", i, tc.expected, err)
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%s,%s=%s", tc.input1, tc.input2, tc.expected), func(t *testing.T) {
+			x, y, exp := new(inf.Dec), new(inf.Dec), new(inf.Dec)
+			if _, ok := x.SetString(tc.input1); !ok {
+				t.Errorf("could not set decimal: %s", tc.input1)
+				return
 			}
-			continue
-		}
-		if z == nil {
-			if tc.expected != "nil" {
-				t.Errorf("%d: expected %s, got nil", i, tc.expected)
+			if _, ok := y.SetString(tc.input2); !ok {
+				t.Errorf("could not set decimal: %s", tc.input2)
+				return
 			}
-			continue
-		} else if tc.expected == "nil" {
-			t.Errorf("%d: expected nil, got %s", i, z)
-			continue
-		}
-		if _, ok := exp.SetString(tc.expected); !ok {
-			t.Errorf("%d: could not set decimal: %s", i, tc.expected)
-			continue
-		}
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
 
-		// Test provided decimal mutation.
-		z.SetString("0.0")
-		_, _ = f(z, x, y, s)
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
+			// Test allocated return value.
+			var z *inf.Dec
+			var err error
+			done := make(chan struct{}, 1)
+			start := timeutil.Now()
+			go func() {
+				z, err = f(nil, x, y, s)
+				done <- struct{}{}
+			}()
+			var tm timeutil.Timer
+			tm.Reset(testFuncTimeout)
+			select {
+			case <-done:
+				tm.Stop()
+				t.Logf("execute duration: %s", timeutil.Since(start))
+			case <-tm.C:
+				t.Fatalf("timedout after %s", testFuncTimeout)
+			}
+			if err != nil {
+				if tc.expected != err.Error() {
+					t.Errorf("expected error %s, got %s", tc.expected, err)
+				}
+				return
+			}
+			if z == nil {
+				if tc.expected != "nil" {
+					t.Errorf("expected %s, got nil", tc.expected)
+				}
+				return
+			} else if tc.expected == "nil" {
+				t.Fatalf("expected nil, got %s", z)
+			}
+			if _, ok := exp.SetString(tc.expected); !ok {
+				t.Fatalf("could not set decimal: %s", tc.expected)
+			}
+			if exp.Cmp(z) != 0 {
+				t.Errorf("expected %s, got %s", exp, z)
+			}
 
-		// Test first arg mutation.
-		_, _ = f(x, x, y, s)
-		if exp.Cmp(x) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, x)
-		}
-		x.SetString(tc.input1)
+			// Test provided decimal mutation.
+			z.SetString("0.0")
+			_, _ = f(z, x, y, s)
+			if exp.Cmp(z) != 0 {
+				t.Errorf("expected %s, got %s", exp, z)
+			}
 
-		// Test second arg mutation.
-		_, _ = f(y, x, y, s)
-		if exp.Cmp(y) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, y)
-		}
-		y.SetString(tc.input2)
-
-		// Test both arg mutation, if possible.
-		if tc.input1 == tc.input2 {
-			_, _ = f(x, x, x, s)
+			// Test first arg mutation.
+			_, _ = f(x, x, y, s)
 			if exp.Cmp(x) != 0 {
-				t.Errorf("%d: expected %s, got %s", i, exp, x)
+				t.Errorf("expected %s, got %s", exp, x)
 			}
 			x.SetString(tc.input1)
-		}
+
+			// Test second arg mutation.
+			_, _ = f(y, x, y, s)
+			if exp.Cmp(y) != 0 {
+				t.Errorf("expected %s, got %s", exp, y)
+			}
+			y.SetString(tc.input2)
+
+			// Test both arg mutation, if possible.
+			if tc.input1 == tc.input2 {
+				_, _ = f(x, x, x, s)
+				if exp.Cmp(x) != 0 {
+					t.Errorf("expected %s, got %s", exp, x)
+				}
+				x.SetString(tc.input1)
+			}
+		})
 	}
 }
 
@@ -540,6 +576,7 @@ func TestDecimalPow(t *testing.T) {
 		{"2", "-38", "argument too large"},
 		{"10000000000", "500", "argument too large"},
 		{"425644047350.89246", "74.4647211651881", "argument too large"},
+		{"56051.85009165843", "98.23741371063426", "argument too large"},
 	}
 	testDecimalDoubleArgFunc(t, Pow, 16, tests)
 }
@@ -564,6 +601,7 @@ func TestDecimalPowDoubleScale(t *testing.T) {
 		{"2", "-38", "0.000000000004"},
 		{"10000000000", "500", "argument too large"},
 		{"425644047350.89246", "74.4647211651881", "argument too large"},
+		{"56051.85009165843", "98.23741371063426", "argument too large"},
 	}
 	testDecimalDoubleArgFunc(t, Pow, 32, tests)
 }
