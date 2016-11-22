@@ -139,7 +139,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -291,7 +291,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -419,7 +419,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -551,7 +551,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(repl1, *repl1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 

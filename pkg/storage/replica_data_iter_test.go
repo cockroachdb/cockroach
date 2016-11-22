@@ -207,7 +207,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 
 	// Destroy range and verify that its data has been completely cleared.
-	if err := tc.store.removeReplicaImpl(tc.repl, *tc.repl.Desc(), true); err != nil {
+	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *tc.repl.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 	iter = NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* !replicatedOnly */)
