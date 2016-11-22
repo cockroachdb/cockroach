@@ -42,7 +42,7 @@ func (d testVarContainer) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags,
 func TestProcessExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := Expression{Expr: "$0 * ($1 + $2) + $0"}
+	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
 	h := parser.MakeIndexedVarHelper(testVarContainer{}, 4)
 	expr, err := processExpression(e, &h)
 	if err != nil {

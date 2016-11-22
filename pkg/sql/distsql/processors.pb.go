@@ -159,8 +159,8 @@ type TableReaderSpec struct {
 	Reverse  bool              `protobuf:"varint,3,opt,name=reverse" json:"reverse"`
 	Spans    []TableReaderSpan `protobuf:"bytes,4,rep,name=spans" json:"spans"`
 	// The filter expression references the columns in the table (table.columns)
-	// via $0, $1, etc. If a secondary index is used, the columns that are not
-	// available as part of the index cannot be referenced.
+	// via ordinal references (@1, @2, etc). If a secondary index is used, the
+	// columns that are not available as part of the index cannot be referenced.
 	Filter Expression `protobuf:"bytes,5,opt,name=filter" json:"filter"`
 	// The table reader will only produce values for these columns, referenced by
 	// their indices in table.columns.
@@ -188,8 +188,8 @@ type JoinReaderSpec struct {
 	// TODO(radu): figure out the correct semantics when joining with an index.
 	IndexIdx uint32 `protobuf:"varint,2,opt,name=index_idx,json=indexIdx" json:"index_idx"`
 	// The filter expression references the columns in the table (table.columns)
-	// via $0, $1, etc. If a secondary index is used, the columns that are not
-	// available as part of the index cannot be referenced.
+	// via ordinal references (@1, @2, etc). If a secondary index is used, the
+	// columns that are not available as part of the index cannot be referenced.
 	Filter Expression `protobuf:"bytes,3,opt,name=filter" json:"filter"`
 	// The table reader will only produce values for these columns, referenced by
 	// their indices in table.columns.
@@ -229,7 +229,7 @@ func (*SorterSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessor
 // expressions on the input row.
 //
 // TODO(irfansharif): Add support for an optional output filter expression.
-// The filter expression would reference the columns in the row via $0, $1,
+// The filter expression would reference the columns in the row via @1, @2,
 // etc., possibly optimizing if filtering on expressions common to the
 // 'program'.
 type EvaluatorSpec struct {
@@ -275,9 +275,9 @@ type MergeJoinerSpec struct {
 	RightTypes    []cockroach_sql_sqlbase1.ColumnType_Kind `protobuf:"varint,4,rep,name=right_types,json=rightTypes,enum=cockroach.sql.sqlbase.ColumnType_Kind" json:"right_types,omitempty"`
 	// "ON" expression (in addition to the equality constraints captured by the
 	// orderings). Assuming that the left stream has N columns and the right
-	// stream has M columns, in this expression variables $0 to $(N-1) refer to
-	// columns of the left stream and variables $N to $(N+M-1) refer to columns in
-	// the right stream.
+	// stream has M columns, in this expression ordinal references @1 to @N refer
+	// to columns of the left stream and variables @(N+1) to @(N+M) refer to
+	// columns in the right stream.
 	Expr Expression `protobuf:"bytes,5,opt,name=expr" json:"expr"`
 	Type JoinType   `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.distsql.JoinType" json:"type"`
 	// Columns for the output stream. Assuming that the left stream has N columns
@@ -309,8 +309,8 @@ type HashJoinerSpec struct {
 	RightTypes     []cockroach_sql_sqlbase1.ColumnType_Kind `protobuf:"varint,4,rep,name=right_types,json=rightTypes,enum=cockroach.sql.sqlbase.ColumnType_Kind" json:"right_types,omitempty"`
 	// "ON" expression (in addition to the equality constraints captured by the
 	// orderings). Assuming that the left stream has N columns and the right
-	// stream has M columns, in this expression variables $0 to $(N-1) refer to
-	// columns of the left stream and variables $N to $(N+M-1) refer to columns in
+	// stream has M columns, in this expression variables @1 to @N refer to
+	// columns of the left stream and variables @N to @(N+M) refer to columns in
 	// the right stream.
 	Expr Expression `protobuf:"bytes,5,opt,name=expr" json:"expr"`
 	Type JoinType   `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.distsql.JoinType" json:"type"`

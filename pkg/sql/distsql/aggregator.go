@@ -268,7 +268,7 @@ func (ag *aggregator) extractFunc(
 		Func: parser.ResolvableFunctionReference{
 			FunctionReference: parser.UnresolvedName{parser.Name(expr.Func.String())},
 		},
-		Exprs: []parser.Expr{eh.indexToExpr(int(expr.ColIdx))},
+		Exprs: []parser.Expr{eh.vars.IndexedVar(int(expr.ColIdx))},
 	}
 
 	_, err := p.TypeCheck(nil, parser.NoTypePreference)
