@@ -46,7 +46,7 @@ func (fn ResolvableFunctionReference) String() string { return AsString(fn) }
 
 // Resolve checks if the function name is already resolved and
 // resolves it as necessary.
-func (fn *ResolvableFunctionReference) Resolve(searchPath []string) (*FunctionDefinition, error) {
+func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*FunctionDefinition, error) {
 	switch t := fn.FunctionReference.(type) {
 	case *FunctionDefinition:
 		return t, nil
@@ -158,8 +158,12 @@ func (fd *FunctionDefinition) Format(buf *bytes.Buffer, f FmtFlags) {
 
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
+// SearchPath represents a list of namespaces to search builtins in.
+// The names must be normalized (as per Name.Normalize) already.
+type SearchPath []string
+
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
-func (n UnresolvedName) ResolveFunction(searchPath []string) (*FunctionDefinition, error) {
+func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
 	fn, err := n.normalizeFunctionName()
 	if err != nil {
 		return nil, err

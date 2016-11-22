@@ -339,7 +339,7 @@ func TestMergeJoiner(t *testing.T) {
 		ms := c.spec
 		inputs := []RowSource{&RowBuffer{rows: c.inputs[0]}, &RowBuffer{rows: c.inputs[1]}}
 		out := &RowBuffer{}
-		flowCtx := FlowCtx{Context: context.Background()}
+		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
 		m, err := newMergeJoiner(&flowCtx, &ms, inputs, out)
 		if err != nil {

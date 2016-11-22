@@ -137,7 +137,7 @@ func (eh *exprHelper) init(
 		return err
 	}
 	var p parser.Parser
-	if p.AggregateInExpr(eh.expr) {
+	if p.AggregateInExpr(eh.expr, evalCtx.SearchPath) {
 		return errors.Errorf("expression '%s' has aggregate", eh.expr)
 	}
 	return nil
