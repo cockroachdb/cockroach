@@ -241,6 +241,16 @@ func init() {
 		panic(err)
 	}
 
+	// Every command but start will inherit the following setting.
+	cockroachCmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		return setDefaultStderrVerbosity(log.Severity_WARNING)
+	}
+
+	// The following only runs for `start`.
+	startCmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		return setDefaultStderrVerbosity(log.Severity_INFO)
+	}
+
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
 	pf := cockroachCmd.PersistentFlags()
@@ -403,18 +413,6 @@ func init() {
 
 // extraFlagInit is a standalone function so we can test more easily.
 func extraFlagInit() {
-	// If no log directory has been set, reduce the logging verbosity by default.
-	// `start` increases it again as a special case.
-	if !log.DirSet() {
-		pf := cockroachCmd.PersistentFlags()
-		f := pf.Lookup(logflags.AlsoLogToStderrName)
-		if !f.Changed {
-			if err := f.Value.Set(log.Severity_WARNING.String()); err != nil {
-				panic(err)
-			}
-		}
-	}
-
 	// If any of the security flags have been set, clear the insecure
 	// setting. Note that we do the inverse when the --insecure flag is
 	// set. See insecureValue.Set().
@@ -434,4 +432,38 @@ func extraFlagInit() {
 		httpHost = connHost
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
+}
+
+func setDefaultStderrVerbosity(defaultSeverity log.Severity) error {
+	pf := cockroachCmd.PersistentFlags()
+	ls := pf.Lookup(logflags.LogToStderrName)
+	vf := pf.Lookup(logflags.AlsoLogToStderrName)
+
+	// To change the default we use the `flag` interface, so
+	// that the Changed attribute does not get updated. This is
+	// necessary because the start logic wants to see whether
+	// the parameter was set explicitly by the user.
+	f := flag.Lookup(logflags.AlsoLogToStderrName)
+
+	if !vf.Changed {
+		// If `--logtostderr` is specified, the base default is
+		// everything, otherwise it's nothing (subject to the additional
+		// setting below).
+		if ls.Value.String() == "true" {
+			if err := f.Value.Set(log.Severity_INFO.String()); err != nil {
+				return err
+			}
+		} else {
+			if err := f.Value.Set(log.Severity_NONE.String()); err != nil {
+				return err
+			}
+		}
+
+		// If no log directory has been set, reduce the logging verbosity
+		// to the given default.
+		if !log.DirSet() {
+			return f.Value.Set(defaultSeverity.String())
+		}
+	}
+	return nil
 }
