@@ -251,7 +251,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedDBs := []string{"information_schema", "pg_catalog", "system", testdb}
+	expectedDBs := []string{"system", testdb}
 	if a, e := len(resp.Databases), len(expectedDBs); a != e {
 		t.Fatalf("length of result %d != expected %d", a, e)
 	}
@@ -319,6 +319,17 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	}
 }
 
+func TestAdminAPIDatabaseVirtual(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	const errPattern = `\\"information_schema\\" is a virtual schema`
+	if err := getAdminJSONProto(s, "databases/information_schema", nil); !testutils.IsError(err, errPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
+	}
+}
+
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -348,6 +359,19 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	const tableErrPattern = `table \\"system.` + fakename + `\\" does not exist`
 	if err := getAdminJSONProto(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, tableErrPattern)
+	}
+}
+
+func TestAdminAPITableVirtual(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	const virtual = "information_schema"
+	const badDBPath = "databases/" + virtual + "/tables/tables"
+	const dbErrPattern = `\\"` + virtual + `\\" is a virtual schema`
+	if err := getAdminJSONProto(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, dbErrPattern)
 	}
 }
 
@@ -508,87 +532,6 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	}
 	if a, e := resp.DescriptorID, int64(path[2]); a != e {
 		t.Fatalf("table had descriptorID %d, expected %d", a, e)
-	}
-}
-
-func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-	ts := s.(*TestServer)
-
-	// Perform API call.
-	var resp serverpb.TableDetailsResponse
-	if err := getAdminJSONProto(s, "databases/information_schema/tables/schemata", &resp); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify columns.
-	expColumns := []serverpb.TableDetailsResponse_Column{
-		{Name: "CATALOG_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
-		{Name: "SCHEMA_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
-		{Name: "DEFAULT_CHARACTER_SET_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
-		{Name: "SQL_PATH", Type: "STRING", Nullable: true},
-	}
-	testutils.SortStructs(expColumns, "Name")
-	testutils.SortStructs(resp.Columns, "Name")
-	if a, e := len(resp.Columns), len(expColumns); a != e {
-		t.Fatalf("# of result columns %d != expected %d (got: %#v)", a, e, resp.Columns)
-	}
-	for i, a := range resp.Columns {
-		e := expColumns[i]
-		if a.String() != e.String() {
-			t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
-		}
-	}
-
-	// Verify grants.
-	if a, e := len(resp.Grants), 0; a != e {
-		t.Fatalf("# of grant columns %d != expected %d (got: %#v)", a, e, resp.Grants)
-	}
-
-	// Verify indexes.
-	if a, e := resp.RangeCount, int64(0); a != e {
-		t.Fatalf("# of indexes %d != expected %d", a, e)
-	}
-
-	// Verify range count.
-	if a, e := resp.RangeCount, int64(0); a != e {
-		t.Fatalf("# of ranges %d != expected %d", a, e)
-	}
-
-	// Verify Create Table Statement.
-	{
-		const (
-			showCreateTableQuery = "SHOW CREATE TABLE information_schema.schemata"
-			createTableCol       = "CreateTable"
-		)
-
-		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
-		ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
-		defer span.Finish()
-
-		session := sql.NewSession(
-			ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
-		session.StartUnlimitedMonitor()
-		defer session.Finish(ts.sqlExecutor)
-
-		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
-		defer resSet.Close()
-		res := resSet.ResultList[0]
-		if res.Err != nil {
-			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
-		}
-
-		scanner := makeResultScanner(res.Columns)
-		var createStmt string
-		if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
-			t.Fatal(err)
-		}
-
-		if a, e := resp.CreateTableStatement, createStmt; a != e {
-			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
-		}
 	}
 }
 
