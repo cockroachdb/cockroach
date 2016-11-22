@@ -14,6 +14,8 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
+// +build !stress
+
 package sql_test
 
 import (
