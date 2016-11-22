@@ -1318,6 +1318,38 @@ var Builtins = map[string][]Builtin{
 	},
 
 	// pg_catalog functions.
+	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
+
+	// Postgres defines pg_get_expr as a function that "decompiles the internal form
+	// of an expression", which is provided in the pg_node_tree type. In Cockroach's
+	// pg_catalog implementation, we populate all pg_node_tree columns with the
+	// corresponding expression as a string, which means that this function can simply
+	// return the first argument directly. It also means we can ignore the second and
+	// optional third argument.
+	"pg_catalog.pg_get_expr": {
+		Builtin{
+			Types: NamedArgTypes{
+				{"pg_node_tree", TypeString},
+				{"relation_oid", TypeInt},
+			},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return args[0], nil
+			},
+		},
+		Builtin{
+			Types: NamedArgTypes{
+				{"pg_node_tree", TypeString},
+				{"relation_oid", TypeInt},
+				{"pretty_bool", TypeBool},
+			},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return args[0], nil
+			},
+		},
+	},
+
 	"pg_catalog.pg_typeof": {
 		// TODO(knz): This is a proof-of-concept until TypeAny works
 		// properly.
