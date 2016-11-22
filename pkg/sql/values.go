@@ -85,7 +85,9 @@ func (p *planner) ValuesClause(
 		tupleBuf = tupleBuf[numCols:]
 
 		for i, expr := range tuple.Exprs {
-			if err := p.parser.AssertNoAggregationOrWindowing(expr, "VALUES"); err != nil {
+			if err := p.parser.AssertNoAggregationOrWindowing(
+				expr, "VALUES", p.session.SearchPath,
+			); err != nil {
 				return nil, err
 			}
 
