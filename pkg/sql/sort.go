@@ -67,36 +67,78 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		return nil, nil
 	}
 
+	// Multiple tests below use selectNode as a special case.
+	// So factor the cast.
+	s, _ := n.(*selectNode)
+
 	// We grab a copy of columns here because we might add new render targets
 	// below. This is the set of columns requested by the query.
 	columns := n.Columns()
 	numOriginalCols := len(columns)
-	if s, ok := n.(*selectNode); ok {
+	if s != nil {
 		numOriginalCols = s.numOriginalCols
 	}
 	var ordering sqlbase.ColumnOrdering
 
 	for _, o := range orderBy {
+		direction := encoding.Ascending
+		if o.Direction == parser.Descending {
+			direction = encoding.Descending
+		}
+
 		index := -1
 
 		// Unwrap parenthesized expressions like "((a))" to "a".
 		expr := parser.StripParens(o.Expr)
 
-		if vBase, ok := expr.(parser.VarName); ok {
+		// The logical data source for ORDER BY is the list of render
+		// expressions for a SELECT, as specified in the input SQL text
+		// (or an entire UNION or VALUES clause).  Alas, SQL has some
+		// historical baggage and there are some special cases:
+		//
+		// 1) column ordinals. If a simple integer literal is used,
+		//    optionally enclosed within parentheses but *not subject to
+		//    any arithmetic*, then this refers to one of the columns of
+		//    the data source. Then use the render expression at that
+		//    ordinal position as sort key.
+		//
+		// 2) if the expression is the aliased (AS) name of a render
+		//    expression in a SELECT clause, then use that
+		//    render as sort key.
+		//    e.g. SELECT a AS b, b AS c ORDER BY b
+		//    this sorts on the first render.
+		//
+		// 3) otherwise, if the expression is already in the render list,
+		//    then use that render as sort key.
+		//    e.g. SELECT b AS c ORDER BY b
+		//    this sorts on the first render.
+		//    (this is an optimization)
+		//
+		// 4) if the sort key is not dependent on the data source (no
+		//    IndexedVar) then simply do not sort. (this is an optimization)
+		//
+		// 5) otherwise, add a new render with the ORDER BY expression
+		//    and use that as sort key.
+		//    e.g. SELECT a FROM t ORDER by b
+		//    e.g. SELECT a, b FROM t ORDER by a+b
+		//
+		// So first, deal with column ordinals.
+		col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
+		if err != nil {
+			return nil, err
+		}
+		if col != -1 {
+			index = col
+		}
+
+		// Now, deal with render aliases.
+		if vBase, ok := expr.(parser.VarName); index == -1 && ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
 				return nil, err
 			}
 
-			var c *parser.ColumnItem
-			switch t := v.(type) {
-			case *parser.ColumnItem:
-				c = t
-			default:
-				return nil, fmt.Errorf("invalid syntax for ORDER BY: %s", v)
-			}
-
-			if c.TableName.Table() == "" {
+			if c, ok := v.(*parser.ColumnItem); ok && c.TableName.Table() == "" {
 				// Look for an output column that matches the name. This
 				// handles cases like:
 				//
@@ -109,62 +151,90 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 					}
 				}
 			}
+		}
 
-			if s, ok := n.(*selectNode); ok && index == -1 {
-				// No output column matched the  name, so look for an existing
-				// render target that matches the column name. This handles cases like:
-				//
-				//   SELECT a AS b FROM t ORDER BY a
-				colIdx, err := s.source.findUnaliasedColumn(c)
-				if err != nil {
-					return nil, err
-				}
-				if colIdx != invalidColIdx {
-					for j, r := range s.render {
-						if ivar, ok := r.(*parser.IndexedVar); ok {
-							s.ivarHelper.AssertSameContainer(ivar)
-							if ivar.Idx == colIdx {
-								index = j
-								break
-							}
-						}
+		if s != nil {
+			// Try to optimize constant sorts. For this we need to resolve
+			// names to IndexedVars then see if there were any vars
+			// substituted.
+			sortExpr := expr
+			if index != -1 {
+				// We found a render above, so fetch it. This is needed
+				// because if the sort expression is a reference to a render
+				// alias, resolveNames below would be incorrect.
+				sortExpr = s.render[index]
+			}
+			resolved, hasVars, err := p.resolveNames(sortExpr, s.sourceInfo, s.ivarHelper)
+			if err != nil {
+				return nil, err
+			}
+			if !hasVars {
+				// No sorting needed!
+				continue
+			}
+
+			// Now, try to find an equivalent render. We use the syntax
+			// representation as approximation of equivalence.
+			// We also use the expression after name resolution so
+			// that comparison occurs after replacing ordinal references
+			// to IndexedVars.
+			if index == -1 {
+				exprStr := parser.AsStringWithFlags(resolved, parser.FmtSymbolicVars)
+				for j, render := range s.render {
+					if parser.AsStringWithFlags(render, parser.FmtSymbolicVars) == exprStr {
+						index = j
+						break
 					}
 				}
 			}
 		}
 
-		if index == -1 {
-			// The order by expression matched neither an output column nor an
-			// existing render target.
-			if col, err := colIndex(numOriginalCols, expr); err != nil {
-				return nil, err
-			} else if col >= 0 {
-				index = col
-			} else if s, ok := n.(*selectNode); ok {
-				// TODO(dan): Once we support VALUES (1), (2) ORDER BY 3*4, this type
-				// check goes away.
+		// Finally, if we haven't found anything so far, we really
+		// need a new render.
+		// TODO(knz/dan) currently this is only possible for selectNode.
+		// If we are dealing with a UNION or something else we would need
+		// to fabricate an intermediate selectNode to add the new render.
+		if index == -1 && s != nil {
+			// We need to add a new render, but let's be careful: if there's
+			// a star in there, we're really adding multiple columns. These
+			// all become sort columns! And if no columns are expanded, then
+			// no columns become sort keys.
+			nextRenderIdx := len(s.render)
 
-				// Add a new render expression to use for ordering. This
-				// handles cases were the expression is either not a name or
-				// is a name that is otherwise not referenced by the query:
-				//
-				//   SELECT a FROM t ORDER by b
-				//   SELECT a, b FROM t ORDER by a+b
-				if err := s.addRender(parser.SelectExpr{Expr: expr}, nil); err != nil {
-					return nil, err
-				}
-				index = len(s.columns) - 1
-			} else {
-				return nil, errors.Errorf("column %s does not exist", expr)
+			// TODO(knz) the optimizations above which reuse existing
+			// renders and skip ordering for constant expressions are not
+			// applied by addRender(). In other words, "ORDER BY foo.*" will
+			// not be optimized as well as "ORDER BY foo.x, foo.y".  We
+			// could do this either here or as a separate later
+			// optimization.
+			if err := s.addRender(parser.SelectExpr{Expr: expr}, nil); err != nil {
+				return nil, err
 			}
+
+			for extraIdx := nextRenderIdx; extraIdx < len(s.render)-1; extraIdx++ {
+				// If more than 1 column were expanded, turn them into sort columns too.
+				// Except the last one, which will be added below.
+				ordering = append(ordering,
+					sqlbase.ColumnOrderInfo{ColIdx: extraIdx, Direction: direction})
+			}
+			if len(s.render) == nextRenderIdx {
+				// Nothing was expanded! So there is no order here.
+				continue
+			}
+			index = len(s.render) - 1
 		}
-		direction := encoding.Ascending
-		if o.Direction == parser.Descending {
-			direction = encoding.Descending
+
+		if index == -1 {
+			return nil, errors.Errorf("column %s does not exist", expr)
 		}
-		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
+		ordering = append(ordering,
+			sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
 	}
 
+	if ordering == nil {
+		// All the sort expressions are constant. Simply drop the sort node.
+		return nil, nil
+	}
 	return &sortNode{ctx: p.ctx(), p: p, columns: columns, ordering: ordering}, nil
 }
 
@@ -172,27 +242,35 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 // valid render target and returns the corresponding column index. For example:
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
-func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
-	typedExpr, err := parser.TypeConstants(expr)
-	if err != nil {
-		return 0, err
-	}
-
-	switch i := typedExpr.(type) {
-	case *parser.DInt:
-		index := int(*i)
-		if numCols := numOriginalCols; index < 1 || index > numCols {
-			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
+func (p *planner) colIndex(numOriginalCols int, expr parser.Expr, context string) (int, error) {
+	ord := int64(-1)
+	switch i := expr.(type) {
+	case *parser.NumVal:
+		if i.ShouldBeInt64() {
+			val, err := i.AsInt64()
+			if err != nil {
+				return -1, err
+			}
+			ord = val
+		} else {
+			return -1, errors.Errorf("non-integer constant in %s: %s", context, expr)
 		}
-		return index - 1, nil
-
+	case *parser.DInt:
+		if *i >= 0 {
+			ord = int64(*i)
+		}
+	case *parser.StrVal:
+		return -1, errors.Errorf("non-integer constant in %s: %s", context, expr)
 	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", typedExpr)
-
-	default:
-		// expr doesn't look like a col index (i.e. not a constant).
-		return -1, nil
+		return -1, errors.Errorf("non-integer constant in %s: %s", context, expr)
 	}
+	if ord != -1 {
+		if ord < 1 || ord > int64(numOriginalCols) {
+			return -1, errors.Errorf("%s position %s is not in select list", context, expr)
+		}
+		ord--
+	}
+	return int(ord), nil
 }
 
 func (n *sortNode) Columns() ResultColumns {

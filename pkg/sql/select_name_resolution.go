@@ -35,11 +35,12 @@ const invalidColIdx = parser.InvalidColIdx
 // nameResolutionVisitor is a parser.Visitor implementation used to
 // resolve the column names in an expression.
 type nameResolutionVisitor struct {
-	err        error
-	sources    multiSourceInfo
-	colOffsets []int
-	iVarHelper parser.IndexedVarHelper
-	searchPath []string
+	err                error
+	sources            multiSourceInfo
+	colOffsets         []int
+	iVarHelper         parser.IndexedVarHelper
+	searchPath         []string
+	foundDependentVars bool
 }
 
 var _ parser.Visitor = &nameResolutionVisitor{}
@@ -50,10 +51,16 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 	}
 
 	switch t := expr.(type) {
+	case parser.UnqualifiedStar:
+		v.foundDependentVars = true
+	case *parser.AllColumnsSelector:
+		v.foundDependentVars = true
+
 	case *parser.IndexedVar:
 		// We allow resolving IndexedVars on expressions that have already been resolved by this
 		// resolver. This is used in some cases when adding render targets for grouping or sorting.
 		v.iVarHelper.AssertSameContainer(t)
+		v.foundDependentVars = true
 		return true, expr
 
 	case parser.UnresolvedName:
@@ -71,6 +78,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 			return false, expr
 		}
 		ivar := v.iVarHelper.IndexedVar(v.colOffsets[srcIdx] + colIdx)
+		v.foundDependentVars = true
 		return true, ivar
 
 	case *parser.FuncExpr:
@@ -131,25 +139,28 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, error) {
+func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, bool, error) {
 	return s.planner.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 }
 
 // resolveNames walks the provided expression and resolves all names
 // using the tableInfo and iVarHelper.
+// If anything that looks like a column reference (indexed vars, star, etc)
+// is encountered, the 2nd return value is true.
 func (p *planner) resolveNames(
 	expr parser.Expr, sources multiSourceInfo, ivarHelper parser.IndexedVarHelper,
-) (parser.Expr, error) {
+) (parser.Expr, bool, error) {
 	if expr == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	v := &p.nameResolutionVisitor
 	*v = nameResolutionVisitor{
-		err:        nil,
-		sources:    sources,
-		colOffsets: make([]int, len(sources)),
-		iVarHelper: ivarHelper,
-		searchPath: p.session.SearchPath,
+		err:                nil,
+		sources:            sources,
+		colOffsets:         make([]int, len(sources)),
+		iVarHelper:         ivarHelper,
+		searchPath:         p.session.SearchPath,
+		foundDependentVars: false,
 	}
 	colOffset := 0
 	for i, s := range sources {
@@ -158,5 +169,5 @@ func (p *planner) resolveNames(
 	}
 
 	expr, _ = parser.WalkExpr(v, expr)
-	return expr, v.err
+	return expr, v.foundDependentVars, v.err
 }
