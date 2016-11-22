@@ -55,6 +55,9 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 
 // TypeCheck is part of the Expr interface.
 func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+	if v.container == nil {
+		return nil, errors.Errorf("no data source available for column reference %s", v)
+	}
 	return v, nil
 }
 
