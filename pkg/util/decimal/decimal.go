@@ -333,8 +333,15 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) (*inf.Dec, error) {
 
 	// maxExp10 is the maximum number of digits exp10 is expected to return. Above
 	// this it becomes very slow. However since the implementation for that lies
-	// in the inf package, we instead check the length in this function.
-	const maxExp10 = 500000
+	// in the inf package, we instead check the length in this function. The
+	// tests in TestDecimalLogN that using strE (a very high-precision E value)
+	// need just under 350000 to complete. They, however, could easily add
+	// more precision because, although the shift value is high, it converges
+	// quickly. If we need to improve this heuristic in the future (which is
+	// designed to prevent slowness only), perhays maxExp10 should decrease as
+	// loop.i increases. This would allow fast-converging calculations to have high
+	// precision and prevent low-precision calculations from taking all the CPU.
+	const maxExp10 = 350000
 
 	// Loop over the Maclaurin series given above until convergence.
 	for loop := newLoop("log", x, s, 40); ; {
