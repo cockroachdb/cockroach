@@ -78,7 +78,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			spec: JoinReaderSpec{
-				Filter:        Expression{Expr: "$2 <= 5"}, // sum <= 5
+				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
 				OutputColumns: []uint32{3},
 			},
 			input: [][]parser.Datum{

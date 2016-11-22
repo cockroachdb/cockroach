@@ -76,14 +76,14 @@ func TestTableReader(t *testing.T) {
 	}{
 		{
 			spec: TableReaderSpec{
-				Filter:        Expression{Expr: "$2 < 5 AND $1 != 3"}, // sum < 5 && b != 3
+				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"}, // sum < 5 && b != 3
 				OutputColumns: []uint32{0, 1},
 			},
 			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
 		},
 		{
 			spec: TableReaderSpec{
-				Filter:        Expression{Expr: "$2 < 5 AND $1 != 3"},
+				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"},
 				OutputColumns: []uint32{3}, // s
 				HardLimit:     4,
 			},
@@ -94,7 +94,7 @@ func TestTableReader(t *testing.T) {
 				IndexIdx:      1,
 				Reverse:       true,
 				Spans:         []TableReaderSpan{makeIndexSpan(4, 6)},
-				Filter:        Expression{Expr: "$0 < 3"}, // sum < 8
+				Filter:        Expression{Expr: "@1 < 3"}, // sum < 8
 				OutputColumns: []uint32{0, 1},
 				SoftLimit:     1,
 			},

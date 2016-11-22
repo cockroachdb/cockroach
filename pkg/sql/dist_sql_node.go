@@ -183,13 +183,13 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 	if n.filter != nil {
 		// Ugly hack to get the expression to print the way we want it.
 		//
-		// The distsql Expression uses the placeholder syntax ($0, $1, $2..) to
+		// The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
 		// refer to columns. We temporarily rename the scanNode columns to
-		// (literally) "$0", "$1", ... and convert to a string.
+		// (literally) "@1", "@2", ... and convert to a string.
 		tmp := n.resultColumns
 		n.resultColumns = make(ResultColumns, len(tmp))
 		for i, orig := range tmp {
-			n.resultColumns[i].Name = fmt.Sprintf("$%d", i)
+			n.resultColumns[i].Name = fmt.Sprintf("@%d", i+1)
 			n.resultColumns[i].Typ = orig.Typ
 			n.resultColumns[i].hidden = orig.hidden
 		}

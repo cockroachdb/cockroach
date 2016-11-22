@@ -61,7 +61,7 @@ func TestMergeJoiner(t *testing.T) {
 				},
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 3, 4},
-				// Implicit $0 = $2 constraint.
+				// Implicit @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -105,7 +105,7 @@ func TestMergeJoiner(t *testing.T) {
 				},
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 1, 3},
-				// Implicit $0 = $2 constraint.
+				// Implicit @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -154,8 +154,8 @@ func TestMergeJoiner(t *testing.T) {
 				},
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 1, 3},
-				Expr:          Expression{Expr: "$3 >= 4"},
-				// Implicit AND $0 = $2 constraint.
+				Expr:          Expression{Expr: "@4 >= 4"},
+				// Implicit AND @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -213,7 +213,7 @@ func TestMergeJoiner(t *testing.T) {
 				},
 				Type:          JoinType_LEFT_OUTER,
 				OutputColumns: []uint32{0, 3, 4},
-				// Implicit $0 = $2 constraint.
+				// Implicit @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -260,7 +260,7 @@ func TestMergeJoiner(t *testing.T) {
 				},
 				Type:          JoinType_RIGHT_OUTER,
 				OutputColumns: []uint32{3, 1, 2},
-				// Implicit $0 = $2 constraint.
+				// Implicit @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -307,7 +307,7 @@ func TestMergeJoiner(t *testing.T) {
 				},
 				Type:          JoinType_FULL_OUTER,
 				OutputColumns: []uint32{0, 3, 4},
-				// Implicit $0 = $2 constraint.
+				// Implicit @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
