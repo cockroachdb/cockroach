@@ -74,7 +74,9 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			groupBy[i] = resolved
 		}
 
-		if err := p.parser.AssertNoAggregationOrWindowing(rawExpr, "GROUP BY"); err != nil {
+		if err := p.parser.AssertNoAggregationOrWindowing(
+			rawExpr, "GROUP BY", p.session.SearchPath,
+		); err != nil {
 			return nil, err
 		}
 	}

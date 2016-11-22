@@ -520,7 +520,9 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 
 	// Make sure there are no aggregation/window functions in the filter
 	// (after subqueries have been expanded).
-	if err := s.planner.parser.AssertNoAggregationOrWindowing(s.filter, "WHERE"); err != nil {
+	if err := s.planner.parser.AssertNoAggregationOrWindowing(
+		s.filter, "WHERE", s.planner.session.SearchPath,
+	); err != nil {
 		return err
 	}
 

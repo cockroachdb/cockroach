@@ -81,7 +81,7 @@ func (n *alterTableNode) Start() error {
 			if d.HasFKConstraint() {
 				return errors.Errorf("adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, n.p.session.SearchPath)
 			if err != nil {
 				return err
 			}
@@ -142,7 +142,7 @@ func (n *alterTableNode) Start() error {
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
 
 			case *parser.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames)
+				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, n.p.session.SearchPath)
 				if err != nil {
 					return err
 				}
@@ -321,7 +321,9 @@ func (n *alterTableNode) Start() error {
 
 			switch status {
 			case sqlbase.DescriptorActive:
-				if err := applyColumnMutation(&n.tableDesc.Columns[i], t); err != nil {
+				if err := applyColumnMutation(
+					&n.tableDesc.Columns[i], t, n.p.session.SearchPath,
+				); err != nil {
 					return err
 				}
 				descriptorChanged = true
@@ -406,14 +408,18 @@ func (n *alterTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "alter table", "", nil
 }
 
-func applyColumnMutation(col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd) error {
+func applyColumnMutation(
+	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,
+) error {
 	switch t := mut.(type) {
 	case *parser.AlterTableSetDefault:
 		if t.Default == nil {
 			col.DefaultExpr = nil
 		} else {
 			colDatumType := col.Type.ToDatumType()
-			if err := sqlbase.SanitizeVarFreeExpr(t.Default, colDatumType, "DEFAULT"); err != nil {
+			if err := sqlbase.SanitizeVarFreeExpr(
+				t.Default, colDatumType, "DEFAULT", searchPath,
+			); err != nil {
 				return err
 			}
 			s := t.Default.String()

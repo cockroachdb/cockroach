@@ -37,6 +37,7 @@ var varGen = map[string]func(p *planner) string{
 	`TRANSACTION ISOLATION LEVEL`:   func(p *planner) string { return p.txn.Proto.Isolation.String() },
 	`TRANSACTION PRIORITY`:          func(p *planner) string { return p.txn.UserPriority.String() },
 	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
+	`SEARCH_PATH`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))

@@ -340,7 +340,7 @@ func TestHashJoiner(t *testing.T) {
 		hs := c.spec
 		inputs := []RowSource{&RowBuffer{rows: c.inputs[0]}, &RowBuffer{rows: c.inputs[1]}}
 		out := &RowBuffer{}
-		flowCtx := FlowCtx{Context: context.Background()}
+		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
 		h, err := newHashJoiner(&flowCtx, &hs, inputs, out)
 		if err != nil {
