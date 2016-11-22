@@ -670,6 +670,7 @@ func (v *containsVarsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 func (*containsVarsVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // ContainsVars returns true if the expression contains any variables.
+// (variables = sub-expressions, placeholders, indexed vars, etc.)
 func ContainsVars(expr Expr) bool {
 	v := containsVarsVisitor{containsVars: false}
 	WalkExprConst(&v, expr)

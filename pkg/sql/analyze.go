@@ -1624,7 +1624,7 @@ func (p *planner) analyzeExpr(
 	if sources == nil {
 		resolved = replaced
 	} else {
-		resolved, err = p.resolveNames(replaced, sources, iVarHelper)
+		resolved, _, err = p.resolveNames(replaced, sources, iVarHelper)
 		if err != nil {
 			return nil, err
 		}
