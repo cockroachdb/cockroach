@@ -1777,6 +1777,7 @@ func (r *Replica) addWriteCmd(
 func (r *Replica) tryAddWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
+	startTime := time.Now()
 	isNonKV := ba.IsNonKV()
 	var endCmds *endCmds
 	if !isNonKV {
@@ -1877,7 +1878,8 @@ func (r *Replica) tryAddWriteCmd(
 			// AmbiguousResultError indicates to caller that the command may
 			// have executed.
 			if tryAbandon() {
-				log.Warningf(ctx, "context cancellation of command %s", ba)
+				log.Warningf(ctx, "context cancellation after %s of attempting command %s",
+					time.Since(startTime), ba)
 				// Set endCmds to nil because they will be invoked in processRaftCommand.
 				endCmds = nil
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoRetry
@@ -1898,7 +1900,8 @@ func (r *Replica) tryAddWriteCmd(
 			// the stopper quiescing, no new commands can be proposed to
 			// Raft successfully.
 			if tryAbandon() {
-				log.Warningf(ctx, "shutdown cancellation of command %s", ba)
+				log.Warningf(ctx, "shutdown cancellation after %s of attempting command %s",
+					time.Since(startTime), ba)
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown")), proposalNoRetry
 			}
 			shouldQuiesce = nil
