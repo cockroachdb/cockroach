@@ -63,13 +63,13 @@ func TestGossipFirstRange(t *testing.T) {
 	// Wait for the specified descriptor to be gossiped for the first range. We
 	// loop because the timing of replica addition and lease transfer can cause
 	// extra gossiping of the first range.
-	waitForGossip := func(desc *roachpb.RangeDescriptor) {
+	waitForGossip := func(desc roachpb.RangeDescriptor) {
 		for {
 			select {
 			case err := <-errors:
 				t.Fatal(err)
 			case gossiped := <-descs:
-				if reflect.DeepEqual(desc, gossiped) {
+				if reflect.DeepEqual(&desc, gossiped) {
 					return
 				}
 				log.Infof(context.TODO(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
@@ -86,7 +86,7 @@ func TestGossipFirstRange(t *testing.T) {
 
 	// Add two replicas. The first range descriptor should be gossiped after each
 	// addition.
-	var desc *roachpb.RangeDescriptor
+	var desc roachpb.RangeDescriptor
 	firstRangeKey := keys.MinKey
 	for i := 1; i <= 2; i++ {
 		var err error

@@ -30,22 +30,32 @@ import (
 //
 // RangeIterator is not thread-safe.
 type RangeIterator struct {
-	ds        *DistSender
-	isReverse bool
-	key       roachpb.RKey
-	desc      *roachpb.RangeDescriptor
-	token     *EvictionToken
-	init      bool
-	pErr      *roachpb.Error
+	ds      *DistSender
+	scanDir ScanDirection
+	key     roachpb.RKey
+	desc    *roachpb.RangeDescriptor
+	token   *EvictionToken
+	init    bool
+	pErr    *roachpb.Error
 }
 
 // NewRangeIterator creates a new RangeIterator.
-func NewRangeIterator(ds *DistSender, isReverse bool) *RangeIterator {
+func NewRangeIterator(ds *DistSender) *RangeIterator {
 	return &RangeIterator{
-		ds:        ds,
-		isReverse: isReverse,
+		ds: ds,
 	}
 }
+
+// ScanDirection determines the semantics of RangeIterator.Next() and
+// RangeIterator.NeedAnother().
+type ScanDirection byte
+
+const (
+	// Ascending means Next() will advance towards keys that compare higher.
+	Ascending ScanDirection = iota
+	// Descending means Next() will advance towards keys that compare lower.
+	Descending
+)
 
 // Key returns the current key. The iterator must be valid.
 func (ri *RangeIterator) Key() roachpb.RKey {
@@ -62,6 +72,17 @@ func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 		panic(ri.Error())
 	}
 	return ri.desc
+}
+
+// LeaseHolder returns the lease holder of the iterator's current range, if that
+// information is present in the DistSender's LeaseHolderCache. The second
+// return val is true if the descriptor has been found.
+// The iterator must be valid.
+func (ri *RangeIterator) LeaseHolder(ctx context.Context) (roachpb.ReplicaDescriptor, bool) {
+	if !ri.Valid() {
+		panic(ri.Error())
+	}
+	return ri.ds.leaseHolderCache.Lookup(ctx, ri.Desc().RangeID)
 }
 
 // Token returns the eviction token corresponding to the range
@@ -83,10 +104,10 @@ func (ri *RangeIterator) NeedAnother(rs roachpb.RSpan) bool {
 	if rs.EndKey == nil {
 		panic("NeedAnother() undefined for spans representing a single key")
 	}
-	if ri.isReverse {
-		return rs.Key.Less(ri.desc.StartKey)
+	if ri.scanDir == Ascending {
+		return ri.desc.EndKey.Less(rs.EndKey)
 	}
-	return ri.desc.EndKey.Less(rs.EndKey)
+	return rs.Key.Less(ri.desc.StartKey)
 }
 
 // Valid returns whether the iterator is valid. To be valid, the
@@ -113,16 +134,17 @@ func (ri *RangeIterator) Next(ctx context.Context) {
 		panic(ri.Error())
 	}
 	// Determine next span when the current range is subtracted.
-	if ri.isReverse {
-		ri.Seek(ctx, ri.desc.StartKey)
+	if ri.scanDir == Ascending {
+		ri.Seek(ctx, ri.desc.EndKey, ri.scanDir)
 	} else {
-		ri.Seek(ctx, ri.desc.EndKey)
+		ri.Seek(ctx, ri.desc.StartKey, ri.scanDir)
 	}
 }
 
 // Seek positions the iterator at the specified key.
-func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey) {
+func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir ScanDirection) {
 	log.Eventf(ctx, "querying next range at %s", key)
+	ri.scanDir = scanDir
 	ri.init = true // the iterator is now initialized
 	ri.pErr = nil  // clear any prior error
 	ri.key = key   // set the key
@@ -132,7 +154,8 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey) {
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
 		log.Event(ctx, "meta descriptor lookup")
 		var err error
-		ri.desc, ri.token, err = ri.ds.getDescriptor(ctx, ri.key, ri.token, ri.isReverse)
+		ri.desc, ri.token, err = ri.ds.getDescriptor(
+			ctx, ri.key, ri.token, ri.scanDir == Descending)
 
 		// getDescriptor may fail retryably if, for example, the first
 		// range isn't available via Gossip. Assume that all errors at
@@ -151,8 +174,9 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey) {
 		// We evict and retry in such a case.
 		// TODO: this code is subject to removal. See
 		// https://groups.google.com/d/msg/cockroach-db/DebjQEgU9r4/_OhMe7atFQAJ
-		if (ri.isReverse && !ri.desc.ContainsExclusiveEndKey(ri.key)) ||
-			(!ri.isReverse && !ri.desc.ContainsKey(ri.key)) {
+		reverse := ri.scanDir == Descending
+		if (reverse && !ri.desc.ContainsExclusiveEndKey(ri.key)) ||
+			(!reverse && !ri.desc.ContainsKey(ri.key)) {
 			log.Eventf(ctx, "addressing error: %s does not include key %s", ri.desc, ri.key)
 			if err := ri.token.Evict(ctx); err != nil {
 				ri.pErr = roachpb.NewError(err)
