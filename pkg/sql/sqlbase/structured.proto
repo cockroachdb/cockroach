@@ -38,6 +38,15 @@ message ColumnType {
     STRING = 7;     // STRING(width)
     BYTES = 8;
     TIMESTAMPTZ = 9;
+
+    // Array types.
+    //
+    // TODO(cuongdo): Fix this before allowing persistence of array types. 
+    // It would be cleaner if when array_dimensions are specified, Kind is
+    // simply the parameterized type of the array. However, because Kind is used
+    // to determine type information elsewhere, it isn't possible to take the
+    // cleaner approach without an extensive refactoring.
+    INT_ARRAY = 100;
   }
 
   optional Kind kind = 1 [(gogoproto.nullable) = false];
@@ -45,6 +54,9 @@ message ColumnType {
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // FLOAT and DECIMAL.
   optional int32 precision = 3 [(gogoproto.nullable) = false];
+  // The length of each dimension in the array. A dimension of -1 means that
+  // no bound was specified for that dimension.
+  repeated int32 array_dimensions = 4;
 }
 
 enum ConstraintValidity {
