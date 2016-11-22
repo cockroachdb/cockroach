@@ -1154,7 +1154,9 @@ var Builtins = map[string][]Builtin{
 			return NewDFloat(1), nil
 		}),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
-			return NewDFloat(DFloat(x.Sign())), nil
+			d := &DDecimal{}
+			d.Dec.SetUnscaled(int64(x.Sign()))
+			return d, nil
 		}),
 		Builtin{
 			Types:      ArgTypes{TypeInt},
@@ -1323,6 +1325,13 @@ var Builtins = map[string][]Builtin{
 		// properly.
 		Builtin{
 			Types:      ArgTypes{TypeInt},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return NewDString(args[0].ResolvedType().String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeDecimal},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(args[0].ResolvedType().String()), nil
