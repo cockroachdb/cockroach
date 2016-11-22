@@ -99,7 +99,11 @@ gotestdashi:
 
 .PHONY: test
 test: gotestdashi
+ifeq ($(BENCHES),-)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+else
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+endif
 
 testrace: GOFLAGS += -race
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
@@ -108,7 +112,11 @@ testrace: test
 .PHONY: testslow
 testslow: TESTFLAGS += -v
 testslow: gotestdashi
+ifeq ($(BENCHES),-)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+else
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+endif
 
 .PHONY: testraceslow
 testraceslow: GOFLAGS += -race
@@ -126,9 +134,11 @@ testraceslow: testslow
 # checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress
 stress:
-	$(GO) list -tags '$(TAGS)' -f \
-	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | \
-	$(SHELL)
+ifeq ($(BENCHES),-)
+	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+else
+	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+endif
 
 .PHONY: stressrace
 stressrace: GOFLAGS += -race
@@ -142,7 +152,11 @@ bench: test
 
 .PHONY: coverage
 coverage: gotestdashi
+ifeq ($(BENCHES),-)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
+else
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" -bench "$(BENCHES)" $(PKG) $(TESTFLAGS)
+endif
 
 .PHONY: upload-coverage
 upload-coverage:
