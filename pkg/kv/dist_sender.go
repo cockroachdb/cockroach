@@ -352,6 +352,11 @@ func (ds *DistSender) sendRPC(
 	// RangeNotFoundErrors.
 	ba.RangeID = rangeID
 
+	// A given RPC may generate retries to multiple replicas, but as soon as we
+	// get a response from one we want to cancel those other RPCs.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
 		ctx:              ctx,
