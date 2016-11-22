@@ -147,7 +147,7 @@ func rebalanceLeases(t testing.TB, tc *testcluster.TestCluster) {
 	}
 	for _, r := range rangeDescs {
 		target := tc.Target(int(r.RangeID) % tc.NumServers())
-		if err := tc.TransferRangeLease(&r, target); err != nil {
+		if err := tc.TransferRangeLease(r, target); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -425,6 +425,76 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	return firstStoreID
 }
 
+// LookupRange returns the descriptor of the range containing key.
+func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
+	rangeLookupReq := roachpb.RangeLookupRequest{
+		Span: roachpb.Span{
+			Key: keys.RangeMetaKey(keys.MustAddr(key)),
+		},
+		MaxRanges: 1,
+	}
+	resp, pErr := client.SendWrapped(context.Background(), ts.DistSender(), &rangeLookupReq)
+	if pErr != nil {
+		return roachpb.RangeDescriptor{}, errors.Errorf(
+			"%q: lookup range unexpected error: %s", key, pErr)
+	}
+	return resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
+}
+
+// SplitRange splits the range containing splitKey.
+// The right range created by the split starts at the split key and extends to the
+// original range's end key.
+// Returns the new descriptors of the left and right ranges.
+//
+// splitKey must correspond to a SQL table key (it must end with a family ID /
+// col ID).
+func (ts *TestServer) SplitRange(
+	splitKey roachpb.Key,
+) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
+	splitRKey, err := keys.Addr(splitKey)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
+	}
+	origRangeDesc, err := ts.LookupRange(splitKey)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
+	}
+	if origRangeDesc.StartKey.Equal(splitRKey) {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Errorf(
+				"cannot split range %+v at start key %q", origRangeDesc, splitKey)
+	}
+	splitReq := roachpb.AdminSplitRequest{
+		Span: roachpb.Span{
+			Key: splitKey,
+		},
+		SplitKey: splitKey,
+	}
+	_, pErr := client.SendWrapped(context.Background(), ts.DistSender(), &splitReq)
+	if pErr != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Errorf(
+				"%q: split unexpected error: %s", splitReq.SplitKey, pErr)
+	}
+
+	var leftRangeDesc, rightRangeDesc roachpb.RangeDescriptor
+	if err := ts.DB().GetProto(context.TODO(),
+		keys.RangeDescriptorKey(origRangeDesc.StartKey), &leftRangeDesc); err != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Wrap(err, "could not look up left-hand side descriptor")
+	}
+	// The split point might not be exactly the one we requested (it can be
+	// adjusted slightly so we don't split in the middle of SQL rows). Update it
+	// to the real point.
+	splitRKey = leftRangeDesc.EndKey
+	if err := ts.DB().GetProto(context.TODO(),
+		keys.RangeDescriptorKey(splitRKey), &rightRangeDesc); err != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Wrap(err, "could not look up right-hand side descriptor")
+	}
+	return leftRangeDesc, rightRangeDesc, nil
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
