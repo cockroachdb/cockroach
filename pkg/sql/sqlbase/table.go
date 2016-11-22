@@ -47,11 +47,14 @@ func incompatibleExprTypeError(
 
 // SanitizeVarFreeExpr verifies a default expression is valid, has the
 // correct type and contains no variable expressions.
-func SanitizeVarFreeExpr(expr parser.Expr, expectedType parser.Type, context string) error {
+func SanitizeVarFreeExpr(
+	expr parser.Expr, expectedType parser.Type, context string, searchPath parser.SearchPath,
+) error {
 	if parser.ContainsVars(expr) {
 		return exprContainsVarsError(context, expr)
 	}
-	typedExpr, err := parser.TypeCheck(expr, nil, expectedType)
+	ctx := parser.SemaContext{SearchPath: searchPath}
+	typedExpr, err := parser.TypeCheck(expr, &ctx, expectedType)
 	if err != nil {
 		return err
 	}
@@ -63,7 +66,10 @@ func SanitizeVarFreeExpr(expr parser.Expr, expectedType parser.Type, context str
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
-func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
+// The search path is used for name resolution for DEFAULT expressions.
+func MakeColumnDefDescs(
+	d *parser.ColumnTableDef, searchPath parser.SearchPath,
+) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
@@ -121,7 +127,8 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		}
 		colDatumType = parser.TypeIntArray
 		for i, e := range t.BoundsExprs {
-			te, err := parser.TypeCheckAndRequire(e, nil, parser.TypeInt, "array bounds")
+			ctx := parser.SemaContext{SearchPath: searchPath}
+			te, err := parser.TypeCheckAndRequire(e, &ctx, parser.TypeInt, "array bounds")
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
 			}
@@ -158,11 +165,15 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type.
-		if err := SanitizeVarFreeExpr(d.DefaultExpr.Expr, colDatumType, "DEFAULT"); err != nil {
+		if err := SanitizeVarFreeExpr(
+			d.DefaultExpr.Expr, colDatumType, "DEFAULT", searchPath,
+		); err != nil {
 			return nil, nil, err
 		}
 		var p parser.Parser
-		if err := p.AssertNoAggregationOrWindowing(d.DefaultExpr.Expr, "DEFAULT expressions"); err != nil {
+		if err := p.AssertNoAggregationOrWindowing(
+			d.DefaultExpr.Expr, "DEFAULT expressions", searchPath,
+		); err != nil {
 			return nil, nil, err
 		}
 		s := d.DefaultExpr.Expr.String()

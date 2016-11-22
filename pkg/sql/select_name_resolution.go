@@ -39,7 +39,7 @@ type nameResolutionVisitor struct {
 	sources            multiSourceInfo
 	colOffsets         []int
 	iVarHelper         parser.IndexedVarHelper
-	searchPath         []string
+	searchPath         parser.SearchPath
 	foundDependentVars bool
 }
 

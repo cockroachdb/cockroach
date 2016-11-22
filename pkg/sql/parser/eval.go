@@ -1487,7 +1487,7 @@ type EvalContext struct {
 	// SearchPath is the search path for databases used when encountering an
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
-	SearchPath []string
+	SearchPath SearchPath
 
 	ReCache *RegexpCache
 	tmpDec  inf.Dec
