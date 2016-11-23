@@ -181,9 +181,11 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 			client.args.Txn = &clonedTxn
 		}
 
-		reply, err := localServer.Batch(gt.opts.ctx, &client.args)
-		gt.setPending(client.args.Replica, false)
-		done <- BatchCall{Reply: reply, Err: err}
+		go func() {
+			reply, err := localServer.Batch(gt.opts.ctx, &client.args)
+			gt.setPending(client.args.Replica, false)
+			done <- BatchCall{Reply: reply, Err: err}
+		}()
 		return
 	}
 
