@@ -58,6 +58,7 @@ var (
 		Help: "Number of read-only commands in all CommandQueues combined"}
 
 	// Range metrics.
+	metaRangeCount          = metric.Metadata{Name: "ranges"}
 	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available"}
 
 	// Replication metrics.
@@ -313,6 +314,7 @@ type StoreMetrics struct {
 	CombinedCommandReadCount  *metric.Gauge
 
 	// Range metrics.
+	RangeCount          *metric.Gauge
 	AvailableRangeCount *metric.Gauge
 
 	// Replication metrics.
@@ -487,6 +489,7 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		CombinedCommandReadCount:  metric.NewGauge(metaCombinedCommandReadCount),
 
 		// Range metrics.
+		RangeCount:          metric.NewGauge(metaRangeCount),
 		AvailableRangeCount: metric.NewGauge(metaAvailableRangeCount),
 
 		// Replication metrics.
