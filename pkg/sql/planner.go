@@ -195,9 +195,12 @@ func (p *planner) resetContexts() {
 
 	p.semaCtx = parser.MakeSemaContext()
 	p.semaCtx.Location = &p.session.Location
+	p.semaCtx.SearchPath = p.session.SearchPath
 
 	p.evalCtx = parser.EvalContext{
-		Location: &p.session.Location,
+		Location:   &p.session.Location,
+		Database:   p.session.Database,
+		SearchPath: p.session.SearchPath,
 	}
 }
 
@@ -251,8 +254,6 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.resetContexts()
 	p.evalCtx.NodeID = e.cfg.NodeID.Get()
 	p.evalCtx.ReCache = e.reCache
-	p.evalCtx.Database = p.session.Database
-	p.evalCtx.SearchPath = p.session.SearchPath
 }
 
 // query initializes a planNode from a SQL statement string. Close() must be
