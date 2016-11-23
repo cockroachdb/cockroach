@@ -61,20 +61,23 @@ func main() {
 
 	client := teamcity.New(u.Host, username, password)
 	// Queue a build per configuration per package.
-	for _, propEvalKV := range []bool{true, false} {
-		for _, params := range []map[string]string{
-			{}, // uninstrumented
-			{"env.GOFLAGS": "-race"},
-			{tagsKey: "deadlock"},
-		} {
+	for _, params := range []map[string]string{
+		{}, // uninstrumented
+		{"env.GOFLAGS": "-race"},
+		{tagsKey: "deadlock"},
+	} {
+		if tags, ok := params[tagsKey]; ok {
+			params[tagsKey] = strings.Join([]string{tags, stressTag}, " ")
+		} else {
+			params[tagsKey] = stressTag
+		}
+
+		for _, propEvalKV := range []bool{true, false} {
+			params["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
+
 			for _, importPath := range importPaths {
 				params["env.PKG"] = importPath
-				params["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
-				if tags, ok := params[tagsKey]; ok {
-					params[tagsKey] = strings.Join([]string{tags, stressTag}, " ")
-				} else {
-					params[tagsKey] = stressTag
-				}
+
 				build, err := client.QueueBuild(*buildTypeID, *branchName, params)
 				if err != nil {
 					log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, err)
