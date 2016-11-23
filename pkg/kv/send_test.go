@@ -96,7 +96,7 @@ func TestSendToOneClient(t *testing.T) {
 	s, ln := newTestServer(t, ctx)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	opts := SendOptions{ctx: context.Background()}
+	opts := SendOptions{ctx: context.Background(), metrics: makeDistSenderMetrics()}
 	reply, err := sendBatch(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestRetryableError(t *testing.T) {
 		return nil
 	})
 
-	opts := SendOptions{ctx: context.Background()}
+	opts := SendOptions{ctx: context.Background(), metrics: makeDistSenderMetrics()}
 	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -476,6 +476,7 @@ func TestComplexScenarios(t *testing.T) {
 					numErrors: test.numErrors,
 				}, nil
 			},
+			metrics: makeDistSenderMetrics(),
 		}
 
 		reply, err := sendBatch(opts, serverAddrs, nodeContext)
