@@ -2088,6 +2088,12 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	res, err := expr.fn.fn(ctx, args)
 	if err != nil {
+		// If we are facing a retry error, in particular those generated
+		// by crdb_internal.force_retry(), propagate it unchanged, so that
+		// the executor can see it with the right type.
+		if _, ok := err.(*roachpb.RetryableTxnError); ok {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%s(): %v", expr.Func, err)
 	}
 	return res, nil
