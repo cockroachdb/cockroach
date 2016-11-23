@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 )
 
@@ -507,7 +508,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing)-1)
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 	for _, repl := range existing {
 		if leaseStoreID == repl.StoreID {
 			continue
@@ -646,4 +647,25 @@ func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) 
 // computeQuorum computes the quorum value for the given number of nodes.
 func computeQuorum(nodes int) int {
 	return (nodes / 2) + 1
+}
+
+// filterBehindReplicas removes any "behind" replicas from the supplied
+// slice. A "behind" replica is one which is not at or past the quorum commit
+// index.
+func filterBehindReplicas(
+	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		return nil
+	}
+	quorumIndex := getQuorumIndex(raftStatus, 0)
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
+	for _, r := range replicas {
+		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
+			if progress.Match >= quorumIndex {
+				candidates = append(candidates, r)
+			}
+		}
+	}
+	return candidates
 }
