@@ -488,6 +488,9 @@ func (*WriteBatchRequest) Method() Method { return WriteBatch }
 // Method implements the Request interface.
 func (*ExportRequest) Method() Method { return Export }
 
+// Method implements the Request interface.
+func (*ImportRequest) Method() Method { return Import }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -677,6 +680,12 @@ func (r *WriteBatchRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ekr *ExportRequest) ShallowCopy() Request {
 	shallowCopy := *ekr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ImportRequest) ShallowCopy() Request {
+	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -895,6 +904,7 @@ func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }
 func (*WriteBatchRequest) flags() int               { return isWrite | isRange }
 func (*ExportRequest) flags() int                   { return isRead | isRange }
+func (*ImportRequest) flags() int                   { return isAdmin | isRange }
 
 // Keys returns credentials in an s3gof3r.Keys
 func (b *ExportStorage_S3) Keys() s3gof3r.Keys {

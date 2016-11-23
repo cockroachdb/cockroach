@@ -257,6 +257,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.CheckConsistencyRequest:
 			case *roachpb.ChangeFrozenRequest:
 			case *roachpb.WriteBatchRequest:
+			case *roachpb.ImportRequest:
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {

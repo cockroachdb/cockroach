@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [32]int32
+type reqCounts [33]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -80,6 +80,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[30]++
 		case r.Export != nil:
 			counts[31]++
+		case r.Import != nil:
+			counts[32]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -120,6 +122,7 @@ var requestNames = []string{
 	"LeaseInfo",
 	"WriteBatch",
 	"Export",
+	"Import",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -186,6 +189,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf29 []LeaseInfoResponse
 	var buf30 []WriteBatchResponse
 	var buf31 []ExportResponse
+	var buf32 []ImportResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -381,6 +385,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].Export = &buf31[0]
 			buf31 = buf31[1:]
+		case r.Import != nil:
+			if buf32 == nil {
+				buf32 = make([]ImportResponse, counts[32])
+			}
+			br.Responses[i].Import = &buf32[0]
+			buf32 = buf32[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

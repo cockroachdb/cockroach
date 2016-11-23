@@ -127,4 +127,6 @@ const (
 	WriteBatch
 	// Export dumps a keyrange into files.
 	Export
+	// Import bulk loads key/value entries.
+	Import
 )

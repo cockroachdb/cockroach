@@ -44,11 +44,6 @@ func evalExport(
 	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Export %s-%s", args.Key, args.EndKey))
 	defer tracing.FinishSpan(span)
 
-	if err := beginLimitedRequest(ctx); err != nil {
-		return storage.EvalResult{}, err
-	}
-	defer endLimitedRequest()
-
 	// If the startTime is zero, then we're doing a full backup and the gc
 	// threshold is irrelevant. Otherwise, make sure startTime is after the gc
 	// threshold. If it's not, the mvcc tombstones could have been deleted and
@@ -60,6 +55,11 @@ func evalExport(
 			return storage.EvalResult{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
 		}
 	}
+
+	if err := beginLimitedRequest(ctx); err != nil {
+		return storage.EvalResult{}, err
+	}
+	defer endLimitedRequest()
 
 	exportStore, err := MakeExportStorage(ctx, args.Storage)
 	if err != nil {

@@ -787,6 +787,25 @@ message ExportResponse {
   repeated File files = 2 [(gogoproto.nullable) = false];
 }
 
+// ImportRequest is the argument to the Import() method, to bulk load key/value
+// entries.
+message ImportRequest {
+  message File {
+    optional ExportStorage dir = 1 [(gogoproto.nullable) = false];
+    optional string path = 3 [(gogoproto.nullable) = false];
+    optional uint32 crc = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC"];
+  }
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated File file = 2 [(gogoproto.nullable) = false];
+  optional Span data_span = 3 [(gogoproto.nullable) = false];
+  repeated KeyRewrite key_rewrite = 4 [(gogoproto.nullable) = false];
+}
+
+// ImportResponse is the response to a Import() operation.
+message ImportResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -832,6 +851,7 @@ message RequestUnion {
   optional LeaseInfoRequest lease_info = 30;
   optional WriteBatchRequest write_batch = 31;
   optional ExportRequest export = 32;
+  optional ImportRequest import = 33;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -876,6 +896,7 @@ message ResponseUnion {
   optional LeaseInfoResponse lease_info = 30;
   optional WriteBatchResponse write_batch = 31;
   optional ExportResponse export = 32;
+  optional ImportResponse import = 33;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
