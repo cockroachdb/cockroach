@@ -992,8 +992,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Add the bookie to the store.
 	s.bookie = newBookie(s.metrics)
 
-	s.intentResolver.Start(stopper)
-
 	// Read the store ident if not already initialized. "NodeID != 0" implies
 	// the store has already been initialized.
 	if s.Ident.NodeID == 0 {
