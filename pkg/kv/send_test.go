@@ -571,6 +571,8 @@ func makeReplicas(addrs ...net.Addr) ReplicaSlice {
 func sendBatch(
 	opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
 ) (*roachpb.BatchResponse, error) {
-	ds := &DistSender{}
-	return ds.sendToReplicas(opts, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
+	opts.metrics = makeDistSenderMetrics()
+	return (&DistSender{
+		metrics: opts.metrics,
+	}).sendToReplicas(opts, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
 }

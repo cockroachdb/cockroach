@@ -48,6 +48,8 @@ type SendOptions struct {
 	SendNextTimeout time.Duration
 
 	transportFactory TransportFactory
+
+	metrics DistSenderMetrics
 }
 
 type batchClient struct {
@@ -167,8 +169,10 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	if log.V(2) {
 		log.Infof(gt.opts.ctx, "sending request to %s: %+v", addr, client.args)
 	}
+	gt.opts.metrics.SentCount.Inc(1)
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
+		gt.opts.metrics.LocalSentCount.Inc(1)
 		// Clone the request. At the time of writing, Replica may mutate it
 		// during command execution which can lead to data races.
 		//
