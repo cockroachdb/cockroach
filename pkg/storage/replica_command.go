@@ -2177,6 +2177,9 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 
 var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
 var exportCmd = makeUnimplementedCommand(roachpb.Export)
+var importCmdFn ImportCmdFunc = func(context.Context, CommandArgs) error {
+	return errors.Errorf("unimplemented command: %s", roachpb.Import)
+}
 
 // SetWriteBatchCmd allows setting the function that will be called as the
 // implementation of the WriteBatch command. Only allowed to be called by Init.
@@ -2190,6 +2193,17 @@ func SetWriteBatchCmd(cmd Command) {
 func SetExportCmd(cmd Command) {
 	// This is safe if SetExportCmd is only called at init time.
 	commands[roachpb.Export] = cmd
+}
+
+// ImportCmdFunc is the type of the function that will be called as the
+// implementation of the Import command.
+type ImportCmdFunc func(context.Context, CommandArgs) error
+
+// SetImportCmd allows setting the function that will be called as the
+// implementation of the Import command. Only allowed to be called by Init.
+func SetImportCmd(fn ImportCmdFunc) {
+	// This is safe if SetImportCmd is only called at init time.
+	importCmdFn = fn
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
