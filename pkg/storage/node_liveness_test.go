@@ -257,3 +257,34 @@ func TestNodeLivenessSelf(t *testing.T) {
 		t.Errorf("expected GetLiveness() and Self() not to return artificially gossiped liveness: %+v, %+v", lGet, lSelf)
 	}
 }
+
+func TestNodeLivenessGetLivenessMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	verifyLiveness(t, mtc)
+	stopNodeLivenessHeartbeats(mtc)
+	lMap := mtc.nodeLivenesses[0].GetLivenessMap()
+	for _, g := range mtc.gossips {
+		if live := lMap[g.NodeID.Get()]; !live {
+			t.Errorf("expected node %d live; got live=%t", g.NodeID.Get(), live)
+		}
+	}
+
+	// Advance the clock but only heartbeat node 0.
+	active, _ := storage.RangeLeaseDurations(
+		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0))
+	mtc.manualClock.Increment(active.Nanoseconds() + 1)
+	if err := mtc.nodeLivenesses[0].ManualHeartbeat(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now verify only node 0 is live.
+	lMap = mtc.nodeLivenesses[0].GetLivenessMap()
+	for i, g := range mtc.gossips {
+		if live := lMap[g.NodeID.Get()]; live != (i == 0) {
+			t.Errorf("expected node %d live (%t); got live=%t", g.NodeID.Get(), (live != (i == 0)), live)
+		}
+	}
+}

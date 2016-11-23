@@ -3648,6 +3648,10 @@ func (s *Store) updateReplicationGauges() error {
 	)
 
 	timestamp := s.cfg.Clock.Now()
+	var livenessMap map[roachpb.NodeID]bool
+	if s.cfg.NodeLiveness != nil {
+		livenessMap = s.cfg.NodeLiveness.GetLivenessMap()
+	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		desc := rep.Desc()
@@ -3676,26 +3680,22 @@ func (s *Store) updateReplicationGauges() error {
 			raftLeaderCount++
 
 			if leaseCovers {
-				// If any replica holds the range lease, the range is available.
-				availableRangeCount++
-
 				if leaseOwned {
 					leaseHolderCount++
 				} else {
 					raftLeaderNotLeaseHolderCount++
 				}
-			} else {
-				// If there is no range lease, then as long as a majority of
-				// the replicas are current then it is available.
-				current := 0
-				for _, progress := range raftStatus.Progress {
-					if progress.Match == raftStatus.Applied {
-						current++
-					} else {
-						current--
+			}
+
+			// If a majority of replicas are live, consider this range available.
+			if livenessMap != nil {
+				var liveReplicas int
+				for _, rd := range desc.Replicas {
+					if livenessMap[rd.NodeID] {
+						liveReplicas++
 					}
 				}
-				if current > 0 {
+				if liveReplicas > len(desc.Replicas)/2 {
 					availableRangeCount++
 				}
 			}
