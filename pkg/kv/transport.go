@@ -48,6 +48,8 @@ type SendOptions struct {
 	SendNextTimeout time.Duration
 
 	transportFactory TransportFactory
+
+	invokedSender client.Sender
 }
 
 type batchClient struct {
@@ -136,8 +138,20 @@ func grpcTransportFactoryImpl(
 	// Put known-unhealthy clients last.
 	splitHealthy(clients)
 
+	var ds *DistSender
+	var ok bool
+	if opts.invokedSender != nil {
+		ds, ok = opts.invokedSender.(*DistSender)
+		if !ok {
+			ds = nil
+		}
+	} else {
+		ds = nil
+	}
+
 	return &grpcTransport{
 		opts:           opts,
+		sender:         ds,
 		rpcContext:     rpcContext,
 		orderedClients: clients,
 	}, nil
@@ -145,6 +159,7 @@ func grpcTransportFactoryImpl(
 
 type grpcTransport struct {
 	opts            SendOptions
+	sender          *DistSender
 	rpcContext      *rpc.Context
 	clientIndex     int
 	orderedClients  []batchClient
@@ -167,8 +182,14 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	if log.V(2) {
 		log.Infof(gt.opts.ctx, "sending request to %s: %+v", addr, client.args)
 	}
+	if gt.sender != nil {
+		gt.sender.distMetrics.TotalSends.Inc(1)
+	}
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
+		if gt.sender != nil {
+			gt.sender.distMetrics.LocalRPCs.Inc(1)
+		}
 		// Clone the request. At the time of writing, Replica may mutate it
 		// during command execution which can lead to data races.
 		//
