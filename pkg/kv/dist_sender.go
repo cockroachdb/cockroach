@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,6 +59,39 @@ const (
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 500
 )
+
+var (
+	// metaDistSenderTotals identify the total rpc sends of DistSender.
+	metaDistSenderTotals = metric.Metadata{Name: "distsender.rpc.totals"}
+	// metaDistSenderLocals identify the total local rpc sends of DistSender.
+	metaDistSenderLocals = metric.Metadata{Name: "distsender.rpc.locals"}
+	// metaDistSenderRetries identify the total retry times DistSender.
+	metaDistSenderRetries = metric.Metadata{Name: "distsender.rpc.retries"}
+	// metaDistSenderNotLeaseHolderErrs identify total NotLeaseHolderErrs of DistSender.
+	metaDistSenderNotLeaseHolderErrs = metric.Metadata{Name: "distsender.rpc.errors.notleaseholderrs"}
+)
+
+// DistSenderMetrics used to metric some statics for debug.
+type DistSenderMetrics struct {
+	registry           *metric.Registry
+	Total              *metric.Counter
+	Local              *metric.Counter
+	Retries            *metric.Counter
+	NotLeaseHolderErrs *metric.Counter
+}
+
+func newDistSenderMetrics() *DistSenderMetrics {
+	registry := metric.NewRegistry()
+	dsm := &DistSenderMetrics{
+		registry:           registry,
+		Total:              metric.NewCounter(metaDistSenderTotals),
+		Local:              metric.NewCounter(metaDistSenderLocals),
+		Retries:            metric.NewCounter(metaDistSenderRetries),
+		NotLeaseHolderErrs: metric.NewCounter(metaDistSenderNotLeaseHolderErrs),
+	}
+	registry.AddMetricStruct(dsm)
+	return dsm
+}
 
 // A firstRangeMissingError indicates that the first range has not yet
 // been gossiped. This will be the case for a node which hasn't yet
@@ -88,7 +122,8 @@ type DistSender struct {
 	// gossip provides up-to-date information about the start of the
 	// key range, used to find the replica metadata for arbitrary key
 	// ranges.
-	gossip *gossip.Gossip
+	gossip      *gossip.Gossip
+	distMetrics *DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache           *rangeDescriptorCache
 	rangeLookupMaxRanges int32
@@ -213,6 +248,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 				}
 			})
 	}
+	ds.distMetrics = newDistSenderMetrics()
 	return ds
 }
 
@@ -357,6 +393,7 @@ func (ds *DistSender) sendRPC(
 		ctx:              ctx,
 		SendNextTimeout:  ds.sendNextTimeout,
 		transportFactory: ds.transportFactory,
+		metrics:          ds.distMetrics,
 	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
@@ -904,6 +941,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			// Clear the descriptor to reload on the next attempt.
 			desc = nil
+			ds.distMetrics.Retries.Inc(1)
 			continue
 		case *roachpb.RangeKeyMismatchError:
 			// Range descriptor might be out of date - evict it. This is
@@ -932,6 +970,7 @@ func (ds *DistSender) sendPartialBatch(
 			// supposed to cover.
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, intersected, isFirst)
+			ds.distMetrics.Retries.Inc(1)
 			return response{reply: reply, pErr: pErr}
 		}
 		break
@@ -1205,6 +1244,7 @@ func (ds *DistSender) handlePerReplicaError(
 	case *roachpb.NodeUnavailableError:
 		return true
 	case *roachpb.NotLeaseHolderError:
+		ds.distMetrics.NotLeaseHolderErrs.Inc(1)
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
 			leaseHolder := *tErr.LeaseHolder
