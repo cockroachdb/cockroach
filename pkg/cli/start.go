@@ -289,29 +289,18 @@ func runStart(_ *cobra.Command, args []string) error {
 	}
 
 	logDir := f.Value.String()
-	vf := pf.Lookup(logflags.AlsoLogToStderrName)
-	if !vf.Changed {
-		if logDir == "" {
-			// If the verbosity was not set yet, raise it -- the default set
-			// in flags.go is WARNING, suitable for all commands other than
-			// `start`.
-			if err := vf.Value.Set(log.Severity_INFO.String()); err != nil {
+	if logDir != "" {
+		vf := pf.Lookup(logflags.AlsoLogToStderrName)
+		ls := pf.Lookup(logflags.LogToStderrName)
+		if ls.Value.String() == "false" && !vf.Changed {
+			// Unless the settings were overridden by the user, silence
+			// logging to stderr because the messages will go to a log file.
+			if err := vf.Value.Set(log.Severity_NONE.String()); err != nil {
 				return err
 			}
-		} else {
-			// If we have a log directory, then we can silence all logging to stderr
-			// (unless verbosity was explicitly set).
-			ls := pf.Lookup(logflags.LogToStderrName)
-			if !ls.Changed {
-				if err := vf.Value.Set(log.Severity_NONE.String()); err != nil {
-					return err
-				}
-			}
 		}
-	}
 
-	// Make sure the path exists.
-	if logDir != "" {
+		// Make sure the path exists.
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return err
 		}
@@ -444,7 +433,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	select {
 	case sig := <-signalCh:
 		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
-		log.Errorf(context.TODO(), "%v", err)
+		log.Errorf(context.TODO(), "%v", returnErr)
 		// This new signal is not welcome, as it interferes with the
 		// graceful shutdown process.  On Unix, a signal that was not
 		// handled gracefully by the application should be visible to
