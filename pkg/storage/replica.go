@@ -1904,6 +1904,15 @@ func (r *Replica) addAdminCmd(
 		var reply roachpb.CheckConsistencyResponse
 		reply, pErr = r.CheckConsistency(ctx, *tArgs)
 		resp = &reply
+	case *roachpb.ImportRequest:
+		cArgs := CommandArgs{
+			Repl:   r,
+			Header: ba.Header,
+			Args:   args,
+		}
+		resp = &roachpb.ImportResponse{}
+		err := importCmdFn(ctx, cArgs)
+		pErr = roachpb.NewError(err)
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}
@@ -4180,6 +4189,11 @@ func (r *Replica) GCThreshold() hlc.Timestamp {
 	threshold := r.mu.state.GCThreshold
 	r.mu.RUnlock()
 	return threshold
+}
+
+// DB returns the Replica's client.DB.
+func (r *Replica) DB() *client.DB {
+	return r.store.DB()
 }
 
 func (r *Replica) executeBatch(

@@ -42,7 +42,7 @@ func evalWriteBatch(
 	h := cArgs.Header
 	ms := cArgs.Stats
 
-	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("WriteBatch %s-%s", args.Key, args.EndKey))
+	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("WriteBatch [%s,%s)", args.Key, args.EndKey))
 	defer tracing.FinishSpan(span)
 
 	// We can't use the normal RangeKeyMismatchError mechanism for dealing with

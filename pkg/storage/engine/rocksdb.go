@@ -1677,7 +1677,7 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 // one kv entry must have been added.
 func (fw *RocksDBSstFileWriter) Close() error {
 	if fw.fw == nil {
-		return errors.New("writer is already closed")
+		return nil
 	}
 	err := statusToError(C.DBSstFileWriterClose(fw.fw))
 	fw.fw = nil
