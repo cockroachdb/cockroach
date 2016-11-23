@@ -1,4 +1,3 @@
-cmd ./pkg/cmd/balancersim
 cmd ./pkg/cmd/github-post
 cmd ./pkg/cmd/github-pull-request-make
 cmd ./pkg/cmd/glock-diff-parser
