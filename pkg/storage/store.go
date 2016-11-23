@@ -2019,8 +2019,9 @@ func (s *Store) removeReplicaImpl(
 	// Clear the pending command queue.
 	if len(rep.mu.proposals) > 0 {
 		resp := proposalResult{
-			Reply: &roachpb.BatchResponse{},
-			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
+			Reply:         &roachpb.BatchResponse{},
+			Err:           roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
+			ProposalRetry: proposalRangeNoLongerExists,
 		}
 		for _, p := range rep.mu.proposals {
 			p.Local.finish(resp)
