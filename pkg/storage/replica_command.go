@@ -1879,9 +1879,10 @@ func (r *Replica) CheckConsistency(
 				if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
 					report(r.store.Ident, diff)
 				}
+				buf.WriteByte('\n')
 				_, _ = diff.WriteTo(&buf)
 			}
-			log.Error(ctx, "\n", buf.String())
+			log.Error(ctx, buf.String())
 		}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
 			wg.Done()
