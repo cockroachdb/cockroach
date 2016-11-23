@@ -183,6 +183,7 @@ type proposalResult struct {
 	Reply         *roachpb.BatchResponse
 	Err           *roachpb.Error
 	ProposalRetry proposalRetryReason
+	Intents       []intentsWithArg
 }
 
 type replicaChecksum struct {
@@ -1664,10 +1665,9 @@ func (r *Replica) addReadOnlyCmd(
 		// described in #2231.
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
-	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
-		log.Eventf(ctx, "submitting %d intents to asynchronous processing",
-			len(*result.Local.intents))
-		r.store.intentResolver.processIntentsAsync(r, *result.Local.intents)
+	if intents := result.Local.detachIntents(); len(intents) > 0 {
+		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
+		r.store.intentResolver.processIntentsAsync(r, intents)
 	}
 	if pErr != nil {
 		log.ErrEvent(ctx, pErr.String())
@@ -1869,6 +1869,19 @@ func (r *Replica) tryAddWriteCmd(
 			// Set endCmds to nil because they have already been invoked
 			// in processRaftCommand.
 			endCmds = nil
+			if len(propResult.Intents) > 0 {
+				// Semi-synchronously process any intents that need resolving here in
+				// order to apply back pressure on the client which generated them. The
+				// resolution is semi-synchronous in that there is a limited number of
+				// outstanding asynchronous resolution tasks allowed after which
+				// further calls will block.
+				//
+				// TODO(peter): Re-proposed and cancelled (but executed) commands can
+				// both leave intents to GC that don't hit this code path. No good
+				// solution presents itself at the moment and such intents will be
+				// resolved on reads.
+				r.store.intentResolver.processIntentsAsync(r, propResult.Intents)
+			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-ctxDone:
 			// If our context was cancelled, return an AmbiguousResultError
@@ -2077,12 +2090,13 @@ func (r *Replica) propose(
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
+		intents := pCmd.Local.detachIntents()
 		r.handleEvalResult(ctx, repDesc, pCmd.Local, pCmd.Replicated)
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
 		ch := make(chan proposalResult, 1)
-		ch <- proposalResult{Err: pErr}
+		ch <- proposalResult{Err: pErr, Intents: intents}
 		close(ch)
 		return ch, func() bool { return false }, nil
 	}
@@ -3287,6 +3301,7 @@ func (r *Replica) processRaftCommand(
 			} else {
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd)
 			}
+			response.Intents = cmd.Local.detachIntents()
 			lResult = cmd.Local
 		}
 
@@ -4224,11 +4239,11 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}
-	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
+	if intents := result.Local.detachIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		r.store.intentResolver.processIntentsAsync(r, *result.Local.intents)
+		r.store.intentResolver.processIntentsAsync(r, intents)
 		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows

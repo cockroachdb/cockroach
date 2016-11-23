@@ -110,6 +110,15 @@ func (lResult *LocalEvalResult) finish(pr proposalResult) {
 	close(lResult.doneCh)
 }
 
+func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
+	if lResult.intents == nil {
+		return nil
+	}
+	intents := *lResult.intents
+	lResult.intents = nil
+	return intents
+}
+
 // EvalResult is the result of evaluating a KV request. That is, the
 // proposer (which holds the lease, at least in the case in which the command
 // will complete successfully) has evaluated the request and is holding on to:
@@ -600,21 +609,10 @@ func (r *Replica) handleLocalEvalResult(
 	// Non-state updates and actions.
 	// ======================
 
-	if originReplica.StoreID == r.store.StoreID() {
-		// On the replica on which this command originated, resolve skipped
-		// intents asynchronously - even on failure.
-		//
-		// TODO(tschottdorf): EndTransaction will use this pathway to return
-		// intents which should immediately be resolved. However, there's
-		// a slight chance that an error between the origin of that intents
-		// slice and here still results in that intent slice arriving here
-		// without the EndTransaction having committed. We should clearly
-		// separate the part of the EvalResult which also applies on errors.
-		if lResult.intents != nil {
-			r.store.intentResolver.processIntentsAsync(r, *lResult.intents)
-		}
+	// The caller is required to detach and handle intents.
+	if lResult.intents != nil {
+		log.Fatalf(ctx, "LocalEvalResult.intents should be nil: %+v", lResult.intents)
 	}
-	lResult.intents = nil
 
 	// The above are present too often, so we assert only if there are
 	// "nontrivial" actions below.
