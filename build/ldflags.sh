@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "${0}")"/..
 
 build_version="$(git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD)"
-if [ -n "$(git status --porcelain)" ]; then
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   build_version="${build_version}-dirty"
 fi
 
