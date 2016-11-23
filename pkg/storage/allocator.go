@@ -213,27 +213,27 @@ func (a *Allocator) AllocateTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
 	relaxConstraints bool,
-) (*roachpb.StoreDescriptor, error) {
+) (roachpb.StoreDescriptor, error) {
 	if a.options.UseRuleSolver {
 		sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID)
 		// When there are throttled stores that do match, we shouldn't send
 		// the replica to purgatory.
 		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+			return roachpb.StoreDescriptor{}, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
 		candidates, err := a.ruleSolver.Solve(sl, constraints, existing)
 		if err != nil {
-			return nil, err
+			return roachpb.StoreDescriptor{}, err
 		}
 
 		if len(candidates) == 0 {
-			return nil, &allocatorError{
+			return roachpb.StoreDescriptor{}, &allocatorError{
 				required: constraints.Constraints,
 			}
 		}
 		// TODO(bram): #10275 Need some randomness here!
-		return &candidates[0].store, nil
+		return candidates[0].store, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
@@ -248,17 +248,17 @@ func (a *Allocator) AllocateTarget(
 	// attribute constraint, from last attribute to first.
 	for attrs := constraints.Constraints; ; attrs = attrs[:len(attrs)-1] {
 		filteredSL := sl.filter(config.Constraints{Constraints: attrs})
-		if target := a.selectGood(filteredSL, existingNodes); target != nil {
+		if target, found := a.selectGood(filteredSL, existingNodes); found {
 			return target, nil
 		}
 
 		// When there are throttled stores that do match, we shouldn't send
 		// the replica to purgatory or even consider relaxing the constraints.
 		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+			return roachpb.StoreDescriptor{}, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 		if len(attrs) == 0 || !relaxConstraints {
-			return nil, &allocatorError{
+			return roachpb.StoreDescriptor{}, &allocatorError{
 				required:         constraints.Constraints,
 				relaxConstraints: relaxConstraints,
 				aliveStoreCount:  aliveStoreCount,
@@ -345,7 +345,7 @@ func (a Allocator) RemoveTarget(
 	}
 
 	sl := makeStoreList(descriptors)
-	if bad := a.selectBad(sl); bad != nil {
+	if bad, ok := a.selectBad(sl); ok {
 		for _, exist := range existing {
 			if exist.StoreID == bad.StoreID {
 				return exist, nil
@@ -380,9 +380,9 @@ func (a Allocator) RebalanceTarget(
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
-) (*roachpb.StoreDescriptor, error) {
+) (roachpb.StoreDescriptor, bool, error) {
 	if !a.options.AllowRebalance {
-		return nil, nil
+		return roachpb.StoreDescriptor{}, false, nil
 	}
 
 	if a.options.UseRuleSolver {
@@ -403,7 +403,7 @@ func (a Allocator) RebalanceTarget(
 			}
 		}
 		if !shouldRebalance {
-			return nil, nil
+			return roachpb.StoreDescriptor{}, false, nil
 		}
 
 		// Load the exiting storesIDs into a map so to eliminate having to loop
@@ -430,11 +430,11 @@ func (a Allocator) RebalanceTarget(
 
 		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil)
 		if err != nil {
-			return nil, err
+			return roachpb.StoreDescriptor{}, false, err
 		}
 		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil)
 		if err != nil {
-			return nil, err
+			return roachpb.StoreDescriptor{}, false, err
 		}
 
 		// Find all candidates that are better than the worst existing store.
@@ -449,11 +449,11 @@ func (a Allocator) RebalanceTarget(
 		// TODO(bram): #10275 Need some randomness here!
 		for _, cand := range candidates {
 			if cand.score > worstCandidateStore {
-				return &candidates[0].store, nil
+				return candidates[0].store, true, nil
 			}
 		}
 
-		return nil, nil
+		return roachpb.StoreDescriptor{}, false, nil
 	}
 
 	sl, _, _ := a.storePool.getStoreList(rangeID)
@@ -474,14 +474,17 @@ func (a Allocator) RebalanceTarget(
 		}
 	}
 	if !shouldRebalance {
-		return nil, nil
+		return roachpb.StoreDescriptor{}, false, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
 		existingNodes[repl.NodeID] = struct{}{}
 	}
-	return a.improve(sl, existingNodes), nil
+	if improve, ok := a.improve(sl, existingNodes); ok {
+		return improve, true, nil
+	}
+	return roachpb.StoreDescriptor{}, false, nil
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
@@ -573,7 +576,7 @@ func shouldTransferLease(sl StoreList, source roachpb.StoreDescriptor) bool {
 // considers to be 'Good' relative to the other stores in the list. Any nodes
 // in the supplied 'exclude' list will be disqualified from selection. Returns
 // the selected store or nil if no such store can be found.
-func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) (roachpb.StoreDescriptor, bool) {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.selectGood(sl, excluded)
 }
@@ -581,7 +584,7 @@ func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDe
 // selectBad attempts to select a store from the supplied store list that it
 // considers to be 'Bad' relative to the other stores in the list. Returns the
 // selected store or nil if no such store can be found.
-func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
+func (a Allocator) selectBad(sl StoreList) (roachpb.StoreDescriptor, bool) {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.selectBad(sl)
 }
@@ -590,7 +593,7 @@ func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 // stores in the given store list. Any nodes in the supplied 'exclude' list
 // will be disqualified from selection. Returns the selected store, or nil if
 // no such store can be found.
-func (a Allocator) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (a Allocator) improve(sl StoreList, excluded nodeIDSet) (roachpb.StoreDescriptor, bool) {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.improve(sl, excluded)
 }

@@ -142,7 +142,7 @@ func (rq *replicateQueue) shouldQueue(
 	// Check for a rebalancing opportunity. Note that leaseStoreID will be 0 if
 	// the range doesn't currently have a lease which will allow the current
 	// replica to be considered a rebalancing source.
-	target, err := rq.allocator.RebalanceTarget(
+	_, ok, err := rq.allocator.RebalanceTarget(
 		zone.Constraints,
 		desc.Replicas,
 		leaseStoreID,
@@ -153,13 +153,13 @@ func (rq *replicateQueue) shouldQueue(
 		return false, 0
 	}
 	if log.V(2) {
-		if target != nil {
+		if ok {
 			log.Infof(ctx, "%s rebalance target found, enqueuing", repl)
 		} else {
 			log.Infof(ctx, "%s no rebalance target found, not enqueuing", repl)
 		}
 	}
-	return target != nil, 0
+	return ok, 0
 }
 
 func (rq *replicateQueue) process(
@@ -284,7 +284,7 @@ func (rq *replicateQueue) process(
 			}
 		}
 
-		rebalanceStore, err := rq.allocator.RebalanceTarget(
+		rebalanceStore, ok, err := rq.allocator.RebalanceTarget(
 			zone.Constraints,
 			desc.Replicas,
 			repl.store.StoreID(),
@@ -294,7 +294,7 @@ func (rq *replicateQueue) process(
 			log.ErrEventf(ctx, "rebalance target failed %s", err)
 			return nil
 		}
-		if rebalanceStore == nil {
+		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.

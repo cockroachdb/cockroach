@@ -39,17 +39,17 @@ const allocatorRandomCount = 2
 type nodeIDSet map[roachpb.NodeID]struct{}
 
 func formatCandidates(
-	selected *roachpb.StoreDescriptor, candidates []roachpb.StoreDescriptor,
+	selected roachpb.StoreDescriptor, candidates []roachpb.StoreDescriptor,
 ) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString("[")
 	for i := range candidates {
-		candidate := &candidates[i]
+		candidate := candidates[i]
 		if i > 0 {
 			_, _ = buf.WriteString(" ")
 		}
 		fmt.Fprintf(&buf, "%d:%d", candidate.StoreID, candidate.Capacity.RangeCount)
-		if candidate == selected {
+		if candidate.StoreID == selected.StoreID {
 			_, _ = buf.WriteString("*")
 		}
 	}
@@ -63,45 +63,46 @@ type rangeCountBalancer struct {
 	rand allocatorRand
 }
 
-func (rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor {
-	var best *roachpb.StoreDescriptor
-	for i := range sl.stores {
-		candidate := &sl.stores[i]
-		if best == nil {
-			best = candidate
-			continue
-		}
-		if candidate.Capacity.RangeCount < best.Capacity.RangeCount {
-			best = candidate
+func (rangeCountBalancer) selectBest(sl StoreList) (roachpb.StoreDescriptor, bool) {
+	if len(sl.stores) == 0 {
+		return roachpb.StoreDescriptor{}, false
+	}
+	best := sl.stores[0]
+	for i := 1; i < len(sl.stores); i++ {
+		if sl.stores[i].Capacity.RangeCount < best.Capacity.RangeCount {
+			best = sl.stores[i]
 		}
 	}
 
 	// NB: logging of the best candidate is performed by the caller (selectGood
 	// or improve).
-	return best
+	return best, true
 }
 
-func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) selectGood(
+	sl StoreList, excluded nodeIDSet,
+) (roachpb.StoreDescriptor, bool) {
 	// Consider a random sample of stores from the store list.
 	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
-	good := rcb.selectBest(sl)
+	good, ok := rcb.selectBest(sl)
 
 	if log.V(2) {
 		log.Infof(context.TODO(), "selected good: mean=%.1f %s",
 			sl.candidateCount.mean, formatCandidates(good, sl.stores))
 	}
-	return good
+	return good, ok
 }
 
-func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	var bad *roachpb.StoreDescriptor
+func (rcb rangeCountBalancer) selectBad(sl StoreList) (roachpb.StoreDescriptor, bool) {
+	var bad roachpb.StoreDescriptor
+	var ok bool
 	if len(sl.stores) > 0 {
 		// Find the list of removal candidates that are on stores that have more
 		// than the average numbers of ranges.
-		candidates := make([]*roachpb.StoreDescriptor, 0, len(sl.stores))
+		candidates := make([]roachpb.StoreDescriptor, 0, len(sl.stores))
 		for i := range sl.stores {
-			candidate := &sl.stores[i]
-			if rebalanceFromConvergesOnMean(sl, *candidate) {
+			candidate := sl.stores[i]
+			if rebalanceFromConvergesOnMean(sl, candidate) {
 				candidates = append(candidates, candidate)
 			}
 		}
@@ -111,9 +112,11 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 			// Randomly choose a store from one of the above average range count
 			// candidates.
 			bad = candidates[rcb.rand.Intn(len(candidates))]
+			ok = true
 		} else {
 			// Fallback to choosing a random store to remove from.
-			bad = &sl.stores[rcb.rand.Intn(len(sl.stores))]
+			bad = sl.stores[rcb.rand.Intn(len(sl.stores))]
+			ok = true
 		}
 		rcb.rand.Unlock()
 	}
@@ -122,40 +125,42 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 		log.Infof(context.TODO(), "selected bad: mean=%.1f %s",
 			sl.candidateCount.mean, formatCandidates(bad, sl.stores))
 	}
-	return bad
+	return bad, ok
 }
 
 // improve returns a candidate StoreDescriptor to rebalance a replica to. The
 // strategy is to always converge on the mean range count. If that isn't
 // possible, we don't return any candidate.
-func (rcb rangeCountBalancer) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) improve(
+	sl StoreList, excluded nodeIDSet,
+) (roachpb.StoreDescriptor, bool) {
 	// Attempt to select a better candidate from the supplied list.
 	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
-	candidate := rcb.selectBest(sl)
-	if candidate == nil {
+	candidate, ok := rcb.selectBest(sl)
+	if !ok {
 		if log.V(2) {
 			log.Infof(context.TODO(), "not rebalancing: no valid candidate targets: %s",
-				formatCandidates(nil, sl.stores))
+				formatCandidates(roachpb.StoreDescriptor{}, sl.stores))
 		}
-		return nil
+		return roachpb.StoreDescriptor{}, false
 	}
 
 	// Adding a replica to the candidate must make its range count converge on the
 	// mean range count.
-	rebalanceConvergesOnMean := rebalanceToConvergesOnMean(sl, *candidate)
+	rebalanceConvergesOnMean := rebalanceToConvergesOnMean(sl, candidate)
 	if !rebalanceConvergesOnMean {
 		if log.V(2) {
 			log.Infof(context.TODO(), "not rebalancing: %s wouldn't converge on the mean %.1f",
 				formatCandidates(candidate, sl.stores), sl.candidateCount.mean)
 		}
-		return nil
+		return roachpb.StoreDescriptor{}, false
 	}
 
 	if log.V(2) {
 		log.Infof(context.TODO(), "rebalancing: mean=%.1f %s",
 			sl.candidateCount.mean, formatCandidates(candidate, sl.stores))
 	}
-	return candidate
+	return candidate, true
 }
 
 // selectRandom chooses up to count random store descriptors from the given
