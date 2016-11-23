@@ -29,6 +29,7 @@ type candidate struct {
 	store      roachpb.StoreDescriptor
 	constraint float64 // Score used to pick the top candidates.
 	balance    float64 // Score used to choose between top candidates.
+	replica    roachpb.ReplicaDescriptor
 }
 
 // less first compares constraint scores, then balance scores.
@@ -37,6 +38,74 @@ func (c candidate) less(o candidate) bool {
 		return c.constraint < o.constraint
 	}
 	return c.balance < o.balance
+}
+
+type candidateList []candidate
+
+// bestConstraint returns all the elements in a sorted candidate list that share
+// the highest constraint score.
+func (cl candidateList) bestConstraint() candidateList {
+	if len(cl) <= 1 {
+		return cl
+	}
+	for i := 1; i < len(cl); i++ {
+		if cl[i].constraint < cl[0].constraint {
+			return cl[0:i]
+		}
+	}
+	return cl
+}
+
+// worstConstraint returns all the elements in a sorted candidate list that
+// share the lowest constraint score.
+func (cl candidateList) worstConstraint() candidateList {
+	if len(cl) <= 1 {
+		return cl
+	}
+	for i := len(cl) - 2; i >= 0; i-- {
+		if cl[i].constraint < cl[len(cl)-1].constraint {
+			return cl[i+1:]
+		}
+	}
+	return cl
+}
+
+// selectGood randomly chooses a good candidate from a sorted candidate list
+// using the provided random generator.
+func (cl candidateList) selectGood(randGen allocatorRand) candidate {
+	cl = cl.bestConstraint()
+	if len(cl) == 1 {
+		return cl[0]
+	}
+	randGen.Lock()
+	order := randGen.Perm(len(cl))
+	randGen.Unlock()
+	best := cl[order[0]]
+	for i := 1; i < allocatorRandomCount; i++ {
+		if best.less(cl[order[i]]) {
+			best = cl[order[i]]
+		}
+	}
+	return best
+}
+
+// selectBad randomly chooses a bad candidate from a sorted candidate list using
+//
+func (cl candidateList) selectBad(randGen allocatorRand) candidate {
+	cl = cl.worstConstraint()
+	if len(cl) == 1 {
+		return cl[0]
+	}
+	randGen.Lock()
+	order := randGen.Perm(len(cl))
+	randGen.Unlock()
+	worst := cl[order[0]]
+	for i := 1; i < allocatorRandomCount; i++ {
+		if cl[order[i]].less(worst) {
+			worst = cl[order[i]]
+		}
+	}
+	return worst
 }
 
 // solveState is used to pass solution state information into a rule.
@@ -71,8 +140,8 @@ func (rs ruleSolver) Solve(
 	c config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
-) ([]candidate, error) {
-	candidates := make([]candidate, 0, len(sl.stores))
+) (candidateList, error) {
+	candidates := make(candidateList, 0, len(sl.stores))
 	state := solveState{
 		constraints:            c,
 		sl:                     sl,
@@ -199,10 +268,23 @@ func ruleCapacity(store roachpb.StoreDescriptor, state solveState) (bool, float6
 }
 
 // byScore implements sort.Interface to sort by scores.
-type byScore []candidate
+type byScore candidateList
 
 var _ sort.Interface = byScore(nil)
 
 func (c byScore) Len() int           { return len(c) }
 func (c byScore) Less(i, j int) bool { return c[i].less(c[j]) }
 func (c byScore) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+
+type byScoreAndID candidateList
+
+var _ sort.Interface = byScoreAndID(nil)
+
+func (c byScoreAndID) Len() int { return len(c) }
+func (c byScoreAndID) Less(i, j int) bool {
+	if c[i].constraint == c[j].constraint && c[i].balance == c[j].balance {
+		return c[i].store.StoreID < c[j].store.StoreID
+	}
+	return c[i].less(c[j])
+}
+func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }

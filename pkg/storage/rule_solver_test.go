@@ -25,17 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type byScoreAndID []candidate
-
-func (c byScoreAndID) Len() int { return len(c) }
-func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].constraint == c[j].constraint && c[i].balance == c[j].balance {
-		return c[i].store.StoreID < c[j].store.StoreID
-	}
-	return c[j].less(c[i])
-}
-func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
-
 // TODO(bram): This test suite is not even close to exhaustive. The scores are
 // not checked and each rule should have many more test cases. Also add a
 // corrupt replica test and remove the 0 range ID used when calling
@@ -118,7 +107,7 @@ func TestRuleSolver(t *testing.T) {
 	}{
 		{
 			name:     "no constraints or rules",
-			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope},
+			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "white list rule",
@@ -141,7 +130,7 @@ func TestRuleSolver(t *testing.T) {
 				{NodeID: roachpb.NodeID(storeUSa15)},
 				{NodeID: roachpb.NodeID(storeUSb)},
 			},
-			expected: []roachpb.StoreID{storeUSa1, storeEurope},
+			expected: []roachpb.StoreID{storeEurope, storeUSa1},
 		},
 		{
 			name: "ruleReplicasUniqueNodes - 0 available nodes",
@@ -162,7 +151,7 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "b", Type: config.Constraint_REQUIRED},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSa1, storeUSb},
+			expected: []roachpb.StoreID{storeUSb, storeUSa1},
 		},
 		{
 			name: "ruleConstraints - required locality constraints",
@@ -172,7 +161,7 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb},
+			expected: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleConstraints - prohibited constraints",
@@ -182,7 +171,7 @@ func TestRuleSolver(t *testing.T) {
 					{Value: "b", Type: config.Constraint_PROHIBITED},
 				},
 			},
-			expected: []roachpb.StoreID{storeUSa15, storeEurope},
+			expected: []roachpb.StoreID{storeEurope, storeUSa15},
 		},
 		{
 			name: "ruleConstraints - prohibited locality constraints",
@@ -214,13 +203,13 @@ func TestRuleSolver(t *testing.T) {
 					{Key: "datacenter", Value: "eur"},
 				},
 			},
-			expected: []roachpb.StoreID{storeEurope, storeUSa15, storeUSa1, storeUSb},
+			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name:     "ruleDiversity - no existing replicas",
 			rule:     ruleDiversity,
 			existing: nil,
-			expected: []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope},
+			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleDiversity - one existing replicas",
@@ -228,7 +217,7 @@ func TestRuleSolver(t *testing.T) {
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: roachpb.NodeID(storeUSa15)},
 			},
-			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa15, storeUSa1},
+			expected: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
 		},
 		{
 			name: "ruleDiversity - two existing replicas",
@@ -237,7 +226,7 @@ func TestRuleSolver(t *testing.T) {
 				{NodeID: roachpb.NodeID(storeUSa15)},
 				{NodeID: roachpb.NodeID(storeEurope)},
 			},
-			expected: []roachpb.StoreID{storeUSb, storeUSa15, storeUSa1, storeEurope},
+			expected: []roachpb.StoreID{storeUSb, storeEurope, storeUSa1, storeUSa15},
 		},
 		{
 			name:     "ruleCapacity",
@@ -262,7 +251,7 @@ func TestRuleSolver(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			sort.Sort(byScoreAndID(candidates))
+			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
 			if len(candidates) != len(tc.expected) {
 				t.Fatalf("length of %+v should match %+v", candidates, tc.expected)
 			}

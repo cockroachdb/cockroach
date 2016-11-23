@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 
 	"golang.org/x/net/context"
 
@@ -237,8 +238,9 @@ func (a *Allocator) AllocateTarget(
 				required: constraints.Constraints,
 			}
 		}
-		// TODO(bram): #10275 Need some randomness here!
-		return &candidates[0].store, nil
+
+		chosenCandidate := candidates.selectGood(a.randGen).store
+		return &chosenCandidate, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
@@ -299,8 +301,7 @@ func (a Allocator) RemoveTarget(
 		// as we are removing a replica and not trying to add one.
 		sl, _, _ := a.storePool.getStoreList(roachpb.RangeID(0))
 
-		worstCandidate := candidate{constraint: math.Inf(0)}
-		var worstReplica roachpb.ReplicaDescriptor
+		var candidates candidateList
 		for _, exist := range existing {
 			if exist.StoreID == leaseStoreID {
 				continue
@@ -316,24 +317,24 @@ func (a Allocator) RemoveTarget(
 				existing:               nil,
 				existingNodeLocalities: a.storePool.getNodeLocalities(existing),
 			})
-			// When a candidate is not valid, it means that it can be
-			// considered the worst existing replica.
+			// When a candidate is not valid, it means that it should be
+			// considered one of the worst existing replicas. If we set its
+			// constraint score to -1, it will be amongst the first to be chosen
+			// for removal.
+			// TODO(bram): add a valid bool to the candidate list to avoid this
+			// hack.
 			if !valid {
-				return exist, nil
+				currentCandidate.constraint = -1
 			}
-
-			if currentCandidate.less(worstCandidate) {
-				worstCandidate = currentCandidate
-				worstReplica = exist
-			}
-
+			currentCandidate.replica = exist
+			candidates = append(candidates, currentCandidate)
 		}
 
-		if !math.IsInf(worstCandidate.constraint, 0) {
-			return worstReplica, nil
+		if len(candidates) == 0 {
+			return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
 		}
 
-		return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
+		return candidates.selectBad(a.randGen).replica, nil
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
@@ -427,17 +428,22 @@ func (a Allocator) RebalanceTarget(
 				candidateDescs = append(candidateDescs, desc)
 			}
 		}
-
-		existingStoreList := makeStoreList(existingDescs)
-		candidateStoreList := makeStoreList(candidateDescs)
-
-		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil, nil)
+		existingCandidates, err := a.ruleSolver.Solve(makeStoreList(existingDescs), constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil, nil)
+		candidates, err := a.ruleSolver.Solve(makeStoreList(candidateDescs), constraints, nil, nil)
 		if err != nil {
 			return nil, err
+		}
+		if a.storePool.deterministic {
+			sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
+			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+		}
+
+		// Are there any valid candidates to rebalance to?
+		if len(candidates) == 0 {
+			return nil, nil
 		}
 
 		// Find all candidates that are better than the worst existing store.
@@ -449,11 +455,11 @@ func (a Allocator) RebalanceTarget(
 			worstCandidate = existingCandidates[len(existingCandidates)-1]
 		}
 
-		// TODO(bram): #10275 Need some randomness here!
-		for _, cand := range candidates {
-			if worstCandidate.less(cand) {
-				return &candidates[0].store, nil
-			}
+		// Is the top candidate better than the worst candidate? If so, we
+		// should probably rebalance.
+		if worstCandidate.less(candidates[0]) {
+			chosenCandidateStore := candidates.selectGood(a.randGen).store
+			return &chosenCandidateStore, nil
 		}
 
 		return nil, nil
