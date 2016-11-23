@@ -21,6 +21,8 @@
 // dir contains a "test.yaml" file along with a set of files in logic test
 // format. The test.yaml file corresponds to the parTestSpec structure below.
 
+// +build !stress
+
 package sql_test
 
 import (

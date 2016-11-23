@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/abourget/teamcity"
 	"github.com/kisielk/gotool"
@@ -33,6 +34,9 @@ var branchName = flag.String("branch", "", "the VCS branch to build")
 const teamcityServerURLEnv = "TC_SERVER_URL"
 const teamcityAPIUserEnv = "TC_API_USER"
 const teamcityAPIPasswordEnv = "TC_API_PASSWORD"
+
+const tagsKey = "env.TAGS"
+const stressTag = "stress"
 
 func main() {
 	flag.Parse()
@@ -61,11 +65,16 @@ func main() {
 		for _, params := range []map[string]string{
 			{}, // uninstrumented
 			{"env.GOFLAGS": "-race"},
-			{"env.TAGS": "deadlock"},
+			{tagsKey: "deadlock"},
 		} {
 			for _, importPath := range importPaths {
 				params["env.PKG"] = importPath
 				params["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
+				if tags, ok := params[tagsKey]; ok {
+					params[tagsKey] = strings.Join([]string{tags, stressTag}, " ")
+				} else {
+					params[tagsKey] = stressTag
+				}
 				build, err := client.QueueBuild(*buildTypeID, *branchName, params)
 				if err != nil {
 					log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, err)
