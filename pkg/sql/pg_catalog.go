@@ -1336,6 +1336,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
+	reflect.TypeOf(parser.TypeTable):       typCategoryPseudo,
 }
 
 func typCategory(typ parser.Type) parser.Datum {

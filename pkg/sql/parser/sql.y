@@ -656,6 +656,7 @@ func (u *sqlSymUnion) window() Window {
 %token     NOT_LA WITH_LA AS_LA
 
 // Precedence: lowest to highest
+%nonassoc  VALUES              // see value_clause
 %nonassoc  SET                 // see relation_expr_opt_alias
 %left      UNION EXCEPT
 %left      INTERSECT
@@ -2732,8 +2733,16 @@ having_clause:
     $$.val = Expr(nil)
   }
 
+// Given "VALUES (a, b)" in a table expression context, we have to
+// decide without looking any further ahead whether VALUES is the
+// values clause or a set-generating function. Since VALUES is allowed
+// as a function name both interpretations are feasible. We resolve
+// the shift/reduce conflict by giving the first values_clause
+// production a higher precedence than the VALUES token has, causing
+// the parser to prefer to reduce, in effect assuming that the VALUES
+// is not a function name.
 values_clause:
-  VALUES ctext_row
+  VALUES ctext_row %prec UMINUS
   {
     $$.val = &ValuesClause{[]*Tuple{{Exprs: $2.exprs()}}}
   }
@@ -2822,7 +2831,11 @@ opt_index_hints:
 table_ref:
   relation_expr opt_index_hints opt_ordinality opt_alias_clause
   {
-   $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
+    $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
+  }
+| qualified_name '(' expr_list ')' opt_ordinality opt_alias_clause
+  {
+    $$.val = &AliasedTableExpr{Expr: &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
 | select_with_parens opt_ordinality opt_alias_clause
   {
