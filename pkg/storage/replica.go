@@ -174,6 +174,16 @@ const (
 	// so if the retry does not succeed, care must be taken to correctly inform
 	// the caller via an AmbiguousResultError.
 	proposalReproposed
+	// proposalErrorReproposing indicates that re-proposal
+	// failed. Because the original proposal may have succeeded, an
+	// AmbiguousResultError must be returned. The command should not be
+	// retried.
+	proposalErrorReproposing
+	// proposalRangeNoLongerExists indicates the proposal was for a
+	// range that no longer exists. Because the original proposal may
+	// have succeeded, an AmbiguousResultError must be returned. The
+	// command should not be retried.
+	proposalRangeNoLongerExists
 )
 
 // proposalResult indicates the result of a proposal. Exactly one of
@@ -1705,10 +1715,12 @@ func (r *Replica) addWriteCmd(
 		br, pErr, retry := r.tryAddWriteCmd(ctx, ba)
 		switch retry {
 		case proposalIllegalLeaseIndex:
-			continue
+			continue // retry
 		case proposalReproposed:
 			ambiguousResult = true
-			continue
+			continue // retry
+		case proposalRangeNoLongerExists, proposalErrorReproposing:
+			ambiguousResult = true
 		}
 		if pErr != nil {
 			// If this isn't an end transaction with commit=true, return
@@ -2822,7 +2834,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		log.Eventf(p.Local.ctx, "re-submitting command %x to Raft: %s", p.Local.idKey, reason)
 		if err := r.submitProposalLocked(p); err != nil {
 			delete(r.mu.proposals, p.Local.idKey)
-			p.Local.finish(proposalResult{Err: roachpb.NewError(err)})
+			p.Local.finish(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
 }
