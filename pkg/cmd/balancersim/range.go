@@ -142,7 +142,7 @@ func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
 // candidate to add a replica for rebalancing. Returns true only if a target is
 // found.
 func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bool) {
-	rebalanceTarget, err := r.allocator.RebalanceTarget(
+	rebalance, rebalanceTarget, err := r.allocator.RebalanceTarget(
 		r.zone.Constraints,
 		r.desc.Replicas,
 		storeID,
@@ -151,7 +151,7 @@ func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bo
 	if err != nil {
 		panic(err)
 	}
-	if rebalanceTarget == nil {
+	if !rebalance {
 		return 0, false
 	}
 	return rebalanceTarget.StoreID, true

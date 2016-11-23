@@ -310,8 +310,8 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 			firstRange,
 			false,
 		)
-		if result != nil {
-			t.Errorf("expected nil result: %+v", result)
+		if result.StoreID != 0 {
+			t.Errorf("expected empty result, got %+v", result)
 		}
 		if err == nil {
 			t.Errorf("allocation succeeded despite there being no available disks: %v", result)
@@ -705,7 +705,7 @@ func TestAllocatorRebalance(t *testing.T) {
 
 		// Every rebalance target must be either store 1 or 2.
 		for i := 0; i < 10; i++ {
-			result, err := a.RebalanceTarget(
+			rebalance, result, err := a.RebalanceTarget(
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{StoreID: 3}},
 				noStore,
@@ -714,7 +714,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result == nil {
+			if !rebalance {
 				i-- // loop until we find 10 candidates
 				continue
 			}
@@ -908,7 +908,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 		// Every rebalance target must be store 4 (or nil for case of missing the only option).
 		for i := 0; i < 10; i++ {
-			result, err := a.RebalanceTarget(
+			rebalance, result, err := a.RebalanceTarget(
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
 				stores[0].StoreID,
@@ -917,7 +917,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result != nil && result.StoreID != 4 {
+			if rebalance && result.StoreID != 4 {
 				t.Errorf("expected store 4; got %d", result.StoreID)
 			}
 		}
@@ -1752,7 +1752,7 @@ func exampleRebalancingCore(useRuleSolver bool) {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			target, err := alloc.RebalanceTarget(
+			rebalance, target, err := alloc.RebalanceTarget(
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 				noStore,
@@ -1761,7 +1761,7 @@ func exampleRebalancingCore(useRuleSolver bool) {
 			if err != nil {
 				panic(err)
 			}
-			if target != nil {
+			if rebalance {
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}
