@@ -183,6 +183,7 @@ type proposalResult struct {
 	Reply         *roachpb.BatchResponse
 	Err           *roachpb.Error
 	ProposalRetry proposalRetryReason
+	Intents       []intentsWithArg
 }
 
 type replicaChecksum struct {
@@ -1869,6 +1870,11 @@ func (r *Replica) tryAddWriteCmd(
 			// Set endCmds to nil because they have already been invoked
 			// in processRaftCommand.
 			endCmds = nil
+			if propResult.Intents != nil {
+				// Synchronously process any intents that need resolving here in order
+				// to apply back pressure on the client which generated them.
+				r.store.intentResolver.processIntents(r, propResult.Intents)
+			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-ctxDone:
 			// If our context was cancelled, return an AmbiguousResultError
@@ -2077,12 +2083,13 @@ func (r *Replica) propose(
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
+		intents := pCmd.Local.detachIntents()
 		r.handleEvalResult(ctx, repDesc, pCmd.Local, pCmd.Replicated)
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
 		ch := make(chan proposalResult, 1)
-		ch <- proposalResult{Err: pErr}
+		ch <- proposalResult{Err: pErr, Intents: intents}
 		close(ch)
 		return ch, func() bool { return false }, nil
 	}
@@ -3287,6 +3294,7 @@ func (r *Replica) processRaftCommand(
 			} else {
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd)
 			}
+			response.Intents = cmd.Local.detachIntents()
 			lResult = cmd.Local
 		}
 
