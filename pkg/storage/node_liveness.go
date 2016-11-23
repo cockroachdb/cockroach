@@ -46,9 +46,9 @@ var (
 	metaEpochIncrements    = metric.Metadata{Name: "liveness.epochincrements"}
 )
 
-func (l *Liveness) isLive(clock *hlc.Clock) bool {
-	expiration := l.Expiration.Add(-int64(clock.MaxOffset()), 0)
-	return clock.Now().Less(expiration)
+func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
+	expiration := l.Expiration.Add(-maxOffset.Nanoseconds(), 0)
+	return now.Less(expiration)
 }
 
 // LivenessMetrics holds metrics for use with node liveness activity.
@@ -114,6 +114,12 @@ func NewNodeLiveness(
 	return nl
 }
 
+// GetLivenessThreshold returns the maximum duration between heartbeats
+// before a node is considered not-live.
+func (nl *NodeLiveness) GetLivenessThreshold() time.Duration {
+	return nl.livenessThreshold
+}
+
 // IsLive returns whether or not the specified node is considered live
 // based on the last receipt of a liveness update via gossip. It is an
 // error if the specified node is not in the local liveness table.
@@ -122,7 +128,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return liveness.isLive(nl.clock), nil
+	return liveness.isLive(nl.clock.Now(), nl.clock.MaxOffset()), nil
 }
 
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
@@ -212,6 +218,20 @@ func (nl *NodeLiveness) Self() (Liveness, error) {
 	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
 }
 
+// GetLivenessMap returns a map of nodeID to liveness.
+func (nl *NodeLiveness) GetLivenessMap() map[roachpb.NodeID]bool {
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+	lMap := map[roachpb.NodeID]bool{}
+	now := nl.clock.Now()
+	maxOffset := nl.clock.MaxOffset()
+	for nID, l := range nl.mu.nodes {
+		lMap[nID] = l.isLive(now, maxOffset)
+	}
+	lMap[nl.mu.self.NodeID] = nl.mu.self.isLive(now, maxOffset)
+	return lMap
+}
+
 // GetLiveness returns the liveness record for the specified nodeID.
 // ErrNoLivenessRecord is returned in the event that nothing is yet
 // known about nodeID via liveness gossip.
@@ -245,7 +265,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, nodeID roachpb.NodeI
 	if err != nil {
 		return err
 	}
-	if liveness.isLive(nl.clock) {
+	if liveness.isLive(nl.clock.Now(), nl.clock.MaxOffset()) {
 		return errors.Errorf("cannot increment epoch on live node: %+v", liveness)
 	}
 	newLiveness := liveness
