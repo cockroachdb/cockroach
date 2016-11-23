@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1315,6 +1316,24 @@ var Builtins = map[string][]Builtin{
 					}
 				}
 				return schemas, nil
+			},
+		},
+	},
+
+	"crdb_internal.force_retry": {
+		Builtin{
+			Types:      ArgTypes{TypeInterval},
+			ReturnType: TypeInt,
+			impure:     true,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				minDuration := args[0].(*DInterval).Duration
+				elapsed := duration.Duration{
+					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
+				}
+				if elapsed.Compare(minDuration) < 0 {
+					return nil, roachpb.NewLocalRetryableError("forced by crdb_internal.force_retry()")
+				}
+				return NewDInt(0), nil
 			},
 		},
 	},

@@ -531,6 +531,20 @@ func (t *logicTest) processTestFile(path string) error {
 			}
 			repeat = count
 
+		case "sleep":
+			var err error
+			duration := 0
+			// A line "sleep X" makes the test sleep for X seconds.
+			if len(fields) != 2 {
+				err = errors.New("invalid line format")
+			} else if duration, err = strconv.Atoi(fields[1]); err != nil {
+				err = errors.New("invalid duration")
+			}
+			if err != nil {
+				return fmt.Errorf("%s:%d invalid sleep line: %s", path, s.line, err)
+			}
+			time.Sleep(time.Duration(duration) * time.Second)
+
 		case "statement":
 			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", path, s.line)}
 			// Parse "statement error <regexp>"

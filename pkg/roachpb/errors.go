@@ -49,6 +49,15 @@ func (e *RetryableTxnError) Error() string {
 
 var _ error = &RetryableTxnError{}
 
+// NewLocalRetryableError creates a shim RetryableTxnError that
+// reports the given cause when converted to String(). This can be
+// used to fake/force a retry at the SQL layer.
+func NewLocalRetryableError(cause string) *RetryableTxnError {
+	return &RetryableTxnError{
+		message: cause,
+	}
+}
+
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
 // a roachpb.BatchResponse) unexpectedly has Error set in its response header.
 func ErrorUnexpectedlySet(culprit, response interface{}) string {
