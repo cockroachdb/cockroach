@@ -229,8 +229,9 @@ func (rq *replicateQueue) process(
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
 			// leases.
+			candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
 			target := rq.allocator.TransferLeaseTarget(
-				zone.Constraints, desc.Replicas, repl.store.StoreID(), desc.RangeID,
+				zone.Constraints, candidates, repl.store.StoreID(), desc.RangeID,
 				false /* checkTransferLeaseSource */)
 			if target != (roachpb.ReplicaDescriptor{}) {
 				log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
@@ -268,10 +269,11 @@ func (rq *replicateQueue) process(
 		if rq.canTransferLease() {
 			// We require the lease in order to process replicas, so
 			// repl.store.StoreID() corresponds to the lease-holder's store ID.
+			candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
 			target := rq.allocator.TransferLeaseTarget(
-				zone.Constraints, desc.Replicas, repl.store.StoreID(), desc.RangeID,
+				zone.Constraints, candidates, repl.store.StoreID(), desc.RangeID,
 				true /* checkTransferLeaseSource */)
-			if target.StoreID != 0 {
+			if target != (roachpb.ReplicaDescriptor{}) {
 				log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
 				if err := repl.AdminTransferLease(target.StoreID); err != nil {
 					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
