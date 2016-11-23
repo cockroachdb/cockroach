@@ -3640,6 +3640,7 @@ func (s *Store) updateReplicationGauges() error {
 		leaseHolderCount                int64
 		raftLeaderNotLeaseHolderCount   int64
 		quiescentCount                  int64
+		rangeCount                      int64
 		availableRangeCount             int64
 		replicaAllocatorNoopCount       int64
 		replicaAllocatorAddCount        int64
@@ -3648,6 +3649,10 @@ func (s *Store) updateReplicationGauges() error {
 	)
 
 	timestamp := s.cfg.Clock.Now()
+	var livenessMap map[roachpb.NodeID]bool
+	if s.cfg.NodeLiveness != nil {
+		livenessMap = s.cfg.NodeLiveness.GetLivenessMap()
+	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		desc := rep.Desc()
@@ -3676,27 +3681,10 @@ func (s *Store) updateReplicationGauges() error {
 			raftLeaderCount++
 
 			if leaseCovers {
-				// If any replica holds the range lease, the range is available.
-				availableRangeCount++
-
 				if leaseOwned {
 					leaseHolderCount++
 				} else {
 					raftLeaderNotLeaseHolderCount++
-				}
-			} else {
-				// If there is no range lease, then as long as a majority of
-				// the replicas are current then it is available.
-				current := 0
-				for _, progress := range raftStatus.Progress {
-					if progress.Match == raftStatus.Applied {
-						current++
-					} else {
-						current--
-					}
-				}
-				if current > 0 {
-					availableRangeCount++
 				}
 			}
 
@@ -3713,6 +3701,33 @@ func (s *Store) updateReplicationGauges() error {
 		} else if leaseCovers && leaseOwned {
 			leaseHolderCount++
 		}
+
+		if livenessMap != nil {
+			// Count live replicas and determine the largest live replica ID to
+			// determine the replica responsible for range stats contributions.
+			// Note that the largest ID is an arbitrary choice. We want to select
+			// one live replica to do the counting that all replicas can agree on.
+			var liveReplicas int
+			highestIdx := -1
+			for i, rd := range desc.Replicas {
+				if livenessMap[rd.NodeID] {
+					liveReplicas++
+					if highestIdx == -1 || rd.ReplicaID > desc.Replicas[highestIdx].ReplicaID {
+						highestIdx = i
+					}
+				}
+			}
+
+			// If this replica is the highest replica ID, it does the counting.
+			if highestIdx != -1 && desc.Replicas[highestIdx].StoreID == s.StoreID() {
+				rangeCount++
+				// If a quorum of replicas are live, consider this range available.
+				if liveReplicas > computeQuorum(len(desc.Replicas)) {
+					availableRangeCount++
+				}
+			}
+		}
+
 		return true // more
 	})
 
@@ -3721,6 +3736,7 @@ func (s *Store) updateReplicationGauges() error {
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
 
+	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.AvailableRangeCount.Update(availableRangeCount)
 
 	s.metrics.ReplicaAllocatorNoopCount.Update(replicaAllocatorNoopCount)
