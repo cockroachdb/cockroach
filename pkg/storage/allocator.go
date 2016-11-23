@@ -213,27 +213,27 @@ func (a *Allocator) AllocateTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
 	relaxConstraints bool,
-) (*roachpb.StoreDescriptor, error) {
+) (roachpb.StoreDescriptor, error) {
 	if a.options.UseRuleSolver {
 		sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID)
 		// When there are throttled stores that do match, we shouldn't send
 		// the replica to purgatory.
 		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+			return roachpb.StoreDescriptor{}, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
 		candidates, err := a.ruleSolver.Solve(sl, constraints, existing)
 		if err != nil {
-			return nil, err
+			return roachpb.StoreDescriptor{}, err
 		}
 
 		if len(candidates) == 0 {
-			return nil, &allocatorError{
+			return roachpb.StoreDescriptor{}, &allocatorError{
 				required: constraints.Constraints,
 			}
 		}
 		// TODO(bram): #10275 Need some randomness here!
-		return &candidates[0].store, nil
+		return candidates[0].store, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
@@ -249,16 +249,16 @@ func (a *Allocator) AllocateTarget(
 	for attrs := constraints.Constraints; ; attrs = attrs[:len(attrs)-1] {
 		filteredSL := sl.filter(config.Constraints{Constraints: attrs})
 		if target := a.selectGood(filteredSL, existingNodes); target != nil {
-			return target, nil
+			return *target, nil
 		}
 
 		// When there are throttled stores that do match, we shouldn't send
 		// the replica to purgatory or even consider relaxing the constraints.
 		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+			return roachpb.StoreDescriptor{}, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 		if len(attrs) == 0 || !relaxConstraints {
-			return nil, &allocatorError{
+			return roachpb.StoreDescriptor{}, &allocatorError{
 				required:         constraints.Constraints,
 				relaxConstraints: relaxConstraints,
 				aliveStoreCount:  aliveStoreCount,
@@ -380,9 +380,9 @@ func (a Allocator) RebalanceTarget(
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
-) (*roachpb.StoreDescriptor, error) {
+) (bool, roachpb.StoreDescriptor, error) {
 	if !a.options.AllowRebalance {
-		return nil, nil
+		return false, roachpb.StoreDescriptor{}, nil
 	}
 
 	if a.options.UseRuleSolver {
@@ -403,7 +403,7 @@ func (a Allocator) RebalanceTarget(
 			}
 		}
 		if !shouldRebalance {
-			return nil, nil
+			return false, roachpb.StoreDescriptor{}, nil
 		}
 
 		// Load the exiting storesIDs into a map so to eliminate having to loop
@@ -430,11 +430,11 @@ func (a Allocator) RebalanceTarget(
 
 		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil)
 		if err != nil {
-			return nil, err
+			return false, roachpb.StoreDescriptor{}, err
 		}
 		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil)
 		if err != nil {
-			return nil, err
+			return false, roachpb.StoreDescriptor{}, err
 		}
 
 		// Find all candidates that are better than the worst existing store.
@@ -449,11 +449,11 @@ func (a Allocator) RebalanceTarget(
 		// TODO(bram): #10275 Need some randomness here!
 		for _, cand := range candidates {
 			if cand.score > worstCandidateStore {
-				return &candidates[0].store, nil
+				return true, candidates[0].store, nil
 			}
 		}
 
-		return nil, nil
+		return false, roachpb.StoreDescriptor{}, nil
 	}
 
 	sl, _, _ := a.storePool.getStoreList(rangeID)
@@ -474,14 +474,18 @@ func (a Allocator) RebalanceTarget(
 		}
 	}
 	if !shouldRebalance {
-		return nil, nil
+		return false, roachpb.StoreDescriptor{}, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
 		existingNodes[repl.NodeID] = struct{}{}
 	}
-	return a.improve(sl, existingNodes), nil
+	improve := a.improve(sl, existingNodes)
+	if improve == nil {
+		return false, roachpb.StoreDescriptor{}, nil
+	}
+	return true, *improve, nil
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
