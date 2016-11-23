@@ -215,6 +215,7 @@ type TableExpr interface {
 func (*AliasedTableExpr) tableExpr() {}
 func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}
+func (*FuncExpr) tableExpr()         {}
 
 // IndexHints represents "@<index_name>" or "@{param[,param]}" where param is
 // one of:

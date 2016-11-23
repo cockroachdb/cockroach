@@ -249,6 +249,9 @@ func (p *planner) getDataSource(
 		}
 		return p.getTableScanOrViewPlan(tn, hints, scanVisibility)
 
+	case *parser.FuncExpr:
+		return p.getGeneratorPlan(t)
+
 	case *parser.Subquery:
 		return p.getSubqueryPlan(t.Select, nil)
 
@@ -434,6 +437,18 @@ func (p *planner) getSubqueryPlan(
 	}
 	return planDataSource{
 		info: newSourceInfoForSingleTable(anonymousTable, cols),
+		plan: plan,
+	}, nil
+}
+
+func (p *planner) getGeneratorPlan(t *parser.FuncExpr) (planDataSource, error) {
+	plan, name, err := p.makeGenerator(t)
+	if err != nil {
+		return planDataSource{}, err
+	}
+	tn := parser.TableName{TableName: parser.Name(name)}
+	return planDataSource{
+		info: newSourceInfoForSingleTable(tn, plan.Columns()),
 		plan: plan,
 	}, nil
 }

@@ -1630,6 +1630,54 @@ func (d *DArray) Append(v Datum) error {
 	return nil
 }
 
+// DTable is the table Datum. It is used for datums that hold an
+// entire table generator. See the comments in generator_builtins.go
+// for details.
+type DTable struct {
+	ValueGenerator
+}
+
+// Format implements the NodeFormatter interface.
+func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {
+	buf.WriteString("<generated>")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (t *DTable) ResolvedType() Type {
+	return TTable{t.ValueGenerator.ColumnTypes()}
+}
+
+// Compare implements the Datum interface.
+func (t *DTable) Compare(other Datum) int {
+	if o, ok := other.(*DTable); ok {
+		if o.ValueGenerator == t.ValueGenerator {
+			return 0
+		}
+	}
+	return -1
+}
+
+// HasPrev implements the Datum interface.
+func (*DTable) HasPrev() bool { return false }
+
+// HasNext implements the Datum interface.
+func (*DTable) HasNext() bool { return false }
+
+// Prev implements the Datum interface.
+func (*DTable) Prev() Datum { return nil }
+
+// Next implements the Datum interface.
+func (*DTable) Next() Datum { return nil }
+
+// IsMax implements the Datum interface.
+func (*DTable) IsMax() bool { return false }
+
+// IsMin implements the Datum interface.
+func (*DTable) IsMin() bool { return false }
+
+// Size implements the Datum interface.
+func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
+
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.
 // TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?
