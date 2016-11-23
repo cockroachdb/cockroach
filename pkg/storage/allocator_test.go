@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -1654,6 +1655,49 @@ func TestAllocatorThrottled(t *testing.T) {
 			t.Fatalf("expected a non purgatory error, got: %v", err)
 		}
 	})
+}
+
+func TestFilterBehindReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		progress []uint64
+		expected []uint64
+	}{
+		{[]uint64{1}, []uint64{1}},
+		{[]uint64{2}, []uint64{2}},
+		{[]uint64{1, 2}, []uint64{1, 2}},
+		{[]uint64{3, 2}, []uint64{3, 2}},
+		{[]uint64{1, 2, 3}, []uint64{2, 3}},
+		{[]uint64{4, 3, 2}, []uint64{4, 3}},
+		{[]uint64{1, 2, 3, 4}, []uint64{2, 3, 4}},
+		{[]uint64{5, 4, 3, 2}, []uint64{5, 4, 3}},
+		{[]uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
+		{[]uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
+	}
+	for i, c := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			status := &raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			var replicas []roachpb.ReplicaDescriptor
+			for j, v := range c.progress {
+				status.Progress[uint64(j)] = raft.Progress{Match: v}
+				replicas = append(replicas, roachpb.ReplicaDescriptor{
+					ReplicaID: roachpb.ReplicaID(j),
+					StoreID:   roachpb.StoreID(v),
+				})
+			}
+			candidates := filterBehindReplicas(status, replicas)
+			var ids []uint64
+			for _, c := range candidates {
+				ids = append(ids, uint64(c.StoreID))
+			}
+			if !reflect.DeepEqual(c.expected, ids) {
+				t.Fatalf("%d: expected %d, but got %d", i, c.expected, ids)
+			}
+		})
+	}
 }
 
 type testStore struct {
