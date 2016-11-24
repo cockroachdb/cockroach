@@ -16,4 +16,6 @@
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 package roachpb_test
 
+//go:generate make -C ../.. protobuf
+
 import _ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
