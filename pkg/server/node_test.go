@@ -636,6 +636,7 @@ func TestStatusSummaries(t *testing.T) {
 	store1["replicas"]++
 	store1["replicas.leaders"]++
 	store1["replicas.leaseholders"]++
+	store1["ranges"]++
 	store1["ranges.available"]++
 
 	forceWriteStatus()

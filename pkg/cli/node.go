@@ -89,6 +89,7 @@ var nodesColumnHeaders = []string{
 	"system_bytes",
 	"replicas_leaders",
 	"replicas_leaseholders",
+	"ranges",
 	"ranges_available",
 }
 
@@ -177,6 +178,7 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 			strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
 			strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
 			strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges"]), 10),
 			strconv.FormatInt(int64(metricVals["ranges.available"]), 10),
 		})
 	}

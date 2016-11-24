@@ -25,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -68,9 +67,7 @@ func TestNodeLiveness(t *testing.T) {
 	stopNodeLivenessHeartbeats(mtc)
 
 	// Advance clock past the liveness threshold to verify IsLive becomes false.
-	active, _ := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0))
-	mtc.manualClock.Increment(active.Nanoseconds() + 1)
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
 	for idx, nl := range mtc.nodeLivenesses {
 		nodeID := mtc.gossips[idx].NodeID.Get()
 		live, err := nl.IsLive(nodeID)
@@ -120,9 +117,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	active, _ := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0))
-	mtc.manualClock.Increment(active.Nanoseconds() + 1)
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), deadNodeID); err != nil {
 		t.Fatalf("unexpected error incrementing a live node: %s", err)
 	}
@@ -255,5 +250,32 @@ func TestNodeLivenessSelf(t *testing.T) {
 	}
 	if lGet.Epoch == 2 || lSelf.NodeID == 2 {
 		t.Errorf("expected GetLiveness() and Self() not to return artificially gossiped liveness: %+v, %+v", lGet, lSelf)
+	}
+}
+
+func TestNodeLivenessGetLivenessMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	verifyLiveness(t, mtc)
+	stopNodeLivenessHeartbeats(mtc)
+	lMap := mtc.nodeLivenesses[0].GetLivenessMap()
+	expectedLMap := map[roachpb.NodeID]bool{1: true, 2: true, 3: true}
+	if !reflect.DeepEqual(expectedLMap, lMap) {
+		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
+	}
+
+	// Advance the clock but only heartbeat node 0.
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
+	if err := mtc.nodeLivenesses[0].ManualHeartbeat(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now verify only node 0 is live.
+	lMap = mtc.nodeLivenesses[0].GetLivenessMap()
+	expectedLMap = map[roachpb.NodeID]bool{1: true, 2: false, 3: false}
+	if !reflect.DeepEqual(expectedLMap, lMap) {
+		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
 	}
 }
