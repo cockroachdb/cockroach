@@ -580,10 +580,18 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
-				log.Errorf(session.Ctx(),
-					"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
-						"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
-					remainingStmts, txnState)
+				doWarn := true
+				if len(stmtsToExec) > 0 {
+					if _, ok := stmtsToExec[0].(*parser.ShowTxnStatus); ok {
+						doWarn = false
+					}
+				}
+				if doWarn {
+					log.Errorf(session.Ctx(),
+						"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
+							"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
+						remainingStmts, txnState)
+				}
 			}
 
 			return err
