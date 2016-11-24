@@ -16,8 +16,6 @@
 
 package main
 
-//go:generate make protobuf
-
 import (
 	"fmt"
 	"math/rand"
