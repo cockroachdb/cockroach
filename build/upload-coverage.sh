@@ -17,9 +17,9 @@ else
   outdir="/tmp"
 fi
 
-main_package="github.com/cockroachdb/cockroach"
+prefix="github.com/cockroachdb/cockroach/pkg"
 # This regex removes files from the uploaded coverage.
-ignore_files="$main_package/(acceptance|cmd|ui/embedded|storage/simulation|sql/pgbench|.*\.(pb|pb\.gw)\.go)"
+ignore_files="$prefix/(acceptance|cmd|ui/embedded|storage/simulation|sql/pgbench|.*\.(pb|pb\.gw)\.go)"
 
 coverage_dir="${outdir}/coverage"
 coverage_profile="${coverage_dir}/coverage.out"
@@ -35,7 +35,7 @@ iterative_coverpkg() {
     old_line_count=$line_count
     imports+=$'\n'$(go list  -f '{{join .Imports "\n"}}
 {{join .TestImports "\n"}}
-{{join .XTestImports "\n"}}' $imports | grep $main_package)
+{{join .XTestImports "\n"}}' $imports | grep $prefix)
     imports=$(echo "$imports" | sort | uniq)
     line_count=$(echo $imports | wc -w)
   done
