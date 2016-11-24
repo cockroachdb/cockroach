@@ -57,7 +57,7 @@ func main() {
 	if !ok {
 		log.Fatalf("teamcity API password environment variable %s is not set", teamcityAPIPasswordEnv)
 	}
-	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/..."})
+	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
 
 	client := teamcity.New(u.Host, username, password)
 	// Queue a build per configuration per package.
