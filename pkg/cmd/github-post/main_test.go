@@ -89,7 +89,7 @@ func TestRunGH(t *testing.T) {
 		},
 		"stress-fatal": {
 			packageName: envPkg,
-			testName:    "(unknown)",
+			testName:    "TestRaftRemoveRace",
 			body:        "F161007 00:27:33.243126 449 storage/store.go:2446  [s3] [n3,s3,r1:/M{in-ax}]: could not remove placeholder after preemptive snapshot",
 		},
 	} {
