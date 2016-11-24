@@ -1,96 +1,170 @@
 package: github.com/cockroachdb/cockroach
 import:
-- package: github.com/Azure/go-ansiterm
-- package: github.com/Microsoft/go-winio
-- package: github.com/Sirupsen/logrus
-- package: github.com/StackExchange/wmi
 - package: github.com/VividCortex/ewma
 - package: github.com/abourget/teamcity
-- package: github.com/agtorre/gocolorize
 - package: github.com/backtrace-labs/go-bcd
 - package: github.com/biogo/store
+  subpackages:
+  - interval
+  - llrb
 - package: github.com/cenk/backoff
 - package: github.com/chzyer/readline
-- package: github.com/client9/misspell
 - package: github.com/cockroachdb/c-jemalloc
+  # Inherently risky.
+  version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
 - package: github.com/cockroachdb/c-protobuf
+  subpackages:
+  - cmd/protoc
 - package: github.com/cockroachdb/c-rocksdb
-- package: github.com/cockroachdb/c-snappy
+  # Inherently risky.
+  version: b5ca031b93fde49bfa2ba99aba423136aebf3c06
 - package: github.com/cockroachdb/cmux
 - package: github.com/cockroachdb/cockroach-go
-- package: github.com/cockroachdb/crlfmt
+  subpackages:
+  - crdb
 - package: github.com/cockroachdb/pq
-- package: github.com/cockroachdb/stress
 - package: github.com/codahale/hdrhistogram
 - package: github.com/coreos/etcd
-- package: github.com/cpuguy83/go-md2man
-- package: github.com/docker/distribution
+  subpackages:
+  - raft
+  - raft/raftpb
 - package: github.com/docker/docker
+  # https://github.com/docker/docker/pull/27912 broke all dependents.
+  version: 7248742ae7127347a52ab9d215451c213b7b59da
+  subpackages:
+  - api/types
+  - api/types/container
+  - api/types/events
+  - api/types/filters
+  - api/types/network
+  - client
+  - pkg/jsonmessage
+  - pkg/stdcopy
 - package: github.com/docker/go-connections
-- package: github.com/docker/go-units
+  subpackages:
+  - nat
 - package: github.com/dustin/go-humanize
 - package: github.com/elastic/gosigar
 - package: github.com/elazarl/go-bindata-assetfs
 - package: github.com/facebookgo/clock
-- package: github.com/ghemawat/stream
-- package: github.com/go-ole/go-ole
-- package: github.com/go-sql-driver/mysql
 - package: github.com/gogo/protobuf
-- package: github.com/golang/glog
-- package: github.com/golang/lint
+  # Updated with google.golang.org/grpc.
+  version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
+  subpackages:
+  - jsonpb
+  - proto
+  - protoc-gen-gogo/descriptor
+  - sortkeys
+  - vanity
+  - vanity/command
 - package: github.com/golang/protobuf
+  subpackages:
+  - proto
 - package: github.com/google/btree
 - package: github.com/google/go-github
-- package: github.com/google/go-querystring
+  subpackages:
+  - github
 - package: github.com/grpc-ecosystem/grpc-gateway
-- package: github.com/inconshreveable/mousetrap
+  subpackages:
+  - runtime
+  - third_party/googleapis/google/api
+  - utilities
+  - protoc-gen-grpc-gateway
 - package: github.com/jeffjen/datefmt
-- package: github.com/jteeuwen/go-bindata
-- package: github.com/kisielk/errcheck
 - package: github.com/kisielk/gotool
-- package: github.com/kkaneda/returncheck
 - package: github.com/kr/pretty
 - package: github.com/kr/text
 - package: github.com/leekchan/timeutil
 - package: github.com/lib/pq
+  subpackages:
+  - oid
 - package: github.com/lightstep/lightstep-tracer-go
 - package: github.com/mattn/go-isatty
-- package: github.com/mattn/go-runewidth
-- package: github.com/mattn/goveralls
-- package: github.com/matttproud/golang_protobuf_extensions
-- package: github.com/mdempsky/unconvert
-- package: github.com/mibk/dupl
 - package: github.com/montanaflynn/stats
 - package: github.com/olekukonko/tablewriter
-- package: github.com/opencontainers/runc
 - package: github.com/opentracing/basictracer-go
 - package: github.com/opentracing/opentracing-go
-- package: github.com/pborman/uuid
+  subpackages:
+  - ext
+  - log
 - package: github.com/petermattis/goid
 - package: github.com/pkg/errors
 - package: github.com/prometheus/client_model
+  subpackages:
+  - go
 - package: github.com/prometheus/common
+  subpackages:
+  - expfmt
 - package: github.com/rcrowley/go-metrics
-- package: github.com/robfig/glock
+  subpackages:
+  - exp
 - package: github.com/rubyist/circuitbreaker
 - package: github.com/sasha-s/go-deadlock
 - package: github.com/satori/go.uuid
 - package: github.com/spf13/cobra
+  subpackages:
+  - doc
 - package: github.com/spf13/pflag
 - package: github.com/tebeka/go2xunit
-- package: github.com/termie/go-shutil
-- package: github.com/wadey/gocovmerge
+  subpackages:
+  - lib
 - package: golang.org/x/crypto
+  subpackages:
+  - bcrypt
+  - ssh/terminal
 - package: golang.org/x/net
+  subpackages:
+  - context
+  - http2
+  - trace
 - package: golang.org/x/oauth2
-- package: golang.org/x/sys
 - package: golang.org/x/text
-- package: golang.org/x/tools
-- package: google.golang.org/appengine
+  subpackages:
+  - collate
+  - language
+  - unicode/norm
 - package: google.golang.org/grpc
+  # Inherently risky.
+  version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
+  subpackages:
+  - codes
+  - credentials
+  - grpclog
+  - peer
+  - transport
 - package: gopkg.in/inf.v0
 - package: gopkg.in/yaml.v2
 - package: honnef.co/go/lint
+  subpackages:
+  - lintutil
 - package: honnef.co/go/simple
 - package: honnef.co/go/staticcheck
 - package: honnef.co/go/unused
+- package: github.com/jteeuwen/go-bindata
+  subpackages:
+  - go-bindata
+- package: github.com/mattn/goveralls
+- package: github.com/client9/misspell
+  subpackages:
+  - cmd/misspell
+- package: github.com/cockroachdb/crlfmt
+- package: github.com/cockroachdb/stress
+- package: github.com/golang/lint
+  subpackages:
+  - golint
+- package: github.com/kisielk/errcheck
+- package: github.com/kkaneda/returncheck
+- package: github.com/mdempsky/unconvert
+- package: github.com/mibk/dupl
+- package: github.com/robfig/glock
+- package: github.com/wadey/gocovmerge
+- package: golang.org/x/tools
+  subpackages:
+  - go/buildutil
+  - cmd/goimports
+  - cmd/goyacc
+  - cmd/stringer
+testImport:
+- package: github.com/ghemawat/stream
+- package: github.com/go-sql-driver/mysql
+- package: github.com/termie/go-shutil
