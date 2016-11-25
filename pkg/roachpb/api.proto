@@ -698,6 +698,12 @@ message DeprecatedVerifyChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// KeyRewrite is rule to replace one prefix (if matching) with another.
+message KeyRewrite {
+  optional bytes old_prefix = 1;
+  optional bytes new_prefix = 2;
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
