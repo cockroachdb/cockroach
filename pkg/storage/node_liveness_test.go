@@ -58,7 +58,6 @@ func stopNodeLivenessHeartbeats(mtc *multiTestContext) {
 
 func TestNodeLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9973")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -86,9 +85,9 @@ func TestNodeLiveness(t *testing.T) {
 	verifyLiveness(t, mtc)
 
 	// Verify metrics counts.
-	for _, nl := range mtc.nodeLivenesses {
-		if c := nl.Metrics().HeartbeatSuccesses.Count(); c != 2 {
-			t.Errorf("expected metrics count == 2; got %d", c)
+	for i, nl := range mtc.nodeLivenesses {
+		if c := nl.Metrics().HeartbeatSuccesses.Count(); c < 2 {
+			t.Errorf("node %d: expected metrics count >= 2; got %d", (i + 1), c)
 		}
 	}
 }
