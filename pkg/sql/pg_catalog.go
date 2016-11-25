@@ -262,7 +262,7 @@ CREATE TABLE pg_catalog.pg_class (
 				if err := addRow(
 					h.TableOid(db, table),         // oid
 					parser.NewDString(table.Name), // relname
-					h.DBOid(db),                   // relnamespace
+					pgNamespaceForDB(db).Oid,      // relnamespace
 					oidZero,                       // reltype (PG creates a composite type in pg_type for each table)
 					parser.DNull,                  // relowner
 					parser.DNull,                  // relam
@@ -295,7 +295,7 @@ CREATE TABLE pg_catalog.pg_class (
 					return addRow(
 						h.IndexOid(db, table, index),  // oid
 						parser.NewDString(index.Name), // relname
-						h.DBOid(db),                   // relnamespace
+						pgNamespaceForDB(db).Oid,      // relnamespace
 						oidZero,                       // reltype
 						parser.DNull,                  // relowner
 						parser.DNull,                  // relam
@@ -473,7 +473,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err := addRow(
 						oid,                                            // oid
 						dStringOrNull(name),                            // conname
-						h.DBOid(db),                                    // connamespace
+						pgNamespaceForDB(db).Oid,                       // connamespace
 						contype,                                        // contype
 						parser.MakeDBool(false),                        // condeferrable
 						parser.MakeDBool(false),                        // condeferred
@@ -527,7 +527,7 @@ var (
 	datEncodingEnUTF8 = parser.NewDString("en_US.utf8")
 )
 
-// See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html
+// See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html.
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_database (
@@ -781,7 +781,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
-						parser.NewDString(db.Name),    // schemaname
+						pgNamespaceForDB(db).NameStr,  // schemaname
 						parser.NewDString(table.Name), // tablename
 						parser.NewDString(index.Name), // indexname
 						parser.DNull,                  // tablespace
@@ -865,15 +865,17 @@ CREATE TABLE pg_catalog.pg_namespace (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
-		h := makeOidHasher()
-		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
-			return addRow(
-				h.DBOid(db),                // oid
-				parser.NewDString(db.Name), // nspname
-				parser.DNull,               // nspowner
-				parser.DNull,               // aclitem
-			)
-		})
+		for _, nsp := range pgNamespaces {
+			if err := addRow(
+				nsp.Oid,      // oid
+				nsp.NameStr,  // nspname
+				parser.DNull, // nspowner
+				parser.DNull, // aclitem
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
@@ -939,10 +941,10 @@ CREATE TABLE pg_catalog.pg_proc (
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
 		dbDesc, err := p.getDatabaseDesc(pgCatalogName)
-		dbOid := h.DBOid(dbDesc)
 		if err != nil {
 			return err
 		}
+		nspOid := pgNamespaceForDB(dbDesc).Oid
 		for name, builtins := range parser.Builtins {
 			// parser.Builtins contains duplicate uppercase and lowercase keys.
 			// Only return the lowercase ones for compatibility with postgres.
@@ -994,7 +996,7 @@ CREATE TABLE pg_catalog.pg_proc (
 				err := addRow(
 					h.BuiltinOid(name, &builtin), // oid
 					dName,                                             // proname
-					dbOid,                                             // pronamespace
+					nspOid,                                            // pronamespace
 					parser.DNull,                                      // proowner
 					oidZero,                                           // prolang
 					parser.DNull,                                      // procost
@@ -1260,7 +1262,7 @@ CREATE TABLE pg_catalog.pg_type (
 			if err := addRow(
 				parser.NewDInt(parser.DInt(oid)), // oid
 				parser.NewDString(typ.String()),  // typname
-				parser.DNull,                     // typnamespace
+				pgNamespacePGCatalog.Oid,         // typnamespace
 				parser.DNull,                     // typowner
 				typLen(typ),                      // typlen
 				typByVal(typ),                    // typbyval
@@ -1438,6 +1440,7 @@ const (
 	uniqueConstraintTypeTag
 	functionTypeTag
 	userTypeTag
+	namespaceTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -1478,6 +1481,12 @@ func (h oidHasher) writeForeignKeyReference(fk *sqlbase.ForeignKeyReference) {
 	h.writeUInt32(uint32(fk.Table))
 	h.writeUInt32(uint32(fk.Index))
 	h.writeStr(fk.Name)
+}
+
+func (h oidHasher) NamespaceOid(namespace string) *parser.DInt {
+	h.writeTypeTag(namespaceTypeTag)
+	h.writeStr(namespace)
+	return h.getOid()
 }
 
 func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
@@ -1568,4 +1577,58 @@ func (h oidHasher) UserOid(username string) *parser.DInt {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(username)
 	return h.getOid()
+}
+
+// pgNamespace represents a PostgreSQL-style namespace, which is the structure
+// underlying SQL schemas: "each namespace can have a separate collection of
+// relations, types, etc. without name conflicts."
+//
+// CockroachDB does not have a notion of namespaces, but some clients rely on
+// a relationship between databases and namespaces existing in pg_catalog. To
+// accommodate this use case, we mock out the existence of namespaces, splitting
+// databases into one of four namespaces. These namespaces mirror Postgres, with
+// the addition of a "system" namespace so that only user-created objects exist
+// in the "public" namespace.
+type pgNamespace struct {
+	name string
+
+	NameStr *parser.DString
+	Oid     *parser.DInt
+}
+
+var (
+	pgNamespacePublic            = &pgNamespace{name: "public"}
+	pgNamespaceSystem            = &pgNamespace{name: "system"}
+	pgNamespacePGCatalog         = &pgNamespace{name: "pg_catalog"}
+	pgNamespaceInformationSchema = &pgNamespace{name: "information_schema"}
+
+	pgNamespaces = []*pgNamespace{
+		pgNamespacePublic,
+		pgNamespaceSystem,
+		pgNamespacePGCatalog,
+		pgNamespaceInformationSchema,
+	}
+)
+
+func init() {
+	h := makeOidHasher()
+	for _, nsp := range pgNamespaces {
+		nsp.NameStr = parser.NewDString(nsp.name)
+		nsp.Oid = h.NamespaceOid(nsp.name)
+	}
+}
+
+// pgNamespaceForDB maps a DatabaseDescriptor to its corresponding pgNamespace.
+// See the comment above pgNamespace for more details.
+func pgNamespaceForDB(db *sqlbase.DatabaseDescriptor) *pgNamespace {
+	switch db.Name {
+	case sqlbase.SystemDB.Name:
+		return pgNamespaceSystem
+	case pgCatalogName:
+		return pgNamespacePGCatalog
+	case informationSchemaName:
+		return pgNamespaceInformationSchema
+	default:
+		return pgNamespacePublic
+	}
 }
