@@ -1430,6 +1430,7 @@ type oidTypeTag uint8
 
 const (
 	_ oidTypeTag = iota
+	namespaceTypeTag
 	databaseTypeTag
 	tableTypeTag
 	indexTypeTag
@@ -1440,7 +1441,6 @@ const (
 	uniqueConstraintTypeTag
 	functionTypeTag
 	userTypeTag
-	namespaceTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
