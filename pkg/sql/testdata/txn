@@ -466,3 +466,83 @@ SNAPSHOT
 
 statement ok
 COMMIT
+
+# SHOW TRANSACTION STATUS
+
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
+
+statement ok
+BEGIN
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
+
+statement ok
+COMMIT
+
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
+
+statement ok
+BEGIN
+
+query error pq: database "t" does not exist
+SELECT a FROM t.b
+
+query T
+SHOW TRANSACTION STATUS
+----
+Aborted
+
+statement ok
+ROLLBACK
+
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
+
+# CommitWait state
+statement ok
+BEGIN;SAVEPOINT cockroach_restart
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+query T
+SHOW TRANSACTION STATUS
+----
+CommitWait
+
+statement ok
+COMMIT
+
+# RestartWait state
+statement ok
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart
+
+query error restart transaction: forced
+SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+
+query T
+SHOW TRANSACTION STATUS
+----
+RestartWait
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
+
+statement ok
+COMMIT

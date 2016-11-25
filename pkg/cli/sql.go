@@ -18,6 +18,7 @@ package cli
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,6 +75,9 @@ type cliState struct {
 	// the upstream readline library handles multi-line history entries
 	// properly.
 	normalizeHistory bool
+
+	// The prefix at the start of a prompt.
+	promptPrefix string
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
 	// The prompt on a continuation line in a multi-line entry.
@@ -133,6 +138,10 @@ const (
 	// Querying the server for the current syntax prior to starting
 	// input.
 	cliQuerySyntax
+
+	// Querying the server for the current transaction status
+	// and setting the prompt accordingly.
+	cliRefreshPrompts
 
 	// Just before reading the first line of a potentially multi-line
 	// statement.
@@ -346,12 +355,61 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
+// refreshPrompts refreshes the prompts of the client depending on the
+// status of the current transaction.
+func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
+	if !isInteractive {
+		return nextState
+	}
+
+	// Query the server for the current transaction status.
+	query := makeQuery(`SHOW TRANSACTION STATUS`)
+	rows, err := query(c.conn)
+	if err != nil {
+		return c.refreshPrompts(" ?", nextState)
+	}
+	if len(rows.Columns()) == 0 {
+		fmt.Fprintf(osStderr, "invalid transaction status")
+		return c.refreshPrompts(" ?", nextState)
+	}
+	val := make([]driver.Value, len(rows.Columns()))
+	err = rows.Next(val)
+	if err != nil {
+		fmt.Fprintf(osStderr, "invalid transaction status")
+		return c.refreshPrompts(" ?", nextState)
+	}
+	txnString := formatVal(val[0], false, false)
+
+	// Change the prompt based on the response from the server.
+	promptSuffix := " ?"
+	switch txnString {
+	case sql.NoTxn.String():
+		promptSuffix = ""
+	case sql.Aborted.String():
+		promptSuffix = " ERROR"
+	case sql.CommitWait.String():
+		promptSuffix = "  DONE"
+	case sql.RestartWait.String():
+		promptSuffix = " RETRY"
+	case sql.Open.String():
+		promptSuffix = "  OPEN"
+	}
+	return c.refreshPrompts(promptSuffix, nextState)
+}
+
+func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
+	c.fullPrompt = c.promptPrefix + promptSuffix
+	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
+	c.fullPrompt += "> "
+	return nextState
+}
+
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
-func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
+func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt string) {
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
-	fullPrompt = dbURL
+	promptPrefix = dbURL
 	if parsedURL, err := url.Parse(dbURL); err == nil {
 		username := ""
 		if parsedURL.User != nil {
@@ -359,19 +417,17 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 		}
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.
-		fullPrompt = fmt.Sprintf("%s@%s", username, parsedURL.Host)
+		promptPrefix = fmt.Sprintf("%s@%s", username, parsedURL.Host)
 	}
 
-	if len(fullPrompt) == 0 {
-		fullPrompt = " "
+	if len(promptPrefix) == 0 {
+		promptPrefix = " "
 	}
 
-	continuePrompt = strings.Repeat(" ", len(fullPrompt)-1) + "-"
+	continuePrompt = strings.Repeat(" ", len(promptPrefix)-1) + "-> "
+	fullPrompt = promptPrefix + "> "
 
-	fullPrompt += "> "
-	continuePrompt += "> "
-
-	return fullPrompt, continuePrompt
+	return promptPrefix, fullPrompt, continuePrompt
 }
 
 // endsWithIncompleteTxn returns true if and only if its
@@ -399,7 +455,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	c.partialLines = []string{}
 
 	if isInteractive {
-		c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
+		c.promptPrefix, c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
 
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
@@ -554,7 +610,7 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 	// In this case ignore empty lines, and recognize "help" specially.
 	switch c.lastInputLine {
 	case "":
-		// Ignore empty lines, just continue reading.
+		// Ignore empty lines, just continue reading if it isn't interactive mode.
 		return startState
 
 	case "help", "quit", "exit":
@@ -785,7 +841,10 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			state = c.doStart(cliQuerySyntax)
 
 		case cliQuerySyntax:
-			state = c.doQuerySyntax(cliStartLine)
+			state = c.doQuerySyntax(cliRefreshPrompts)
+
+		case cliRefreshPrompts:
+			state = c.doRefreshPrompts(cliStartLine)
 
 		case cliStartLine:
 			state = c.doStartLine(cliReadLine)
@@ -800,18 +859,18 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			state = c.doDecidePath()
 
 		case cliProcessFirstLine:
-			state = c.doProcessFirstLine(cliReadLine, cliHandleCliCmd)
+			state = c.doProcessFirstLine(cliRefreshPrompts, cliHandleCliCmd)
 
 		case cliHandleCliCmd:
 			state = c.doHandleCliCmd(cliReadLine, cliPrepareStatementLine)
 
 		case cliPrepareStatementLine:
 			state = c.doPrepareStatementLine(
-				cliStartLine, cliContinueLine, cliCheckStatement, cliRunStatement,
+				cliRefreshPrompts, cliContinueLine, cliCheckStatement, cliRunStatement,
 			)
 
 		case cliCheckStatement:
-			state = c.doCheckStatement(cliStartLine, cliContinueLine, cliRunStatement)
+			state = c.doCheckStatement(cliRefreshPrompts, cliContinueLine, cliRunStatement)
 
 		case cliRunStatement:
 			state = c.doRunStatement(cliQuerySyntax)
