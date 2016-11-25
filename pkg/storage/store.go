@@ -273,10 +273,6 @@ type storeReplicaVisitor struct {
 	visited int        // Number of visited ranges, -1 before first call to Visit()
 }
 
-// storeReplicaVisitor implements the shuffle.Interface.
-func (rs storeReplicaVisitor) Len() int      { return len(rs.repls) }
-func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i] }
-
 func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 	return &storeReplicaVisitor{
 		store:   store,
@@ -286,26 +282,7 @@ func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 
 // Visit calls the visitor with each Replica until false is returned.
 func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
-	// Copy the range IDs to a slice so that we iterate over some (possibly
-	// stale) consistent view of all Replicas without holding the Store lock.
-	// In particular, no locks are acquired during the copy process.
-	rs.store.mu.Lock()
-	rs.repls = make([]*Replica, 0, len(rs.store.mu.replicas))
-	for _, repl := range rs.store.mu.replicas {
-		rs.repls = append(rs.repls, repl)
-	}
-	rs.store.mu.Unlock()
-
-	// The Replicas are already in "unspecified order" due to map iteration,
-	// but we want to make sure it's completely random to prevent issues in
-	// tests where stores are scanning replicas in lock-step and one store is
-	// winning the race and getting a first crack at processing the replicas on
-	// its queues.
-	//
-	// TODO(peter): Re-evaluate whether this is necessary after we allow
-	// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
-	shuffle.Shuffle(rs)
-
+	rs.repls = rs.store.getReplicasForIteration()
 	rs.visited = 0
 	for _, repl := range rs.repls {
 		// TODO(tschottdorf): let the visitor figure out if something's been
@@ -485,6 +462,8 @@ type Store struct {
 		syncutil.TimedMutex // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas map[roachpb.RangeID]*Replica
+		// Copy of most recent replicas into a slice for non-locking iterations.
+		replicasCopy []*Replica
 		// A btree key containing objects of type *Replica or
 		// *ReplicaPlaceholder (both of which have an associated key range, on
 		// the EndKey of which the btree is keyed)
@@ -1543,6 +1522,39 @@ func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func
 		})
 }
 
+// replicaSlice implements the shuffle.Interface.
+type replicaSlice []*Replica
+
+func (rs replicaSlice) Len() int      { return len(rs) }
+func (rs replicaSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
+
+// getReplicasForIteration returns a copy of the replicas slice for use
+// with non-locking iterations.
+func (s *Store) getReplicasForIteration() []*Replica {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Copy the replicas to a slice so that we iterate over some (possibly
+	// stale) consistent view of all Replicas without holding the Store lock.
+	// In particular, no locks are acquired during the copy process.
+	if s.mu.replicasCopy == nil {
+		repls := make([]*Replica, 0, len(s.mu.replicas))
+		for _, repl := range s.mu.replicas {
+			repls = append(repls, repl)
+		}
+		// The Replicas are already in "unspecified order" due to map iteration,
+		// but we want to make sure it's completely random to prevent issues in
+		// tests where stores are scanning replicas in lock-step and one store is
+		// winning the race and getting a first crack at processing the replicas on
+		// its queues.
+		//
+		// TODO(peter): Re-evaluate whether this is necessary after we allow
+		// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
+		shuffle.Shuffle(replicaSlice(repls))
+		s.mu.replicasCopy = repls
+	}
+	return s.mu.replicasCopy
+}
+
 // RaftStatus returns the current raft status of the local replica of
 // the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
@@ -1781,6 +1793,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		delete(s.mu.replicas, newDesc.RangeID)
 		delete(s.mu.replicaQueues, newDesc.RangeID)
 	}
+	s.mu.replicasCopy = nil
 
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
@@ -1961,6 +1974,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
 	s.mu.replicas[repl.RangeID] = repl
+	s.mu.replicasCopy = nil
 	return nil
 }
 
@@ -2045,6 +2059,7 @@ func (s *Store) removeReplicaImpl(
 	delete(s.mu.replicas, rep.RangeID)
 	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
+	s.mu.replicasCopy = nil
 	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
@@ -2162,21 +2177,10 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 
 // deadReplicas returns a list of all the corrupt replicas on the store.
 func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
-	// We can't use a storeReplicaVisitor here as it skips destroyed replicas.
-	// Similar to in the storeReplicaVisitor, make a copy of the current
-	// replicas to iterate over so we don't have to hold the store lock during
-	// processing.
 	// TODO(bram): does this need to visit all the stores? Could we just use the
 	// store pool to locate any dead replicas on this store directly?
-	s.mu.Lock()
-	replicas := make([]*Replica, 0, len(s.mu.replicas))
-	for _, repl := range s.mu.replicas {
-		replicas = append(replicas, repl)
-	}
-	s.mu.Unlock()
-
 	var deadReplicas []roachpb.ReplicaIdent
-	for _, r := range replicas {
+	for _, r := range s.getReplicasForIteration() {
 		r.mu.Lock()
 		corrupted := r.mu.corrupted
 		desc := r.mu.state.Desc
@@ -3540,6 +3544,7 @@ func (s *Store) tryGetOrCreateReplica(
 		delete(s.mu.replicas, rangeID)
 		delete(s.mu.replicaQueues, rangeID)
 		delete(s.mu.uninitReplicas, rangeID)
+		s.mu.replicasCopy = nil
 		s.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
