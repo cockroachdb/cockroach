@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -163,6 +164,40 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     5,
+	}
+
+	// Use a retry loop in order to backoff in the case of preemptive
+	// snapshot errors, usually signalling that a rebalancing
+	// reservation could not be made with the selected target.
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		if err := rq.processOneChange(ctx, now, repl, sysCfg); err != nil {
+			if IsPreemptiveSnapshotError(err) {
+				// If ChangeReplicas failed because the preemptive snapshot failed, we
+				// log the error but then return success indicating we should retry the
+				// operation. The most likely causes of the preemptive snapshot failing are
+				// a declined reservation or the remote node being unavailable. In either
+				// case we don't want to wait another scanner cycle before reconsidering
+				// the range.
+				log.Info(ctx, err)
+				continue
+			}
+			return err
+		}
+		// Enqueue this replica again to see if there are more changes to be made.
+		rq.MaybeAdd(repl, rq.clock.Now())
+		return nil
+	}
+	return errors.Errorf("failed to replicate %s after %d retries", repl, retryOpts.MaxRetries)
+}
+
+func (rq *replicateQueue) processOneChange(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	desc := repl.Desc()
@@ -310,8 +345,6 @@ func (rq *replicateQueue) process(
 		}
 	}
 
-	// Enqueue this replica again to see if there are more changes to be made.
-	rq.MaybeAdd(repl, rq.clock.Now())
 	return nil
 }
 
@@ -321,18 +354,7 @@ func (rq *replicateQueue) addReplica(
 	repDesc roachpb.ReplicaDescriptor,
 	desc *roachpb.RangeDescriptor,
 ) error {
-	err := repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, repDesc, desc)
-	if IsPreemptiveSnapshotError(err) {
-		// If the ChangeReplicas failed because the preemptive snapshot failed, we
-		// log the error but then return success indicating we should retry the
-		// operation. The most likely causes of the preemptive snapshot failing are
-		// a declined reservation or the remote node being unavailable. In either
-		// case we don't want to wait another scanner cycle before reconsidering
-		// the range.
-		log.Info(ctx, err)
-		return nil
-	}
-	return err
+	return repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, repDesc, desc)
 }
 
 func (rq *replicateQueue) removeReplica(
