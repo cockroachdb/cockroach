@@ -845,6 +845,8 @@ func (n *Node) batchInternal(
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
+	growStack()
+
 	ctx = n.AnnotateCtx(ctx)
 
 	br, err := n.batchInternal(ctx, args)
@@ -864,4 +866,21 @@ func (n *Node) Batch(
 		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
+}
+
+var growStackGlobal = false
+
+//go:noinline
+func growStack() {
+	// Goroutine stacks currently start at 2 KB in size. The code paths through
+	// the storage package often need a stack that is 32 KB in size. The stack
+	// growth is mildly expensive making it useful to trick the runtime into
+	// growing the stack early.
+	var buf [16 << 10] /* 16 KB */ byte
+	if growStackGlobal {
+		// Make sure the compiler doesn't optimize away buf.
+		for i := range buf {
+			buf[i] = byte(i)
+		}
+	}
 }
