@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -903,15 +904,23 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 			m.t.Fatal(err)
 		}
 
-		if err := rep.ChangeReplicas(
-			rep.AnnotateCtx(ctx),
-			roachpb.ADD_REPLICA,
-			roachpb.ReplicaDescriptor{
-				NodeID:  m.stores[dest].Ident.NodeID,
-				StoreID: m.stores[dest].Ident.StoreID,
-			},
-			&desc,
-		); err != nil {
+		// Assume AmbiguousResultErrors are due to re-proposals and the
+		// underlying change replicas succeeded.
+		for {
+			err := rep.ChangeReplicas(
+				rep.AnnotateCtx(ctx),
+				roachpb.ADD_REPLICA,
+				roachpb.ReplicaDescriptor{
+					NodeID:  m.stores[dest].Ident.NodeID,
+					StoreID: m.stores[dest].Ident.StoreID,
+				},
+				&desc,
+			)
+			if err == nil || testutils.IsError(err, "already present") {
+				break
+			} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
+				break
+			}
 			m.t.Fatal(err)
 		}
 
@@ -959,16 +968,24 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 
 	ctx := rep.AnnotateCtx(context.Background())
 
-	if err := rep.ChangeReplicas(
-		ctx,
-		roachpb.REMOVE_REPLICA,
-		roachpb.ReplicaDescriptor{
-			NodeID:  m.idents[dest].NodeID,
-			StoreID: m.idents[dest].StoreID,
-		},
-		&desc,
-	); err != nil {
-		m.t.Fatal(err)
+	// Assume AmbiguousResultErrors are due to re-proposals and the
+	// underlying change replicas succeeded.
+	for {
+		err := rep.ChangeReplicas(
+			ctx,
+			roachpb.REMOVE_REPLICA,
+			roachpb.ReplicaDescriptor{
+				NodeID:  m.idents[dest].NodeID,
+				StoreID: m.idents[dest].StoreID,
+			},
+			&desc,
+		)
+		if err == nil || testutils.IsError(err, "not present") {
+			break
+		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
+			break
+		}
+		m.t.Fatalf("failed: %T, %s", err, err)
 	}
 }
 
