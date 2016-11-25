@@ -580,10 +580,18 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
-				log.Errorf(session.Ctx(),
-					"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
-						"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
-					remainingStmts, txnState)
+				doWarn := true
+				if len(stmtsToExec) > 0 {
+					if _, ok := stmtsToExec[0].(*parser.ShowTransactionStatus); ok {
+						doWarn = false
+					}
+				}
+				if doWarn {
+					log.Errorf(session.Ctx(),
+						"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
+							"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
+						remainingStmts, txnState)
+				}
 			}
 
 			return err
@@ -783,25 +791,32 @@ func (e *Executor) execStmtsInCurrentTxn(
 			// statements to not change from what the client sends.
 			stmtStrBefore = stmt.String()
 		}
+
 		var res Result
 		var err error
-		switch txnState.State {
-		case Open:
-			res, err = e.execStmtInOpenTxn(
-				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-				txnState)
-		case Aborted, RestartWait:
-			res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
-		case CommitWait:
-			res, err = e.execStmtInCommitWaitTxn(stmt, txnState)
-		default:
-			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
-		}
-		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
-			(e.cfg.TestingKnobs.StatementFilter != nil) {
-			if after := stmt.String(); after != stmtStrBefore {
-				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
-					stmtStrBefore, after))
+		// Run SHOW TRANSACTION STATUS in a separate code path so it is
+		// always guaranteed to execute regardless of the current transaction state.
+		if _, ok := stmt.(*parser.ShowTransactionStatus); ok {
+			res, err = planMaker.runShowTransactionState(txnState, implicitTxn)
+		} else {
+			switch txnState.State {
+			case Open:
+				res, err = e.execStmtInOpenTxn(
+					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+					txnState)
+			case Aborted, RestartWait:
+				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
+			case CommitWait:
+				res, err = e.execStmtInCommitWaitTxn(stmt, txnState)
+			default:
+				panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
+			}
+			if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+				(e.cfg.TestingKnobs.StatementFilter != nil) {
+				if after := stmt.String(); after != stmtStrBefore {
+					panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
+						stmtStrBefore, after))
+				}
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)

@@ -201,6 +201,25 @@ func (p *planner) resetContexts() {
 	}
 }
 
+// runShowTransactionState returns the state of current transaction.
+func (p *planner) runShowTransactionState(txnState *txnState, implicitTxn bool) (Result, error) {
+	var result Result
+	result.PGTag = (*parser.Show)(nil).StatementTag()
+	result.Type = (*parser.Show)(nil).StatementType()
+	result.Columns = ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}}
+	result.Rows = NewRowContainer(p.session.makeBoundAccount(), result.Columns, 0)
+	state := txnState.State
+	if implicitTxn {
+		state = NoTxn
+	}
+	if _, err := result.Rows.AddRow(parser.DTuple{parser.NewDString(state.String())}); err != nil {
+		result.Rows.Close()
+		result.Err = err
+		return result, err
+	}
+	return result, nil
+}
+
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by
 // each internal SQL pool before the pool start explicitly logging
 // overall usage growth in the log.
