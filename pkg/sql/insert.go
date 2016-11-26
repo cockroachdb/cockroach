@@ -124,10 +124,12 @@ func (p *planner) Insert(
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
+	insertRows, orderBy, limit, err := p.fillDefaults(defaultExprs, cols, n)
 	if err != nil {
 		return nil, err
 	}
+
+	insertRows = p.processOrderByAndLimit(insertRows, orderBy, limit)
 
 	// Analyze the expressions for column information and typing.
 	desiredTypesFromSelect := make([]parser.Type, len(cols))
@@ -392,7 +394,7 @@ func (p *planner) processColumns(
 
 func (p *planner) fillDefaults(
 	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, n *parser.Insert,
-) (parser.SelectStatement, error) {
+) (parser.Statement, parser.OrderBy, *parser.Limit, error) {
 	if n.DefaultValues() {
 		row := make(parser.Exprs, 0, len(cols))
 		for i := range cols {
@@ -402,12 +404,32 @@ func (p *planner) fillDefaults(
 			}
 			row = append(row, defaultExprs[i])
 		}
-		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}, nil
+		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}, nil, nil, nil
 	}
 
-	values, ok := n.Rows.Select.(*parser.ValuesClause)
+	wrapped := n.Rows.Select
+	limit := n.Rows.Limit
+	orderBy := n.Rows.OrderBy
+
+	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+		wrapped = s.Select.Select
+		if s.Select.OrderBy != nil {
+			if orderBy != nil {
+				return nil, nil, nil, fmt.Errorf("multiple ORDER BY clauses not allowed")
+			}
+			orderBy = s.Select.OrderBy
+		}
+		if s.Select.Limit != nil {
+			if limit != nil {
+				return nil, nil, nil, fmt.Errorf("multiple LIMIT clauses not allowed")
+			}
+			limit = s.Select.Limit
+		}
+	}
+
+	values, ok := wrapped.(*parser.ValuesClause)
 	if !ok {
-		return n.Rows.Select, nil
+		return wrapped, orderBy, limit, nil
 	}
 
 	ret := values
@@ -435,7 +457,16 @@ func (p *planner) fillDefaults(
 			}
 		}
 	}
-	return ret, nil
+	return ret, orderBy, limit, nil
+}
+
+func (p planner) processOrderByAndLimit(
+	insertRows parser.Statement, orderBy parser.OrderBy, limit *parser.Limit,
+) parser.Statement {
+	if orderBy != nil || limit != nil {
+		return &parser.Select{Select: insertRows.(parser.SelectStatement), OrderBy: orderBy, Limit: limit}
+	}
+	return insertRows
 }
 
 func makeDefaultExprs(
