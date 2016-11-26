@@ -581,9 +581,11 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	return expr, nil
 }
 
+var errInvalidDefaultUsage = errors.New("DEFAULT can only appear in a VALUES list within INSERT")
+
 // TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, errInvalidDefaultUsage
 }
 
 // TypeCheck implements the Expr interface.

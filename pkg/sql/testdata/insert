@@ -455,12 +455,12 @@ CREATE TABLE blindcput (
   x INT,
   v INT,
   PRIMARY KEY (x)
-);
+)
 
 # The optimization thresholds at 10 k/v operations, so we need at least that
 # many in one batch to trigger it.
 statement error duplicate key value \(x\)=\(1\) violates unique constraint "primary"
-INSERT INTO blindcput values (1, 1), (2, 2), (3, 3), (4, 4), (1, 5);
+INSERT INTO blindcput values (1, 1), (2, 2), (3, 3), (4, 4), (1, 5)
 
 statement ok
 CREATE TABLE nocols()
@@ -479,3 +479,69 @@ INSERT INTO kv (k[0]) VALUES ('hello')
 
 statement error compound types not supported yet: "k.v"
 INSERT INTO kv (k.v) VALUES ('hello')
+
+# Test INSERT INTO ... SELECT FROM ... LIMIT 1
+statement ok
+CREATE TABLE insert_t (x INT,v INT,PRIMARY KEY (x))
+
+statement ok
+CREATE TABLE select_t (x INT,v INT,PRIMARY KEY (x))
+
+statement ok
+INSERT INTO select_t VALUES(1, 2),(2,3),(3,4)
+
+query ITT
+EXPLAIN (PLAN) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
+----
+0  insert
+1  limit   count: 1
+2  scan    select_t@primary
+
+statement ok
+INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
+
+query II
+SELECT * FROM insert_t
+----
+1  2
+
+statement ok
+TRUNCATE TABLE insert_t
+
+statement ok
+INSERT INTO insert_t (SELECT * FROM select_t LIMIT 1)
+
+query II
+SELECT * FROM insert_t
+----
+1  2
+
+query ITT
+EXPLAIN (PLAN) INSERT INTO insert_t VALUES(1,'AAA'),(2,'BBB') LIMIT 1
+----
+0  insert
+1  limit   count: 1
+2  values  2 columns, 2 rows
+
+query ITT
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB')) LIMIT 1
+----
+0  insert
+1  limit   count: 1
+2  values  2 columns, 2 rows
+
+query ITT
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1)
+----
+0  insert
+1  limit   count: 1
+2  values  2 columns, 2 rows
+
+statement error pq: multiple LIMIT clauses not allowed
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1) LIMIT 1
+
+query error DEFAULT can only appear in a VALUES list within INSERT
+INSERT INTO insert_t (VALUES(1, DEFAULT),(2,'BBB') LIMIT 1)
+
+query error DEFAULT can only appear in a VALUES list within INSERT
+INSERT INTO insert_t (VALUES(1, DEFAULT),(2,'BBB')) LIMIT 1
