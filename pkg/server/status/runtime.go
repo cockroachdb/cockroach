@@ -50,10 +50,6 @@ var (
 	metaFDOpen         = metric.Metadata{Name: "sys.fd.open", Help: "Process open file descriptors"}
 	metaFDSoftLimit    = metric.Metadata{Name: "sys.fd.softlimit", Help: "Process open FD soft limit"}
 	metaUptime         = metric.Metadata{Name: "sys.uptime", Help: "Process uptime in seconds"}
-
-	// Build information. Placed here for lack of a better location.
-	// Labels for this metric get populated in MakeRuntimeStatSampler
-	metaBuildTimestamp = metric.Metadata{Name: "build.timestamp", Help: "Build information"}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -116,6 +112,8 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		log.Warningf(context.TODO(), "Could not parse build timestamp: %v", err)
 	}
 
+	// Build information.
+	metaBuildTimestamp := metric.Metadata{Name: "build.timestamp", Help: "Build information"}
 	metaBuildTimestamp.AddLabel("tag", info.Tag)
 	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
 

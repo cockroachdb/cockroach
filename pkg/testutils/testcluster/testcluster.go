@@ -152,7 +152,11 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 	tc := &TestCluster{}
 	tc.stopper = stop.NewStopper()
+	tc.Servers = make([]*server.TestServer, nodes)
+	tc.Conns = make([]*gosql.DB, nodes)
+	tc.mu.serverStoppers = make([]*stop.Stopper, nodes)
 
+	serversArgs := make([]base.TestServerArgs, nodes)
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
 		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
@@ -163,9 +167,24 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		serverArgs.PartOfCluster = true
 		if i > 0 {
 			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
+			serversArgs[i] = serverArgs
+		} else {
+			// Start the first server--The first server establishes a join
+			// address for the rest of the cluster.
+			tc.addServerAt(t, serverArgs, 0)
 		}
-		tc.AddServer(t, serverArgs)
 	}
+
+	// Start all the other servers.
+	var wg sync.WaitGroup
+	wg.Add(len(serversArgs) - 1)
+	for i := 1; i < len(serversArgs); i++ {
+		go func(idx int) {
+			tc.addServerAt(t, serversArgs[idx], idx)
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
 
 	// Create a closer that will stop the individual server stoppers when the
 	// cluster stopper is stopped.
@@ -176,11 +195,24 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	// TODO(peter): We should replace the hardcoded 3 with the default ZoneConfig
 	// replication factor.
 	if args.ReplicationMode == base.ReplicationAuto && nodes >= 3 {
+		// TODO(vivek): This occasionally takes a few seconds #11212.
 		if err := tc.waitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return tc
+}
+
+// addServerAt creates a server with the specified arguments and adds it to
+// test cluster at a specific index.
+func (tc *TestCluster) addServerAt(t testing.TB, serverArgs base.TestServerArgs, at int) {
+	serverArgs.Stopper = stop.NewStopper()
+	s, conn, _ := serverutils.StartServer(t, serverArgs)
+	tc.Servers[at] = s.(*server.TestServer)
+	tc.Conns[at] = conn
+	tc.mu.Lock()
+	tc.mu.serverStoppers[at] = serverArgs.Stopper
+	tc.mu.Unlock()
 }
 
 // AddServer creates a server with the specified arguments and appends it to
