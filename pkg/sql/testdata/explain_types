@@ -9,9 +9,10 @@ EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
 Level  Type   Element       Description
 0      insert result        ()
-1      values result        (column1 int, column2 int)
-1      values row 0, expr 0 (1)[int]
-1      values row 0, expr 1 (2)[int]
+1      select result        (column1 int, column2 int)
+2      values result        (column1 int, column2 int)
+2      values row 0, expr 0 (1)[int]
+2      values row 0, expr 1 (2)[int]
 
 statement ok
 INSERT INTO t VALUES (1, 2)

@@ -392,7 +392,7 @@ func (p *planner) processColumns(
 
 func (p *planner) fillDefaults(
 	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, n *parser.Insert,
-) (parser.SelectStatement, error) {
+) (parser.Statement, error) {
 	if n.DefaultValues() {
 		row := make(parser.Exprs, 0, len(cols))
 		for i := range cols {
@@ -405,9 +405,29 @@ func (p *planner) fillDefaults(
 		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}, nil
 	}
 
-	values, ok := n.Rows.Select.(*parser.ValuesClause)
+	wrapped := n.Rows.Select
+	limit := n.Rows.Limit
+	orderBy := n.Rows.OrderBy
+
+	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+		wrapped = s.Select.Select
+		if s.Select.OrderBy != nil {
+			if orderBy != nil {
+				return nil, fmt.Errorf("multiple ORDER BY clauses not allowed")
+			}
+			orderBy = s.Select.OrderBy
+		}
+		if s.Select.Limit != nil {
+			if limit != nil {
+				return nil, fmt.Errorf("multiple LIMIT clauses not allowed")
+			}
+			limit = s.Select.Limit
+		}
+	}
+
+	values, ok := wrapped.(*parser.ValuesClause)
 	if !ok {
-		return n.Rows.Select, nil
+		return n.Rows, nil
 	}
 
 	ret := values
@@ -435,7 +455,8 @@ func (p *planner) fillDefaults(
 			}
 		}
 	}
-	return ret, nil
+
+	return &parser.Select{Select: ret, OrderBy: orderBy, Limit: limit}, nil
 }
 
 func makeDefaultExprs(
