@@ -2536,6 +2536,12 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// If the raft group is uninitialized, do not initialize raft groups on
+	// tick.
+	if r.mu.internalRaftGroup == nil {
+		return false, nil
+	}
+
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -2545,11 +2551,6 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
 	}
 
-	// If the raft group is uninitialized, do not initialize raft groups on
-	// tick.
-	if r.mu.internalRaftGroup == nil {
-		return false, nil
-	}
 	if r.mu.quiescent {
 		// While a replica is quiesced we still advance its logical clock. This is
 		// necessary to avoid a scenario where the leader quiesces and a follower
