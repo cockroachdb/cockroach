@@ -1320,16 +1320,6 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 }
 
 func checkResultType(typ parser.Type) error {
-	// Compare all types that cannot rely on == equality.
-	istype := typ.FamilyEqual
-	switch {
-	case istype(parser.TypeCollatedString):
-		return nil
-	case istype(parser.TypePlaceholder):
-		return errors.Errorf("could not determine data type of %s", typ)
-	case istype(parser.TypeTuple):
-		return nil
-	}
 	// Compare all types that can rely on == equality.
 	switch typ {
 	case parser.TypeNull:
@@ -1346,7 +1336,16 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeStringArray:
 	case parser.TypeIntArray:
 	default:
-		return errors.Errorf("unsupported result type: %s", typ)
+		// Compare all types that cannot rely on == equality.
+		istype := typ.FamilyEqual
+		switch {
+		case istype(parser.TypeCollatedString):
+		case istype(parser.TypeTuple):
+		case istype(parser.TypePlaceholder):
+			return errors.Errorf("could not determine data type of %s", typ)
+		default:
+			return errors.Errorf("unsupported result type: %s", typ)
+		}
 	}
 	return nil
 }

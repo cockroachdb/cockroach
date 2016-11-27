@@ -79,14 +79,6 @@ type pgNumeric struct {
 }
 
 func pgTypeForParserType(t parser.Type) pgType {
-	// Compare all types that cannot rely on == equality.
-	istype := t.FamilyEqual
-	switch {
-	case istype(parser.TypeCollatedString):
-		return pgType{oid.T_unknown, -1}
-	case istype(parser.TypeTuple):
-		return pgType{oid.T_record, -1}
-	}
 	// Compare all types that can rely on == equality.
 	switch t {
 	case parser.TypeNull:
@@ -116,7 +108,16 @@ func pgTypeForParserType(t parser.Type) pgType {
 	case parser.TypeIntArray:
 		return pgType{oid.T__int8, -1}
 	default:
-		panic(fmt.Sprintf("unsupported type %s", t))
+		// Compare all types that cannot rely on == equality.
+		istype := t.FamilyEqual
+		switch {
+		case istype(parser.TypeCollatedString):
+			return pgType{oid.T_unknown, -1}
+		case istype(parser.TypeTuple):
+			return pgType{oid.T_record, -1}
+		default:
+			panic(fmt.Sprintf("unsupported type %s", t))
+		}
 	}
 }
 
