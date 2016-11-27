@@ -66,12 +66,8 @@ func TestInitInsecure(t *testing.T) {
 		}
 
 		err := initInsecure()
-		if c.expected == "" {
-			if err != nil {
-				t.Fatalf("%d: expected success, but found %v", i, err)
-			}
-		} else if !testutils.IsError(err, c.expected) {
-			t.Fatalf("%d: expected %s, but found %v", i, c.expected, err)
+		if !testutils.IsError(err, c.expected) {
+			t.Fatalf("%d: expected %q, but found %v", i, c.expected, err)
 		}
 	}
 }

@@ -1056,7 +1056,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 				NodeID:    roachpb.NodeID(test.storeID),
 				StoreID:   test.storeID,
 			},
-		}); !(test.expErr == "" && err == nil || testutils.IsError(err, test.expErr)) {
+		}); !testutils.IsError(err, test.expErr) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
@@ -6062,12 +6062,8 @@ func TestSetReplicaID(t *testing.T) {
 			repl.mu.Unlock()
 
 			err := repl.setReplicaID(c.newReplicaID)
-			if c.expected == "" {
-				if err != nil {
-					t.Fatalf("expected success, but found %v", err)
-				}
-			} else if !testutils.IsError(err, c.expected) {
-				t.Fatalf("expected %s, but found %v", c.expected, err)
+			if !testutils.IsError(err, c.expected) {
+				t.Fatalf("expected %q, but found %v", c.expected, err)
 			}
 		})
 	}

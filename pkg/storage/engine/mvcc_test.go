@@ -3733,7 +3733,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 		vals     []roachpb.Value
 		expError string
 	}{
-		{roachpb.Key("a"), []roachpb.Value{val1, val2}, `request to GC non-deleted, latest value ok "a"`},
+		{roachpb.Key("a"), []roachpb.Value{val1, val2}, `request to GC non-deleted, latest value of "a"`},
 		{roachpb.Key("inline"), []roachpb.Value{valInline}, ""},
 	}
 
@@ -3749,14 +3749,8 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 			{Key: test.key, Timestamp: ts2},
 		}
 		err := MVCCGarbageCollect(context.Background(), engine, nil, keys, ts2)
-		if test.expError == "" {
-			if err != nil {
-				t.Fatalf("expected no error garbage collecting a non-deleted inline live value, found %v", err)
-			}
-		} else {
-			if testutils.IsError(err, test.expError) {
-				t.Fatalf("expected error %q when garbage collecting a non-deleted live value, found %v", test.expError, err)
-			}
+		if !testutils.IsError(err, test.expError) {
+			t.Fatalf("expected error %q when garbage collecting a non-deleted live value, found %v", test.expError, err)
 		}
 	}
 
