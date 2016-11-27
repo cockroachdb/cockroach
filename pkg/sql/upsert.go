@@ -124,7 +124,7 @@ func (p *planner) makeUpsertHelper(
 	ivarHelper := parser.MakeIndexedVarHelper(helper, len(sourceInfo.sourceColumns)+len(excludedSourceInfo.sourceColumns))
 	sources := multiSourceInfo{sourceInfo, excludedSourceInfo}
 	for _, expr := range untupledExprs {
-		normExpr, err := p.analyzeExpr(expr, sources, ivarHelper, parser.NoTypePreference, false, "")
+		normExpr, err := p.analyzeExpr(expr, sources, ivarHelper, parser.TypeAny, false, "")
 		if err != nil {
 			return nil, err
 		}

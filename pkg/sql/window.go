@@ -177,7 +177,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 		for _, partition := range windowDef.Partitions {
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, len(s.render)-origRenderLen)
 
-			err := s.addRender(parser.SelectExpr{Expr: partition}, parser.NoTypePreference)
+			err := s.addRender(parser.SelectExpr{Expr: partition}, parser.TypeAny)
 			if err != nil {
 				return err
 			}
@@ -195,7 +195,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 			}
 			windowFn.columnOrdering = append(windowFn.columnOrdering, ordering)
 
-			err := s.addRender(parser.SelectExpr{Expr: orderBy.Expr}, parser.NoTypePreference)
+			err := s.addRender(parser.SelectExpr{Expr: orderBy.Expr}, parser.TypeAny)
 			if err != nil {
 				return err
 			}

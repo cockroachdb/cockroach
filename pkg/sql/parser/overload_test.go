@@ -164,7 +164,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	for i, d := range testData {
 		ctx := MakeSemaContext()
 		ctx.Placeholders.SetTypes(d.ptypes)
-		desired := NoTypePreference
+		desired := TypeAny
 		if d.desired != nil {
 			desired = d.desired
 		}

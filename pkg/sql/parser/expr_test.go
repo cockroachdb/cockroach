@@ -146,7 +146,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
+		typedExpr, err := TypeCheck(expr, nil, TypeAny)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -156,7 +156,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := TypeCheck(expr2, nil, NoTypePreference)
+		typedExpr2, err := TypeCheck(expr2, nil, TypeAny)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}

@@ -60,7 +60,7 @@ func TestIndexedVars(t *testing.T) {
 	c[0] = NewDInt(3)
 	c[1] = NewDInt(5)
 	c[2] = NewDInt(6)
-	typedExpr, err := expr.TypeCheck(nil, NoTypePreference)
+	typedExpr, err := expr.TypeCheck(nil, TypeAny)
 	if err != nil {
 		t.Fatal(err)
 	}

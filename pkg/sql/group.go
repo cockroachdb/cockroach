@@ -159,7 +159,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 
 	// Add the group-by expressions so they are available for bucketing.
 	for _, g := range groupBy {
-		if err := s.addRender(parser.SelectExpr{Expr: g}, parser.NoTypePreference); err != nil {
+		if err := s.addRender(parser.SelectExpr{Expr: g}, parser.TypeAny); err != nil {
 			return nil, err
 		}
 	}

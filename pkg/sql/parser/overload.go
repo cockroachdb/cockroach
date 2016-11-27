@@ -297,7 +297,7 @@ func typeCheckOverloadedExprs(
 	// and adds them to the type checked slice.
 	defaultTypeCheck := func(errorOnPlaceholders bool) error {
 		for _, expr := range constExprs {
-			typ, err := expr.e.TypeCheck(ctx, NoTypePreference)
+			typ, err := expr.e.TypeCheck(ctx, TypeAny)
 			if err != nil {
 				return fmt.Errorf("error type checking constant value: %v", err)
 			}
@@ -305,7 +305,7 @@ func typeCheckOverloadedExprs(
 		}
 		for _, expr := range placeholderExprs {
 			if errorOnPlaceholders {
-				_, err := expr.e.TypeCheck(ctx, NoTypePreference)
+				_, err := expr.e.TypeCheck(ctx, TypeAny)
 				return err
 			}
 			// If we dont want to error on args, avoid type checking them without a desired type.
@@ -317,7 +317,7 @@ func typeCheckOverloadedExprs(
 	// If no overloads are provided, just type check parameters and return.
 	if len(overloads) == 0 {
 		for _, expr := range resolvableExprs {
-			typ, err := expr.e.TypeCheck(ctx, NoTypePreference)
+			typ, err := expr.e.TypeCheck(ctx, TypeAny)
 			if err != nil {
 				return nil, nil, fmt.Errorf("error type checking resolved expression: %v", err)
 			}
@@ -360,7 +360,7 @@ func typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types.
 	for _, expr := range resolvableExprs {
-		paramDesired := NoTypePreference
+		paramDesired := TypeAny
 		if len(overloads) == 1 {
 			// Once we get down to a single overload candidate, begin desiring its
 			// parameter types for the corresponding argument expressions.
@@ -422,7 +422,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
-	if desired != NoTypePreference {
+	if desired != TypeAny {
 		filterOverloads(func(o overloadImpl) bool {
 			return o.returnType().Equal(desired)
 		})

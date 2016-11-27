@@ -74,10 +74,6 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 	return p.scanner.stmts, nil
 }
 
-// NoTypePreference can be provided to TypeCheck's desired type parameter to indicate that
-// the caller of the function has no preference on the type of the resulting TypedExpr.
-var NoTypePreference = TypeAny
-
 // TypeCheck performs type checking on the provided expression tree, returning
 // the new typed expression tree, which additionally permits evaluation and type
 // introspection globally and on each sub-tree.
@@ -85,10 +81,12 @@ var NoTypePreference = TypeAny
 // While doing so, it will fold numeric constants and bind placeholder names to
 // their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
-// tree.
+// tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
+// type. Instead, call it with the wildcard type TypeAny if no specific type is
+// desired.
 func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
 	if desired == nil {
-		panic("the desired type for parser.TypeCheck cannot be nil, use NoTypePreference instead")
+		panic("the desired type for parser.TypeCheck cannot be nil, use TypeAny instead")
 	}
 	expr, err := foldConstantLiterals(expr)
 	if err != nil {
