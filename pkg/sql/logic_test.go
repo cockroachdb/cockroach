@@ -801,7 +801,7 @@ func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err e
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		return t.unexpectedError(sql, pos, err)
 	}
-	if expectErr != "" && !testutils.IsError(err, expectErr) {
+	if !testutils.IsError(err, expectErr) {
 		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
 		return false
 	}

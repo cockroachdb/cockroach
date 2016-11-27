@@ -258,7 +258,7 @@ func TestMetaScanBounds(t *testing.T) {
 	for i, test := range testCases {
 		resStart, resEnd, err := MetaScanBounds(test.key)
 
-		if !(test.expError == "" && err == nil || testutils.IsError(err, test.expError)) {
+		if !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %v", test.expError, err)
 		}
 
@@ -326,10 +326,8 @@ func TestMetaReverseScanBounds(t *testing.T) {
 	for i, test := range testCases {
 		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key))
 
-		if err != nil && !testutils.IsError(err, test.expError) {
-			t.Errorf("expected error: %s ; got %v", test.expError, err)
-		} else if err == nil && test.expError != "" {
-			t.Errorf("expected error: %s", test.expError)
+		if !testutils.IsError(err, test.expError) {
+			t.Errorf("expected error %q ; got %v", test.expError, err)
 		}
 
 		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
@@ -518,7 +516,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 	for i, d := range errorData {
 		_, err := EnsureSafeSplitKey(d.in)
 		if !testutils.IsError(err, d.err) {
-			t.Fatalf("%d: %s: expected %s, but got %v", i, d.in, d.err, err)
+			t.Fatalf("%d: %s: expected %q, but got %v", i, d.in, d.err, err)
 		}
 	}
 }

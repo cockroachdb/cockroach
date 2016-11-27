@@ -437,14 +437,8 @@ func TestReplicasByKey(t *testing.T) {
 	for i, desc := range reps {
 		desc.replica = createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
 		err := store.AddReplica(desc.replica)
-		if desc.expectedErrorOnAdd == "" {
-			if err != nil {
-				t.Fatalf("adding replica %d: expected success, but encountered %s", i, err)
-			}
-		} else {
-			if !testutils.IsError(err, desc.expectedErrorOnAdd) {
-				t.Fatalf("adding replica %d: expected err %s, but encountered %v", i, desc.expectedErrorOnAdd, err)
-			}
+		if !testutils.IsError(err, desc.expectedErrorOnAdd) {
+			t.Fatalf("adding replica %d: expected err %q, but encountered %v", i, desc.expectedErrorOnAdd, err)
 		}
 	}
 }
@@ -1967,8 +1961,8 @@ func TestStoreBadRequests(t *testing.T) {
 		if test.header.Txn != nil {
 			test.header.Txn.Sequence++
 		}
-		if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), *test.header, test.args); pErr == nil || test.err == "" || !testutils.IsPError(pErr, test.err) {
-			t.Errorf("%d unexpected result: %s", i, pErr)
+		if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), *test.header, test.args); !testutils.IsPError(pErr, test.err) {
+			t.Errorf("%d expected error %q, got error %v", i, test.err, pErr)
 		}
 	}
 }

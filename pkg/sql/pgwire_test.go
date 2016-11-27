@@ -899,14 +899,9 @@ func TestPGPreparedExec(t *testing.T) {
 					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
 				}
 			} else {
-				if rowsAffected, err := result.RowsAffected(); err != nil {
-					if test.rowsAffectedErr == "" {
-						t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
-					} else if !testutils.IsError(err, test.rowsAffectedErr) {
-						t.Errorf("%s: %v: expected %s, got %s", query, test.qargs, test.rowsAffectedErr, err)
-					}
-				} else if test.rowsAffectedErr != "" {
-					t.Errorf("%s: %v: expected error: %s", query, test.qargs, test.rowsAffectedErr)
+				rowsAffected, err := result.RowsAffected()
+				if !testutils.IsError(err, test.rowsAffectedErr) {
+					t.Errorf("%s: %v: expected %q, got %v", query, test.qargs, test.rowsAffectedErr, err)
 				} else if rowsAffected != test.rowsAffected {
 					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
 				}
