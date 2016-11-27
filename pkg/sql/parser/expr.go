@@ -38,7 +38,7 @@ type Expr interface {
 	// The ctx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr. It is not valid to call TypeCheck with a nil desired
-	// type. Instead, call it with the NoTypePreference value if no specific type is
+	// type. Instead, call it with wildcard type TypeAny if no specific type is
 	// desired. This restriction is also true of most methods and functions related
 	// to type checking.
 	TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)

@@ -127,7 +127,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 
 	if fn == nil {
 		var desStr string
-		if desired != NoTypePreference {
+		if desired != TypeAny {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		return nil, fmt.Errorf("unsupported binary operator: <%s> %s <%s>%s",
@@ -150,7 +150,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			tmpExprs = append(tmpExprs, when.Cond)
 		}
 
-		typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, NoTypePreference, tmpExprs...)
+		typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, TypeAny, tmpExprs...)
 		if err != nil {
 			return nil, decorateTypeCheckError(err, "incompatible condition type")
 		}
@@ -194,9 +194,9 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 	returnDatum, validTypes := expr.castTypeAndValidArgTypes()
 
 	// The desired type provided to a CastExpr is ignored. Instead,
-	// NoTypePreference is passed to the child of the cast. There are two
+	// TypeAny is passed to the child of the cast. There are two
 	// exceptions, described below.
-	desired := NoTypePreference
+	desired := TypeAny
 	switch {
 	case isConstant(expr.Expr):
 		if canConstantBecome(expr.Expr.(Constant), returnDatum) {
@@ -327,7 +327,7 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr
 
 // TypeCheck implements the Expr interface.
 func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, NoTypePreference)
+	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, TypeAny)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +360,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		var desStr string
-		if desired != NoTypePreference {
+		if desired != TypeAny {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		return nil, fmt.Errorf("unknown signature: %s(%s)%s",
@@ -369,7 +369,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 
 	if expr.WindowDef != nil {
 		for i, partition := range expr.WindowDef.Partitions {
-			typedPartition, err := partition.TypeCheck(ctx, NoTypePreference)
+			typedPartition, err := partition.TypeCheck(ctx, TypeAny)
 			if err != nil {
 				return nil, err
 			}
@@ -431,7 +431,7 @@ func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)
 
 // TypeCheck implements the Expr interface.
 func (expr *IsOfTypeExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	exprTyped, err := expr.Expr.TypeCheck(ctx, NoTypePreference)
+	exprTyped, err := expr.Expr.TypeCheck(ctx, TypeAny)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +533,7 @@ func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired Type) (TypedEx
 
 // TypeCheck implements the Expr interface.
 func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, NoTypePreference, expr.Left, expr.From, expr.To)
+	typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, TypeAny, expr.Left, expr.From, expr.To)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +569,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 
 	if fn == nil {
 		var desStr string
-		if desired != NoTypePreference {
+		if desired != TypeAny {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		return nil, fmt.Errorf("unsupported unary operator: %s <%s>%s",
@@ -600,7 +600,7 @@ func (expr *StrVal) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)
 func (expr *Tuple) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	expr.types = make(TTuple, len(expr.Exprs))
 	for i, subExpr := range expr.Exprs {
-		desiredElem := NoTypePreference
+		desiredElem := TypeAny
 		if t, ok := desired.(TTuple); ok && len(t) > i {
 			desiredElem = t[i]
 		}
@@ -619,13 +619,13 @@ var errAmbiguousArrayType = errors.Errorf("cannot determine type of empty array.
 
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	desiredParam := NoTypePreference
+	desiredParam := TypeAny
 	if arr, ok := desired.(tArray); ok {
 		desiredParam = arr.Typ
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == NoTypePreference {
+		if desiredParam == TypeAny {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = tArray{desiredParam}
@@ -663,7 +663,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 		expr.typ = typ
 		return expr, nil
 	}
-	if desired == NoTypePreference || desired.IsAmbiguous() {
+	if desired.IsAmbiguous() {
 		return nil, placeholderTypeAmbiguityError{expr}
 	}
 	if err := ctx.Placeholders.SetType(expr.Name, desired); err != nil {
@@ -767,7 +767,7 @@ func typeCheckComparisonOp(
 		sameTypeExprs = append(sameTypeExprs, foldedLeft)
 		sameTypeExprs = append(sameTypeExprs, rightTuple.Exprs...)
 
-		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, NoTypePreference, sameTypeExprs...)
+		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
 			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprs,
 				left, op, right, err)
@@ -796,7 +796,7 @@ func typeCheckComparisonOp(
 			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, TypeTuple, op, TypeTuple)
 		}
 		// Using non-folded left and right to avoid having to swap later.
-		typedSubExprs, _, err := typeCheckSameTypedTupleExprs(ctx, NoTypePreference, left, right)
+		typedSubExprs, _, err := typeCheckSameTypedTupleExprs(ctx, TypeAny, left, right)
 		if err != nil {
 			return nil, nil, CmpOp{}, err
 		}
@@ -807,7 +807,7 @@ func typeCheckComparisonOp(
 	for i := range ops {
 		overloads[i] = ops[i]
 	}
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, NoTypePreference, overloads, foldedLeft, foldedRight)
+	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, TypeAny, overloads, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, CmpOp{}, err
 	}
@@ -912,13 +912,13 @@ func typeCheckSameTypedExprs(
 			}
 		}
 
-		// If typ is not nil, all consts try to become typ.
-		if typ != NoTypePreference {
+		// If typ is not a wildcard, all consts try to become typ.
+		if typ != TypeAny {
 			all := true
 			for _, constExpr := range constExprs {
 				if !canConstantBecome(constExpr.e.(Constant), typ) {
 					if required {
-						typedExpr, err := constExpr.e.TypeCheck(ctx, NoTypePreference)
+						typedExpr, err := constExpr.e.TypeCheck(ctx, TypeAny)
 						if err != nil {
 							return nil, err
 						}
@@ -1056,7 +1056,7 @@ func typeCheckSameTypedTupleExprs(
 		for tupleIdx, expr := range exprs {
 			sameTypeExprs[tupleIdx] = expr.(*Tuple).Exprs[elemIdx]
 		}
-		desiredElem := NoTypePreference
+		desiredElem := TypeAny
 		if len(desiredTuple) > elemIdx {
 			desiredElem = desiredTuple[elemIdx]
 		}
@@ -1079,7 +1079,7 @@ func typeCheckSameTypedTupleExprs(
 func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 	for _, expr := range exprs {
 		if _, ok := expr.(*Tuple); !ok {
-			typedExpr, err := expr.TypeCheck(ctx, NoTypePreference)
+			typedExpr, err := expr.TypeCheck(ctx, TypeAny)
 			if err != nil {
 				return err
 			}

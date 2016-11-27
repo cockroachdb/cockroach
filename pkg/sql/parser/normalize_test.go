@@ -150,7 +150,7 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := expr.TypeCheck(nil, NoTypePreference)
+		typedExpr, err := expr.TypeCheck(nil, TypeAny)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

@@ -60,7 +60,7 @@ func isNumericConstant(expr Expr) bool {
 
 func typeCheckConstant(c Constant, ctx *SemaContext, desired Type) (TypedExpr, error) {
 	avail := c.AvailableTypes()
-	if desired != NoTypePreference {
+	if desired != TypeAny {
 		for _, typ := range avail {
 			if desired.Equal(typ) {
 				return c.ResolveAsType(ctx, desired)
