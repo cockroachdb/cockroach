@@ -207,7 +207,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 			// not be optimized as well as "ORDER BY foo.x, foo.y".  We
 			// could do this either here or as a separate later
 			// optimization.
-			if err := s.addRender(parser.SelectExpr{Expr: expr}, nil); err != nil {
+			err := s.addRender(parser.SelectExpr{Expr: expr}, parser.NoTypePreference)
+			if err != nil {
 				return nil, err
 			}
 

@@ -1213,8 +1213,7 @@ var Builtins = map[string][]Builtin{
 
 	"array_length": {
 		Builtin{
-			// TODO(nvanbenschoten): Make this work with all types of arrays.
-			Types:      ArgTypes{TypeStringArray, TypeInt},
+			Types:      ArgTypes{TypeAnyArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -1231,8 +1230,7 @@ var Builtins = map[string][]Builtin{
 
 	"array_lower": {
 		Builtin{
-			// TODO(nvanbenschoten): Make this work with all types of arrays.
-			Types:      ArgTypes{TypeStringArray, TypeInt},
+			Types:      ArgTypes{TypeAnyArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -1249,8 +1247,7 @@ var Builtins = map[string][]Builtin{
 
 	"array_upper": {
 		Builtin{
-			// TODO(nvanbenschoten): Make this work with all types of arrays.
-			Types:      ArgTypes{TypeStringArray, TypeInt},
+			Types:      ArgTypes{TypeAnyArray, TypeInt},
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
