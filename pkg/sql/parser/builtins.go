@@ -69,6 +69,8 @@ const (
 	AggregateClass
 	// WindowClass is a builtin window function.
 	WindowClass
+	// GeneratorClass is a builtin generator function.
+	GeneratorClass
 )
 
 // Avoid vet warning about unused enum value.
@@ -108,6 +110,7 @@ type Builtin struct {
 
 	AggregateFunc func() AggregateFunc
 	WindowFunc    func() WindowFunc
+	generator     generatorFactory
 	fn            func(*EvalContext, DTuple) (Datum, error)
 }
 
@@ -168,6 +171,7 @@ func (b Builtin) Signature() string {
 func init() {
 	initAggregateBuiltins()
 	initWindowBuiltins()
+	initGeneratorBuiltins()
 
 	names := make([]string, 0, len(Builtins))
 	funDefs = make(map[string]*FunctionDefinition)
