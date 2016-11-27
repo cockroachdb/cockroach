@@ -960,9 +960,25 @@ CREATE TABLE pg_catalog.pg_proc (
 				isWindow := builtin.Class() == parser.WindowClass
 
 				var retType parser.Datum
+				isRetSet := false
 				if builtin.ReturnType != nil {
-					oid := datumToOidOrPanic(builtin.ReturnType, builtin)
-					retType = parser.NewDInt(parser.DInt(oid))
+					var retOid oid.Oid
+					if t, ok := builtin.ReturnType.(parser.TTable); ok {
+						isRetSet = true
+						// Functions returning tables with zero, or more than one
+						// columns are marked to return "anyelement"
+						// (e.g. `unnest`)
+						retOid = oid.T_anyelement
+						if len(t.Cols) == 1 {
+							// Functions returning tables with exactly one column
+							// are marked to return the type of that column
+							// (e.g. `generate_series`).
+							retOid = datumToOidOrPanic(t.Cols[0], builtin)
+						}
+					} else {
+						retOid = datumToOidOrPanic(builtin.ReturnType, builtin)
+					}
+					retType = parser.NewDInt(parser.DInt(retOid))
 				}
 
 				argTypes := builtin.Types
@@ -1006,7 +1022,7 @@ CREATE TABLE pg_catalog.pg_proc (
 					parser.MakeDBool(false),                           // prosecdef
 					parser.MakeDBool(parser.DBool(!builtin.Impure())), // proleakproof
 					parser.MakeDBool(false),                           // proisstrict
-					parser.MakeDBool(false),                           // proretset
+					parser.MakeDBool(parser.DBool(isRetSet)),          // proretset
 					parser.DNull,                                      // provolatile
 					parser.DNull,                                      // proparallel
 					parser.NewDInt(parser.DInt(builtin.Types.Length())), // pronargs
@@ -1336,6 +1352,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
+	reflect.TypeOf(parser.TypeTable):       typCategoryPseudo,
 }
 
 func typCategory(typ parser.Type) parser.Datum {

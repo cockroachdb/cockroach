@@ -82,6 +82,8 @@ var (
 	TypeInterval Type = tInterval{}
 	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
 	TypeTuple Type = TTuple(nil)
+	// TypeTable is the type family of a DTable. CANNOT be compared with ==.
+	TypeTable Type = TTable{}
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
@@ -350,6 +352,37 @@ func (tArray) Size() (uintptr, bool) {
 // IsAmbiguous implements the Type interface.
 func (a tArray) IsAmbiguous() bool {
 	return a.Typ == nil || a.Typ.IsAmbiguous()
+}
+
+// TTable is the type of a DTable.
+// See the comments at the start of generator_builtins.go for details.
+type TTable struct{ Cols TTuple }
+
+func (a TTable) String() string { return "setof " + a.Cols.String() }
+
+// Equal implements the Type interface.
+func (a TTable) Equal(other Type) bool {
+	if u, ok := other.(TTable); ok {
+		return a.Cols.Equal(u.Cols)
+	}
+	return false
+}
+
+// FamilyEqual implements the Type interface.
+func (TTable) FamilyEqual(other Type) bool {
+	_, ok := other.(TTable)
+	return ok
+}
+
+// Size implements the Type interface.
+func (a TTable) Size() (uintptr, bool) {
+	sz, _ := a.Cols.Size()
+	return sz, variableSize
+}
+
+// IsAmbiguous implements the Type interface.
+func (a TTable) IsAmbiguous() bool {
+	return a.Cols == nil || a.Cols.IsAmbiguous()
 }
 
 type tAny struct{}
