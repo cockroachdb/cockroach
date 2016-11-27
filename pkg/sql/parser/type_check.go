@@ -113,7 +113,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 		overloads[i] = ops[i]
 	}
 
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Left, expr.Right)
+	typedSubExprs, fn, rest, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Left, expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +129,10 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 		var desStr string
 		if desired != nil {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
+		}
+		if rest != nil {
+			return nil, fmt.Errorf("ambiguous binary operator: <%s> %s <%s>%s, candidates are:\n%s",
+				leftReturn, expr.Operator, rightReturn, desStr, formatCandidates(expr.Operator.String(), rest))
 		}
 		return nil, fmt.Errorf("unsupported binary operator: <%s> %s <%s>%s",
 			leftReturn, expr.Operator, rightReturn, desStr)
@@ -351,7 +355,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	for i, d := range def.Definition {
 		overloads[i] = d
 	}
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Exprs...)
+	typedSubExprs, fn, rest, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Exprs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s(): %v", def.Name, err)
 	} else if fn == nil {
@@ -363,8 +367,13 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		if desired != nil {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
+		sig := strings.Join(typeNames, ", ")
+		if rest != nil {
+			return nil, fmt.Errorf("ambiguous call: %s(%s)%s, candidates are:\n%s",
+				expr.Func, sig, desStr, formatCandidates(expr.Func.String(), rest))
+		}
 		return nil, fmt.Errorf("unknown signature: %s(%s)%s",
-			expr.Func, strings.Join(typeNames, ", "), desStr)
+			expr.Func, sig, desStr)
 	}
 
 	if expr.WindowDef != nil {
@@ -556,7 +565,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 		overloads[i] = ops[i]
 	}
 
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Expr)
+	typedSubExprs, fn, rest, err := typeCheckOverloadedExprs(ctx, desired, overloads, expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -571,6 +580,10 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 		var desStr string
 		if desired != nil {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
+		}
+		if rest != nil {
+			return nil, fmt.Errorf("ambiguous unary operator: %s <%s>%s, candidates are:\n%s",
+				expr.Operator, exprReturn, desStr, formatCandidates(expr.Operator.String(), rest))
 		}
 		return nil, fmt.Errorf("unsupported unary operator: %s <%s>%s",
 			expr.Operator, exprReturn, desStr)
@@ -747,6 +760,7 @@ func typeCheckAndRequire(ctx *SemaContext, expr Expr, required Type, op string) 
 const (
 	unsupportedCompErrFmtWithTypes = "unsupported comparison operator: <%s> %s <%s>"
 	unsupportedCompErrFmtWithExprs = "unsupported comparison operator: %s %s %s: %v"
+	ambiguousCompErrFmtWithTypes   = "ambiguous comparison operator: <%s> %s <%s>, candidates are:\n%s"
 )
 
 func typeCheckComparisonOp(
@@ -803,7 +817,7 @@ func typeCheckComparisonOp(
 	for i := range ops {
 		overloads[i] = ops[i]
 	}
-	typedSubExprs, fn, err := typeCheckOverloadedExprs(ctx, nil, overloads, foldedLeft, foldedRight)
+	typedSubExprs, fn, rest, err := typeCheckOverloadedExprs(ctx, nil, overloads, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, CmpOp{}, err
 	}
@@ -827,6 +841,11 @@ func typeCheckComparisonOp(
 	}
 
 	if fn == nil || (leftReturn.FamilyEqual(TypeCollatedString) && !leftReturn.Equal(rightReturn)) {
+		if rest != nil {
+			return nil, nil, CmpOp{},
+				fmt.Errorf(ambiguousCompErrFmtWithTypes, leftReturn, op, rightReturn,
+					formatCandidates(op.String(), rest))
+		}
 		return nil, nil, CmpOp{},
 			fmt.Errorf(unsupportedCompErrFmtWithTypes, leftReturn, op, rightReturn)
 	}

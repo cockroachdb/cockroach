@@ -164,7 +164,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	for i, d := range testData {
 		ctx := MakeSemaContext()
 		ctx.Placeholders.SetTypes(d.ptypes)
-		_, fn, err := typeCheckOverloadedExprs(&ctx, d.desired, d.overloads, d.exprs...)
+		_, fn, _, err := typeCheckOverloadedExprs(&ctx, d.desired, d.overloads, d.exprs...)
 		if d.expectedOverload != nil {
 			if err != nil {
 				t.Errorf("%d: unexpected error returned from typeCheckOverloadedExprs when type checking %s: %v", i, d.exprs, err)
