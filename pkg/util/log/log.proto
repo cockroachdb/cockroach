@@ -51,6 +51,7 @@ message FileDetails {
   Severity severity = 4;
   int64 time = 5;
   int64 pid = 6 [(gogoproto.customname) = "PID"];
+  int64 counter = 7;
 }
 
 message FileInfo {

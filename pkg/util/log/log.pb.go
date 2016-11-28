@@ -92,6 +92,7 @@ type FileDetails struct {
 	Severity Severity `protobuf:"varint,4,opt,name=severity,proto3,enum=cockroach.util.log.Severity" json:"severity,omitempty"`
 	Time     int64    `protobuf:"varint,5,opt,name=time,proto3" json:"time,omitempty"`
 	PID      int64    `protobuf:"varint,6,opt,name=pid,proto3" json:"pid,omitempty"`
+	Counter  int64    `protobuf:"varint,7,opt,name=counter,proto3" json:"counter,omitempty"`
 }
 
 func (m *FileDetails) Reset()                    { *m = FileDetails{} }
