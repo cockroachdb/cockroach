@@ -56,7 +56,7 @@ type selectNode struct {
 	// as invoked initially by initTargets() and initWhere().
 	// sortNode peeks into the render array defined by initTargets() as an optimization.
 	// sortNode adds extra selectNode renders for sort columns not requested as select targets.
-	// groupNode copies/extends the render array defined by initTargets()
+	// groupNode copies/extends the render array defined by initTargets() and
 	// will add extra selectNode renders for the aggregation sources.
 	render  []parser.TypedExpr
 	columns ResultColumns
@@ -598,10 +598,28 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Type
 	if err != nil {
 		return err
 	}
-	s.render = append(s.render, normalized)
 
-	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: normalized.ResolvedType()})
+	s.addRenderColumn(normalized, ResultColumn{Name: outputName, Typ: normalized.ResolvedType()})
+
 	return nil
+}
+
+// appendRenderColumn adds a new render expression at the end of the current list.
+// The expression must be normalized already.
+func (s *selectNode) addRenderColumn(expr parser.TypedExpr, col ResultColumn) {
+	s.render = append(s.render, expr)
+	s.columns = append(s.columns, col)
+}
+
+// resetRenderColumns resets all the render expressions. This is used e.g. by
+// aggregation and windowing (see group.go / window.go). The method also
+// asserts that both the render and columns array have the same size.
+func (s *selectNode) resetRenderColumns(exprs []parser.TypedExpr, cols ResultColumns) {
+	if len(exprs) != len(cols) {
+		panic(fmt.Sprintf("resetRenderColumns used with arrays of different sizes: %d != %d", len(exprs), len(cols)))
+	}
+	s.render = exprs
+	s.columns = cols
 }
 
 // renderRow renders the row by evaluating the render expressions.
