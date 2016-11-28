@@ -209,8 +209,9 @@ func (s *Server) checkForUpdates(ctx context.Context) {
 		return
 	}
 
-	for _, v := range r.Details {
-		log.Infof(ctx, "A new version is available: %s, details: %s", v.Version, v.Details)
+	if l := len(r.Details); l > 0 {
+		v := r.Details[l-1]
+		log.Infof(ctx, "%d new version(s) are available; latest is %s (%s)", l, v.Version, v.Details)
 	}
 }
 

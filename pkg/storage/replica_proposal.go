@@ -384,6 +384,10 @@ func (r *Replica) leasePostApply(
 		// periodic check should happen.
 		r.maybeTransferRaftLeadership(ctx, replicaID, newLease.Replica.ReplicaID)
 	}
+
+	// Notify the store that a lease change occurred and it may need to
+	// gossip updated capacity.
+	r.store.maybeGossipOnCapacityChange()
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership away from

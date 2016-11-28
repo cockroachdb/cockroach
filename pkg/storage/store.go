@@ -88,6 +88,11 @@ const (
 	// for a replica.
 	replicaRequestQueueSize = 100
 
+	// gossipWhenCapacityDeltaExceedsFraction indicates the fraction from the last
+	// gossiped store capacity values which need be exceeded before the store will
+	// gossip immediately without waiting for the periodic gossip interval.
+	gossipWhenCapacityDeltaExceedsFraction = 0.01
+
 	defaultStoreMutexWarnThreshold = 100 * time.Millisecond
 )
 
@@ -361,6 +366,12 @@ type Store struct {
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
+
+	// gossipCapacityCountdown is the number of changes to range count
+	// or lease count allowed before re-gossiping store descriptor
+	// earlier than the normal periodic gossip interval. Updated
+	// atomically.
+	gossipCapacityCountdown int32
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1054,7 +1065,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return false, err
 			}
 			// Add this range and its stats to our counter.
-			s.metrics.ReplicaCount.Inc(1)
+			s.incReplicaCountLocked()
 			s.metrics.addMVCCStats(rep.GetMVCCStats())
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
@@ -1339,6 +1350,15 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
+
+	// Set countdown target for re-gossiping capacity earlier than
+	// the usual periodic interval.
+	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * gossipWhenCapacityDeltaExceedsFraction
+	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * gossipWhenCapacityDeltaExceedsFraction
+	// Store the minimum value of the two, maximum 1.
+	atomic.StoreInt32(&s.gossipCapacityCountdown,
+		int32(math.Ceil(math.Max(math.Max(rangeCountdown, leaseCountdown), 1))))
+
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
@@ -1372,6 +1392,19 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	}
 	s.idleReplicaElectionTime.Unlock()
 	return nil
+}
+
+// In case the capacity values have changed enough since the last time
+// they were gossiped for the store, re-gossip them immediately.
+func (s *Store) maybeGossipOnCapacityChange() {
+	if atomic.AddInt32(&s.gossipCapacityCountdown, -1) != 0 {
+		return
+	}
+	go func() {
+		if err := s.GossipStore(context.TODO()); err != nil {
+			log.Warningf(context.TODO(), "error doing initial gossiping: %s", err)
+		}
+	}()
 }
 
 func (s *Store) canCampaignIdleReplica() bool {
@@ -1808,7 +1841,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return err
 	}
 
-	s.metrics.ReplicaCount.Inc(1)
+	s.incReplicaCountLocked()
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
@@ -2006,7 +2039,7 @@ func (s *Store) removeReplicaImpl(
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
-	s.metrics.ReplicaCount.Dec(1)
+	s.decReplicaCountLocked()
 	s.mu.Unlock()
 
 	// Mark the replica as destroyed and (optionally) destroy the on-disk data
@@ -2091,9 +2124,19 @@ func (s *Store) processRangeDescriptorUpdateLocked(repl *Replica) error {
 	}
 
 	// Add the range and its current stats into metrics.
-	s.metrics.ReplicaCount.Inc(1)
+	s.incReplicaCountLocked()
 
 	return nil
+}
+
+func (s *Store) incReplicaCountLocked() {
+	s.metrics.ReplicaCount.Inc(1)
+	s.maybeGossipOnCapacityChange()
+}
+
+func (s *Store) decReplicaCountLocked() {
+	s.metrics.ReplicaCount.Dec(1)
+	s.maybeGossipOnCapacityChange()
 }
 
 // NewSnapshot creates a new snapshot engine.
@@ -2151,6 +2194,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}
 	capacity.RangeCount = int32(s.ReplicaCount())
 	capacity.LeaseCount = int32(s.LeaseCount())
+
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
@@ -2166,7 +2210,7 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	// Similar to in the storeReplicaVisitor, make a copy of the current
 	// replicas to iterate over so we don't have to hold the store lock during
 	// processing.
-	// TODO(bram): does this need to visit all the stores? Could we just use the
+	// TODO(bram): does this need to visit all the replicas? Could we just use the
 	// store pool to locate any dead replicas on this store directly?
 	s.mu.Lock()
 	replicas := make([]*Replica, 0, len(s.mu.replicas))
