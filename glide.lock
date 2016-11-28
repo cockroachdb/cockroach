@@ -322,7 +322,7 @@ imports:
   - transform
   - unicode/norm
 - name: golang.org/x/tools
-  version: 167995c67fa45f3a7fc8dab62bb872212e397c11
+  version: ebf631f91765900b0af5a2010d1ee5e471db6b49
   subpackages:
   - cmd/goimports
   - cmd/goyacc
