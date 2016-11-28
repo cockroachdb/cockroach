@@ -213,7 +213,23 @@ func create(severity Severity, t time.Time) (f *os.File, filename string, err er
 		return nil, "", err
 	}
 	name, link := logName(severity, t)
-	fname := filepath.Join(dir, name)
+	baseFname := filepath.Join(dir, name)
+
+	fname := baseFname
+	// If we are rotating into a new file within the same second, or
+	// there is a NTP delay underway, or a leap second adjustment
+	// happens, we may run into a file name collision. Ensure
+	// that the file names are unique.
+	for i := 0; ; i += 1 {
+		_, err := os.Stat(fname)
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		fname = fmt.Sprintf("%s_%d", baseFname, i)
+	}
 
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.

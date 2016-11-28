@@ -511,11 +511,6 @@ func TestRollover(t *testing.T) {
 
 	// Make sure the next log file gets a file name with a different
 	// time stamp.
-	//
-	// TODO: determine whether we need to support subsecond log
-	// rotation.  C++ does not appear to handle this case (nor does it
-	// handle Daylight Savings Time properly).
-	time.Sleep(1 * time.Second)
 
 	Info(context.Background(), "x") // create a new file
 	if err != nil {
