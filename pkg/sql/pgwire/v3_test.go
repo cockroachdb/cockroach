@@ -27,18 +27,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
 	metrics := makeServerMetrics(nil)
 	mon := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, 1000)
-	return makeV3Conn(
-		context.Background(),
-		c,
-		&metrics,
-		&mon,
-		sql.NewDummyExecutor(),
+	exec := sql.NewExecutor(
+		sql.ExecutorConfig{
+			AmbientCtx:            log.AmbientContext{Tracer: tracing.NewTracer()},
+			MetricsSampleInterval: metric.TestSampleInterval,
+		},
+		nil, /* stopper */
 	)
+	return makeV3Conn(context.Background(), c, &metrics, &mon, exec)
 }
 
 // TestMaliciousInputs verifies that known malicious inputs sent to

@@ -32,6 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -42,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -74,12 +76,14 @@ var (
 type distSQLExecMode int
 
 const (
-	distSQLDisabled distSQLExecMode = iota
-	//The plan does not instantiate any goroutines internally.
-	distSQLSync
-	distSQLAsync
+	// distSQLOff means that we never use distSQL.
+	distSQLOff distSQLExecMode = iota
+	// distSQLOn means that we use distSQL for queries that are supported.
+	distSQLOn
+	// distSQLOnly means that we only use distSQL; unsupported queries fail.
+	distSQLAlways
 )
-const testDistSQL distSQLExecMode = distSQLDisabled
+const testDistSQL distSQLExecMode = distSQLOff
 
 type traceResult struct {
 	tag   string
@@ -163,6 +167,7 @@ type ResultColumns []ResultColumn
 // Executor is thread-safe.
 type Executor struct {
 	cfg            ExecutorConfig
+	stopper        *stop.Stopper
 	reCache        *parser.RegexpCache
 	virtualSchemas virtualSchemaHolder
 
@@ -191,6 +196,8 @@ type Executor struct {
 	// execution of statements. So don't go on changing state after you've
 	// Wait()ed on it.
 	systemConfigCond *sync.Cond
+
+	distSQLPlanner *distSQLPlanner
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -202,6 +209,8 @@ type ExecutorConfig struct {
 	NodeID       *base.NodeIDContainer
 	DB           *client.DB
 	Gossip       *gossip.Gossip
+	DistSender   *kv.DistSender
+	RPCContext   *rpc.Context
 	LeaseManager *LeaseManager
 	Clock        *hlc.Clock
 	DistSQLSrv   *distsql.ServerImpl
@@ -253,11 +262,10 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(
-	cfg ExecutorConfig, stopper *stop.Stopper, startupMemMetrics *MemoryMetrics,
-) *Executor {
-	exec := &Executor{
+func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
+	return &Executor{
 		cfg:     cfg,
+		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
 
 		Latency:          metric.NewLatency(MetaLatency, cfg.MetricsSampleInterval),
@@ -273,39 +281,39 @@ func NewExecutor(
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
 	}
+}
 
-	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
+// Start starts workers for the executor and initializes the distSQLPlanner.
+func (e *Executor) Start(
+	ctx context.Context, startupMemMetrics *MemoryMetrics, nodeDesc roachpb.NodeDescriptor,
+) {
+	ctx = e.AnnotateCtx(ctx)
+	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
+	e.distSQLPlanner = newDistSQLPlanner(
+		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
+	)
 
-	gossipUpdateC := cfg.Gossip.RegisterSystemConfigChannel()
-	stopper.RunWorker(func() {
+	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
+
+	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
+	e.stopper.RunWorker(func() {
 		for {
 			select {
 			case <-gossipUpdateC:
-				sysCfg, _ := cfg.Gossip.GetSystemConfig()
-				exec.updateSystemConfig(sysCfg)
-			case <-stopper.ShouldStop():
+				sysCfg, _ := e.cfg.Gossip.GetSystemConfig()
+				e.updateSystemConfig(sysCfg)
+			case <-e.stopper.ShouldStop():
 				return
 			}
 		}
 	})
 
-	ctx := log.WithLogTag(context.Background(), "startup", nil)
-	startupSession := NewSession(ctx, SessionArgs{}, exec, nil, startupMemMetrics)
-	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
+	ctx = log.WithLogTag(ctx, "startup", nil)
+	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
+	if err := e.virtualSchemas.init(&startupSession.planner); err != nil {
 		log.Fatal(ctx, err)
 	}
-	startupSession.Finish(exec)
-
-	return exec
-}
-
-// NewDummyExecutor creates an empty Executor that is used for certain tests.
-func NewDummyExecutor() *Executor {
-	return &Executor{
-		cfg: ExecutorConfig{
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		},
-	}
+	startupSession.Finish(e)
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
@@ -1161,52 +1169,40 @@ func commitSQLTransaction(
 	return result, err
 }
 
-// The current transaction might have been committed/rolled back when this returns.
-func (e *Executor) execStmt(
-	stmt parser.Statement, planMaker *planner, autoCommit bool,
-) (Result, error) {
-	var result Result
-	plan, err := planMaker.makePlan(stmt, autoCommit)
+// exectDistSQL converts a classic plan to a distributed SQL physical plan and
+// runs it.
+func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
+	// Note: if we just want the row count, result.Rows is nil here.
+	recv := distSQLReceiver{rows: result.Rows}
+	err := e.distSQLPlanner.PlanAndRun(planMaker.session.Ctx(), planMaker.txn, tree, &recv)
 	if err != nil {
-		return result, err
+		return err
 	}
-
-	defer plan.Close()
-
-	distSQLMode := testDistSQL
-	if planMaker.session.DistSQLMode != distSQLDisabled {
-		distSQLMode = planMaker.session.DistSQLMode
+	if recv.err != nil {
+		return recv.err
 	}
-	if distSQLMode != distSQLDisabled {
-		if err := hackPlanToUseDistSQL(plan, distSQLMode); err != nil {
-			return result, err
-		}
+	if result.Type == parser.RowsAffected {
+		result.RowsAffected = int(recv.numRows)
 	}
+	return nil
+}
 
+// execClassic runs a plan using the classic (non-distributed) SQL
+// implementation.
+func (e *Executor) execClassic(plan planNode, result *Result) error {
 	if err := plan.Start(); err != nil {
-		return result, err
+		return err
 	}
-
-	result.PGTag = stmt.StatementTag()
-	result.Type = stmt.StatementType()
 
 	switch result.Type {
 	case parser.RowsAffected:
 		count, err := countRowsAffected(plan)
 		if err != nil {
-			return result, err
+			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		result.Columns = plan.Columns()
-		for _, c := range result.Columns {
-			if err := checkResultType(c.Typ); err != nil {
-				return result, err
-			}
-		}
-		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
-
 		next, err := plan.Next()
 		for ; next; next, err = plan.Next() {
 			// The plan.Values DTuple needs to be copied on each iteration.
@@ -1214,18 +1210,85 @@ func (e *Executor) execStmt(
 
 			for _, val := range values {
 				if err := checkResultType(val.ResolvedType()); err != nil {
-					return result, err
+					return err
 				}
 			}
 			if _, err := result.Rows.AddRow(values); err != nil {
-				return result, err
+				return err
 			}
 		}
 		if err != nil {
-			return result, err
+			return err
 		}
 	}
-	return result, nil
+	return nil
+}
+
+// shouldUseDistSQL determines whether we should use DistSQL for a plan, based
+// on the session settings.
+func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, error) {
+	distSQLMode := testDistSQL
+	if session.DistSQLMode != distSQLOff {
+		distSQLMode = session.DistSQLMode
+	}
+
+	if distSQLMode == distSQLOff {
+		return false, nil
+	}
+	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
+	if _, ok := plan.(*emptyNode); ok {
+		return false, nil
+	}
+
+	if err := e.distSQLPlanner.CheckSupport(plan); err != nil {
+		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
+		if distSQLMode == distSQLAlways {
+			return false, err
+		}
+		// Don't use distSQL for this request.
+		log.Infof(session.Ctx(), "query not supported for distSQL: %s", err)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// The current transaction might have been committed/rolled back when this returns.
+// The caller closes result.Rows (even in error cases).
+func (e *Executor) execStmt(
+	stmt parser.Statement, planMaker *planner, autoCommit bool,
+) (Result, error) {
+	plan, err := planMaker.makePlan(stmt, autoCommit)
+	if err != nil {
+		return Result{}, err
+	}
+
+	defer plan.Close()
+
+	result := Result{
+		PGTag: stmt.StatementTag(),
+		Type:  stmt.StatementType(),
+	}
+	if result.Type == parser.Rows {
+		result.Columns = plan.Columns()
+		for _, c := range result.Columns {
+			if err := checkResultType(c.Typ); err != nil {
+				return result, err
+			}
+		}
+		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+	}
+
+	useDistSQL, err := e.shouldUseDistSQL(planMaker.session, plan)
+	if err != nil {
+		return result, err
+	}
+	if useDistSQL {
+		err = e.execDistSQL(planMaker, plan, &result)
+	} else {
+		err = e.execClassic(plan, &result)
+	}
+	return result, err
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL

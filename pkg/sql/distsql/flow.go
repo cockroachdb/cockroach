@@ -378,3 +378,5 @@ func (f *Flow) RunSync() {
 	}
 	f.Cleanup()
 }
+
+var _ = (*Flow).RunSync
