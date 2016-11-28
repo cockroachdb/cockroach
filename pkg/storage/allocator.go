@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 
 	"golang.org/x/net/context"
 
@@ -222,7 +223,12 @@ func (a *Allocator) AllocateTarget(
 			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
-		candidates, err := a.ruleSolver.Solve(sl, constraints, existing)
+		candidates, err := a.ruleSolver.Solve(
+			sl,
+			constraints,
+			existing,
+			a.storePool.getNodeLocalities(existing),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -232,8 +238,9 @@ func (a *Allocator) AllocateTarget(
 				required: constraints.Constraints,
 			}
 		}
-		// TODO(bram): #10275 Need some randomness here!
-		return &candidates[0].store, nil
+
+		chosenCandidate := candidates.selectGood(a.randGen).store
+		return &chosenCandidate, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
@@ -294,8 +301,7 @@ func (a Allocator) RemoveTarget(
 		// as we are removing a replica and not trying to add one.
 		sl, _, _ := a.storePool.getStoreList(roachpb.RangeID(0))
 
-		var worst roachpb.ReplicaDescriptor
-		worstScore := math.Inf(0)
+		var candidates candidateList
 		for _, exist := range existing {
 			if exist.StoreID == leaseStoreID {
 				continue
@@ -305,32 +311,30 @@ func (a Allocator) RemoveTarget(
 				continue
 			}
 
-			candidate, valid := a.ruleSolver.computeCandidate(solveState{
-				constraints: constraints,
-				store:       desc,
-				existing:    nil,
-				sl:          sl,
-				tierOrder:   canonicalTierOrder(sl),
-				tiers:       storeTierMap(sl),
+			currentCandidate, valid := a.ruleSolver.computeCandidate(desc, solveState{
+				constraints:            constraints,
+				sl:                     sl,
+				existing:               nil,
+				existingNodeLocalities: a.storePool.getNodeLocalities(existing),
 			})
-			// When a candidate is not valid, it means that it can be
-			// considered the worst existing replica.
+			// When a candidate is not valid, it means that it should be
+			// considered one of the worst existing replicas. If we set its
+			// constraint score to -1, it will be amongst the first to be chosen
+			// for removal.
+			// TODO(bram): add a valid bool to the candidate list to avoid this
+			// hack.
 			if !valid {
-				return exist, nil
+				currentCandidate.constraint = -1
 			}
-
-			if candidate.score < worstScore {
-				worstScore = candidate.score
-				worst = exist
-			}
-
+			currentCandidate.replica = exist
+			candidates = append(candidates, currentCandidate)
 		}
 
-		if !math.IsInf(worstScore, 0) {
-			return worst, nil
+		if len(candidates) == 0 {
+			return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
 		}
 
-		return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
+		return candidates.selectBad(a.randGen).replica, nil
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
@@ -424,33 +428,38 @@ func (a Allocator) RebalanceTarget(
 				candidateDescs = append(candidateDescs, desc)
 			}
 		}
-
-		existingStoreList := makeStoreList(existingDescs)
-		candidateStoreList := makeStoreList(candidateDescs)
-
-		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil)
+		existingCandidates, err := a.ruleSolver.Solve(makeStoreList(existingDescs), constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil)
+		candidates, err := a.ruleSolver.Solve(makeStoreList(candidateDescs), constraints, nil, nil)
 		if err != nil {
 			return nil, err
+		}
+		if a.storePool.deterministic {
+			sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
+			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+		}
+
+		// Are there any valid candidates to rebalance to?
+		if len(candidates) == 0 {
+			return nil, nil
 		}
 
 		// Find all candidates that are better than the worst existing store.
-		var worstCandidateStore float64
+		var worstCandidate candidate
 		// If any store from existing is not included in existingCandidates, it
 		// is because it no longer meets the constraints. If so, its score is
 		// considered to be 0.
 		if len(existingCandidates) == len(existing) {
-			worstCandidateStore = existingCandidates[len(existingCandidates)-1].score
+			worstCandidate = existingCandidates[len(existingCandidates)-1]
 		}
 
-		// TODO(bram): #10275 Need some randomness here!
-		for _, cand := range candidates {
-			if cand.score > worstCandidateStore {
-				return &candidates[0].store, nil
-			}
+		// Is the top candidate better than the worst candidate? If so, we
+		// should probably rebalance.
+		if worstCandidate.less(candidates[0]) {
+			chosenCandidateStore := candidates.selectGood(a.randGen).store
+			return &chosenCandidateStore, nil
 		}
 
 		return nil, nil

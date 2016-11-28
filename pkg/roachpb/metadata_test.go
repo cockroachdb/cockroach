@@ -17,6 +17,7 @@
 package roachpb
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -138,5 +139,62 @@ func TestLocalityConversions(t *testing.T) {
 		if !reflect.DeepEqual(l, tc.expected) {
 			t.Errorf("%d: Locality.Set(%q) = %+v; not %+v", i, tc.in, l, tc.expected)
 		}
+	}
+}
+
+func TestDiversityScore(t *testing.T) {
+	// Keys are not considered for score, just the order, so we don't need to
+	// specify them.
+	generateLocality := func(values string) Locality {
+		var locality Locality
+		if len(values) > 0 {
+			for i, value := range strings.Split(values, ",") {
+				locality.Tiers = append(locality.Tiers, Tier{
+					Key:   fmt.Sprintf("%d", i),
+					Value: value,
+				})
+			}
+		}
+		return locality
+	}
+
+	testCases := []struct {
+		left     string
+		right    string
+		expected float64
+	}{
+		{"", "", 0},
+		{"a,b,c", "", 0},
+		{"a", "b", 1},
+		{"a,aa", "b,bb", 1},
+		{"a,aa,aaa", "b,bb,bbb", 1},
+		{"a,aa,aaa", "b,aa,aaa", 1},
+		{"a", "a", 0},
+		{"a,aa", "a,aa", 0},
+		{"a,aa,aaa", "a,aa,aaa", 0},
+		{"a,aa", "a,bb", 1.0 / 2.0},
+		{"a,aa,aaa", "a,bb,bbb", 2.0 / 3.0},
+		{"a,aa,aaa", "a,bb,aaa", 2.0 / 3.0},
+		{"a,aa,aaa", "a,aa,bbb", 1.0 / 3.0},
+		{"a,aa,aaa,aaaa", "b,aa,aaa,aaaa", 1},
+		{"a,aa,aaa,aaaa", "a,bb,aaa,aaaa", 3.0 / 4.0},
+		{"a,aa,aaa,aaaa", "a,aa,bbb,aaaa", 2.0 / 4.0},
+		{"a,aa,aaa,aaaa", "a,aa,aaa,bbbb", 1.0 / 4.0},
+		{"a,aa,aaa,aaaa", "b,aa", 1},
+		{"a,aa,aaa,aaaa", "b,aa", 1},
+		{"a,aa,aaa,aaaa", "a,bb", 1.0 / 2.0},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(fmt.Sprintf("%s:%s", testCase.left, testCase.right), func(t *testing.T) {
+			left := generateLocality(testCase.left)
+			right := generateLocality(testCase.right)
+			if a := left.DiversityScore(right); a != testCase.expected {
+				t.Fatalf("expected %f, got %f", testCase.expected, a)
+			}
+			if a := right.DiversityScore(left); a != testCase.expected {
+				t.Fatalf("expected %f, got %f", testCase.expected, a)
+			}
+		})
 	}
 }

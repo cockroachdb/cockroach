@@ -17,38 +17,110 @@
 package storage
 
 import (
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-const (
-	ruleDiversityWeight = 0.1
-	ruleCapacityWeight  = 0.01
-)
-
 // candidate store for allocation.
 type candidate struct {
-	store roachpb.StoreDescriptor
-	score float64
+	store      roachpb.StoreDescriptor
+	constraint float64 // Score used to pick the top candidates.
+	balance    float64 // Score used to choose between top candidates.
+	replica    roachpb.ReplicaDescriptor
+}
+
+// less first compares constraint scores, then balance scores.
+func (c candidate) less(o candidate) bool {
+	if c.constraint != o.constraint {
+		return c.constraint < o.constraint
+	}
+	return c.balance < o.balance
+}
+
+type candidateList []candidate
+
+// bestConstraint returns all the elements in a sorted candidate list that share
+// the highest constraint score.
+func (cl candidateList) bestConstraint() candidateList {
+	if len(cl) <= 1 {
+		return cl
+	}
+	for i := 1; i < len(cl); i++ {
+		if cl[i].constraint < cl[0].constraint {
+			return cl[0:i]
+		}
+	}
+	return cl
+}
+
+// worstConstraint returns all the elements in a sorted candidate list that
+// share the lowest constraint score.
+func (cl candidateList) worstConstraint() candidateList {
+	if len(cl) <= 1 {
+		return cl
+	}
+	for i := len(cl) - 2; i >= 0; i-- {
+		if cl[i].constraint < cl[len(cl)-1].constraint {
+			return cl[i+1:]
+		}
+	}
+	return cl
+}
+
+// selectGood randomly chooses a good candidate from a sorted candidate list
+// using the provided random generator.
+func (cl candidateList) selectGood(randGen allocatorRand) candidate {
+	cl = cl.bestConstraint()
+	if len(cl) == 1 {
+		return cl[0]
+	}
+	randGen.Lock()
+	order := randGen.Perm(len(cl))
+	randGen.Unlock()
+	best := cl[order[0]]
+	for i := 1; i < allocatorRandomCount; i++ {
+		if best.less(cl[order[i]]) {
+			best = cl[order[i]]
+		}
+	}
+	return best
+}
+
+// selectBad randomly chooses a bad candidate from a sorted candidate list using
+//
+func (cl candidateList) selectBad(randGen allocatorRand) candidate {
+	cl = cl.worstConstraint()
+	if len(cl) == 1 {
+		return cl[0]
+	}
+	randGen.Lock()
+	order := randGen.Perm(len(cl))
+	randGen.Unlock()
+	worst := cl[order[0]]
+	for i := 1; i < allocatorRandomCount; i++ {
+		if cl[order[i]].less(worst) {
+			worst = cl[order[i]]
+		}
+	}
+	return worst
 }
 
 // solveState is used to pass solution state information into a rule.
 type solveState struct {
-	constraints config.Constraints
-	store       roachpb.StoreDescriptor
-	existing    []roachpb.ReplicaDescriptor
-	sl          StoreList
-	tiers       map[roachpb.StoreID]map[string]roachpb.Tier
-	tierOrder   []string
+	constraints            config.Constraints
+	sl                     StoreList
+	existing               []roachpb.ReplicaDescriptor
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality
 }
 
 // rule is a function that given a solveState will score and possibly
 // disqualify a store. The store in solveState can be disqualified by
 // returning false. Unless disqualified, the higher the returned score, the
 // more likely the store will be picked as a candidate.
-type rule func(state solveState) (float64, bool)
+type rule func(roachpb.StoreDescriptor, solveState) (bool, float64, float64)
 
 // ruleSolver is used to test a collection of rules against stores.
 type ruleSolver []rule
@@ -64,20 +136,21 @@ var defaultRuleSolver = ruleSolver{
 // Solve runs the rules against the stores in the store list and returns all
 // passing stores and their scores ordered from best to worst score.
 func (rs ruleSolver) Solve(
-	sl StoreList, c config.Constraints, existing []roachpb.ReplicaDescriptor,
-) ([]candidate, error) {
-	candidates := make([]candidate, 0, len(sl.stores))
+	sl StoreList,
+	c config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) (candidateList, error) {
+	candidates := make(candidateList, 0, len(sl.stores))
 	state := solveState{
-		constraints: c,
-		existing:    existing,
-		sl:          sl,
-		tierOrder:   canonicalTierOrder(sl),
-		tiers:       storeTierMap(sl),
+		constraints:            c,
+		sl:                     sl,
+		existing:               existing,
+		existingNodeLocalities: existingNodeLocalities,
 	}
 
 	for _, store := range sl.stores {
-		state.store = store
-		if cand, ok := rs.computeCandidate(state); ok {
+		if cand, ok := rs.computeCandidate(store, state); ok {
 			candidates = append(candidates, cand)
 		}
 	}
@@ -87,27 +160,36 @@ func (rs ruleSolver) Solve(
 
 // computeCandidate runs the rules against a candidate store using the provided
 // state and returns each candidate's score and if the candidate is valid.
-func (rs ruleSolver) computeCandidate(state solveState) (candidate, bool) {
-	var totalScore float64
+func (rs ruleSolver) computeCandidate(
+	store roachpb.StoreDescriptor, state solveState,
+) (candidate, bool) {
+	var totalConstraintScore, totalBalanceScore float64
 	for _, rule := range rs {
-		score, valid := rule(state)
+		valid, constraintScore, balanceScore := rule(store, state)
 		if !valid {
 			return candidate{}, false
 		}
-		totalScore += score
+		totalConstraintScore += constraintScore
+		totalBalanceScore += balanceScore
 	}
-	return candidate{store: state.store, score: totalScore}, true
+	return candidate{
+		store:      store,
+		constraint: totalConstraintScore,
+		balance:    totalBalanceScore,
+	}, true
 }
 
 // ruleReplicasUniqueNodes returns true iff no existing replica is present on
-// the candidate's node.
-func ruleReplicasUniqueNodes(state solveState) (float64, bool) {
+// the candidate's node. All other scores are always 0.
+func ruleReplicasUniqueNodes(
+	store roachpb.StoreDescriptor, state solveState,
+) (bool, float64, float64) {
 	for _, r := range state.existing {
-		if r.NodeID == state.store.Node.NodeID {
-			return 0, false
+		if r.NodeID == store.Node.NodeID {
+			return false, 0, 0
 		}
 	}
-	return 0, true
+	return true, 0, 0
 }
 
 // storeHasConstraint returns whether a store descriptor attributes or locality
@@ -134,121 +216,75 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool
 // ruleConstraints returns true iff all required and prohibited constraints are
 // satisfied. Stores with attributes or localities that match the most positive
 // constraints return higher scores.
-func ruleConstraints(state solveState) (float64, bool) {
+func ruleConstraints(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
 	if len(state.constraints.Constraints) == 0 {
-		return 0, true
+		return true, 0, 0
 	}
 	matched := 0
 	for _, c := range state.constraints.Constraints {
-		hasConstraint := storeHasConstraint(state.store, c)
+		hasConstraint := storeHasConstraint(store, c)
 		switch {
-		case c.Type == config.Constraint_POSITIVE && hasConstraint:
-			matched++
 		case c.Type == config.Constraint_REQUIRED && !hasConstraint:
-			return 0, false
+			return false, 0, 0
 		case c.Type == config.Constraint_PROHIBITED && hasConstraint:
-			return 0, false
+			return false, 0, 0
+		case (c.Type == config.Constraint_POSITIVE && hasConstraint) ||
+			(c.Type == config.Constraint_REQUIRED && hasConstraint) ||
+			(c.Type == config.Constraint_PROHIBITED && !hasConstraint):
+			matched++
 		}
 	}
 
-	return float64(matched) / float64(len(state.constraints.Constraints)), true
+	return true, float64(matched) / float64(len(state.constraints.Constraints)), 0
 }
 
 // ruleDiversity returns higher scores for stores with the fewest locality tiers
 // in common with already existing replicas. It always returns true.
-func ruleDiversity(state solveState) (float64, bool) {
-	storeTiers := state.tiers[state.store.StoreID]
-	var maxScore, score float64
-	for i, tierKey := range state.tierOrder {
-		storeTier, ok := storeTiers[tierKey]
-		if !ok {
-			continue
-		}
-		tierScore := 1 / (float64(i) + 1)
-		for _, existing := range state.existing {
-			existingTier, ok := state.tiers[existing.StoreID][tierKey]
-			if ok && existingTier.Value != storeTier.Value {
-				score += tierScore
-			}
-			maxScore += tierScore
+func ruleDiversity(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
+	minScore := math.Inf(0)
+	for _, locality := range state.existingNodeLocalities {
+		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
+			minScore = newScore
 		}
 	}
-	if maxScore == 0 {
-		return 0, true
+
+	if !math.IsInf(minScore, 0) {
+		return true, minScore, 0
 	}
-	return score / maxScore * ruleDiversityWeight, true
+	return true, 0, 0
 }
 
 // ruleCapacity returns true iff a new replica won't overfill the store. The
 // score returned is inversely proportional to the number of ranges on the
 // candidate store, with the most empty nodes having the highest scores.
 // TODO(bram): consider splitting this into two rules.
-func ruleCapacity(state solveState) (float64, bool) {
+func ruleCapacity(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
 	// Don't overfill stores.
-	if state.store.Capacity.FractionUsed() > maxFractionUsedThreshold {
-		return 0, false
+	if store.Capacity.FractionUsed() > maxFractionUsedThreshold {
+		return false, 0, 0
 	}
 
-	return ruleCapacityWeight / float64(state.store.Capacity.RangeCount+1), true
-}
-
-// canonicalTierOrder returns the most common key at each tier level in
-// order from the most broad tier down to the most local tier. If a majority of
-// the stores' nodes have no tier at any level, all subsequent levels are
-// ignored.
-func canonicalTierOrder(sl StoreList) []string {
-	maxTierCount := 0
-	for _, store := range sl.stores {
-		if count := len(store.Node.Locality.Tiers); maxTierCount < count {
-			maxTierCount = count
-		}
-	}
-
-	// Might have up to maxTierCount of tiers.
-	keys := make([]string, 0, maxTierCount)
-	for i := 0; i < maxTierCount; i++ {
-		// At each tier, count the number of occurrences of each key.
-		counts := map[string]int{}
-		maxKey := ""
-		for _, store := range sl.stores {
-			key := ""
-			if i < len(store.Node.Locality.Tiers) {
-				key = store.Node.Locality.Tiers[i].Key
-			}
-			counts[key]++
-			if counts[key] > counts[maxKey] {
-				maxKey = key
-			}
-		}
-		// Don't add the tier if most nodes don't have that many tiers.
-		if maxKey != "" {
-			keys = append(keys, maxKey)
-		} else {
-			break
-		}
-	}
-	return keys
-}
-
-// storeTierMap indexes a store list so it can be used to look up the locality
-// tier value from store ID and tier key.
-func storeTierMap(sl StoreList) map[roachpb.StoreID]map[string]roachpb.Tier {
-	m := map[roachpb.StoreID]map[string]roachpb.Tier{}
-	for _, store := range sl.stores {
-		sm := map[string]roachpb.Tier{}
-		m[store.StoreID] = sm
-		for _, tier := range store.Node.Locality.Tiers {
-			sm[tier.Key] = tier
-		}
-	}
-	return m
+	return true, 0, 1 / float64(store.Capacity.RangeCount+1)
 }
 
 // byScore implements sort.Interface to sort by scores.
-type byScore []candidate
+type byScore candidateList
 
 var _ sort.Interface = byScore(nil)
 
 func (c byScore) Len() int           { return len(c) }
-func (c byScore) Less(i, j int) bool { return c[i].score < c[j].score }
+func (c byScore) Less(i, j int) bool { return c[i].less(c[j]) }
 func (c byScore) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+
+type byScoreAndID candidateList
+
+var _ sort.Interface = byScoreAndID(nil)
+
+func (c byScoreAndID) Len() int { return len(c) }
+func (c byScoreAndID) Less(i, j int) bool {
+	if c[i].constraint == c[j].constraint && c[i].balance == c[j].balance {
+		return c[i].store.StoreID < c[j].store.StoreID
+	}
+	return c[i].less(c[j])
+}
+func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
