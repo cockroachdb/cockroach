@@ -134,14 +134,8 @@ func TestToInternal(t *testing.T) {
 
 	for i, tc := range tcases {
 		actual, err := tc.input.ToInternal(tc.keyDuration, tc.sampleDuration)
-		if e := tc.expectedError; len(e) > 0 {
-			if !testutils.IsError(err, e) {
-				t.Errorf("unexpected error from case %d: %v", i, err)
-			}
-		} else {
-			if err != nil {
-				t.Errorf("unexpected error from case %d: %v", i, err)
-			}
+		if !testutils.IsError(err, tc.expectedError) {
+			t.Errorf("expected error %q from case %d, got %v", tc.expectedError, i, err)
 		}
 
 		if !reflect.DeepEqual(actual, tc.expected) {

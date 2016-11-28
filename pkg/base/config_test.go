@@ -67,7 +67,7 @@ func TestClientSSLSettings(t *testing.T) {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 		}
 		tlsConfig, err := cfg.GetClientTLSConfig()
-		if !(tc.configErr == "" && err == nil || testutils.IsError(err, tc.configErr)) {
+		if !testutils.IsError(err, tc.configErr) {
 			t.Fatalf("#%d: expected err=%s, got err=%v", tcNum, tc.configErr, err)
 		}
 		if err != nil {

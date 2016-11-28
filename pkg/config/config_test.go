@@ -196,13 +196,11 @@ func TestGetLargestID(t *testing.T) {
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		ret, err := cfg.GetLargestObjectID(tc.maxID)
-		if tc.errStr == "" {
-			if err != nil {
-				t.Errorf("#%d: error: %v", tcNum, err)
-				continue
-			}
-		} else if !testutils.IsError(err, tc.errStr) {
-			t.Errorf("#%d: expected err=%s, got %v", tcNum, tc.errStr, err)
+		if !testutils.IsError(err, tc.errStr) {
+			t.Errorf("#%d: expected err=%q, got %v", tcNum, tc.errStr, err)
+			continue
+		}
+		if err != nil {
 			continue
 		}
 		if ret != tc.largest {
@@ -343,12 +341,8 @@ func TestZoneConfigValidate(t *testing.T) {
 	}
 	for i, c := range testCases {
 		err := c.cfg.Validate()
-		if c.expected == "" {
-			if err != nil {
-				t.Fatalf("%d: expected success, but got %v", i, err)
-			}
-		} else if !testutils.IsError(err, c.expected) {
-			t.Fatalf("%d: expected %s, but got %v", i, c.expected, err)
+		if !testutils.IsError(err, c.expected) {
+			t.Fatalf("%d: expected %q, got %v", i, c.expected, err)
 		}
 	}
 }
