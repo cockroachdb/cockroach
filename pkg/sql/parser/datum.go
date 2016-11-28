@@ -1622,7 +1622,7 @@ func (d *DArray) Size() uintptr {
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.
 func (d *DArray) Append(v Datum) error {
-	if !d.ParamTyp.Equal(v.ResolvedType()) {
+	if v != DNull && !d.ParamTyp.Equal(v.ResolvedType()) {
 		return errors.Errorf("cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
 	}
