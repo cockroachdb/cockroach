@@ -129,7 +129,8 @@ func (rq *replicateQueue) shouldQueue(
 	if lease, _ := repl.getLease(); lease != nil && lease.Covers(now) {
 		leaseStoreID = lease.Replica.StoreID
 		if rq.canTransferLease() &&
-			rq.allocator.ShouldTransferLease(zone.Constraints, leaseStoreID, desc.RangeID) {
+			rq.allocator.ShouldTransferLease(
+				zone.Constraints, desc.Replicas, leaseStoreID, desc.RangeID) {
 			if log.V(2) {
 				log.Infof(ctx, "%s lease transfer needed, enqueuing", repl)
 			}
@@ -240,7 +241,8 @@ func (rq *replicateQueue) processOneChange(
 		// If the lease holder (our local store) is an overfull store (in terms of
 		// leases) allow transferring the lease away.
 		leaseHolderStoreID := repl.store.StoreID()
-		if rq.allocator.ShouldTransferLease(zone.Constraints, leaseHolderStoreID, desc.RangeID) {
+		if rq.allocator.ShouldTransferLease(
+			zone.Constraints, desc.Replicas, leaseHolderStoreID, desc.RangeID) {
 			leaseHolderStoreID = 0
 		}
 		removeReplica, err := rq.allocator.RemoveTarget(
