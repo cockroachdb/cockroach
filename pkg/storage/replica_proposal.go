@@ -384,6 +384,13 @@ func (r *Replica) leasePostApply(
 		// periodic check should happen.
 		r.maybeTransferRaftLeadership(ctx, replicaID, newLease.Replica.ReplicaID)
 	}
+
+	// Notify the store that a lease change occurred and it may need to
+	// gossip the updated store descriptor (with updated capacity).
+	if leaseChangingHands && (prevLease.OwnedBy(r.store.StoreID()) ||
+		newLease.OwnedBy(r.store.StoreID())) {
+		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
+	}
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership away from
