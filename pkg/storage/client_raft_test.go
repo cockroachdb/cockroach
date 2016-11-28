@@ -1847,6 +1847,42 @@ func TestRaftRemoveRace(t *testing.T) {
 	}
 }
 
+// TestRemovePlaceholderRace adds and removes a replica repeatedly (similar to
+// TestRaftRemoveRace) in an attempt to stress the locking around replica
+// placeholders.
+func TestRemovePlaceholderRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
+
+	repl, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ident := mtc.idents[1]
+	ctx := repl.AnnotateCtx(context.Background())
+
+	for i := 0; i < 100; i++ {
+		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
+			if err := repl.ChangeReplicas(
+				ctx,
+				action,
+				roachpb.ReplicaDescriptor{
+					NodeID:  ident.NodeID,
+					StoreID: ident.StoreID,
+				},
+				repl.Desc(),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
 // TestStoreRangeRemoveDead verifies that if a store becomes dead, the
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
