@@ -998,7 +998,7 @@ func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 		// r.rm is null in some tests.
 		return nil
 	}
-	return r.store.processRangeDescriptorUpdate(r)
+	return r.store.processRangeDescriptorUpdate(r.AnnotateCtx(context.TODO()), r)
 }
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
@@ -2391,7 +2391,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.store.removePlaceholderLocked(r.RangeID) {
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
-			if err := r.store.processRangeDescriptorUpdateLocked(r); err != nil {
+			if err := r.store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
 				return errors.Wrapf(err, "could not processRangeDescriptorUpdate after applySnapshot")
 			}
 			return nil

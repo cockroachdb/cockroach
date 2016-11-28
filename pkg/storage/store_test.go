@@ -673,7 +673,8 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	}
 
 	expectedResult := "attempted to process uninitialized range.*"
-	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
+	ctx := r.AnnotateCtx(context.TODO())
+	if err := store.processRangeDescriptorUpdate(ctx, r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with uninitialized replica to fail, got %v", err)
 	}
 
@@ -683,7 +684,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	r.mu.state.Desc.EndKey = roachpb.RKey("d")
 	r.mu.Unlock()
 
-	if err := store.processRangeDescriptorUpdateLocked(r); err != nil {
+	if err := store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
 		t.Errorf("expected processRangeDescriptorUpdate on a replica that's not in the uninit map to silently succeed, got %v", err)
 	}
 
@@ -692,7 +693,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	store.mu.Unlock()
 
 	expectedResult = ".*cannot processRangeDescriptorUpdate.*"
-	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
+	if err := store.processRangeDescriptorUpdate(ctx, r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
 	}
 }
@@ -1033,7 +1034,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SplitRange(repl, newRng); err != nil {
+	if err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng); err != nil {
 		t.Fatal(err)
 	}
 	return newRng
@@ -2522,9 +2523,8 @@ func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
 }
 
 type fakeStorePool struct {
-	declinedThrottles    int
-	failedThrottles      int
-	updatedStoreCapacity *roachpb.StoreCapacity
+	declinedThrottles int
+	failedThrottles   int
 }
 
 func (sp *fakeStorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) {
@@ -2534,12 +2534,6 @@ func (sp *fakeStorePool) throttle(reason throttleReason, toStoreID roachpb.Store
 	case throttleFailed:
 		sp.failedThrottles++
 	}
-}
-
-func (sp *fakeStorePool) updateRemoteCapacityEstimate(
-	toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity,
-) {
-	sp.updatedStoreCapacity = &capacity
 }
 
 // TestSendSnapshotThrottling tests the store pool throttling behavior of
@@ -2573,44 +2567,33 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		}
 	}
 
-	// Test that a declined snapshot causes a decline throttle, and that a nil
-	// storeCapacity doesn't cause an update to the store capacity estimate.
+	// Test that a declined snapshot causes a decline throttle.
 	{
 		sp := &fakeStorePool{}
 		resp := &SnapshotResponse{
-			StoreCapacity: nil,
-			Status:        SnapshotResponse_DECLINED,
+			Status: SnapshotResponse_DECLINED,
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
 		if sp.declinedThrottles != 1 {
 			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
 		}
-		if sp.updatedStoreCapacity != nil {
-			t.Fatalf("detected unexpected update to store capacity estimate")
-		}
 		if err == nil {
 			t.Fatalf("expected error, found nil")
 		}
 	}
 
-	// Test that a declined but required snapshot causes a fail throttle, and
-	// that a non-nil storeCapacity causes an update to the store capacity estimate.
+	// Test that a declined but required snapshot causes a fail throttle.
 	{
 		sp := &fakeStorePool{}
 		header.CanDecline = false
-		storeCapacity := roachpb.StoreCapacity{Capacity: 50}
 		resp := &SnapshotResponse{
-			StoreCapacity: &storeCapacity,
-			Status:        SnapshotResponse_DECLINED,
+			Status: SnapshotResponse_DECLINED,
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
-		}
-		if *sp.updatedStoreCapacity != storeCapacity {
-			t.Fatalf("expected storeCapacity %+v, found %+v", *sp.updatedStoreCapacity, storeCapacity)
 		}
 		if err == nil {
 			t.Fatalf("expected error, found nil")
@@ -2621,8 +2604,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	{
 		sp := &fakeStorePool{}
 		resp := &SnapshotResponse{
-			StoreCapacity: &roachpb.StoreCapacity{},
-			Status:        SnapshotResponse_ERROR,
+			Status: SnapshotResponse_ERROR,
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
