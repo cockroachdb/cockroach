@@ -225,9 +225,16 @@ func TestStatusLocalLogs(t *testing.T) {
 	if a, e := len(wrapper.Files), 3; a != e {
 		t.Fatalf("expected %d log files; got %d", e, a)
 	}
-	for i, name := range []string{"log.ERROR", "log.INFO", "log.WARNING"} {
-		if !strings.Contains(wrapper.Files[i].Name, name) {
-			t.Errorf("expected log file name %s to contain %q", wrapper.Files[i].Name, name)
+	for _, fileInfo := range wrapper.Files {
+		fName := fileInfo.Name
+		found := false
+		for i, name := range []string{"ERROR.log", "INFO.log", "WARNING.log"} {
+			if strings.Contains(wrapper.Files[i].Name, name) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected log file name %s to contain ERROR, INFO or WARNING.", fName)
 		}
 	}
 
