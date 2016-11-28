@@ -10,13 +10,11 @@ import:
 - package: github.com/cenk/backoff
 - package: github.com/chzyer/readline
 - package: github.com/cockroachdb/c-jemalloc
-  # Inherently risky.
   version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
 - package: github.com/cockroachdb/c-protobuf
   subpackages:
   - cmd/protoc
 - package: github.com/cockroachdb/c-rocksdb
-  # Inherently risky.
   version: b5ca031b93fde49bfa2ba99aba423136aebf3c06
 - package: github.com/cockroachdb/cmux
 - package: github.com/cockroachdb/cockroach-go
@@ -29,7 +27,6 @@ import:
   - raft
   - raft/raftpb
 - package: github.com/docker/docker
-  # https://github.com/docker/docker/pull/27912 broke all dependents.
   version: 7248742ae7127347a52ab9d215451c213b7b59da
   subpackages:
   - api/types
@@ -48,7 +45,6 @@ import:
 - package: github.com/elazarl/go-bindata-assetfs
 - package: github.com/facebookgo/clock
 - package: github.com/gogo/protobuf
-  # Updated with google.golang.org/grpc.
   version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
   subpackages:
   - jsonpb
@@ -124,7 +120,6 @@ import:
   - language
   - unicode/norm
 - package: google.golang.org/grpc
-  # Inherently risky.
   version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
   subpackages:
   - codes
@@ -164,6 +159,9 @@ import:
   - cmd/goimports
   - cmd/goyacc
   - cmd/stringer
+- package: github.com/golang/glog
+- package: github.com/pborman/uuid
+- package: github.com/agtorre/gocolorize
 testImport:
 - package: github.com/ghemawat/stream
 - package: github.com/go-sql-driver/mysql
