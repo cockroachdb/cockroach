@@ -621,6 +621,9 @@ func BenchmarkDecimalPow(b *testing.B) {
 	z := new(inf.Dec)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = Pow(z, xs[i%len(ys)], ys[i%len(ys)], 16)
+		_, err := Pow(z, xs[i%len(ys)], ys[i%len(ys)], 16)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
