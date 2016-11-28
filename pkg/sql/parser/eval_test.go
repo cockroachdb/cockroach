@@ -400,6 +400,7 @@ func TestEval(t *testing.T) {
 		{`ARRAY[1, 2, 3]`, `{1,2,3}`},
 		{`ARRAY['a', 'b', 'c']`, `{'a','b','c'}`},
 		{`ARRAY[ARRAY[1, 2], ARRAY[2, 3]]`, `{{1,2},{2,3}}`},
+		{`ARRAY[1, NULL]`, `{1,NULL}`},
 		// Cast expressions.
 		{`true::boolean`, `true`},
 		{`true::int`, `1`},
