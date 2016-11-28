@@ -504,7 +504,7 @@ func (a *Allocator) TransferLeaseTarget(
 	if !ok {
 		return roachpb.ReplicaDescriptor{}
 	}
-	if checkTransferLeaseSource && !shouldTransferLease(sl, source) {
+	if checkTransferLeaseSource && !a.shouldTransferLease(sl, source, existing) {
 		return roachpb.ReplicaDescriptor{}
 	}
 
@@ -533,7 +533,10 @@ func (a *Allocator) TransferLeaseTarget(
 // of leases with respect to the other stores matching the specified
 // attributes.
 func (a *Allocator) ShouldTransferLease(
-	constraints config.Constraints, leaseStoreID roachpb.StoreID, rangeID roachpb.RangeID,
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
 ) bool {
 	if !a.options.AllowRebalance {
 		return false
@@ -548,14 +551,16 @@ func (a *Allocator) ShouldTransferLease(
 	if log.V(3) {
 		log.Infof(context.TODO(), "transfer-lease-source (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
-	return shouldTransferLease(sl, source)
+	return a.shouldTransferLease(sl, source, existing)
 }
 
 // EnableLeaseRebalancing controls whether lease rebalancing is enabled or
 // not. Exported for testing.
 var EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", false)
 
-func shouldTransferLease(sl StoreList, source roachpb.StoreDescriptor) bool {
+func (a Allocator) shouldTransferLease(
+	sl StoreList, source roachpb.StoreDescriptor, existing []roachpb.ReplicaDescriptor,
+) bool {
 	if !EnableLeaseRebalancing {
 		return false
 	}
@@ -566,7 +571,28 @@ func shouldTransferLease(sl StoreList, source roachpb.StoreDescriptor) bool {
 	if overfullLeaseThreshold < minOverfullThreshold {
 		overfullLeaseThreshold = minOverfullThreshold
 	}
-	return source.Capacity.LeaseCount > overfullLeaseThreshold
+	if source.Capacity.LeaseCount > overfullLeaseThreshold {
+		return true
+	}
+
+	if float64(source.Capacity.LeaseCount) > sl.candidateLeases.mean {
+		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - rebalanceThreshold)))
+		minUnderfullThreshold := int32(math.Ceil(sl.candidateLeases.mean - 5))
+		if underfullLeaseThreshold > minUnderfullThreshold {
+			underfullLeaseThreshold = minUnderfullThreshold
+		}
+
+		for _, repl := range existing {
+			storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+			if !ok {
+				continue
+			}
+			if storeDesc.Capacity.LeaseCount < underfullLeaseThreshold {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // selectGood attempts to select a store from the supplied store list that it
