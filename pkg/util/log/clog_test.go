@@ -357,6 +357,8 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
+	s := logScope(t)
+	defer s.close(t)
 	setFlags()
 
 	methods := map[Severity]func(context.Context, ...interface{}){
@@ -445,7 +447,7 @@ func TestGetLogReader(t *testing.T) {
 		// Non-log file.
 		{"other.txt", "malformed log filename", "malformed log filename"},
 		// Non-existent file matching RE.
-		{"cockroach.roach0.root.log.ERROR.2015-09-25T19_24_19Z.1", "no such file", "no such file"},
+		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00000.ERROR.log", "no such file", "no such file"},
 		// Base filename is specified.
 		{warnName, "", ""},
 		// Relative path with directory components.
@@ -511,11 +513,6 @@ func TestRollover(t *testing.T) {
 
 	// Make sure the next log file gets a file name with a different
 	// time stamp.
-	//
-	// TODO: determine whether we need to support subsecond log
-	// rotation.  C++ does not appear to handle this case (nor does it
-	// handle Daylight Savings Time properly).
-	time.Sleep(1 * time.Second)
 
 	Info(context.Background(), "x") // create a new file
 	if err != nil {

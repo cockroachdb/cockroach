@@ -885,9 +885,10 @@ func (l *loggingT) exit(err error) {
 type syncBuffer struct {
 	logger *loggingT
 	*bufio.Writer
-	file   *os.File
-	sev    Severity
-	nbytes uint64 // The number of bytes written to this file
+	file         *os.File
+	sev          Severity
+	lastRotation int64
+	nbytes       uint64 // The number of bytes written to this file
 }
 
 func (sb *syncBuffer) Sync() error {
@@ -919,7 +920,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}
 	}
 	var err error
-	sb.file, _, err = create(sb.sev, now)
+	sb.file, sb.lastRotation, _, err = create(sb.sev, now, sb.lastRotation)
 	sb.nbytes = 0
 	if err != nil {
 		return err
