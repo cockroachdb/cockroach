@@ -1914,6 +1914,8 @@ func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	return nil
 }
 
+// addPlaceholderLocked adds the specified placeholder. Requires that Store.mu
+// and Replica.raftMu are held.
 func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	rangeID := placeholder.Desc().RangeID
 	if exRng := s.mu.replicasByKey.ReplaceOrInsert(placeholder); exRng != nil {
@@ -1928,13 +1930,15 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 
 // removePlaceholder removes a placeholder for the specified range if it
 // exists, returning true if a placeholder was present and removed and false
-// otherwise.
+// otherwise. Requires that Replica.raftMu is held.
 func (s *Store) removePlaceholder(rngID roachpb.RangeID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.removePlaceholderLocked(rngID)
 }
 
+// addPlaceholderLocked adds the specified placeholder. Requires that Store.mu
+// and Replica.raftMu are held.
 func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 	placeholder, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
@@ -3242,9 +3246,14 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 			// replicasByKey map. While the replica will usually consume the
 			// placeholder itself, that isn't guaranteed and so this invocation
 			// here is crucial (i.e. don't remove it).
+			//
+			// We need to hold raftMu here to prevent removing a placeholder that is
+			// actively being used by Store.processRaftRequest.
+			r.raftMu.Lock()
 			if s.removePlaceholder(r.RangeID) {
 				atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
 			}
+			r.raftMu.Unlock()
 		}
 	}
 }

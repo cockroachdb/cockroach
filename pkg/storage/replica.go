@@ -2375,8 +2375,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		// handleRaftReady is called under the processRaftMu lock, so it is
-		// safe to lock the store here.
 		if err := func() error {
 			r.store.mu.Lock()
 			defer r.store.mu.Unlock()
