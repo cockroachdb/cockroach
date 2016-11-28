@@ -204,7 +204,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	case parser.TypeInterval:
 		d := duration.Duration{Nanos: r.Int63()}
 		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-	case parser.TypeIntArray, parser.TypeStringArray:
+	case parser.TypeIntArray, parser.TypeStringArray, parser.TypeAnyArray:
 		v = "NULL"
 	default:
 		switch typ.(type) {
