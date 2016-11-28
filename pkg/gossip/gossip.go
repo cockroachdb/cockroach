@@ -115,6 +115,10 @@ const (
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
 
+	// defaultGossipStoresInterval is the default interval for gossiping
+	// store descriptors.
+	defaultGossipStoresInterval = 60 * time.Second
+
 	unknownNodeID roachpb.NodeID = 0
 )
 
@@ -131,7 +135,7 @@ var (
 var (
 	// GossipStoresInterval is the interval for gossipping storage-related info.
 	GossipStoresInterval = envutil.EnvOrDefaultDuration("COCKROACH_GOSSIP_STORES_INTERVAL",
-		5*time.Second)
+		defaultGossipStoresInterval)
 )
 
 // Storage is an interface which allows the gossip instance

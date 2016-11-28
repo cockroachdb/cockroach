@@ -593,22 +593,6 @@ func (sp *StorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) 
 	}
 }
 
-// updateRemoteCapacityEstimate updates the StorePool's estimate of the given
-// remote store's capacity.
-func (sp *StorePool) updateRemoteCapacityEstimate(
-	toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity,
-) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-	// During tests, we might not have received a gossip update before trying to
-	// send a snapshot. In that case, desc could be nil here.
-	desc := sp.getStoreDetailLocked(toStoreID).desc
-	if desc != nil {
-		// TODO(jordan,bram): Consider updating the full capacity here.
-		desc.Capacity.RangeCount = capacity.RangeCount
-	}
-}
-
 // getNodeLocalities returns the localities for the provided replicas.
 // TODO(bram): consider storing a full list of all node to node diversity
 // scores for faster lookups.
