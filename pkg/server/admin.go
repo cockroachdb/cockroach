@@ -806,46 +806,17 @@ func (s *adminServer) SetUIData(
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
-		br := s.server.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
-		defer br.Close()
-		if err := s.checkQueryResults(br.ResultList, 1); err != nil {
+		query := "UPSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW())"
+		qargs := parser.NewPlaceholderInfo()
+		qargs.SetValue(`1`, parser.NewDString(key))
+		qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
+		r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
+		defer r.Close()
+		if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 			return nil, s.serverError(err)
 		}
-
-		// See if the key already exists.
-		resp, err := s.getUIData(session, s.getUser(req), []string{key})
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		_, alreadyExists := resp.KeyValues[key]
-
-		// INSERT or UPDATE as appropriate.
-		if alreadyExists {
-			query := "UPDATE system.ui SET value = $1, lastUpdated = NOW() WHERE key = $2; COMMIT;"
-			qargs := parser.NewPlaceholderInfo()
-			qargs.SetValue(`1`, parser.NewDString(string(val)))
-			qargs.SetValue(`2`, parser.NewDString(key))
-			r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
-			defer r.Close()
-			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
-				return nil, s.serverError(err)
-			}
-			if a, e := r.ResultList[0].RowsAffected, 1; a != e {
-				return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
-			}
-		} else {
-			query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW()); COMMIT;"
-			qargs := parser.NewPlaceholderInfo()
-			qargs.SetValue(`1`, parser.NewDString(key))
-			qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
-			r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
-			defer r.Close()
-			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
-				return nil, s.serverError(err)
-			}
-			if a, e := r.ResultList[0].RowsAffected, 1; a != e {
-				return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
-			}
+		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
+			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
 		}
 	}
 
