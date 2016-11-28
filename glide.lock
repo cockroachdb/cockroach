@@ -1,8 +1,10 @@
-hash: 978bc226e4f562c7d20e703f6780be01b79573e0c2863cb3ddcebb06a7c2ecab
-updated: 2016-11-24T00:23:37.560268231-05:00
+hash: 25cafe1ddc0e3a1c44003743074780c3bef5ec5dfad764e2085f103a16636f95
+updated: 2016-11-28T19:24:55.079179654Z
 imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
+- name: github.com/agtorre/gocolorize
+  version: f42b554bf7f006936130c9bb4f971afd2d87f671
 - name: github.com/Azure/go-ansiterm
   version: fa152c58bc15761d0200cb75fe958b89a9d4888e
   subpackages:
@@ -138,6 +140,8 @@ imports:
   - types
   - vanity
   - vanity/command
+- name: github.com/golang/glog
+  version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/lint
   version: 206c0f020eba0f7fbcfbc467a5eb808037df2ed6
   subpackages:
@@ -231,6 +235,8 @@ imports:
   subpackages:
   - ext
   - log
+- name: github.com/pborman/uuid
+  version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
 - name: github.com/petermattis/goid
   version: ba001f8780f3bf978180f390ad7b5bac39fbf70a
 - name: github.com/pkg/errors
