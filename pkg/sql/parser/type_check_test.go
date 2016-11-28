@@ -72,6 +72,8 @@ func TestTypeCheck(t *testing.T) {
 		`1 BETWEEN 2 AND 3`,
 		`COUNT(3)`,
 		`ARRAY['a', 'b', 'c']`,
+		`ARRAY[1.5, 2.5, 3.5]`,
+		`ARRAY[NULL]`,
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d)
@@ -120,8 +122,6 @@ func TestTypeCheckError(t *testing.T) {
 		{`NULLIF(1, '5')`, `incompatible NULLIF expressions: expected 1 to be of type string, found type int`},
 		{`COALESCE(1, 2, 3, 4, '5')`, `incompatible COALESCE expressions: expected 1 to be of type string, found type int`},
 		{`ARRAY[]`, `cannot determine type of empty array`},
-		{`ARRAY[1.5, 2.5, 3.5]`, `unhandled parameterized array type parser.tDecimal`},
-		{`ARRAY[NULL]`, `unhandled parameterized array type parser.tNull`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)

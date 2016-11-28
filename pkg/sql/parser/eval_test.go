@@ -393,6 +393,13 @@ func TestEval(t *testing.T) {
 		{`length('hel'||'lo')`, `5`},
 		{`lower('HELLO')`, `'hello'`},
 		{`UPPER('hello')`, `'HELLO'`},
+		// Array constructors.
+		// TODO(nathan) Test empty array literals when they become supported.
+		// {`ARRAY[]:::int[]`, `{}`},
+		{`ARRAY[NULL]`, `{NULL}`},
+		{`ARRAY[1, 2, 3]`, `{1,2,3}`},
+		{`ARRAY['a', 'b', 'c']`, `{'a','b','c'}`},
+		{`ARRAY[ARRAY[1, 2], ARRAY[2, 3]]`, `{{1,2},{2,3}}`},
 		// Cast expressions.
 		{`true::boolean`, `true`},
 		{`true::int`, `1`},

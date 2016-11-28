@@ -49,7 +49,7 @@ SELECT ARRAY(SELECT 1, 2)
 
 # decimal arrays are unsupported
 
-query error unhandled parameterized array type parser.tDecimal
+query error unsupported result type: decimal\[\]
 SELECT ARRAY[1.2]
 
 query error unhandled parameterized array type parser.tDecimal
