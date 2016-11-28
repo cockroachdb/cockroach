@@ -88,6 +88,10 @@ const (
 	// for a replica.
 	replicaRequestQueueSize = 100
 
+	// defaultGossipWhenCapacityDeltaExceedsFraction indicates the default
+	// value for StoreConfig.GossipWhenCapacityDeltaExceedsFraction.
+	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
+
 	defaultStoreMutexWarnThreshold = 100 * time.Millisecond
 )
 
@@ -362,6 +366,12 @@ type Store struct {
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
 
+	// gossipCapacityCountdown is a countdown of changes to range and
+	// leaseholder counts required before re-gossiping the store
+	// descriptor (earlier than the normal periodic gossip interval).
+	// Updated atomically.
+	gossipCapacityCountdown int32
+
 	coalescedMu struct {
 		syncutil.Mutex
 		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
@@ -625,6 +635,11 @@ type StoreConfig struct {
 
 	// EnableCoalescedHeartbeats controls whether heartbeats are coalesced.
 	EnableCoalescedHeartbeats bool
+
+	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
+	// gossiped store capacity values which need be exceeded before the store will
+	// gossip immediately without waiting for the periodic gossip interval.
+	GossipWhenCapacityDeltaExceedsFraction float64
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -760,6 +775,10 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 
 	sc.AllocatorOptions.UseRuleSolver = enableRuleSolver
+
+	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
+		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
+	}
 }
 
 // NewStore returns a new instance of a store.
@@ -1339,6 +1358,15 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
+
+	// Set countdown target for re-gossiping capacity earlier than
+	// the usual periodic interval.
+	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	// Store the minimum value of the two, with overall minimum value 1.
+	atomic.StoreInt32(&s.gossipCapacityCountdown,
+		int32(math.Ceil(math.Max(math.Min(rangeCountdown, leaseCountdown), 1))))
+
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
@@ -1372,6 +1400,22 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	}
 	s.idleReplicaElectionTime.Unlock()
 	return nil
+}
+
+// maybeGossipOnCapacityChange decrements the countdown on range
+// and leaseholder counts. If it reaches 0, then we trigger an
+// immediate gossip of this store's descriptor, to include updated
+// capacity information.
+func (s *Store) maybeGossipOnCapacityChange() {
+	if atomic.AddInt32(&s.gossipCapacityCountdown, -1) != 0 {
+		return
+	}
+	go func() {
+		ctx := s.AnnotateCtx(context.Background())
+		if err := s.GossipStore(ctx); err != nil {
+			log.Warningf(ctx, "error gossiping on capacity change: %s", err)
+		}
+	}()
 }
 
 func (s *Store) canCampaignIdleReplica() bool {
@@ -1965,6 +2009,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
 	s.mu.replicas[repl.RangeID] = repl
+	s.maybeGossipOnCapacityChange()
 	return nil
 }
 
@@ -2057,6 +2102,7 @@ func (s *Store) removeReplicaImpl(
 		log.Fatalf(ctx, "unexpectedly overlapped by %v", placeholder)
 	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
+	s.maybeGossipOnCapacityChange()
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
 	return nil
@@ -2157,6 +2203,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}
 	capacity.RangeCount = int32(s.ReplicaCount())
 	capacity.LeaseCount = int32(s.LeaseCount())
+
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
@@ -2172,7 +2219,7 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	// Similar to in the storeReplicaVisitor, make a copy of the current
 	// replicas to iterate over so we don't have to hold the store lock during
 	// processing.
-	// TODO(bram): does this need to visit all the stores? Could we just use the
+	// TODO(bram): does this need to visit all the replicas? Could we just use the
 	// store pool to locate any dead replicas on this store directly?
 	s.mu.Lock()
 	replicas := make([]*Replica, 0, len(s.mu.replicas))
@@ -2542,21 +2589,12 @@ func (s *Store) maybeUpdateTransaction(
 func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
-	var capacity *roachpb.StoreCapacity
-
 	sendSnapError := func(err error) error {
 		return stream.Send(&SnapshotResponse{
-			Status:        SnapshotResponse_ERROR,
-			Message:       err.Error(),
-			StoreCapacity: capacity,
+			Status:  SnapshotResponse_ERROR,
+			Message: err.Error(),
 		})
 	}
-
-	tmpCap, err := s.Capacity()
-	if err != nil {
-		return sendSnapError(err)
-	}
-	capacity = &tmpCap
 
 	ctx := s.AnnotateCtx(stream.Context())
 
@@ -2572,8 +2610,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 		})
 		if !resp.Reserved {
 			return stream.Send(&SnapshotResponse{
-				Status:        SnapshotResponse_DECLINED,
-				StoreCapacity: capacity,
+				Status: SnapshotResponse_DECLINED,
 			})
 		}
 		defer s.bookie.Fill(ctx, header.RangeDescriptor.RangeID)
@@ -2584,14 +2621,14 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	_, err = s.canApplySnapshot(ctx, &header.RangeDescriptor)
+	_, err := s.canApplySnapshot(ctx, &header.RangeDescriptor)
 	if err != nil {
 		return sendSnapError(
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.RangeDescriptor.RangeID),
 		)
 	}
 
-	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED, StoreCapacity: capacity}); err != nil {
+	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
 		return err
 	}
 
@@ -2628,7 +2665,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
-			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED, StoreCapacity: capacity})
+			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
 		}
 	}
 }
@@ -3039,7 +3076,6 @@ type OutgoingSnapshotStream interface {
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
 type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
-	updateRemoteCapacityEstimate(toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity)
 }
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
@@ -3060,9 +3096,6 @@ func sendSnapshot(
 	if err != nil {
 		storePool.throttle(throttleFailed, storeID)
 		return err
-	}
-	if resp.StoreCapacity != nil {
-		storePool.updateRemoteCapacityEstimate(storeID, *resp.StoreCapacity)
 	}
 	switch resp.Status {
 	case SnapshotResponse_DECLINED:

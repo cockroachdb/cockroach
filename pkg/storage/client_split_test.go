@@ -1727,3 +1727,77 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 		return nil
 	})
 }
+
+// TestStoreRangeGossipOnSplits verifies that the store descriptor
+// is gossiped on splits up until the point where an additional
+// split range doesn't exceed GossipWhenCapacityDeltaExceedsFraction.
+func TestStoreRangeGossipOnSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.GossipWhenCapacityDeltaExceedsFraction = 0.5 // 50% for testing
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	storeKey := gossip.MakeStoreKey(store.StoreID())
+	defer stopper.Stop()
+
+	// Avoid excessive logging on under-replicated ranges due to our many splits.
+	config.TestingSetupZoneConfigHook(stopper)
+	config.TestingSetZoneConfig(0, config.ZoneConfig{NumReplicas: 1})
+
+	<-store.Gossip().Connected
+
+	rangeCountCh := make(chan int32, 20)
+	unregister := store.Gossip().RegisterCallback(storeKey, func(_ string, val roachpb.Value) {
+		var sd roachpb.StoreDescriptor
+		if err := val.GetProto(&sd); err != nil {
+			panic(err)
+		}
+		// Wait for lease count to equal range count, as they're incremented in lockstep.
+		if sd.Capacity.LeaseCount != sd.Capacity.RangeCount {
+			return
+		}
+		rangeCountCh <- sd.Capacity.RangeCount
+	})
+	defer unregister()
+
+	splitFunc := func(i int) {
+		splitKey := roachpb.Key(fmt.Sprintf("%02d", i))
+		args := adminSplitArgs(splitKey, splitKey)
+		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
+			RangeID: store.LookupReplica(roachpb.RKey(splitKey), nil).RangeID,
+		}, &args); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Split 10 times; verify range count is gossiped.
+	for i := 0; i < 10; i++ {
+		splitFunc(i)
+	}
+	util.SucceedsSoon(t, func() error {
+		if err := store.GossipStore(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if rangeCount := <-rangeCountCh; rangeCount != 11 {
+			return errors.Errorf("expected 11 ranges; got %d", rangeCount)
+		}
+		return nil
+	})
+
+	// Now, since we require 50% of range/lease count to re-gossip, verify
+	// that with 3 more splits, we gossip just once (it's 3 splits, not 5,
+	// because a new lease and a new range both count towards the total
+	// capacity changes).
+	for i := 10; i < 13; i++ {
+		splitFunc(i)
+	}
+
+	if rangeCount := <-rangeCountCh; rangeCount != 14 {
+		t.Errorf("expected 14 ranges; got %d", rangeCount)
+	}
+	select {
+	case <-rangeCountCh:
+		t.Errorf("expected no further gossip")
+	default:
+	}
+}
