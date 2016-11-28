@@ -227,7 +227,7 @@ func TestStopperQuiesce(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Errorf("timed out waiting for stop")
 	}
 }
