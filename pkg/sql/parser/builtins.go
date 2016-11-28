@@ -104,7 +104,13 @@ type Builtin struct {
 	// e.g.: random(), clock_timestamp(). Some functions like now()
 	// return the same value in the same statement, but different values
 	// in separate statements, and should not be marked as impure.
-	impure         bool
+	impure bool
+
+	// Set to true when a function depends on data stored in the EvalContext, e.g.
+	// statement_timestamp. Currently used for DistSQL to determine if expressions
+	// can be evaluated on a different node without sending over the EvalContext.
+	ctxDependent bool
+
 	class          FunctionClass
 	category, Info string
 
@@ -161,6 +167,12 @@ func (b Builtin) Class() FunctionClass {
 // Impure returns false if this builtin is a pure function of its inputs.
 func (b Builtin) Impure() bool {
 	return b.impure
+}
+
+// ContextDependent returns true if this builtin depends on data stored in the
+// EvalContext.
+func (b Builtin) ContextDependent() bool {
+	return b.ctxDependent
 }
 
 // Signature returns a human-readable signature.
@@ -759,8 +771,9 @@ var Builtins = map[string][]Builtin{
 
 	"age": {
 		Builtin{
-			Types:      ArgTypes{TypeTimestampTZ},
-			ReturnType: TypeInterval,
+			Types:        ArgTypes{TypeTimestampTZ},
+			ReturnType:   TypeInterval,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
@@ -776,8 +789,9 @@ var Builtins = map[string][]Builtin{
 
 	"current_date": {
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeDate,
+			Types:        ArgTypes{},
+			ReturnType:   TypeDate,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
 				return NewDDateFromTime(t, ctx.GetLocation()), nil
@@ -795,14 +809,16 @@ var Builtins = map[string][]Builtin{
 			ReturnType:        TypeTimestampTZ,
 			preferredOverload: true,
 			impure:            true,
+			ctxDependent:      true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 		},
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeTimestamp,
-			impure:     true,
+			Types:        ArgTypes{},
+			ReturnType:   TypeTimestamp,
+			impure:       true,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
@@ -811,10 +827,11 @@ var Builtins = map[string][]Builtin{
 
 	"cluster_logical_timestamp": {
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeDecimal,
-			category:   categorySystemInfo,
-			impure:     true,
+			Types:        ArgTypes{},
+			ReturnType:   TypeDecimal,
+			category:     categorySystemInfo,
+			impure:       true,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
@@ -1298,9 +1315,10 @@ var Builtins = map[string][]Builtin{
 	// parameter is true, the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:      ArgTypes{TypeBool},
-			ReturnType: TypeStringArray,
-			category:   categorySystemInfo,
+			Types:        ArgTypes{TypeBool},
+			ReturnType:   TypeStringArray,
+			category:     categorySystemInfo,
+			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				schemas := NewDArray(TypeString)
 				showImplicitSchemas := args[0].(*DBool)
@@ -1497,14 +1515,16 @@ var txnTSImpl = []Builtin{
 		ReturnType:        TypeTimestampTZ,
 		preferredOverload: true,
 		impure:            true,
+		ctxDependent:      true,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 			return ctx.GetTxnTimestamp(time.Microsecond), nil
 		},
 	},
 	{
-		Types:      ArgTypes{},
-		ReturnType: TypeTimestamp,
-		impure:     true,
+		Types:        ArgTypes{},
+		ReturnType:   TypeTimestamp,
+		impure:       true,
+		ctxDependent: true,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
 		},
