@@ -190,9 +190,6 @@ func TestRocksDBOpenWithVersions(t *testing.T) {
 
 	for i, testCase := range testCases {
 		err := openRocksDBWithVersion(t, testCase.hasFile, testCase.ver)
-		if err == nil && len(testCase.expectedErr) == 0 {
-			continue
-		}
 		if !testutils.IsError(err, testCase.expectedErr) {
 			t.Errorf("%d: expected error '%s', actual '%v'", i, testCase.expectedErr, err)
 		}

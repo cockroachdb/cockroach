@@ -25,10 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
-// IsError returns true if err is non-nil and the error string matches the
-// supplied regexp.
+// IsError returns true if the error string matches the supplied regex.
+// An empty regex is interpreted to mean that a nil error is expected.
 func IsError(err error, re string) bool {
-	if err == nil {
+	if err == nil && re == "" {
+		return true
+	}
+	if err == nil || re == "" {
 		return false
 	}
 	matched, merr := regexp.MatchString(re, err.Error())
@@ -38,10 +41,13 @@ func IsError(err error, re string) bool {
 	return matched
 }
 
-// IsPError returns true if pErr is non-nil and the error message matches the
-// supplied regexp.
+// IsPError returns true if pErr's message matches the supplied regex.
+// An empty regex is interpreted to mean that a nil error is expected.
 func IsPError(pErr *roachpb.Error, re string) bool {
-	if pErr == nil {
+	if pErr == nil && re == "" {
+		return true
+	}
+	if pErr == nil || re == "" {
 		return false
 	}
 	matched, merr := regexp.MatchString(re, pErr.Message)
