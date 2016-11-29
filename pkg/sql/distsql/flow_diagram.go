@@ -121,6 +121,8 @@ func (is *InputSyncSpec) summary() (string, []string) {
 
 func (r *OutputRouterSpec) summary() (string, []string) {
 	switch r.Type {
+	case OutputRouterSpec_PASS_THROUGH:
+		return "", []string{}
 	case OutputRouterSpec_MIRROR:
 		return "mirror", []string{}
 	case OutputRouterSpec_BY_HASH:

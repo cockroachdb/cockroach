@@ -122,7 +122,7 @@ func TestClusterFlow(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr1},
 			Output: []OutputRouterSpec{{
-				Type: OutputRouterSpec_MIRROR,
+				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
 					{Type: StreamEndpointSpec_REMOTE, StreamID: 0, TargetAddr: tc.Server(2).ServingAddr()},
 				},
@@ -136,7 +136,7 @@ func TestClusterFlow(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr2},
 			Output: []OutputRouterSpec{{
-				Type: OutputRouterSpec_MIRROR,
+				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
 					{Type: StreamEndpointSpec_REMOTE, StreamID: 1, TargetAddr: tc.Server(2).ServingAddr()},
 				},
@@ -151,7 +151,7 @@ func TestClusterFlow(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr3},
 				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_MIRROR,
+					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
 						{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
 					},
@@ -169,7 +169,7 @@ func TestClusterFlow(t *testing.T) {
 				}},
 				Core: ProcessorCoreUnion{JoinReader: &jr},
 				Output: []OutputRouterSpec{{
-					Type:    OutputRouterSpec_MIRROR,
+					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
 				}},
 			},
