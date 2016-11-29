@@ -1376,21 +1376,7 @@ var Builtins = map[string][]Builtin{
 		// TODO(knz): This is a proof-of-concept until TypeAny works
 		// properly.
 		Builtin{
-			Types:      ArgTypes{TypeInt},
-			ReturnType: TypeString,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return NewDString(args[0].ResolvedType().String()), nil
-			},
-		},
-		Builtin{
-			Types:      ArgTypes{TypeDecimal},
-			ReturnType: TypeString,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return NewDString(args[0].ResolvedType().String()), nil
-			},
-		},
-		Builtin{
-			Types:      ArgTypes{TypeString},
+			Types:      ArgTypes{TypeAny},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(args[0].ResolvedType().String()), nil
