@@ -77,8 +77,8 @@
  */
 
 import "nvd3/build/nv.d3.min.css!";
-import "build/app.css!";
 import "react-select/dist/react-select.css!";
+import "build/app.css!";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";

@@ -78,6 +78,13 @@ class AxisDomain {
   min: number = Infinity;
   max: number = -Infinity;
   stackedSum: { [key: number]: number } = {};
+  tickCount: number;
+  maxMinTicks: boolean;
+
+  constructor(tickCount: number = 3, maxMinTicks: boolean = true) {
+    this.tickCount = tickCount;
+    this.maxMinTicks = maxMinTicks;
+  }
 
   // domain returns the current min and max as an array.
   domain(): [number, number] {
@@ -104,7 +111,18 @@ class AxisDomain {
 
   // ticks computes 3 tick values for a graph given the current max/min.
   ticks(transform: (n: number) => any = _.identity): number[] {
-    return _.map(_.uniq([this.min, (this.min + this.max) / 2, this.max]), transform);
+    let increment = (this.max - this.min) / (this.tickCount + 1);
+    let tix: number[] = [];
+    if (this.maxMinTicks) {
+      tix.push(this.min);
+    }
+    for (let i = 0; i < this.tickCount; i++) {
+      tix.push(this.min + increment * (i + 1));
+    }
+    if (this.maxMinTicks) {
+      tix.push(this.max);
+    }
+    return _.map(_.uniq(tix), transform);
   }
 }
 
@@ -137,8 +155,8 @@ export function ProcessDataPoints(metrics: React.ReactElement<MetricProps>[],
                                   axis: React.ReactElement<AxisProps>,
                                   data: TSResponseMessage,
                                   stacked = false) {
-  let yAxisDomain = new AxisDomain();
-  let xAxisDomain = new AxisDomain();
+  let yAxisDomain = new AxisDomain(3);
+  let xAxisDomain = new AxisDomain(10, false);
 
   let formattedData: any[] = [];
 

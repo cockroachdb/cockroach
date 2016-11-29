@@ -20,7 +20,7 @@ export default function (props: { groupId: string, hide: boolean, childClassName
       if ((child as React.ReactElement<any>).type === "h2") {
         return <div>{ child }</div>;
       }
-      return <div style={{float:"left"}} key={key} className={ props.childClassName || "" }>
+      return <div key={key} className={ props.childClassName || "" }>
         <MetricsDataProvider id={key}>
           { child }
         </MetricsDataProvider>
