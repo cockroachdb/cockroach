@@ -87,6 +87,10 @@ var (
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
+	// TypePGOID is a pseudo-type representing a postgres-style OID type.  It's
+	// a special case cast target and can't be used as a normal type. See
+	// PGOIDType in expr.go.
+	TypePGOID Type = tInt{}
 	// TypeStringArray is the type family of a DArray containing strings. Can be
 	// compared with ==.
 	TypeStringArray Type = tArray{TypeString}
