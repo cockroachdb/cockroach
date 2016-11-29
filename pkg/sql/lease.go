@@ -153,7 +153,7 @@ func (s LeaseStore) Acquire(
 	defer finishInternalPlanner(p)
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
-	values, err := p.queryRow(getDescriptor, int(tableID))
+	values, err := p.QueryRow(getDescriptor, int(tableID))
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +399,7 @@ func (s LeaseStore) countLeases(
 		defer finishInternalPlanner(p)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
-		values, err := p.queryRow(countLeases, descID, int(version), expiration)
+		values, err := p.QueryRow(countLeases, descID, int(version), expiration)
 		if err != nil {
 			return err
 		}
