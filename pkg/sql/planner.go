@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -297,7 +296,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	return p.makePlan(stmt, false)
 }
 
-// queryRow implements the queryRunner interface.
+// QueryRow implements the parser.EvalPlanner interface.
 func (p *planner) QueryRow(sql string, args ...interface{}) (parser.DTuple, error) {
 	rows, err := p.queryRows(sql, args...)
 	if err != nil {
@@ -309,7 +308,7 @@ func (p *planner) QueryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	case 1:
 		return rows[0], nil
 	default:
-		return nil, errors.Errorf("%s: unexpected multiple results", sql)
+		return nil, &parser.MultipleResultsError{SQL: sql}
 	}
 }
 
