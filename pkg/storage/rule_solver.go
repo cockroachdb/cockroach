@@ -26,16 +26,35 @@ import (
 // candidate store for allocation.
 type candidate struct {
 	store      roachpb.StoreDescriptor
+	valid      bool
 	constraint float64 // Score used to pick the top candidates.
 	balance    float64 // Score used to choose between top candidates.
 }
 
 // less first compares constraint scores, then balance scores.
 func (c candidate) less(o candidate) bool {
+	if !o.valid {
+		return false
+	}
+	if !c.valid {
+		return true
+	}
 	if c.constraint != o.constraint {
 		return c.constraint < o.constraint
 	}
 	return c.balance < o.balance
+}
+
+type candidateList []candidate
+
+// onlyValid returns all the elements in a sorted candidate list that are valid.
+func (cl candidateList) onlyValid() candidateList {
+	for i := len(cl) - 1; i >= 0; i-- {
+		if cl[i].valid {
+			return cl[:i+1]
+		}
+	}
+	return candidateList{}
 }
 
 // solveState is used to pass solution state information into a rule.
@@ -71,14 +90,14 @@ var removeRuleSolver = ruleSolver{
 }
 
 // Solve runs the rules against the stores in the store list and returns all
-// passing stores and their scores ordered from best to worst score.
+// candidate stores and their scores ordered from best to worst score.
 func (rs ruleSolver) Solve(
 	sl StoreList,
 	c config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
-) ([]candidate, error) {
-	candidates := make([]candidate, 0, len(sl.stores))
+) candidateList {
+	candidates := make(candidateList, len(sl.stores), len(sl.stores))
 	state := solveState{
 		constraints:            c,
 		sl:                     sl,
@@ -86,34 +105,34 @@ func (rs ruleSolver) Solve(
 		existingNodeLocalities: existingNodeLocalities,
 	}
 
-	for _, store := range sl.stores {
-		if cand, ok := rs.computeCandidate(store, state); ok {
-			candidates = append(candidates, cand)
-		}
+	for i, store := range sl.stores {
+		candidates[i] = rs.computeCandidate(store, state)
 	}
 	sort.Sort(sort.Reverse(byScore(candidates)))
-	return candidates, nil
+	return candidates
 }
 
 // computeCandidate runs the rules against a candidate store using the provided
 // state and returns each candidate's score and if the candidate is valid.
-func (rs ruleSolver) computeCandidate(
-	store roachpb.StoreDescriptor, state solveState,
-) (candidate, bool) {
+func (rs ruleSolver) computeCandidate(store roachpb.StoreDescriptor, state solveState) candidate {
 	var totalConstraintScore, totalBalanceScore float64
 	for _, rule := range rs {
 		valid, constraintScore, balanceScore := rule(store, state)
 		if !valid {
-			return candidate{}, false
+			return candidate{
+				store: store,
+				valid: false,
+			}
 		}
 		totalConstraintScore += constraintScore
 		totalBalanceScore += balanceScore
 	}
 	return candidate{
 		store:      store,
+		valid:      true,
 		constraint: totalConstraintScore,
 		balance:    totalBalanceScore,
-	}, true
+	}
 }
 
 // ruleReplicasUniqueNodes returns true iff no existing replica is present on
@@ -201,7 +220,7 @@ func ruleCapacity(store roachpb.StoreDescriptor, state solveState) (bool, float6
 }
 
 // byScore implements sort.Interface to sort by scores.
-type byScore []candidate
+type byScore candidateList
 
 var _ sort.Interface = byScore(nil)
 

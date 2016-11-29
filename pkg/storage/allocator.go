@@ -220,16 +220,13 @@ func (a *Allocator) AllocateTarget(
 			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
-		candidates, err := allocateRuleSolver.Solve(
+		candidates := allocateRuleSolver.Solve(
 			sl,
 			constraints,
 			existing,
 			a.storePool.getNodeLocalities(existing),
 		)
-		if err != nil {
-			return nil, err
-		}
-
+		candidates = candidates.onlyValid()
 		if len(candidates) == 0 {
 			return nil, &allocatorError{
 				required: constraints.Constraints,
@@ -289,51 +286,6 @@ func (a Allocator) RemoveTarget(
 		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
 
-	if a.options.UseRuleSolver {
-		// TODO(bram): #10275 Is this getStoreList call required? Compute candidate
-		// requires a store list, but we should be able to create one using only
-		// the stores that belong to the range.
-		// Use an invalid range ID as we don't care about a corrupt replicas since
-		// as we are removing a replica and not trying to add one.
-		sl, _, _ := a.storePool.getStoreList(roachpb.RangeID(0))
-
-		worstCandidate := candidate{constraint: math.Inf(0)}
-		var worstReplica roachpb.ReplicaDescriptor
-		for _, exist := range existing {
-			if exist.StoreID == leaseStoreID {
-				continue
-			}
-			desc, ok := a.storePool.getStoreDescriptor(exist.StoreID)
-			if !ok {
-				continue
-			}
-
-			currentCandidate, valid := removeRuleSolver.computeCandidate(desc, solveState{
-				constraints:            constraints,
-				sl:                     sl,
-				existing:               nil,
-				existingNodeLocalities: a.storePool.getNodeLocalities(existing),
-			})
-			// When a candidate is not valid, it means that it can be
-			// considered the worst existing replica.
-			if !valid {
-				return exist, nil
-			}
-
-			if currentCandidate.less(worstCandidate) {
-				worstCandidate = currentCandidate
-				worstReplica = exist
-			}
-
-		}
-
-		if !math.IsInf(worstCandidate.constraint, 0) {
-			return worstReplica, nil
-		}
-
-		return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
-	}
-
 	// Retrieve store descriptors for the provided replicas from the StorePool.
 	descriptors := make([]roachpb.StoreDescriptor, 0, len(existing))
 	for _, exist := range existing {
@@ -344,15 +296,37 @@ func (a Allocator) RemoveTarget(
 			descriptors = append(descriptors, desc)
 		}
 	}
-
 	sl := makeStoreList(descriptors)
-	if bad := a.selectBad(sl); bad != nil {
+	var badStoreID roachpb.StoreID
+
+	if a.options.UseRuleSolver {
+		candidates := removeRuleSolver.Solve(
+			sl,
+			constraints,
+			existing,
+			a.storePool.getNodeLocalities(existing),
+		)
+
+		if len(candidates) != 0 {
+			// TODO(bram): There needs some randomness here and the logic from
+			// selectBad around rebalanceFromConvergesOnMean.
+			badStoreID = candidates[len(candidates)-1].store.StoreID
+		}
+	} else {
+		bad := a.selectBad(sl)
+		if bad != nil {
+			badStoreID = bad.StoreID
+		}
+	}
+
+	if badStoreID != 0 {
 		for _, exist := range existing {
-			if exist.StoreID == bad.StoreID {
+			if exist.StoreID == badStoreID {
 				return exist, nil
 			}
 		}
 	}
+
 	return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
 }
 
@@ -429,14 +403,8 @@ func (a Allocator) RebalanceTarget(
 		existingStoreList := makeStoreList(existingDescs)
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		existingCandidates, err := removeRuleSolver.Solve(existingStoreList, constraints, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		candidates, err := allocateRuleSolver.Solve(candidateStoreList, constraints, nil, nil)
-		if err != nil {
-			return nil, err
-		}
+		existingCandidates := removeRuleSolver.Solve(existingStoreList, constraints, nil, nil)
+		candidates := allocateRuleSolver.Solve(candidateStoreList, constraints, nil, nil)
 
 		// Find all candidates that are better than the worst existing store.
 		var worstCandidate candidate
