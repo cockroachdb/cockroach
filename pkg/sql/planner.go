@@ -428,3 +428,17 @@ func (p *planner) fillFKTableMap(m tableLookupsByID) error {
 	}
 	return nil
 }
+
+// isDatabaseVisible returns true if the given database is visible to the
+// current user. Only the current database and system databases are available
+// to ordinary users; everything is available to root.
+func (p *planner) isDatabaseVisible(dbName string) bool {
+	if p.session.User == security.RootUser {
+		return true
+	} else if dbName == p.evalCtx.Database {
+		return true
+	} else if isSystemDatabaseName(dbName) {
+		return true
+	}
+	return false
+}

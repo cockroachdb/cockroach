@@ -40,7 +40,6 @@ var (
 )
 
 const (
-	pgCatalogName          = "pg_catalog"
 	cockroachIndexEncoding = "prefix"
 )
 
