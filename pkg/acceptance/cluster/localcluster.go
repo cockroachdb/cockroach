@@ -826,13 +826,19 @@ func (l *LocalCluster) NumNodes() int {
 
 // Kill kills the i-th node.
 func (l *LocalCluster) Kill(i int) error {
-	return l.Nodes[i].Kill()
+	if err := l.Nodes[i].Kill(); err != nil {
+		return errors.Wrapf(err, "failed to kill node %d", i)
+	}
+	return nil
 }
 
 // Restart restarts the given node. If the node isn't running, this starts it.
 func (l *LocalCluster) Restart(i int) error {
 	// The default timeout is 10 seconds.
-	return l.Nodes[i].Restart(nil)
+	if err := l.Nodes[i].Restart(nil); err != nil {
+		return errors.Wrapf(err, "failed to restart node %d", i)
+	}
+	return nil
 }
 
 // URL returns the base url.
