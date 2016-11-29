@@ -133,9 +133,7 @@ query ITT
 EXPLAIN SHOW TABLES
 ----
 0  virtual table  SHOW TABLES FROM test
-1  sort           +TABLE_NAME
-2  virtual table  information_schema.tables
-3  values         5 columns, 36 rows
+1  values         1 column, 1 row
 
 query ITT
 EXPLAIN SHOW DATABASE
