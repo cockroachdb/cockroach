@@ -418,6 +418,21 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		})
 	}
 
+	// Ensure that all nodes are serving SQL by making sure a simple
+	// read-only query succeeds.
+	for i := 0; i < c.NumNodes(); i++ {
+		util.SucceedsSoon(t, func() error {
+			db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
+			if err != nil {
+				return err
+			}
+			if _, err := db.Exec("SHOW DATABASES;"); err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+
 	completed = true
 	return c
 }
