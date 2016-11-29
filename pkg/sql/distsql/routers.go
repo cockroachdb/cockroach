@@ -28,19 +28,24 @@ import (
 )
 
 func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (RowReceiver, error) {
-	switch len(streams) {
-	case 0:
+	if len(streams) == 0 {
 		return nil, errors.Errorf("no streams in router")
-	case 1:
-		// Special passthrough case - no router.
-		return streams[0], nil
 	}
 
 	switch spec.Type {
+	case OutputRouterSpec_PASS_THROUGH:
+		if len(streams) != 1 {
+			return nil, errors.Errorf("expected one stream for passthrough router")
+		}
+		// No router.
+		return streams[0], nil
+
 	case OutputRouterSpec_BY_HASH:
 		return makeHashRouter(spec.HashColumns, streams)
+
 	case OutputRouterSpec_MIRROR:
 		return makeMirrorRouter(streams)
+
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
 	}
@@ -69,12 +74,18 @@ var _ RowReceiver = &mirrorRouter{}
 var crc32Table = crc32.MakeTable(crc32.Castagnoli)
 
 func makeMirrorRouter(streams []RowReceiver) (*mirrorRouter, error) {
+	if len(streams) < 2 {
+		return nil, errors.Errorf("need at least two streams for mirror router")
+	}
 	return &mirrorRouter{
 		routerBase: routerBase{streams: streams},
 	}, nil
 }
 
 func makeHashRouter(hashCols []uint32, streams []RowReceiver) (*hashRouter, error) {
+	if len(streams) < 2 {
+		return nil, errors.Errorf("need at least two streams for hash router")
+	}
 	if len(hashCols) == 0 {
 		return nil, errors.Errorf("no hash columns for BY_HASH router")
 	}
