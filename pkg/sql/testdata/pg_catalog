@@ -907,3 +907,88 @@ WHERE n.nspname = 'public'
 ----
 2737381215  t1  12
 2989572986  t3  'FOO'
+
+# Verify that a set database shows tables from that database for a non-root
+# user, when that user has permissions.
+
+statement ok
+GRANT ALL ON constraint_db.* TO testuser
+
+user testuser
+
+statement ok
+SET DATABASE = 'constraint_db'
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='constraint_db';
+----
+3
+
+# Verify that an unset database shows only system tables in pg_catalog for a
+# non-root user.
+
+statement ok
+SET DATABASE = ''
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='constraint_db';
+----
+0
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='constraint_db';
+----
+0
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE nspname='public'
+----
+0
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'public'
+----
+0
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_depend
+----
+0
+
+# Verify that an unset database shows everything in pg_catalog for the root
+# user.
+
+user root
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='constraint_db';
+----
+3
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='constraint_db';
+----
+1
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE nspname='public'
+----
+11
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
+WHERE n.nspname = 'public'
+----
+8
+
+query I
+SELECT COUNT(*) FROM pg_catalog.pg_depend
+----
+2

@@ -173,6 +173,12 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 					}
 				}
 			}
+			// Temporarily set the current database to get visibility into
+			// information_schema if the current user isn't root.
+			origDatabase := p.evalCtx.Database
+			p.evalCtx.Database = tn.Database()
+			defer func() { p.evalCtx.Database = origDatabase }()
+
 			// Get columns of table from information_schema.columns.
 			rows, err := p.queryRows(getColumns, tn.Database(), tn.Table())
 			if err != nil {
@@ -768,16 +774,28 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 					return nil, sqlbase.NewUndefinedDatabaseError(name)
 				}
 			}
+			// Temporarily set the current database to get visibility into
+			// information_schema if the current user isn't root.
+			origDatabase := p.evalCtx.Database
+			p.evalCtx.Database = name
+			defer func() { p.evalCtx.Database = origDatabase }()
 
 			// Get the tables of database from information_schema.tables.
 			const getTables = `SELECT TABLE_NAME FROM information_schema.tables
 							WHERE tables.TABLE_SCHEMA=$1 ORDER BY tables.TABLE_NAME`
-			stmt, err := parser.ParseOneTraditional(getTables)
+			rows, err := p.queryRows(getTables, name)
 			if err != nil {
 				return nil, err
 			}
-			golangFillQueryArguments(p.semaCtx.Placeholders, []interface{}{name})
-			return p.newPlan(stmt, nil, false)
+
+			v := p.newContainerValuesNode(columns, 0)
+			for _, r := range rows {
+				if _, err := v.rows.AddRow(r); err != nil {
+					v.rows.Close()
+					return nil, err
+				}
+			}
+			return v, nil
 		},
 	}, nil
 }

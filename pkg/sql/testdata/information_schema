@@ -500,6 +500,9 @@ GRANT SELECT ON other_db.xyz TO testuser
 
 user testuser
 
+statement ok
+SET DATABASE=other_db
+
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
@@ -635,6 +638,7 @@ def                 constraint_column  fk               def            constrain
 def                 constraint_column  fk               def            constraint_column  t3          b            2                 2
 def                 constraint_column  primary          def            constraint_column  t3          rowid        1                 NULL
 
+# TODO(nvanbenschoten) blocked on #8497.
 #statement ok
 #DROP DATABASE constraint_column
 
@@ -670,6 +674,8 @@ root      def            system             SELECT          NULL
 root      def            test               ALL             NULL
 
 ## information_schema.table_privileges
+
+# root can see everything
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges
 ----
@@ -727,6 +733,24 @@ NULL     root      def            other_db      xyz         ALL             NULL
 NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
 NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
 
+# testuser can read permissions as well
+user testuser
+
+statement ok
+SET DATABASE=other_db
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
+----
+GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root      def            other_db      abc         ALL             NULL          NULL
+NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     root      def            other_db      xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
+NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
+
+user root
+
 ## information_schema.statistics
 statement ok
 CREATE TABLE other_db.teststatis(id INT PRIMARY KEY, c INT, d INT, e STRING, INDEX idx_c(c), UNIQUE INDEX idx_cd(c,d))
@@ -763,5 +787,3 @@ NULL          NULL                NULL                  NULL                  NU
 
 statement ok
 DROP DATABASE other_db
-
-
