@@ -185,6 +185,9 @@ func (u *sqlSymUnion) colType() ColumnType {
     }
     return nil
 }
+func (u *sqlSymUnion) castTargetType() CastTargetType {
+    return u.val.(CastTargetType)
+}
 func (u *sqlSymUnion) colTypes() []ColumnType {
     return u.val.([]ColumnType)
 }
@@ -499,6 +502,8 @@ func (u *sqlSymUnion) window() Window {
 %type <ColumnType> const_datetime const_interval
 %type <ColumnType> bit const_bit bit_with_length bit_without_length
 %type <ColumnType> character_base
+%type <CastTargetType> postgres_oid
+%type <CastTargetType> cast_target
 %type <str> extract_arg
 %type <empty> opt_varying
 
@@ -613,13 +618,14 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
-%token <str>   OF OFF OFFSET ON ONLY OR
+%token <str>   OF OFF OFFSET OID ON ONLY OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
 %token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
+%token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str>   RENAME REPEATABLE
 %token <str>   RELEASE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT
@@ -3062,6 +3068,16 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
 | simple_typename ARRAY { return unimplementedWithIssue(sqllex, 2115) }
 
+cast_target:
+  typename
+  {
+    $$.val = $1.colType()
+  }
+| postgres_oid
+  {
+    $$.val = $1.castTargetType()
+  }
+
 opt_array_bounds:
   opt_array_bounds '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
 | opt_array_bounds '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
@@ -3224,6 +3240,33 @@ numeric:
 | BOOL
   {
     $$.val = boolColTypeBool
+  }
+
+// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
+postgres_oid:
+  OID
+  {
+    $$.val = oidPseudoTypeOid
+  }
+| REGPROC
+  {
+    $$.val = oidPseudoTypeRegProc
+  }
+| REGPROCEDURE
+  {
+    $$.val = oidPseudoTypeRegProc
+  }
+| REGCLASS
+  {
+    $$.val = oidPseudoTypeRegClass
+  }
+| REGTYPE
+  {
+    $$.val = oidPseudoTypeRegType
+  }
+| REGNAMESPACE
+  {
+    $$.val = oidPseudoTypeRegNamespace
   }
 
 opt_float:
@@ -3393,9 +3436,9 @@ interval_second:
 // So we use %prec annotations freely to set precedences.
 a_expr:
   c_expr
-| a_expr TYPECAST typename
+| a_expr TYPECAST cast_target
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: castShort}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), syntaxMode: castShort}
   }
 | a_expr TYPEANNOTATE typename
   {
@@ -3915,7 +3958,7 @@ func_expr_common_subexpr:
 | CURRENT_USER { return unimplemented(sqllex) }
 | SESSION_USER { return unimplemented(sqllex) }
 | USER { return unimplemented(sqllex) }
-| CAST '(' a_expr AS typename ')'
+| CAST '(' a_expr AS cast_target ')'
   {
     $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType(), syntaxMode: castExplicit}
   }
@@ -4810,6 +4853,7 @@ unreserved_keyword:
 | NULLS
 | OF
 | OFF
+| OID
 | ORDINALITY
 | OVER
 | PARENT
@@ -4823,6 +4867,11 @@ unreserved_keyword:
 | READ
 | RECURSIVE
 | REF
+| REGCLASS
+| REGPROC
+| REGPROCEDURE
+| REGNAMESPACE
+| REGTYPE
 | RELEASE
 | RENAME
 | REPEATABLE
