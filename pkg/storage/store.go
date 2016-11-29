@@ -2041,7 +2041,7 @@ func (s *Store) removeReplicaImpl(
 	rep.readOnlyCmdMu.Unlock()
 
 	if destroyData {
-		if err := rep.destroyDataRaftMuLocked(ctx); err != nil {
+		if err := rep.destroyDataRaftMuLocked(ctx, origDesc); err != nil {
 			return err
 		}
 	}
