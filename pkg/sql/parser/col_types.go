@@ -28,6 +28,7 @@ type ColumnType interface {
 	fmt.Stringer
 	NodeFormatter
 	columnType()
+	castTargetType()
 }
 
 func (*BoolColType) columnType()        {}
@@ -41,6 +42,19 @@ func (*IntervalColType) columnType()    {}
 func (*StringColType) columnType()      {}
 func (*BytesColType) columnType()       {}
 func (*ArrayColType) columnType()       {}
+
+// All ColumnTypes also implement CastTargetType.
+func (*BoolColType) castTargetType()        {}
+func (*IntColType) castTargetType()         {}
+func (*FloatColType) castTargetType()       {}
+func (*DecimalColType) castTargetType()     {}
+func (*DateColType) castTargetType()        {}
+func (*TimestampColType) castTargetType()   {}
+func (*TimestampTZColType) castTargetType() {}
+func (*IntervalColType) castTargetType()    {}
+func (*StringColType) castTargetType()      {}
+func (*BytesColType) castTargetType()       {}
+func (*ArrayColType) castTargetType()       {}
 
 // Pre-allocated immutable boolean column types.
 var (

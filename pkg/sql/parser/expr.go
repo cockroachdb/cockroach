@@ -926,10 +926,41 @@ const (
 	castPrefixParens
 )
 
+// CastTargetType represents a type that is a valid cast target.
+type CastTargetType interface {
+	fmt.Stringer
+	NodeFormatter
+	castTargetType()
+}
+
+// PGOIDType represents a postgres oid pseudo-type.
+// See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
+type PGOIDType struct {
+	Name string
+}
+
+func (*PGOIDType) castTargetType() {}
+
+// Format implements the NodeFormatter interface.
+func (node *PGOIDType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(node.Name)
+}
+
+func (node *PGOIDType) String() string { return AsString(node) }
+
+// Pre-allocated immutable postgres oid pseudo-types.
+var (
+	oidPseudoTypeOid          = &PGOIDType{Name: "OID"}
+	oidPseudoTypeRegProc      = &PGOIDType{Name: "REGPROC"}
+	oidPseudoTypeRegClass     = &PGOIDType{Name: "REGCLASS"}
+	oidPseudoTypeRegType      = &PGOIDType{Name: "REGTYPE"}
+	oidPseudoTypeRegNamespace = &PGOIDType{Name: "REGNAMESPACE"}
+)
+
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
-	Type ColumnType
+	Type CastTargetType
 
 	typeAnnotation
 	syntaxMode castSyntaxMode
@@ -976,7 +1007,7 @@ var (
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeInt, TypeInterval}
 )
 
-func colTypeToTypeAndValidArgTypes(t ColumnType) (Type, []Type) {
+func colTypeToTypeAndValidArgTypes(t CastTargetType) (Type, []Type) {
 	switch t.(type) {
 	case *BoolColType:
 		return TypeBool, boolCastTypes
@@ -998,6 +1029,8 @@ func colTypeToTypeAndValidArgTypes(t ColumnType) (Type, []Type) {
 		return TypeTimestampTZ, timestampCastTypes
 	case *IntervalColType:
 		return TypeInterval, intervalCastTypes
+	case *PGOIDType:
+		return TypeInt, intCastTypes
 	}
 	return nil, nil
 }
@@ -1030,7 +1063,7 @@ const (
 // AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
 type AnnotateTypeExpr struct {
 	Expr Expr
-	Type ColumnType
+	Type CastTargetType
 
 	typeAnnotation
 	syntaxMode annotateSyntaxMode
