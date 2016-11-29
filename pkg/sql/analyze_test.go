@@ -75,7 +75,7 @@ func parseAndNormalizeExpr(t *testing.T, sql string, sel *selectNode) parser.Typ
 	if expr, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	typedExpr, err := parser.TypeCheck(expr, nil, parser.NoTypePreference)
+	typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeAny)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}

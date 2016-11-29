@@ -271,7 +271,7 @@ func (ag *aggregator) extractFunc(
 		Exprs: []parser.Expr{eh.vars.IndexedVar(int(expr.ColIdx))},
 	}
 
-	_, err := p.TypeCheck(nil, parser.NoTypePreference)
+	_, err := p.TypeCheck(nil, parser.TypeAny)
 	if err != nil {
 		return nil, err
 	}

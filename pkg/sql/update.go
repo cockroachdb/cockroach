@@ -205,7 +205,7 @@ func (p *planner) Update(
 	exprTargetIdx := len(targets)
 	desiredTypesFromSelect := make([]parser.Type, len(targets), len(targets)+len(exprs))
 	for i := range targets {
-		desiredTypesFromSelect[i] = parser.NoTypePreference
+		desiredTypesFromSelect[i] = parser.TypeAny
 	}
 	for _, expr := range exprs {
 		if expr.Tuple {

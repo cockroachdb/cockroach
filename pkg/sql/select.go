@@ -489,7 +489,7 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	for i, target := range targets {
-		desiredType := parser.NoTypePreference
+		desiredType := parser.TypeAny
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}

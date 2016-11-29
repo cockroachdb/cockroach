@@ -68,7 +68,7 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 	}
 
 	// Convert to a fully typed expression.
-	typedExpr, err := parser.TypeCheck(expr, nil, parser.NoTypePreference)
+	typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeAny)
 	if err != nil {
 		return nil, err
 	}

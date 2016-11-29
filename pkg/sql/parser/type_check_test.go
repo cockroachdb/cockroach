@@ -78,7 +78,7 @@ func TestTypeCheck(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d, err)
 		}
-		if _, err := TypeCheck(expr, nil, NoTypePreference); err != nil {
+		if _, err := TypeCheck(expr, nil, TypeAny); err != nil {
 			t.Errorf("%s: unexpected error %s", d, err)
 		}
 	}
@@ -128,7 +128,7 @@ func TestTypeCheckError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := TypeCheck(expr, nil, NoTypePreference); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := TypeCheck(expr, nil, TypeAny); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
@@ -231,7 +231,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := MakeSemaContext()
 		ctx.Placeholders.SetTypes(clonePlaceholderTypes(test.ptypes))
-		desired := NoTypePreference
+		desired := TypeAny
 		if test.desired != nil {
 			desired = test.desired
 		}
@@ -372,7 +372,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	for i, d := range testData {
 		ctx := MakeSemaContext()
 		ctx.Placeholders.SetTypes(d.ptypes)
-		desired := NoTypePreference
+		desired := TypeAny
 		if d.desired != nil {
 			desired = d.desired
 		}
