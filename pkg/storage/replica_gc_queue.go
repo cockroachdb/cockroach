@@ -106,12 +106,9 @@ func (q *replicaGCQueue) shouldQueue(
 
 	lastActivity := hlc.ZeroTimestamp.Add(repl.store.startedAt, 0)
 
-	lease, nextLease := repl.getLease()
-	if lease != nil {
-		lastActivity.Forward(lease.Expiration)
-	}
-	if nextLease != nil {
-		lastActivity.Forward(nextLease.Expiration)
+	lease, _ := repl.getLease()
+	if lease != nil && lease.ProposedTS != nil {
+		lastActivity.Forward(*lease.ProposedTS)
 	}
 
 	var isCandidate bool
@@ -134,7 +131,7 @@ func replicaGCShouldQueueImpl(
 		priority = replicaGCPriorityCandidate
 	} else if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
 		// Return false immediately if the previous check was less than the
-		// check interval in the past. Note that we don't do this is the
+		// check interval in the past. Note that we don't do this if the
 		// replica is in candidate state, in which case we want to be more
 		// aggressive - a failed rebalance attempt could have checked this
 		// range, and candidate state suggests that a retry succeeded. See
