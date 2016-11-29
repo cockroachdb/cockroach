@@ -1221,13 +1221,9 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				arr := *args[0].(*DArray)
-				dimen := *args[1].(*DInt)
-				// We do not currently support multi-dimensional arrays.
-				if dimen != 1 || arr.Len() == 0 {
-					return DNull, nil
-				}
-				return NewDInt(DInt(arr.Len())), nil
+				arr := args[0].(*DArray)
+				dimen := int64(*args[1].(*DInt))
+				return arrayLength(arr, dimen), nil
 			},
 		},
 	},
@@ -1238,13 +1234,9 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				arr := *args[0].(*DArray)
-				dimen := *args[1].(*DInt)
-				// We do not currently support multi-dimensional arrays.
-				if dimen != 1 || arr.Len() == 0 {
-					return DNull, nil
-				}
-				return NewDInt(DInt(1)), nil
+				arr := args[0].(*DArray)
+				dimen := int64(*args[1].(*DInt))
+				return arrayLower(arr, dimen), nil
 			},
 		},
 	},
@@ -1255,13 +1247,9 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeInt,
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				arr := *args[0].(*DArray)
-				dimen := *args[1].(*DInt)
-				// We do not currently support multi-dimensional arrays.
-				if dimen != 1 || arr.Len() == 0 {
-					return DNull, nil
-				}
-				return NewDInt(DInt(arr.Len())), nil
+				arr := args[0].(*DArray)
+				dimen := int64(*args[1].(*DInt))
+				return arrayLength(arr, dimen), nil
 			},
 		},
 	},
@@ -2017,4 +2005,34 @@ func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	// timestamp portion of the final value instead of always setting them.
 	id = (id << nodeIDBits) ^ uint64(nodeID)
 	return DInt(id)
+}
+
+func arrayLength(arr *DArray, dim int64) Datum {
+	if arr.Len() == 0 || dim < 1 {
+		return DNull
+	}
+	if dim == 1 {
+		return NewDInt(DInt(arr.Len()))
+	}
+	a, ok := arr.Array[0].(*DArray)
+	if !ok {
+		return DNull
+	}
+	return arrayLength(a, dim-1)
+}
+
+var intOne = NewDInt(DInt(1))
+
+func arrayLower(arr *DArray, dim int64) Datum {
+	if arr.Len() == 0 || dim < 1 {
+		return DNull
+	}
+	if dim == 1 {
+		return intOne
+	}
+	a, ok := arr.Array[0].(*DArray)
+	if !ok {
+		return DNull
+	}
+	return arrayLower(a, dim-1)
 }
