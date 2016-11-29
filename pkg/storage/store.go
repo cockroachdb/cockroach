@@ -2126,7 +2126,13 @@ func (s *Store) Attrs() roachpb.Attributes {
 // Capacity returns the capacity of the underlying storage engine. Note that
 // this does not include reservations.
 func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
-	return s.engine.Capacity()
+	capacity, err := s.engine.Capacity()
+	if err != nil {
+		return roachpb.StoreCapacity{}, err
+	}
+	capacity.RangeCount = int32(s.ReplicaCount())
+	capacity.LeaseCount = int32(s.LeaseCount())
+	return capacity, nil
 }
 
 // Registry returns the store registry.
@@ -2155,9 +2161,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	capacity.RangeCount = int32(s.ReplicaCount())
-	capacity.LeaseCount = int32(s.LeaseCount())
-	// Initialize the store descriptor.
+
 	return &roachpb.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
 		Attrs:    s.Attrs(),
@@ -2584,8 +2588,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	_, err = s.canApplySnapshot(ctx, &header.RangeDescriptor)
-	if err != nil {
+	if _, err := s.canApplySnapshot(ctx, &header.RangeDescriptor); err != nil {
 		return sendSnapError(
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.RangeDescriptor.RangeID),
 		)

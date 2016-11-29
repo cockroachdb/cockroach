@@ -2508,16 +2508,16 @@ func TestCanCampaignIdleReplica(t *testing.T) {
 	}
 }
 
-type fakeSnapshotStream struct {
+type fakeOutgoingSnapshotStream struct {
 	nextResp *SnapshotResponse
 	nextErr  error
 }
 
-func (c fakeSnapshotStream) Recv() (*SnapshotResponse, error) {
+func (c fakeOutgoingSnapshotStream) Recv() (*SnapshotResponse, error) {
 	return c.nextResp, c.nextErr
 }
 
-func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
+func (c fakeOutgoingSnapshotStream) Send(request *SnapshotRequest) error {
 	return nil
 }
 
@@ -2559,7 +2559,10 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	{
 		sp := &fakeStorePool{}
 		expectedErr := errors.New("")
-		c := fakeSnapshotStream{nil, expectedErr}
+		c := fakeOutgoingSnapshotStream{
+			nextResp: nil,
+			nextErr:  expectedErr,
+		}
 		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
@@ -2577,7 +2580,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			StoreCapacity: nil,
 			Status:        SnapshotResponse_DECLINED,
 		}
-		c := fakeSnapshotStream{resp, nil}
+		c := fakeOutgoingSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
 		if sp.declinedThrottles != 1 {
 			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
@@ -2600,7 +2603,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			StoreCapacity: &storeCapacity,
 			Status:        SnapshotResponse_DECLINED,
 		}
-		c := fakeSnapshotStream{resp, nil}
+		c := fakeOutgoingSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
@@ -2620,7 +2623,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			StoreCapacity: &roachpb.StoreCapacity{},
 			Status:        SnapshotResponse_ERROR,
 		}
-		c := fakeSnapshotStream{resp, nil}
+		c := fakeOutgoingSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
@@ -2628,5 +2631,74 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error, found nil")
 		}
+	}
+}
+
+type fakeSnapshotResponseStream struct {
+	recvFn func() (*SnapshotRequest, error)
+	sendFn func(*SnapshotResponse) error
+}
+
+// Recv implements the SnapshotResponseStream interface.
+func (c fakeSnapshotResponseStream) Recv() (*SnapshotRequest, error) {
+	if c.recvFn != nil {
+		return c.recvFn()
+	}
+	return new(SnapshotRequest), nil
+}
+
+// Send implements the SnapshotResponseStream interface.
+func (c fakeSnapshotResponseStream) Send(request *SnapshotResponse) error {
+	if c.sendFn != nil {
+		return c.sendFn(request)
+	}
+	return nil
+}
+
+// Context implements the SnapshotResponseStream interface.
+func (c fakeSnapshotResponseStream) Context() context.Context {
+	return context.Background()
+}
+
+// TestFailedSnapshotFillsReservation tests that failing to finish applying an
+// incoming snapshot still cleans up the outstanding reservation that was made.
+func TestFailedSnapshotFillsReservation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	rep, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := SnapshotRequest_Header{
+		CanDecline:      true,
+		RangeSize:       100,
+		RangeDescriptor: *rep.Desc(),
+	}
+
+	// Cause this stream to return an error as soon as we ask it for something.
+	// This injects an error into HandleSnapshotStream when we try to send the
+	// "snapshot accepted" message.
+	expectedErr := errors.New("")
+	stream := fakeSnapshotResponseStream{
+		recvFn: func() (*SnapshotRequest, error) {
+			return nil, expectedErr
+		},
+		sendFn: func(resp *SnapshotResponse) error {
+			if resp.StoreCapacity.RangeCount == 0 {
+				return errors.Errorf("expected nonzero range count, got %+v", resp.StoreCapacity)
+			}
+			if resp.StoreCapacity.LeaseCount == 0 {
+				return errors.Errorf("expected nonzero lease count, got %+v", resp.StoreCapacity)
+			}
+			return nil
+		},
+	}
+	if err := store.HandleSnapshot(&header, stream); err != expectedErr {
+		t.Fatalf("expected error %s, but found %v", expectedErr, err)
+	}
+	if n := store.ReservationCount(); n != 0 {
+		t.Fatalf("expected 0 reservations, but found %d", n)
 	}
 }
