@@ -41,11 +41,10 @@ SELECT ARRAY(VALUES ('a'),('b'),('c'))
 query error subquery must return only one column, found 2
 SELECT ARRAY(SELECT 1, 2)
 
-# TODO(nvanbenschoten) Uncomment when int[] is added as a column type.
-# query T
-# SELECT ARRAY[]:::int[]
-# ----
-# {}
+query T
+SELECT ARRAY[]:::int[]
+----
+{}
 
 # decimal arrays are unsupported
 
