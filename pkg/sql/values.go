@@ -91,7 +91,7 @@ func (p *planner) ValuesClause(
 				return nil, err
 			}
 
-			desired := parser.NoTypePreference
+			desired := parser.TypeAny
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}

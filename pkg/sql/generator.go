@@ -55,7 +55,7 @@ func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, string, error) {
 	}
 
 	normalized, err := p.analyzeExpr(
-		t, multiSourceInfo{}, parser.IndexedVarHelper{}, parser.NoTypePreference, false, "FROM",
+		t, multiSourceInfo{}, parser.IndexedVarHelper{}, parser.TypeAny, false, "FROM",
 	)
 	if err != nil {
 		return nil, "", err

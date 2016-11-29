@@ -91,7 +91,7 @@ func (p *planner) newReturningHelper(
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		desired := parser.NoTypePreference
+		desired := parser.TypeAny
 		if len(desiredTypes) > i {
 			desired = desiredTypes[i]
 		}
