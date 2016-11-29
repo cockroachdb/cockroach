@@ -1333,3 +1333,24 @@ query T
 SELECT pg_catalog.pg_typeof(sign(1:::decimal))
 ----
 decimal
+
+query T
+VALUES (pg_typeof(1:::int)),
+       (pg_typeof('a':::string)),
+       (pg_typeof(true)),
+       (pg_typeof(null)),
+       (pg_typeof('3m':::interval)),
+       (pg_typeof('2016-11-12':::date)),
+       (pg_typeof(now():::timestamptz)),
+       (pg_typeof(b'a':::bytes)),
+       (pg_typeof(array[1,2,3]))
+----
+int
+string
+bool
+NULL
+interval
+date
+timestamptz
+bytes
+int[]
