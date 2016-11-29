@@ -1466,6 +1466,13 @@ func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (DBool,
 	return DBool(re.MatchString(string(*str.(*DString)))), nil
 }
 
+// EvalPlanner is a limited planner that can be used from EvalContext.
+type EvalPlanner interface {
+	// QueryRow executes a SQL query string where exactly 1 result row is
+	// expected and returns that row.
+	QueryRow(sql string, args ...interface{}) (DTuple, error)
+}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
@@ -1488,6 +1495,8 @@ type EvalContext struct {
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
+
+	Planner EvalPlanner
 
 	ReCache *RegexpCache
 	tmpDec  inf.Dec

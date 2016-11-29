@@ -115,13 +115,12 @@ type queryRunner interface {
 
 	// The following methods run SQL queries.
 
-	// queryRow executes a SQL query string where exactly 1 result row is
-	// expected and returns that row.
-	queryRow(sql string, args ...interface{}) (parser.DTuple, error)
-
 	// exec executes a SQL query string and returns the number of rows
 	// affected.
 	exec(sql string, args ...interface{}) (int, error)
+
+	// parser.EvalPlanner gives us the QueryRow method.
+	parser.EvalPlanner
 
 	// The following methods can be used during testing.
 
@@ -201,6 +200,7 @@ func (p *planner) resetContexts() {
 		Location:   &p.session.Location,
 		Database:   p.session.Database,
 		SearchPath: p.session.SearchPath,
+		Planner:    p,
 	}
 }
 
@@ -286,8 +286,8 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	return p.makePlan(stmt, false)
 }
 
-// queryRow implements the queryRunner interface.
-func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+// QueryRow implements the queryRunner interface.
+func (p *planner) QueryRow(sql string, args ...interface{}) (parser.DTuple, error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
