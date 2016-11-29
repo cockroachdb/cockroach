@@ -2,20 +2,28 @@ import _ from "lodash";
 import * as React from "react";
 import * as d3 from "d3";
 import { IInjectedProps } from "react-router";
+import { connect } from "react-redux";
+import { createSelector } from "reselect";
 
 import {
   nodeIDAttr, dashboardNameAttr,
 } from "../util/constants";
 
+import { AdminUIState } from "../redux/state";
+import { refreshNodes } from "../redux/apiReducers";
 import GraphGroup from "../components/graphGroup";
+import { SummaryBar, SummaryLabel, SummaryStat } from "../components/summaryBar";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
 import { StackedAreaGraph } from "../components/stackedgraph";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
+import { MetricConstants } from "../util/proto";
 
 interface NodeGraphsOwnProps {
-  groupId: string;
-  nodeIds: string[];
+  refreshNodes: typeof refreshNodes;
+  nodeCount: number;
+  capacityAvailable: number;
+  capacityTotal: number;
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & IInjectedProps;
@@ -23,7 +31,7 @@ type NodeGraphsProps = NodeGraphsOwnProps & IInjectedProps;
 /**
  * Renders the main content of the help us page.
  */
-export default class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
+class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   static displayTimeScale = true;
   render() {
     let nodeID = this.props.params[nodeIDAttr];
@@ -31,8 +39,13 @@ export default class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     let dashboard = this.props.params[dashboardNameAttr];
     let specifier = (sources && sources.length === 1) ? `on node ${sources[0]}` : "across all nodes";
 
-    return <div className="section node">
-      <div className="charts">
+    // Capacity math.
+    let { capacityTotal, capacityAvailable } = this.props;
+    let capacityUsed = capacityTotal - capacityAvailable;
+    let capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
+
+    return <div className="section l-columns">
+      <div className="chart-group l-columns__left">
         <GraphGroup groupId="node.activity" hide={dashboard !== "activity"}>
           <LineGraph title="SQL Connections" sources={sources} tooltip={`The total number of active SQL connections ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
@@ -427,6 +440,51 @@ export default class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
           </GraphGroup>
       </div>
+      <div className="l-columns__right">
+        <SummaryBar>
+          <SummaryLabel>Summary</SummaryLabel>
+          <SummaryStat title="Total Nodes" value={this.props.nodeCount} />
+          <SummaryStat title="Capacity Used" value={capacityPercent}
+                       format={(v) => `${d3.format(".2f")(v)}%`}
+                       tooltip={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)} 
+                       storage capacity across all nodes.`} />
+        </SummaryBar>
+      </div>
     </div>;
   }
 }
+
+let nodeStatuses = (state: AdminUIState) => state.cachedData.nodes.data;
+
+let nodeSums = createSelector(
+  nodeStatuses,
+  (ns) => {
+    let result = {
+      nodeCount: 0,
+      capacityAvailable: 0,
+      capacityTotal: 0,
+    };
+    if (_.isArray(ns)) {
+      ns.forEach((n) => {
+        result.nodeCount += 1;
+        result.capacityAvailable += n.metrics.get(MetricConstants.availableCapacity);
+        result.capacityTotal += n.metrics.get(MetricConstants.capacity);
+      });
+    }
+    return result;
+  }
+);
+
+export default connect(
+  (state: AdminUIState) => {
+    let sums = nodeSums(state);
+    return {
+      nodeCount: sums.nodeCount,
+      capacityAvailable: sums.capacityAvailable,
+      capacityTotal: sums.capacityTotal,
+    };
+  },
+  {
+    refreshNodes,
+  }
+)(NodeGraphs);

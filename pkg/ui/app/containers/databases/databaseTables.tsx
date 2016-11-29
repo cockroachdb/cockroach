@@ -3,7 +3,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
 
-import { SummaryBar, SummaryItem } from "../../components/summaryBar";
+import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 
@@ -56,11 +56,11 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
 
     let numTables = tableInfos && tableInfos.length || 0;
 
-    return <div className="database-summary">
+    return <div className="database-summary l-columns">
       <div className="database-summary-title">
         { dbID }
       </div>
-      <div className="content">
+      <div className="l-columns__left">
         <div className="database-summary-table sql-table">
         {
           (numTables === 0) ? "" :
@@ -105,21 +105,23 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
         }
         </div>
       </div>
-      <SummaryBar>
-        <SummaryItem
-          title="Database Size"
-          tooltip="Total disk size of this database."
-          value={ this.totalSize() }
-          format={ Bytes }/>
-        <SummaryItem
-          title={ (numTables === 1) ? "Table" : "Tables" }
-          tooltip="The total number of tables in this database."
-          value={ numTables }/>
-        <SummaryItem
-          title="Total Range Count"
-          tooltip="The total ranges across all tables in this database."
-          value={ this.totalRangeCount() }/>
-      </SummaryBar>
+      <div className="l-columns__right">
+        <SummaryBar>
+          <SummaryHeadlineStat
+            title="Database Size"
+            tooltip="Total disk size of this database."
+            value={ this.totalSize() }
+            format={ Bytes }/>
+          <SummaryHeadlineStat
+            title={ (numTables === 1) ? "Table" : "Tables" }
+            tooltip="The total number of tables in this database."
+            value={ numTables }/>
+          <SummaryHeadlineStat
+            title="Total Range Count"
+            tooltip="The total ranges across all tables in this database."
+            value={ this.totalRangeCount() }/>
+        </SummaryBar>
+      </div>
     </div>;
   }
 }

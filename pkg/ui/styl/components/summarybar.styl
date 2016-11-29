@@ -1,0 +1,49 @@
+.summary-section
+  width calc(100% - 48px)
+  float left
+  background-color white
+  margin 0 24px
+  padding 24px 24px 12px
+  border-radius 5px
+  border 1px solid rgba(0, 0, 0, .07)
+  font-family lato-light
+
+.summary-headline
+  margin-bottom 12px
+
+  &__title
+    font-size 12px
+    padding 6px 0
+    color $light-gray
+
+  &__value
+    font-size 30px
+    color $light-blue
+
+.summary-label
+  text-transform uppercase
+  font-family lato
+  font-weight bold
+  color $light-blue
+  padding-bottom 12px
+
+.summary-stat
+  clearfix()
+  padding 12px 0
+
+  &__title
+    color $light-blue
+    float left
+
+  &__value
+    float right
+    color $light-green
+
+  &__tooltip
+    display block
+    clear both
+    font-size 12px
+    color $light-gray
+
+  & + .summary-stat
+    border-top 1px solid rgb(242, 242, 242)

@@ -53,34 +53,26 @@ $subnav-background  = $secondary-gray-4
   font-face lato
   letter-spacing 5px
 
+.l-columns
+  clearfix()
+
+.l-columns__left
+  float left
+  width 70%
+
+.l-columns__right
+  float left
+  width 30%
+
 .page.help-us
   height 100%
   background-color white
 
 .section
-  padding 1rem 2rem
-
-  &:after
-    content ""
-    display table
-    clear both
-
-  .topbar + &
-    padding-top $top-bar-height + 10px
-    width 100%
-
-  &.table
-    margin 0
-    padding-left 0
-    padding-right 0
-
-  h1
-    font-family Lato-Medium
-    font-size 23px
-    color $main-navy
-    margin-top 10px
-    margin-bottom 10px
-    font-weight normal
+  padding-left 24px
+  padding-top 24px
+  max-width 1350px
+  clearfix()
 
   .header
     width calc(100% + 40px)
