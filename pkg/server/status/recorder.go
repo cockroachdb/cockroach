@@ -134,7 +134,7 @@ func (mr *MetricsRecorder) AddNode(
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry
-// in this recoder. A reference to the store is kept for the purpose of
+// in this recorder. A reference to the store is kept for the purpose of
 // gathering some additional information which is present in store status
 // summaries.
 // Stores should only be added to the registry after they have been started.
