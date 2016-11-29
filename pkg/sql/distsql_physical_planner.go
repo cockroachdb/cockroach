@@ -507,7 +507,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 
 		proc.spec.Core.SetValue(tr)
 		proc.spec.Output = make([]distsql.OutputRouterSpec, 1)
-		proc.spec.Output[0].Type = distsql.OutputRouterSpec_MIRROR
+		proc.spec.Output[0].Type = distsql.OutputRouterSpec_PASS_THROUGH
 
 		pIdx := p.addProcessor(proc)
 		p.resultRouters = append(p.resultRouters, pIdx)
@@ -533,7 +533,7 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 				}},
 				Core: core,
 				Output: []distsql.OutputRouterSpec{{
-					Type: distsql.OutputRouterSpec_MIRROR,
+					Type: distsql.OutputRouterSpec_PASS_THROUGH,
 				}},
 			},
 		}
@@ -650,7 +650,7 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 			Input: []distsql.InputSyncSpec{{}},
 			Core:  core,
 			Output: []distsql.OutputRouterSpec{{
-				Type: distsql.OutputRouterSpec_MIRROR,
+				Type: distsql.OutputRouterSpec_PASS_THROUGH,
 			}},
 		},
 	}

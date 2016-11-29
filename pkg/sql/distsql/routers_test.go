@@ -119,7 +119,7 @@ func TestMirrorRouter(t *testing.T) {
 
 	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows)
 
-	for numBuckets := 1; numBuckets <= 3; numBuckets++ {
+	for numBuckets := 2; numBuckets <= 4; numBuckets++ {
 		bufs := make([]*RowBuffer, numBuckets)
 		recvs := make([]RowReceiver, numBuckets)
 		for i := 0; i < numBuckets; i++ {
