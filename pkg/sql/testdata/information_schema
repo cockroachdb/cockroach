@@ -327,6 +327,9 @@ statement ok
 CREATE DATABASE other_db
 
 statement ok
+SET DATABASE = other_db
+
+statement ok
 CREATE TABLE other_db.xyz (i INT)
 
 statement ok
@@ -638,6 +641,9 @@ def                 constraint_column  primary          def            constrain
 statement ok
 CREATE DATABASE other_db
 
+statement ok
+SET DATABASE = other_db
+
 query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
@@ -669,11 +675,6 @@ query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges
 ----
 GRANTOR  GRANTEE  TABLE_CATALOG  TABLE_SCHEMA       TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
-NULL     root     def            constraint_column  t1          ALL             NULL          NULL
-NULL     root     def            constraint_column  t2          ALL             NULL          NULL
-NULL     root     def            constraint_column  t3          ALL             NULL          NULL
-NULL     root     def            constraint_db      t1          ALL             NULL          NULL
-NULL     root     def            constraint_db      t2          ALL             NULL          NULL
 NULL     root     def            system             descriptor  GRANT           NULL          NULL
 NULL     root     def            system             descriptor  SELECT          NULL          NULL
 NULL     root     def            system             eventlog    ALL             NULL          NULL
@@ -692,6 +693,34 @@ NULL     root     def            system             zones       GRANT           
 NULL     root     def            system             zones       INSERT          NULL          NULL
 NULL     root     def            system             zones       SELECT          NULL          NULL
 NULL     root     def            system             zones       UPDATE          NULL          NULL
+
+statement ok
+SET DATABASE = constraint_column
+
+## information_schema.table_privileges
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges
+WHERE TABLE_SCHEMA != 'system'
+----
+GRANTOR  GRANTEE  TABLE_CATALOG  TABLE_SCHEMA       TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root     def            constraint_column  t1          ALL             NULL          NULL
+NULL     root     def            constraint_column  t2          ALL             NULL          NULL
+NULL     root     def            constraint_column  t3          ALL             NULL          NULL
+
+statement ok
+SET DATABASE = constraint_db
+
+## information_schema.table_privileges
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges
+WHERE TABLE_SCHEMA != 'system'
+----
+GRANTOR  GRANTEE  TABLE_CATALOG  TABLE_SCHEMA       TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root     def            constraint_db      t1          ALL             NULL          NULL
+NULL     root     def            constraint_db      t2          ALL             NULL          NULL
+
+statement ok
+SET DATABASE = other_db
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

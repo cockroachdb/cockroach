@@ -27,6 +27,7 @@ import (
 
 const (
 	informationSchemaName = "information_schema"
+	pgCatalogName         = "pg_catalog"
 )
 
 var informationSchema = virtualSchema{
@@ -523,10 +524,11 @@ func forEachDatabaseDesc(p *planner, fn func(*sqlbase.DatabaseDescriptor) error)
 	return nil
 }
 
-// forEachTableDesc retrieves all table descriptors and iterates through them in
-// lexicographical order with respect primarily to database name and secondarily
-// to table name. For each table, the function will call fn with its respective
-// database and table descriptor.
+// forEachTableDesc retrieves all table descriptors from the current database
+// and all system databases and iterates through them in lexicographical order
+// with respect primarily to database name and secondarily to table name. For
+// each table, the function will call fn with its respective database and table
+// descriptor.
 func forEachTableDesc(
 	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
@@ -535,7 +537,13 @@ func forEachTableDesc(
 		table *sqlbase.TableDescriptor,
 		_ tableLookupFn,
 	) error {
-		return fn(db, table)
+		if db.Name == p.evalCtx.Database ||
+			db.Name == sqlbase.SystemDB.Name ||
+			db.Name == pgCatalogName ||
+			db.Name == informationSchemaName {
+			return fn(db, table)
+		}
+		return nil
 	})
 }
 
