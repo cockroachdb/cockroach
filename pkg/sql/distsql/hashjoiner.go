@@ -34,12 +34,12 @@ type bucket struct {
 
 // HashJoiner performs hash join, it has two input streams and one output.
 //
-// It works by reading the entire left stream and putting it in a hash
+// It works by reading the entire right stream and putting it in a hash
 // table. Thus, there is no guarantee on the ordering of results that stem only
-// from the left input (in the case of LEFT OUTER, FULL OUTER). However, it is
-// guaranteed that results that involve the right stream preserve the ordering;
-// i.e. all results that stem from right row (i) precede results that stem from
-// right row (i+1).
+// from the right input (in the case of RIGHT OUTER, FULL OUTER). However, it is
+// guaranteed that results that involve the left stream preserve the ordering;
+// i.e. all results that stem from left row (i) precede results that stem from
+// left row (i+1).
 type hashJoiner struct {
 	joinerBase
 
@@ -94,43 +94,14 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 }
 
 // buildPhase constructs our internal hash map of rows seen, this is done
-// entirely from the left stream with the encoding/group key generated using the
+// entirely from the right stream with the encoding/group key generated using the
 // left equality columns.
 func (h *hashJoiner) buildPhase() error {
 	var scratch []byte
 	for {
-		lrow, err := h.inputs[0].NextRow()
-		if err != nil || lrow == nil {
-			return err
-		}
-
-		encoded, err := h.encode(scratch, lrow, h.leftEqCols)
-		if err != nil {
-			return err
-		}
-
-		b, _ := h.buckets[string(encoded)]
-		b.rows = append(b.rows, lrow)
-		h.buckets[string(encoded)] = b
-
-		scratch = encoded[:0]
-	}
-}
-
-// probePhase uses our constructed hash map of rows seen from the left stream,
-// we probe the map for each row retrieved from the right stream outputting the
-// merging of the two rows if matched. Behaviour for outer joins also behave as
-// expected, i.e. for RIGHT OUTER joins if no corresponding left row is seen an
-// empty DNull row is emitted instead.
-func (h *hashJoiner) probePhase() error {
-	var scratch []byte
-	for {
 		rrow, err := h.inputs[1].NextRow()
-		if err != nil {
+		if err != nil || rrow == nil {
 			return err
-		}
-		if rrow == nil {
-			break
 		}
 
 		encoded, err := h.encode(scratch, rrow, h.rightEqCols)
@@ -138,9 +109,38 @@ func (h *hashJoiner) probePhase() error {
 			return err
 		}
 
+		b, _ := h.buckets[string(encoded)]
+		b.rows = append(b.rows, rrow)
+		h.buckets[string(encoded)] = b
+
+		scratch = encoded[:0]
+	}
+}
+
+// probePhase uses our constructed hash map of rows seen from the right stream,
+// we probe the map for each row retrieved from the left stream outputting the
+// merging of the two rows if matched. Behaviour for outer joins is as expected,
+// i.e. for RIGHT OUTER joins if no corresponding left row is seen an empty
+// DNull row is emitted instead.
+func (h *hashJoiner) probePhase() error {
+	var scratch []byte
+	for {
+		lrow, err := h.inputs[0].NextRow()
+		if err != nil {
+			return err
+		}
+		if lrow == nil {
+			break
+		}
+
+		encoded, err := h.encode(scratch, lrow, h.leftEqCols)
+		if err != nil {
+			return err
+		}
+
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			row, err := h.render(nil, rrow)
+			row, err := h.render(lrow, nil)
 			if err != nil {
 				return err
 			}
@@ -150,7 +150,7 @@ func (h *hashJoiner) probePhase() error {
 		} else {
 			b.seen = true
 			h.buckets[string(encoded)] = b
-			for _, lrow := range b.rows {
+			for _, rrow := range b.rows {
 				row, err := h.render(lrow, rrow)
 				if err != nil {
 					return err
@@ -163,14 +163,15 @@ func (h *hashJoiner) probePhase() error {
 		scratch = encoded[:0]
 	}
 
-	if h.joinType == innerJoin || h.joinType == rightOuter {
+	if h.joinType == innerJoin || h.joinType == leftOuter {
 		return nil
 	}
 
+	// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
 	for _, b := range h.buckets {
 		if !b.seen {
-			for _, lrow := range b.rows {
-				row, err := h.render(lrow, nil)
+			for _, rrow := range b.rows {
+				row, err := h.render(nil, rrow)
 				if err != nil {
 					return err
 				}
@@ -178,7 +179,6 @@ func (h *hashJoiner) probePhase() error {
 					return nil
 				}
 			}
-
 		}
 	}
 

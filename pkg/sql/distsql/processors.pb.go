@@ -294,12 +294,12 @@ func (*MergeJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProc
 // HashJoinerSpec is the specification for a hash join processor. The processor
 // has two inputs and one output.
 //
-// The processor works by reading the entire left input and putting it in a hash
+// The processor works by reading the entire right input and putting it in a hash
 // table. Thus, there is no guarantee on the ordering of results that stem only
-// from the left input (in the case of LEFT_OUTER, FULL_OUTER). However, it is
-// guaranteed that results that involve the right stream preserve the ordering;
-// i.e. all results that stem from right row (i) precede results that stem from
-// right row (i+1).
+// from the right input (in the case of RIGHT_OUTER, FULL_OUTER). However, it is
+// guaranteed that results that involve the left stream preserve the ordering;
+// i.e. all results that stem from left row (i) precede results that stem from
+// left row (i+1).
 type HashJoinerSpec struct {
 	// The join constraints certain columns from the left stream to equal
 	// corresponding columns on the right stream. These must have the same length.
