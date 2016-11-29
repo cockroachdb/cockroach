@@ -152,10 +152,19 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
-	s.render = make([]parser.TypedExpr, len(group.funcs))
+	newRenders := make([]parser.TypedExpr, len(group.funcs))
+	newColumns := make(ResultColumns, len(group.funcs))
 	for i, f := range group.funcs {
-		s.render[i] = f.arg
+		// Note: we do not need to normalize the expressions again because
+		// they were normalized by selectNode's initFrom() before we
+		// extracted aggregation functions above.
+		newRenders[i] = f.arg
+		newColumns[i] = ResultColumn{
+			Name: f.arg.String(),
+			Typ:  f.arg.ResolvedType(),
+		}
 	}
+	s.resetRenderColumns(newRenders, newColumns)
 
 	// Add the group-by expressions so they are available for bucketing.
 	for _, g := range groupBy {

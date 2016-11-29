@@ -112,8 +112,8 @@ func (n *windowNode) extractWindowFunctions(s *selectNode) error {
 
 	oldRenders := s.render
 	oldColumns := s.columns
-	s.render = make([]parser.TypedExpr, 0, len(oldRenders))
-	s.columns = make([]ResultColumn, 0, len(oldColumns))
+	newRenders := make([]parser.TypedExpr, 0, len(oldRenders))
+	newColumns := make([]ResultColumn, 0, len(oldColumns))
 	for i := range oldRenders {
 		// Add all window function applications found in oldRenders[i] to window.funcs.
 		typedExpr, numFuncsAdded, err := visitor.extract(oldRenders[i])
@@ -122,8 +122,8 @@ func (n *windowNode) extractWindowFunctions(s *selectNode) error {
 		}
 		if numFuncsAdded == 0 {
 			// No window functions in render.
-			s.render = append(s.render, oldRenders[i])
-			s.columns = append(s.columns, oldColumns[i])
+			newRenders = append(newRenders, oldRenders[i])
+			newColumns = append(newColumns, oldColumns[i])
 		} else {
 			// One or more window functions in render. Create a new render in
 			// selectNode for each window function argument.
@@ -131,11 +131,11 @@ func (n *windowNode) extractWindowFunctions(s *selectNode) error {
 			prevWindowCount := len(n.funcs) - numFuncsAdded
 			for i, funcHolder := range n.funcs[prevWindowCount:] {
 				funcHolder.funcIdx = prevWindowCount + i
-				funcHolder.argIdxStart = len(s.render)
+				funcHolder.argIdxStart = len(newRenders)
 				for _, argExpr := range funcHolder.args {
 					arg := argExpr.(parser.TypedExpr)
-					s.render = append(s.render, arg)
-					s.columns = append(s.columns, ResultColumn{
+					newRenders = append(newRenders, arg)
+					newColumns = append(newColumns, ResultColumn{
 						Name: arg.String(),
 						Typ:  arg.ResolvedType(),
 					})
@@ -143,6 +143,7 @@ func (n *windowNode) extractWindowFunctions(s *selectNode) error {
 			}
 		}
 	}
+	s.resetRenderColumns(newRenders, newColumns)
 	return nil
 }
 
@@ -294,11 +295,7 @@ func (n *windowNode) replaceIndexedVars(s *selectNode) {
 			if _, ok := n.ivarIdxMap[iv.Idx]; !ok {
 				// We add a new render to the wrapped selectNode for each new IndexedVar we
 				// see. We also register this mapping in the ivarIdxMap.
-				s.render = append(s.render, iv)
-				s.columns = append(s.columns, ResultColumn{
-					Name: iv.String(),
-					Typ:  iv.ResolvedType(),
-				})
+				s.addRenderColumn(iv, ResultColumn{Name: iv.String(), Typ: iv.ResolvedType()})
 
 				n.ivarIdxMap[iv.Idx] = varIdx
 				varIdx++
