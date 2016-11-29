@@ -178,7 +178,9 @@ func makeUsingPredicate(
 	return makeEqualityPredicate(left, right, colNames, colNames, len(colNames), nil)
 }
 
-// makeEqualityPredicate constructs a joinPredicate object for joins.
+// makeEqualityPredicate constructs a joinPredicate object for joins. The join
+// condition includes equality between numMergedEqualityColumns columns,
+// specified by leftColNames and rightColNames.
 func makeEqualityPredicate(
 	left, right *dataSourceInfo,
 	leftColNames, rightColNames parser.NameList,
