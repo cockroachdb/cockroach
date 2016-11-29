@@ -370,10 +370,37 @@ func (t *logicTest) close() {
 		t.cleanupRootUser()
 		t.cleanupRootUser = nil
 	}
-	if t.srv != nil {
-		t.srv.Stopper().Stop()
-		t.srv = nil
+	cleanup := t.setUser(security.RootUser)
+	// drop all databases created in the test
+	toDrop := make([]string, 0)
+	func() {
+		rows, err := t.db.Query("SHOW DATABASES")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var dbName string
+			if err := rows.Scan(&dbName); err != nil {
+				t.Fatal(err)
+			}
+			if sql.IsSystemDatabaseName(dbName) {
+				continue
+			}
+			toDrop = append(toDrop, dbName)
+		}
+	}()
+	for _, dbName := range toDrop {
+		fmt.Printf("Dropping database %s...\n", dbName)
+		if _, err := t.db.Exec(fmt.Sprintf("DROP DATABASE %s;", dbName)); err != nil {
+			t.Fatal(err)
+		}
 	}
+	if _, err := t.db.Exec(
+		fmt.Sprintf("DELETE FROM system.users WHERE username='%s';", server.TestUser)); err != nil {
+		t.Fatal(err)
+	}
+	cleanup()
 	if t.clients != nil {
 		for _, c := range t.clients {
 			c.Close()
@@ -438,22 +465,6 @@ func (t *logicTest) setUser(user string) func() {
 }
 
 func (t *logicTest) setup() {
-	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
-	// MySQL or Postgres instance.
-	// TODO(andrei): if createTestServerParams() is used here, the command filter
-	// it installs detects a transaction that doesn't have
-	// modifiedSystemConfigSpan set even though it should, for
-	// "testdata/rename_table". Figure out what's up with that.
-	params := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				WaitForGossipUpdate:   true,
-				CheckStmtStringChange: true,
-			},
-		},
-	}
-	t.srv, _, _ = serverutils.StartServer(t.T, params)
-
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
 	t.cleanupRootUser = t.setUser(security.RootUser)
@@ -1104,9 +1115,31 @@ func TestLogic(t *testing.T) {
 		verbose:         testing.Verbose() || log.V(1),
 		perErrorSummary: make(map[string][]string),
 	}
-	if *printErrorSummary {
-		defer l.printErrorSummary()
+	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
+	// MySQL or Postgres instance.
+	// TODO(andrei): if createTestServerParams() is used here, the command filter
+	// it installs detects a transaction that doesn't have
+	// modifiedSystemConfigSpan set even though it should, for
+	// "testdata/rename_table". Figure out what's up with that.
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				WaitForGossipUpdate:   true,
+				CheckStmtStringChange: true,
+			},
+		},
 	}
+	l.srv, _, _ = serverutils.StartServer(l.T, params)
+	defer func() {
+		if l.srv != nil {
+			l.srv.Stopper().Stop()
+			l.srv = nil
+
+			if *printErrorSummary {
+				defer l.printErrorSummary()
+			}
+		}
+	}()
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			// the `t` given to this anonymous function may be different

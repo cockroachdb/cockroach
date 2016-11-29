@@ -27,6 +27,8 @@ import (
 
 const (
 	informationSchemaName = "information_schema"
+	pgCatalogName         = "pg_catalog"
+	systemDatabaseName    = "system"
 )
 
 var informationSchema = virtualSchema{
@@ -56,6 +58,10 @@ var (
 	yesString = parser.NewDString("YES")
 	noString  = parser.NewDString("NO")
 )
+
+func IsSystemDatabaseName(name string) bool {
+	return name == informationSchemaName || name == pgCatalogName || name == systemDatabaseName
+}
 
 func yesOrNoDatum(b bool) parser.Datum {
 	if b {
