@@ -1988,6 +1988,8 @@ func (s *Store) RemoveReplica(
 func (s *Store) removeReplicaImpl(
 	ctx context.Context, rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool,
 ) error {
+	log.Infof(ctx, "removing replica")
+
 	desc := rep.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
