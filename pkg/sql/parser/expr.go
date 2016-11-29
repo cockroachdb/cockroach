@@ -973,6 +973,10 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+func (node *CastExpr) castType() Type {
+	return columnTypeToDatumType(node.Type)
+}
+
 var (
 	boolCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
 	intCastTypes  = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
@@ -989,34 +993,29 @@ var (
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeInt, TypeInterval}
 )
 
-func colTypeToTypeAndValidArgTypes(t ColumnType) (Type, []Type) {
-	switch t.(type) {
-	case *BoolColType:
-		return TypeBool, boolCastTypes
-	case *IntColType:
-		return TypeInt, intCastTypes
-	case *FloatColType:
-		return TypeFloat, floatCastTypes
-	case *DecimalColType:
-		return TypeDecimal, decimalCastTypes
-	case *StringColType:
-		return TypeString, stringCastTypes
-	case *BytesColType:
-		return TypeBytes, bytesCastTypes
-	case *DateColType:
-		return TypeDate, dateCastTypes
-	case *TimestampColType:
-		return TypeTimestamp, timestampCastTypes
-	case *TimestampTZColType:
-		return TypeTimestampTZ, timestampCastTypes
-	case *IntervalColType:
-		return TypeInterval, intervalCastTypes
+// validCastTypes returns a set of types that can be cast into the provided type.
+func validCastTypes(t Type) []Type {
+	switch t {
+	case TypeBool:
+		return boolCastTypes
+	case TypeInt:
+		return intCastTypes
+	case TypeFloat:
+		return floatCastTypes
+	case TypeDecimal:
+		return decimalCastTypes
+	case TypeString:
+		return stringCastTypes
+	case TypeBytes:
+		return bytesCastTypes
+	case TypeDate:
+		return dateCastTypes
+	case TypeTimestamp, TypeTimestampTZ:
+		return timestampCastTypes
+	case TypeInterval:
+		return intervalCastTypes
 	}
-	return nil, nil
-}
-
-func (node *CastExpr) castTypeAndValidArgTypes() (Type, []Type) {
-	return colTypeToTypeAndValidArgTypes(node.Type)
+	return nil
 }
 
 // IndirectionExpr represents a subscript expression.
@@ -1071,8 +1070,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 }
 
 func (node *AnnotateTypeExpr) annotationType() Type {
-	typ, _ := colTypeToTypeAndValidArgTypes(node.Type)
-	return typ
+	return columnTypeToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.
