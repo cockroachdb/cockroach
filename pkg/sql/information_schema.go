@@ -25,8 +25,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	informationSchemaName = "information_schema"
+)
+
 var informationSchema = virtualSchema{
-	name: "information_schema",
+	name: informationSchemaName,
 	tables: []virtualSchemaTable{
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
