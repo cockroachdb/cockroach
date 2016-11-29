@@ -27,6 +27,7 @@ import (
 
 const (
 	informationSchemaName = "information_schema"
+	pgCatalogName         = "pg_catalog"
 )
 
 var informationSchema = virtualSchema{
@@ -523,10 +524,11 @@ func forEachDatabaseDesc(p *planner, fn func(*sqlbase.DatabaseDescriptor) error)
 	return nil
 }
 
-// forEachTableDesc retrieves all table descriptors and iterates through them in
-// lexicographical order with respect primarily to database name and secondarily
-// to table name. For each table, the function will call fn with its respective
-// database and table descriptor.
+// forEachTableDesc retrieves all table descriptors from the current database
+// and all system databases and iterates through them in lexicographical order
+// with respect primarily to database name and secondarily to table name. For
+// each table, the function will call fn with its respective database and table
+// descriptor.
 func forEachTableDesc(
 	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
@@ -549,6 +551,19 @@ func (fn tableLookupFn) tableOrErr(id sqlbase.ID) (*sqlbase.TableDescriptor, err
 		return t, nil
 	}
 	return nil, errors.Errorf("could not find referenced table with ID %v", id)
+}
+
+// isSystemDatabaseName returns true if the input name is not a user db name.
+func isSystemDatabaseName(name string) bool {
+	switch name {
+	case informationSchemaName:
+		return true
+	case pgCatalogName:
+		return true
+	case sqlbase.SystemDB.Name:
+		return true
+	}
+	return false
 }
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
@@ -630,6 +645,9 @@ func forEachTableDescWithTableLookup(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
+		if !p.isDatabaseVisible(dbName) {
+			continue
+		}
 		db := databases[dbName]
 		dbTableNames := make([]string, 0, len(db.tables))
 		for tableName := range db.tables {
