@@ -40,7 +40,7 @@ $subnav-underline-height = 3px
   width $nav-width
   modular-font-size '1'
   background-color $navbar-bg
-  border-right 1px solid $navbar-border
+  border-right 1px solid $light-gray-2
   margin 0
   padding 0
   display block
@@ -66,30 +66,13 @@ $subnav-underline-height = 3px
 
     &.normal
       path
-        fill $main-nav-inactive
+        fill $light-blue
 
-      &.active, &.active:hover
-        color $main-nav-active-font
-        background-color $main-nav-active-bg
-        position relative
-        right -1px
-        border-right 2px solid $main-nav-active-bg
+      &.active, &.active:hover, &:hover
+        color $glow-blue
 
         path
-          fill $main-nav-active-icon
-
-      &:hover
-        color $main-nav-hover
-
-        path
-          fill $main-nav-hover
-
-      #Fill-6, #Fill-7
-        fill $navbar-bg
-
-      &.active
-        #Fill-6, #Fill-7
-          fill $main-nav-active-bg
+          fill $glow-blue
 
     &.cockroach
       padding-top 10px
