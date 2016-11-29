@@ -90,6 +90,26 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		return true, ivar
 
 	case *parser.FuncExpr:
+		fd, err := t.Func.Resolve(v.searchPath)
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+
+		if strings.EqualFold(fd.Name, "random") {
+			// `random()` changes values every row. So report we found
+			// a dependent variable.
+			// TODO(knz): in the future we may have more than one built-in
+			// function that has different values for every row. In that
+			// case, the property becomes an attribute of the
+			// built-in. However then overload resolution (type checking)
+			// must occur before this property can be detected. This
+			// would be a more significant refactoring, which is why
+			// we don't do this yet.
+			v.foundDependentVars = true
+			break
+		}
+
 		// Check for invalid use of *, which, if it is an argument, is the only argument.
 		if len(t.Exprs) != 1 {
 			break
@@ -104,12 +124,6 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		}
 		// Save back to avoid re-doing the work later.
 		t.Exprs[0] = vn
-
-		fd, err := t.Func.Resolve(v.searchPath)
-		if err != nil {
-			v.err = err
-			return false, expr
-		}
 
 		if strings.EqualFold(fd.Name, "count") {
 			// Special case handling for COUNT(*). This is a special construct to
@@ -153,8 +167,9 @@ func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, bool, error) {
 
 // resolveNames walks the provided expression and resolves all names
 // using the tableInfo and iVarHelper.
-// If anything that looks like a column reference (indexed vars, star, etc)
-// is encountered, the 2nd return value is true.
+// If anything that looks like a column reference (indexed vars, star,
+// etc) is encountered, or a function that may change value for every
+// row in a table, the 2nd return value is true.
 func (p *planner) resolveNames(
 	expr parser.Expr, sources multiSourceInfo, ivarHelper parser.IndexedVarHelper,
 ) (parser.Expr, bool, error) {
