@@ -104,16 +104,17 @@ message InputSyncSpec {
 // it decides how to send results to multiple output streams.
 message OutputRouterSpec {
   enum Type {
-    // Each row is sent to all output streams (also used if there is a
-    // single output stream).
-    MIRROR = 0;
+    // Single output stream.
+    PASS_THROUGH = 0;
+    // Each row is sent to all output streams.
+    MIRROR = 1;
     // Each row is sent to one stream, chosen by hashing certain columns of
     // the row (specified by the hash_columns field).
-    BY_HASH = 1;
+    BY_HASH = 2;
     // Each row is sent to one stream, chosen according to preset boundaries
     // for the values of certain columns of the row. TODO(radu): an extra
     // optional structure below for the range details.
-    BY_RANGE = 2;
+    BY_RANGE = 3;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];

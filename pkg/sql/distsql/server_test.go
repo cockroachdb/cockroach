@@ -64,7 +64,7 @@ func TestServer(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},
 			Output: []OutputRouterSpec{{
-				Type:    OutputRouterSpec_MIRROR,
+				Type:    OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
 		}},
