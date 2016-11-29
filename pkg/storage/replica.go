@@ -573,7 +573,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
 	// Add replica pointer value.
-	r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", r))
+	r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
 	raftMuLogger := syncutil.ThresholdLogger(
 		r.AnnotateCtx(context.Background()),
