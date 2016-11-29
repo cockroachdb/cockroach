@@ -398,7 +398,7 @@ func TestStyle(t *testing.T) {
 
 		if t.Failed() {
 			args := append([]string(nil), cmd.Args[1:len(cmd.Args)-1]...)
-			args = append(args, "-w", ".")
+			args = append(args, "-w", pkg.Dir)
 			for i := range args {
 				args[i] = strconv.Quote(args[i])
 			}
