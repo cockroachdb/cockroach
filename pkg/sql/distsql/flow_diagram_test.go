@@ -67,7 +67,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Output: []OutputRouterSpec{{
-				Type: OutputRouterSpec_MIRROR,
+				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
 					{StreamID: 0},
 				},
@@ -79,7 +79,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Output: []OutputRouterSpec{{
-				Type: OutputRouterSpec_MIRROR,
+				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
 					{StreamID: 1},
 				},
@@ -92,7 +92,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr},
 				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_MIRROR,
+					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
 						{StreamID: 2},
 					},
@@ -110,7 +110,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 				}},
 				Core: ProcessorCoreUnion{JoinReader: &jr},
 				Output: []OutputRouterSpec{{
-					Type:    OutputRouterSpec_MIRROR,
+					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
 				}}},
 		},
@@ -216,7 +216,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 				},
 				Core: ProcessorCoreUnion{HashJoiner: &hj},
 				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_MIRROR,
+					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
 						{StreamID: 101},
 					},
@@ -232,7 +232,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 				}},
 				Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
 				Output: []OutputRouterSpec{{
-					Type:    OutputRouterSpec_MIRROR,
+					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
 				}}},
 		},
@@ -282,7 +282,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 				},
 				Core: ProcessorCoreUnion{HashJoiner: &hj},
 				Output: []OutputRouterSpec{{
-					Type: OutputRouterSpec_MIRROR,
+					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
 						{StreamID: 101},
 					},
