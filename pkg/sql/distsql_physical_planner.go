@@ -252,6 +252,14 @@ type physicalPlan struct {
 	ordering distsql.Ordering
 }
 
+// addProcessor adds a processor to a physicalPlan and returns the index that
+// can be used to refer to that processor.
+func (p *physicalPlan) addProcessor(proc processor) processorIdx {
+	idx := processorIdx(len(p.processors))
+	p.processors = append(p.processors, proc)
+	return idx
+}
+
 // The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
 // refer to columns. We format the expression using an IndexedVar formatting
 // interceptor. A columnMap can optionally be used to remap the indices.
@@ -485,7 +493,6 @@ func (dsp *distSQLPlanner) createTableReaders(
 		return physicalPlan{}, err
 	}
 	var p physicalPlan
-	pIdx := processorIdx(len(p.processors))
 	for _, sp := range spanPartitions {
 		proc := processor{
 			node: sp.node,
@@ -502,11 +509,10 @@ func (dsp *distSQLPlanner) createTableReaders(
 		proc.spec.Output = make([]distsql.OutputRouterSpec, 1)
 		proc.spec.Output[0].Type = distsql.OutputRouterSpec_MIRROR
 
-		p.processors = append(p.processors, proc)
+		pIdx := p.addProcessor(proc)
 		p.resultRouters = append(p.resultRouters, pIdx)
 		p.planToStreamColMap = planToStreamColMap
 		p.ordering = ordering
-		pIdx++
 	}
 	return p, nil
 }
@@ -516,7 +522,6 @@ func (dsp *distSQLPlanner) createTableReaders(
 // stages that correspond to logical blocks that don't require any grouping
 // (e.g. evaluator, sorting, etc).
 func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.ProcessorCoreUnion) {
-	pIdx := processorIdx(len(p.processors))
 	for i, resultProc := range p.resultRouters {
 		prevProc := &p.processors[resultProc]
 
@@ -533,6 +538,8 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 			},
 		}
 
+		pIdx := p.addProcessor(proc)
+
 		p.streams = append(p.streams, stream{
 			sourceProcessor: resultProc,
 			destProcessor:   pIdx,
@@ -540,8 +547,6 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 		})
 
 		p.resultRouters[i] = pIdx
-		p.processors = append(p.processors, proc)
-		pIdx++
 	}
 }
 
@@ -650,9 +655,7 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 		},
 	}
 
-	// Add the processor.
-	pIdx := processorIdx(len(p.processors))
-	p.processors = append(p.processors, proc)
+	pIdx := p.addProcessor(proc)
 
 	// Connect the result routers to the no-op processor.
 	dsp.mergeResultStreams(p, p.resultRouters, p.ordering, pIdx, 0)
