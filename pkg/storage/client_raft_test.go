@@ -1848,7 +1848,10 @@ func TestRaftRemoveRace(t *testing.T) {
 // placeholders.
 func TestRemovePlaceholderRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	sc := storage.TestStoreConfig(nil)
+	sc.RaftTickInterval = time.Millisecond
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 3)
 	defer mtc.Stop()
 
 	const rangeID = roachpb.RangeID(1)
@@ -1864,16 +1867,24 @@ func TestRemovePlaceholderRace(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
-			if err := repl.ChangeReplicas(
-				ctx,
-				action,
-				roachpb.ReplicaDescriptor{
-					NodeID:  ident.NodeID,
-					StoreID: ident.StoreID,
-				},
-				repl.Desc(),
-			); err != nil {
-				t.Fatal(err)
+			for {
+				if err := repl.ChangeReplicas(
+					ctx,
+					action,
+					roachpb.ReplicaDescriptor{
+						NodeID:  ident.NodeID,
+						StoreID: ident.StoreID,
+					},
+					repl.Desc(),
+				); err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
+					break
+				} else if testutils.IsError(err, "cannot add placeholder, have an existing placeholder") {
+					break // TODO(tamird): why is this clause necessary?
+				} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
+					continue
+				} else {
+					t.Fatal(err)
+				}
 			}
 		}
 	}

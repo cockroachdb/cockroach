@@ -1975,25 +1975,25 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 // then. If `destroy` is true, all data belonging to the replica will be
 // deleted. In either case a tombstone record will be written.
 func (s *Store) RemoveReplica(
-	ctx context.Context, rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool,
+	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, destroy bool,
 ) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	return s.removeReplicaImpl(ctx, rep, origDesc, destroy)
+	return s.removeReplicaImpl(ctx, rep, consistentDesc, destroy)
 }
 
 // removeReplicaImpl is the implementation of RemoveReplica, which is sometimes
 // called directly when the necessary lock is already held. It requires that
 // Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(
-	ctx context.Context, rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool,
+	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, destroyData bool,
 ) error {
 	log.Infof(ctx, "removing replica")
 
 	desc := rep.Desc()
-	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
+	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= consistentDesc.NextReplicaID {
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
-			rep, repDesc.ReplicaID, origDesc.NextReplicaID)
+			rep, repDesc.ReplicaID, consistentDesc.NextReplicaID)
 	}
 
 	s.mu.Lock()
@@ -2041,7 +2041,7 @@ func (s *Store) removeReplicaImpl(
 	rep.readOnlyCmdMu.Unlock()
 
 	if destroyData {
-		if err := rep.destroyDataRaftMuLocked(ctx); err != nil {
+		if err := rep.destroyDataRaftMuLocked(ctx, consistentDesc); err != nil {
 			return err
 		}
 	}
@@ -3582,7 +3582,7 @@ func (s *Store) canApplySnapshotLocked(
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
 	if exRng, ok := s.mu.replicaPlaceholders[rangeDescriptor.RangeID]; ok {
-		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
+		return nil, errors.Errorf("%s: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
 	if exRange := s.getOverlappingKeyRangeLocked(rangeDescriptor); exRange != nil {

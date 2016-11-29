@@ -718,9 +718,8 @@ func (r *Replica) String() string {
 
 // destroyData deletes all data associated with a replica, leaving a
 // tombstone. Requires that Replica.raftMu is held.
-func (r *Replica) destroyDataRaftMuLocked(ctx context.Context) error {
-	desc := r.Desc()
-	iter := NewReplicaDataIterator(desc, r.store.Engine(), false /* !replicatedOnly */)
+func (r *Replica) destroyDataRaftMuLocked(ctx context.Context, desc roachpb.RangeDescriptor) error {
+	iter := NewReplicaDataIterator(r.Desc(), r.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
@@ -730,7 +729,7 @@ func (r *Replica) destroyDataRaftMuLocked(ctx context.Context) error {
 
 	// Save a tombstone. The range cannot be re-replicated onto this
 	// node without having a replica ID of at least desc.NextReplicaID.
-	if err := r.setTombstoneKey(ctx, batch, desc); err != nil {
+	if err := r.setTombstoneKey(ctx, batch, &desc); err != nil {
 		return err
 	}
 	return batch.Commit()

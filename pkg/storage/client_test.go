@@ -971,7 +971,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	// Assume AmbiguousResultErrors are due to re-proposals and the
 	// underlying change replicas succeeded.
 	for {
-		err := rep.ChangeReplicas(
+		if err := rep.ChangeReplicas(
 			ctx,
 			roachpb.REMOVE_REPLICA,
 			roachpb.ReplicaDescriptor{
@@ -979,13 +979,13 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 				StoreID: m.idents[dest].StoreID,
 			},
 			&desc,
-		)
-		if err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
+		); err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
 			break
 		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-			break
+			continue
+		} else {
+			m.t.Fatal(err)
 		}
-		m.t.Fatalf("failed: %T, %s", err, err)
 	}
 }
 
