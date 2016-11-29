@@ -1619,12 +1619,29 @@ func (d *DArray) Size() uintptr {
 	return sz
 }
 
+var errNonHomogeneousArray = errors.New("multidimensional arrays must have array expressions with matching dimensions")
+
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.
 func (d *DArray) Append(v Datum) error {
 	if v != DNull && !d.ParamTyp.Equal(v.ResolvedType()) {
 		return errors.Errorf("cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
+	}
+	if _, ok := d.ParamTyp.(tArray); ok {
+		if v == DNull {
+			return errNonHomogeneousArray
+		}
+		if d.Len() > 0 {
+			prevItem := d.Array[d.Len()-1]
+			if prevItem == DNull {
+				return errNonHomogeneousArray
+			}
+			expectedLen := prevItem.(*DArray).Len()
+			if v.(*DArray).Len() != expectedLen {
+				return errNonHomogeneousArray
+			}
+		}
 	}
 	d.Array = append(d.Array, v)
 	return nil
