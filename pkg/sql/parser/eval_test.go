@@ -696,10 +696,6 @@ func TestEvalError(t *testing.T) {
 			`could not parse '3 4' as type interval: interval: missing unit in postgres duration 3 4`},
 		{`'3t-4 2:3'::interval`,
 			`could not parse '3t-4 2:3' as type interval: interval: invalid SQL stardard duration 3t-4`},
-		{`ANNOTATE_TYPE('a', int)`,
-			`incompatible type assertion for 'a' as int, found type: string`},
-		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`,
-			`incompatible type assertion for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},

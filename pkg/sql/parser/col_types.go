@@ -306,3 +306,34 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 	}
 	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
 }
+
+// columnTypeToDatumType produces a Datum type equivalent to the given
+// SQL column type.
+func columnTypeToDatumType(t ColumnType) Type {
+	switch ct := t.(type) {
+	case *BoolColType:
+		return TypeBool
+	case *IntColType:
+		return TypeInt
+	case *FloatColType:
+		return TypeFloat
+	case *DecimalColType:
+		return TypeDecimal
+	case *StringColType:
+		return TypeString
+	case *BytesColType:
+		return TypeBytes
+	case *DateColType:
+		return TypeDate
+	case *TimestampColType:
+		return TypeTimestamp
+	case *TimestampTZColType:
+		return TypeTimestampTZ
+	case *IntervalColType:
+		return TypeInterval
+	case *ArrayColType:
+		return tArray{columnTypeToDatumType(ct.ParamType)}
+	default:
+		panic(errors.Errorf("unexpected ColumnType %T", t))
+	}
+}

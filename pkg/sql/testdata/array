@@ -16,11 +16,10 @@ SELECT ARRAY['a', 'b', 'c']
 ----
 {'a','b','c'}
 
-# TODO(nvanbenschoten) Uncomment when int[] is added as a column type.
-# query T
-# SELECT ARRAY[]:::int[]
-# ----
-# {}
+query T
+SELECT ARRAY[]:::int[]
+----
+{}
 
 # array subscript access
 

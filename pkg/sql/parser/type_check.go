@@ -191,7 +191,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
-	returnDatum, validTypes := expr.castTypeAndValidArgTypes()
+	returnType := expr.castType()
 
 	// The desired type provided to a CastExpr is ignored. Instead,
 	// TypeAny is passed to the child of the cast. There are two
@@ -199,11 +199,11 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 	desired := TypeAny
 	switch {
 	case isConstant(expr.Expr):
-		if canConstantBecome(expr.Expr.(Constant), returnDatum) {
+		if canConstantBecome(expr.Expr.(Constant), returnType) {
 			// If a Constant is subject to a cast which it can naturally become (which
 			// is in its resolvable type set), we desire the cast's type for the Constant,
 			// which will result in the CastExpr becoming an identity cast.
-			desired = returnDatum
+			desired = returnType
 		}
 	case ctx.isUnresolvedPlaceholder(expr.Expr):
 		// This case will be triggered if ProcessPlaceholderAnnotations found
@@ -219,10 +219,10 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 	}
 
 	castFrom := typedSubExpr.ResolvedType()
-	for _, t := range validTypes {
+	for _, t := range validCastTypes(returnType) {
 		if castFrom.Equal(t) {
 			expr.Expr = typedSubExpr
-			expr.typ = returnDatum
+			expr.typ = returnType
 			return expr, nil
 		}
 	}
@@ -270,7 +270,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	annotType := expr.annotationType()
 	subExpr, err := typeCheckAndRequire(ctx, expr.Expr, annotType,
-		fmt.Sprintf("type assertion for %v as %s, found", expr.Expr, annotType))
+		fmt.Sprintf("type annotation for %v as %s, found", expr.Expr, annotType))
 	if err != nil {
 		return nil, err
 	}
@@ -1132,7 +1132,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 		}
 	case *CastExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
-			castType, _ := t.castTypeAndValidArgTypes()
+			castType := t.castType()
 			if state, ok := v.placeholders[arg.Name]; ok {
 				// Ignore casts once an assertion has been seen.
 				if state.sawAssertion {

@@ -122,6 +122,9 @@ func TestTypeCheckError(t *testing.T) {
 		{`ARRAY[]`, `cannot determine type of empty array`},
 		{`ARRAY[1.5, 2.5, 3.5]`, `unhandled parameterized array type parser.tDecimal`},
 		{`ARRAY[NULL]`, `unhandled parameterized array type parser.tNull`},
+		{`ANNOTATE_TYPE('a', int)`, `incompatible type annotation for 'a' as int, found type: string`},
+		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
+		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
