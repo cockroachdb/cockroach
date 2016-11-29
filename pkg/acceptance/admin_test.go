@@ -45,7 +45,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	for i := 0; i < c.NumNodes(); i++ {
 		var details serverpb.DetailsResponse
 		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
-			t.Fatal(err)
+			t.Fatalf("failed to get local details from node %d: %s", i, err)
 		}
 		nodeIDs[i] = details.NodeID
 	}
@@ -53,7 +53,7 @@ func testAdminLossOfQuorumInner(t *testing.T, c cluster.Cluster, cfg cluster.Tes
 	// Leave only the first node alive.
 	for i := 1; i < c.NumNodes(); i++ {
 		if err := c.Kill(i); err != nil {
-			t.Fatal(err)
+			t.Fatalf("failed to kill node %d: %s", i, err)
 		}
 	}
 

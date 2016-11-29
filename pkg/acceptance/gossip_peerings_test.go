@@ -55,7 +55,7 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration, f checkGossip
 		var infoStatus gossip.InfoStatus
 		for i := 0; i < c.NumNodes(); i++ {
 			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/gossip/local", &infoStatus); err != nil {
-				return err
+				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
 			}
 			if err := f(infoStatus.Infos); err != nil {
 				return errors.Errorf("node %d: %s", i, err)
