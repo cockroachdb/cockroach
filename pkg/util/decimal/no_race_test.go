@@ -18,4 +18,4 @@ package decimal
 
 import "time"
 
-const testFuncTimeout = time.Second * 5
+const testFuncTimeout = time.Second
