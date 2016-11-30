@@ -1648,7 +1648,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Shut down a raft transport via the circuit breaker, and wait for two
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
-	cb := mtc.transports[0].GetCircuitBreaker(roachpb.NodeID(followerIdx))
+	cb := mtc.transport.GetCircuitBreaker(roachpb.NodeID(followerIdx))
 	cb.Break()
 
 	ticksToWait := 2 * mtc.makeStoreConfig(0).RaftElectionTimeoutTicks
@@ -1855,7 +1855,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	mtc.transports[2].SendAsync(&storage.RaftMessageRequest{
+	mtc.transport.SendAsync(&storage.RaftMessageRequest{
 		RangeID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,

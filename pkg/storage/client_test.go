@@ -186,23 +186,22 @@ type multiTestContext struct {
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
+	transport *storage.RaftTransport
+
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
 	clocks         []*hlc.Clock
 	engines        []engine.Engine
 	grpcServers    []*grpc.Server
-	transports     []*storage.RaftTransport
 	distSenders    []*kv.DistSender
 	dbs            []*client.DB
 	gossips        []*gossip.Gossip
 	nodeLivenesses []*storage.NodeLiveness
 	storePools     []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
-	// test individually. transportStopper is for 'transports', and the
+	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
-	// TODO(bdarnell): now that there are multiple transports, do we
-	// need transportStopper?
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
@@ -260,7 +259,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = make([]*storage.Stores, numStores)
 	m.idents = make([]roachpb.StoreIdent, numStores)
 	m.grpcServers = make([]*grpc.Server, numStores)
-	m.transports = make([]*storage.RaftTransport, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
 	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
 
@@ -284,6 +282,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 			})
 		}
 	}
+	m.transport = storage.NewRaftTransport(
+		log.AmbientContext{}, m.getNodeIDAddress, nil, m.rpcContext,
+	)
+
 	for idx := 0; idx < numStores; idx++ {
 		m.addStore(idx)
 	}
@@ -565,7 +567,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	} else {
 		cfg = storage.TestStoreConfig(m.clocks[i])
 	}
-	cfg.Transport = m.transports[i]
+	cfg.Transport = m.transport
 	cfg.DB = m.dbs[i]
 	cfg.Gossip = m.gossips[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
@@ -647,9 +649,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	grpcServer := rpc.NewServer(m.rpcContext)
 	m.grpcServers[idx] = grpcServer
-	m.transports[idx] = storage.NewRaftTransport(
-		log.AmbientContext{}, m.getNodeIDAddress, grpcServer, m.rpcContext,
-	)
+	storage.RegisterMultiRaftServer(grpcServer, m.transport)
 
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 
