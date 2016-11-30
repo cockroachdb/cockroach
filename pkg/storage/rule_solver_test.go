@@ -269,10 +269,15 @@ func TestRuleSolver(t *testing.T) {
 			expectedValid: []roachpb.StoreID{storeUSb, storeUSa1, storeEurope, storeUSa15},
 		},
 		{
-			name:            "ruleCapacity",
-			rule:            ruleCapacity,
-			expectedValid:   []roachpb.StoreID{storeUSa1, storeEurope, storeUSb},
+			name:            "ruleCapacityMax",
+			rule:            ruleCapacityMax,
+			expectedValid:   []roachpb.StoreID{storeEurope, storeUSb, storeUSa1},
 			expectedInvalid: []roachpb.StoreID{storeUSa15},
+		},
+		{
+			name:          "ruleCapacity",
+			rule:          ruleCapacity,
+			expectedValid: []roachpb.StoreID{storeUSa1, storeEurope, storeUSb, storeUSa15},
 		},
 	}
 
