@@ -42,27 +42,27 @@ var retryOptions = retry.Options{
 }
 
 // get performs an HTTPS GET to the specified path for a specific node.
-func get(t *testing.T, base, rel string) []byte {
+func get(ctx context.Context, t *testing.T, base, rel string) []byte {
 	// TODO(bram) #2059: Remove retry logic.
 	url := base + rel
 	for r := retry.Start(retryOptions); r.Next(); {
 		resp, err := cluster.HTTPClient.Get(url)
 		if err != nil {
-			log.Infof(context.Background(), "could not GET %s - %s", url, err)
+			log.Infof(ctx, "could not GET %s - %s", url, err)
 			continue
 		}
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Infof(context.Background(), "could not read body for %s - %s", url, err)
+			log.Infof(ctx, "could not read body for %s - %s", url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			log.Infof(context.Background(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			log.Infof(ctx, "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "OK response from %s", url)
+			log.Infof(ctx, "OK response from %s", url)
 		}
 		return body
 	}
@@ -74,7 +74,12 @@ func get(t *testing.T, base, rel string) []byte {
 // requests info for the node with otherNodeID. That node could be the same
 // other node, the same node or "local".
 func checkNode(
-	t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expectedNodeID roachpb.NodeID,
+	ctx context.Context,
+	t *testing.T,
+	c cluster.Cluster,
+	i int,
+	nodeID,
+	otherNodeID, expectedNodeID roachpb.NodeID,
 ) {
 	urlIDs := []string{otherNodeID.String()}
 	if nodeID == otherNodeID {
@@ -82,18 +87,18 @@ func checkNode(
 	}
 	var details serverpb.DetailsResponse
 	for _, urlID := range urlIDs {
-		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/"+urlID, &details); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/details/"+urlID, &details); err != nil {
 			t.Fatal(errors.Errorf("unable to parse details - %s", err))
 		}
 		if details.NodeID != expectedNodeID {
 			t.Fatal(errors.Errorf("%d calling %s: node ids don't match - expected %d, actual %d", nodeID, urlID, expectedNodeID, details.NodeID))
 		}
 
-		get(t, c.URL(i), fmt.Sprintf("/_status/gossip/%s", urlID))
-		get(t, c.URL(i), fmt.Sprintf("/_status/nodes/%s", urlID))
-		get(t, c.URL(i), fmt.Sprintf("/_status/logfiles/%s", urlID))
-		get(t, c.URL(i), fmt.Sprintf("/_status/logs/%s", urlID))
-		get(t, c.URL(i), fmt.Sprintf("/_status/stacks/%s", urlID))
+		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/gossip/%s", urlID))
+		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/nodes/%s", urlID))
+		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/logfiles/%s", urlID))
+		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/logs/%s", urlID))
+		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/stacks/%s", urlID))
 	}
 }
 
@@ -103,12 +108,14 @@ func TestStatusServer(t *testing.T) {
 	runTestOnConfigs(t, testStatusServerInner)
 }
 
-func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
+func testStatusServerInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
 		var details serverpb.DetailsResponse
-		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(i)+"/_status/details/local", &details); err != nil {
+		if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/details/local", &details); err != nil {
 			t.Fatal(err)
 		}
 		idMap[i] = details.NodeID
@@ -117,8 +124,8 @@ func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConf
 	// Check local response for the every node.
 	for i := 0; i < c.NumNodes(); i++ {
 		id := idMap[i]
-		checkNode(t, c, i, id, id, id)
-		get(t, c.URL(i), "/_status/nodes")
+		checkNode(ctx, t, c, i, id, id, id)
+		get(ctx, t, c.URL(ctx, i), "/_status/nodes")
 	}
 
 	// Proxy from the first node to the last node.
@@ -126,11 +133,11 @@ func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConf
 	lastNode := c.NumNodes() - 1
 	firstID := idMap[firstNode]
 	lastID := idMap[lastNode]
-	checkNode(t, c, firstNode, firstID, lastID, lastID)
+	checkNode(ctx, t, c, firstNode, firstID, lastID, lastID)
 
 	// And from the last node to the first node.
-	checkNode(t, c, lastNode, lastID, firstID, firstID)
+	checkNode(ctx, t, c, lastNode, lastID, firstID, firstID)
 
 	// And from the last node to the last node.
-	checkNode(t, c, lastNode, lastID, lastID, lastID)
+	checkNode(ctx, t, c, lastNode, lastID, lastID, lastID)
 }

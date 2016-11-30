@@ -137,7 +137,6 @@ type testNode struct {
 // persistent volumes used for certs and node data and N cockroach nodes.
 type LocalCluster struct {
 	client               client.APIClient
-	stopper              chan struct{}
 	mu                   syncutil.Mutex // Protects the fields below
 	vols                 *Container
 	config               TestConfig
@@ -146,6 +145,7 @@ type LocalCluster struct {
 	expectedEvents       chan Event
 	oneshot              *Container
 	CertsDir             string
+	stopper              *stop.Stopper
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
 	logDir               string // no logging if empty
@@ -160,17 +160,17 @@ type LocalCluster struct {
 // must be started before being used and keeps logs in the specified logDir, if
 // supplied.
 func CreateLocal(
-	cfg TestConfig, logDir string, privileged bool, stopper chan struct{},
+	ctx context.Context, cfg TestConfig, logDir string, privileged bool, stopper *stop.Stopper,
 ) *LocalCluster {
 	select {
-	case <-stopper:
+	case <-stopper.ShouldStop():
 		// The stopper was already closed, exit early.
 		os.Exit(1)
 	default:
 	}
 
 	if *cockroachImage == builderImageFull && !exists(*cockroachBinary) {
-		log.Fatalf(context.Background(), "\"%s\": does not exist", *cockroachBinary)
+		log.Fatalf(ctx, "\"%s\": does not exist", *cockroachBinary)
 	}
 
 	cli, err := client.NewEnvClient()
@@ -193,8 +193,8 @@ func CreateLocal(
 	return &LocalCluster{
 		clusterID: clusterIDS,
 		client:    retryingClient,
-		stopper:   stopper,
 		config:    cfg,
+		stopper:   stopper,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
@@ -224,32 +224,33 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 // can be running at once.
 // Adds the same binds as the cluster containers (certs, binary, etc).
 func (l *LocalCluster) OneShot(
+	ctx context.Context,
 	ref string,
 	ipo types.ImagePullOptions,
 	containerConfig container.Config,
 	hostConfig container.HostConfig,
 	name string,
 ) error {
-	if err := pullImage(l, ref, ipo); err != nil {
+	if err := pullImage(ctx, l, ref, ipo); err != nil {
 		return err
 	}
 	hostConfig.VolumesFrom = []string{l.vols.id}
-	container, err := createContainer(l, containerConfig, hostConfig, name)
+	container, err := createContainer(ctx, l, containerConfig, hostConfig, name)
 	if err != nil {
 		return err
 	}
 	l.oneshot = container
 	defer func() {
-		if err := l.oneshot.Remove(); err != nil {
-			log.Errorf(context.Background(), "ContainerRemove: %s", err)
+		if err := l.oneshot.Remove(ctx); err != nil {
+			log.Errorf(ctx, "ContainerRemove: %s", err)
 		}
 		l.oneshot = nil
 	}()
 
-	if err := l.oneshot.Start(); err != nil {
+	if err := l.oneshot.Start(ctx); err != nil {
 		return err
 	}
-	if err := l.oneshot.Wait(); err != nil {
+	if err := l.oneshot.Wait(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -259,9 +260,9 @@ func (l *LocalCluster) OneShot(
 // to tear down the cluster if a panic occurs while starting it. If the panic
 // was initiated by the stopper being closed (which panicOnStop notices) then
 // the process is exited with a failure code.
-func (l *LocalCluster) stopOnPanic() {
+func (l *LocalCluster) stopOnPanic(ctx context.Context) {
 	if r := recover(); r != nil {
-		l.stop()
+		l.stop(ctx)
 		if r != l {
 			panic(r)
 		}
@@ -269,7 +270,7 @@ func (l *LocalCluster) stopOnPanic() {
 	}
 }
 
-// panicOnStop tests whether the stopper channel has been closed and panics if
+// panicOnStop tests whether the stopper has been closed and panics if
 // it has. This allows polling for whether to stop and avoids nasty locking
 // complications with trying to call Stop at arbitrary points such as in the
 // middle of creating a container.
@@ -279,50 +280,50 @@ func (l *LocalCluster) panicOnStop() {
 	}
 
 	select {
-	case <-l.stopper:
+	case <-l.stopper.IsStopped():
 		l.stopper = nil
 		panic(l)
 	default:
 	}
 }
 
-func (l *LocalCluster) createNetwork() {
+func (l *LocalCluster) createNetwork(ctx context.Context) {
 	l.panicOnStop()
 
 	l.networkName = fmt.Sprintf("%s-%s", networkPrefix, l.clusterID)
-	log.Infof(context.Background(), "creating docker network with name: %s", l.networkName)
-	net, err := l.client.NetworkInspect(context.Background(), l.networkName)
+	log.Infof(ctx, "creating docker network with name: %s", l.networkName)
+	net, err := l.client.NetworkInspect(ctx, l.networkName)
 	if err == nil {
 		// We need to destroy the network and any running containers inside of it.
 		for containerID := range net.Containers {
 			// This call could fail if the container terminated on its own after we call
 			// NetworkInspect, but the likelihood of this seems low. If this line creates
 			// a lot of panics we should do more careful error checking.
-			maybePanic(l.client.ContainerKill(context.Background(), containerID, "9"))
+			maybePanic(l.client.ContainerKill(ctx, containerID, "9"))
 		}
-		maybePanic(l.client.NetworkRemove(context.Background(), l.networkName))
+		maybePanic(l.client.NetworkRemove(ctx, l.networkName))
 	} else if !client.IsErrNotFound(err) {
 		panic(err)
 	}
 
-	resp, err := l.client.NetworkCreate(context.Background(), l.networkName, types.NetworkCreate{
+	resp, err := l.client.NetworkCreate(ctx, l.networkName, types.NetworkCreate{
 		Driver: "bridge",
 		// Docker gets very confused if two networks have the same name.
 		CheckDuplicate: true,
 	})
 	maybePanic(err)
 	if resp.Warning != "" {
-		log.Warningf(context.Background(), "creating network: %s", resp.Warning)
+		log.Warningf(ctx, "creating network: %s", resp.Warning)
 	}
 	l.networkID = resp.ID
 }
 
 // create the volumes container that keeps all of the volumes used by
 // the cluster.
-func (l *LocalCluster) initCluster() {
+func (l *LocalCluster) initCluster(ctx context.Context) {
 	configJSON, err := json.Marshal(l.config)
 	maybePanic(err)
-	log.Infof(context.Background(), "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
+	log.Infof(ctx, "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
 	l.panicOnStop()
 
 	// Create the temporary certs directory in the current working
@@ -385,9 +386,10 @@ func (l *LocalCluster) initCluster() {
 	}
 
 	if *cockroachImage == builderImageFull {
-		maybePanic(pullImage(l, builderImage+":"+builderTag, types.ImagePullOptions{}))
+		maybePanic(pullImage(ctx, l, builderImage+":"+builderTag, types.ImagePullOptions{}))
 	}
 	c, err := createContainer(
+		ctx,
 		l,
 		container.Config{
 			Image:      *cockroachImage,
@@ -404,13 +406,15 @@ func (l *LocalCluster) initCluster() {
 	// Otherwise, if they trigger maybePanic, this container won't get cleaned up
 	// and it'll get in the way of future runs.
 	l.vols = c
-	maybePanic(c.Start())
-	maybePanic(c.Wait())
+	maybePanic(c.Start(ctx))
+	maybePanic(c.Wait(ctx))
 }
 
 // createRoach creates the docker container for a testNode. It may be called in
 // parallel to start many nodes at once, and thus should remain threadsafe.
-func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string, cmd ...string) {
+func (l *LocalCluster) createRoach(
+	ctx context.Context, node *testNode, vols *Container, env []string, cmd ...string,
+) {
 	l.panicOnStop()
 
 	hostConfig := container.HostConfig{
@@ -427,7 +431,7 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 	if node.index >= 0 {
 		hostname = fmt.Sprintf("roach-%s-%d", l.clusterID, node.index)
 	}
-	log.Infof(context.Background(), "creating docker container with name: %s", hostname)
+	log.Infof(ctx, "creating docker container with name: %s", hostname)
 	var entrypoint []string
 	if *cockroachImage == builderImageFull {
 		entrypoint = append(entrypoint, CockroachBinaryInContainer)
@@ -436,6 +440,7 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 	}
 	var err error
 	node.Container, err = createContainer(
+		ctx,
 		l,
 		container.Config{
 			Hostname: hostname,
@@ -482,7 +487,7 @@ func (l *LocalCluster) createNodeCerts() {
 
 // startNode starts a Docker container to run testNode. It may be called in
 // parallel to start many nodes at once, and thus should remain threadsafe.
-func (l *LocalCluster) startNode(node *testNode) {
+func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
 		"--ca-cert=/certs/ca.crt",
@@ -527,11 +532,11 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true",
 		"COCKROACH_SKIP_UPDATE_CHECK=1",
 	}
-	l.createRoach(node, l.vols, env, cmd...)
-	maybePanic(node.Start())
-	httpAddr := node.Addr(defaultHTTP)
+	l.createRoach(ctx, node, l.vols, env, cmd...)
+	maybePanic(node.Start(ctx))
+	httpAddr := node.Addr(ctx, defaultHTTP)
 
-	log.Infof(context.Background(), `*** started %[1]s ***
+	log.Infof(ctx, `*** started %[1]s ***
   ui:        %[2]s
   trace:     %[2]s/debug/requests
   logs:      %[3]s/cockroach.INFO
@@ -544,7 +549,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 }
 
 // returns false is the event
-func (l *LocalCluster) processEvent(event events.Message) bool {
+func (l *LocalCluster) processEvent(ctx context.Context, event events.Message) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -557,7 +562,7 @@ func (l *LocalCluster) processEvent(event events.Message) bool {
 	for i, n := range l.Nodes {
 		if n != nil && n.id == event.ID {
 			if log.V(1) {
-				log.Errorf(context.Background(), "node=%d status=%s", i, event.Status)
+				log.Errorf(ctx, "node=%d status=%s", i, event.Status)
 			}
 			select {
 			case l.events <- Event{NodeIndex: i, Status: event.Status}:
@@ -568,35 +573,34 @@ func (l *LocalCluster) processEvent(event events.Message) bool {
 		}
 	}
 
-	log.Infof(context.Background(), "received docker event for unrecognized container: %+v",
+	log.Infof(ctx, "received docker event for unrecognized container: %+v",
 		event)
 
 	// An event on any other container is unexpected. Die.
 	select {
-	case <-l.stopper:
+	case <-l.stopper.ShouldStop():
 	case <-l.monitorCtx.Done():
 	default:
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
-		log.Errorf(context.Background(), "stopping due to unexpected event: %+v", event)
+		log.Errorf(ctx, "stopping due to unexpected event: %+v", event)
 		if rc, err := l.client.ContainerLogs(context.Background(), event.Actor.ID, types.ContainerLogsOptions{
 			ShowStdout: true,
 			ShowStderr: true,
 		}); err == nil {
 			defer rc.Close()
 			if _, err := io.Copy(os.Stderr, rc); err != nil {
-				log.Infof(context.Background(), "error listing logs: %s", err)
+				log.Infof(ctx, "error listing logs: %s", err)
 			}
 		}
-		close(l.stopper)
 	}
 	return false
 }
 
-func (l *LocalCluster) monitor() {
+func (l *LocalCluster) monitor(ctx context.Context) {
 	if log.V(1) {
-		log.Infof(context.Background(), "events monitor starts")
-		defer log.Infof(context.Background(), "events monitor exits")
+		log.Infof(ctx, "events monitor starts")
+		defer log.Infof(ctx, "events monitor exits")
 	}
 	longPoll := func() bool {
 		// If our context was cancelled, it's time to go home.
@@ -614,7 +618,7 @@ func (l *LocalCluster) monitor() {
 		for {
 			select {
 			case err := <-errq:
-				log.Infof(context.Background(), "event stream done, resetting...: %s", err)
+				log.Infof(ctx, "event stream done, resetting...: %s", err)
 				// Sometimes we get a random string-wrapped EOF error back.
 				// Hard to assert on, so we just let this goroutine spin.
 				return true
@@ -624,7 +628,7 @@ func (l *LocalCluster) monitor() {
 				// Docker.
 				switch event.Status {
 				case eventDie, eventRestart:
-					if !l.processEvent(event) {
+					if !l.processEvent(ctx, event) {
 						return false
 					}
 				}
@@ -637,15 +641,15 @@ func (l *LocalCluster) monitor() {
 }
 
 // Start starts the cluster.
-func (l *LocalCluster) Start() {
-	defer l.stopOnPanic()
+func (l *LocalCluster) Start(ctx context.Context) {
+	defer l.stopOnPanic(ctx)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.createNetwork()
-	l.initCluster()
-	log.Infof(context.Background(), "creating certs (%dbit) in: %s", keyLen, l.CertsDir)
+	l.createNetwork(ctx)
+	l.initCluster(ctx)
+	log.Infof(ctx, "creating certs (%dbit) in: %s", keyLen, l.CertsDir)
 	l.createCACert()
 	l.createNodeCerts()
 	maybePanic(security.RunCreateClientCert(
@@ -656,12 +660,12 @@ func (l *LocalCluster) Start() {
 		512, security.RootUser))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
-	go l.monitor()
+	go l.monitor(ctx)
 	var wg sync.WaitGroup
 	wg.Add(len(l.Nodes))
 	for _, node := range l.Nodes {
 		go func(node *testNode) {
-			l.startNode(node)
+			l.startNode(ctx, node)
 			wg.Done()
 		}(node)
 	}
@@ -672,7 +676,7 @@ func (l *LocalCluster) Start() {
 // expected to have been generated by the operations performed on the nodes in
 // the cluster (restart, kill, ...). In the event of a mismatch, the passed
 // Tester receives a fatal error.
-func (l *LocalCluster) Assert(t *testing.T) {
+func (l *LocalCluster) Assert(ctx context.Context, t *testing.T) {
 	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		select {
@@ -699,25 +703,25 @@ func (l *LocalCluster) Assert(t *testing.T) {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
 	if log.V(2) {
-		log.Infof(context.Background(), "asserted %v", events)
+		log.Infof(ctx, "asserted %v", events)
 	}
 }
 
 // AssertAndStop calls Assert and then stops the cluster. It is safe to stop
 // the cluster multiple times.
-func (l *LocalCluster) AssertAndStop(t *testing.T) {
-	defer l.stop()
-	l.Assert(t)
+func (l *LocalCluster) AssertAndStop(ctx context.Context, t *testing.T) {
+	defer l.stop(ctx)
+	l.Assert(ctx, t)
 }
 
 // stop stops the cluster.
-func (l *LocalCluster) stop() {
+func (l *LocalCluster) stop(ctx context.Context) {
 	if *waitOnStop {
-		log.Infof(context.Background(), "waiting for interrupt")
-		<-l.stopper
+		log.Infof(ctx, "waiting for interrupt")
+		<-l.stopper.ShouldStop()
 	}
 
-	log.Infof(context.Background(), "stopping")
+	log.Infof(ctx, "stopping")
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -728,8 +732,8 @@ func (l *LocalCluster) stop() {
 	}
 
 	if l.vols != nil {
-		maybePanic(l.vols.Kill())
-		maybePanic(l.vols.Remove())
+		maybePanic(l.vols.Kill(ctx))
+		maybePanic(l.vols.Remove(ctx))
 		l.vols = nil
 	}
 	if l.CertsDir != "" {
@@ -741,9 +745,9 @@ func (l *LocalCluster) stop() {
 		if n.Container == nil {
 			continue
 		}
-		ci, err := n.Inspect()
+		ci, err := n.Inspect(ctx)
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
-		maybePanic(n.Kill())
+		maybePanic(n.Kill(ctx))
 		if crashed && outputLogDir == "" {
 			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
 		}
@@ -758,44 +762,43 @@ func (l *LocalCluster) stop() {
 			w, err := os.Create(file)
 			maybePanic(err)
 			defer w.Close()
-			maybePanic(n.Logs(w))
-			log.Infof(context.Background(), "node %d: stderr at %s", i, file)
+			maybePanic(n.Logs(ctx, w))
+			log.Infof(ctx, "node %d: stderr at %s", i, file)
 			if crashed {
-				log.Infof(context.Background(), "~~~ node %d CRASHED ~~~~", i)
+				log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)
 			}
 		}
-		maybePanic(n.Remove())
+		maybePanic(n.Remove(ctx))
 	}
 	l.Nodes = nil
 
 	if l.networkID != "" {
 		maybePanic(
-			l.client.NetworkRemove(context.Background(), l.networkID))
+			l.client.NetworkRemove(ctx, l.networkID))
 		l.networkID = ""
 		l.networkName = ""
 	}
 }
 
 // NewClient implements the Cluster interface.
-func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
+func (l *LocalCluster) NewClient(ctx context.Context, t *testing.T, i int) *roachClient.DB {
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
 		User:       security.NodeUser,
 		SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(l.CertsDir, security.EmbeddedNodeCert),
 		SSLCertKey: filepath.Join(l.CertsDir, security.EmbeddedNodeKey),
-	}, hlc.NewClock(hlc.UnixNano, 0), stopper)
-	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(DefaultTCP).String())
+	}, hlc.NewClock(hlc.UnixNano, 0), l.stopper)
+	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return roachClient.NewDB(roachClient.NewSender(conn)), stopper
+	return roachClient.NewDB(roachClient.NewSender(conn))
 }
 
 // InternalIP returns the IP address used for inter-node communication.
-func (l *LocalCluster) InternalIP(i int) net.IP {
+func (l *LocalCluster) InternalIP(ctx context.Context, i int) net.IP {
 	c := l.Nodes[i]
-	containerInfo, err := c.Inspect()
+	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
 		return nil
 	}
@@ -803,7 +806,7 @@ func (l *LocalCluster) InternalIP(i int) net.IP {
 }
 
 // PGUrl returns a URL string for the given node postgres server.
-func (l *LocalCluster) PGUrl(i int) string {
+func (l *LocalCluster) PGUrl(ctx context.Context, i int) string {
 	certUser := security.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
@@ -813,7 +816,7 @@ func (l *LocalCluster) PGUrl(i int) string {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),
-		Host:     l.Nodes[i].Addr(DefaultTCP).String(),
+		Host:     l.Nodes[i].Addr(ctx, DefaultTCP).String(),
 		RawQuery: options.Encode(),
 	}
 	return pgURL.String()
@@ -825,30 +828,30 @@ func (l *LocalCluster) NumNodes() int {
 }
 
 // Kill kills the i-th node.
-func (l *LocalCluster) Kill(i int) error {
-	if err := l.Nodes[i].Kill(); err != nil {
+func (l *LocalCluster) Kill(ctx context.Context, i int) error {
+	if err := l.Nodes[i].Kill(ctx); err != nil {
 		return errors.Wrapf(err, "failed to kill node %d", i)
 	}
 	return nil
 }
 
 // Restart restarts the given node. If the node isn't running, this starts it.
-func (l *LocalCluster) Restart(i int) error {
+func (l *LocalCluster) Restart(ctx context.Context, i int) error {
 	// The default timeout is 10 seconds.
-	if err := l.Nodes[i].Restart(nil); err != nil {
+	if err := l.Nodes[i].Restart(ctx, nil); err != nil {
 		return errors.Wrapf(err, "failed to restart node %d", i)
 	}
 	return nil
 }
 
 // URL returns the base url.
-func (l *LocalCluster) URL(i int) string {
-	return "https://" + l.Nodes[i].Addr(defaultHTTP).String()
+func (l *LocalCluster) URL(ctx context.Context, i int) string {
+	return "https://" + l.Nodes[i].Addr(ctx, defaultHTTP).String()
 }
 
 // Addr returns the host and port from the node in the format HOST:PORT.
-func (l *LocalCluster) Addr(i int, port string) string {
-	return l.Nodes[i].Addr(nat.Port(port + "/tcp")).String()
+func (l *LocalCluster) Addr(ctx context.Context, i int, port string) string {
+	return l.Nodes[i].Addr(ctx, nat.Port(port+"/tcp")).String()
 }
 
 // Hostname implements the Cluster interface.
@@ -857,7 +860,7 @@ func (l *LocalCluster) Hostname(i int) string {
 }
 
 // ExecRoot runs a command as root.
-func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
+func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) error {
 	execRoot := func(ctx context.Context) error {
 		cfg := types.ExecConfig{
 			User:         "root",
@@ -903,6 +906,6 @@ func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
 		return nil
 	}
 
-	return retry(context.Background(), 3, 10*time.Second, "ExecRoot",
+	return retry(ctx, 3, 10*time.Second, "ExecRoot",
 		matchNone, execRoot)
 }

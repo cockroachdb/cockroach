@@ -27,9 +27,9 @@ import (
 
 // insertLoad add a very basic load that inserts into a unique table and checks
 // that the inserted values are indeed correct.
-func insertLoad(t *testing.T, dc *dynamicClient, ID int) {
+func insertLoad(ctx context.Context, t *testing.T, dc *dynamicClient, ID int) {
 	// Initialize the db.
-	if _, err := dc.exec(`CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
+	if _, err := dc.exec(ctx, `CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -43,7 +43,7 @@ CREATE TABLE %s (
 	selectStatement := fmt.Sprintf(`SELECT key-value AS "total" FROM %s WHERE key = $1`, tableName)
 
 	// Init the db for the basic insert.
-	if _, err := dc.exec(createTableStatement); err != nil {
+	if _, err := dc.exec(ctx, createTableStatement); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ CREATE TABLE %s (
 
 		// Insert some values.
 		valueInsert++
-		if _, err := dc.exec(insertStatement, valueInsert); err != nil {
+		if _, err := dc.exec(ctx, insertStatement, valueInsert); err != nil {
 			if err == errTestFinished {
 				return
 			}
@@ -69,7 +69,7 @@ CREATE TABLE %s (
 		}
 
 		var total int
-		if err := dc.queryRowScan(selectStatement, []interface{}{valueCheck}, []interface{}{&total}); err != nil {
+		if err := dc.queryRowScan(ctx, selectStatement, []interface{}{valueCheck}, []interface{}{&total}); err != nil {
 			if err == errTestFinished {
 				return
 			}
@@ -80,7 +80,7 @@ CREATE TABLE %s (
 		}
 
 		if timeutil.Now().After(nextUpdate) {
-			log.Infof(context.TODO(), "Insert %d: inserted and checked %d values", ID, valueInsert)
+			log.Infof(ctx, "Insert %d: inserted and checked %d values", ID, valueInsert)
 			nextUpdate = timeutil.Now().Add(time.Second)
 		}
 	}
