@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -627,5 +628,55 @@ INSERT INTO t.kv VALUES ('a', 'b');
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestSubqueryLeases tests that all leases acquired by a subquery are
+// properly tracked and released.
+func TestSubqueryLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+
+	fooRelease := make(chan struct{})
+
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseReleasedEvent: func(lease *csql.LeaseState, _ error) {
+					if lease.Name == "foo" {
+						// Note: we don't use close(fooRelease) here because the
+						// lease on "foo" may be re-acquired (and re-released)
+						// multiple times, at least one for the first
+						// CREATE/SELECT pair and one for the final DROP.
+						fooRelease <- struct{}{}
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.foo (v INT);
+SELECT EXISTS(SELECT * FROM t.foo);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The above SELECT has acquired a lease on the table. Now close the
+	// session, which should release the new lease and delete it because
+	// of the testing knob set above.
+	sqlDB.Close()
+
+	// Now wait for the release to happen. We use a local timer
+	// to make the test fail faster if it needs to fail.
+	timeout := time.After(5 * time.Second)
+	select {
+	case <-timeout:
+		t.Fatal("lease from sub-query was not released")
+	case <-fooRelease:
 	}
 }
