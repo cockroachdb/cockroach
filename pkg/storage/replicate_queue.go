@@ -39,14 +39,11 @@ const (
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
-)
 
-var (
 	// minLeaseTransferInterval controls how frequently leases can be transferred
 	// for rebalancing. It does not prevent transferring leases in order to allow
-	// a replica to be removed from a range. The value should be some reasonable
-	// fraction of the store descriptor gossip interval which currently
-	minLeaseTransferInterval = gossip.GossipStoresInterval / 5
+	// a replica to be removed from a range.
+	minLeaseTransferInterval = time.Second
 )
 
 // replicateQueue manages a queue of replicas which may need to add an
