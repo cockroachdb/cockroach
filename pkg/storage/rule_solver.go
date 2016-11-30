@@ -78,15 +78,17 @@ type ruleSolver []rule
 var allocateRuleSolver = ruleSolver{
 	ruleReplicasUniqueNodes,
 	ruleConstraints,
-	ruleCapacity,
+	ruleCapacityMax,
 	ruleDiversity,
+	ruleCapacity,
 }
 
 // removeRuleSolver is the set of rules used for removing existing replicas.
 var removeRuleSolver = ruleSolver{
 	ruleConstraints,
-	ruleCapacity,
+	ruleCapacityMax,
 	ruleDiversity,
+	ruleCapacity,
 }
 
 // Solve runs the rules against the stores in the store list and returns all
@@ -206,17 +208,19 @@ func ruleDiversity(store roachpb.StoreDescriptor, state solveState) (bool, float
 	return true, minScore, 0
 }
 
-// ruleCapacity returns true iff a new replica won't overfill the store. The
-// score returned is inversely proportional to the number of ranges on the
-// candidate store, with the most empty nodes having the highest scores.
-// TODO(bram): consider splitting this into two rules.
+// ruleCapacity returns a balance score that is inversely proportional to the
+// number of ranges on the candidate store such that the most empty store will
+// have the highest scores. Scores are always between 0 and 1.
 func ruleCapacity(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
-	// Don't overfill stores.
+	return true, 0, 1 / float64(store.Capacity.RangeCount+1)
+}
+
+// ruleCapacityMax ensures that we don't try to overfill a store.
+func ruleCapacityMax(store roachpb.StoreDescriptor, state solveState) (bool, float64, float64) {
 	if store.Capacity.FractionUsed() > maxFractionUsedThreshold {
 		return false, 0, 0
 	}
-
-	return true, 0, 1 / float64(store.Capacity.RangeCount+1)
+	return true, 0, 0
 }
 
 // byScore implements sort.Interface to sort by scores.
