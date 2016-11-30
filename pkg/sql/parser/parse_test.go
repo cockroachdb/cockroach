@@ -314,6 +314,7 @@ func TestParse(t *testing.T) {
 		{`SELECT true = false`},
 		{`SELECT (true = false)`},
 		{`SELECT (ARRAY['a', 'b'])[2]`},
+		{`SELECT (ARRAY(VALUES (1), (2)))[1]`},
 		{`SELECT (SELECT 1)`},
 		{`SELECT ((SELECT 1))`},
 		{`SELECT (SELECT ARRAY['a', 'b'])[2]`},

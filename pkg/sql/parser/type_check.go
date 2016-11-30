@@ -654,6 +654,30 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 }
 
 // TypeCheck implements the Expr interface.
+func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+	desiredParam := TypeAny
+	if arr, ok := desired.(tArray); ok {
+		desiredParam = arr.Typ
+	}
+
+	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, desiredParam)
+	if err != nil {
+		return nil, err
+	}
+	expr.Subquery = subqueryTyped
+	subqueryType := subqueryTyped.ResolvedType()
+	switch subqueryType {
+	case TypeInt:
+		expr.typ = TypeIntArray
+	case TypeString:
+		expr.typ = TypeStringArray
+	default:
+		return nil, errors.Errorf("unhandled parameterized array type %T", subqueryType)
+	}
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
 func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	// If there is a value known already, immediately substitute with it.
 	if v, ok := ctx.Placeholders.Value(expr.Name); ok {

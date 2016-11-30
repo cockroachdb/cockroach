@@ -28,15 +28,14 @@ import (
 // in the expression tree from the point type checking occurs to
 // the point the query starts execution / evaluation.
 type subquery struct {
-	typ            parser.Type
-	subquery       *parser.Subquery
-	execMode       subqueryExecMode
-	wantNormalized bool
-	expanded       bool
-	started        bool
-	plan           planNode
-	result         parser.Datum
-	err            error
+	typ      parser.Type
+	subquery *parser.Subquery
+	execMode subqueryExecMode
+	expanded bool
+	started  bool
+	plan     planNode
+	result   parser.Datum
+	err      error
 }
 
 type subqueryExecMode int
@@ -49,6 +48,10 @@ const (
 	// type is tuple of rows. As a special case, if there is only one
 	// column selected, the result is a tuple of the selected values
 	// (instead of a tuple of 1-tuples).
+	execModeAllRowsNormalized
+	// Sub-query is argument to an ARRAY constructor. Any number of rows
+	// expected, and exactly one column is expected. Result type is tuple
+	// of selected values.
 	execModeAllRows
 	// Sub-query is argument to another function. Exactly 1 row
 	// expected. Result type is tuple of columns, unless there is
@@ -124,6 +127,8 @@ func (s *subquery) doEval() (parser.Datum, error) {
 		}
 
 	case execModeAllRows:
+		fallthrough
+	case execModeAllRowsNormalized:
 		var rows parser.DTuple
 		next, err := s.plan.Next()
 		for ; next; next, err = s.plan.Next() {
@@ -147,7 +152,7 @@ func (s *subquery) doEval() (parser.Datum, error) {
 		if s.err = err; err != nil {
 			return result, err
 		}
-		if s.wantNormalized {
+		if s.execMode == execModeAllRowsNormalized {
 			rows.Normalize()
 		}
 		result = &rows
@@ -336,7 +341,8 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		result.execMode = execModeExists
 		result.typ = parser.TypeBool
 	} else {
-		wantedNumColumns, ctxIsInExpr := v.getSubqueryContext()
+		wantedNumColumns, execMode := v.getSubqueryContext()
+		result.execMode = execMode
 
 		// First check that the number of columns match.
 		cols := plan.Columns()
@@ -352,15 +358,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			return false, expr
 		}
 
-		// Decide how the sub-query will be evaluated.
-		if ctxIsInExpr {
-			result.execMode = execModeAllRows
-			result.wantNormalized = true
-		} else {
-			result.execMode = execModeOneRow
-		}
-
-		if wantedNumColumns == 1 && !ctxIsInExpr {
+		if wantedNumColumns == 1 && execMode != execModeAllRowsNormalized {
 			// This seems hokey, but if we don't do this then the subquery expands
 			// to a tuple of tuples instead of a tuple of values and an expression
 			// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
@@ -394,8 +392,8 @@ func (p *planner) replaceSubqueries(expr parser.Expr, columns int) (parser.Expr,
 
 // getSubqueryContext returns:
 // - the desired number of columns;
-// - whether the sub-query is operand of a IN/NOT IN expression.
-func (v *subqueryVisitor) getSubqueryContext() (columns int, ctxIsInExpr bool) {
+// - the mode in which the sub-query should be executed.
+func (v *subqueryVisitor) getSubqueryContext() (columns int, execMode subqueryExecMode) {
 	for i := len(v.path) - 1; i >= 0; i-- {
 		switch e := v.path[i].(type) {
 		case *parser.ExistsExpr:
@@ -404,6 +402,11 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, ctxIsInExpr bool) {
 			continue
 		case *parser.ParenExpr:
 			continue
+
+		case *parser.ArrayFlatten:
+			// If the subquery is inside of an ARRAY constructor, it must return a
+			// single-column, multi-row result.
+			return 1, execModeAllRows
 
 		case *parser.ComparisonExpr:
 			// The subquery must occur on the right hand side of the comparison.
@@ -420,23 +423,23 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, ctxIsInExpr bool) {
 				columns = len(*t)
 			}
 
-			ctxIsInExpr = false
+			execMode = execModeOneRow
 			switch e.Operator {
 			case parser.In, parser.NotIn:
-				ctxIsInExpr = true
+				execMode = execModeAllRowsNormalized
 			}
 
-			return columns, ctxIsInExpr
+			return columns, execMode
 
 		default:
 			// Any other expr that has this sub-query as operand
 			// is expecting a single value.
-			return 1, false
+			return 1, execModeOneRow
 		}
 	}
 
 	// We have not encountered any non-paren, non-IN expression so far,
 	// so the outer context is informing us of the desired number of
 	// columns.
-	return v.columns, false
+	return v.columns, execModeOneRow
 }
