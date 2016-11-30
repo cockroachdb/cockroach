@@ -715,6 +715,11 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 		// Figure out if we'd like to remove the lease from the store asap (i.e. when
 		// the refcount drops to 0). If so, we'll need to mark the lease as released.
 		removeOnceDereferenced := false
+
+		if store.testingKnobs.RemoveOnceDereferenced {
+			removeOnceDereferenced = true
+		}
+
 		// Release from the store if the table has been deleted; no leases can be
 		// acquired any more.
 		if t.deleted {
@@ -820,6 +825,9 @@ type LeaseStoreTestingKnobs struct {
 	LeaseReleasedEvent func(lease *LeaseState, err error)
 	// Allow the use of expired leases.
 	CanUseExpiredLeases bool
+	// RemoveOnceDereferenced forces leases to be removed
+	// as soon as they are dereferenced.
+	RemoveOnceDereferenced bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

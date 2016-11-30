@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,6 +78,8 @@ type planner struct {
 	nameResolutionVisitor       nameResolutionVisitor
 
 	execCfg *ExecutorConfig
+
+	noCopy util.NoCopy
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
