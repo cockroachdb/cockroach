@@ -123,10 +123,18 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	// Replace any DEFAULT markers with the corresponding default expressions.
-	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
-	if err != nil {
-		return nil, err
+	var insertRows parser.SelectStatement
+	if n.DefaultValues() {
+		insertRows = getDefaultValuesClause(defaultExprs, cols)
+	} else {
+		src, values, err := extractInsertSource(n.Rows)
+		if err != nil {
+			return nil, err
+		}
+		if values != nil {
+			src = fillDefaults(defaultExprs, cols, values)
+		}
+		insertRows = src
 	}
 
 	// Analyze the expressions for column information and typing.
@@ -390,26 +398,56 @@ func (p *planner) processColumns(
 	return cols, nil
 }
 
-func (p *planner) fillDefaults(
-	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, n *parser.Insert,
-) (parser.SelectStatement, error) {
-	if n.DefaultValues() {
-		row := make(parser.Exprs, 0, len(cols))
-		for i := range cols {
-			if defaultExprs == nil {
-				row = append(row, parser.DNull)
-				continue
+// extractInsertSource removes the parentheses around the data source of an INSERT statement.
+// If the data source is a VALUES clause not further qualified with LIMIT/OFFSET and ORDER BY,
+// the 2nd return value is a pre-casted pointer to the VALUES clause.
+func extractInsertSource(s *parser.Select) (parser.SelectStatement, *parser.ValuesClause, error) {
+	wrapped := s.Select
+	limit := s.Limit
+	orderBy := s.OrderBy
+
+	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+		wrapped = s.Select.Select
+		if s.Select.OrderBy != nil {
+			if orderBy != nil {
+				return nil, nil, fmt.Errorf("multiple ORDER BY clauses not allowed")
 			}
-			row = append(row, defaultExprs[i])
+			orderBy = s.Select.OrderBy
 		}
-		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}, nil
+		if s.Select.Limit != nil {
+			if limit != nil {
+				return nil, nil, fmt.Errorf("multiple LIMIT clauses not allowed")
+			}
+			limit = s.Select.Limit
+		}
 	}
 
-	values, ok := n.Rows.Select.(*parser.ValuesClause)
-	if !ok {
-		return n.Rows.Select, nil
+	if orderBy == nil && limit == nil {
+		values, _ := wrapped.(*parser.ValuesClause)
+		return wrapped, values, nil
 	}
+	return &parser.ParenSelect{
+		Select: &parser.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
+	}, nil, nil
+}
 
+func getDefaultValuesClause(
+	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor,
+) parser.SelectStatement {
+	row := make(parser.Exprs, 0, len(cols))
+	for i := range cols {
+		if defaultExprs == nil {
+			row = append(row, parser.DNull)
+			continue
+		}
+		row = append(row, defaultExprs[i])
+	}
+	return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
+}
+
+func fillDefaults(
+	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, values *parser.ValuesClause,
+) *parser.ValuesClause {
 	ret := values
 	for tIdx, tuple := range values.Tuples {
 		tupleCopied := false
@@ -435,7 +473,7 @@ func (p *planner) fillDefaults(
 			}
 		}
 	}
-	return ret, nil
+	return ret
 }
 
 func makeDefaultExprs(
