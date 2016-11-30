@@ -91,6 +91,7 @@ message ReplicatedEvalResult {
   // a split, contains only the contributions to the left-hand side.
   optional storage.engine.enginepb.MVCCStats delta = 10010 [(gogoproto.nullable) = false];
   optional ChangeReplicas change_replicas = 10012;
+  optional int64 raft_log_delta = 10013;
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
