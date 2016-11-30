@@ -597,6 +597,62 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	})
 }
 
+func TestRaftLogSizeAfterTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	const rangeID = 1
+	mtc.replicateRange(rangeID, 1, 2)
+
+	repl, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key := []byte("a")
+	incArgs := incrementArgs(key, 5)
+	if _, err := client.SendWrapped(
+		context.Background(), rg1(mtc.stores[0]), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.waitForValues(key, []int64{5, 5, 5})
+
+	index, err := repl.GetLastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertEqualRaftLogSize := func() error {
+		var expectedSize int64
+		for i, s := range mtc.stores {
+			repl, err := s.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			size := repl.GetRaftLogSize()
+			if i == 0 {
+				expectedSize = size
+			} else if expectedSize != size {
+				return fmt.Errorf("%s: expected raftLogSize %d, but found %d", repl, expectedSize, size)
+			}
+		}
+		return nil
+	}
+
+	util.SucceedsSoon(t, assertEqualRaftLogSize)
+
+	truncArgs := truncateLogArgs(index+1, 1)
+	if _, err := client.SendWrapped(
+		context.Background(), rg1(mtc.stores[0]), &truncArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	util.SucceedsSoon(t, assertEqualRaftLogSize)
+}
+
 // TestSnapshotAfterTruncation tests that Raft will properly send a
 // non-preemptive snapshot when a node is brought up and the log has been
 // truncated.
