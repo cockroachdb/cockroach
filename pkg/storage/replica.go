@@ -718,9 +718,16 @@ func (r *Replica) String() string {
 
 // destroyData deletes all data associated with a replica, leaving a
 // tombstone. Requires that Replica.raftMu is held.
-func (r *Replica) destroyDataRaftMuLocked(ctx context.Context) error {
-	desc := r.Desc()
-	iter := NewReplicaDataIterator(desc, r.store.Engine(), false /* !replicatedOnly */)
+func (r *Replica) destroyDataRaftMuLocked(
+	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
+) error {
+	iter := NewReplicaDataIterator(
+		// NB: this uses the local descriptor instead of the consistent one to
+		// match the data on disk.
+		r.Desc(),
+		r.store.Engine(),
+		false, /* !replicatedOnly */
+	)
 	defer iter.Close()
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
@@ -728,9 +735,9 @@ func (r *Replica) destroyDataRaftMuLocked(ctx context.Context) error {
 		_ = batch.Clear(iter.Key())
 	}
 
-	// Save a tombstone. The range cannot be re-replicated onto this
-	// node without having a replica ID of at least desc.NextReplicaID.
-	if err := r.setTombstoneKey(ctx, batch, desc); err != nil {
+	// Save a tombstone. The range cannot be re-replicated onto this node
+	// without having a replica ID of at least consistentDesc.NextReplicaID.
+	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}
 	return batch.Commit()
