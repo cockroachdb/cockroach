@@ -3822,8 +3822,10 @@ c_expr:
   {
     $$.val = &ExistsExpr{Subquery: &Subquery{Select: $2.selectStmt()}}
   }
-// TODO(pmattis): Support this notation?
-// | ARRAY select_with_parens { return unimplemented(sqllex) }
+| ARRAY select_with_parens
+  {
+    $$.val = &ArrayFlatten{Subquery: &Subquery{Select: $2.selectStmt()}}
+  }
 | ARRAY array_expr
   {
     $$.val = $2.expr()
