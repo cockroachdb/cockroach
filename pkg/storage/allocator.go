@@ -23,6 +23,8 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -31,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -225,6 +225,7 @@ func (a *Allocator) AllocateTarget(
 			constraints,
 			existing,
 			a.storePool.getNodeLocalities(existing),
+			a.storePool.deterministic,
 		)
 		candidates = candidates.onlyValid()
 		if len(candidates) == 0 {
@@ -232,8 +233,8 @@ func (a *Allocator) AllocateTarget(
 				required: constraints.Constraints,
 			}
 		}
-		// TODO(bram): #10275 Need some randomness here!
-		return &candidates[0].store, nil
+		chosenCandidate := candidates.selectGood(a.randGen).store
+		return &chosenCandidate, nil
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
@@ -305,12 +306,10 @@ func (a Allocator) RemoveTarget(
 			constraints,
 			existing,
 			a.storePool.getNodeLocalities(existing),
+			a.storePool.deterministic,
 		)
-
 		if len(candidates) != 0 {
-			// TODO(bram): There needs some randomness here and the logic from
-			// selectBad around rebalanceFromConvergesOnMean.
-			badStoreID = candidates[len(candidates)-1].store.StoreID
+			badStoreID = candidates.selectBad(a.randGen).store.StoreID
 		}
 	} else {
 		bad := a.selectBad(sl)
@@ -403,12 +402,32 @@ func (a Allocator) RebalanceTarget(
 		existingStoreList := makeStoreList(existingDescs)
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		existingCandidates := removeRuleSolver.Solve(existingStoreList, constraints, nil, nil)
-		candidates := allocateRuleSolver.Solve(candidateStoreList, constraints, nil, nil)
+		localities := a.storePool.getNodeLocalities(existing)
+		existingCandidates := rebalanceExisting.Solve(
+			existingStoreList,
+			constraints,
+			existing,
+			localities,
+			a.storePool.deterministic,
+		)
+		candidates := rebalance.Solve(
+			candidateStoreList,
+			constraints,
+			existing,
+			localities,
+			a.storePool.deterministic,
+		)
 
-		// TODO(bram): #10275 Need some randomness here!
-		if existingCandidates[len(existingCandidates)-1].less(candidates[0]) {
-			return &candidates[0].store, nil
+		/*
+			fmt.Printf("existing: %s\n", existingCandidates)
+			fmt.Printf("candidates: %s\n", candidates)
+		*/
+
+		// Find all candidates that are better than the worst existing.
+		targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
+		if len(targets) != 0 {
+			target := targets.selectGood(a.randGen).store
+			return &target, nil
 		}
 		return nil, nil
 	}
