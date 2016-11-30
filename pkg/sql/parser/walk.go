@@ -426,11 +426,18 @@ func (expr *Tuple) Walk(v Visitor) Expr {
 
 // Walk implements the Expr interface.
 func (expr *Array) Walk(v Visitor) Expr {
-	exprs, changed := walkExprSlice(v, expr.Exprs)
-	if changed {
-		exprCopy := *expr
-		exprCopy.Exprs = exprs
-		return &exprCopy
+	if expr.IsSubqueryConstructor() {
+		if sq, changed := WalkExpr(v, expr.Subquery); changed {
+			exprCopy := *expr
+			exprCopy.Subquery = sq
+			return &exprCopy
+		}
+	} else {
+		if exprs, changed := walkExprSlice(v, expr.Exprs); changed {
+			exprCopy := *expr
+			exprCopy.Exprs = exprs
+			return &exprCopy
+		}
 	}
 	return expr
 }

@@ -626,6 +626,24 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		desiredParam = arr.Typ
 	}
 
+	if expr.IsSubqueryConstructor() {
+		subqueryTyped, err := expr.Subquery.TypeCheck(ctx, desiredParam)
+		if err != nil {
+			return nil, err
+		}
+		expr.Subquery = subqueryTyped
+		subqueryType := subqueryTyped.ResolvedType()
+		switch subqueryType {
+		case TypeInt:
+			expr.typ = TypeIntArray
+		case TypeString:
+			expr.typ = TypeStringArray
+		default:
+			return nil, errors.Errorf("unhandled parameterized array type %T", subqueryType)
+		}
+		return expr, nil
+	}
+
 	if len(expr.Exprs) == 0 {
 		if desiredParam == TypeAny {
 			return nil, errAmbiguousArrayType

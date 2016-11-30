@@ -604,16 +604,31 @@ func (node *Tuple) ResolvedType() Type {
 
 // Array represents an array constructor.
 type Array struct {
+	// Exprs is set if Array contains a list of expressions.
 	Exprs Exprs
+	// Subquery is set if Array contains a single subquery.
+	Subquery Expr
 
 	typeAnnotation
 }
 
+// IsSubqueryConstructor returns true when the array is being constructed with
+// an embedded subquery, and false when the array is being constructed with a
+// list of subexpressions.
+func (node *Array) IsSubqueryConstructor() bool {
+	return node.Subquery != nil
+}
+
 // Format implements the NodeFormatter interface.
 func (node *Array) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ARRAY[")
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(']')
+	if node.IsSubqueryConstructor() {
+		buf.WriteString("ARRAY")
+		exprFmtWithParen(buf, f, node.Subquery)
+	} else {
+		buf.WriteString("ARRAY[")
+		FormatNode(buf, f, node.Exprs)
+		buf.WriteByte(']')
+	}
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression

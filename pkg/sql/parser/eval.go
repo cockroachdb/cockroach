@@ -2339,13 +2339,29 @@ func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	array := NewDArray(arrayTyp.Typ)
-	for _, v := range t.Exprs {
-		d, err := v.(TypedExpr).Eval(ctx)
+	if !t.IsSubqueryConstructor() {
+		for _, v := range t.Exprs {
+			d, err := v.(TypedExpr).Eval(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := array.Append(d); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		d, err := t.Subquery.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if err := array.Append(d); err != nil {
-			return nil, err
+		t, ok := d.(*DTuple)
+		if !ok {
+			return nil, errors.Errorf("array subquery didn't return a tuple")
+		}
+		for _, v := range *t {
+			if err := array.Append(v); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return array, nil
