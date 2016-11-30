@@ -1590,13 +1590,6 @@ func (r *Replica) TruncateLog(
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
 		return reply, EvalResult{}, err
 	}
-	r.mu.Lock()
-	raftLogSize := r.mu.raftLogSize + diff.SysBytes
-	r.mu.Unlock()
-	// Check raftLogSize since it isn't persisted between server restarts.
-	if raftLogSize < 0 {
-		raftLogSize = 0
-	}
 
 	tState := &roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
@@ -1605,7 +1598,7 @@ func (r *Replica) TruncateLog(
 
 	var pd EvalResult
 	pd.Replicated.State.TruncatedState = tState
-	pd.Local.raftLogSize = &raftLogSize
+	pd.Replicated.RaftLogDelta = &diff.SysBytes
 
 	return reply, pd, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
 }
