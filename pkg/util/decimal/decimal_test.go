@@ -17,6 +17,7 @@
 package decimal
 
 import (
+	"flag"
 	"fmt"
 	"math"
 	"testing"
@@ -27,6 +28,10 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+var (
+	flagDurationLimit = flag.Duration("limit", 0, "function execution time limit; 0 is disabled")
 )
 
 var floatDecimalEqualities = map[float64]*inf.Dec{
@@ -98,11 +103,15 @@ func testDecimalSingleArgFunc(
 				z, err = f(nil, x, s)
 				done <- struct{}{}
 			}()
+			var after <-chan time.Time
+			if *flagDurationLimit > 0 {
+				after = time.After(*flagDurationLimit)
+			}
 			select {
 			case <-done:
 				t.Logf("execute duration: %s", timeutil.Since(start))
-			case <-time.After(testFuncTimeout):
-				t.Fatalf("timedout after %s", testFuncTimeout)
+			case <-after:
+				t.Fatalf("timedout after %s", *flagDurationLimit)
 			}
 			if err != nil {
 				if tc.expected != err.Error() {
@@ -172,11 +181,15 @@ func testDecimalDoubleArgFunc(
 				z, err = f(nil, x, y, s)
 				done <- struct{}{}
 			}()
+			var after <-chan time.Time
+			if *flagDurationLimit > 0 {
+				after = time.After(*flagDurationLimit)
+			}
 			select {
 			case <-done:
 				t.Logf("execute duration: %s", timeutil.Since(start))
-			case <-time.After(testFuncTimeout):
-				t.Fatalf("timedout after %s", testFuncTimeout)
+			case <-after:
+				t.Fatalf("timedout after %s", *flagDurationLimit)
 			}
 			if err != nil {
 				if tc.expected != err.Error() {
