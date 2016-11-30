@@ -204,6 +204,13 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	return r.mu.tsCache.lowWater
 }
 
+// GetRaftLogSize returns the raft log size.
+func (r *Replica) GetRaftLogSize() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.raftLogSize
+}
+
 // GetStoreList is the same function as GetStoreList exposed for tests only.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
 	return sp.getStoreList(rangeID)
