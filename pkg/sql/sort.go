@@ -155,8 +155,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 
 		if s != nil {
 			// Try to optimize constant sorts. For this we need to resolve
-			// names to IndexedVars then see if there were any vars
-			// substituted.
+			// names to IndexedVars then see if there were any row-dependent
+			// expressions found in the sort expression.
 			sortExpr := expr
 			if index != -1 {
 				// We found a render above, so fetch it. This is needed
@@ -164,11 +164,11 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// alias, resolveNames below would be incorrect.
 				sortExpr = s.render[index]
 			}
-			resolved, hasVars, err := p.resolveNames(sortExpr, s.sourceInfo, s.ivarHelper)
+			resolved, hasRowDependentValues, err := p.resolveNames(sortExpr, s.sourceInfo, s.ivarHelper)
 			if err != nil {
 				return nil, err
 			}
-			if !hasVars {
+			if !hasRowDependentValues {
 				// No sorting needed!
 				continue
 			}
