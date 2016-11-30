@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -242,7 +243,7 @@ func farmer(t *testing.T, prefix string, stopper *stop.Stopper) *terrafarm.Farme
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
 		Insecure: true,
 		User:     security.NodeUser,
-	}, nil, stopper)
+	}, hlc.NewClock(hlc.UnixNano, 0), stopper)
 
 	f := &terrafarm.Farmer{
 		Output:      os.Stderr,
