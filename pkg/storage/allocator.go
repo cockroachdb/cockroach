@@ -660,6 +660,9 @@ func filterBehindReplicas(
 	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		// raftStatus.Progress is only populated on the Raft leader which means we
+		// won't be able to rebalance a lease away if the lease holder is not the
+		// Raft leader. This is rare enough not to matter.
 		return nil
 	}
 	quorumIndex := getQuorumIndex(raftStatus, 0)
