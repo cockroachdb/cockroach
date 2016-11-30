@@ -14,12 +14,17 @@
 
 package acceptance
 
-import "testing"
+import (
+	"testing"
+
+	"golang.org/x/net/context"
+)
 
 // This runs the `finagle-postgres` tests from the upstream project.
 func TestDockerFinagle(t *testing.T) {
+	ctx := context.Background()
 	t.Skip("#8332. Upstream has a 2s timeout, disabled until we run tests somewhere more consistent.")
-	testDockerSuccess(t, "finagle", []string{"/bin/sh", "-c", finagle})
+	testDockerSuccess(ctx, t, "finagle", []string{"/bin/sh", "-c", finagle})
 }
 
 const finagle = `
