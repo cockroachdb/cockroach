@@ -934,6 +934,15 @@ getCapacity?() : StoreCapacity;
 
 
 
+draining?: boolean;
+		
+
+getDraining?() : boolean;
+		setDraining?(draining : boolean): void;
+		
+
+
+
 }
 
 	export interface StoreDescriptorMessage extends StoreDescriptor {

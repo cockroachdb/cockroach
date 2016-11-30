@@ -102,6 +102,7 @@ message StoreDescriptor {
   optional Attributes attrs = 2 [(gogoproto.nullable) = false];
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
+  optional bool draining = 5 [(gogoproto.nullable) = false];
 }
 
 // StoreDeadReplicas holds a storeID and a list of dead replicas on that store.

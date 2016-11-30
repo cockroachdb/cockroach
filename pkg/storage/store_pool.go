@@ -121,6 +121,10 @@ func (sd *storeDetail) status(now time.Time, rangeID roachpb.RangeID) storeStatu
 		return storeStatusDead
 	}
 
+	if sd.desc.Draining {
+		return storeStatusDead
+	}
+
 	// The store must not have a recent declined reservation to be available.
 	if sd.isThrottled(now) {
 		return storeStatusThrottled

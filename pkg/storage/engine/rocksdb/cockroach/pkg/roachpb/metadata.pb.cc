@@ -2602,6 +2602,7 @@ const int StoreDescriptor::kStoreIdFieldNumber;
 const int StoreDescriptor::kAttrsFieldNumber;
 const int StoreDescriptor::kNodeFieldNumber;
 const int StoreDescriptor::kCapacityFieldNumber;
+const int StoreDescriptor::kDrainingFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 StoreDescriptor::StoreDescriptor()
@@ -2635,7 +2636,8 @@ void StoreDescriptor::SharedCtor() {
   attrs_ = NULL;
   node_ = NULL;
   capacity_ = NULL;
-  store_id_ = 0;
+  ::memset(&store_id_, 0, reinterpret_cast<char*>(&draining_) -
+    reinterpret_cast<char*>(&store_id_) + sizeof(draining_));
 }
 
 StoreDescriptor::~StoreDescriptor() {
@@ -2675,8 +2677,24 @@ StoreDescriptor* StoreDescriptor::New(::google::protobuf::Arena* arena) const {
 
 void StoreDescriptor::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.roachpb.StoreDescriptor)
-  if (_has_bits_[0 / 32] & 15u) {
-    store_id_ = 0;
+#if defined(__clang__)
+#define ZR_HELPER_(f) \
+  _Pragma("clang diagnostic push") \
+  _Pragma("clang diagnostic ignored \"-Winvalid-offsetof\"") \
+  __builtin_offsetof(StoreDescriptor, f) \
+  _Pragma("clang diagnostic pop")
+#else
+#define ZR_HELPER_(f) reinterpret_cast<char*>(\
+  &reinterpret_cast<StoreDescriptor*>(16)->f)
+#endif
+
+#define ZR_(first, last) do {\
+  ::memset(&(first), 0,\
+           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
+} while (0)
+
+  if (_has_bits_[0 / 32] & 31u) {
+    ZR_(store_id_, draining_);
     if (has_attrs()) {
       if (attrs_ != NULL) attrs_->::cockroach::roachpb::Attributes::Clear();
     }
@@ -2687,6 +2705,10 @@ void StoreDescriptor::Clear() {
       if (capacity_ != NULL) capacity_->::cockroach::roachpb::StoreCapacity::Clear();
     }
   }
+
+#undef ZR_HELPER_
+#undef ZR_
+
   _has_bits_.Clear();
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -2756,6 +2778,21 @@ bool StoreDescriptor::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(40)) goto parse_draining;
+        break;
+      }
+
+      // optional bool draining = 5;
+      case 5: {
+        if (tag == 40) {
+         parse_draining:
+          set_has_draining();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &draining_)));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -2808,6 +2845,11 @@ void StoreDescriptor::SerializeWithCachedSizes(
       4, *this->capacity_, output);
   }
 
+  // optional bool draining = 5;
+  if (has_draining()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->draining(), output);
+  }
+
   output->WriteRaw(unknown_fields().data(),
                    static_cast<int>(unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.StoreDescriptor)
@@ -2817,7 +2859,7 @@ size_t StoreDescriptor::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.StoreDescriptor)
   size_t total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 31u) {
     // optional int32 store_id = 1;
     if (has_store_id()) {
       total_size += 1 +
@@ -2844,6 +2886,11 @@ size_t StoreDescriptor::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->capacity_);
+    }
+
+    // optional bool draining = 5;
+    if (has_draining()) {
+      total_size += 1 + 1;
     }
 
   }
@@ -2885,6 +2932,9 @@ void StoreDescriptor::UnsafeMergeFrom(const StoreDescriptor& from) {
     if (from.has_capacity()) {
       mutable_capacity()->::cockroach::roachpb::StoreCapacity::MergeFrom(from.capacity());
     }
+    if (from.has_draining()) {
+      set_draining(from.draining());
+    }
   }
   if (!from.unknown_fields().empty()) {
     mutable_unknown_fields()->append(from.unknown_fields());
@@ -2912,6 +2962,7 @@ void StoreDescriptor::InternalSwap(StoreDescriptor* other) {
   std::swap(attrs_, other->attrs_);
   std::swap(node_, other->node_);
   std::swap(capacity_, other->capacity_);
+  std::swap(draining_, other->draining_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _unknown_fields_.Swap(&other->_unknown_fields_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -3081,6 +3132,30 @@ void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreCapacity
     clear_has_capacity();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreDescriptor.capacity)
+}
+
+// optional bool draining = 5;
+bool StoreDescriptor::has_draining() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+void StoreDescriptor::set_has_draining() {
+  _has_bits_[0] |= 0x00000010u;
+}
+void StoreDescriptor::clear_has_draining() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+void StoreDescriptor::clear_draining() {
+  draining_ = false;
+  clear_has_draining();
+}
+bool StoreDescriptor::draining() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.draining)
+  return draining_;
+}
+void StoreDescriptor::set_draining(bool value) {
+  set_has_draining();
+  draining_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreDescriptor.draining)
 }
 
 inline const StoreDescriptor* StoreDescriptor::internal_default_instance() {

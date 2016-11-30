@@ -899,11 +899,19 @@ func (s *Store) AnnotateCtxWithSpan(
 
 // DrainLeases (when called with 'true') prevents all of the Store's
 // Replicas from acquiring or extending range leases and waits until all of
-// them have expired. If an error is returned, the draining state is still
-// active, but there may be active leases held by some of the Store's Replicas.
+// them have expired. The Store's descriptor is gossipped to notify that no
+// ranges or leases should be transferred to the Store. If an error is returned,
+// the draining state is still active, but there may be active leases held by
+// some of the Store's Replicas.
 // When called with 'false', returns to the normal mode of operation.
 func (s *Store) DrainLeases(drain bool) error {
 	s.drainLeases.Store(drain)
+	// Force a gossip of the draining mode.
+	select {
+	case <-s.cfg.Gossip.Connected:
+		_ = s.GossipStore(s.AnnotateCtx(context.Background()))
+	default:
+	}
 	if !drain {
 		return nil
 	}
@@ -2225,6 +2233,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		Attrs:    s.Attrs(),
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
+		Draining: s.IsDrainingLeases(),
 	}, nil
 }
 

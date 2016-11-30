@@ -148,7 +148,7 @@ func TestStorePoolDies(t *testing.T) {
 			t.Errorf("store 2 has been counted dead %d times, expected %d", a, e)
 		}
 		if store2.index == -1 {
-			t.Errorf("store 2 is mot the queue, it should be")
+			t.Errorf("store 2 is not in the queue, it should be")
 		}
 		if e, a := 1, sp.mu.queue.Len(); e > a {
 			t.Errorf("wrong number of stores in the queue expected to be at least:%d actual:%d", e, a)
@@ -188,7 +188,7 @@ func TestStorePoolDies(t *testing.T) {
 			t.Errorf("store 2 has been counted dead %d times, expected %d", a, e)
 		}
 		if store2.index == -1 {
-			t.Errorf("store 2 is mot the queue, it should be")
+			t.Errorf("store 2 is not in the queue, it should be")
 		}
 		sp.mu.RUnlock()
 	}
@@ -294,6 +294,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
 		Attrs:   roachpb.Attributes{Attrs: required},
 	}
+	drainingStore := roachpb.StoreDescriptor{
+		StoreID: 8,
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
+	}
 
 	corruptedRangeID := roachpb.RangeID(1)
 
@@ -306,6 +311,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		&deadStore,
 		&declinedStore,
 		&corruptReplicaStore,
+		&drainingStore,
 	}, t)
 
 	// Add some corrupt replicas that should not affect getStoreList().
@@ -337,8 +343,9 @@ func TestStorePoolGetStoreList(t *testing.T) {
 			int(deadStore.StoreID),
 			int(declinedStore.StoreID),
 			int(corruptReplicaStore.StoreID),
+			int(drainingStore.StoreID),
 		},
-		/* expectedAliveStoreCount */ 7,
+		/* expectedAliveStoreCount */ 8,
 		/* expectedThrottledStoreCount */ 0,
 	); err != nil {
 		t.Error(err)
@@ -356,6 +363,10 @@ func TestStorePoolGetStoreList(t *testing.T) {
 			NodeID:  corruptReplicaStore.Node.NodeID,
 		}}
 	sp.mu.Unlock()
+
+	// Set drainingStore as draining.
+	drainingStore.Draining = true
+	sg.GossipStores([]*roachpb.StoreDescriptor{&drainingStore}, t)
 
 	if err := verifyStoreList(
 		sp,

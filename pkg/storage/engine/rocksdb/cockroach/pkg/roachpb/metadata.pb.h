@@ -885,6 +885,13 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::StoreCapacity* release_capacity();
   void set_allocated_capacity(::cockroach::roachpb::StoreCapacity* capacity);
 
+  // optional bool draining = 5;
+  bool has_draining() const;
+  void clear_draining();
+  static const int kDrainingFieldNumber = 5;
+  bool draining() const;
+  void set_draining(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreDescriptor)
  private:
   inline void set_has_store_id();
@@ -895,6 +902,8 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   inline void clear_has_node();
   inline void set_has_capacity();
   inline void clear_has_capacity();
+  inline void set_has_draining();
+  inline void clear_has_draining();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -905,6 +914,7 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::NodeDescriptor* node_;
   ::cockroach::roachpb::StoreCapacity* capacity_;
   ::google::protobuf::int32 store_id_;
+  bool draining_;
   friend void  protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2fmetadata_2eproto_impl();
   friend void  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2fmetadata_2eproto_impl();
   friend void protobuf_AssignDesc_cockroach_2fpkg_2froachpb_2fmetadata_2eproto();
@@ -2082,6 +2092,30 @@ inline void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreC
     clear_has_capacity();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreDescriptor.capacity)
+}
+
+// optional bool draining = 5;
+inline bool StoreDescriptor::has_draining() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void StoreDescriptor::set_has_draining() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void StoreDescriptor::clear_has_draining() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void StoreDescriptor::clear_draining() {
+  draining_ = false;
+  clear_has_draining();
+}
+inline bool StoreDescriptor::draining() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.draining)
+  return draining_;
+}
+inline void StoreDescriptor::set_draining(bool value) {
+  set_has_draining();
+  draining_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreDescriptor.draining)
 }
 
 inline const StoreDescriptor* StoreDescriptor::internal_default_instance() {

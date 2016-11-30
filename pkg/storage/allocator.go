@@ -518,7 +518,7 @@ func (a *Allocator) TransferLeaseTarget(
 			continue
 		}
 		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
-		if !ok {
+		if !ok || storeDesc.Draining {
 			continue
 		}
 		if float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {

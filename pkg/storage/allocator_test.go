@@ -296,6 +296,36 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 	})
 }
 
+// TestAllocatorDrainingStore ensures that the allocator never attempts to
+// allocate a new replica on top of a draining store.
+func TestAllocatorDrainingStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
+		stopper, g, _, a, _ := createTestAllocator(
+			/* deterministic */ false,
+			/* useRuleSolver */ useRuleSolver,
+		)
+		defer stopper.Stop()
+
+		sameDCStores[0].Draining = true
+		defer func() { sameDCStores[0].Draining = false }()
+
+		gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
+		result, err := a.AllocateTarget(
+			simpleZoneConfig.Constraints,
+			[]roachpb.ReplicaDescriptor{},
+			firstRange,
+			true,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Node.NodeID != 2 || result.StoreID != 2 {
+			t.Errorf("expected NodeID 2 and StoreID 2: %+v", result)
+		}
+	})
+}
+
 func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -971,13 +1001,15 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 		{StoreID: 3},
 	}
 
-	// TODO(peter): Add test cases for non-empty constraints.
-	testCases := []struct {
+	type transferLeaseTargetTestCases struct {
 		existing    []roachpb.ReplicaDescriptor
 		leaseholder roachpb.StoreID
 		check       bool
 		expected    roachpb.StoreID
-	}{
+	}
+
+	// TODO(peter): Add test cases for non-empty constraints.
+	testCases := []transferLeaseTargetTestCases{
 		// No existing lease holder, nothing to do.
 		{existing: existing, leaseholder: 0, check: true, expected: 0},
 		// Store 1 is not a lease transfer source.
@@ -992,6 +1024,26 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			target := a.TransferLeaseTarget(config.Constraints{},
+				c.existing, c.leaseholder, 0, c.check)
+			if c.expected != target.StoreID {
+				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
+			}
+		})
+	}
+
+	// A draining store should never be the target for a lease transfer or be
+	// included in the calculation of the mean candidate lease count.
+	stores[0].Draining = true
+	sg.GossipStores(stores, t)
+
+	drainingTestCases := []transferLeaseTargetTestCases{
+		{existing: existing, leaseholder: 1, check: false, expected: 2},
+		{existing: existing, leaseholder: 2, check: false, expected: 0},
+		{existing: existing, leaseholder: 3, check: false, expected: 2},
+	}
+	for i, c := range drainingTestCases {
+		t.Run(fmt.Sprintf("%d", i+len(testCases)), func(t *testing.T) {
 			target := a.TransferLeaseTarget(config.Constraints{},
 				c.existing, c.leaseholder, 0, c.check)
 			if c.expected != target.StoreID {
