@@ -56,6 +56,7 @@ pg_index
 pg_indexes
 pg_namespace
 pg_proc
+pg_range
 pg_roles
 pg_settings
 pg_tables
@@ -809,6 +810,12 @@ WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
 least    2283         1         2283        2283         v
+
+## pg_catalog.pg_range
+query IIIIII colnames
+SELECT * from pg_catalog.pg_range
+----
+rngtypid  rngsubtype  rngcollation  rngsubopc  rngcanonical  rngsubdiff
 
 ## pg_catalog.pg_roles
 

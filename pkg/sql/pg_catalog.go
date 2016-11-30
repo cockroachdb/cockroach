@@ -62,6 +62,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogProcTable,
+		pgCatalogRangeTable,
 		pgCatalogRolesTable,
 		pgCatalogSettingsTable,
 		pgCatalogTablesTable,
@@ -1046,6 +1047,26 @@ CREATE TABLE pg_catalog.pg_proc (
 				}
 			}
 		}
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-range.html.
+var pgCatalogRangeTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_range (
+	rngtypid INT,
+	rngsubtype INT,
+	rngcollation INT,
+	rngsubopc INT,
+	rngcanonical INT,
+	rngsubdiff INT
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// We currently do not support any range types, so this table is empty.
+		// This table should be populated when any range types are added to
+		// oidToDatum (and therefore pg_type).
 		return nil
 	},
 }
