@@ -64,9 +64,6 @@ type LocalEvalResult struct {
 
 	Batch engine.Batch
 
-	// The new (estimated, i.e. not necessarily consistently replicated)
-	// raftLogSize.
-	raftLogSize *int64
 	// intents stores any intents encountered but not conflicted with. They
 	// should be handed off to asynchronous intent processing on the proposer,
 	// so that an attempt to resolve them is made.
@@ -223,12 +220,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.ComputeChecksum = nil
 
-	if p.Local.raftLogSize == nil {
-		p.Local.raftLogSize = q.Local.raftLogSize
-	} else if q.Local.raftLogSize != nil {
-		return errors.New("conflicting raftLogSize")
+	if p.Replicated.RaftLogDelta == nil {
+		p.Replicated.RaftLogDelta = q.Replicated.RaftLogDelta
+	} else if q.Replicated.RaftLogDelta != nil {
+		return errors.New("conflicting RaftLogDelta")
 	}
-	q.Local.raftLogSize = nil
+	q.Replicated.RaftLogDelta = nil
 
 	if q.Local.intents != nil {
 		if p.Local.intents == nil {
@@ -582,6 +579,16 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
+	if rResult.RaftLogDelta != nil {
+		r.mu.Lock()
+		r.mu.raftLogSize += *rResult.RaftLogDelta
+		if r.mu.raftLogSize < 0 {
+			r.mu.raftLogSize = 0
+		}
+		r.mu.Unlock()
+		rResult.RaftLogDelta = nil
+	}
+
 	if (rResult != storagebase.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))
 	}
@@ -617,13 +624,6 @@ func (r *Replica) handleLocalEvalResult(
 	// The above are present too often, so we assert only if there are
 	// "nontrivial" actions below.
 	shouldAssert = (lResult != LocalEvalResult{})
-
-	if lResult.raftLogSize != nil {
-		r.mu.Lock()
-		r.mu.raftLogSize = *lResult.raftLogSize
-		r.mu.Unlock()
-		lResult.raftLogSize = nil
-	}
 
 	if lResult.gossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
