@@ -2331,14 +2331,22 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	return &tuple, nil
 }
 
+// arrayOfType returns a fresh DArray of the input type.
+func arrayOfType(typ Type) (*DArray, error) {
+	arrayTyp, ok := typ.(tArray)
+	if !ok {
+		return nil, errors.Errorf("array node type (%v) is not tArray", typ)
+	}
+	return NewDArray(arrayTyp.Typ), nil
+}
+
 // Eval implements the TypedExpr interface.
 func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
-	arrayTyp, ok := t.ResolvedType().(tArray)
-	if !ok {
-		return nil, errors.Errorf("array node type (%v) is not tArray", t.ResolvedType())
+	array, err := arrayOfType(t.ResolvedType())
+	if err != nil {
+		return nil, err
 	}
 
-	array := NewDArray(arrayTyp.Typ)
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
@@ -2348,6 +2356,26 @@ func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
 			return nil, err
 		}
 	}
+	return array, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
+	array, err := arrayOfType(t.ResolvedType())
+	if err != nil {
+		return nil, err
+	}
+
+	d, err := t.Subquery.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tuple, ok := d.(*DTuple)
+	if !ok {
+		return nil, errors.Errorf("array subquery result (%v) is not DTuple", d)
+	}
+	array.Array = *tuple
 	return array, nil
 }
 

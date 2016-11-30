@@ -616,6 +616,19 @@ func (node *Array) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(']')
 }
 
+// ArrayFlatten represents a subquery array constructor.
+type ArrayFlatten struct {
+	Subquery Expr
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ArrayFlatten) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ARRAY")
+	exprFmtWithParen(buf, f, node.Subquery)
+}
+
 // Exprs represents a list of value expressions. It's not a valid expression
 // because it's not parenthesized.
 type Exprs []Expr
@@ -1104,6 +1117,7 @@ func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
+func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
 func (node *IfExpr) String() string           { return AsString(node) }
 func (node *IndexedVar) String() string       { return AsString(node) }
