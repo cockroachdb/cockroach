@@ -2360,8 +2360,8 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	const expected = "preemptive snapshot from term 0 received"
 	if err := s.processRaftRequest(ctx, req,
 		IncomingSnapshot{
-			SnapUUID:        uuid.MakeV4(),
-			RangeDescriptor: *repl1.Desc(),
+			SnapUUID: uuid.MakeV4(),
+			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
 		}); !testutils.IsPError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -2442,8 +2442,8 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 	if err := s.processRaftRequest(ctx, req,
 		IncomingSnapshot{
-			SnapUUID:        uuid.MakeV4(),
-			RangeDescriptor: *repl1.Desc(),
+			SnapUUID: uuid.MakeV4(),
+			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -2551,8 +2551,12 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	defer e.Close()
 
 	ctx := context.Background()
-	header := SnapshotRequest_Header{CanDecline: true}
-	var snap *OutgoingSnapshot
+	header := SnapshotRequest_Header{
+		CanDecline: true,
+		State: storagebase.ReplicaState{
+			Desc: &roachpb.RangeDescriptor{RangeID: 1},
+		},
+	}
 	newBatch := e.NewBatch
 
 	// Test that a failed Recv() fauses a fail throttle
@@ -2560,7 +2564,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		sp := &fakeStorePool{}
 		expectedErr := errors.New("")
 		c := fakeSnapshotStream{nil, expectedErr}
-		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
@@ -2578,7 +2582,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status:        SnapshotResponse_DECLINED,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
 		if sp.declinedThrottles != 1 {
 			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
 		}
@@ -2601,7 +2605,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status:        SnapshotResponse_DECLINED,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
@@ -2621,7 +2625,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status:        SnapshotResponse_ERROR,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		err := sendSnapshot(ctx, c, sp, header, nil, newBatch)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}

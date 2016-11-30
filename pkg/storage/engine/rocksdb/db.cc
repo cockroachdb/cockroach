@@ -128,6 +128,25 @@ struct DBBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
+struct DBWriteOnlyBatch : public DBEngine {
+  int updates;
+  rocksdb::WriteBatch batch;
+
+  DBWriteOnlyBatch(DBEngine* db);
+  virtual ~DBWriteOnlyBatch() {
+  }
+
+  virtual DBStatus Put(DBKey key, DBSlice value);
+  virtual DBStatus Merge(DBKey key, DBSlice value);
+  virtual DBStatus Delete(DBKey key);
+  virtual DBStatus CommitBatch();
+  virtual DBStatus ApplyBatchRepr(DBSlice repr);
+  virtual DBSlice BatchRepr();
+  virtual DBStatus Get(DBKey key, DBString* value);
+  virtual DBIterator* NewIter(bool prefix);
+  virtual DBStatus GetStats(DBStatsResult* stats);
+};
+
 struct DBSnapshot : public DBEngine {
   const rocksdb::Snapshot* snapshot;
   rocksdb::ReadOptions read_opts;
@@ -483,7 +502,7 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
 
 class DBBatchInserter : public rocksdb::WriteBatch::Handler {
  public:
-  DBBatchInserter(rocksdb::WriteBatchWithIndex* batch)
+  DBBatchInserter(rocksdb::WriteBatchBase* batch)
       : batch_(batch) {
   }
 
@@ -498,7 +517,7 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
   }
 
  private:
-  rocksdb::WriteBatchWithIndex* const batch_;
+  rocksdb::WriteBatchBase* const batch_;
 };
 
 // Method used to sort InternalTimeSeriesSamples.
@@ -1408,6 +1427,11 @@ DBBatch::DBBatch(DBEngine* db)
       updates(0) {
 }
 
+DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db)
+    : DBEngine(db->rep),
+      updates(0) {
+}
+
 DBCache* DBNewCache(uint64_t size) {
   const int num_cache_shard_bits = 4;
   DBCache *cache = new DBCache;
@@ -1658,6 +1682,12 @@ DBStatus DBBatch::Put(DBKey key, DBSlice value) {
   return kSuccess;
 }
 
+DBStatus DBWriteOnlyBatch::Put(DBKey key, DBSlice value) {
+  ++updates;
+  batch.Put(EncodeKey(key), ToSlice(value));
+  return kSuccess;
+}
+
 DBStatus DBSnapshot::Put(DBKey key, DBSlice value) {
   return FmtStatus("unsupported");
 }
@@ -1672,6 +1702,12 @@ DBStatus DBImpl::Merge(DBKey key, DBSlice value) {
 }
 
 DBStatus DBBatch::Merge(DBKey key, DBSlice value) {
+  ++updates;
+  batch.Merge(EncodeKey(key), ToSlice(value));
+  return kSuccess;
+}
+
+DBStatus DBWriteOnlyBatch::Merge(DBKey key, DBSlice value) {
   ++updates;
   batch.Merge(EncodeKey(key), ToSlice(value));
   return kSuccess;
@@ -1700,6 +1736,10 @@ DBStatus DBBatch::Get(DBKey key, DBString* value) {
   return ProcessDeltaKey(&base, iter.get(), base.key, value);
 }
 
+DBStatus DBWriteOnlyBatch::Get(DBKey key, DBString* value) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBSnapshot::Get(DBKey key, DBString* value) {
   DBGetter base(rep, read_opts, EncodeKey(key));
   return base.Get(value);
@@ -1715,6 +1755,12 @@ DBStatus DBImpl::Delete(DBKey key) {
 }
 
 DBStatus DBBatch::Delete(DBKey key) {
+  ++updates;
+  batch.Delete(EncodeKey(key));
+  return kSuccess;
+}
+
+DBStatus DBWriteOnlyBatch::Delete(DBKey key) {
   ++updates;
   batch.Delete(EncodeKey(key));
   return kSuccess;
@@ -1738,6 +1784,14 @@ DBStatus DBBatch::CommitBatch() {
   }
   rocksdb::WriteOptions options;
   return ToDBStatus(rep->Write(options, batch.GetWriteBatch()));
+}
+
+DBStatus DBWriteOnlyBatch::CommitBatch() {
+  if (updates == 0) {
+    return kSuccess;
+  }
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->Write(options, &batch));
 }
 
 DBStatus DBSnapshot::CommitBatch() {
@@ -1764,6 +1818,16 @@ DBStatus DBBatch::ApplyBatchRepr(DBSlice repr) {
   return kSuccess;
 }
 
+DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr) {
+  // TODO(peter): It would be slightly more efficient to iterate over
+  // repr directly instead of first converting it to a string.
+  DBBatchInserter inserter(&batch);
+  rocksdb::WriteBatch batch(ToString(repr));
+  batch.Iterate(&inserter);
+  updates += batch.Count();
+  return kSuccess;
+}
+
 DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr) {
   return FmtStatus("unsupported");
 }
@@ -1780,6 +1844,10 @@ DBSlice DBBatch::BatchRepr() {
   return ToDBSlice(batch.GetWriteBatch()->Data());
 }
 
+DBSlice DBWriteOnlyBatch::BatchRepr() {
+  return ToDBSlice(batch.GetWriteBatch()->Data());
+}
+
 DBSlice DBSnapshot::BatchRepr() {
   return ToDBSlice("unsupported");
 }
@@ -1792,7 +1860,10 @@ DBEngine* DBNewSnapshot(DBEngine* db)  {
   return new DBSnapshot(db);
 }
 
-DBEngine* DBNewBatch(DBEngine *db) {
+DBEngine* DBNewBatch(DBEngine *db, bool writeOnly) {
+  if (writeOnly) {
+    return new DBWriteOnlyBatch(db);
+  }
   return new DBBatch(db);
 }
 
@@ -1814,6 +1885,10 @@ DBIterator* DBBatch::NewIter(bool prefix) {
   rocksdb::WBWIIterator* delta = batch.NewIterator();
   iter->rep.reset(new BaseDeltaIterator(base, delta, prefix));
   return iter;
+}
+
+DBIterator* DBWriteOnlyBatch::NewIter(bool prefix) {
+  return NULL;
 }
 
 DBIterator* DBSnapshot::NewIter(bool prefix) {
@@ -1855,6 +1930,10 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
 }
 
 DBStatus DBBatch::GetStats(DBStatsResult* stats) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) {
   return FmtStatus("unsupported");
 }
 
