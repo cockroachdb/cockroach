@@ -173,7 +173,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sqlbase.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 4, 0, ""},
+		{sqlbase.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 5, 0, ""},
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{
@@ -276,9 +276,9 @@ func TestComputeSplits(t *testing.T) {
 		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
 		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, allSplits[2:]},
 		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:6]},
+		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:7]},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:9]},
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:10]},
 	}
 
 	cfg := config.SystemConfig{}

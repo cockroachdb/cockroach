@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -111,6 +112,22 @@ CREATE TABLE system.ui (
 	value       BYTES,
 	lastUpdated TIMESTAMP NOT NULL
 );`
+
+	// JobsTableSchema defines the schema of the table that tracks long-running
+	// jobs being worked on in the cluster. These jobs can be of different types;
+	// for example, they could be SQL schema changes or backup/restore processes.
+	// TODO(a-robinson): Consider adding an index on jobType/status.
+	JobsTableSchema = `
+CREATE TABLE system.jobs (
+	jobID                SERIAL PRIMARY KEY,
+	jobType              STRING NOT NULL,
+	name				         STRING NOT NULL,
+	payload			         BYTES,
+	status               STRING NOT NULL,
+	completionPercentage FLOAT,
+	startTime            TIMESTAMP NOT NULL,
+	lastUpdated          TIMESTAMP NOT NULL
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -127,6 +144,7 @@ func pk(name string) IndexDescriptor {
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
 	colTypeInt       = ColumnType{Kind: ColumnType_INT}
+	colTypeFloat     = ColumnType{Kind: ColumnType_FLOAT}
 	colTypeString    = ColumnType{Kind: ColumnType_STRING}
 	colTypeBytes     = ColumnType{Kind: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{Kind: ColumnType_TIMESTAMP}
@@ -402,6 +420,41 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	// JobsTable is the descriptor for the jobs table.
+	JobsTable = TableDescriptor{
+		Name:     "jobs",
+		ID:       keys.JobsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "jobID", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "jobType", ID: 2, Type: colTypeString},
+			{Name: "name", ID: 3, Type: colTypeString},
+			{Name: "payload", ID: 4, Type: colTypeBytes, Nullable: true},
+			{Name: "status", ID: 5, Type: colTypeString},
+			{Name: "completionPercentage", ID: 6, Type: colTypeFloat, Nullable: true},
+			{Name: "startTime", ID: 7, Type: colTypeTimestamp},
+			{Name: "lastUpdated", ID: 8, Type: colTypeTimestamp},
+		},
+		NextColumnID: 9,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"jobID"}, ColumnIDs: singleID1},
+			{Name: "fam_2_jobType", ID: 2, ColumnNames: []string{"jobType"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_name", ID: 3, ColumnNames: []string{"name"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_payload", ID: 4, ColumnNames: []string{"payload"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_status", ID: 5, ColumnNames: []string{"status"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
+			{Name: "fam_6_completionPercentage", ID: 6, ColumnNames: []string{"completionPercentage"}, ColumnIDs: []ColumnID{6}, DefaultColumnID: 6},
+			{Name: "fam_7_startTime", ID: 7, ColumnNames: []string{"startTime"}, ColumnIDs: []ColumnID{7}, DefaultColumnID: 7},
+			{Name: "fam_8_lastUpdated", ID: 8, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []ColumnID{8}, DefaultColumnID: 8},
+		},
+		NextFamilyID:   9,
+		PrimaryIndex:   pk("jobID"),
+		NextIndexID:    2,
+		Privileges:     NewDefaultPrivilegeDescriptor(),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create the key/value pairs for the default zone config entry.
@@ -438,6 +491,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
+	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
@@ -445,4 +499,30 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 // IsSystemConfigID returns true if this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
+}
+
+// SystemTableID returns the ID for a named system table.
+func SystemTableID(name string) (ID, error) {
+	switch name {
+	case "namespace":
+		return keys.NamespaceTableID, nil
+	case "descriptor":
+		return keys.DescriptorTableID, nil
+	case "users":
+		return keys.UsersTableID, nil
+	case "zones":
+		return keys.ZonesTableID, nil
+	case "lease":
+		return keys.LeaseTableID, nil
+	case "eventlog":
+		return keys.EventLogTableID, nil
+	case "rangelog":
+		return keys.RangeEventTableID, nil
+	case "ui":
+		return keys.UITableID, nil
+	case "jobs":
+		return keys.JobsTableID, nil
+	}
+
+	return 0, errors.Errorf("system table %q not found", name)
 }

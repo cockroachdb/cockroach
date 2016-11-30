@@ -32,7 +32,7 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nonSystemDesc = 4
+	const nonSystemDesc = 5
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
@@ -131,6 +131,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
 		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
+		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
 	} {
 		gen, err := sql.CreateTestTableDescriptor(
 			keys.SystemDatabaseID, test.id, test.schema, sqlbase.NewDefaultPrivilegeDescriptor(),

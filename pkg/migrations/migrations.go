@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -43,8 +45,8 @@ var (
 // node versions are currently running within the cluster.
 var backwardCompatibleMigrations = []migrationDescriptor{
 	{
-		name:   "example migration",
-		workFn: exampleNoopMigration,
+		name:   "create system.jobs table",
+		workFn: createSystemJobsTableMigration,
 	},
 }
 
@@ -237,6 +239,33 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return bytes.Join([][]byte{keys.MigrationPrefix, roachpb.RKey(migration.name)}, nil)
 }
 
-func exampleNoopMigration(ctx context.Context, r runner) error {
+// checkQueryResults performs basic tests on the provided query results and
+// returns the first error that was found.
+func checkQueryResults(results []sql.Result, numResults int) error {
+	if a, e := len(results), numResults; a != e {
+		return errors.Errorf("number of results %d != expected %d", a, e)
+	}
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
 	return nil
+}
+
+func createSystemJobsTableMigration(ctx context.Context, r runner) error {
+	// System tables have to be created by a privileged internal user.
+	session := sql.NewSession(ctx, sql.SessionArgs{User: security.NodeUser}, r.sqlExecutor, nil, nil)
+	defer session.Finish(r.sqlExecutor)
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		res := r.sqlExecutor.ExecuteStatements(session, sqlbase.JobsTableSchema, nil)
+		log.Infof(ctx, "res: %+v", res)
+		err = checkQueryResults(res.ResultList, 1)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "unable to create system.jobs table: %s", err)
+	}
+	return err
 }

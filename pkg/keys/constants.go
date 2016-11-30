@@ -284,4 +284,5 @@ const (
 	EventLogTableID   = 12
 	RangeEventTableID = 13
 	UITableID         = 14
+	JobsTableID       = 15
 )
