@@ -140,7 +140,7 @@ func (s LeaseStore) Acquire(
 	minExpirationTime parser.DTimestamp,
 ) (*LeaseState, error) {
 	lease := &LeaseState{testingKnobs: s.testingKnobs}
-	expiration := time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration())
+	expiration := s.clock.Now().GoTime().Add(jitteredLeaseDuration())
 	expiration = expiration.Round(time.Microsecond)
 	if !minExpirationTime.IsZero() && expiration.Before(minExpirationTime.Time) {
 		expiration = minExpirationTime.Time

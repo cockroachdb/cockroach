@@ -45,7 +45,7 @@ func (c *breakerClock) AfterFunc(d time.Duration, f func()) *clock.Timer {
 }
 
 func (c *breakerClock) Now() time.Time {
-	return c.clock.PhysicalTime()
+	return c.clock.Now().GoTime()
 }
 
 func (c *breakerClock) Sleep(d time.Duration) {

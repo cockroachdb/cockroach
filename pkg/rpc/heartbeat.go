@@ -76,7 +76,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
 	return &PingResponse{
 		Pong:       args.Ping,
-		ServerTime: hs.clock.PhysicalNow(),
+		ServerTime: hs.clock.Now().WallTime,
 	}, nil
 }
 

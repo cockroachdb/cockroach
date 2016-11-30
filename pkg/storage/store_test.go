@@ -989,7 +989,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	// Set args timestamp to exceed max offset.
 	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0)
 	_, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{Timestamp: reqTS}, &args)
-	if !testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+	if !testutils.IsPError(pErr, "rejecting command: offset .* exceeds maximum .*") {
 		t.Errorf("unexpected error: %v", pErr)
 	}
 }

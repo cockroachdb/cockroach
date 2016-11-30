@@ -746,7 +746,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				// with a strictly higher timestamp. We're dropping logical
 				// ticks and the clock may just have been pushed into the
 				// future, so that's necessary. See #3122.
-				if ts[0].WallTime >= s.Clock().Now().WallTime {
+				if s.Clock().Now().Less(ts[0]) {
 					return errors.New("time stands still")
 				}
 				return nil

@@ -288,7 +288,7 @@ func (tc *TxnCoordSender) Send(
 		tracer = sp.Tracer()
 	}
 
-	startNS := tc.clock.PhysicalNow()
+	startTS := tc.clock.Now()
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
@@ -420,7 +420,7 @@ func (tc *TxnCoordSender) Send(
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
-		if pErr = tc.updateState(ctx, startNS, ba, br, pErr); pErr != nil {
+		if pErr = tc.updateState(ctx, startTS.WallTime, ba, br, pErr); pErr != nil {
 			log.Eventf(ctx, "error: %s", pErr)
 			return nil, pErr
 		}
@@ -436,22 +436,21 @@ func (tc *TxnCoordSender) Send(
 	// If the --linearizable flag is set, we want to make sure that
 	// all the clocks in the system are past the commit timestamp
 	// of the transaction. This is guaranteed if either
-	// - the commit timestamp is MaxOffset behind startNS
+	// - the commit timestamp is MaxOffset behind startTS
 	// - MaxOffset ns were spent in this function
 	// when returning to the client. Below we choose the option
 	// that involves less waiting, which is likely the first one
 	// unless a transaction commits with an odd timestamp.
-	if tsNS := br.Txn.Timestamp.WallTime; startNS > tsNS {
-		startNS = tsNS
+	if baTS := br.Txn.Timestamp; baTS.Less(startTS) {
+		startTS = baTS
 	}
-	sleepNS := tc.clock.MaxOffset() -
-		time.Duration(tc.clock.PhysicalNow()-startNS)
-	if tc.linearizable && sleepNS > 0 {
+	sleepTime := tc.clock.MaxOffset() - tc.clock.Now().GoTime().Sub(startTS.GoTime())
+	if tc.linearizable && sleepTime > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), util.TruncateDuration(sleepTime, time.Millisecond))
 			}
-			time.Sleep(sleepNS)
+			time.Sleep(sleepTime)
 		}()
 	}
 	if br.Txn.Status != roachpb.PENDING {
@@ -586,7 +585,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
-	duration = tc.clock.PhysicalNow() - txnMeta.firstUpdateNanos
+	duration = tc.clock.Now().WallTime - txnMeta.firstUpdateNanos
 	restarts = int64(txnMeta.txn.Epoch)
 	status = txnMeta.txn.Status
 
@@ -712,7 +711,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	txn := txnMeta.txn.Clone()
-	hasAbandoned := txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow())
+	hasAbandoned := txnMeta.hasClientAbandonedCoord(tc.clock.Now().WallTime)
 	tc.Unlock()
 
 	if txn.Status != roachpb.PENDING {
@@ -907,7 +906,7 @@ func (tc *TxnCoordSender) updateState(
 					txn:              newTxn,
 					keys:             keys,
 					firstUpdateNanos: startNS,
-					lastUpdateNanos:  tc.clock.PhysicalNow(),
+					lastUpdateNanos:  tc.clock.Now().WallTime,
 					timeoutDuration:  tc.clientTimeout,
 					txnEnd:           make(chan struct{}),
 				}
@@ -928,7 +927,7 @@ func (tc *TxnCoordSender) updateState(
 				// directly as they won't otherwise be updated on heartbeat
 				// loop shutdown.
 				etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
-				tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
+				tc.updateStats(tc.clock.Now().WallTime-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
 			}
 		}
 	}
@@ -939,7 +938,7 @@ func (tc *TxnCoordSender) updateState(
 		if !txnMeta.txn.Writing {
 			panic("tracking a non-writing txn")
 		}
-		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+		txnMeta.setLastUpdate(tc.clock.Now().WallTime)
 	}
 
 	if pErr == nil {

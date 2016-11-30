@@ -550,7 +550,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			}
 			txnState.resetForNewSQLTxn(e, session)
 			txnState.autoRetry = true
-			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
+			txnState.sqlTimestamp = e.cfg.Clock.Now().GoTime()
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
@@ -960,7 +960,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.Now().GoTime())
 
 	session := planMaker.session
 	log.Eventf(session.context, "%s", stmt)
