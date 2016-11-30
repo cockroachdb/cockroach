@@ -215,8 +215,12 @@ func (rlq *raftLogQueue) process(
 
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
-		log.VEventf(ctx, 1, "truncating raft log %d-%d",
-			oldestIndex-truncatableIndexes, oldestIndex)
+		r.mu.Lock()
+		raftLogSize := r.mu.raftLogSize
+		r.mu.Unlock()
+
+		log.VEventf(ctx, 1, "truncating raft log %d-%d: size=%d",
+			oldestIndex-truncatableIndexes, oldestIndex, raftLogSize)
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
 			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
