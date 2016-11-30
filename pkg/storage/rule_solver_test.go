@@ -19,44 +19,17 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
+	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-type byScoreAndID candidateList
-
-func (c byScoreAndID) Len() int { return len(c) }
-func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].constraint == c[j].constraint &&
-		c[i].balance == c[j].balance &&
-		c[i].valid == c[j].valid {
-		return c[i].store.StoreID < c[j].store.StoreID
-	}
-	return c[i].less(c[j])
-}
-func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
-
-func (c candidate) String() string {
-	return fmt.Sprintf("StoreID:%d, valid:%t, con:%.2f, bal:%.2f",
-		c.store.StoreID, c.valid, c.constraint, c.balance)
-}
-
-func (cl candidateList) String() string {
-	var buffer bytes.Buffer
-	buffer.WriteRune('[')
-	for i, c := range cl {
-		if i != 0 {
-			buffer.WriteString("; ")
-		}
-		buffer.WriteString(c.String())
-	}
-	buffer.WriteRune(']')
-	return buffer.String()
-}
 
 // TODO(bram): This test suite is not even close to exhaustive. The scores are
 // not checked and each rule should have many more test cases. Also add a
@@ -67,7 +40,7 @@ func TestRuleSolver(t *testing.T) {
 
 	stopper, _, _, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff,
-		/* deterministic */ false,
+		/* deterministic */ true,
 		/* defaultNodeLiveness */ true,
 	)
 	defer stopper.Stop()
@@ -294,8 +267,8 @@ func TestRuleSolver(t *testing.T) {
 				tc.c,
 				tc.existing,
 				storePool.getNodeLocalities(tc.existing),
+				storePool.deterministic,
 			)
-			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
 			valid := candidates.onlyValid()
 			invalid := candidates[len(valid):]
 
@@ -358,5 +331,196 @@ func TestOnlyValid(t *testing.T) {
 				t.Errorf("expected %d invalid, actual %d", e, a)
 			}
 		})
+	}
+}
+
+// TestCandidateSelection tests select{good,bad} and {best,worst}constraints.
+func TestCandidateSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type scoreTuple struct {
+		constraint int
+		balance    int
+	}
+	genCandidates := func(scores []scoreTuple) candidateList {
+		var cl candidateList
+		for _, score := range scores {
+			cl = append(cl, candidate{
+				constraint: float64(score.constraint),
+				balance:    float64(score.balance),
+				valid:      true,
+			})
+		}
+		sort.Sort(sort.Reverse(byScore(cl)))
+		return cl
+	}
+
+	formatter := func(cl candidateList) string {
+		var buffer bytes.Buffer
+		for i, c := range cl {
+			if i != 0 {
+				buffer.WriteRune(',')
+			}
+			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.constraint), int(c.balance)))
+		}
+		return buffer.String()
+	}
+
+	testCases := []struct {
+		candidates []scoreTuple
+		best       []scoreTuple
+		worst      []scoreTuple
+		good       scoreTuple
+		bad        scoreTuple
+	}{
+		{
+			candidates: []scoreTuple{{0, 0}},
+			best:       []scoreTuple{{0, 0}},
+			worst:      []scoreTuple{{0, 0}},
+			good:       scoreTuple{0, 0},
+			bad:        scoreTuple{0, 0},
+		},
+		{
+			candidates: []scoreTuple{{0, 1}, {0, 0}},
+			best:       []scoreTuple{{0, 1}, {0, 0}},
+			worst:      []scoreTuple{{0, 1}, {0, 0}},
+			good:       scoreTuple{0, 1},
+			bad:        scoreTuple{0, 0},
+		},
+		{
+			candidates: []scoreTuple{{0, 2}, {0, 1}, {0, 0}},
+			best:       []scoreTuple{{0, 2}, {0, 1}, {0, 0}},
+			worst:      []scoreTuple{{0, 2}, {0, 1}, {0, 0}},
+			good:       scoreTuple{0, 1},
+			bad:        scoreTuple{0, 0},
+		},
+		{
+			candidates: []scoreTuple{{1, 0}, {0, 1}},
+			best:       []scoreTuple{{1, 0}},
+			worst:      []scoreTuple{{0, 1}},
+			good:       scoreTuple{1, 0},
+			bad:        scoreTuple{0, 1},
+		},
+		{
+			candidates: []scoreTuple{{1, 0}, {0, 2}, {0, 1}},
+			best:       []scoreTuple{{1, 0}},
+			worst:      []scoreTuple{{0, 2}, {0, 1}},
+			good:       scoreTuple{1, 0},
+			bad:        scoreTuple{0, 1},
+		},
+		{
+			candidates: []scoreTuple{{1, 1}, {1, 0}, {0, 2}},
+			best:       []scoreTuple{{1, 1}, {1, 0}},
+			worst:      []scoreTuple{{0, 2}},
+			good:       scoreTuple{1, 1},
+			bad:        scoreTuple{0, 2},
+		},
+		{
+			candidates: []scoreTuple{{1, 1}, {1, 0}, {0, 3}, {0, 2}},
+			best:       []scoreTuple{{1, 1}, {1, 0}},
+			worst:      []scoreTuple{{0, 3}, {0, 2}},
+			good:       scoreTuple{1, 1},
+			bad:        scoreTuple{0, 2},
+		},
+	}
+
+	allocRand := makeAllocatorRand(rand.NewSource(0))
+	for _, tc := range testCases {
+		cl := genCandidates(tc.candidates)
+		t.Run(fmt.Sprintf("best-%s", formatter(cl)), func(t *testing.T) {
+			if a, e := cl.best(), genCandidates(tc.best); !reflect.DeepEqual(a, e) {
+				t.Errorf("expected:%s actual:%s diff:%v", formatter(e), formatter(a), pretty.Diff(e, a))
+			}
+		})
+		t.Run(fmt.Sprintf("worst-%s", formatter(cl)), func(t *testing.T) {
+			if a, e := cl.worst(), genCandidates(tc.worst); !reflect.DeepEqual(a, e) {
+				t.Errorf("expected:%s actual:%s diff:%v", formatter(e), formatter(a), pretty.Diff(e, a))
+			}
+		})
+		t.Run(fmt.Sprintf("good-%s", formatter(cl)), func(t *testing.T) {
+			good := cl.selectGood(allocRand)
+			actual := scoreTuple{int(good.constraint), int(good.balance)}
+			if actual != tc.good {
+				t.Errorf("expected:%v actual:%v", tc.good, actual)
+			}
+		})
+		t.Run(fmt.Sprintf("bad-%s", formatter(cl)), func(t *testing.T) {
+			bad := cl.selectBad(allocRand)
+			actual := scoreTuple{int(bad.constraint), int(bad.balance)}
+			if actual != tc.bad {
+				t.Errorf("expected:%v actual:%v", tc.bad, actual)
+			}
+		})
+	}
+}
+
+func TestBetterThan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCandidateList := candidateList{
+		{
+			valid:      true,
+			constraint: 1,
+			balance:    1,
+		},
+		{
+			valid:      true,
+			constraint: 1,
+			balance:    1,
+		},
+		{
+			valid:      true,
+			constraint: 1,
+			balance:    0,
+		},
+		{
+			valid:      true,
+			constraint: 1,
+			balance:    0,
+		},
+		{
+			valid:      true,
+			constraint: 0,
+			balance:    1,
+		},
+		{
+			valid:      true,
+			constraint: 0,
+			balance:    1,
+		},
+		{
+			valid:      true,
+			constraint: 0,
+			balance:    0,
+		},
+		{
+			valid:      true,
+			constraint: 0,
+			balance:    0,
+		},
+		{
+			valid:      false,
+			constraint: 1,
+			balance:    0.5,
+		},
+		{
+			valid:      false,
+			constraint: 0,
+			balance:    0.5,
+		},
+		{
+			valid:      false,
+			constraint: 0,
+			balance:    0,
+		},
+	}
+
+	expectedResults := []int{0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 8}
+
+	for i := 0; i < len(testCandidateList); i++ {
+		betterThan := testCandidateList.betterThan(testCandidateList[i])
+		if e, a := expectedResults[i], len(betterThan); e != a {
+			t.Errorf("expected %d results, actual %d", e, a)
+		}
 	}
 }
