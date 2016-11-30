@@ -6,6 +6,7 @@ import { connect } from "react-redux";
 import { IRouter, IInjectedProps } from "react-router";
 
 import Selector, { SelectorOption } from "../../components/selector";
+import { PageConfig, PageConfigItem } from "../../components/pageconfig";
 
 import { AdminUIState } from "../../redux/state";
 import { refreshDatabases } from "../../redux/apiReducers";
@@ -38,16 +39,14 @@ class DatabaseListNav extends React.Component<{selected: string}, {}> {
   context: { router?: IRouter & IInjectedProps; };
 
   render() {
-    return <div className="page-config">
-      <ul className="page-config__list">
-        <li className="page-config__item">
-          <Selector title="View" options={databasePages} selected={this.props.selected}
-                    onChange={(selected: SelectorOption) => {
-                      this.context.router.push(`databases/${selected.value}`);
-                    }} />
-        </li>
-      </ul>
-    </div>;
+    return <PageConfig>
+      <PageConfigItem>
+        <Selector title="View" options={databasePages} selected={this.props.selected}
+                  onChange={(selected: SelectorOption) => {
+                    this.context.router.push(`databases/${selected.value}`);
+                  }} />
+      </PageConfigItem>
+    </PageConfig>;
   }
 }
 

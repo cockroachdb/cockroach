@@ -25,6 +25,7 @@
     "react-router": "registry:npm/react-router#2.4.0+20160915183637",
     "react-router-redux": "registry:npm/react-router-redux#4.0.0+20160602212457",
     "react-select": "registry:npm/react-select#1.0.0+20160723033700",
+    "react-sticky": "file:local_typings/react-sticky.d.ts",
     "redux": "file:jspm_packages/npm/redux@3.6.0/index.d.ts",
     "redux-thunk": "registry:npm/redux-thunk#2.0.0+20160525185520",
     "reselect": "file:jspm_packages/npm/reselect@2.5.4/src/reselect.d.ts",
