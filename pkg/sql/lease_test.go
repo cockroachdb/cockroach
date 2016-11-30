@@ -23,7 +23,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -627,5 +629,71 @@ INSERT INTO t.kv VALUES ('a', 'b');
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestSubqueryLeases tests that all leases acquired by a subquery are
+// properly tracked and released.
+func TestSubqueryLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+
+	fooRelease := make(chan struct{}, 10)
+	fooAcquiredCount := int32(0)
+	fooReleaseCount := int32(0)
+
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseAcquiredEvent: func(lease *csql.LeaseState, _ error) {
+					if lease.Name == "foo" {
+						atomic.AddInt32(&fooAcquiredCount, 1)
+					}
+				},
+				LeaseReleasedEvent: func(lease *csql.LeaseState, _ error) {
+					if lease.Name == "foo" {
+						// Note: we don't use close(fooRelease) here because the
+						// lease on "foo" may be re-acquired (and re-released)
+						// multiple times, at least once for the first
+						// CREATE/SELECT pair and one for the final DROP.
+						atomic.AddInt32(&fooReleaseCount, 1)
+						fooRelease <- struct{}{}
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.foo (v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if atomic.LoadInt32(&fooAcquiredCount) > 0 {
+		t.Fatalf("CREATE TABLE has acquired a lease: got %d, expected 0", atomic.LoadInt32(&fooAcquiredCount))
+	}
+
+	if _, err := sqlDB.Exec(`
+SELECT EXISTS(SELECT * FROM t.foo);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if atomic.LoadInt32(&fooAcquiredCount) == 0 {
+		t.Fatalf("subquery has not acquired a lease")
+	}
+
+	// Now wait for the release to happen. We use a local timer
+	// to make the test fail faster if it needs to fail.
+	timeout := time.After(5 * time.Second)
+	select {
+	case <-timeout:
+		t.Fatal("lease from sub-query was not released")
+	case <-fooRelease:
 	}
 }

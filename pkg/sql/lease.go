@@ -715,6 +715,11 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 		// Figure out if we'd like to remove the lease from the store asap (i.e. when
 		// the refcount drops to 0). If so, we'll need to mark the lease as released.
 		removeOnceDereferenced := false
+
+		if store.testingKnobs.RemoveOnceDereferenced {
+			removeOnceDereferenced = true
+		}
+
 		// Release from the store if the table has been deleted; no leases can be
 		// acquired any more.
 		if t.deleted {
@@ -818,8 +823,13 @@ type LeaseStoreTestingKnobs struct {
 	// Called after a lease is removed from the store, with any operation error.
 	// See LeaseRemovalTracker.
 	LeaseReleasedEvent func(lease *LeaseState, err error)
+	// Called after a lease is acquired, with any operation error.
+	LeaseAcquiredEvent func(lease *LeaseState, err error)
 	// Allow the use of expired leases.
 	CanUseExpiredLeases bool
+	// RemoveOnceDereferenced forces leases to be removed
+	// as soon as they are dereferenced.
+	RemoveOnceDereferenced bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1095,7 +1105,11 @@ func (m *LeaseManager) Acquire(
 	txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
-	return t.acquire(txn, version, m.LeaseStore)
+	lease, err := t.acquire(txn, version, m.LeaseStore)
+	if m.LeaseStore.testingKnobs.LeaseAcquiredEvent != nil {
+		m.LeaseStore.testingKnobs.LeaseAcquiredEvent(lease, err)
+	}
+	return lease, err
 }
 
 // acquireFreshestFromStore acquires a new lease from the store. The returned
