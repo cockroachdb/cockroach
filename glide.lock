@@ -1,5 +1,5 @@
-hash: 43c2ae8c4c7adacd66a6a844cef30ab3d8599d25b1d4451254d06daf60b7aacb
-updated: 2016-12-01T15:03:43.177064764-05:00
+hash: a1f8beb02b6d6dd526d9e02540b6fa93e07ed7102e93a0f0750e8b97201b552f
+updated: 2016-12-01T17:14:38.62150015-05:00
 imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
@@ -196,7 +196,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: bde2bd98404b5f591290d74e66c23c986bf4016d
+  version: 3e498ece14af4f1f10af7696caa88ec67feff521
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -261,8 +261,6 @@ imports:
   version: af9583088c3453556f6e4f580693ba8606ca459a
 - name: github.com/russross/blackfriday
   version: 5f33e7b7878355cd2b7e6b8eefc48a5472c69f70
-- name: github.com/sasha-s/go-deadlock
-  version: 09aefc0ac06ad74d91ca31acdb11fc981c159149
 - name: github.com/satori/go.uuid
   version: b061729afc07e77a8aa4fad0a2fd840958f1942a
 - name: github.com/shurcooL/sanitized_anchor_name
@@ -280,7 +278,7 @@ imports:
 - name: github.com/StackExchange/wmi
   version: e54cbda6595d7293a7a468ccf9525f6bc8887f99
 - name: github.com/tamird/go-deadlock
-  version: 9c489b49f3dd3c305f29801b10d84407ffa71971
+  version: 44897155cb375bfc533e32256f5f49a758a04143
 - name: github.com/tebeka/go2xunit
   version: aaee8a42931ce35b4821d9c7cd68f73de70cba3d
   subpackages:
