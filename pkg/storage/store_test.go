@@ -537,26 +537,26 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	}
 
 	// Verify two passes of the visit.
-	ranges := newStoreReplicaVisitor(store)
+	visitor := newStoreReplicaVisitor(store)
 	exp := make(map[roachpb.RangeID]struct{})
 	for i := 0; i < newCount; i++ {
 		exp[roachpb.RangeID(i+1)] = struct{}{}
 	}
 
 	for pass := 0; pass < 2; pass++ {
-		if ec := ranges.EstimatedCount(); ec != 10 {
+		if ec := visitor.EstimatedCount(); ec != 10 {
 			t.Fatalf("expected 10 remaining; got %d", ec)
 		}
 		i := 1
 		seen := make(map[roachpb.RangeID]struct{})
-		ranges.Visit(func(repl *Replica) bool {
+		visitor.Visit(func(repl *Replica) bool {
 			_, ok := seen[repl.RangeID]
 			if ok {
 				t.Fatalf("already saw %d", repl.RangeID)
 			}
 
 			seen[repl.RangeID] = struct{}{}
-			if ec := ranges.EstimatedCount(); ec != 10-i {
+			if ec := visitor.EstimatedCount(); ec != 10-i {
 				t.Fatalf(
 					"expected %d remaining; got %d after seeing %+v",
 					10-i, ec, seen,
@@ -565,7 +565,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 			i++
 			return true
 		})
-		if ec := ranges.EstimatedCount(); ec != 10 {
+		if ec := visitor.EstimatedCount(); ec != 10 {
 			t.Fatalf("expected 10 remaining; got %d", ec)
 		}
 		if !reflect.DeepEqual(exp, seen) {

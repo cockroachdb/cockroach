@@ -52,9 +52,8 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	var totalStats enginepb.MVCCStats
 	var err error
 
-	visitor := newStoreReplicaVisitor(s)
 	now := s.Clock().PhysicalNow()
-	visitor.Visit(func(r *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
 		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {

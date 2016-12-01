@@ -33,7 +33,7 @@ var (
 	metaRaftLeaderCount               = metric.Metadata{Name: "replicas.leaders"}
 	metaRaftLeaderNotLeaseHolderCount = metric.Metadata{
 		Name: "replicas.leaders_not_leaseholders",
-		Help: "Total number of Replicas that are Raft leaders whose Range lease is held by another store.",
+		Help: "Number of replicas that are Raft leaders whose range lease is held by another store",
 	}
 	metaLeaseHolderCount = metric.Metadata{Name: "replicas.leaseholders"}
 	metaQuiescentCount   = metric.Metadata{Name: "replicas.quiescent"}
@@ -131,51 +131,51 @@ var (
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
 		Name: "raft.rcvd.prop",
-		Help: "Total number of MsgProp messages received by this store",
+		Help: "Number of MsgProp messages received by this store",
 	}
 	metaRaftRcvdApp = metric.Metadata{
 		Name: "raft.rcvd.app",
-		Help: "Total number of MsgApp messages received by this store",
+		Help: "Number of MsgApp messages received by this store",
 	}
 	metaRaftRcvdAppResp = metric.Metadata{
 		Name: "raft.rcvd.appresp",
-		Help: "Total number of MsgAppResp messages received by this store",
+		Help: "Number of MsgAppResp messages received by this store",
 	}
 	metaRaftRcvdVote = metric.Metadata{
 		Name: "raft.rcvd.vote",
-		Help: "Total number of MsgVote messages received by this store",
+		Help: "Number of MsgVote messages received by this store",
 	}
 	metaRaftRcvdVoteResp = metric.Metadata{
 		Name: "raft.rcvd.voteresp",
-		Help: "Total number of MsgVoteResp messages received by this store",
+		Help: "Number of MsgVoteResp messages received by this store",
 	}
 	metaRaftRcvdPreVote = metric.Metadata{
 		Name: "raft.rcvd.prevote",
-		Help: "Total number of MsgPreVote messages received by this store",
+		Help: "Number of MsgPreVote messages received by this store",
 	}
 	metaRaftRcvdPreVoteResp = metric.Metadata{
 		Name: "raft.rcvd.prevoteresp",
-		Help: "Total number of MsgPreVoteResp messages received by this store",
+		Help: "Number of MsgPreVoteResp messages received by this store",
 	}
 	metaRaftRcvdSnap = metric.Metadata{
 		Name: "raft.rcvd.snap",
-		Help: "Total number of MsgSnap messages received by this store",
+		Help: "Number of MsgSnap messages received by this store",
 	}
 	metaRaftRcvdHeartbeat = metric.Metadata{
 		Name: "raft.rcvd.heartbeat",
-		Help: "Total number of (coalesced, if enabled) MsgHeartbeat messages received by this store",
+		Help: "Number of (coalesced, if enabled) MsgHeartbeat messages received by this store",
 	}
 	metaRaftRcvdHeartbeatResp = metric.Metadata{
 		Name: "raft.rcvd.heartbeatresp",
-		Help: "Total number of (coalesced, if enabled) MsgHeartbeatResp messages received by this store",
+		Help: "Number of (coalesced, if enabled) MsgHeartbeatResp messages received by this store",
 	}
 	metaRaftRcvdTransferLeader = metric.Metadata{
 		Name: "raft.rcvd.transferleader",
-		Help: "Total number of MsgTransferLeader messages received by this store",
+		Help: "Number of MsgTransferLeader messages received by this store",
 	}
 	metaRaftRcvdTimeoutNow = metric.Metadata{
 		Name: "raft.rcvd.timeoutnow",
-		Help: "Total number of MsgTimeoutNow messages received by this store",
+		Help: "Number of MsgTimeoutNow messages received by this store",
 	}
 	metaRaftRcvdDropped = metric.Metadata{
 		Name: "raft.rcvd.dropped",
@@ -200,13 +200,13 @@ var (
 	metaGCQueueProcessingNanos = metric.Metadata{Name: "queue.gc.processingnanos",
 		Help: "Nanoseconds spent processing replicas in the GC queue"}
 	metaRaftLogQueueSuccesses = metric.Metadata{Name: "queue.raftlog.process.success",
-		Help: "Number of replicas successfully processed by the raft log queue"}
+		Help: "Number of replicas successfully processed by the Raft log queue"}
 	metaRaftLogQueueFailures = metric.Metadata{Name: "queue.raftlog.process.failure",
-		Help: "Number of replicas which failed processing in the raft log queue"}
+		Help: "Number of replicas which failed processing in the Raft log queue"}
 	metaRaftLogQueuePending = metric.Metadata{Name: "queue.raftlog.pending",
-		Help: "Number of pending replicas in the raft log queue"}
+		Help: "Number of pending replicas in the Raft log queue"}
 	metaRaftLogQueueProcessingNanos = metric.Metadata{Name: "queue.raftlog.processingnanos",
-		Help: "Nanoseconds spent processing replicas in the raft log queue"}
+		Help: "Nanoseconds spent processing replicas in the Raft log queue"}
 	metaConsistencyQueueSuccesses = metric.Metadata{Name: "queue.consistency.process.success",
 		Help: "Number of replicas successfully processed by the consistency checker queue"}
 	metaConsistencyQueueFailures = metric.Metadata{Name: "queue.consistency.process.failure",
@@ -259,7 +259,7 @@ var (
 	metaGCIntentTxns = metric.Metadata{Name: "queue.gc.info.intenttxns",
 		Help: "Number of associated distinct transactions"}
 	metaGCTransactionSpanScanned = metric.Metadata{Name: "queue.gc.info.transactionspanscanned",
-		Help: "Total number of entries in the transaction span scanned from the engine"}
+		Help: "Number of entries in the transaction span scanned from the engine"}
 	metaGCTransactionSpanGCAborted = metric.Metadata{Name: "queue.gc.info.transactionspangcaborted",
 		Help: "Number of GC'able entries corresponding to aborted txns"}
 	metaGCTransactionSpanGCCommitted = metric.Metadata{Name: "queue.gc.info.transactionspangccommitted",
@@ -267,15 +267,15 @@ var (
 	metaGCTransactionSpanGCPending = metric.Metadata{Name: "queue.gc.info.transactionspangcpending",
 		Help: "Number of GC'able entries corresponding to pending txns"}
 	metaGCAbortSpanScanned = metric.Metadata{Name: "queue.gc.info.abortspanscanned",
-		Help: "Total number of transactions present in the abort cache scanned from the engine"}
+		Help: "Number of transactions present in the abort cache scanned from the engine"}
 	metaGCAbortSpanConsidered = metric.Metadata{Name: "queue.gc.info.abortspanconsidered",
 		Help: "Number of abort cache entries old enough to be considered for removal"}
 	metaGCAbortSpanGCNum = metric.Metadata{Name: "queue.gc.info.abortspangcnum",
 		Help: "Number of abort cache entries fit for removal"}
 	metaGCPushTxn = metric.Metadata{Name: "queue.gc.info.pushtxn",
-		Help: "Total number of attempted pushes"}
+		Help: "Number of attempted pushes"}
 	metaGCResolveTotal = metric.Metadata{Name: "queue.gc.info.resolvetotal",
-		Help: "Total number of attempted intent resolutions"}
+		Help: "Number of attempted intent resolutions"}
 	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
 
@@ -324,7 +324,7 @@ type StoreMetrics struct {
 	ReplicaAllocatorRemoveDeadCount *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
-	// count proposals (i.e. it does not matter how many Replicas apply the
+	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
 	LeaseRequestSuccessCount *metric.Counter
 	LeaseRequestErrorCount   *metric.Counter
