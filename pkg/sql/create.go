@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -737,6 +738,15 @@ func matchesIndex(
 	return true
 }
 
+func (p *planner) resolveFK(
+	tbl *sqlbase.TableDescriptor,
+	d *parser.ForeignKeyConstraintTableDef,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	mode sqlbase.ConstraintValidity,
+) error {
+	return resolveFK(p.txn, &p.session.virtualSchemas, tbl, d, backrefs, mode)
+}
+
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
@@ -745,14 +755,16 @@ func matchesIndex(
 // "unvalidated", but when table is empty (e.g. during creation), no existing
 // data imples no existing violations, and thus the constraint can be created
 // without the unvalidated flag.
-func (p *planner) resolveFK(
+func resolveFK(
+	txn *client.Txn,
+	vt VirtualTabler,
 	tbl *sqlbase.TableDescriptor,
 	d *parser.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
 	targetTable := d.Table.TableName()
-	target, err := p.getTableDesc(targetTable)
+	target, err := getTableDesc(txn, vt, targetTable)
 	if err != nil {
 		return err
 	}
@@ -942,22 +954,33 @@ func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
 	return nil
 }
 
-// addInterleave marks an index as one that is interleaved in some parent data
-// according to the given definition.
 func (p *planner) addInterleave(
 	desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, interleave *parser.InterleaveDef,
+) error {
+	return addInterleave(p.txn, &p.session.virtualSchemas, desc, index, interleave, p.session.Database)
+}
+
+// addInterleave marks an index as one that is interleaved in some parent data
+// according to the given definition.
+func addInterleave(
+	txn *client.Txn,
+	vt VirtualTabler,
+	desc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	interleave *parser.InterleaveDef,
+	database string,
 ) error {
 	if interleave.DropBehavior != parser.DropDefault {
 		return util.UnimplementedWithIssueErrorf(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	tn, err := interleave.Parent.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := interleave.Parent.NormalizeWithDatabaseName(database)
 	if err != nil {
 		return err
 	}
 
-	parentTable, err := p.mustGetTableDesc(tn)
+	parentTable, err := mustGetTableDesc(txn, vt, tn)
 	if err != nil {
 		return err
 	}
@@ -1153,11 +1176,15 @@ func makeTableDescIfAs(
 }
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
-func (p *planner) makeTableDesc(
+func MakeTableDesc(
+	txn *client.Txn,
+	vt VirtualTabler,
+	searchPath parser.SearchPath,
 	n *parser.CreateTable,
 	parentID, id sqlbase.ID,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+	database string,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
 		ID:            id,
@@ -1180,7 +1207,7 @@ func (p *planner) makeTableDesc(
 				}
 			}
 
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, p.session.SearchPath)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath)
 			if err != nil {
 				return desc, err
 			}
@@ -1279,7 +1306,7 @@ func (p *planner) makeTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := p.addInterleave(&desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+		if err := addInterleave(txn, vt, &desc, &desc.PrimaryIndex, n.Interleave, database); err != nil {
 			return desc, err
 		}
 	}
@@ -1297,14 +1324,14 @@ func (p *planner) makeTableDesc(
 			// pass, handled above.
 
 		case *parser.CheckConstraintTableDef:
-			ck, err := makeCheckConstraint(desc, d, generatedNames, p.session.SearchPath)
+			ck, err := makeCheckConstraint(desc, d, generatedNames, searchPath)
 			if err != nil {
 				return desc, err
 			}
 			desc.Checks = append(desc.Checks, ck)
 
 		case *parser.ForeignKeyConstraintTableDef:
-			err := p.resolveFK(&desc, d, affected, sqlbase.ConstraintValidity_Validated)
+			err := resolveFK(txn, vt, &desc, d, affected, sqlbase.ConstraintValidity_Validated)
 			if err != nil {
 				return desc, err
 			}
@@ -1329,6 +1356,16 @@ func (p *planner) makeTableDesc(
 	}
 
 	return desc, desc.AllocateIDs()
+}
+
+// makeTableDesc creates a table descriptor from a CreateTable statement.
+func (p *planner) makeTableDesc(
+	n *parser.CreateTable,
+	parentID, id sqlbase.ID,
+	privileges *sqlbase.PrivilegeDescriptor,
+	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	return MakeTableDesc(p.txn, &p.session.virtualSchemas, p.session.SearchPath, n, parentID, id, privileges, affected, p.session.Database)
 }
 
 // dummyColumnItem is used in makeCheckConstraint to construct an expression

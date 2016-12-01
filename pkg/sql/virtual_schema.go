@@ -237,6 +237,12 @@ func (vs *virtualSchemaHolder) getVirtualTableEntry(
 	return virtualTableEntry{}, nil
 }
 
+// VirtualTabler is used to fetch descriptors for virtual tables and databases.
+type VirtualTabler interface {
+	getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor
+}
+
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
 func (vs *virtualSchemaHolder) getVirtualTableDesc(
