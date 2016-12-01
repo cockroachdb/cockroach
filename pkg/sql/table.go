@@ -240,7 +240,7 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 // getTableLease implements the SchemaAccessor interface.
 func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(p.ctx(), "planner acquiring lease on table %s", tn)
+		log.Infof(p.ctx(), "planner acquiring lease on table %q", tn)
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
@@ -298,6 +298,9 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 			return nil, err
 		}
 		p.leases = append(p.leases, lease)
+		if log.V(2) {
+			log.Infof(p.ctx(), "added lease on table %q to planner cache", tn)
+		}
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
 		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
@@ -442,10 +445,10 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 
 // releaseLeases implements the SchemaAccessor interface.
 func (p *planner) releaseLeases() {
-	if log.V(2) {
-		log.Infof(p.ctx(), "planner releasing leases")
-	}
 	if p.leases != nil {
+		if log.V(2) {
+			log.Infof(p.ctx(), "planner releasing %d leases", len(p.leases))
+		}
 		for _, lease := range p.leases {
 			if err := p.leaseMgr.Release(lease); err != nil {
 				log.Warning(p.ctx(), err)
