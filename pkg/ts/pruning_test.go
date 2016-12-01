@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -108,14 +109,86 @@ func TestFindTimeSeries(t *testing.T) {
 
 	e := tm.LocalTestCluster.Eng
 	for i, tcase := range []struct {
-		start    roachpb.RKey
-		end      roachpb.RKey
-		expected []timeSeriesResolutionInfo
+		start     roachpb.RKey
+		end       roachpb.RKey
+		timestamp hlc.Timestamp
+		expected  []timeSeriesResolutionInfo
 	}{
 		// Entire key range.
 		{
-			start: roachpb.RKeyMin,
-			end:   roachpb.RKeyMax,
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.MaxTimestamp,
+			expected: []timeSeriesResolutionInfo{
+				{
+					Name:       metrics[0],
+					Resolution: Resolution10s,
+				},
+				{
+					Name:       metrics[0],
+					Resolution: resolution1ns,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: Resolution10s,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: resolution1ns,
+				},
+			},
+		},
+		// Timestamp at 400s means we prune nothing.
+		{
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.Timestamp{WallTime: 400 * 1e9},
+			expected:  nil,
+		},
+		// Timestamp at 401s is just at the limit for 1ns time series pruning.
+		{
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.Timestamp{WallTime: 401 * 1e9},
+			expected:  nil,
+		},
+		// Timestamp at 401s + 1ns prunes the 400s records at 1ns resolution.
+		{
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.Timestamp{WallTime: 401*1e9 + 1},
+			expected: []timeSeriesResolutionInfo{
+				{
+					Name:       metrics[0],
+					Resolution: resolution1ns,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: resolution1ns,
+				},
+			},
+		},
+		// Timestamp at the Resolution10s threshold doesn't prune the 10s resolutions.
+		{
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.Timestamp{WallTime: pruneThresholdByResolution[Resolution10s]},
+			expected: []timeSeriesResolutionInfo{
+				{
+					Name:       metrics[0],
+					Resolution: resolution1ns,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: resolution1ns,
+				},
+			},
+		},
+		// Timestamp at the Resolution10s threshold + 1ns prunes all time series.
+		{
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.Timestamp{WallTime: pruneThresholdByResolution[Resolution10s] + 1},
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[0],
@@ -137,14 +210,16 @@ func TestFindTimeSeries(t *testing.T) {
 		},
 		// Key range entirely outside of time series range.
 		{
-			start:    roachpb.RKey("a"),
-			end:      roachpb.RKey("b"),
-			expected: nil,
+			start:     roachpb.RKey("a"),
+			end:       roachpb.RKey("b"),
+			timestamp: hlc.MaxTimestamp,
+			expected:  nil,
 		},
 		// Key range split between metrics.
 		{
-			start: roachpb.RKeyMin,
-			end:   roachpb.RKey(MakeDataKey("metric.b", "", Resolution10s, 0)),
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKey(MakeDataKey("metric.b", "", Resolution10s, 0)),
+			timestamp: hlc.MaxTimestamp,
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[0],
@@ -157,8 +232,9 @@ func TestFindTimeSeries(t *testing.T) {
 			},
 		},
 		{
-			start: roachpb.RKey(MakeDataKey("metric.b", "", Resolution10s, 0)),
-			end:   roachpb.RKeyMax,
+			start:     roachpb.RKey(MakeDataKey("metric.b", "", Resolution10s, 0)),
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.MaxTimestamp,
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[1],
@@ -172,8 +248,9 @@ func TestFindTimeSeries(t *testing.T) {
 		},
 		// Key range split within a metric along resolution boundary.
 		{
-			start: roachpb.RKeyMin,
-			end:   roachpb.RKey(MakeDataKey(metrics[0], "", resolution1ns, 0)),
+			start:     roachpb.RKeyMin,
+			end:       roachpb.RKey(MakeDataKey(metrics[0], "", resolution1ns, 0)),
+			timestamp: hlc.MaxTimestamp,
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[0],
@@ -182,8 +259,9 @@ func TestFindTimeSeries(t *testing.T) {
 			},
 		},
 		{
-			start: roachpb.RKey(MakeDataKey(metrics[0], "", resolution1ns, 0)),
-			end:   roachpb.RKeyMax,
+			start:     roachpb.RKey(MakeDataKey(metrics[0], "", resolution1ns, 0)),
+			end:       roachpb.RKeyMax,
+			timestamp: hlc.MaxTimestamp,
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[0],
@@ -201,7 +279,7 @@ func TestFindTimeSeries(t *testing.T) {
 		},
 	} {
 		snap := e.NewSnapshot()
-		actual, err := findTimeSeries(snap, tcase.start, tcase.end)
+		actual, err := findTimeSeries(snap, tcase.start, tcase.end, tcase.timestamp)
 		snap.Close()
 		if err != nil {
 			t.Fatalf("case %d: unexpected error %q", i, err)
