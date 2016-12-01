@@ -3692,7 +3692,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		quiescentCount                int64
 
 		rangeCount                int64
-		availableRangeCount       int64
+		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
 	)
 
@@ -3752,9 +3752,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			// If this replica is the highest replica ID, it does the counting.
 			if highestIdx != -1 && desc.Replicas[highestIdx].StoreID == s.StoreID() {
 				rangeCount++
-				// If a quorum of replicas are live, consider this range available.
-				if liveReplicas > computeQuorum(len(desc.Replicas)) {
-					availableRangeCount++
+				if liveReplicas < computeQuorum(len(desc.Replicas)) {
+					unavailableRangeCount++
 				}
 
 				if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
@@ -3776,7 +3775,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.QuiescentCount.Update(quiescentCount)
 
 	s.metrics.RangeCount.Update(rangeCount)
-	s.metrics.AvailableRangeCount.Update(availableRangeCount)
+	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 
 	return nil
