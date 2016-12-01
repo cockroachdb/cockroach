@@ -5,7 +5,7 @@ set -exuo pipefail
 
 echo "checking that 'vendor' matches manifest"
 rm -rf vendor/*/*
-glide install --strip-vcs
+gvt restore -connections 8
 ! git -C vendor status --porcelain | read || (git -C vendor status; git -C vendor diff -a; exit 1)
 
 echo "checking that all deps are in 'vendor''"
