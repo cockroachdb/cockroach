@@ -3686,16 +3686,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	var (
-		raftLeaderCount                 int64
-		leaseHolderCount                int64
-		raftLeaderNotLeaseHolderCount   int64
-		quiescentCount                  int64
-		rangeCount                      int64
-		availableRangeCount             int64
-		replicaAllocatorNoopCount       int64
-		replicaAllocatorAddCount        int64
-		replicaAllocatorRemoveCount     int64
-		replicaAllocatorRemoveDeadCount int64
+		raftLeaderCount               int64
+		leaseHolderCount              int64
+		raftLeaderNotLeaseHolderCount int64
+		quiescentCount                int64
+
+		rangeCount                int64
+		availableRangeCount       int64
+		underreplicatedRangeCount int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -3705,13 +3703,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		desc := rep.Desc()
-		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
-		if err != nil {
-			log.Error(ctx, err)
-			return true
-		}
-
 		rep.mu.Lock()
 		raftStatus := rep.raftStatusLocked()
 		lease := rep.mu.state.Lease
@@ -3736,22 +3727,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 					raftLeaderNotLeaseHolderCount++
 				}
 			}
-
-			switch action, _ := s.allocator.ComputeAction(zoneConfig, desc); action {
-			case AllocatorNoop:
-				replicaAllocatorNoopCount++
-			case AllocatorAdd:
-				replicaAllocatorAddCount++
-			case AllocatorRemove:
-				replicaAllocatorRemoveCount++
-			case AllocatorRemoveDead:
-				replicaAllocatorRemoveDeadCount++
-			}
 		} else if leaseCovers && leaseOwned {
 			leaseHolderCount++
 		}
 
 		if livenessMap != nil {
+			desc := rep.Desc()
+
 			// Count live replicas and determine the largest live replica ID to
 			// determine the replica responsible for range stats contributions.
 			// Note that the largest ID is an arbitrary choice. We want to select
@@ -3774,6 +3756,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				if liveReplicas > computeQuorum(len(desc.Replicas)) {
 					availableRangeCount++
 				}
+
+				if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
+					log.Error(ctx, err)
+				} else {
+					if int32(liveReplicas) < zoneConfig.NumReplicas {
+						underreplicatedRangeCount++
+					}
+				}
 			}
 		}
 
@@ -3787,11 +3777,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.AvailableRangeCount.Update(availableRangeCount)
-
-	s.metrics.ReplicaAllocatorNoopCount.Update(replicaAllocatorNoopCount)
-	s.metrics.ReplicaAllocatorRemoveCount.Update(replicaAllocatorRemoveCount)
-	s.metrics.ReplicaAllocatorAddCount.Update(replicaAllocatorAddCount)
-	s.metrics.ReplicaAllocatorRemoveDeadCount.Update(replicaAllocatorRemoveDeadCount)
+	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 
 	return nil
 }
