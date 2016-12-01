@@ -17,6 +17,7 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"honnef.co/go/lint"
@@ -26,17 +27,39 @@ import (
 	"honnef.co/go/unused"
 )
 
+type metaChecker struct {
+	checkers []lint.Checker
+}
+
+func (m *metaChecker) Init(program *lint.Program) {
+	for _, checker := range m.checkers {
+		checker.Init(program)
+	}
+}
+
+func (m *metaChecker) Funcs() map[string]lint.Func {
+	funcs := make(map[string]lint.Func)
+	for _, checker := range m.checkers {
+		for k, v := range checker.Funcs() {
+			if _, ok := funcs[k]; ok {
+				log.Fatalf("duplicate lint function %s", k)
+			} else {
+				funcs[k] = v
+			}
+		}
+	}
+	return funcs
+}
+
 func main() {
-	checker := unused.NewChecker(unused.CheckAll)
-	checker.WholeProgram = true
-	funcs := map[string]lint.Func{
-		"U1000": unused.NewLintRunner(checker),
+	unusedChecker := unused.NewChecker(unused.CheckAll)
+	unusedChecker.WholeProgram = true
+	meta := metaChecker{
+		checkers: []lint.Checker{
+			simple.NewChecker(),
+			staticcheck.NewChecker(),
+			unused.NewLintChecker(unusedChecker),
+		},
 	}
-	for n, f := range staticcheck.Funcs {
-		funcs[n] = f
-	}
-	for n, f := range simple.Funcs {
-		funcs[n] = f
-	}
-	lintutil.ProcessArgs("metacheck", funcs, os.Args[1:])
+	lintutil.ProcessArgs("metacheck", &meta, os.Args[1:])
 }
