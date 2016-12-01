@@ -33,7 +33,7 @@ var (
 	metaRaftLeaderCount               = metric.Metadata{Name: "replicas.leaders"}
 	metaRaftLeaderNotLeaseHolderCount = metric.Metadata{
 		Name: "replicas.leaders_not_leaseholders",
-		Help: "Total number of Replicas that are Raft leaders whose Range lease is held by another store.",
+		Help: "Total number of replicas that are Raft leaders whose Range lease is held by another store.",
 	}
 	metaLeaseHolderCount = metric.Metadata{Name: "replicas.leaseholders"}
 	metaQuiescentCount   = metric.Metadata{Name: "replicas.quiescent"}
@@ -324,7 +324,7 @@ type StoreMetrics struct {
 	ReplicaAllocatorRemoveDeadCount *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
-	// count proposals (i.e. it does not matter how many Replicas apply the
+	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
 	LeaseRequestSuccessCount *metric.Counter
 	LeaseRequestErrorCount   *metric.Counter

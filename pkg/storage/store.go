@@ -275,10 +275,13 @@ type storeReplicaVisitor struct {
 	visited int        // Number of visited ranges, -1 before first call to Visit()
 }
 
-// storeReplicaVisitor implements the shuffle.Interface.
-func (rs storeReplicaVisitor) Len() int      { return len(rs.repls) }
+// Len implements shuffle.Interface.
+func (rs storeReplicaVisitor) Len() int { return len(rs.repls) }
+
+// Swap implements shuffle.Interface.
 func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i] }
 
+// newStoreReplicaVisitor constructs a storeReplicaVisitor.
 func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 	return &storeReplicaVisitor{
 		store:   store,
@@ -325,6 +328,9 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	rs.visited = 0
 }
 
+// EstimatedCount returns an estimated count of the underlying store's
+// replicas.
+//
 // TODO(tschottdorf): this method has highly doubtful semantics.
 func (rs *storeReplicaVisitor) EstimatedCount() int {
 	if rs.visited <= 0 {
@@ -1202,7 +1208,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 
 		// Run metrics computation up front to populate initial statistics.
-		if err = s.ComputeMetrics(-1); err != nil {
+		if err = s.ComputeMetrics(ctx, -1); err != nil {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
@@ -3672,7 +3678,7 @@ func (s *Store) updateCapacityGauges() error {
 // TODO(bram): #4564 It may be appropriate to compute these statistics while
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
-func (s *Store) updateReplicationGauges() error {
+func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
@@ -3702,7 +3708,6 @@ func (s *Store) updateReplicationGauges() error {
 		desc := rep.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
-			ctx := s.AnnotateCtx(context.TODO())
 			log.Error(ctx, err)
 			return true
 		}
@@ -3862,15 +3867,14 @@ func (s *Store) updateCommandQueueGauges() error {
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
-func (s *Store) ComputeMetrics(tick int) error {
+func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
+	ctx = s.AnnotateCtx(ctx)
 	if err := s.updateCapacityGauges(); err != nil {
 		return err
 	}
-
-	if err := s.updateReplicationGauges(); err != nil {
+	if err := s.updateReplicationGauges(ctx); err != nil {
 		return err
 	}
-
 	if err := s.updateCommandQueueGauges(); err != nil {
 		return err
 	}
@@ -3890,7 +3894,6 @@ func (s *Store) ComputeMetrics(tick int) error {
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
 		if tick%100 == 0 {
-			ctx := s.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
 		}
 	}
@@ -3949,6 +3952,26 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 // reserve requests a reservation from the store's bookie.
 func (s *Store) reserve(ctx context.Context, req reservationRequest) reservationResponse {
 	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
+}
+
+// RangesReplicated returns true iff all replicas on the store are fully
+// replicated with respect to cfg.
+func (s *Store) RangesReplicated(cfg config.SystemConfig) bool {
+	replicated := true
+	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+		desc := rep.Desc()
+		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
+			replicated = false
+			log.Error(rep.AnnotateCtx(context.TODO()), err)
+		} else {
+			switch action, _ := s.allocator.ComputeAction(zoneConfig, desc); action {
+			case AllocatorAdd:
+				replicated = false
+			}
+		}
+		return replicated
+	})
+	return replicated
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

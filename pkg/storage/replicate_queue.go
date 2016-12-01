@@ -199,30 +199,31 @@ func (rq *replicateQueue) processOneChange(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	desc := repl.Desc()
-	// Find the zone config for this range.
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return err
-	}
-	action, _ := rq.allocator.ComputeAction(zone, desc)
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
 	deadReplicas := rq.allocator.storePool.deadReplicas(desc.RangeID, desc.Replicas)
-	quorum := computeQuorum(len(desc.Replicas))
-	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
-	if liveReplicaCount < quorum {
-		return errors.Errorf("range requires a replication change, but lacks a quorum of live nodes.")
+	{
+		liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
+		quorum := computeQuorum(len(desc.Replicas))
+		if liveReplicaCount < quorum {
+			return errors.Errorf("range requires a replication change, but lacks a quorum of live replicas (%d/%d)", liveReplicaCount, quorum)
+		}
 	}
 
-	switch action {
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		return err
+	}
+
+	switch action, _ := rq.allocator.ComputeAction(zone, desc); action {
 	case AllocatorAdd:
 		log.Event(ctx, "adding a new replica")
 		newStore, err := rq.allocator.AllocateTarget(
 			zone.Constraints,
 			desc.Replicas,
 			desc.RangeID,
-			true,
+			true, /*relaxConstraints*/
 		)
 		if err != nil {
 			return err
@@ -263,17 +264,12 @@ func (rq *replicateQueue) processOneChange(
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
 			// leases.
-			candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
-			target := rq.allocator.TransferLeaseTarget(
-				zone.Constraints, candidates, repl.store.StoreID(), desc.RangeID,
-				false /* checkTransferLeaseSource */)
-			if target != (roachpb.ReplicaDescriptor{}) {
-				log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-				if err := repl.AdminTransferLease(target.StoreID); err != nil {
-					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
-				}
-				rq.lastLeaseTransfer.Store(timeutil.Now())
-				// Do not requeue as we transferred our lease away.
+			transferred, err := rq.transferLease(ctx, repl, desc, zone, false)
+			if err != nil {
+				return err
+			}
+			// Do not requeue as we transferred our lease away.
+			if transferred {
 				return nil
 			}
 		} else {
@@ -286,7 +282,7 @@ func (rq *replicateQueue) processOneChange(
 		log.Event(ctx, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
-				log.Warningf(ctx, "Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
+				log.Warningf(ctx, "range of replica %s was identified as having dead replicas, but no dead replicas were found", repl)
 			}
 			break
 		}
@@ -303,17 +299,12 @@ func (rq *replicateQueue) processOneChange(
 		if rq.canTransferLease() {
 			// We require the lease in order to process replicas, so
 			// repl.store.StoreID() corresponds to the lease-holder's store ID.
-			candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
-			target := rq.allocator.TransferLeaseTarget(
-				zone.Constraints, candidates, repl.store.StoreID(), desc.RangeID,
-				true /* checkTransferLeaseSource */)
-			if target != (roachpb.ReplicaDescriptor{}) {
-				log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-				if err := repl.AdminTransferLease(target.StoreID); err != nil {
-					return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
-				}
-				rq.lastLeaseTransfer.Store(timeutil.Now())
-				// Do not requeue as we transferred our lease away.
+			transferred, err := rq.transferLease(ctx, repl, desc, zone, true)
+			if err != nil {
+				return err
+			}
+			// Do not requeue as we transferred our lease away.
+			if transferred {
 				return nil
 			}
 		}
@@ -345,6 +336,31 @@ func (rq *replicateQueue) processOneChange(
 	}
 
 	return nil
+}
+
+func (rq *replicateQueue) transferLease(
+	ctx context.Context,
+	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	zone config.ZoneConfig,
+	checkTransferLeaseSource bool,
+) (bool, error) {
+	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
+	if target := rq.allocator.TransferLeaseTarget(
+		zone.Constraints,
+		candidates,
+		repl.store.StoreID(),
+		desc.RangeID,
+		checkTransferLeaseSource,
+	); target != (roachpb.ReplicaDescriptor{}) {
+		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+		if err := repl.AdminTransferLease(target.StoreID); err != nil {
+			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+		}
+		rq.lastLeaseTransfer.Store(timeutil.Now())
+		return true, nil
+	}
+	return false, nil
 }
 
 func (rq *replicateQueue) addReplica(
