@@ -142,6 +142,7 @@ func (n *createDatabaseNode) Values() parser.DTuple               { return parse
 func (n *createDatabaseNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createDatabaseNode) ExplainTypes(_ func(string, string)) {}
 func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createDatabaseNode) setNeededColumns(_ []bool)           {}
 func (n *createDatabaseNode) MarkDebug(mode explainMode)          {}
 func (n *createDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create database", "", nil
@@ -261,6 +262,7 @@ func (n *createIndexNode) Values() parser.DTuple               { return parser.D
 func (n *createIndexNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createIndexNode) ExplainTypes(_ func(string, string)) {}
 func (n *createIndexNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createIndexNode) setNeededColumns(_ []bool)           {}
 func (n *createIndexNode) MarkDebug(mode explainMode)          {}
 func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create index", "", nil
@@ -346,6 +348,7 @@ func (n *createUserNode) Values() parser.DTuple               { return parser.DT
 func (n *createUserNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createUserNode) ExplainTypes(_ func(string, string)) {}
 func (n *createUserNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createUserNode) setNeededColumns(_ []bool)           {}
 func (n *createUserNode) MarkDebug(mode explainMode)          {}
 func (n *createUserNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create user", "", nil
@@ -476,6 +479,7 @@ func (n *createViewNode) Ordering() orderingInfo              { return orderingI
 func (n *createViewNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createViewNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createViewNode) ExplainTypes(_ func(string, string)) {}
+func (n *createViewNode) setNeededColumns(_ []bool)           {}
 func (n *createViewNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createViewNode) MarkDebug(mode explainMode)          {}
 func (n *createViewNode) ExplainPlan(v bool) (string, string, []planNode) {
@@ -704,6 +708,7 @@ func (n *createTableNode) Values() parser.DTuple               { return parser.D
 func (n *createTableNode) DebugValues() debugValues            { return debugValues{} }
 func (n *createTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *createTableNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createTableNode) setNeededColumns(_ []bool)           {}
 func (n *createTableNode) MarkDebug(mode explainMode)          {}
 func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	if n.n.As() {

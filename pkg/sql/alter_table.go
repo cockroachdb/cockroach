@@ -403,6 +403,7 @@ func (n *alterTableNode) Values() parser.DTuple               { return parser.DT
 func (n *alterTableNode) DebugValues() debugValues            { return debugValues{} }
 func (n *alterTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *alterTableNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *alterTableNode) setNeededColumns(_ []bool)           {}
 func (n *alterTableNode) MarkDebug(mode explainMode)          {}
 func (n *alterTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "alter table", "", nil

@@ -272,3 +272,4 @@ func (d *deleteNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}
+func (d *deleteNode) setNeededColumns(_ []bool)             {}
