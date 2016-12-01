@@ -1015,10 +1015,10 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	}(EnableLeaseRebalancing)
 	EnableLeaseRebalancing = true
 
-	// 3 stores where the lease count for each store is equal to 10x the store
+	// 4 stores where the lease count for each store is equal to 10x the store
 	// ID.
 	var stores []*roachpb.StoreDescriptor
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 4; i++ {
 		stores = append(stores, &roachpb.StoreDescriptor{
 			StoreID:  roachpb.StoreID(i),
 			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
@@ -1028,17 +1028,34 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
+	replicas := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		var r []roachpb.ReplicaDescriptor
+		for _, storeID := range storeIDs {
+			r = append(r, roachpb.ReplicaDescriptor{
+				StoreID: storeID,
+			})
+		}
+		return r
+	}
+
 	testCases := []struct {
 		leaseholder roachpb.StoreID
+		existing    []roachpb.ReplicaDescriptor
 		expected    bool
 	}{
-		{leaseholder: 1, expected: false},
-		{leaseholder: 2, expected: false},
-		{leaseholder: 3, expected: true},
+		{leaseholder: 1, existing: nil, expected: false},
+		{leaseholder: 2, existing: nil, expected: false},
+		{leaseholder: 3, existing: nil, expected: false},
+		{leaseholder: 3, existing: replicas(1), expected: true},
+		{leaseholder: 3, existing: replicas(1, 2), expected: true},
+		{leaseholder: 3, existing: replicas(2), expected: false},
+		{leaseholder: 3, existing: replicas(3), expected: false},
+		{leaseholder: 3, existing: replicas(4), expected: false},
+		{leaseholder: 4, existing: nil, expected: true},
 	}
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			result := a.ShouldTransferLease(config.Constraints{}, c.leaseholder, 0)
+			result := a.ShouldTransferLease(config.Constraints{}, c.existing, c.leaseholder, 0)
 			if c.expected != result {
 				t.Fatalf("expected %v, but found %v", c.expected, result)
 			}
