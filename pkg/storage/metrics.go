@@ -63,7 +63,7 @@ var (
 	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available",
 		Help: "Number of ranges with a quorum of live replicas"}
 	metaUnderReplicatedRangeCount = metric.Metadata{Name: "ranges.underreplicated",
-		Help: "Number of ranges with fewer than the configured number of live replicas"}
+		Help: "Number of ranges with fewer live replicas than the replication target"}
 
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{Name: "leases.success"}
