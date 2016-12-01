@@ -215,7 +215,7 @@ func (q *replicaGCQueue) process(
 	return nil
 }
 
-func (*replicaGCQueue) timer() time.Duration {
+func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
 	return replicaGCQueueTimerDuration
 }
 

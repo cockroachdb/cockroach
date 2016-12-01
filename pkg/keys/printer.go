@@ -170,7 +170,8 @@ var (
 		atEnd  bool
 	}{
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
-		{name: "Transaction", suffix: localTransactionSuffix, atEnd: false},
+		{name: "Transaction", suffix: LocalTransactionSuffix, atEnd: false},
+		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
 	}
 )
 
@@ -368,11 +369,16 @@ func localRangeKeyPrint(key roachpb.Key) string {
 			begin := bytes.Index(key, s.suffix)
 			if begin > 0 {
 				addrKey := key[:begin]
-				txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
-				if err != nil {
-					return fmt.Sprintf("/%q/err:%v", key, err)
+				if bytes.Equal(s.suffix, LocalTransactionSuffix) {
+					txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
+					if err != nil {
+						return fmt.Sprintf("/%q/err:%v", key, err)
+					}
+					fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, txnID)
+				} else {
+					id := key[(begin + len(s.suffix)):]
+					fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, id)
 				}
-				fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, txnID)
 				return buf.String()
 			}
 		}
@@ -467,36 +473,37 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 // PrettyPrint prints the key in a human readable format:
 //
 // Key's Format                                   Key's Value
-// /Local/...                                     "\x01"+...
-// 		/Store/...                                  "\x01s"+...
-//		/RangeID/...                                "\x01s"+[rangeid]
-//			/[rangeid]/AbortCache/[id]                "\x01s"+[rangeid]+"abc-"+[id]
-//			/[rangeid]/Lease						  "\x01s"+[rangeid]+"rfll"
-//			/[rangeid]/RaftTombstone                  "\x01s"+[rangeid]+"rftb"
-//			/[rangeid]/RaftHardState						      "\x01s"+[rangeid]+"rfth"
-//			/[rangeid]/RaftAppliedIndex						    "\x01s"+[rangeid]+"rfta"
-//			/[rangeid]/RaftLog/logIndex:[logIndex]    "\x01s"+[rangeid]+"rftl"+[logIndex]
-//			/[rangeid]/RaftTruncatedState             "\x01s"+[rangeid]+"rftt"
-//			/[rangeid]/RaftLastIndex                  "\x01s"+[rangeid]+"rfti"
-//			/[rangeid]/RangeLastReplicaGCTimestamp    "\x01s"+[rangeid]+"rlrt"
-//			/[rangeid]/RangeLastVerificationTimestamp "\x01s"+[rangeid]+"rlvt"
-//			/[rangeid]/RangeStats                     "\x01s"+[rangeid]+"stat"
-//		/Range/...                                  "\x01k"+...
-//			/RangeDescriptor/[key]                    "\x01k"+[key]+"rdsc"
-//			/Transaction/addrKey:[key]/id:[id]				"\x01k"+[key]+"txn-"+[id]
-// /Local/Max                                     "\x02"
+// /Local/...                                        "\x01"+...
+// 		/Store/...                                     "\x01s"+...
+//		/RangeID/...                                   "\x01s"+[rangeid]
+//			/[rangeid]/AbortCache/[id]                   "\x01s"+[rangeid]+"abc-"+[id]
+//			/[rangeid]/Lease						                 "\x01s"+[rangeid]+"rfll"
+//			/[rangeid]/RaftTombstone                     "\x01s"+[rangeid]+"rftb"
+//			/[rangeid]/RaftHardState						         "\x01s"+[rangeid]+"rfth"
+//			/[rangeid]/RaftAppliedIndex						       "\x01s"+[rangeid]+"rfta"
+//			/[rangeid]/RaftLog/logIndex:[logIndex]       "\x01s"+[rangeid]+"rftl"+[logIndex]
+//			/[rangeid]/RaftTruncatedState                "\x01s"+[rangeid]+"rftt"
+//			/[rangeid]/RaftLastIndex                     "\x01s"+[rangeid]+"rfti"
+//			/[rangeid]/RangeLastReplicaGCTimestamp       "\x01s"+[rangeid]+"rlrt"
+//			/[rangeid]/RangeLastVerificationTimestamp    "\x01s"+[rangeid]+"rlvt"
+//			/[rangeid]/RangeStats                        "\x01s"+[rangeid]+"stat"
+//		/Range/...                                     "\x01k"+...
+//			/RangeDescriptor/[key]                       "\x01k"+[key]+"rdsc"
+//			/Transaction/addrKey:[key]/id:[id]	         "\x01k"+[key]+"txn-"+[txn-id]
+//			/QueueLastProcessed/addrKey:[key]/id:[queue] "\x01k"+[key]+"qlpt"+[queue]
+// /Local/Max                                        "\x02"
 //
-// /Meta1/[key]                                   "\x02"+[key]
-// /Meta2/[key]                                   "\x03"+[key]
-// /System/...                                    "\x04"
-//		/NodeLiveness/[key]                         "\x04\0x00liveness-"+[key]
-//		/StatusNode/[key]                           "\x04status-node-"+[key]
-// /System/Max                                    "\x05"
+// /Meta1/[key]                                      "\x02"+[key]
+// /Meta2/[key]                                      "\x03"+[key]
+// /System/...                                       "\x04"
+//		/NodeLiveness/[key]                            "\x04\0x00liveness-"+[key]
+//		/StatusNode/[key]                              "\x04status-node-"+[key]
+// /System/Max                                       "\x05"
 //
-// /Table/[key]                                   [key]
+// /Table/[key]                                      [key]
 //
-// /Min                                           ""
-// /Max                                           "\xff\xff"
+// /Min                                              ""
+// /Max                                              "\xff\xff"
 func PrettyPrint(key roachpb.Key) string {
 	for _, k := range constKeyDict {
 		if key.Equal(k.value) {

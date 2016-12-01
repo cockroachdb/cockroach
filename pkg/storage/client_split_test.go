@@ -231,14 +231,22 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 		}
 	}
 
+	txnPrefix := func(key roachpb.Key) roachpb.Key {
+		rk, err := keys.Addr(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return keys.MakeRangeKey(rk, keys.LocalTransactionSuffix, nil)
+	}
 	// Verify the transaction record is gone.
 	start := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
 	end := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
 	iter := store.Engine().NewIterator(false)
+
 	defer iter.Close()
 	for iter.Seek(start); iter.Valid() && iter.Less(end); iter.Next() {
-		if !bytes.HasPrefix([]byte(iter.Key().Key), keys.RangeDescriptorKey(roachpb.RKeyMin)) &&
-			!bytes.HasPrefix([]byte(iter.Key().Key), keys.RangeDescriptorKey(roachpb.RKey(splitKey))) {
+		if bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(roachpb.KeyMin)) ||
+			bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(splitKey)) {
 			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.Key())
 		}
 	}

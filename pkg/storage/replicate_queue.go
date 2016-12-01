@@ -370,7 +370,7 @@ func (rq *replicateQueue) canTransferLease() bool {
 	return true
 }
 
-func (*replicateQueue) timer() time.Duration {
+func (*replicateQueue) timer(_ time.Duration) time.Duration {
 	return replicateQueueTimerDuration
 }
 

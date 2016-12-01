@@ -135,7 +135,7 @@ func (sq *splitQueue) process(
 }
 
 // timer returns interval between processing successive queued splits.
-func (*splitQueue) timer() time.Duration {
+func (*splitQueue) timer(_ time.Duration) time.Duration {
 	return splitQueueTimerDuration
 }
 

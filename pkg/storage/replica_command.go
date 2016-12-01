@@ -270,7 +270,6 @@ func (r *Replica) ConditionalPut(
 	args roachpb.ConditionalPutRequest,
 ) (roachpb.ConditionalPutResponse, error) {
 	var reply roachpb.ConditionalPutResponse
-
 	if h.DistinctSpans {
 		if b, ok := batch.(engine.Batch); ok {
 			// Use the distinct batch for both blind and normal ops so that we don't
@@ -2668,7 +2667,7 @@ func (r *Replica) splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}
 	} else {
-		// Because neither the original stats or the delta stats contain
+		// Because neither the original stats nor the delta stats contain
 		// estimate values, we can safely perform arithmetic to determine the
 		// new range's stats. The calculation looks like:
 		//   rhs_ms = orig_both_ms - orig_left_ms + right_delta_ms
@@ -2689,6 +2688,11 @@ func (r *Replica) splitTrigger(
 		rightMS.Subtract(leftMS)
 		rightMS.Add(bothDeltaMS)
 	}
+
+	// Note: we don't copy the queue last processed times. This means
+	// we'll process the RHS range in consistency and time series
+	// maintenance queues again possibly sooner than if we copied. The
+	// intent is to limit post-raft logic.
 
 	// Now that we've computed the stats for the RHS so far, we persist them.
 	// This looks a bit more complicated than it really is: updating the stats
