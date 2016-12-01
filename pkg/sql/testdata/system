@@ -11,6 +11,7 @@ SHOW TABLES FROM system
 ----
 descriptor
 eventlog
+jobs
 lease
 namespace
 rangelog
@@ -21,16 +22,17 @@ zones
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM system.namespace
 ----
-0 /namespace/primary/0/'system'/id     1    ROW
-1 /namespace/primary/0/'test'/id       50   ROW
-2 /namespace/primary/1/'descriptor'/id 3    ROW
-3 /namespace/primary/1/'eventlog'/id   12   ROW
-4 /namespace/primary/1/'lease'/id      11   ROW
-5 /namespace/primary/1/'namespace'/id  2    ROW
-6 /namespace/primary/1/'rangelog'/id   13   ROW
-7 /namespace/primary/1/'ui'/id         14   ROW
-8 /namespace/primary/1/'users'/id      4    ROW
-9 /namespace/primary/1/'zones'/id      5    ROW
+0  /namespace/primary/0/'system'/id     1    ROW
+1  /namespace/primary/0/'test'/id       50   ROW
+2  /namespace/primary/1/'descriptor'/id 3    ROW
+3  /namespace/primary/1/'eventlog'/id   12   ROW
+4  /namespace/primary/1/'jobs'/id       15   ROW
+5  /namespace/primary/1/'lease'/id      11   ROW
+6  /namespace/primary/1/'namespace'/id  2    ROW
+7  /namespace/primary/1/'rangelog'/id   13   ROW
+8  /namespace/primary/1/'ui'/id         14   ROW
+9  /namespace/primary/1/'users'/id      4    ROW
+10 /namespace/primary/1/'zones'/id      5    ROW
 
 query ITI
 SELECT * FROM system.namespace
@@ -39,6 +41,7 @@ SELECT * FROM system.namespace
 0 test       50
 1 descriptor 3
 1 eventlog   12
+1 jobs       15
 1 lease      11
 1 namespace  2
 1 rangelog   13
@@ -58,6 +61,7 @@ SELECT id FROM system.descriptor
 12
 13
 14
+15
 50
 
 # Verify we can read "protobuf" columns.

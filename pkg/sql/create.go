@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -593,8 +594,18 @@ func (n *createTableNode) Start() error {
 	if err != nil {
 		return err
 	}
-
 	privs := n.dbDesc.GetPrivileges()
+
+	// If a new system table is being created (which should only be doable by
+	// an internal user account), make sure it gets the correct ID and privileges.
+	if n.dbDesc.ID == keys.SystemDatabaseID {
+		id, err = sqlbase.SystemTableID(tKey.name)
+		if err != nil {
+			return err
+		}
+		privs = sqlbase.NewDefaultPrivilegeDescriptor()
+	}
+
 	var desc sqlbase.TableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	if n.n.As() {

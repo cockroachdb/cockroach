@@ -170,6 +170,14 @@ def            system              eventlog    targetID                  3
 def            system              eventlog    reportingID               4
 def            system              eventlog    info                      5
 def            system              eventlog    uniqueID                  6
+def            system              jobs        jobID                     1
+def            system              jobs        jobType                   2
+def            system              jobs        name                      3
+def            system              jobs        payload                   4
+def            system              jobs        status                    5
+def            system              jobs        completionPercentage      6
+def            system              jobs        startTime                 7
+def            system              jobs        lastUpdated               8
 def            system              lease       descID                    1
 def            system              lease       version                   2
 def            system              lease       nodeID                    3
@@ -365,6 +373,7 @@ pg_type
 pg_views
 descriptor
 eventlog
+jobs
 lease
 namespace
 rangelog
@@ -440,6 +449,7 @@ def            pg_catalog          pg_type            SYSTEM VIEW  1
 def            pg_catalog          pg_views           SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
+def            system              jobs               BASE TABLE   1
 def            system              lease              BASE TABLE   1
 def            system              namespace          BASE TABLE   1
 def            system              rangelog           BASE TABLE   1
@@ -545,6 +555,7 @@ ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA  TABLE_NAME  CONSTRAINT_TYPE
 def                 system             primary          system        descriptor  PRIMARY KEY
 def                 system             primary          system        eventlog    PRIMARY KEY
+def                 system             primary          system        jobs        PRIMARY KEY
 def                 system             primary          system        lease       PRIMARY KEY
 def                 system             primary          system        namespace   PRIMARY KEY
 def                 system             primary          system        rangelog    PRIMARY KEY
@@ -677,6 +688,7 @@ NULL     root     def            constraint_db      t2          ALL             
 NULL     root     def            system             descriptor  GRANT           NULL          NULL
 NULL     root     def            system             descriptor  SELECT          NULL          NULL
 NULL     root     def            system             eventlog    ALL             NULL          NULL
+NULL     root     def            system             jobs        ALL             NULL          NULL
 NULL     root     def            system             lease       ALL             NULL          NULL
 NULL     root     def            system             namespace   GRANT           NULL          NULL
 NULL     root     def            system             namespace   SELECT          NULL          NULL
