@@ -60,10 +60,10 @@ var (
 	// Range metrics.
 	metaRangeCount = metric.Metadata{Name: "ranges",
 		Help: "Number of ranges"}
-	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available",
-		Help: "Number of ranges with a quorum of live replicas"}
+	metaUnavailableRangeCount = metric.Metadata{Name: "ranges.unavailable",
+		Help: "Number of ranges with fewer live replicas than needed for quorum"}
 	metaUnderReplicatedRangeCount = metric.Metadata{Name: "ranges.underreplicated",
-		Help: "Number of ranges with fewer than the configured number of live replicas"}
+		Help: "Number of ranges with fewer live replicas than the replication target"}
 
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{Name: "leases.success"}
@@ -313,7 +313,7 @@ type StoreMetrics struct {
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
-	AvailableRangeCount       *metric.Gauge
+	UnavailableRangeCount     *metric.Gauge
 	UnderReplicatedRangeCount *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
@@ -483,7 +483,7 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
-		AvailableRangeCount:       metric.NewGauge(metaAvailableRangeCount),
+		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
 		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
 
 		// Lease request metrics.

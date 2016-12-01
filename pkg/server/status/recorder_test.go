@@ -211,7 +211,8 @@ func TestMetricsRecorder(t *testing.T) {
 		{"replicas.leaders", "gauge", 1},
 		{"replicas.leaseholders", "gauge", 1},
 		{"ranges", "gauge", 1},
-		{"ranges.available", "gauge", 1},
+		{"ranges.unavailable", "gauge", 1},
+		{"ranges.underreplicated", "gauge", 1},
 	}
 
 	// Add the metrics to each registry and set their values. At the same time,
