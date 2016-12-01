@@ -809,7 +809,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	// variable says should be used.
 	if !cfg.EnableCoalescedHeartbeats {
 		s.cfg.EnableCoalescedHeartbeats = envutil.EnvOrDefaultBool(
-			"COCKROACH_ENABLE_COALESCED_HEARTBEATS", false)
+			"COCKROACH_ENABLE_COALESCED_HEARTBEATS", true)
 	}
 
 	s.intentResolver = newIntentResolver(s)
