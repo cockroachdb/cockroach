@@ -2280,7 +2280,6 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#10189")
 
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
@@ -2316,6 +2315,15 @@ func TestReplicaTooOldGC(t *testing.T) {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 16, 5})
+
+	// Wait for a bunch of raft ticks in order to flush any heartbeats through
+	// the system. In particular, a coalesced heartbeat containing a quiesce
+	// message could have been sent before the node was removed from range but
+	// arrive after the node restarted.
+	ticks := mtc.stores[0].Metrics().RaftTicks.Count
+	for targetTicks := ticks() + 5; ticks() < targetTicks; {
+		time.Sleep(time.Millisecond)
+	}
 
 	// Restart node 3. The removed replica will start talking to the other
 	// replicas and determine it needs to be GC'd.
