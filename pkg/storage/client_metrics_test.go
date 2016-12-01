@@ -135,7 +135,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 }
 
 func verifyRocksDBStats(t *testing.T, s *storage.Store) {
-	if err := s.ComputeMetrics(0); err != nil {
+	if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 		t.Fatal(err)
 	}
 

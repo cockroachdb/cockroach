@@ -649,7 +649,7 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 		for tick := 0; ; tick++ {
 			select {
 			case <-ticker.C:
-				if err := n.computePeriodicMetrics(tick); err != nil {
+				if err := n.computePeriodicMetrics(ctx, tick); err != nil {
 					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
 			case <-stopper.ShouldStop():
@@ -661,10 +661,9 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 
 // computePeriodicMetrics instructs each store to compute the value of
 // complicated metrics.
-func (n *Node) computePeriodicMetrics(tick int) error {
+func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 	return n.stores.VisitStores(func(store *storage.Store) error {
-		if err := store.ComputeMetrics(tick); err != nil {
-			ctx := n.AnnotateCtx(context.TODO())
+		if err := store.ComputeMetrics(ctx, tick); err != nil {
 			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		}
 		return nil
