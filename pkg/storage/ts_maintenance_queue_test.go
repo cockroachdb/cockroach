@@ -187,17 +187,21 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	// Force replica scan to run. But because we haven't moved the
 	// clock forward, no pruning will take place on second invocation.
 	store.ForceTimeSeriesMaintenanceQueueProcess()
+	model.Lock()
 	if a, e := model.containsCalled, len(expectedStartKeys); a != e {
 		t.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 	}
 	if a, e := model.pruneCalled, len(expectedStartKeys); a != e {
 		t.Errorf("PruneTimeSeries called %d times; expected %d", a, e)
 	}
+	model.Unlock()
 
 	// Move clock forward and force to scan again.
 	manual.Increment(storage.TimeSeriesMaintenanceInterval.Nanoseconds())
 	store.ForceTimeSeriesMaintenanceQueueProcess()
 	util.SucceedsSoon(t, func() error {
+		model.Lock()
+		defer model.Unlock()
 		if a, e := model.containsCalled, len(expectedStartKeys)*2; a != e {
 			return errors.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 		}
