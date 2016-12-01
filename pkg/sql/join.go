@@ -217,9 +217,9 @@ func (p *planner) makeJoin(
 	}
 
 	// Check that the same table name is not used on both sides.
-	for alias := range right.info.sourceAliases {
-		if _, ok := left.info.sourceAliases[alias]; ok {
-			t := alias.Table()
+	for _, alias := range right.info.sourceAliases {
+		if _, ok := left.info.sourceAliases.srcIdx(alias.name); ok {
+			t := alias.name.Table()
 			if t == "" {
 				return planDataSource{}, errors.New(
 					"cannot join columns from multiple anonymous sources (missing AS clause)")
@@ -240,7 +240,7 @@ func (p *planner) makeJoin(
 	)
 
 	if cond == nil {
-		pred, info, err = p.makeCrossPredicate(leftInfo, rightInfo)
+		pred, info = p.makeCrossPredicate(leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
