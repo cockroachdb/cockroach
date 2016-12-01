@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -35,7 +36,7 @@ const rangeID = 1
 const keySize = 1 << 7  // 128 B
 const valSize = 1 << 10 // 1 KiB
 
-func fillTestRange(t testing.TB, rep *Replica, size int64) {
+func fillTestRange(rep *Replica, size int64) error {
 	src := rand.New(rand.NewSource(0))
 	for i := int64(0); i < size/int64(keySize+valSize); i++ {
 		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
@@ -44,15 +45,16 @@ func fillTestRange(t testing.TB, rep *Replica, size int64) {
 		if _, pErr := client.SendWrappedWith(context.Background(), rep, roachpb.Header{
 			RangeID: rangeID,
 		}, &pArgs); pErr != nil {
-			t.Fatal(pErr)
+			return pErr.GoError()
 		}
 	}
 	rep.mu.Lock()
 	after := rep.mu.state.Stats.Total()
 	rep.mu.Unlock()
 	if after < size {
-		t.Fatalf("range not full after filling: wrote %d, but range at %d", size, after)
+		return errors.Errorf("range not full after filling: wrote %d, but range at %d", size, after)
 	}
+	return nil
 }
 
 func TestSkipLargeReplicaSnapshot(t *testing.T) {
@@ -60,7 +62,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	storeCfg := TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 
-	const snapSize = 1 << 20 // 1 MiB
+	const snapSize = 5 * (keySize + valSize)
 	cfg := config.DefaultZoneConfig()
 	cfg.RangeMaxBytes = snapSize
 	defer config.TestingSetDefaultZoneConfig(cfg)()
@@ -78,14 +80,18 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	fillTestRange(t, rep, snapSize)
+	if err := fillTestRange(rep, snapSize); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
 		t.Fatal(err)
 	}
 	rep.CloseOutSnap()
 
-	fillTestRange(t, rep, snapSize*2)
+	if err := fillTestRange(rep, snapSize*2); err != nil {
+		t.Fatal(err)
+	}
 
 	rep.mu.Lock()
 	_, err = rep.Snapshot()
