@@ -1,5 +1,5 @@
-hash: 25cafe1ddc0e3a1c44003743074780c3bef5ec5dfad764e2085f103a16636f95
-updated: 2016-11-28T19:24:55.079179654Z
+hash: 43c2ae8c4c7adacd66a6a844cef30ab3d8599d25b1d4451254d06daf60b7aacb
+updated: 2016-12-01T15:03:43.177064764-05:00
 imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
@@ -49,7 +49,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: c31b1ab8d18ff7990a43bd258ca54f80c5a3c952
+  version: 9647012cb192deedeb9451ecc445d43cf6fdbf05
   subpackages:
   - raft
   - raft/raftpb
@@ -58,7 +58,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 38fbd03266d86923d963566a6565c3fa01f496d8
+  version: c59995570762ec8ef1b1d5a0b147600622979cb1
   subpackages:
   - digest
   - reference
@@ -95,9 +95,9 @@ imports:
   - sockets
   - tlsconfig
 - name: github.com/docker/go-units
-  version: 8a7beacffa3009a9ac66bad506b18ffdd110cf97
+  version: e30f1e79f3cd72542f2026ceec18d3bd67ab859c
 - name: github.com/dustin/go-humanize
-  version: bd88f87ad3a420f7bcf05e90566fd1ceb351fa7f
+  version: 2064d2b8b5e33b3e5d175b3d9c5b90ba7b212665
 - name: github.com/elastic/gosigar
   version: 77904081ae782b3d34334a142e1d98c4f9d88336
   subpackages:
@@ -156,7 +156,7 @@ imports:
 - name: github.com/google/btree
   version: 925471ac9e2131377a91e1595defec898166fe49
 - name: github.com/google/go-github
-  version: d4f1b2d029be1730fd349ca929cc9c0da4a27007
+  version: dccec7b5f17234b8219494c2b5b03af034e08c04
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -182,7 +182,7 @@ imports:
 - name: github.com/kisielk/errcheck
   version: db0ca22445717d1b2c51ac1034440e0a2a2de645
 - name: github.com/kisielk/gotool
-  version: 5e136deb9b893bbe6c8f23236ff4378b7a8a0dbb
+  version: 0de1eaf82fa3f583ce21fde859f1e7e0c5e9b220
 - name: github.com/kkaneda/returncheck
   version: bf081fa7155e3a27df1f056a49d50685edfa5b1b
 - name: github.com/kr/pretty
@@ -192,11 +192,11 @@ imports:
 - name: github.com/leekchan/timeutil
   version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
-  version: d8eeeb8bae8896dd8e1b7e514ab0d396c4f12a1b
+  version: 4a82388ebc5138c8289fe9bc602cb0b3e32cd617
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: b1bc6c278e9a007584bbc0b9139e776b4e3203e3
+  version: bde2bd98404b5f591290d74e66c23c986bf4016d
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -223,7 +223,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: bdcc175572fd7abece6c831e643891b9331bc9e7
 - name: github.com/opencontainers/runc
-  version: f156f73c2aab1b735df23c9323c976ad5dca1d78
+  version: 4271a8b5aec07d69f128df5474dea064d4694832
   subpackages:
   - libcontainer/user
 - name: github.com/opentracing/basictracer-go
@@ -231,14 +231,14 @@ imports:
   subpackages:
   - wire
 - name: github.com/opentracing/opentracing-go
-  version: 902ca977fd85455c364050f985eba376b44315f0
+  version: 137bfcefd3340b28186f4fd3608719fcb120f98f
   subpackages:
   - ext
   - log
 - name: github.com/pborman/uuid
   version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
 - name: github.com/petermattis/goid
-  version: ba001f8780f3bf978180f390ad7b5bac39fbf70a
+  version: caab6446a35a918488a0f52d4b0bd088a60f3511
 - name: github.com/pkg/errors
   version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
 - name: github.com/prometheus/client_model
@@ -246,13 +246,13 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 0d5de9d6d8629cb8bee6d4674da4127cd8b615a3
+  version: 195bde7883f7c39ea62b0d92ab7359b5327065cb
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/rcrowley/go-metrics
-  version: ab2277b1c5d15c3cba104e9cbddbdfc622df5ad8
+  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
   subpackages:
   - exp
 - name: github.com/robfig/glock
@@ -279,6 +279,8 @@ imports:
   version: 5ccb023bc27df288a957c5e994cd44fd19619465
 - name: github.com/StackExchange/wmi
   version: e54cbda6595d7293a7a468ccf9525f6bc8887f99
+- name: github.com/tamird/go-deadlock
+  version: 9c489b49f3dd3c305f29801b10d84407ffa71971
 - name: github.com/tebeka/go2xunit
   version: aaee8a42931ce35b4821d9c7cd68f73de70cba3d
   subpackages:
@@ -304,16 +306,16 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: d5040cddfc0da40b408c9a1da4728662435176a9
+  version: f6093e37b6cb4092101a298aba5d794eb570757f
   subpackages:
   - internal
 - name: golang.org/x/sys
-  version: 30237cf4eefd639b184d1f2cb77a581ea0be8947
+  version: d5645953809d8b4752afb2c3224b1f1ad73dfa70
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: b01949dc0793a9af5e4cb3fce4d42999e76e8ca1
+  version: 5c6cf4f9a2357d38515014cea8c488ed22bdab90
   subpackages:
   - collate
   - internal/colltab
@@ -322,7 +324,7 @@ imports:
   - transform
   - unicode/norm
 - name: golang.org/x/tools
-  version: ebf631f91765900b0af5a2010d1ee5e471db6b49
+  version: e04df2157ae7263e17159baabadc99fb03fc7514
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -330,7 +332,6 @@ imports:
   - go/ast/astutil
   - go/buildutil
   - go/loader
-  - go/ssa
   - go/types/typeutil
 - name: google.golang.org/appengine
   version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
@@ -358,19 +359,23 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
 - name: honnef.co/go/lint
-  version: b93edc3f49e7fac49e833136d261c0a15125178e
+  version: 7e567b803c76e82612c1ce4c9d642d0a309d36e4
   subpackages:
   - lintutil
 - name: honnef.co/go/simple
-  version: 5bf56c237b9660d8476ebd0e9ff14e6f06215a7d
+  version: 785f2adbeecfb675c110966bb69792863aa0aa49
+- name: honnef.co/go/ssa
+  version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
-  version: 1808e1b5cd4acae8f67421110d05222214cebe4d
+  version: 66144fd3521952097bebe10e173210be47d9d219
+  subpackages:
+  - vrp
 - name: honnef.co/go/unused
-  version: bc7f902391ead3f59bf5ab82ddf3c7d489837b62
+  version: 87353912d70354d751e22c0142883412b5eeb55f
 testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-sql-driver/mysql
-  version: 665b83488b90b902ce0a305ef6652e599771cdf9
+  version: a0583e0143b1624142adab07e0e97fe106d99561
 - name: github.com/termie/go-shutil
   version: bcacb06fecaeec8dc42af03c87c6949f4a05c74c
