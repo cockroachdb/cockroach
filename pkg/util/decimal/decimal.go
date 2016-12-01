@@ -374,6 +374,13 @@ func integerPower(z, x *inf.Dec, y int64, s inf.Scale) *inf.Dec {
 		}
 		y >>= 1
 		x.Mul(x, x)
+
+		// integerPower is only ever called with `e` (decimalE), which is a constant
+		// with very high precision. When it is squared above, the number of digits
+		// needed to express it goes up quickly. If we are a large power of a small
+		// number (like 0.5 ^ 5000), this loop becomes very slow because of the very
+		// high number of digits it must compute. To prevent that, round x.
+		x.Round(x, s*2, inf.RoundHalfUp)
 	}
 
 	if neg {
