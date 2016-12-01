@@ -216,6 +216,7 @@ func (rq *replicateQueue) processOneChange(
 
 	switch action {
 	case AllocatorAdd:
+		repl.store.metrics.ReplicaAllocatorAddCount.Inc(1)
 		log.Event(ctx, "adding a new replica")
 		newStore, err := rq.allocator.AllocateTarget(
 			zone.Constraints,
@@ -236,6 +237,7 @@ func (rq *replicateQueue) processOneChange(
 			return err
 		}
 	case AllocatorRemove:
+		repl.store.metrics.ReplicaAllocatorRemoveCount.Inc(1)
 		log.Event(ctx, "removing a replica")
 		// If the lease holder (our local store) is an overfull store (in terms of
 		// leases) allow transferring the lease away.
@@ -281,6 +283,7 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 	case AllocatorRemoveDead:
+		repl.store.metrics.ReplicaAllocatorRemoveDeadCount.Inc(1)
 		log.Event(ctx, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
@@ -294,6 +297,7 @@ func (rq *replicateQueue) processOneChange(
 			return err
 		}
 	case AllocatorNoop:
+		repl.store.metrics.ReplicaAllocatorNoopCount.Inc(1)
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
 		log.Event(ctx, "considering a rebalance")

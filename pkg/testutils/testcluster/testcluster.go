@@ -512,25 +512,29 @@ func (tc *TestCluster) waitForFullReplication() error {
 		Multiplier:     2,
 	}
 
-	notReplicated := true
-	for r := retry.Start(opts); r.Next() && notReplicated; {
-		notReplicated = false
-		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(s *storage.Store) error {
-				if err := s.ComputeMetrics(0); err != nil {
-					return err
-				}
-				if s.Metrics().ReplicaAllocatorAddCount.Value() > 0 {
-					notReplicated = true
+outer:
+	for r := retry.Start(opts); r.Next(); {
+		replicated := true
+		for i, s := range tc.Servers {
+			cfg, ok := s.Gossip().GetSystemConfig()
+			if !ok {
+				return errors.Errorf("%d: system config not yet available", i)
+			}
+
+			if err := s.Stores().VisitStores(func(s *storage.Store) error {
+				if !s.RangesReplicated(cfg) {
+					replicated = false
 				}
 				return nil
-			})
-			if err != nil {
+			}); err != nil {
 				return err
 			}
-			if notReplicated {
-				break
+			if !replicated {
+				continue outer
 			}
+		}
+		if replicated {
+			break
 		}
 	}
 	return nil

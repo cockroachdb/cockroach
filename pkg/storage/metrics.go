@@ -61,7 +61,7 @@ var (
 	metaRangeCount          = metric.Metadata{Name: "ranges"}
 	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available"}
 
-	// Replication metrics.
+	// Allocator metrics.
 	metaReplicaAllocatorNoopCount       = metric.Metadata{Name: "ranges.allocator.noop"}
 	metaReplicaAllocatorRemoveCount     = metric.Metadata{Name: "ranges.allocator.remove"}
 	metaReplicaAllocatorAddCount        = metric.Metadata{Name: "ranges.allocator.add"}
@@ -317,11 +317,11 @@ type StoreMetrics struct {
 	RangeCount          *metric.Gauge
 	AvailableRangeCount *metric.Gauge
 
-	// Replication metrics.
-	ReplicaAllocatorNoopCount       *metric.Gauge
-	ReplicaAllocatorRemoveCount     *metric.Gauge
-	ReplicaAllocatorAddCount        *metric.Gauge
-	ReplicaAllocatorRemoveDeadCount *metric.Gauge
+	// Allocator metrics.
+	ReplicaAllocatorNoopCount       *metric.Counter
+	ReplicaAllocatorRemoveCount     *metric.Counter
+	ReplicaAllocatorAddCount        *metric.Counter
+	ReplicaAllocatorRemoveDeadCount *metric.Counter
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many Replicas apply the
@@ -492,11 +492,11 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RangeCount:          metric.NewGauge(metaRangeCount),
 		AvailableRangeCount: metric.NewGauge(metaAvailableRangeCount),
 
-		// Replication metrics.
-		ReplicaAllocatorNoopCount:       metric.NewGauge(metaReplicaAllocatorNoopCount),
-		ReplicaAllocatorRemoveCount:     metric.NewGauge(metaReplicaAllocatorRemoveCount),
-		ReplicaAllocatorAddCount:        metric.NewGauge(metaReplicaAllocatorAddCount),
-		ReplicaAllocatorRemoveDeadCount: metric.NewGauge(metaReplicaAllocatorRemoveDeadCount),
+		// Allocator metrics.
+		ReplicaAllocatorNoopCount:       metric.NewCounter(metaReplicaAllocatorNoopCount),
+		ReplicaAllocatorRemoveCount:     metric.NewCounter(metaReplicaAllocatorRemoveCount),
+		ReplicaAllocatorAddCount:        metric.NewCounter(metaReplicaAllocatorAddCount),
+		ReplicaAllocatorRemoveDeadCount: metric.NewCounter(metaReplicaAllocatorRemoveDeadCount),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),

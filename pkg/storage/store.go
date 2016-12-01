@@ -275,10 +275,13 @@ type storeReplicaVisitor struct {
 	visited int        // Number of visited ranges, -1 before first call to Visit()
 }
 
-// storeReplicaVisitor implements the shuffle.Interface.
-func (rs storeReplicaVisitor) Len() int      { return len(rs.repls) }
+// Len implements shuffle.Interface.
+func (rs storeReplicaVisitor) Len() int { return len(rs.repls) }
+
+// Swap implements shuffle.Interface.
 func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i] }
 
+// newStoreReplicaVisitor constructs a storeReplicaVisitor.
 func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 	return &storeReplicaVisitor{
 		store:   store,
@@ -325,6 +328,9 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	rs.visited = 0
 }
 
+// EstimatedCount returns an estimated count of the underlying store's
+// replicas.
+//
 // TODO(tschottdorf): this method has highly doubtful semantics.
 func (rs *storeReplicaVisitor) EstimatedCount() int {
 	if rs.visited <= 0 {
@@ -3687,23 +3693,13 @@ func (s *Store) updateCapacityGauges() error {
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
 func (s *Store) updateReplicationGauges() error {
-	// Load the system config.
-	cfg, ok := s.Gossip().GetSystemConfig()
-	if !ok {
-		return errors.Errorf("%s: system config not yet available", s)
-	}
-
 	var (
-		raftLeaderCount                 int64
-		leaseHolderCount                int64
-		raftLeaderNotLeaseHolderCount   int64
-		quiescentCount                  int64
-		rangeCount                      int64
-		availableRangeCount             int64
-		replicaAllocatorNoopCount       int64
-		replicaAllocatorAddCount        int64
-		replicaAllocatorRemoveCount     int64
-		replicaAllocatorRemoveDeadCount int64
+		raftLeaderCount               int64
+		leaseHolderCount              int64
+		raftLeaderNotLeaseHolderCount int64
+		quiescentCount                int64
+		rangeCount                    int64
+		availableRangeCount           int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -3714,12 +3710,6 @@ func (s *Store) updateReplicationGauges() error {
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		desc := rep.Desc()
-		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
-		if err != nil {
-			ctx := s.AnnotateCtx(context.TODO())
-			log.Error(ctx, err)
-			return true
-		}
 
 		rep.mu.Lock()
 		raftStatus := rep.raftStatusLocked()
@@ -3744,17 +3734,6 @@ func (s *Store) updateReplicationGauges() error {
 				} else {
 					raftLeaderNotLeaseHolderCount++
 				}
-			}
-
-			switch action, _ := s.allocator.ComputeAction(zoneConfig, desc); action {
-			case AllocatorNoop:
-				replicaAllocatorNoopCount++
-			case AllocatorAdd:
-				replicaAllocatorAddCount++
-			case AllocatorRemove:
-				replicaAllocatorRemoveCount++
-			case AllocatorRemoveDead:
-				replicaAllocatorRemoveDeadCount++
 			}
 		} else if leaseCovers && leaseOwned {
 			leaseHolderCount++
@@ -3793,14 +3772,8 @@ func (s *Store) updateReplicationGauges() error {
 	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
-
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.AvailableRangeCount.Update(availableRangeCount)
-
-	s.metrics.ReplicaAllocatorNoopCount.Update(replicaAllocatorNoopCount)
-	s.metrics.ReplicaAllocatorRemoveCount.Update(replicaAllocatorRemoveCount)
-	s.metrics.ReplicaAllocatorAddCount.Update(replicaAllocatorAddCount)
-	s.metrics.ReplicaAllocatorRemoveDeadCount.Update(replicaAllocatorRemoveDeadCount)
 
 	return nil
 }
@@ -3963,6 +3936,26 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 // reserve requests a reservation from the store's bookie.
 func (s *Store) reserve(ctx context.Context, req reservationRequest) reservationResponse {
 	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
+}
+
+// RangesReplicated returns true iff all replicas on the store are fully
+// replicated with respect to cfg.
+func (s *Store) RangesReplicated(cfg config.SystemConfig) bool {
+	replicated := true
+	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+		desc := rep.Desc()
+		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
+			replicated = false
+			log.Error(rep.AnnotateCtx(context.TODO()), err)
+		} else {
+			switch action, _ := s.allocator.ComputeAction(zoneConfig, desc); action {
+			case AllocatorAdd:
+				replicated = false
+			}
+		}
+		return replicated
+	})
+	return replicated
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue
