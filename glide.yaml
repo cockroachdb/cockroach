@@ -96,7 +96,7 @@ import:
   - exp
 - package: github.com/rubyist/circuitbreaker
 - package: github.com/tamird/go-deadlock
-  version: 9c489b49f3dd3c305f29801b10d84407ffa71971
+  version: 44897155cb375bfc533e32256f5f49a758a04143
 - package: github.com/satori/go.uuid
 - package: github.com/spf13/cobra
   subpackages:
