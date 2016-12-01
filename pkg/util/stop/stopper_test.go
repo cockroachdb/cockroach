@@ -419,8 +419,9 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	defer s.Stop()
 
 	const maxConcurrency = 5
-	const duration = 10 * time.Millisecond
+	const numTasks = maxConcurrency * 3
 	sem := make(chan struct{}, maxConcurrency)
+	taskSignal := make(chan struct{}, maxConcurrency)
 	var mu syncutil.Mutex
 	concurrency := 0
 	peakConcurrency := 0
@@ -433,14 +434,30 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 			peakConcurrency = concurrency
 		}
 		mu.Unlock()
-		time.Sleep(duration)
+		<-taskSignal
 		mu.Lock()
 		concurrency--
 		mu.Unlock()
 		wg.Done()
 	}
+	go func() {
+		// Loop until the desired peak concurrency has been reached.
+		for {
+			mu.Lock()
+			c := concurrency
+			mu.Unlock()
+			if c >= maxConcurrency {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+		// Then let the rest of the async tasks finish quickly.
+		for i := 0; i < numTasks; i++ {
+			taskSignal <- struct{}{}
+		}
+	}()
 
-	for i := 0; i < maxConcurrency*3; i++ {
+	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
 		if err := s.RunLimitedAsyncTask(
 			context.TODO(), sem, true /* wait */, f,
