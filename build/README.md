@@ -1,5 +1,4 @@
 # Docker Deploy
-
 Installing docker is a prerequisite. The instructions differ depending on the
 environment. Docker is comprised of two parts: the daemon server which runs on
 Linux and accepts commands, and the client which is a Go program capable of
@@ -33,3 +32,41 @@ build and run a development container. The CockroachDB binary will be built
 inside of that container. That binary is built into our minimal container. The
 resulting image `cockroachdb/cockroach` can be run via `docker run` in the
 usual fashion.
+
+#  Dependencies
+A snapshot of cockroachdb's dependencies is maintained at https://github.com/cockroachdb/vendored
+and checked out as a submodule at `./vendor`.
+
+## Updating Dependencies
+This snapshot was built and is managed using `glide`.
+
+The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
+* run `./scripts/glide.sh` in `cockroachdb/cockroach` checkout
+* add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
+* update dependencies to their latest version with `./scripts/glide.sh up`
+  - to update a pinned dependency, change the version in `glide.yaml`, then run `./scripts/glide.sh up`
+
+## Working with Submodules
+Since dependendies are stored in their own repository, and `cockroachdb/cockroach` depends on it,
+changing a dependency requires pushing two things, in order: first the changes to the `vendored`
+repository, then the reference to those changes to the main repository.
+
+After adding or updating dependencies (and running all tests), switch into the `vendor` submodule
+and commit changes (or use `git -C`). The commit must be available on `github.com/cockroachdb/vendored`
+*before* submitting a pull request to `cockroachdb/cockroach` that references it.
+* Organization members can push new refs directly.
+  * Likely want to `git remote set-url origin git@github.com:cockroachdb/vendored.git`.
+  * If not pushing to `master`, be sure to tag the ref so that it will not be GC'ed.
+* Non-members should fork the `vendored` repo, add their fork as a second remote, and submit a pull
+request.
+  * After the pull request is merged, fetch and checkout the new `origin/master`, and commit *that* as the
+  new ref in `cockroachdb/cockroach`.
+
+## Repository Name
+We only want the vendor directory used by builds when it is explicitly checked out *and managed* as a
+submodule at `./vendor`.
+
+If a go build fails to find a dependency in `./vendor`, it will continue searching anything named
+"vendor" in parent directories. Thus the vendor repository is _not_ named "vendor", to minimize the risk
+of it ending up somewhere in `GOPATH` with the name `vendor` (e.g. if it is manually cloned), where
+it could end up being unintentionally used by builds and causing confusion.
