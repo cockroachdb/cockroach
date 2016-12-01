@@ -398,16 +398,16 @@ func (s *selectNode) expandPlan() error {
 	// cannot occur during expandPlan.
 	limitCount, limitOffset := s.top.limit.estimateLimit()
 
-	if scan, ok := s.source.plan.(*scanNode); ok {
-		// Find the set of columns that we actually need values for. This is an
-		// optimization to avoid unmarshaling unnecessary values and is also
-		// used for index selection.
-		neededCols := make([]bool, len(s.source.info.sourceColumns))
-		for i := range neededCols {
-			neededCols[i] = s.ivarHelper.IndexedVarUsed(i)
-		}
-		scan.setNeededColumns(neededCols)
+	// Find the set of columns that we actually need values for. This is an
+	// optimization to avoid unmarshaling unnecessary values and is also
+	// used for index selection.
+	neededCols := make([]bool, len(s.source.info.sourceColumns))
+	for i := range neededCols {
+		neededCols[i] = s.ivarHelper.IndexedVarUsed(i)
+	}
+	s.source.plan.setNeededColumns(neededCols)
 
+	if scan, ok := s.source.plan.(*scanNode); ok {
 		// Compute a filter expression for the scan node.
 		convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
 			ivar := expr.(*parser.IndexedVar)
