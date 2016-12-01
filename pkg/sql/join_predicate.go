@@ -111,17 +111,15 @@ func (p *crossPredicate) encode(_ []byte, _ parser.DTuple, _ int) ([]byte, bool,
 }
 
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
-func (p *planner) makeCrossPredicate(
-	left, right *dataSourceInfo,
-) (joinPredicate, *dataSourceInfo, error) {
+func (p *planner) makeCrossPredicate(left, right *dataSourceInfo) (joinPredicate, *dataSourceInfo) {
 	pred := &crossPredicate{
 		joinPredicateBase: joinPredicateBase{
 			numLeftCols:  len(left.sourceColumns),
 			numRightCols: len(right.sourceColumns),
 		},
 	}
-	info, err := concatDataSourceInfos(left, right)
-	return pred, info, err
+	info := concatDataSourceInfos(left, right)
+	return pred, info
 }
 
 // onPredicate implements the predicate logic for joins with an ON clause.
@@ -244,10 +242,7 @@ func (p *planner) makeOnPredicate(
 	left, right *dataSourceInfo, expr parser.Expr,
 ) (joinPredicate, *dataSourceInfo, error) {
 	// Output rows are the concatenation of input rows.
-	info, err := concatDataSourceInfos(left, right)
-	if err != nil {
-		return nil, nil, err
-	}
+	info := concatDataSourceInfos(left, right)
 
 	pred := &onPredicate{
 		joinPredicateBase: joinPredicateBase{
@@ -566,21 +561,21 @@ func (p *planner) makeEqualityPredicate(
 
 		// Merge the mappings from table aliases to column sets from both
 		// sides into a new alias-columnset mapping for the result rows.
-		aliases := make(sourceAliases)
-		for alias, colRange := range left.sourceAliases {
-			newRange := make([]int, len(colRange))
-			for i, colIdx := range colRange {
+		aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
+		for _, alias := range left.sourceAliases {
+			newRange := make([]int, len(alias.columnRange))
+			for i, colIdx := range alias.columnRange {
 				newRange[i] = usedLeft[colIdx]
 			}
-			aliases[alias] = newRange
+			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
 
-		for alias, colRange := range right.sourceAliases {
-			newRange := make([]int, len(colRange))
-			for i, colIdx := range colRange {
+		for _, alias := range right.sourceAliases {
+			newRange := make([]int, len(alias.columnRange))
+			for i, colIdx := range alias.columnRange {
 				newRange[i] = usedRight[colIdx]
 			}
-			aliases[alias] = newRange
+			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
 
 		info = &dataSourceInfo{
@@ -592,10 +587,7 @@ func (p *planner) makeEqualityPredicate(
 		// concatenations of left and right columns.
 		info = concatInfos
 		if info == nil {
-			info, err = concatDataSourceInfos(left, right)
-			if err != nil {
-				return nil, nil, err
-			}
+			info = concatDataSourceInfos(left, right)
 		}
 	}
 
