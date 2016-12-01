@@ -33,7 +33,7 @@ type Cluster interface {
 	// NumNodes returns the number of nodes in the cluster, running or not.
 	NumNodes() int
 	// NewClient returns a kv client for the given node.
-	NewClient(context.Context, *testing.T, int) *client.DB
+	NewClient(context.Context, testing.TB, int) *client.DB
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(context.Context, int) string
 	// InternalIP returns the address used for inter-node communication.
@@ -41,10 +41,10 @@ type Cluster interface {
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.
-	Assert(context.Context, *testing.T)
+	Assert(context.Context, testing.TB)
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
-	AssertAndStop(context.Context, *testing.T)
+	AssertAndStop(context.Context, testing.TB)
 	// ExecRoot executes the given command with super-user privileges.
 	ExecRoot(ctx context.Context, i int, cmd []string) error
 	// Kill terminates the cockroach process running on the given node number.
@@ -64,7 +64,7 @@ type Cluster interface {
 
 // Consistent performs a replication consistency check on all the ranges
 // in the cluster. It depends on a majority of the nodes being up.
-func Consistent(ctx context.Context, t *testing.T, c Cluster) {
+func Consistent(ctx context.Context, t testing.TB, c Cluster) {
 	if c.NumNodes() <= 0 {
 		return
 	}

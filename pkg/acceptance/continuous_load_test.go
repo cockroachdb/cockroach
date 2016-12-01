@@ -110,8 +110,8 @@ func (cl continuousLoadTest) startLoad(ctx context.Context, f *terrafarm.Farmer)
 // generator constitutes a test failure. The test runs for the duration given
 // by the `test.timeout` flag, minus the time it takes to reliably tear down
 // the test cluster.
-func (cl continuousLoadTest) Run(ctx context.Context, t *testing.T) {
-	f := farmer(t, cl.Prefix+cl.shortTestTimeout(), stopper)
+func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
+	f := MakeFarmer(t, cl.Prefix+cl.shortTestTimeout(), stopper)
 	// If the timeout flag was set, calculate an appropriate lower timeout by
 	// subtracting expected cluster creation and teardown times to allow for
 	// proper shutdown at the end of the test.
@@ -150,7 +150,7 @@ func (cl continuousLoadTest) Run(ctx context.Context, t *testing.T) {
 	if err := f.Resize(cl.NumNodes); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(ctx, t, f, longWaitTime, hasPeers(cl.NumNodes))
+	CheckGossip(ctx, t, f, longWaitTime, HasPeers(cl.NumNodes))
 	start := timeutil.Now()
 	if err := cl.startLoad(ctx, f); err != nil {
 		t.Fatal(err)
@@ -214,7 +214,7 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 }
 
 // assert fails the test if CockroachDB or the load generators are down.
-func (cl continuousLoadTest) assert(ctx context.Context, t *testing.T, f *terrafarm.Farmer) {
+func (cl continuousLoadTest) assert(ctx context.Context, t testing.TB, f *terrafarm.Farmer) {
 	f.Assert(ctx, t)
 	for _, host := range f.Nodes()[0:*flagCLTWriters] {
 		f.AssertState(ctx, t, host, cl.Process, "RUNNING")
