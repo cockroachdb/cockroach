@@ -52,9 +52,16 @@ type rule func(state solveState) (float64, bool)
 // ruleSolver is used to test a collection of rules against stores.
 type ruleSolver []rule
 
-// defaultRuleSolver is the set of rules used.
-var defaultRuleSolver = ruleSolver{
+// allocateRuleSolver is the set of rules used for adding new replicas.
+var allocateRuleSolver = ruleSolver{
 	ruleReplicasUniqueNodes,
+	ruleConstraints,
+	ruleCapacity,
+	ruleDiversity,
+}
+
+// removeRuleSolver is the set of rules used for removing existing replicas.
+var removeRuleSolver = ruleSolver{
 	ruleConstraints,
 	ruleCapacity,
 	ruleDiversity,
