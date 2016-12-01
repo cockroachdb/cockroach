@@ -240,8 +240,7 @@ func (p *planner) makeJoin(
 	)
 
 	if cond == nil {
-		pred = &crossPredicate{}
-		info, err = concatDataSourceInfos(leftInfo, rightInfo)
+		pred, info, err = p.makeCrossPredicate(leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
@@ -305,7 +304,11 @@ func (n *joinNode) ExplainTypes(regTypes func(string, string)) {
 func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
 
 // setNeededColumns implements the planNode interface.
-func (n *joinNode) setNeededColumns(_ []bool) {}
+func (n *joinNode) setNeededColumns(needed []bool) {
+	leftNeeded, rightNeeded := n.pred.getNeededColumns(needed)
+	n.left.plan.setNeededColumns(leftNeeded)
+	n.right.plan.setNeededColumns(rightNeeded)
+}
 
 // expandPlan implements the planNode interface.
 func (n *joinNode) expandPlan() error {

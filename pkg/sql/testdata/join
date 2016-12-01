@@ -403,3 +403,41 @@ CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(
 # The following query demands at least 100GB of RAM if unoptimized.
 query error memory budget exceeded
 SELECT COUNT(*) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k;
+
+# THe following queries verify that only the necessary columns are scanned.
+query ITTTT
+EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
+----
+0  select                                                                          (x, y)
+1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x, y)
+2  join           NESTED LOOP JOIN, CROSS                                          (x, y, rowid[hidden], x, y, rowid[hidden])
+3  scan           twocolumn@primary (x)                                            (x, y, rowid[hidden])
+3  scan           twocolumn@primary (y)                                            (x, y, rowid[hidden])
+
+
+query ITTTT
+EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
+----
+0  select                                                                  (y)
+1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.y, *"".b.rowid)  (y)
+2  join           HASH JOIN, INNER ON EQUALS((x),(x))                      (x, y, rowid[hidden], y, rowid[hidden])
+3  scan           twocolumn@primary (x)                                    (x, y, rowid[hidden])
+3  scan           twocolumn@primary (x, y)                                 (x, y, rowid[hidden])
+
+query ITTTT
+EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
+----
+0  select                                                                          (y)
+1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (y)
+2  join           HASH JOIN, INNER ON EQUALS((x),(x))                              (x, y, rowid[hidden], x, y, rowid[hidden])
+3  scan           twocolumn@primary (x)                                            (x, y, rowid[hidden])
+3  scan           twocolumn@primary (x, y)                                         (x, y, rowid[hidden])
+
+query ITTTT
+EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
+----
+0  select                                                                          (x)
+1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x)
+2  join           NESTED LOOP JOIN, INNER ON a.x < b.y                             (x, y, rowid[hidden], x, y, rowid[hidden])
+3  scan           twocolumn@primary (x)                                            (x, y, rowid[hidden])
+3  scan           twocolumn@primary (y)                                            (x, y, rowid[hidden])
