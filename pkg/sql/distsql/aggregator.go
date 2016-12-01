@@ -154,7 +154,7 @@ func (ag *aggregator) accumulateRows() error {
 		ag.buckets[string(encoded)] = struct{}{}
 		// Feed the func holders for this bucket the non-grouping datums.
 		for i, colIdx := range ag.inputCols {
-			if err := row[colIdx].Decode(&ag.datumAlloc); err != nil {
+			if err := row[colIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
 				return err
 			}
 			if err := ag.funcs[i].add(encoded, row[colIdx].Datum); err != nil {
@@ -175,9 +175,16 @@ func (ag *aggregator) computeAggregates() error {
 		}
 
 		row := ag.rowAlloc.AllocRow(len(tuple))
-		err := sqlbase.DTupleToEncDatumRow(row, tuple)
-		if err != nil {
-			return err
+		if len(row) != len(tuple) {
+			return errors.Errorf(
+				"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
+		}
+		for i, datum := range tuple {
+			encD, err := sqlbase.DatumToEncDatumWithInferredType(datum)
+			if err != nil {
+				return err
+			}
+			row[i] = encD
 		}
 
 		if ok := ag.rows.PushRow(row); !ok {

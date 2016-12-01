@@ -51,7 +51,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) erro
 			if err != nil {
 				return err
 			}
-			valTypes, err := sqlbase.MakeKeyVals(tableDesc, index.ColumnIDs)
+			vals, err := sqlbase.MakeEncodedKeyVals(tableDesc, index.ColumnIDs)
 			if err != nil {
 				return err
 			}
@@ -63,12 +63,19 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) erro
 				}
 				dirs = append(dirs, convertedDir)
 			}
-			vals := make([]parser.Datum, len(valTypes))
-			if _, err := sqlbase.DecodeKeyVals(&alloc, valTypes, vals, dirs, key); err != nil {
+			if _, err := sqlbase.DecodeKeyVals(&alloc, vals, dirs, key); err != nil {
 				return err
 			}
-
-			return sqlbase.NewUniquenessConstraintViolationError(index, vals)
+			decodedVals := make([]parser.Datum, len(vals))
+			var da sqlbase.DatumAlloc
+			for i, val := range vals {
+				err := val.EnsureDecoded(&da)
+				if err != nil {
+					return err
+				}
+				decodedVals[i] = val.Datum
+			}
+			return sqlbase.NewUniquenessConstraintViolationError(index, decodedVals)
 		}
 	}
 	return origPErr.GoError()

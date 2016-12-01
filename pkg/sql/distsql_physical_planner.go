@@ -939,7 +939,7 @@ func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
 		r.row = make(parser.DTuple, len(r.resultToStreamColMap))
 	}
 	for i, resIdx := range r.resultToStreamColMap {
-		err := row[resIdx].Decode(&r.alloc)
+		err := row[resIdx].EnsureDecoded(&r.alloc)
 		if err != nil {
 			r.err = err
 			return false
