@@ -77,15 +77,17 @@ func (p *planner) makeIndexJoin(
 		colIDtoRowIndex[colID] = idx
 	}
 
-	for i := range origScan.valNeededForCol {
-		// We transfer valNeededForCol to the table node.
-		table.valNeededForCol[i] = origScan.valNeededForCol[i]
+	// Transfer needed columns set to the table node.
+	table.setNeededColumns(origScan.valNeededForCol)
 
-		// For the index node, we set valNeededForCol for columns that are part of the index.
-		id := indexScan.desc.Columns[i].ID
-		_, found := colIDtoRowIndex[id]
-		indexScan.valNeededForCol[i] = found
+	// For the index node, we need values for columns that are part of the index.
+	// TODO(radu): we could reduce this further - we only need the PK columns plus
+	// whatever filters may be used by the filter below.
+	valNeededIndex := make([]bool, len(origScan.valNeededForCol))
+	for _, idx := range colIDtoRowIndex {
+		valNeededIndex[idx] = true
 	}
+	indexScan.setNeededColumns(valNeededIndex)
 
 	if origScan.filter != nil {
 		// Transfer the filter to the table node. We must first convert the

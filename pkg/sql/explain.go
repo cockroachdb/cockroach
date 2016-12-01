@@ -193,9 +193,27 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 			buf.WriteString(", ")
 		}
 		parser.Name(rCol.Name).Format(&buf, parser.FmtSimple)
-		if rCol.hidden {
-			buf.WriteString("[hidden]")
+		// Output extra properties like [hidden,omitted].
+		hasProps := false
+		outputProp := func(prop string) {
+			if hasProps {
+				buf.WriteByte(',')
+			} else {
+				buf.WriteByte('[')
+			}
+			hasProps = true
+			buf.WriteString(prop)
 		}
+		if rCol.hidden {
+			outputProp("hidden")
+		}
+		if rCol.omitted {
+			outputProp("omitted")
+		}
+		if hasProps {
+			buf.WriteByte(']')
+		}
+
 		if printTypes {
 			buf.WriteByte(' ')
 			buf.WriteString(rCol.Typ.String())
