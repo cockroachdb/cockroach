@@ -517,10 +517,10 @@ func (tc *TestCluster) waitForFullReplication() error {
 		notReplicated = false
 		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
-				if err := s.ComputeMetrics(0); err != nil {
+				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					return err
 				}
-				if s.Metrics().ReplicaAllocatorAddCount.Value() > 0 {
+				if s.Metrics().UnderReplicatedRangeCount.Value() > 0 {
 					notReplicated = true
 				}
 				return nil
