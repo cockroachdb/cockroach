@@ -57,7 +57,7 @@ func (tsdb *DB) PruneTimeSeries(
 	db *client.DB,
 	timestamp hlc.Timestamp,
 ) error {
-	series, err := findTimeSeries(snapshot, start, end)
+	series, err := findTimeSeries(snapshot, start, end, timestamp)
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ type timeSeriesResolutionInfo struct {
 // intended to be called by a storage queue which can inspect the local data for
 // a single range without the need for expensive network calls.
 func findTimeSeries(
-	snapshot engine.Reader, startKey, endKey roachpb.RKey,
+	snapshot engine.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
 
@@ -105,18 +105,25 @@ func findTimeSeries(
 		end = lastTS
 	}
 
+	thresholds := computeThresholds(now.WallTime)
+
 	for iter.Seek(next); iter.Valid() && iter.Less(end); iter.Seek(next) {
 		foundKey := iter.Key().Key
 
 		// Extract the name and resolution from the discovered key.
-		name, _, res, _, err := DecodeDataKey(foundKey)
+		name, _, res, tsNanos, err := DecodeDataKey(foundKey)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, timeSeriesResolutionInfo{
-			Name:       name,
-			Resolution: res,
-		})
+		// Skip this time series if there's nothing to prune. We check the
+		// oldest (first) time series record's timestamp against the
+		// pruning threshold.
+		if threshold, ok := thresholds[res]; !ok || threshold > tsNanos {
+			results = append(results, timeSeriesResolutionInfo{
+				Name:       name,
+				Resolution: res,
+			})
+		}
 
 		// Set 'next' is initialized to the next possible time series key
 		// which could belong to a previously undiscovered time series.
