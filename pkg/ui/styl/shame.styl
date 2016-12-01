@@ -1,0 +1,57 @@
+// This is an attempt to override settings from the react-select component.
+// react-select's css file uses rules with extremely high specificity, making
+// numerous !important statements necessary.
+// @stylint off
+.has-value.Select--single > .Select-control .Select-value .Select-value-label,
+.has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
+  color $secondary-blue-3 !important
+
+.Select-option.is-selected
+  color $secondary-blue-3 !important
+
+.Select-value
+  line-height inherit !important
+  height auto !important
+
+.Select-control
+  line-height inherit !important
+  height auto !important
+  border-width 0 !important
+  box-shadow 0 0 0 black !important
+  border-radius 0 3px 3px 0 !important
+  background-color transparent !important
+
+.Select-input
+  line-height inherit !important
+  height auto !important
+
+.Select-input > input
+  padding 0 !important
+// @stylint on
+
+// NVD3 Style overrides.
+.nvtooltip table tr.highlight td
+  padding 2px 9px 2px 0
+
+.nvtooltip table tr.highlight td:first-child
+  padding 2px 9px 2px 3rem
+
+.nvd3 .nv-axis
+  .tick line
+    stroke $lighter-gray
+
+  text
+    fill $dark-blue
+    font-family lato
+
+  .nv-axislabel
+    text-transform lowercase
+    font-family lato
+    fill $lighter-blue
+
+.nv-y .nv-axis .domain
+  opacity 0
+
+.nvd3 text
+  opacity .6
+  font-size 10px

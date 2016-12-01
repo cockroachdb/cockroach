@@ -21,7 +21,8 @@
  *      - Management of column widths
  * - Cluster Page
  *    - Fix widths of selectors
- *    - Timespan Selector Styling
+ *    ! Selectors
+ *    ! Timespan Selector Styling
  *    - Alert notifications
  *      - Mismatched/Out-of-date Version
  *      - Help us
@@ -53,6 +54,7 @@
  *      - Display in table list column
  *      - Display alert on table details page
  *    - Table details page
+ *      - Back Button
  *      - Syntax highlighting colors
  *      - Syntax highlighting keywords
  * - Nodes page
@@ -75,15 +77,17 @@
  */
 
 import "nvd3/build/nv.d3.min.css!";
-import "build/app.css!";
 import "react-select/dist/react-select.css!";
+import "build/app.css!";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect } from "react-router";
 
-import { tableNameAttr, databaseNameAttr, nodeIDAttr} from "./util/constants";
+import {
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr,
+} from "./util/constants";
 
 import { store, history } from "./redux/state";
 import Layout from "./containers/layout";
@@ -115,10 +119,9 @@ ReactDOM.render(
       <Route path="/" component={Layout}>
         <IndexRedirect to="cluster" />
         <Route path="cluster" component={ Nodes }>
-          <IndexRedirect to="dashboard" />
-          <Route path="dashboard" component={NodeGraphs} >
-            <Route path={ `:${nodeIDAttr}` } />
-          </Route>
+          <IndexRedirect to="all/activity" />
+          <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
+          <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
         </Route>
         <Route path="nodes" >
           <IndexRedirect to="overview" />
