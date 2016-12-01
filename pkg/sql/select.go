@@ -228,6 +228,8 @@ func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
 }
 
+func (*selectNode) setNeededColumns(_ []bool) {}
+
 func (s *selectNode) Close() {
 	s.source.plan.Close()
 }

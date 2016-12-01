@@ -249,6 +249,8 @@ func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	n.index.SetLimitHint(numRows, soft)
 }
 
+func (*indexJoinNode) setNeededColumns(_ []bool) {}
+
 func (n *indexJoinNode) Close() {
 	n.index.Close()
 	n.table.Close()

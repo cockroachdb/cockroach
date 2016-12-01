@@ -459,3 +459,4 @@ func (u *updateNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}
+func (u *updateNode) setNeededColumns(_ []bool)             {}

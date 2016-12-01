@@ -304,6 +304,9 @@ func (n *joinNode) ExplainTypes(regTypes func(string, string)) {
 // SetLimitHint implements the planNode interface.
 func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
 
+// setNeededColumns implements the planNode interface.
+func (n *joinNode) setNeededColumns(_ []bool) {}
+
 // expandPlan implements the planNode interface.
 func (n *joinNode) expandPlan() error {
 	if err := n.pred.expand(); err != nil {

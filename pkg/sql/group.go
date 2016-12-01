@@ -426,6 +426,7 @@ func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
+func (*groupNode) setNeededColumns(_ []bool)    {}
 
 func (n *groupNode) Close() {
 	n.plan.Close()

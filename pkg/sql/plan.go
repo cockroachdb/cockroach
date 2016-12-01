@@ -100,6 +100,11 @@ type planNode interface {
 	// Available during/after newPlan().
 	SetLimitHint(numRows int64, soft bool)
 
+	// setNeededColumns is optionally called when the values for some of the
+	// Columns() are not required for this node. There must be one value per
+	// column. It must be called before expandPlan.
+	setNeededColumns(needed []bool)
+
 	// expandPlan finalizes type checking of placeholders and expands
 	// the query plan to its final form, including index selection and
 	// expansion of sub-queries. Returns an error if the initialization

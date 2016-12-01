@@ -597,3 +597,4 @@ func (n *insertNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}
+func (n *insertNode) setNeededColumns(_ []bool)             {}
