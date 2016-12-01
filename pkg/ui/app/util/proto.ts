@@ -41,8 +41,8 @@ export namespace MetricConstants {
   export const raftLeaders: string = "replicas.leaders";
   export const leaseHolders: string = "replicas.leaseholders";
   export const ranges: string = "ranges";
-  export const availableRanges: string = "ranges.available";
-  export const replicatedRanges: string  = "ranges.allocator.noop";
+  export const unavailableRanges: string = "ranges.unavailable";
+  export const underReplicatedRanges: string  = "ranges.underreplicated";
   export const liveBytes: string = "livebytes";
   export const keyBytes: string = "keybytes";
   export const valBytes: string = "valbytes";
