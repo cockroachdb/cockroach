@@ -48,7 +48,7 @@ func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
 		if a == nil {
 			a = &DatumAlloc{}
 		}
-		err := ed.Decode(a)
+		err := ed.EnsureDecoded(a)
 		if err != nil {
 			return fmt.Sprintf("<error: %v>", err)
 		}
@@ -60,58 +60,81 @@ func (ed *EncDatum) String() string {
 	return ed.stringWithAlloc(nil)
 }
 
-// SetEncoded initializes the EncDatum with the given encoded value. The encoded
-// value is stored as a shallow copy, so the caller must make sure the slice is
-// not modified for the lifetime of the EncDatum.
-func (ed *EncDatum) SetEncoded(typ ColumnType_Kind, enc DatumEncoding, val []byte) {
-	if len(val) == 0 {
+// EncDatumFromEncoded initializes an EncDatum with the given encoded
+// value. The encoded value is stored as a shallow copy, so the caller must
+// make sure the slice is not modified for the lifetime of the EncDatum.
+// SetEncoded wipes the underlying Datum.
+func EncDatumFromEncoded(typ ColumnType_Kind, enc DatumEncoding, encoded []byte) EncDatum {
+	if len(encoded) == 0 {
 		panic("empty encoded value")
 	}
-	ed.Type = typ
-	ed.encoding = enc
-	ed.encoded = val
-	ed.Datum = nil
+	return EncDatum{
+		Type:     typ,
+		encoding: enc,
+		encoded:  encoded,
+		Datum:    nil,
+	}
 }
 
-// SetFromBuffer initializes the EncDatum with an encoding that is possibly
-// followed by other data. Similar to SetEncoded, except that this function
-// figures out where the encoding stops and returns a slice for the rest of the
-// buffer.
-func (ed *EncDatum) SetFromBuffer(
+// EncDatumFromBuffer initializes an EncDatum with an encoding that is
+// possibly followed by other data. Similar to EncDatumFromEncoded,
+// except that this function figures out where the encoding stops and returns a
+// slice for the rest of the buffer.
+func EncDatumFromBuffer(
 	typ ColumnType_Kind, enc DatumEncoding, buf []byte,
-) (remaining []byte, err error) {
+) (EncDatum, []byte, error) {
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
 		encLen, err := encoding.PeekLength(buf)
 		if err != nil {
-			return nil, err
+			return EncDatum{}, nil, err
 		}
-		ed.SetEncoded(typ, enc, buf[:encLen])
-		return buf[encLen:], nil
+		ed := EncDatumFromEncoded(typ, enc, buf[:encLen])
+		return ed, buf[encLen:], nil
 	case DatumEncoding_VALUE:
 		typeOffset, encLen, err := encoding.PeekValueLength(buf)
 		if err != nil {
-			return nil, err
+			return EncDatum{}, nil, err
 		}
-		ed.SetEncoded(typ, enc, buf[typeOffset:encLen])
-		return buf[encLen:], nil
+		ed := EncDatumFromEncoded(typ, enc, buf[typeOffset:encLen])
+		return ed, buf[encLen:], nil
 	default:
-		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
+		panic(fmt.Sprintf("unknown encoding %s", enc))
 	}
 }
 
-// SetDatum initializes the EncDatum with the given Datum.
-func (ed *EncDatum) SetDatum(typ ColumnType_Kind, d parser.Datum) {
+// DatumToEncDatum initializes an EncDatum with the given Datum.
+func DatumToEncDatum(typ ColumnType_Kind, d parser.Datum) EncDatum {
 	if d == nil {
-		panic("nil datum given")
+		panic("Cannot convert nil datum to EncDatum")
 	}
 	if d != parser.DNull && !typ.ToDatumType().Equal(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
 			d.ResolvedType(), typ.ToDatumType()))
 	}
-	ed.Type = typ
+	return EncDatum{
+		Type:  typ,
+		Datum: d,
+	}
+}
+
+// DatumToEncDatumWithInferredType initializes an EncDatum with the given
+// Datum, setting its Type automatically. This does not work if the base
+// Datum's type is DNull, in which case an error is returned.
+func DatumToEncDatumWithInferredType(datum parser.Datum) (EncDatum, error) {
+	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
+	if !ok {
+		return EncDatum{}, errors.Errorf(
+			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
+	}
+	return DatumToEncDatum(ColumnType_Kind(dType), datum), nil
+}
+
+// UnsetDatum ensures subsequent IsUnset() calls return false.
+func (ed *EncDatum) UnsetDatum() {
 	ed.encoded = nil
-	ed.Datum = d
+	ed.Datum = nil
+	ed.encoding = 0
 }
 
 // IsUnset returns true if SetEncoded or SetDatum were not called.
@@ -119,8 +142,8 @@ func (ed *EncDatum) IsUnset() bool {
 	return ed.encoded == nil && ed.Datum == nil
 }
 
-// Decode ensures that Datum is set (decoding if necessary).
-func (ed *EncDatum) Decode(a *DatumAlloc) error {
+// EnsureDecoded ensures that the Datum field is set (decoding if it is not).
+func (ed *EncDatum) EnsureDecoded(a *DatumAlloc) error {
 	if ed.Datum != nil {
 		return nil
 	}
@@ -166,7 +189,7 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 		// We already have an encoding that matches
 		return append(appendTo, ed.encoded...), nil
 	}
-	if err := ed.Decode(a); err != nil {
+	if err := ed.EnsureDecoded(a); err != nil {
 		return nil, err
 	}
 	switch enc {
@@ -196,10 +219,10 @@ func (ed *EncDatum) Compare(a *DatumAlloc, rhs *EncDatum) (int, error) {
 			return bytes.Compare(rhs.encoded, ed.encoded), nil
 		}
 	}
-	if err := ed.Decode(a); err != nil {
+	if err := ed.EnsureDecoded(a); err != nil {
 		return 0, err
 	}
-	if err := rhs.Decode(a); err != nil {
+	if err := rhs.EnsureDecoded(a); err != nil {
 		return 0, err
 	}
 	return ed.Datum.Compare(rhs.Datum), nil
@@ -225,31 +248,22 @@ func (r EncDatumRow) String() string {
 	return b.String()
 }
 
-// DatumToEncDatum converts a parser.Datum to an EncDatum.
-func DatumToEncDatum(datum parser.Datum) (EncDatum, error) {
-	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
-	if !ok {
-		return EncDatum{}, errors.Errorf(
-			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
-	}
-	return EncDatum{
-		Type:  (ColumnType_Kind)(dType),
-		Datum: datum,
-	}, nil
-}
-
-// DTupleToEncDatumRow converts a parser.DTuple to an EncDatumRow.
-func DTupleToEncDatumRow(row EncDatumRow, tuple parser.DTuple) error {
+// EncDatumRowToDTuple converts a given EncDatumRow to a DTuple.
+func EncDatumRowToDTuple(tuple parser.DTuple, row EncDatumRow, da *DatumAlloc) error {
 	if len(row) != len(tuple) {
 		return errors.Errorf(
-			"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
+			"Length mismatch (%d and %d) between tuple and row", len(tuple), len(row))
 	}
-	for i, datum := range tuple {
-		encDatum, err := DatumToEncDatum(datum)
+	for i, encDatum := range row {
+		if encDatum.IsUnset() {
+			tuple[i] = parser.DNull
+			continue
+		}
+		err := encDatum.EnsureDecoded(da)
 		if err != nil {
 			return err
 		}
-		row[i] = encDatum
+		tuple[i] = encDatum.Datum
 	}
 	return nil
 }

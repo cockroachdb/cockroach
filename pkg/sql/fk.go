@@ -306,5 +306,5 @@ func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
 	if err := f.rf.StartScan(f.txn, spans, true /* limit batches */, 1); err != nil {
 		return nil, err
 	}
-	return f.rf.NextRow()
+	return f.rf.NextRowDecoded()
 }
