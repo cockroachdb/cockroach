@@ -159,10 +159,15 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	// Copy over the store specs.
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
-	if cfg.TestingKnobs.Store == nil {
-		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+
+	// Make a separate copy of the store testing knobs because we intend to
+	// modify it, and some other TestingKnobs struct can be referencing it.
+	storeTestingKnob := storage.StoreTestingKnobs{}
+	if cfg.TestingKnobs.Store != nil {
+		storeTestingKnob = *(cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs))
 	}
-	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
+	storeTestingKnob.SkipMinSizeCheck = true
+	cfg.TestingKnobs.Store = &storeTestingKnob
 
 	return cfg
 }
