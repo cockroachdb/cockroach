@@ -75,10 +75,10 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTTT colnames
 EXPLAIN(VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-Level Type          Description                                  Columns               Ordering
-0     select                                                     (a, b)                +b
-1     sort          +b                                           (a, b)                +b
-2     render/filter from (test.tc.a, test.tc.b, *test.tc.rowid)  (a, b)                =a
-3     index-join                                                 (a, b, rowid[hidden]) =a,+rowid,unique
-4     scan          tc@c /10-/11                                 (a, b, rowid[hidden]) =a,+rowid,unique
-4     scan          tc@primary                                   (a, b, rowid[hidden]) +rowid,unique
+Level  Type           Description                                  Columns                         Ordering
+0      select                                                      (a, b)                          +b                
+1      sort           +b                                           (a, b)                          +b                
+2      render/filter  from (test.tc.a, test.tc.b, *test.tc.rowid)  (a, b)                          =a                
+3      index-join                                                  (a, b, rowid[hidden,omitted])   =a,+rowid,unique  
+4      scan           tc@c /10-/11                                 (a, b[omitted], rowid[hidden])  =a,+rowid,unique  
+4      scan           tc@primary                                   (a, b, rowid[hidden,omitted])   +rowid,unique     
