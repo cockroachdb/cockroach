@@ -248,6 +248,12 @@ func TestGossipStorageCleanup(t *testing.T) {
 	// Wait for the gossip network to connect.
 	network.RunUntilFullyConnected()
 
+	// Let the gossip network continue running in the background without the
+	// simulation cycler preventing it from operating.
+	for _, node := range network.Nodes {
+		node.Gossip.EnableSimulationCycler(false)
+	}
+
 	// Wait long enough for storage to get the expected number of
 	// addresses and no pending cleanups.
 	util.SucceedsSoon(t, func() error {
