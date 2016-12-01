@@ -1,43 +1,53 @@
 import _ from "lodash";
 import * as React from "react";
-import { IInjectedProps } from "react-router";
+import { IRouter, IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 
 import { refreshNodes } from "../redux/apiReducers";
 import Selector, { SelectorOption } from "../components/selector";
 import { AdminUIState } from "../redux/state";
 
+import {
+  nodeIDAttr, dashboardNameAttr,
+} from "../util/constants";
+
 import TimeScaleSelector from "./timescale";
-import { dashQueryString, nodeQueryString } from "../util/constants";
 
 interface ClusterOverviewOwnProps {
   nodes: Proto2TypeScript.cockroach.server.status.NodeStatus[];
   refreshNodes: typeof refreshNodes;
 }
 
-class ClusterOverviewState {
-  nodeOptions?: SelectorOption[] = [];
-  selectedNodes?: string[] = null;
-  selectedDash?: string;
-}
-
 type ClusterOverviewProps = ClusterOverviewOwnProps & IInjectedProps;
 
+interface ClusterOverviewState {
+  nodeOptions: { value: string, label: string }[];
+}
+
 let dashboards = [
-  { value: "node.activity", label: "Activity" },
-  { value: "node.queries", label: "SQL Queries" },
-  { value: "node.resources", label: "System Resources" },
-  { value: "node.internals", label: "Advanced Internals" },
+  { value: "activity", label: "Activity" },
+  { value: "queries", label: "SQL Queries" },
+  { value: "resources", label: "System Resources" },
+  { value: "internals", label: "Advanced Internals" },
 ];
 
 /**
  * Renders the layout of the nodes page.
  */
 class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverviewState> {
-  state = new ClusterOverviewState();
+  // Magic to add react router to the context.
+  // See https://github.com/ReactTraining/react-router/issues/975
+  static contextTypes = {
+    router: React.PropTypes.object.isRequired,
+  };
+  context: { router?: IRouter & IInjectedProps; };
+
+  state: ClusterOverviewState = {
+    nodeOptions: [{ value: "", label: "Cluster"}],
+  };
 
   static title() {
-    return <h2>Nodes</h2>;
+    return "Cluster Overview";
   }
 
   componentWillMount() {
@@ -45,31 +55,33 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
   }
 
   componentWillReceiveProps(props: ClusterOverviewProps) {
-    let base = [{ value: "", label: "All nodes"}];
+    let base = [{ value: "", label: "Cluster"}];
     if (props.nodes) {
       this.setState({
-        nodeOptions: base.concat(_.map(props.nodes, (n) => { return { value: n.desc.node_id.toString(), label: n.desc.address.address_field }; })),
+        nodeOptions: base.concat(_.map(props.nodes, (n) => {
+          return {
+            value: n.desc.node_id.toString(),
+            label: n.desc.address.address_field,
+          };
+        })),
       });
+    }
+  }
+
+  setClusterPath(nodeID: string, dashboardName: string) {
+    if (!_.isString(nodeID) || nodeID === "") {
+      this.context.router.push(`/cluster/all/${dashboardName}`);
+    } else {
+      this.context.router.push(`/cluster/node/${nodeID}/${dashboardName}`);
     }
   }
 
   nodeChange = (selected: SelectorOption) => {
-    if (selected.value) {
-      this.setState({
-        selectedNodes: [selected.value],
-      });
-    } else {
-      // Handle all nodes case.
-      this.setState({
-        selectedNodes: null,
-      });
-    }
+    this.setClusterPath(selected.value, this.props.params[dashboardNameAttr]);
   }
 
   dashChange = (selected: SelectorOption) => {
-    this.setState({
-      selectedDash: selected.value,
-    });
+    this.setClusterPath(this.props.params[nodeIDAttr], selected.value);
   }
 
   render() {
@@ -77,26 +89,26 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
     let child = React.Children.only(this.props.children);
     let displayTimescale = (child as any).type.displayTimeScale === true;
 
-    let childWithProps = React.cloneElement(child, { nodeIds: this.state.selectedNodes, groupId: this.state.selectedDash });
+    let dashboard = this.props.params[dashboardNameAttr];
+    let node = this.props.params[nodeIDAttr] || "";
 
-    // TODO(mrtracy): this outer div is used to spare the children
-    // `nav-container's styling. Should those styles apply only to `nav`?
     return <div>
-      <div className="nav-container">
-        <ul className="nav">
-          <li className="title">Nodes:</li>
-          <li className="selector" style={{ width: 250 }}>
-            <Selector urlKey={nodeQueryString} options={this.state.nodeOptions} onChange={this.nodeChange} /></li>
-          <li className="title">Dashboard:</li>
-          <li className="selector" style={{ width: 200 }}>
-            <Selector urlKey={dashQueryString} options={dashboards} onChange={this.dashChange} />
+      <section className="page-config">
+        <ul className="page-config__list">
+          <li className="page-config__item">
+            <Selector title="Graph" options={this.state.nodeOptions}
+                      selected={node} onChange={this.nodeChange} />
           </li>
-          <li className="title">View:</li>
-          {/* <li>Last 6 Hours</li> */}
-          {displayTimescale ? <TimeScaleSelector /> : null }
+          <li className="page-config__item">
+            <Selector title="Dashboard" options={dashboards}
+                      selected={dashboard} onChange={this.dashChange} />
+          </li>
+          <li className="page-config__item">
+              {displayTimescale ? <TimeScaleSelector /> : null }
+          </li>
         </ul>
-      </div>
-      { childWithProps }
+      </section>
+      { this.props.children }
     </div>;
   }
 }

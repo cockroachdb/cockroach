@@ -8,7 +8,7 @@ import { Bytes } from "../../util/format";
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshTableDetails, refreshTableStats, generateTableID } from "../../redux/apiReducers";
-import { SummaryBar, SummaryItem } from "../../components/summaryBar";
+import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
 
 import { TableInfo } from "./data";
 import { SortSetting } from "../../components/sortabletable";
@@ -85,45 +85,49 @@ class TableMain extends React.Component<TableMainProps, {}> {
     let { tableInfo, grantsSortSetting } = this.props;
 
     if (tableInfo) {
-      return <div className="section databases">
+      return <div className="section">
         <div className="database-summary-title">
           { this.props.params[tableNameAttr] }
         </div>
-        <div className="content">
-          <pre className="sql" ref={(node) => this.createStmtNode = node}>
-            {/* TODO (mrtracy): format and highlight create table statement */}
-            {tableInfo.createStatement}
-          </pre>
-          <div className="sql-table">
-          <GrantsSortedTable
-            data={tableInfo.grants}
-            sortSetting={grantsSortSetting}
-            onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
-            columns={[
-              {
-                title: "User",
-                cell: (grants) => grants.user,
-                sort: (grants) => grants.user,
-              },
-              {
-                title: "Grants",
-                cell: (grants) => grants.privileges.join(", "),
-                sort: (grants) => grants.privileges.join(", "),
-              },
-            ]}/>
+        <div className="content l-columns">
+          <div className="l-columns__left">
+            <pre className="sql" ref={(node) => this.createStmtNode = node}>
+              {/* TODO (mrtracy): format and highlight create table statement */}
+              {tableInfo.createStatement}
+            </pre>
+            <div className="sql-table">
+              <GrantsSortedTable
+                data={tableInfo.grants}
+                sortSetting={grantsSortSetting}
+                onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
+                columns={[
+                  {
+                    title: "User",
+                    cell: (grants) => grants.user,
+                    sort: (grants) => grants.user,
+                  },
+                  {
+                    title: "Grants",
+                    cell: (grants) => grants.privileges.join(", "),
+                    sort: (grants) => grants.privileges.join(", "),
+                  },
+                ]}/>
+            </div>
+          </div>
+          <div className="l-columns__right">
+            <SummaryBar>
+              <SummaryHeadlineStat
+                title="Size"
+                tooltip="Total disk size of this table."
+                value={ tableInfo.size }
+                format={ Bytes }/>
+              <SummaryHeadlineStat
+                title="Ranges"
+                tooltip="The total count of ranges in this database"
+                value={ tableInfo.rangeCount }/>
+            </SummaryBar>
           </div>
         </div>
-        <SummaryBar>
-          <SummaryItem
-            title="Size"
-            tooltip="Total disk size of this table."
-            value={ tableInfo.size }
-            format={ Bytes }/>
-          <SummaryItem
-            title="Ranges"
-            tooltip="The total count of ranges in this database"
-            value={ tableInfo.rangeCount }/>
-        </SummaryBar>
       </div>;
     }
     return <div>No results.</div>;

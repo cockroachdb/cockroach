@@ -1,7 +1,7 @@
 import * as React from "react";
 import { connect } from "react-redux";
 
-import { SummaryBar, SummaryItem } from "../../components/summaryBar";
+import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 
@@ -47,11 +47,11 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
 
     let numTables = tableInfos && tableInfos.length || 0;
 
-    return <div className="database-summary">
+    return <div className="database-summary l-columns">
       <div className="database-summary-title">
         { dbID }
       </div>
-      <div className="content">
+      <div className="l-columns__left">
         <div className="database-summary-table sql-table">
         {
           (numTables === 0) ? "" :
@@ -73,12 +73,14 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
         }
         </div>
       </div>
-      <SummaryBar>
-        <SummaryItem
-          title="Total Users"
-          tooltip="Total users that have been granted permissions on this table."
-          value={ this.totalUsers() }/>
-      </SummaryBar>
+      <div className="l-columns__right">
+        <SummaryBar>
+          <SummaryHeadlineStat
+            title="Total Users"
+            tooltip="Total users that have been granted permissions on this table."
+            value={ this.totalUsers() }/>
+        </SummaryBar>
+      </div>
     </div>;
   }
 }
