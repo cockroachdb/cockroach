@@ -70,6 +70,7 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeRangeKeyPrefix(roachpb.RKey("ok")), `/Local/Range/"ok"`},
 		{RangeDescriptorKey(roachpb.RKey("111")), `/Local/Range/"111"/RangeDescriptor`},
 		{TransactionKey(roachpb.Key("111"), txnID), fmt.Sprintf(`/Local/Range/"111"/Transaction/addrKey:/id:%q`, txnID)},
+		{QueueLastProcessedKey(roachpb.RKey("111"), "foo"), `/Local/Range/"111"/QueueLastProcessed/addrKey:/id:"foo"`},
 
 		{LocalMax, `/Meta1/""`}, // LocalMax == Meta1Prefix
 
