@@ -302,6 +302,9 @@ func (n *scanNode) setNeededColumns(needed []bool) {
 			len(needed), len(n.valNeededForCol), needed))
 	}
 	copy(n.valNeededForCol, needed)
+	for i, val := range needed {
+		n.resultColumns[i].omitted = !val
+	}
 }
 
 // Initializes the column structures.

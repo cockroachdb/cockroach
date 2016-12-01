@@ -155,11 +155,11 @@ EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 query ITTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-0   select          result     (k int)
-1   distinct        result     (k int)
-2   render/filter   result     (k int)
-2   render/filter   render 0   (k)[int]
-3   scan            result     (k int, v int)
+0  select         result    (k int)
+1  distinct       result    (k int)
+2  render/filter  result    (k int)
+2  render/filter  render 0  (k)[int]
+3  scan           result    (k int, v[omitted] int)
 
 query ITTT
 EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
@@ -176,7 +176,7 @@ EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 1   sort            result     (v int)
 2   render/filter   result     (v int)
 2   render/filter   render 0   (v)[int]
-3   scan            result     (k int, v int)
+3   scan            result     (k[omitted] int, v int)
 
 query ITTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t ORDER BY v
@@ -194,7 +194,7 @@ EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 1   limit           count      (1)[int]
 2   render/filter   result     (v int)
 2   render/filter   render 0   (v)[int]
-3   scan            result     (k int, v int)
+3   scan            result     (k[omitted] int, v int)
 
 query ITTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t LIMIT 1
@@ -211,15 +211,15 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query ITTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-0   select          result     (x int, y int)
-1   render/filter   result     (x int, y int)
-1   render/filter   render 0   (x)[int]
-1   render/filter   render 1   (y)[int]
-2   index-join      result     (x int, y int, rowid[hidden] int)
-3   scan            result     (x int, y int, rowid[hidden] int)
-3   scan            filter     ((x)[int] < (10)[int])[bool]
-3   scan            result     (x int, y int, rowid[hidden] int)
-3   scan            filter     ((y)[int] > (10)[int])[bool]
+0  select         result    (x int, y int)
+1  render/filter  result    (x int, y int)
+1  render/filter  render 0  (x)[int]
+1  render/filter  render 1  (y)[int]
+2  index-join     result    (x int, y int, rowid[hidden,omitted] int)
+3  scan           result    (x int, y[omitted] int, rowid[hidden] int)
+3  scan           filter    ((x)[int] < (10)[int])[bool]
+3  scan           result    (x int, y int, rowid[hidden,omitted] int)
+3  scan           filter    ((y)[int] > (10)[int])[bool]
 
 query ITTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
