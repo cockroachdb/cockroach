@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -46,10 +47,43 @@ const (
 	minLeaseTransferInterval = time.Second
 )
 
+var (
+	metaAddReplicaCount = metric.Metadata{Name: "queue.replicate.addreplica",
+		Help: "Number of replica additions attempted by the replicate queue"}
+	metaRemoveReplicaCount = metric.Metadata{Name: "queue.replicate.removereplica",
+		Help: "Number of replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)"}
+	metaRemoveDeadReplicaCount = metric.Metadata{Name: "queue.replicate.removedeadreplica",
+		Help: "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)"}
+	metaRebalanceReplicaCount = metric.Metadata{Name: "queue.replicate.rebalancereplica",
+		Help: "Number of replica rebalancer-initiated additions attempted by the replicate queue"}
+	metaTransferLeaseCount = metric.Metadata{Name: "queue.replicate.transferlease",
+		Help: "Number of range lease transfers attempted by the replicate queue"}
+)
+
+// ReplicateQueueMetrics is the set of metrics for the replicate queue.
+type ReplicateQueueMetrics struct {
+	AddReplicaCount        *metric.Counter
+	RemoveReplicaCount     *metric.Counter
+	RemoveDeadReplicaCount *metric.Counter
+	RebalanceReplicaCount  *metric.Counter
+	TransferLeaseCount     *metric.Counter
+}
+
+func makeReplicateQueueMetrics() ReplicateQueueMetrics {
+	return ReplicateQueueMetrics{
+		AddReplicaCount:        metric.NewCounter(metaAddReplicaCount),
+		RemoveReplicaCount:     metric.NewCounter(metaRemoveReplicaCount),
+		RemoveDeadReplicaCount: metric.NewCounter(metaRemoveDeadReplicaCount),
+		RebalanceReplicaCount:  metric.NewCounter(metaRebalanceReplicaCount),
+		TransferLeaseCount:     metric.NewCounter(metaTransferLeaseCount),
+	}
+}
+
 // replicateQueue manages a queue of replicas which may need to add an
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
+	metrics           ReplicateQueueMetrics
 	allocator         Allocator
 	clock             *hlc.Clock
 	updateChan        chan struct{}
@@ -61,10 +95,12 @@ func newReplicateQueue(
 	store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock, options AllocatorOptions,
 ) *replicateQueue {
 	rq := &replicateQueue{
+		metrics:    makeReplicateQueueMetrics(),
 		allocator:  allocator,
 		clock:      clock,
 		updateChan: make(chan struct{}, 1),
 	}
+	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
 		"replicate", rq, store, g,
 		queueConfig{
@@ -233,6 +269,7 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: newStore.StoreID,
 		}
 
+		rq.metrics.AddReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "adding replica to %+v due to under-replication", newReplica)
 		if err := rq.addReplica(ctx, repl, newReplica, desc); err != nil {
 			return err
@@ -273,6 +310,7 @@ func (rq *replicateQueue) processOneChange(
 				return nil
 			}
 		} else {
+			rq.metrics.RemoveReplicaCount.Inc(1)
 			log.VEventf(ctx, 1, "removing replica %+v due to over-replication", removeReplica)
 			if err := rq.removeReplica(ctx, repl, removeReplica, desc); err != nil {
 				return err
@@ -287,6 +325,7 @@ func (rq *replicateQueue) processOneChange(
 			break
 		}
 		deadReplica := deadReplicas[0]
+		rq.metrics.RemoveDeadReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "removing dead replica %+v from store", deadReplica)
 		if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
@@ -329,6 +368,7 @@ func (rq *replicateQueue) processOneChange(
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}
+		rq.metrics.RebalanceReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "rebalancing to %+v", rebalanceReplica)
 		if err := rq.addReplica(ctx, repl, rebalanceReplica, desc); err != nil {
 			return err
@@ -353,6 +393,7 @@ func (rq *replicateQueue) transferLease(
 		desc.RangeID,
 		checkTransferLeaseSource,
 	); target != (roachpb.ReplicaDescriptor{}) {
+		rq.metrics.TransferLeaseCount.Inc(1)
 		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
 		if err := repl.AdminTransferLease(target.StoreID); err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
