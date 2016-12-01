@@ -135,10 +135,9 @@ type AllocatorOptions struct {
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
-	storePool  *StorePool
-	randGen    allocatorRand
-	options    AllocatorOptions
-	ruleSolver ruleSolver
+	storePool *StorePool
+	randGen   allocatorRand
+	options   AllocatorOptions
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -153,10 +152,9 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 		randSource = rand.NewSource(rand.Int63())
 	}
 	return Allocator{
-		storePool:  storePool,
-		options:    options,
-		randGen:    makeAllocatorRand(randSource),
-		ruleSolver: defaultRuleSolver,
+		storePool: storePool,
+		options:   options,
+		randGen:   makeAllocatorRand(randSource),
 	}
 }
 
@@ -222,7 +220,7 @@ func (a *Allocator) AllocateTarget(
 			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 		}
 
-		candidates, err := a.ruleSolver.Solve(
+		candidates, err := allocateRuleSolver.Solve(
 			sl,
 			constraints,
 			existing,
@@ -310,7 +308,7 @@ func (a Allocator) RemoveTarget(
 				continue
 			}
 
-			candidate, valid := a.ruleSolver.computeCandidate(solveState{
+			candidate, valid := removeRuleSolver.computeCandidate(solveState{
 				constraints:            constraints,
 				store:                  desc,
 				sl:                     sl,
@@ -432,11 +430,11 @@ func (a Allocator) RebalanceTarget(
 		existingStoreList := makeStoreList(existingDescs)
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		existingCandidates, err := a.ruleSolver.Solve(existingStoreList, constraints, nil, nil)
+		existingCandidates, err := removeRuleSolver.Solve(existingStoreList, constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := a.ruleSolver.Solve(candidateStoreList, constraints, nil, nil)
+		candidates, err := allocateRuleSolver.Solve(candidateStoreList, constraints, nil, nil)
 		if err != nil {
 			return nil, err
 		}
