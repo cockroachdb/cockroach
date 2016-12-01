@@ -3686,16 +3686,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	var (
-		raftLeaderCount                 int64
-		leaseHolderCount                int64
-		raftLeaderNotLeaseHolderCount   int64
-		quiescentCount                  int64
-		rangeCount                      int64
-		availableRangeCount             int64
-		replicaAllocatorNoopCount       int64
-		replicaAllocatorAddCount        int64
-		replicaAllocatorRemoveCount     int64
-		replicaAllocatorRemoveDeadCount int64
+		raftLeaderCount               int64
+		leaseHolderCount              int64
+		raftLeaderNotLeaseHolderCount int64
+		quiescentCount                int64
+
+		rangeCount                int64
+		availableRangeCount       int64
+		underreplicatedRangeCount int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -3738,14 +3736,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 
 			switch action, _ := s.allocator.ComputeAction(zoneConfig, desc); action {
-			case AllocatorNoop:
-				replicaAllocatorNoopCount++
-			case AllocatorAdd:
-				replicaAllocatorAddCount++
-			case AllocatorRemove:
-				replicaAllocatorRemoveCount++
-			case AllocatorRemoveDead:
-				replicaAllocatorRemoveDeadCount++
+			case AllocatorAdd, AllocatorRemoveDead:
+				underreplicatedRangeCount++
 			}
 		} else if leaseCovers && leaseOwned {
 			leaseHolderCount++
@@ -3787,11 +3779,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.AvailableRangeCount.Update(availableRangeCount)
-
-	s.metrics.ReplicaAllocatorNoopCount.Update(replicaAllocatorNoopCount)
-	s.metrics.ReplicaAllocatorRemoveCount.Update(replicaAllocatorRemoveCount)
-	s.metrics.ReplicaAllocatorAddCount.Update(replicaAllocatorAddCount)
-	s.metrics.ReplicaAllocatorRemoveDeadCount.Update(replicaAllocatorRemoveDeadCount)
+	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 
 	return nil
 }

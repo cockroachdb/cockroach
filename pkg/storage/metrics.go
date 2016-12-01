@@ -58,14 +58,9 @@ var (
 		Help: "Number of read-only commands in all CommandQueues combined"}
 
 	// Range metrics.
-	metaRangeCount          = metric.Metadata{Name: "ranges"}
-	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available"}
-
-	// Replication metrics.
-	metaReplicaAllocatorNoopCount       = metric.Metadata{Name: "ranges.allocator.noop"}
-	metaReplicaAllocatorRemoveCount     = metric.Metadata{Name: "ranges.allocator.remove"}
-	metaReplicaAllocatorAddCount        = metric.Metadata{Name: "ranges.allocator.add"}
-	metaReplicaAllocatorRemoveDeadCount = metric.Metadata{Name: "ranges.allocator.removedead"}
+	metaRangeCount                = metric.Metadata{Name: "ranges"}
+	metaAvailableRangeCount       = metric.Metadata{Name: "ranges.available"}
+	metaUnderReplicatedRangeCount = metric.Metadata{Name: "ranges.underreplicated"}
 
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{Name: "leases.success"}
@@ -314,14 +309,9 @@ type StoreMetrics struct {
 	CombinedCommandReadCount  *metric.Gauge
 
 	// Range metrics.
-	RangeCount          *metric.Gauge
-	AvailableRangeCount *metric.Gauge
-
-	// Replication metrics.
-	ReplicaAllocatorNoopCount       *metric.Gauge
-	ReplicaAllocatorRemoveCount     *metric.Gauge
-	ReplicaAllocatorAddCount        *metric.Gauge
-	ReplicaAllocatorRemoveDeadCount *metric.Gauge
+	RangeCount                *metric.Gauge
+	AvailableRangeCount       *metric.Gauge
+	UnderReplicatedRangeCount *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -489,14 +479,9 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		CombinedCommandReadCount:  metric.NewGauge(metaCombinedCommandReadCount),
 
 		// Range metrics.
-		RangeCount:          metric.NewGauge(metaRangeCount),
-		AvailableRangeCount: metric.NewGauge(metaAvailableRangeCount),
-
-		// Replication metrics.
-		ReplicaAllocatorNoopCount:       metric.NewGauge(metaReplicaAllocatorNoopCount),
-		ReplicaAllocatorRemoveCount:     metric.NewGauge(metaReplicaAllocatorRemoveCount),
-		ReplicaAllocatorAddCount:        metric.NewGauge(metaReplicaAllocatorAddCount),
-		ReplicaAllocatorRemoveDeadCount: metric.NewGauge(metaReplicaAllocatorRemoveDeadCount),
+		RangeCount:                metric.NewGauge(metaRangeCount),
+		AvailableRangeCount:       metric.NewGauge(metaAvailableRangeCount),
+		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
