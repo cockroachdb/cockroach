@@ -520,7 +520,7 @@ func (tc *TestCluster) waitForFullReplication() error {
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					return err
 				}
-				if s.Metrics().ReplicaAllocatorAddCount.Value() > 0 {
+				if s.Metrics().UnderReplicatedRangeCount.Value() > 0 {
 					notReplicated = true
 				}
 				return nil
