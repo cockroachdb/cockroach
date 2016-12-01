@@ -228,7 +228,7 @@ func (n *scanNode) Next() (bool, error) {
 	}
 }
 
-func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
+func (n *scanNode) ExplainPlan(verbose bool) (name, description string, children []planNode) {
 	if n.reverse {
 		name = "revscan"
 	} else {
@@ -246,6 +246,19 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 		} else {
 			fmt.Fprintf(&desc, " (max %d rows)", n.limitHint)
 		}
+	}
+	if verbose {
+		// Include the columns we are going to read.
+		desc.WriteString(" (")
+		separator := ""
+		for i := range n.cols {
+			if n.valNeededForCol[i] {
+				desc.WriteString(separator)
+				separator = ", "
+				desc.WriteString(n.cols[i].Name)
+			}
+		}
+		desc.WriteString(")")
 	}
 
 	subplans := n.p.collectSubqueryPlans(n.filter, nil)

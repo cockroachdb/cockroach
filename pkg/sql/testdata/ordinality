@@ -88,7 +88,7 @@ EXPLAIN (verbose) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALIT
 2  ordinality                                       (x, ordinality)  +x,unique
 3  select                                           (x)              +x,unique
 4  render/filter  from (test.foo.x)                 (x)              +x,unique
-5  scan           foo@primary /"a\x00"-             (x)              +x,unique
+5  scan           foo@primary /"a\x00"- (x)         (x)              +x,unique
 
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
@@ -98,4 +98,4 @@ EXPLAIN (verbose) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a';
 0  select                                              (x, ordinality)  +ordinality,unique
 1  render/filter  from (test.foo.x, ""."".ordinality)  (x, ordinality)  +ordinality,unique
 2  ordinality                                          (x, ordinality)  +ordinality,unique
-3  scan           foo@primary                          (x)
+3  scan           foo@primary (x)                      (x)

@@ -26,7 +26,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t
 Level  Type          Description                Columns Ordering
 0      select                                   (k, v)  +k,unique
 1      render/filter from (test.t.k, test.t.v)  (k, v)  +k,unique
-2      scan          t@primary                  (k, v)  +k,unique
+2      scan          t@primary (k, v)           (k, v)  +k,unique
 
 query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -80,5 +80,5 @@ Level Type          Description                                  Columns        
 1     sort          +b                                           (a, b)                +b
 2     render/filter from (test.tc.a, test.tc.b, *test.tc.rowid)  (a, b)                =a
 3     index-join                                                 (a, b, rowid[hidden]) =a,+rowid,unique
-4     scan          tc@c /10-/11                                 (a, b, rowid[hidden]) =a,+rowid,unique
-4     scan          tc@primary                                   (a, b, rowid[hidden]) +rowid,unique
+4     scan          tc@c /10-/11 (a, rowid)                      (a, b, rowid[hidden]) =a,+rowid,unique
+4     scan          tc@primary (a, b)                            (a, b, rowid[hidden]) +rowid,unique
