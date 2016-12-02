@@ -95,8 +95,7 @@ import:
   subpackages:
   - exp
 - package: github.com/rubyist/circuitbreaker
-- package: github.com/tamird/go-deadlock
-  version: 44897155cb375bfc533e32256f5f49a758a04143
+- package: github.com/sasha-s/go-deadlock
 - package: github.com/satori/go.uuid
 - package: github.com/spf13/cobra
   subpackages:
@@ -110,6 +109,7 @@ import:
   - bcrypt
   - ssh/terminal
 - package: golang.org/x/net
+  version: 97edce0b2e423f6a8debb459af47f4a3cb4ff954
   subpackages:
   - context
   - http2
