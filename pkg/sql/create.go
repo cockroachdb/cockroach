@@ -299,6 +299,9 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 		}
 
 		resolvedPassword = string(*password.(*parser.DString))
+		if resolvedPassword == "" {
+			return nil, security.ErrEmptyPassword
+		}
 	}
 
 	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
@@ -309,9 +312,13 @@ func (n *createUserNode) expandPlan() error {
 }
 
 func (n *createUserNode) Start() error {
-	hashedPassword, err := security.HashPassword(n.password)
-	if err != nil {
-		return err
+	var hashedPassword []byte
+	if n.password != "" {
+		var err error
+		hashedPassword, err = security.HashPassword(n.password)
+		if err != nil {
+			return err
+		}
 	}
 
 	normalizedUsername := n.n.Name.Normalize()
