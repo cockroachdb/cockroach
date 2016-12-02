@@ -884,7 +884,6 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	ctx := context.TODO()
 	startKey := m.findStartKeyLocked(rangeID)
 
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
@@ -895,33 +894,35 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		// raft leader is guaranteed to have the updated version, but followers are
 		// not.
 		var desc roachpb.RangeDescriptor
-		if err := m.dbs[dest].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		if err := m.dbs[dest].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			m.t.Fatal(err)
 		}
 
-		rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+		repl, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
 		if err != nil {
 			m.t.Fatal(err)
 		}
 
+		ctx := repl.AnnotateCtx(context.Background())
+
 		// Assume AmbiguousResultErrors are due to re-proposals and the
 		// underlying change replicas succeeded.
 		for {
-			err := rep.ChangeReplicas(
-				rep.AnnotateCtx(ctx),
+			if err := repl.ChangeReplicas(
+				ctx,
 				roachpb.ADD_REPLICA,
 				roachpb.ReplicaDescriptor{
 					NodeID:  m.stores[dest].Ident.NodeID,
 					StoreID: m.stores[dest].Ident.StoreID,
 				},
 				&desc,
-			)
-			if err == nil || testutils.IsError(err, "unable to add replica .* which is already present") {
+			); err == nil || testutils.IsError(err, "unable to add replica .* which is already present") {
 				break
 			} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-				break
+				continue
+			} else {
+				m.t.Fatal(err)
 			}
-			m.t.Fatal(err)
 		}
 
 		expectedReplicaIDs[i] = desc.NextReplicaID
@@ -957,7 +958,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	startKey := m.findStartKeyLocked(rangeID)
 
 	var desc roachpb.RangeDescriptor
-	if err := m.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+	if err := m.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 		m.t.Fatal(err)
 	}
 
@@ -971,7 +972,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	// Assume AmbiguousResultErrors are due to re-proposals and the
 	// underlying change replicas succeeded.
 	for {
-		err := rep.ChangeReplicas(
+		if err := rep.ChangeReplicas(
 			ctx,
 			roachpb.REMOVE_REPLICA,
 			roachpb.ReplicaDescriptor{
@@ -979,13 +980,13 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 				StoreID: m.idents[dest].StoreID,
 			},
 			&desc,
-		)
-		if err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
+		); err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
 			break
 		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-			break
+			continue
+		} else {
+			m.t.Fatal(err)
 		}
-		m.t.Fatalf("failed: %T, %s", err, err)
 	}
 }
 
