@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -127,9 +128,14 @@ type SchemaAccessor interface {
 
 var _ SchemaAccessor = &planner{}
 
-// getTableOrViewDesc implements the SchemaAccessor interface.
 func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	virtual, err := p.session.virtualSchemas.getVirtualTableDesc(tn)
+	return getTableOrViewDesc(p.txn, &p.session.virtualSchemas, tn)
+}
+
+func getTableOrViewDesc(
+	txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	virtual, err := vt.getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
 		if _, ok := err.(*sqlbase.ErrUndefinedTable); ok {
 			return nil, nil
@@ -137,13 +143,13 @@ func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescri
 		return virtual, err
 	}
 
-	dbDesc, err := p.mustGetDatabaseDesc(tn.Database())
+	dbDesc, err := MustGetDatabaseDesc(txn, vt, tn.Database())
 	if err != nil {
 		return nil, err
 	}
 
 	desc := sqlbase.TableDescriptor{}
-	found, err := p.getDescriptor(tableKey{parentID: dbDesc.ID, name: tn.Table()}, &desc)
+	found, err := getDescriptor(txn, tableKey{parentID: dbDesc.ID, name: tn.Table()}, &desc)
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +159,15 @@ func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescri
 	return &desc, nil
 }
 
-// getTableDesc implements the SchemaAccessor interface.
 func (p *planner) getTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getTableOrViewDesc(tn)
+	return getTableDesc(p.txn, &p.session.virtualSchemas, tn)
+}
+
+// getTableDesc implements the SchemaAccessor interface.
+func getTableDesc(
+	txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	desc, err := getTableOrViewDesc(txn, vt, tn)
 	if err != nil {
 		return desc, err
 	}
@@ -194,7 +206,13 @@ func (p *planner) mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDe
 
 // mustGetTableDesc implements the SchemaAccessor interface.
 func (p *planner) mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getTableDesc(tn)
+	return mustGetTableDesc(p.txn, &p.session.virtualSchemas, tn)
+}
+
+func mustGetTableDesc(
+	txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	desc, err := getTableDesc(txn, vt, tn)
 	if err != nil {
 		return nil, err
 	}

@@ -88,37 +88,10 @@ func (p *planner) Insert(
 	// columns receiving a default value.
 	numInputColumns := len(cols)
 
-	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(cols))
-	for _, col := range cols {
-		colIDSet[col.ID] = struct{}{}
+	cols, defaultExprs, err := ProcessDefaultColumns(cols, en.tableDesc, &p.parser, &p.evalCtx)
+	if err != nil {
+		return nil, err
 	}
-
-	// Add the column if it has a DEFAULT expression.
-	addIfDefault := func(col sqlbase.ColumnDescriptor) {
-		if col.DefaultExpr != nil {
-			if _, ok := colIDSet[col.ID]; !ok {
-				colIDSet[col.ID] = struct{}{}
-				cols = append(cols, col)
-			}
-		}
-	}
-
-	// Add any column that has a DEFAULT expression.
-	for _, col := range en.tableDesc.Columns {
-		addIfDefault(col)
-	}
-	// Also add any column in a mutation that is WRITE_ONLY and has
-	// a DEFAULT expression.
-	for _, m := range en.tableDesc.Mutations {
-		if m.State != sqlbase.DescriptorMutation_WRITE_ONLY {
-			continue
-		}
-		if col := m.GetColumn(); col != nil {
-			addIfDefault(*col)
-		}
-	}
-
-	defaultExprs, err := makeDefaultExprs(cols, &p.parser, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +132,7 @@ func (p *planner) Insert(
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}
-	ri, err := makeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
+	ri, err := MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +194,7 @@ func (p *planner) Insert(
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
 		insertCols:            ri.insertCols,
-		insertColIDtoRowIndex: ri.insertColIDtoRowIndex,
+		insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
 		tw: tw,
 	}
 
@@ -234,6 +207,48 @@ func (p *planner) Insert(
 	}
 
 	return in, nil
+}
+
+// ProcessDefaultColumns adds columns with DEFAULT to cols if not present
+// and returns the defaultExprs for cols.
+func ProcessDefaultColumns(
+	cols []sqlbase.ColumnDescriptor,
+	tableDesc *sqlbase.TableDescriptor,
+	parse *parser.Parser,
+	evalCtx *parser.EvalContext,
+) ([]sqlbase.ColumnDescriptor, []parser.TypedExpr, error) {
+	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(cols))
+	for _, col := range cols {
+		colIDSet[col.ID] = struct{}{}
+	}
+
+	// Add the column if it has a DEFAULT expression.
+	addIfDefault := func(col sqlbase.ColumnDescriptor) {
+		if col.DefaultExpr != nil {
+			if _, ok := colIDSet[col.ID]; !ok {
+				colIDSet[col.ID] = struct{}{}
+				cols = append(cols, col)
+			}
+		}
+	}
+
+	// Add any column that has a DEFAULT expression.
+	for _, col := range tableDesc.Columns {
+		addIfDefault(col)
+	}
+	// Also add any column in a mutation that is WRITE_ONLY and has
+	// a DEFAULT expression.
+	for _, m := range tableDesc.Mutations {
+		if m.State != sqlbase.DescriptorMutation_WRITE_ONLY {
+			continue
+		}
+		if col := m.GetColumn(); col != nil {
+			addIfDefault(*col)
+		}
+	}
+
+	defaultExprs, err := makeDefaultExprs(cols, parse, evalCtx)
+	return cols, defaultExprs, err
 }
 
 func (n *insertNode) expandPlan() error {
@@ -294,45 +309,9 @@ func (n *insertNode) Next() (bool, error) {
 		return true, nil
 	}
 
-	rowVals := n.run.rows.Values()
-
-	// The values for the row may be shorter than the number of columns being
-	// inserted into. Generate default values for those columns using the
-	// default expressions.
-
-	if len(rowVals) < len(n.insertCols) {
-		// It's not cool to append to the slice returned by a node; make a copy.
-		oldVals := rowVals
-		rowVals = make(parser.DTuple, len(n.insertCols))
-		copy(rowVals, oldVals)
-
-		for i := len(oldVals); i < len(n.insertCols); i++ {
-			if n.defaultExprs == nil {
-				rowVals[i] = parser.DNull
-				continue
-			}
-			d, err := n.defaultExprs[i].Eval(&n.p.evalCtx)
-			if err != nil {
-				return false, err
-			}
-			rowVals[i] = d
-		}
-	}
-
-	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range n.tableDesc.Columns {
-		if !col.Nullable {
-			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-				return false, sqlbase.NewNonNullViolationError(col.Name)
-			}
-		}
-	}
-
-	// Ensure that the values honor the specified column widths.
-	for i := range rowVals {
-		if err := sqlbase.CheckValueWidth(n.insertCols[i], rowVals[i]); err != nil {
-			return false, err
-		}
+	rowVals, err := GenerateInsertRow(n.defaultExprs, n.insertColIDtoRowIndex, n.insertCols, n.p.evalCtx, n.tableDesc, n.run.rows.Values())
+	if err != nil {
+		return false, err
 	}
 
 	n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false)
@@ -340,7 +319,7 @@ func (n *insertNode) Next() (bool, error) {
 		return false, err
 	}
 
-	_, err := n.tw.row(ctx, rowVals)
+	_, err = n.tw.row(ctx, rowVals)
 	if err != nil {
 		return false, err
 	}
@@ -358,6 +337,57 @@ func (n *insertNode) Next() (bool, error) {
 	n.run.resultRow = resultRow
 
 	return true, nil
+}
+
+// GenerateInsertRow prepares a row tuple for insertion. It fills in default
+// expressions, verifies non-nullable columns, and checks column widths.
+func GenerateInsertRow(
+	defaultExprs []parser.TypedExpr,
+	insertColIDtoRowIndex map[sqlbase.ColumnID]int,
+	insertCols []sqlbase.ColumnDescriptor,
+	evalCtx parser.EvalContext,
+	tableDesc *sqlbase.TableDescriptor,
+	rowVals parser.DTuple,
+) (parser.DTuple, error) {
+	// The values for the row may be shorter than the number of columns being
+	// inserted into. Generate default values for those columns using the
+	// default expressions.
+
+	if len(rowVals) < len(insertCols) {
+		// It's not cool to append to the slice returned by a node; make a copy.
+		oldVals := rowVals
+		rowVals = make(parser.DTuple, len(insertCols))
+		copy(rowVals, oldVals)
+
+		for i := len(oldVals); i < len(insertCols); i++ {
+			if defaultExprs == nil {
+				rowVals[i] = parser.DNull
+				continue
+			}
+			d, err := defaultExprs[i].Eval(&evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			rowVals[i] = d
+		}
+	}
+
+	// Check to see if NULL is being inserted into any non-nullable column.
+	for _, col := range tableDesc.Columns {
+		if !col.Nullable {
+			if i, ok := insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
+				return nil, sqlbase.NewNonNullViolationError(col.Name)
+			}
+		}
+	}
+
+	// Ensure that the values honor the specified column widths.
+	for i := range rowVals {
+		if err := sqlbase.CheckValueWidth(insertCols[i], rowVals[i]); err != nil {
+			return nil, err
+		}
+	}
+	return rowVals, nil
 }
 
 func (p *planner) processColumns(
