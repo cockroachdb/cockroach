@@ -1859,9 +1859,6 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		RangeID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,
-		Message: raftpb.Message{
-			Type: raftpb.MsgHeartbeat,
-		},
 		Heartbeats: []storage.RaftHeartbeat{
 			{
 				RangeID:       rangeID,
@@ -1914,8 +1911,6 @@ func TestRemovePlaceholderRace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	ident := mtc.idents[1]
 	ctx := repl.AnnotateCtx(context.Background())
 
 	for i := 0; i < 100; i++ {
@@ -1924,8 +1919,8 @@ func TestRemovePlaceholderRace(t *testing.T) {
 				ctx,
 				action,
 				roachpb.ReplicaDescriptor{
-					NodeID:  ident.NodeID,
-					StoreID: ident.StoreID,
+					NodeID:  mtc.stores[1].Ident.NodeID,
+					StoreID: mtc.stores[1].Ident.StoreID,
 				},
 				repl.Desc(),
 			); err != nil {
@@ -2264,7 +2259,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		switch pErr.GetDetail().(type) {
 		case *roachpb.ReplicaTooOldError:
 		default:
-			t.Fatalf("unexpected error type %T: %s", pErr, pErr)
+			t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("did not get expected error")
