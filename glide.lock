@@ -1,5 +1,5 @@
 hash: 638d0ab13b3ebe6c328d403f9fbc3ea8ca8ceb755c8c4047023fb53e4a2bb8f0
-updated: 2016-12-01T20:35:23.065303599-05:00
+updated: 2016-12-02T13:36:08.475425592-05:00
 imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
@@ -196,7 +196,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: d249fdabe04c1347b4d2de79ddefa161ba989419
+  version: 3699758ec6e003d09bb521274c0cc01a798e45d7
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -231,7 +231,7 @@ imports:
   subpackages:
   - wire
 - name: github.com/opentracing/opentracing-go
-  version: 137bfcefd3340b28186f4fd3608719fcb120f98f
+  version: ac5446f53f2c0fc68dc16dc5f426eae1cd288b34
   subpackages:
   - ext
   - log
@@ -310,7 +310,7 @@ imports:
   subpackages:
   - internal
 - name: golang.org/x/sys
-  version: d5645953809d8b4752afb2c3224b1f1ad73dfa70
+  version: ca83bd2cb9abb47839b50eb4da612f00158f5870
   subpackages:
   - unix
   - windows
@@ -367,8 +367,9 @@ imports:
 - name: honnef.co/go/ssa
   version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
-  version: 66144fd3521952097bebe10e173210be47d9d219
+  version: 333d80cd00e6fbc09e8c8e45587a1dbfcddbda2c
   subpackages:
+  - pure
   - vrp
 - name: honnef.co/go/unused
   version: 87353912d70354d751e22c0142883412b5eeb55f
