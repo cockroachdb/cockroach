@@ -53,8 +53,8 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			if !ok || filterArgs.Sid != 2 {
 				return nil
 			}
-			rct := et.InternalCommitTrigger.GetChangeReplicasTrigger()
-			if rct == nil || rct.ChangeType != roachpb.REMOVE_REPLICA {
+			crt := et.InternalCommitTrigger.GetChangeReplicasTrigger()
+			if crt == nil || crt.ChangeType != roachpb.REMOVE_REPLICA {
 				return nil
 			}
 			util.SucceedsSoon(t, func() error {

@@ -157,8 +157,8 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
-// ManualReplicaGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualReplicaGC(repl *Replica) error {
+// ManualGC processes the specified replica using the store's GC queue.
+func (s *Store) ManualGC(repl *Replica) error {
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
 		return fmt.Errorf("%s: system config not yet available", s)
