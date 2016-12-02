@@ -1093,6 +1093,13 @@ SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
 `,
 		},
+		{
+			`CREATE USER foo WITH PASSWORD`,
+			`syntax error at or near "EOF"
+CREATE USER foo WITH PASSWORD
+                             ^
+`,
+		},
 	}
 	for _, d := range testData {
 		_, err := parseTraditional(d.sql)

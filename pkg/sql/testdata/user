@@ -20,6 +20,9 @@ CREATE USER user1
 statement error user user1 already exists
 CREATE USER UsEr1
 
+statement error empty passwords are not permitted
+CREATE USER test WITH PASSWORD ''
+
 statement ok
 CREATE USER uSEr2 WITH PASSWORD 'cockroach'
 

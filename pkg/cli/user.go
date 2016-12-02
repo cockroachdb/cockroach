@@ -125,11 +125,6 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-	} else {
-		hashed, err = security.HashPassword("")
-		if err != nil {
-			return err
-		}
 	}
 
 	conn, err := getPasswordAndMakeSQLClient()
