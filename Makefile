@@ -200,8 +200,6 @@ protobuf:
 
 include .go-version
 
-ifneq ($(SKIP_BOOTSTRAP),1)
-
 # If we're in a git worktree, the git hooks directory may not be in our root,
 # so we ask git for the location.
 #
@@ -229,6 +227,8 @@ $(GLOCK):
 	git submodule update --init
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
+
+ifneq ($(SKIP_BOOTSTRAP),1)
 
 include .bootstrap
 
