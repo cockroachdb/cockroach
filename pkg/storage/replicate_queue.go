@@ -48,15 +48,15 @@ const (
 )
 
 var (
-	metaAddReplicaCount = metric.Metadata{Name: "queue.replicate.addreplica",
+	metaReplicateQueueAddReplicaCount = metric.Metadata{Name: "queue.replicate.addreplica",
 		Help: "Number of replica additions attempted by the replicate queue"}
-	metaRemoveReplicaCount = metric.Metadata{Name: "queue.replicate.removereplica",
+	metaReplicateQueueRemoveReplicaCount = metric.Metadata{Name: "queue.replicate.removereplica",
 		Help: "Number of replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)"}
-	metaRemoveDeadReplicaCount = metric.Metadata{Name: "queue.replicate.removedeadreplica",
+	metaReplicateQueueRemoveDeadReplicaCount = metric.Metadata{Name: "queue.replicate.removedeadreplica",
 		Help: "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)"}
-	metaRebalanceReplicaCount = metric.Metadata{Name: "queue.replicate.rebalancereplica",
+	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{Name: "queue.replicate.rebalancereplica",
 		Help: "Number of replica rebalancer-initiated additions attempted by the replicate queue"}
-	metaTransferLeaseCount = metric.Metadata{Name: "queue.replicate.transferlease",
+	metaReplicateQueueTransferLeaseCount = metric.Metadata{Name: "queue.replicate.transferlease",
 		Help: "Number of range lease transfers attempted by the replicate queue"}
 )
 
@@ -71,11 +71,11 @@ type ReplicateQueueMetrics struct {
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 	return ReplicateQueueMetrics{
-		AddReplicaCount:        metric.NewCounter(metaAddReplicaCount),
-		RemoveReplicaCount:     metric.NewCounter(metaRemoveReplicaCount),
-		RemoveDeadReplicaCount: metric.NewCounter(metaRemoveDeadReplicaCount),
-		RebalanceReplicaCount:  metric.NewCounter(metaRebalanceReplicaCount),
-		TransferLeaseCount:     metric.NewCounter(metaTransferLeaseCount),
+		AddReplicaCount:        metric.NewCounter(metaReplicateQueueAddReplicaCount),
+		RemoveReplicaCount:     metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
+		RemoveDeadReplicaCount: metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
+		RebalanceReplicaCount:  metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
+		TransferLeaseCount:     metric.NewCounter(metaReplicateQueueTransferLeaseCount),
 	}
 }
 
