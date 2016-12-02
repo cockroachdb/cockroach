@@ -33,6 +33,9 @@ import (
 // For now, we use the library's default cost.
 const bcryptCost = bcrypt.DefaultCost
 
+// ErrEmptyPassword indicates that an empty password was attempted to be set.
+var ErrEmptyPassword = errors.New("empty passwords are not permitted")
+
 func compareHashAndPassword(hashedPassword []byte, password string) error {
 	h := sha256.New()
 	return bcrypt.CompareHashAndPassword(hashedPassword, h.Sum([]byte(password)))
@@ -53,7 +56,7 @@ func PromptForPassword() (string, error) {
 		return "", err
 	}
 	if len(one) == 0 {
-		return "", errors.New("empty passwords not permitted")
+		return "", ErrEmptyPassword
 	}
 	fmt.Print("\nConfirm password: ")
 	two, err := terminal.ReadPassword(syscall.Stdin)

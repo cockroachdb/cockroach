@@ -298,6 +298,9 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 		}
 
 		resolvedPassword = string(*password.(*parser.DString))
+		if resolvedPassword == "" {
+			return nil, security.ErrEmptyPassword
+		}
 	}
 
 	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil

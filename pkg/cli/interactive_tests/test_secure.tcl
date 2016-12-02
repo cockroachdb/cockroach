@@ -57,7 +57,7 @@ eexpect $prompt
 send "$argv user set carl --password --ca-cert=$ca_crt --cert=$root_crt --key=$root_key\r"
 eexpect "Enter password:"
 send "\r"
-eexpect "empty passwords not permitted"
+eexpect "empty passwords are not permitted"
 
 eexpect $prompt
 
