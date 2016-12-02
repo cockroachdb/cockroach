@@ -295,7 +295,6 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		returnToken := rdc.makeEvictionToken(desc, func() error {
 			return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 		})
-		log.Event(ctx, "looked up range descriptor from cache")
 		return desc, returnToken, nil
 	}
 
