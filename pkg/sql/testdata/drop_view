@@ -95,11 +95,7 @@ DROP VIEW testuser3
 query T
 SHOW TABLES FROM test
 ----
-a
-b
-c
 d
-diamond
 testuser1
 testuser2
 
@@ -115,11 +111,7 @@ DROP VIEW testuser1 CASCADE
 query T
 SHOW TABLES FROM test
 ----
-a
-b
-c
 d
-diamond
 
 statement error pgcode 42P01 view "testuser2" does not exist
 DROP VIEW testuser2

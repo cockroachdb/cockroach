@@ -360,7 +360,7 @@ w      DECIMAL                   true   NULL
 x      DECIMAL(1)                true   NULL
 y      DECIMAL(2,1)              true   NULL
 z      DECIMAL                   true   NULL
-aa      DECIMAL(1)                true   NULL
+aa     DECIMAL(1)                true   NULL
 ab     DECIMAL(2,1)              true   NULL
 ac     DATE                      true   NULL
 ad     TIMESTAMP                 true   NULL
@@ -372,7 +372,6 @@ ai     BYTES                     true   NULL
 aj     BYTES                     true   NULL
 ak     BYTES                     true   NULL
 al     INTERVAL                  true   NULL
-rowid  INT                       false  unique_rowid()
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng;

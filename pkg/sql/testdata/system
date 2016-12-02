@@ -122,27 +122,38 @@ config BYTES true NULL
 query TTT
 SHOW GRANTS ON DATABASE system
 ----
-system root GRANT,SELECT
+system  root  GRANT
+system  root  SELECT
 
 query TTT
 SHOW GRANTS ON system.namespace
 ----
-namespace root GRANT,SELECT
+namespace  root  GRANT
+namespace  root  SELECT
 
 query TTT
 SHOW GRANTS ON system.descriptor
 ----
-descriptor root GRANT,SELECT
+descriptor  root  GRANT
+descriptor  root  SELECT
 
 query TTT
 SHOW GRANTS ON system.users
 ----
-users root DELETE,GRANT,INSERT,SELECT,UPDATE
+users  root  DELETE
+users  root  GRANT
+users  root  INSERT
+users  root  SELECT
+users  root  UPDATE
 
 query TTT
 SHOW GRANTS ON system.zones
 ----
-zones root DELETE,GRANT,INSERT,SELECT,UPDATE
+zones  root  DELETE
+zones  root  GRANT
+zones  root  INSERT
+zones  root  SELECT
+zones  root  UPDATE
 
 query TTT
 SHOW GRANTS ON system.lease
