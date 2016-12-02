@@ -308,9 +308,13 @@ func (n *createUserNode) expandPlan() error {
 }
 
 func (n *createUserNode) Start() error {
-	hashedPassword, err := security.HashPassword(n.password)
-	if err != nil {
-		return err
+	var hashedPassword []byte
+	if n.password != "" {
+		var err error
+		hashedPassword, err = security.HashPassword(n.password)
+		if err != nil {
+			return err
+		}
 	}
 
 	normalizedUsername := n.n.Name.Normalize()
