@@ -1,6 +1,11 @@
-hash: 638d0ab13b3ebe6c328d403f9fbc3ea8ca8ceb755c8c4047023fb53e4a2bb8f0
-updated: 2016-12-02T13:36:08.475425592-05:00
+hash: 936f209181dbc61da290ad09e7164e1f364fbf4200befb293f06be0c1126dd00
+updated: 2016-12-02T22:51:30.769759354Z
 imports:
+- name: cloud.google.com/go
+  version: 2b8eb373216db8c887f4934051ab8338581e3656
+  subpackages:
+  - internal/optional
+  - storage
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/agtorre/gocolorize
@@ -163,6 +168,8 @@ imports:
   version: 9235644dd9e52eeae6fa48efd539fdc351a0af53
   subpackages:
   - query
+- name: github.com/googleapis/gax-go
+  version: da06d194a00e19ce00d9011a13931c3f6f6887c7
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 84398b94e188ee336f307779b57b3aa91af7063c
   subpackages:
@@ -255,6 +262,8 @@ imports:
   version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
   subpackages:
   - exp
+- name: github.com/rlmcpherson/s3gof3r
+  version: bc1aca74326ad100d0aa82bfa9ce6e9278620750
 - name: github.com/robfig/glock
   version: 4222fa46a09f9ac1e2fc20bd1053e1e866d0a01f
 - name: github.com/rubyist/circuitbreaker
@@ -306,9 +315,12 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: f6093e37b6cb4092101a298aba5d794eb570757f
+  version: 045497edb6234273d67dbc25da3f2ddbc4c4cacf
   subpackages:
+  - google
   - internal
+  - jws
+  - jwt
 - name: golang.org/x/sys
   version: ca83bd2cb9abb47839b50eb4da612f00158f5870
   subpackages:
@@ -333,21 +345,44 @@ imports:
   - go/buildutil
   - go/loader
   - go/types/typeutil
+- name: google.golang.org/api
+  version: 3ef9447cad8d725923ca024dab57786299cf745a
+  subpackages:
+  - gensupport
+  - googleapi
+  - googleapi/internal/uritemplates
+  - internal
+  - iterator
+  - option
+  - storage/v1
+  - transport
 - name: google.golang.org/appengine
   version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
   subpackages:
   - internal
+  - internal/app_identity
   - internal/base
   - internal/datastore
   - internal/log
+  - internal/modules
   - internal/remote_api
+  - internal/socket
   - internal/urlfetch
+  - socket
   - urlfetch
+- name: google.golang.org/cloud
+  version: 975617b05ea8a58727e6c1a06b6161ff4185a9f2
+  subpackages:
+  - compute/metadata
+  - internal
+  - internal/opts
+  - storage
 - name: google.golang.org/grpc
   version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
   subpackages:
   - codes
   - credentials
+  - credentials/oauth
   - grpclog
   - internal
   - metadata
