@@ -990,8 +990,8 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 		{existing: existing, leaseholder: 3, check: true, expected: 1},
 		{existing: existing, leaseholder: 3, check: false, expected: 1},
 	}
-	for i, c := range testCases {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(config.Constraints{},
 				c.existing, c.leaseholder, 0, c.check)
 			if c.expected != target.StoreID {
@@ -1053,8 +1053,8 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		{leaseholder: 3, existing: replicas(4), expected: false},
 		{leaseholder: 4, existing: nil, expected: true},
 	}
-	for i, c := range testCases {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
 			result := a.ShouldTransferLease(config.Constraints{}, c.existing, c.leaseholder, 0)
 			if c.expected != result {
 				t.Fatalf("expected %v, but found %v", c.expected, result)
@@ -1695,8 +1695,8 @@ func TestFilterBehindReplicas(t *testing.T) {
 		{[]uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
 		{[]uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
 	}
-	for i, c := range testCases {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
 				Progress: make(map[uint64]raft.Progress),
 			}
@@ -1714,7 +1714,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 				ids = append(ids, uint64(c.StoreID))
 			}
 			if !reflect.DeepEqual(c.expected, ids) {
-				t.Fatalf("%d: expected %d, but got %d", i, c.expected, ids)
+				t.Fatalf("expected %d, but got %d", c.expected, ids)
 			}
 		})
 	}

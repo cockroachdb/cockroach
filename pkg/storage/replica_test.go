@@ -6054,8 +6054,8 @@ func TestSetReplicaID(t *testing.T) {
 		{1, 2, 1, ""}, // not an error; replicaID == newReplicaID is checked first
 		{2, 0, 1, "replicaID cannot move backwards"},
 	}
-	for i, c := range testCases {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
 			repl.mu.Lock()
 			repl.mu.replicaID = c.replicaID
 			repl.mu.minReplicaID = c.minReplicaID
