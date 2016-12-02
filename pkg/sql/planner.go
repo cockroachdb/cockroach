@@ -120,7 +120,7 @@ type queryRunner interface {
 	// expected and returns that row.
 	queryRow(sql string, args ...interface{}) (parser.DTuple, error)
 
-	// queryRow executes a SQL query string where multiple result rows are returned.
+	// queryRows executes a SQL query string where multiple result rows are returned.
 	queryRows(sql string, args ...interface{}) ([]parser.DTuple, error)
 
 	// queryRowsAsRoot executes a SQL query string using security.RootUser
@@ -342,7 +342,7 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, e
 	return rows, nil
 }
 
-// queryRows implements the queryRunner interface.
+// queryRowsAsRoot implements the queryRunner interface.
 func (p *planner) queryRowsAsRoot(sql string, args ...interface{}) ([]parser.DTuple, error) {
 	currentUser := p.session.User
 	defer func() { p.session.User = currentUser }()

@@ -132,7 +132,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		constructor: func(p *planner) (planNode, error) {
 			const getColumns = `SELECT COLUMN_NAME AS "Field", DATA_TYPE AS "Type", (IS_NULLABLE!='NO') AS "Null",` +
 				` COLUMN_DEFAULT AS "Default" FROM information_schema.columns WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2` +
-				` ORDER BY ORDINAL_POSITION;`
+				` ORDER BY ORDINAL_POSITION`
 			{
 				// Check if the database exists by using the security.RootUser.
 				values, err := p.queryRowsAsRoot(checkSchema, tn.Database())
@@ -421,7 +421,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	const getDatabases = `SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata
-							ORDER BY "Database";`
+							ORDER BY "Database"`
 	stmt, err := parser.ParseOneTraditional(getDatabases)
 	if err != nil {
 		return nil, err
