@@ -35,6 +35,8 @@ func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
 
 //line sql.y:50
 
+// RANDOM DIFF
+
 // sqlSymUnion represents a union of types, providing accessor methods
 // to retrieve the underlying type stored in the union's empty interface.
 // The purpose of the sqlSymUnion struct is to reduce the memory footprint of
