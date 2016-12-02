@@ -142,23 +142,26 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		})
 	defer tc.Stopper().Stop()
 
-	// Take down the first node of the cluster and replace it with a new one.
-	// We replace the first node rather than the second or third to be adversarial
-	// because it typically has the most leases on it.
-	oldNodeIdx := 0
+	// Take down the a node other than first node and replace it with a new one.
+	// Replacing the first node would be better from an adversarial testing,
+	// perspective because it typically has the most leases on it, but that also
+	// causes the test to take significantly longer as a result.
+	// TODO(a-robinson): Try switching back to using the first node once we start
+	// actively draining leases from nodes that are going down (#10765).
+	oldNodeIdx := 1
 	newServerArgs := base.TestServerArgs{
 		Addr:          tc.Servers[oldNodeIdx].ServingAddr(),
 		PartOfCluster: true,
-		JoinAddr:      tc.Servers[1].ServingAddr(),
+		JoinAddr:      tc.Servers[0].ServingAddr(),
 	}
 	tc.StopServer(oldNodeIdx)
 	tc.AddServer(t, newServerArgs)
-	tc.WaitForStores(t, tc.Server(1).Gossip())
+	tc.WaitForStores(t, tc.Server(0).Gossip())
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first
 	// node, they can get stuck here.
-	for i := 1; i < 4; i++ {
+	for _, i := range []int{0, 2, 3} {
 		kvClient := tc.Server(i).KVClient().(*client.DB)
 		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
 			t.Errorf("failed Put to node %d: %s", i, err)
