@@ -52,6 +52,9 @@ func PromptForPassword() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(one) == 0 {
+		return "", errors.New("empty passwords not permitted")
+	}
 	fmt.Print("\nConfirm password: ")
 	two, err := terminal.ReadPassword(syscall.Stdin)
 	if err != nil {
@@ -72,6 +75,9 @@ func PromptForPasswordAndHash() ([]byte, error) {
 	password, err := PromptForPassword()
 	if err != nil {
 		return nil, err
+	}
+	if password == "" {
+		return nil, nil
 	}
 	return HashPassword(password)
 }
