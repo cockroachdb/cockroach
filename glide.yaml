@@ -163,6 +163,12 @@ import:
 - package: github.com/golang/glog
 - package: github.com/pborman/uuid
 - package: github.com/agtorre/gocolorize
+- package: github.com/rlmcpherson/s3gof3r
+- package: google.golang.org/api
+  version: 3ef9447cad8d725923ca024dab57786299cf745a
+- package: cloud.google.com/go
+  subpackages:
+  - storage
 testImport:
 - package: github.com/ghemawat/stream
 - package: github.com/go-sql-driver/mysql
