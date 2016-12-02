@@ -21,7 +21,7 @@ package syncutil
 import (
 	"time"
 
-	deadlock "github.com/tamird/go-deadlock"
+	deadlock "github.com/sasha-s/go-deadlock"
 )
 
 func init() {
