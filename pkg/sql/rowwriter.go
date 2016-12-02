@@ -123,11 +123,11 @@ func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.Colum
 	return colIDs, ok
 }
 
-// rowInserter abstracts the key/value operations for inserting table rows.
-type rowInserter struct {
+// RowInserter abstracts the key/value operations for inserting table rows.
+type RowInserter struct {
 	helper                rowHelper
 	insertCols            []sqlbase.ColumnDescriptor
-	insertColIDtoRowIndex map[sqlbase.ColumnID]int
+	InsertColIDtoRowIndex map[sqlbase.ColumnID]int
 	fks                   fkInsertHelper
 
 	// For allocation avoidance.
@@ -137,16 +137,16 @@ type rowInserter struct {
 	value      roachpb.Value
 }
 
-// makeRowInserter creates a rowInserter for the given table.
+// MakeRowInserter creates a RowInserter for the given table.
 //
 // insertCols must contain every column in the primary key.
-func makeRowInserter(
+func MakeRowInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	fkTables tableLookupsByID,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs bool,
-) (rowInserter, error) {
+) (RowInserter, error) {
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
 	for _, m := range tableDesc.Mutations {
@@ -157,22 +157,22 @@ func makeRowInserter(
 		}
 	}
 
-	ri := rowInserter{
+	ri := RowInserter{
 		helper:                rowHelper{tableDesc: tableDesc, indexes: indexes},
 		insertCols:            insertCols,
-		insertColIDtoRowIndex: colIDtoRowIndexFromCols(insertCols),
+		InsertColIDtoRowIndex: colIDtoRowIndexFromCols(insertCols),
 		marshalled:            make([]roachpb.Value, len(insertCols)),
 	}
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := ri.insertColIDtoRowIndex[col]; !ok {
-			return rowInserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+		if _, ok := ri.InsertColIDtoRowIndex[col]; !ok {
+			return RowInserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 
 	if checkFKs {
 		var err error
-		if ri.fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.insertColIDtoRowIndex); err != nil {
+		if ri.fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.InsertColIDtoRowIndex); err != nil {
 			return ri, err
 		}
 	}
@@ -181,7 +181,7 @@ func makeRowInserter(
 
 // insertCPutFn is used by insertRow when conflicts should be respected.
 // logValue is used for pretty printing.
-func insertCPutFn(ctx context.Context, b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
+func insertCPutFn(ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value) {
 	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
 	// client.Batch wrapper instead of inlining it everywhere.
 	if log.V(2) {
@@ -192,17 +192,22 @@ func insertCPutFn(ctx context.Context, b *client.Batch, key *roachpb.Key, value 
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 // logValue is used for pretty printing.
-func insertPutFn(ctx context.Context, b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
+func insertPutFn(ctx context.Context, b puter, key *roachpb.Key, value *roachpb.Value) {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "Put %s -> %s", *key, value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
 
-// insertRow adds to the batch the kv operations necessary to insert a table row
+type puter interface {
+	CPut(key, value, expValue interface{})
+	Put(key, value interface{})
+}
+
+// InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
-func (ri *rowInserter) insertRow(
-	ctx context.Context, b *client.Batch, values []parser.Datum, ignoreConflicts bool,
+func (ri *RowInserter) InsertRow(
+	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool,
 ) error {
 	if len(values) != len(ri.insertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
@@ -228,7 +233,7 @@ func (ri *rowInserter) insertRow(
 		return err
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ri.helper.encodeIndexes(ri.insertColIDtoRowIndex, values)
+	primaryIndexKey, secondaryIndexEntries, err := ri.helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
@@ -249,7 +254,7 @@ func (ri *rowInserter) insertRow(
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
 
-			idx, ok := ri.insertColIDtoRowIndex[family.DefaultColumnID]
+			idx, ok := ri.InsertColIDtoRowIndex[family.DefaultColumnID]
 			if !ok {
 				continue
 			}
@@ -285,7 +290,7 @@ func (ri *rowInserter) insertRow(
 				continue
 			}
 
-			idx, ok := ri.insertColIDtoRowIndex[colID]
+			idx, ok := ri.InsertColIDtoRowIndex[colID]
 			if !ok {
 				// Column not being inserted.
 				continue
@@ -334,7 +339,7 @@ type rowUpdater struct {
 	primaryKeyColChange   bool
 
 	rd rowDeleter
-	ri rowInserter
+	ri RowInserter
 
 	fks fkUpdateHelper
 
@@ -450,7 +455,7 @@ func makeRowUpdater(
 		}
 		ru.fetchCols = ru.rd.fetchCols
 		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
-		if ru.ri, err = makeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
+		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
 			return rowUpdater{}, err
 		}
 	} else {
@@ -581,7 +586,7 @@ func (ru *rowUpdater) updateRow(
 		if err := ru.rd.deleteRow(ctx, b, oldValues); err != nil {
 			return nil, err
 		}
-		if err := ru.ri.insertRow(ctx, b, ru.newValues, false); err != nil {
+		if err := ru.ri.InsertRow(ctx, b, ru.newValues, false); err != nil {
 			return nil, err
 		}
 		return ru.newValues, nil
