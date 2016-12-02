@@ -152,7 +152,6 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
-		log.Event(ctx, "meta descriptor lookup")
 		var err error
 		ri.desc, ri.token, err = ri.ds.getDescriptor(
 			ctx, ri.key, ri.token, ri.scanDir == Descending)

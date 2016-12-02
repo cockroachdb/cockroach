@@ -50,13 +50,23 @@ func contextBottomTag(ctx context.Context) *logTag {
 	return val.(*logTag)
 }
 
-func contextLogTags(ctx context.Context) []logTag {
-	var tags []logTag
-	for t := contextBottomTag(ctx); t != nil; t = t.parent {
-		tags = append(tags, *t)
+func contextLogTags(ctx context.Context, tags []*logTag) []*logTag {
+	t := contextBottomTag(ctx)
+	if t == nil {
+		return nil
 	}
-	for i, j := 0, len(tags)-1; i < j; i, j = i+1, j-1 {
-		tags[i], tags[j] = tags[j], tags[i]
+	var n int
+	for q := t; q != nil; q = q.parent {
+		n++
+	}
+	if cap(tags) < n {
+		tags = make([]*logTag, n)
+	} else {
+		tags = tags[:n]
+	}
+	for ; t != nil; t = t.parent {
+		n--
+		tags[n] = t
 	}
 	return tags
 }
