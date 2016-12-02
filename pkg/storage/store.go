@@ -3709,6 +3709,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if rep.mu.quiescent || rep.mu.internalRaftGroup == nil {
 			quiescentCount++
 		}
+		desc := rep.mu.state.Desc
 		rep.mu.Unlock()
 
 		leaseCovers := lease.Covers(timestamp)
@@ -3717,7 +3718,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		// To avoid double counting, most stats are only counted on the raft
 		// leader. The lease holder count is the exception, which is counted by
 		// all replicas.
-		if raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader {
+		isLeader := raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader
+		if isLeader {
 			raftLeaderCount++
 
 			if leaseCovers {
@@ -3732,34 +3734,49 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 
 		if livenessMap != nil {
-			desc := rep.Desc()
-
-			// Count live replicas and determine the largest live replica ID to
-			// determine the replica responsible for range stats contributions.
-			// Note that the largest ID is an arbitrary choice. We want to select
-			// one live replica to do the counting that all replicas can agree on.
-			var liveReplicas int
+			// We gather per-range stats on either the leader or, if there is no
+			// leader, the largest live replica ID. Note that the largest ID is an
+			// arbitrary choice. We want to select one live replica to do the
+			// counting that all replicas can agree on.
+			//
+			// Count good replicas: those which are on a live node and, if there is
+			// a leader, which are not too far behind.
+			hasLeader := isLeader || raftStatus != nil && raftStatus.SoftState.Lead != 0
+			var goodReplicas int
 			highestIdx := -1
 			for i, rd := range desc.Replicas {
 				if livenessMap[rd.NodeID] {
-					liveReplicas++
-					if highestIdx == -1 || rd.ReplicaID > desc.Replicas[highestIdx].ReplicaID {
+					if !hasLeader &&
+						(highestIdx == -1 || rd.ReplicaID > desc.Replicas[highestIdx].ReplicaID) {
 						highestIdx = i
+					}
+
+					if !isLeader {
+						goodReplicas++
+					} else if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
+						// TODO(peter): Put more thought into this value. A single range
+						// can process thousands of ops/sec, so a replica that is 1000 Raft
+						// log entries behind is fairly current.
+						const behindThreshold = 1000
+						if progress.Match+behindThreshold >= raftStatus.Commit {
+							goodReplicas++
+						}
 					}
 				}
 			}
 
-			// If this replica is the highest replica ID, it does the counting.
-			if highestIdx != -1 && desc.Replicas[highestIdx].StoreID == s.StoreID() {
+			// If this replica is the leader or there isn't a leader and it is the
+			// highest replica ID, it does the counting.
+			if isLeader || (highestIdx != -1 && desc.Replicas[highestIdx].StoreID == s.StoreID()) {
 				rangeCount++
-				if liveReplicas < computeQuorum(len(desc.Replicas)) {
+				if goodReplicas < computeQuorum(len(desc.Replicas)) {
 					unavailableRangeCount++
 				}
 
 				if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 					log.Error(ctx, err)
 				} else {
-					if int32(liveReplicas) < zoneConfig.NumReplicas {
+					if int32(goodReplicas) < zoneConfig.NumReplicas {
 						underreplicatedRangeCount++
 					}
 				}
