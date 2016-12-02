@@ -19,6 +19,7 @@ package log
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 
 	"golang.org/x/net/context"
 
@@ -29,6 +30,7 @@ import (
 // msgBuf extends bytes.Buffer and implements otlog.Encoder.
 type msgBuf struct {
 	bytes.Buffer
+	tagBuf [8]*logTag
 }
 
 var _ otlog.Encoder = &msgBuf{}
@@ -49,49 +51,53 @@ func (b *msgBuf) EmitString(key, value string) {
 
 func (b *msgBuf) EmitBool(key string, value bool) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.FormatBool(value))
 }
 
 func (b *msgBuf) EmitInt(key string, value int) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.Itoa(value))
 }
 
 func (b *msgBuf) EmitInt32(key string, value int32) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.Itoa(int(value)))
 }
 
 func (b *msgBuf) EmitInt64(key string, value int64) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.FormatInt(value, 10))
 }
 
 func (b *msgBuf) EmitUint32(key string, value uint32) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.FormatUint(uint64(value), 10))
 }
 
 func (b *msgBuf) EmitUint64(key string, value uint64) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.FormatUint(value, 10))
 }
 
 func (b *msgBuf) EmitFloat32(key string, value float32) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.FormatFloat(float64(value), 'g', -1, 32))
 }
 
 func (b *msgBuf) EmitFloat64(key string, value float64) {
 	b.writeKey(key, true /* hasValue */)
-	fmt.Fprint(b, value)
+	b.WriteString(strconv.FormatFloat(value, 'g', -1, 64))
 }
 
 func (b *msgBuf) EmitObject(key string, value interface{}) {
 	hasValue := (value != nil)
 	b.writeKey(key, hasValue)
 	if hasValue {
-		fmt.Fprint(b, value)
+		if s, ok := value.(fmt.Stringer); ok {
+			b.WriteString(s.String())
+		} else {
+			fmt.Fprint(b, value)
+		}
 	}
 }
 
@@ -102,12 +108,12 @@ func (b *msgBuf) EmitLazyLogger(value otlog.LazyLogger) {
 // formatTags appends the tags to a bytes.Buffer. If there are no tags,
 // returns false.
 func formatTags(ctx context.Context, buf *msgBuf) bool {
-	tags := contextLogTags(ctx)
+	tags := contextLogTags(ctx, buf.tagBuf[:0])
 	if len(tags) > 0 {
-		buf.WriteString("[")
+		buf.WriteByte('[')
 		for i, t := range tags {
 			if i > 0 {
-				buf.WriteString(",")
+				buf.WriteByte(',')
 			}
 			t.Field.Marshal(buf)
 		}
