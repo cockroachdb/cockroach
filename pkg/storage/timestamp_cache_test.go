@@ -18,7 +18,6 @@ package storage
 
 import (
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -464,14 +463,14 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	tc := newTimestampCache(clock)
 
 	// Run each test case in several configurations.
-	for testCaseIdx, testCase := range []layeredIntervalTestCase{
+	for _, testCase := range []layeredIntervalTestCase{
 		layeredIntervalTestCase1,
 		layeredIntervalTestCase2,
 		layeredIntervalTestCase3,
 		layeredIntervalTestCase4,
 		layeredIntervalTestCase5,
 	} {
-		t.Run(strconv.Itoa(testCaseIdx), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			// In simultaneous runs, each span in the test case is given the same
 			// time. Otherwise each gets a distinct timestamp (in the order of
 			// definition).
