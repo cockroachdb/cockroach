@@ -79,7 +79,7 @@ var _ tableWriter = (*tableDeleter)(nil)
 
 // tableInserter handles writing kvs and forming table rows for inserts.
 type tableInserter struct {
-	ri         rowInserter
+	ri         RowInserter
 	autoCommit bool
 
 	// Set by init.
@@ -102,7 +102,7 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 }
 
 func (ti *tableInserter) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
-	return nil, ti.ri.insertRow(ctx, ti.b, values, false)
+	return nil, ti.ri.InsertRow(ctx, ti.b, values, false)
 }
 
 func (ti *tableInserter) finalize(_ context.Context) error {
@@ -202,7 +202,7 @@ type tableUpsertEvaler interface {
 // operated on during `row`, and run during `finalize`. This is the same model
 // as the other `tableFoo`s, which are more simple than upsert.
 type tableUpserter struct {
-	ri            rowInserter
+	ri            RowInserter
 	conflictIndex sqlbase.IndexDescriptor
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
@@ -298,7 +298,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
 	if tu.fastPathBatch != nil {
 		primaryKey, _, err := sqlbase.EncodeIndexKey(
-			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +306,7 @@ func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTu
 			return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
 		}
 		tu.fastPathKeys[string(primaryKey)] = struct{}{}
-		err = tu.ri.insertRow(ctx, tu.fastPathBatch, row, true)
+		err = tu.ri.InsertRow(ctx, tu.fastPathBatch, row, true)
 		return nil, err
 	}
 
@@ -331,7 +331,7 @@ func (tu *tableUpserter) flush(ctx context.Context) error {
 		existingRow := existingRows[i]
 
 		if existingRow == nil {
-			err := tu.ri.insertRow(ctx, b, insertRow, false)
+			err := tu.ri.InsertRow(ctx, b, insertRow, false)
 			if err != nil {
 				return err
 			}
@@ -368,7 +368,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 		// conflicts.
 		for i, insertRow := range tu.insertRows {
 			upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-				tu.tableDesc, &tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
+				tu.tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -384,7 +384,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 	b := tu.txn.NewBatch()
 	for _, insertRow := range tu.insertRows {
 		entry, err := sqlbase.EncodeSecondaryIndex(
-			tu.tableDesc, &tu.conflictIndex, tu.ri.insertColIDtoRowIndex, insertRow)
+			tu.tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
 		if err != nil {
 			return nil, err
 		}

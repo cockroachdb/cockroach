@@ -191,7 +191,13 @@ func (p *planner) createDescriptorWithID(
 func (p *planner) getDescriptor(
 	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
-	gr, err := p.txn.Get(plainKey.Key())
+	return getDescriptor(p.txn, plainKey, descriptor)
+}
+
+func getDescriptor(
+	txn *client.Txn, plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
+) (bool, error) {
+	gr, err := txn.Get(plainKey.Key())
 	if err != nil {
 		return false, err
 	}
@@ -201,7 +207,7 @@ func (p *planner) getDescriptor(
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
 	desc := &sqlbase.Descriptor{}
-	if err := p.txn.GetProto(descKey, desc); err != nil {
+	if err := txn.GetProto(descKey, desc); err != nil {
 		return false, err
 	}
 
@@ -217,7 +223,7 @@ func (p *planner) getDescriptor(
 		// but it's worth it to avoid having to do the upgrade every time the
 		// descriptor is fetched. Our current test for this enforces compatibility
 		// backward and forward, so that'll have to be extended before this is done.
-		if err := table.Validate(p.txn); err != nil {
+		if err := table.Validate(txn); err != nil {
 			return false, err
 		}
 		*t = *table

@@ -128,22 +128,35 @@ type DatabaseAccessor interface {
 
 var _ DatabaseAccessor = &planner{}
 
-// getDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if virtual := p.session.virtualSchemas.getVirtualDatabaseDesc(name); virtual != nil {
+	return getDatabaseDesc(p.txn, &p.session.virtualSchemas, name)
+}
+
+func getDatabaseDesc(
+	txn *client.Txn, vt VirtualTabler, name string,
+) (*sqlbase.DatabaseDescriptor, error) {
+	if virtual := vt.getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual, nil
 	}
 	desc := &sqlbase.DatabaseDescriptor{}
-	found, err := p.getDescriptor(databaseKey{name}, desc)
+	found, err := getDescriptor(txn, databaseKey{name}, desc)
 	if !found {
 		return nil, err
 	}
 	return desc, err
 }
 
-// getDatabaseDesc implements the DatabaseAccessor interface.
+// mustGetDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) mustGetDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := p.getDatabaseDesc(name)
+	return MustGetDatabaseDesc(p.txn, &p.session.virtualSchemas, name)
+}
+
+// MustGetDatabaseDesc looks up the database descriptor given its name,
+// returning an error if the descriptor is not found.
+func MustGetDatabaseDesc(
+	txn *client.Txn, vt VirtualTabler, name string,
+) (*sqlbase.DatabaseDescriptor, error) {
+	desc, err := getDatabaseDesc(txn, vt, name)
 	if err != nil {
 		return nil, err
 	}
