@@ -88,14 +88,10 @@ function inspect() {
   echo "unable to determine license"
 }
 
-# List the dependencies which are not part of the standard library
-# (i.e. packages that contain a least one dot in the first component
-# of their name).
-pkgs=$(go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... 2>/dev/null | \
-  sort -u | egrep '[^/]+\.[^/]+/')
-
-# For each package, list the package directory and package root.
-pkginfo=($(go list -f '{{.Dir}} {{.Root}}' ${pkgs} 2>/dev/null))
+# For each dependency which is not part of the standard library, list the
+# package directory and package root.
+pkginfo=($(go list -f '{{ join .Deps "\n"}}' ./pkg/... | sort | uniq | \
+  xargs go list -f '{{if not .Standard}}{{.Dir}} {{.Root}}{{end}}'))
 
 # Loop over the package info which comes in pairs in the pkginfo
 # array.

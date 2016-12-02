@@ -13,7 +13,7 @@
 
 2.  Get the CockroachDB code:
 
-	```bash
+	```shell
 	go get -d github.com/cockroachdb/cockroach
 	cd $GOPATH/src/github.com/cockroachdb/cockroach
 	```
@@ -26,12 +26,12 @@ will be in your current directory and can be run as shown in the
 [README](README.md).
 
 Note that if you edit a `.proto` or `.ts` file, you will need to manually
-regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate
-./...`.
+regenerate the associated `.pb.{go,cc,h}` or `.js` files using
+`go generate ./pkg/...`.
 
 We advise to run `go generate` using our embedded Docker setup.
 `build/builder.sh` is a wrapper script designed to make this convenient. You can
-run `build/builder.sh env SKIP_BOOTSTRAP=0 go generate ./...` from the repository
+run `build/builder.sh go generate ./pkg/...` from the repository
 root to get the intended result.
 
 If you want to run it outside of Docker, `go generate` requires a collection
@@ -66,7 +66,7 @@ To add or update a go dependency:
   Remember to write tests! The following are helpful for running specific
   subsets of tests:
 
-  ```bash
+  ```shell
   make test
   # Run all tests in ./pkg/storage
   make test PKG=./pkg/storage
@@ -87,9 +87,9 @@ To add or update a go dependency:
   not point to a specific package; those commits may begin with "*:" or "all:"
   to indicate their reach.
 
-+ Run the whole CI test suite locally: `./build/circle-local.sh`. This requires
-  the Docker setup; if you don't have/want that,
-  `go generate ./... && make check test testrace` is a good first approximation.
++ Run the test suite locally:
+
+  `go generate ./pkg/... && make check test testrace`
 
 + When you’re ready for review, groom your work: each commit should pass tests
   and contain a substantial (but not overwhelming) unit of work. You may also
@@ -151,7 +151,7 @@ Peeking into a running cluster can be done in several ways:
 An easy way to locally run a workload against a cluster are the acceptance
 tests. For example,
 
-```bash
+```shell
 make acceptance TESTS='TestPut$$' TESTFLAGS='-v -d 1200s -l .' TESTTIMEOUT=1210s
 ```
 
