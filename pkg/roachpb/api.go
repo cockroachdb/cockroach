@@ -267,10 +267,10 @@ func (rh *Span) SetHeader(other Span) {
 }
 
 // Header implements the Request interface.
-func (*NoopRequest) Header() Span { return Span{} }
+func (*NoopRequest) Header() Span { panic("NoopRequest has no span") }
 
 // SetHeader implements the Request interface.
-func (*NoopRequest) SetHeader(_ Span) {}
+func (*NoopRequest) SetHeader(_ Span) { panic("NoopRequest has no span") }
 
 // SetHeader implements the Response interface.
 func (rh *ResponseHeader) SetHeader(other ResponseHeader) {

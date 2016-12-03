@@ -2326,6 +2326,9 @@ func (s *Store) Send(
 	ctx = s.AnnotateCtx(ctx)
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
+		if _, ok := arg.(*roachpb.NoopRequest); ok {
+			continue
+		}
 		header := arg.Header()
 		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
 			return nil, roachpb.NewError(err)
