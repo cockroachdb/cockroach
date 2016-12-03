@@ -18,7 +18,6 @@ package storage
 
 import (
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -239,20 +239,23 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 func TestAllocateWithStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	store, _ := createTestStore(t, stopper)
-	idAlloc, err := newIDAllocator(
-		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
-	)
-	if err != nil {
-		log.Fatal(context.Background(), err)
-	}
 
-	stopper.Stop()
+	// Wrap things in a function so we can defer the stopper, but have it stop
+	// before the end of the test.
+	idAlloc := func() *idAllocator {
+		stopper := stop.NewStopper()
+		defer stopper.Stop()
+		store, _ := createTestStore(t, stopper)
+		idAlloc, err := newIDAllocator(
+			log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return idAlloc
+	}()
 
-	if _, err := idAlloc.Allocate(); err == nil {
-		t.Errorf("unexpected success")
-	} else if !strings.Contains(err.Error(), "system is draining") {
-		t.Errorf("unexpected error: %s", err)
+	if _, err := idAlloc.Allocate(); !testutils.IsError(err, "system is draining") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
