@@ -324,8 +324,9 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 // that are not on the same stores.
 func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 4)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 4)
 
 	store := mtc.stores[0]
 

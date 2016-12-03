@@ -919,8 +919,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 func runSetupSplitSnapshotRace(
 	t *testing.T, testFn func(*multiTestContext, roachpb.Key, roachpb.Key),
 ) {
-	mtc := startMultiTestContext(t, 6)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 6)
 
 	leftKey := roachpb.Key("a")
 	rightKey := roachpb.Key("z")
@@ -1403,8 +1404,8 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	}
 
 	mtc.storeConfig = &storeCfg
-	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	leftRange := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
 
@@ -1490,8 +1491,8 @@ func TestLeaderAfterSplit(t *testing.T) {
 	mtc := &multiTestContext{
 		storeConfig: &storeConfig,
 	}
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	mtc.replicateRange(1, 1, 2)
 

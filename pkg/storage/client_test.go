@@ -224,14 +224,6 @@ func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, er
 	return nil, errors.Errorf("unknown peer %d", nodeID)
 }
 
-// startMultiTestContext is a convenience function to create, start, and return
-// a multiTestContext.
-func startMultiTestContext(t *testing.T, numStores int) *multiTestContext {
-	m := &multiTestContext{}
-	m.Start(t, numStores)
-	return m
-}
-
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	{
 		// Only the fields we nil out below can be injected into m as it
