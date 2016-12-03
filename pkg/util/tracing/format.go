@@ -49,7 +49,7 @@ func (l traceLogs) Swap(i, j int) {
 // FormatRawSpans formats the given spans for human consumption, showing the
 // relationship using nesting and times as both relative to the previous event
 // and cumulative.
-func FormatRawSpans(spans []basictracer.RawSpan) string {
+func FormatRawSpans(spans []basictracer.RawSpan, formatTiming bool) string {
 	m := make(map[uint64]*basictracer.RawSpan)
 	for i, sp := range spans {
 		m[sp.Context.SpanID] = &spans[i]
@@ -83,10 +83,12 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 		last = logs[0].Timestamp
 	}
 	for _, entry := range logs {
-		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
-			1000*entry.Timestamp.Sub(start).Seconds(),
-			1000*entry.Timestamp.Sub(last).Seconds(),
-			strings.Repeat("    ", entry.depth+1))
+		if formatTiming {
+			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms",
+				1000*entry.Timestamp.Sub(start).Seconds(),
+				1000*entry.Timestamp.Sub(last).Seconds())
+		}
+		fmt.Fprintf(&buf, "%s", strings.Repeat("    ", entry.depth+1))
 		for i, f := range entry.Fields {
 			if i != 0 {
 				buf.WriteByte(' ')
