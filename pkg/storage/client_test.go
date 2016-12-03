@@ -80,18 +80,17 @@ func rg1(s *storage.Store) client.Sender {
 }
 
 // createTestStore creates a test store using an in-memory
-// engine. The caller is responsible for stopping the stopper on exit.
-func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
+// engine.
+func createTestStore(t testing.TB, stopper *stop.Stopper) (*storage.Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	store, stopper := createTestStoreWithConfig(t, cfg)
-	return store, stopper, manual
+	store := createTestStoreWithConfig(t, stopper, cfg)
+	return store, manual
 }
 
 func createTestStoreWithConfig(
-	t testing.TB, storeCfg storage.StoreConfig,
-) (*storage.Store, *stop.Stopper) {
-	stopper := stop.NewStopper()
+	t testing.TB, stopper *stop.Stopper, storeCfg storage.StoreConfig,
+) *storage.Store {
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
 	store := createTestStoreWithEngine(t,
@@ -100,7 +99,7 @@ func createTestStoreWithConfig(
 		storeCfg,
 		stopper,
 	)
-	return store, stopper
+	return store
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
