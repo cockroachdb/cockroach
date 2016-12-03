@@ -685,20 +685,20 @@ message ComputeChecksumResponse {
 }
 
 message DeprecatedVerifyChecksumRequest {
-  optional NoopRequest deprecated = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message DeprecatedVerifyChecksumResponse {
-  optional NoopResponse deprecated = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
-// WARNING: Do not remove fields from RequestUnion. Instead, replace the
-// contents of the deprecated field's type with an embedded NoopRequest and
-// prepend the type's name with "Deprecated". See
-// DeprecatedVerifyChecksumRequest for an example.
+// WARNING: Do not remove fields from RequestUnion. Instead, remove
+// all non-header fields from the request message and prepend its
+// name with "Deprecated". See DeprecatedVerifyChecksumRequest for an
+// example.
 //
 // Be cautious about deprecating fields as doing so can lead to inconsistencies
 // between replicas.
@@ -740,13 +740,10 @@ message RequestUnion {
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
 //
-// WARNING: Do not remove fields from ResponseUnion. Instead, replace the
-// contents of the deprecated field's type with an embedded NoopResponse and
-// prepend the type's name with "Deprecated". See
-// DeprecatedVerifyChecksumResponse for an example.
-//
-// Be cautious about deprecating fields as doing so can lead to inconsistencies
-// between replicas.
+// WARNING: Do not remove fields from ResponseUnion. Instead, remove
+// all non-header fields from the response message and prepend its
+// name with "Deprecated". See DeprecatedVerifyChecksumResponse for an
+// example.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
 
@@ -773,7 +770,7 @@ message ResponseUnion {
   optional RequestLeaseResponse request_lease = 20;
   optional ReverseScanResponse reverse_scan = 21;
   optional ComputeChecksumResponse compute_checksum = 22;
-  optional DeprecatedVerifyChecksumResponse deprecated_verify_response = 23;
+  optional DeprecatedVerifyChecksumResponse deprecated_verify_checksum = 23;
   optional CheckConsistencyResponse check_consistency = 24;
   optional NoopResponse noop = 25;
   optional InitPutResponse init_put = 26;
