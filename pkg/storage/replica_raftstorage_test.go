@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 const rangeID = 1
@@ -67,8 +68,9 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	cfg.RangeMaxBytes = snapSize
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
-	store, stopper := createTestStoreWithConfig(t, &storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, &storeCfg)
 
 	rep, err := store.GetReplica(rangeID)
 	if err != nil {

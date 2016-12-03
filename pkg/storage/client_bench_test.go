@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -28,8 +29,9 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer tracing.Disable()()
 	storeCfg := TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(b, &storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(b, stopper, &storeCfg)
 	// We want to manually control the size of the raft log.
 	store.SetRaftLogQueueActive(false)
 

@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -36,9 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 )
 
 type modelTimeSeriesDataStore struct {
@@ -102,8 +103,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	cfg.TestingKnobs.DisableScanner = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 
-	store, stopper := createTestStoreWithConfig(t, cfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, cfg)
 
 	// Generate several splits.
 	splitKeys := []roachpb.Key{roachpb.Key("c"), roachpb.Key("b"), roachpb.Key("a")}

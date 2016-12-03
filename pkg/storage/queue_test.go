@@ -411,8 +411,9 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	s, _ := createTestStore(t, stopper)
 
 	dataMaxAddr, err := keys.Addr(keys.SystemConfigTableDataMax)
 	if err != nil {

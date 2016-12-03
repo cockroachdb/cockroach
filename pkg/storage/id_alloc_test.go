@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // TestIDAllocator creates an ID allocator which allocates from
@@ -40,8 +41,9 @@ import (
 // from 2 to 101 are present.
 func TestIDAllocator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store, _ := createTestStore(t, stopper)
 	const maxI, maxJ = 10, 10
 	allocd := make(chan uint32, maxI*maxJ)
 	errChan := make(chan error, maxI*maxJ)
@@ -92,8 +94,9 @@ func TestIDAllocator(t *testing.T) {
 // and push the id allocation into positive integers.
 func TestIDAllocatorNegativeValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store, _ := createTestStore(t, stopper)
 
 	// Increment our key to a negative value.
 	newValue, err := engine.MVCCIncrement(context.Background(), store.Engine(), nil, keys.RangeIDGenerator, store.cfg.Clock.Now(), nil, -1024)
@@ -142,8 +145,9 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 // 5) Check if the following allocations return correctly.
 func TestAllocateErrorAndRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store, _ := createTestStore(t, stopper)
 	const routines = 10
 	allocd := make(chan uint32, routines)
 
@@ -235,7 +239,8 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 func TestAllocateWithStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
+	store, _ := createTestStore(t, stopper)
 	idAlloc, err := newIDAllocator(
 		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
 	)
