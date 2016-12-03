@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TestBatchPrevNext tests batch.{Prev,Next}.
+// TestBatchPrevNext tests prev() and next()
 func TestBatchPrevNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	loc := func(s string) string {
@@ -78,4 +78,37 @@ func TestBatchPrevNext(t *testing.T) {
 			t.Errorf("%d: prev: expected %q, got %q", i, test.expBW, prev)
 		}
 	}
+}
+
+func TestBatchPrevNextWithNoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	leftKey := roachpb.Key("a")
+	middleKey := roachpb.RKey("b")
+	rightKey := roachpb.Key("c")
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: leftKey}})
+	ba.Add(&roachpb.NoopRequest{})
+	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: rightKey}})
+
+	t.Run("prev", func(t *testing.T) {
+		rk, err := prev(ba, middleKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !rk.Equal(leftKey) {
+			t.Errorf("got %s, expected %s", rk, leftKey)
+		}
+		rk, err = prev(ba, leftKey)
+
+	})
+	t.Run("next", func(t *testing.T) {
+		rk, err := next(ba, middleKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !rk.Equal(rightKey) {
+			t.Errorf("got %s, expected %s", rk, rightKey)
+		}
+	})
 }
