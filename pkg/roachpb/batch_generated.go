@@ -317,7 +317,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			if buf23 == nil {
 				buf23 = make([]DeprecatedVerifyChecksumResponse, counts[23])
 			}
-			br.Responses[i].DeprecatedVerifyResponse = &buf23[0]
+			br.Responses[i].DeprecatedVerifyChecksum = &buf23[0]
 			buf23 = buf23[1:]
 		case r.CheckConsistency != nil:
 			if buf24 == nil {

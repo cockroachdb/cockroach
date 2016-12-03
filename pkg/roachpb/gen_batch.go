@@ -51,13 +51,11 @@ func initFields() {
 		var info reqFieldInfo
 		field := t.Field(i).Name
 		info.name = field
-		// The ResponseUnion fields match those in RequestUnion, with a couple of
-		// exceptions.
+		// The ResponseUnion fields match those in RequestUnion, with the
+		// following exceptions:
 		switch field {
 		case "TransferLease":
 			field = "RequestLease"
-		case "DeprecatedVerifyChecksum":
-			field = "DeprecatedVerifyResponse"
 		}
 		info.responseField = field
 		respField, ok := reflect.TypeOf(roachpb.ResponseUnion{}).FieldByName(field)
