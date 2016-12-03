@@ -1930,6 +1930,195 @@ func TestRemovePlaceholderRace(t *testing.T) {
 	}
 }
 
+type noConfChangeTestHandler struct {
+	rangeID roachpb.RangeID
+	storage.RaftMessageHandler
+}
+
+func (ncc *noConfChangeTestHandler) HandleRaftRequest(
+	ctx context.Context,
+	req *storage.RaftMessageRequest,
+	respStream storage.RaftMessageResponseStream,
+) *roachpb.Error {
+	for i, e := range req.Message.Entries {
+		if e.Type == raftpb.EntryConfChange {
+			var cc raftpb.ConfChange
+			if err := cc.Unmarshal(e.Data); err != nil {
+				panic(err)
+			}
+			var ccCtx storage.ConfChangeContext
+			if err := ccCtx.Unmarshal(cc.Context); err != nil {
+				panic(err)
+			}
+			var command storagebase.RaftCommand
+			if err := command.Unmarshal(ccCtx.Payload); err != nil {
+				panic(err)
+			}
+			if command.BatchRequest.RangeID == ncc.rangeID {
+				if ba, ok := command.BatchRequest.GetArg(roachpb.EndTransaction); ok {
+					et := ba.(*roachpb.EndTransactionRequest)
+					if crt := et.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+						// We found a configuration change headed for our victim range;
+						// sink it.
+						req.Message.Entries = req.Message.Entries[:i]
+						break
+					}
+				}
+			}
+		}
+	}
+	return ncc.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func (ncc *noConfChangeTestHandler) HandleRaftResponse(
+	ctx context.Context, resp *storage.RaftMessageResponse,
+) error {
+	switch val := resp.Union.GetValue().(type) {
+	case *roachpb.Error:
+		switch val.GetDetail().(type) {
+		case *roachpb.ReplicaTooOldError:
+			// We're going to manually GC the replica, so ignore these errors.
+			return nil
+		}
+	}
+	return ncc.RaftMessageHandler.HandleRaftResponse(ctx, resp)
+}
+
+func TestReplicaGCRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1)
+
+	leaderStore := mtc.stores[0]
+	fromStore := mtc.stores[1]
+	toStore := mtc.stores[2]
+
+	// Prevent the victim replica from processing configuration changes.
+	mtc.transport.Stop(toStore.Ident.StoreID)
+	mtc.transport.Listen(toStore.Ident.StoreID, &noConfChangeTestHandler{
+		rangeID:            rangeID,
+		RaftMessageHandler: toStore,
+	})
+
+	repl, err := leaderStore.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := repl.AnnotateCtx(context.Background())
+
+	// Add the victim replica. Note that it will receive a snapshot and raft log
+	// replays, but will not process the configuration change containing the new
+	// range descriptor, preventing it from learning of the new NextReplicaID.
+	if err := repl.ChangeReplicas(
+		ctx,
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  toStore.Ident.NodeID,
+			StoreID: toStore.Ident.StoreID,
+		},
+		repl.Desc(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Craft a heartbeat addressed to the victim replica. Note that this
+	// heartbeat will be sent after the replica has been GC'ed.
+	rangeDesc := repl.Desc()
+	fromReplicaDesc, ok := rangeDesc.GetReplicaDescriptor(fromStore.Ident.StoreID)
+	if !ok {
+		t.Fatalf("expected %s to have a replica on %s", rangeDesc, fromStore)
+	}
+	toReplicaDesc, ok := rangeDesc.GetReplicaDescriptor(toStore.Ident.StoreID)
+	if !ok {
+		t.Fatalf("expected %s to have a replica on %s", rangeDesc, toStore)
+	}
+
+	hbReq := storage.RaftMessageRequest{
+		RangeID:     0,
+		FromReplica: fromReplicaDesc,
+		ToReplica:   toReplicaDesc,
+		Heartbeats: []storage.RaftHeartbeat{
+			{
+				RangeID:       rangeID,
+				FromReplicaID: fromReplicaDesc.ReplicaID,
+				ToReplicaID:   toReplicaDesc.ReplicaID,
+			},
+		},
+	}
+
+	// Wait for the victim's raft log to be non-empty, then configure the heartbeat
+	// with the raft state.
+	util.SucceedsSoon(t, func() error {
+		status := repl.RaftStatus()
+		progressByID := status.Progress
+		progress, ok := progressByID[uint64(toReplicaDesc.ReplicaID)]
+		if !ok {
+			return errors.Errorf("%+v does not yet contain %s", progressByID, toReplicaDesc)
+		}
+		if progress.Match == 0 {
+			return errors.Errorf("%+v has not yet advanced", progress)
+		}
+		for i := range hbReq.Heartbeats {
+			hbReq.Heartbeats[i].Term = status.Term
+			hbReq.Heartbeats[i].Commit = progress.Match
+		}
+		return nil
+	})
+
+	// Remove the victim replica and manually GC it.
+	if err := repl.ChangeReplicas(
+		ctx,
+		roachpb.REMOVE_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  toStore.Ident.NodeID,
+			StoreID: toStore.Ident.StoreID,
+		},
+		repl.Desc(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	{
+		removedReplica, err := toStore.GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := toStore.ManualReplicaGC(removedReplica); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create a new transport for store 0. Error responses are passed
+	// back along the same grpc stream as the request so it's ok that
+	// there are two (this one and the one actually used by the store).
+	fromTransport := storage.NewRaftTransport(log.AmbientContext{},
+		storage.GossipAddressResolver(fromStore.Gossip()),
+		nil, /* grpcServer */
+		mtc.rpcContext,
+	)
+	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
+	fromTransport.Listen(fromStore.StoreID(), errChan)
+
+	// Send the heartbeat. Boom.
+	fromTransport.SendAsync(&hbReq)
+
+	// The receiver of this message should return an error.
+	select {
+	case pErr := <-errChan:
+		switch pErr.GetDetail().(type) {
+		case *roachpb.RaftGroupDeletedError:
+		default:
+			t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("did not get expected error")
+	}
+}
+
 // TestStoreRangeRemoveDead verifies that if a store becomes dead, the
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
@@ -2121,15 +2310,15 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	finishWG.Wait()
 }
 
-type disruptiveElectionTestHandler chan *roachpb.Error
+type errorChannelTestHandler chan *roachpb.Error
 
-func (disruptiveElectionTestHandler) HandleRaftRequest(
+func (errorChannelTestHandler) HandleRaftRequest(
 	_ context.Context, _ *storage.RaftMessageRequest, _ storage.RaftMessageResponseStream,
 ) *roachpb.Error {
 	panic("unimplemented")
 }
 
-func (d disruptiveElectionTestHandler) HandleRaftResponse(
+func (d errorChannelTestHandler) HandleRaftResponse(
 	ctx context.Context, resp *storage.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
@@ -2141,7 +2330,7 @@ func (d disruptiveElectionTestHandler) HandleRaftResponse(
 	return nil
 }
 
-func (disruptiveElectionTestHandler) HandleSnapshot(
+func (errorChannelTestHandler) HandleSnapshot(
 	_ *storage.SnapshotRequest_Header, _ storage.SnapshotResponseStream,
 ) error {
 	panic("unimplemented")
@@ -2237,7 +2426,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		nil, /* grpcServer */
 		mtc.rpcContext,
 	)
-	errChan := disruptiveElectionTestHandler(make(chan *roachpb.Error, 1))
+	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	transport0.Listen(mtc.stores[0].StoreID(), errChan)
 
 	// Simulate an election triggered by the removed node.

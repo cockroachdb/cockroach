@@ -157,14 +157,24 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
-// ManualGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualGC(repl *Replica) error {
+func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.TODO())
-	return s.gcQueue.process(ctx, s.Clock().Now(), repl, cfg)
+	return q.process(ctx, s.Clock().Now(), repl, cfg)
+}
+
+// ManualGC processes the specified replica using the store's GC queue.
+func (s *Store) ManualGC(repl *Replica) error {
+	return manualQueue(s, s.gcQueue, repl)
+}
+
+// ManualReplicaGC processes the specified replica using the store's replica
+// GC queue.
+func (s *Store) ManualReplicaGC(repl *Replica) error {
+	return manualQueue(s, s.replicaGCQueue, repl)
 }
 
 func (s *Store) ReservationCount() int {
