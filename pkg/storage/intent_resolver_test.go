@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // TestPushTransactionsWithNonPendingIntent verifies that maybePushTransactions
@@ -33,8 +34,9 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	intents := []roachpb.Intent{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.ABORTED}}
 	if _, pErr := tc.store.intentResolver.maybePushTransactions(

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -131,8 +132,9 @@ func TestQueuePriorityQueue(t *testing.T) {
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
 	repl1, err := tc.store.GetReplica(1)
@@ -247,8 +249,9 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 func TestBaseQueueAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -283,8 +286,9 @@ func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
-	tc.StartWithStoreConfig(t, tsc)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
 	repl1, err := tc.store.GetReplica(1)
@@ -313,7 +317,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
-	bq.Start(tc.Clock(), tc.stopper)
+	bq.Start(tc.Clock(), stopper)
 
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
@@ -365,8 +369,9 @@ func TestBaseQueueProcess(t *testing.T) {
 func TestBaseQueueAddRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -384,7 +389,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	bq.Start(clock, tc.stopper)
+	bq.Start(clock, stopper)
 
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	bq.MaybeRemove(r.RangeID)
@@ -532,8 +537,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
-	tc.StartWithStoreConfig(t, tsc)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
@@ -557,7 +563,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	replicaCount := 10
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: replicaCount})
-	bq.Start(tc.Clock(), tc.stopper)
+	bq.Start(tc.Clock(), stopper)
 
 	for i := 1; i <= replicaCount; i++ {
 		r := createReplica(tc.store, roachpb.RangeID(i+1000),
@@ -682,8 +688,9 @@ func (pq *processTimeoutQueueImpl) process(
 func TestBaseQueueProcessTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -700,7 +707,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
-	bq.Start(tc.Clock(), tc.stopper)
+	bq.Start(tc.Clock(), stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
 	if l := bq.Length(); l != 1 {
@@ -734,8 +741,9 @@ func (pq *processTimeQueueImpl) process(
 func TestBaseQueueTimeMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -751,7 +759,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
-	bq.Start(tc.Clock(), tc.stopper)
+	bq.Start(tc.Clock(), stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
 	util.SucceedsSoon(t, func() error {
