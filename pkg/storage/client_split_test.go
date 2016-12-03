@@ -1710,7 +1710,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	// the range is fully split, meaning the initial GC may fail because
 	// it spans ranges.
 	util.SucceedsSoon(t, func() error {
-		return store.ManualReplicaGC(store.LookupReplica(splitKey, nil))
+		return store.ManualGC(store.LookupReplica(splitKey, nil))
 	})
 
 	// Wait for the split to complete.

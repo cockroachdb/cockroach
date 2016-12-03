@@ -186,23 +186,22 @@ type multiTestContext struct {
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
+	transport *storage.RaftTransport
+
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
 	clocks         []*hlc.Clock
 	engines        []engine.Engine
 	grpcServers    []*grpc.Server
-	transports     []*storage.RaftTransport
 	distSenders    []*kv.DistSender
 	dbs            []*client.DB
 	gossips        []*gossip.Gossip
 	nodeLivenesses []*storage.NodeLiveness
 	storePools     []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
-	// test individually. transportStopper is for 'transports', and the
+	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
-	// TODO(bdarnell): now that there are multiple transports, do we
-	// need transportStopper?
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
@@ -260,7 +259,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = make([]*storage.Stores, numStores)
 	m.idents = make([]roachpb.StoreIdent, numStores)
 	m.grpcServers = make([]*grpc.Server, numStores)
-	m.transports = make([]*storage.RaftTransport, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
 	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
 
@@ -284,6 +282,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 			})
 		}
 	}
+	m.transport = storage.NewRaftTransport(
+		log.AmbientContext{}, m.getNodeIDAddress, nil, m.rpcContext,
+	)
+
 	for idx := 0; idx < numStores; idx++ {
 		m.addStore(idx)
 	}
@@ -565,7 +567,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	} else {
 		cfg = storage.TestStoreConfig(m.clocks[i])
 	}
-	cfg.Transport = m.transports[i]
+	cfg.Transport = m.transport
 	cfg.DB = m.dbs[i]
 	cfg.Gossip = m.gossips[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
@@ -647,9 +649,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	grpcServer := rpc.NewServer(m.rpcContext)
 	m.grpcServers[idx] = grpcServer
-	m.transports[idx] = storage.NewRaftTransport(
-		log.AmbientContext{}, m.getNodeIDAddress, grpcServer, m.rpcContext,
-	)
+	storage.RegisterMultiRaftServer(grpcServer, m.transport)
 
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 
@@ -884,7 +884,6 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	ctx := context.TODO()
 	startKey := m.findStartKeyLocked(rangeID)
 
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
@@ -895,33 +894,35 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		// raft leader is guaranteed to have the updated version, but followers are
 		// not.
 		var desc roachpb.RangeDescriptor
-		if err := m.dbs[dest].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		if err := m.dbs[dest].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			m.t.Fatal(err)
 		}
 
-		rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+		repl, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
 		if err != nil {
 			m.t.Fatal(err)
 		}
 
+		ctx := repl.AnnotateCtx(context.Background())
+
 		// Assume AmbiguousResultErrors are due to re-proposals and the
 		// underlying change replicas succeeded.
 		for {
-			err := rep.ChangeReplicas(
-				rep.AnnotateCtx(ctx),
+			if err := repl.ChangeReplicas(
+				ctx,
 				roachpb.ADD_REPLICA,
 				roachpb.ReplicaDescriptor{
 					NodeID:  m.stores[dest].Ident.NodeID,
 					StoreID: m.stores[dest].Ident.StoreID,
 				},
 				&desc,
-			)
-			if err == nil || testutils.IsError(err, "unable to add replica .* which is already present") {
+			); err == nil || testutils.IsError(err, "unable to add replica .* which is already present") {
 				break
 			} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-				break
+				continue
+			} else {
+				m.t.Fatal(err)
 			}
-			m.t.Fatal(err)
 		}
 
 		expectedReplicaIDs[i] = desc.NextReplicaID
@@ -957,7 +958,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	startKey := m.findStartKeyLocked(rangeID)
 
 	var desc roachpb.RangeDescriptor
-	if err := m.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+	if err := m.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 		m.t.Fatal(err)
 	}
 
@@ -971,7 +972,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	// Assume AmbiguousResultErrors are due to re-proposals and the
 	// underlying change replicas succeeded.
 	for {
-		err := rep.ChangeReplicas(
+		if err := rep.ChangeReplicas(
 			ctx,
 			roachpb.REMOVE_REPLICA,
 			roachpb.ReplicaDescriptor{
@@ -979,13 +980,13 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 				StoreID: m.idents[dest].StoreID,
 			},
 			&desc,
-		)
-		if err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
+		); err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
 			break
 		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-			break
+			continue
+		} else {
+			m.t.Fatal(err)
 		}
-		m.t.Fatalf("failed: %T, %s", err, err)
 	}
 }
 
