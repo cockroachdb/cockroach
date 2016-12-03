@@ -57,32 +57,38 @@ func main() {
 	if !ok {
 		log.Fatalf("teamcity API password environment variable %s is not set", teamcityAPIPasswordEnv)
 	}
+	client := teamcity.New(u.Host, username, password)
+	runTC(func(properties map[string]string) {
+		build, err := client.QueueBuild(*buildTypeID, *branchName, properties)
+		if err != nil {
+			log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, properties=%+v): %s", *buildTypeID, *branchName, properties, err)
+		}
+		log.Printf("created teamcity build (*buildTypeID=%s *branchName=%s, properties=%+v): %s", *buildTypeID, *branchName, properties, build)
+	})
+}
+
+func runTC(queueBuildFn func(map[string]string)) {
 	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
 
-	client := teamcity.New(u.Host, username, password)
 	// Queue a build per configuration per package.
-	for _, params := range []map[string]string{
+	for _, properties := range []map[string]string{
 		{}, // uninstrumented
 		{"env.GOFLAGS": "-race"},
 		{tagsKey: "deadlock"},
 	} {
-		if tags, ok := params[tagsKey]; ok {
-			params[tagsKey] = strings.Join([]string{tags, stressTag}, " ")
+		if tags, ok := properties[tagsKey]; ok {
+			properties[tagsKey] = strings.Join([]string{tags, stressTag}, " ")
 		} else {
-			params[tagsKey] = stressTag
+			properties[tagsKey] = stressTag
 		}
 
 		for _, propEvalKV := range []bool{true, false} {
-			params["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
+			properties["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
 
 			for _, importPath := range importPaths {
-				params["env.PKG"] = importPath
+				properties["env.PKG"] = importPath
 
-				build, err := client.QueueBuild(*buildTypeID, *branchName, params)
-				if err != nil {
-					log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, err)
-				}
-				log.Printf("created teamcity build (*buildTypeID=%s *branchName=%s, params=%+v): %s", *buildTypeID, *branchName, params, build)
+				queueBuildFn(properties)
 			}
 		}
 	}
