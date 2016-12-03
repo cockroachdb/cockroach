@@ -70,8 +70,8 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			return nil
 		}
 
-	mtc.Start(t, numStores)
 	defer mtc.Stop()
+	mtc.Start(t, numStores)
 
 	mtc.replicateRange(rangeID, 1, 2)
 	mtc.unreplicateRange(rangeID, 1)
@@ -90,8 +90,9 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 	// Disable the replica gc queue to prevent direct removal of replica.
 	mtc.stores[1].SetReplicaGCQueueActive(false)
 

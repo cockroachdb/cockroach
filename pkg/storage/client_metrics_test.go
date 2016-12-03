@@ -168,8 +168,9 @@ func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("TODO(mrtracy): #9204")
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Flush RocksDB memtables, so that RocksDB begins using block-based tables.
 	// This is useful, because most of the stats we track don't apply to

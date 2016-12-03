@@ -222,8 +222,9 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	// Issue a command on the first node before replicating.
 	incArgs := incrementArgs([]byte("a"), 5)
@@ -307,8 +308,8 @@ func TestRestoreReplicas(t *testing.T) {
 	// this test to deal with needing to acquire new leases after the restart.
 	sc.TestingKnobs.DontPreventUseOfOldLeaseOnStart = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	firstRng, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
@@ -416,8 +417,8 @@ func TestFailedReplicaChange(t *testing.T) {
 		return nil
 	}
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	repl, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
@@ -497,8 +498,8 @@ func TestPreemptiveSnapshotReleasedAfterApply(t *testing.T) {
 		return nil
 	}
 	mtc = &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	mtc.replicateRange(1, 1)
 }
@@ -506,8 +507,9 @@ func TestPreemptiveSnapshotReleasedAfterApply(t *testing.T) {
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	repl, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
@@ -599,8 +601,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	const rangeID = 1
 	mtc.replicateRange(rangeID, 1, 2)
@@ -658,8 +661,9 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 // truncated.
 func TestSnapshotAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 	repl, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
@@ -733,8 +737,9 @@ func (c fakeSnapshotStream) Context() context.Context {
 // incoming snapshot still cleans up the outstanding reservation that was made.
 func TestFailedSnapshotFillsReservation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	rep, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
@@ -763,8 +768,9 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 // situation occurs when two replicas need snapshots at the same time.
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 5)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 5)
 	repl, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
@@ -827,8 +833,8 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	// removed replica and GC it. We'll explicitly enable it later in the test.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 	rep1, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
@@ -918,8 +924,8 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// unexpectedly.
 			sc.TestingKnobs.DisablePeriodicGossips = true
 			mtc := &multiTestContext{storeConfig: &sc}
-			mtc.Start(t, 3)
 			defer mtc.Stop()
+			mtc.Start(t, 3)
 
 			const rangeID = roachpb.RangeID(1)
 			mtc.replicateRange(rangeID, 1, 2)
@@ -995,8 +1001,9 @@ func TestRefreshPendingCommands(t *testing.T) {
 // under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	mtc.initGossipNetwork()
 
@@ -1069,8 +1076,8 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 	}
-	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
+	mtc.Start(t, numReplicas+extraStores)
 	mtc.initGossipNetwork()
 	store0 := mtc.stores[0]
 
@@ -1190,8 +1197,9 @@ func getRangeMetadata(
 func TestUnreplicateFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	const rangeID = roachpb.RangeID(1)
 	// Replicate the range to store 1.
@@ -1213,8 +1221,9 @@ func TestUnreplicateFirstRange(t *testing.T) {
 // case in stats already) or doesn't produce a Ready.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	repl, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
@@ -1292,8 +1301,9 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 // with a downed node.
 func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
@@ -1367,8 +1377,8 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	key := roachpb.Key("a")
 
@@ -1449,8 +1459,8 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// and run it manually when we're ready.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 4)
 	defer mtc.Stop()
+	mtc.Start(t, 4)
 
 	key := roachpb.Key("a")
 	verifyFn := func(expected []int64) func() error {
@@ -1584,8 +1594,9 @@ func TestReplicateRemoveAndAdd(t *testing.T) {
 func TestRaftHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 	mtc.replicateRange(1, 1, 2)
 
 	// Capture the initial term and state.
@@ -1619,8 +1630,9 @@ func TestRaftHeartbeats(t *testing.T) {
 func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Replicate the range onto all three stores
 	mtc.replicateRange(1, 1, 2)
@@ -1672,8 +1684,9 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	const rangeID = roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
@@ -1744,8 +1757,9 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 	for i, td := range testData {
 		func() {
-			mtc := startMultiTestContext(t, 2)
+			mtc := &multiTestContext{}
 			defer mtc.Stop()
+			mtc.Start(t, 2)
 
 			// Replicate range to enable raft campaigning.
 			mtc.replicateRange(rangeID, 1)
@@ -1818,8 +1832,9 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 // a remote node correctly after the Replica was removed from the Store.
 func TestRaftAfterRemoveRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Make the split.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
@@ -1880,8 +1895,9 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // reproduce a race (see #1911 and #9037).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 10)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 10)
 
 	const rangeID = roachpb.RangeID(1)
 	// Up-replicate to a bunch of nodes which stresses a condition where a
@@ -1901,8 +1917,9 @@ func TestRaftRemoveRace(t *testing.T) {
 // placeholders.
 func TestRemovePlaceholderRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
@@ -1987,8 +2004,9 @@ func (ncc *noConfChangeTestHandler) HandleRaftResponse(
 func TestReplicaGCRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1)
@@ -2126,8 +2144,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Replicate the range to all stores.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
@@ -2183,8 +2201,9 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// First put the range on all three nodes.
 	raftID := roachpb.RangeID(1)
@@ -2344,8 +2363,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		t.Skip("#10577")
 	}
 
-	mtc := startMultiTestContext(t, 4)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 4)
 
 	// Move the first range from the first node to the other three.
 	const rangeID = roachpb.RangeID(1)
@@ -2469,8 +2489,8 @@ func TestReplicaTooOldGC(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 4)
 	defer mtc.Stop()
+	mtc.Start(t, 4)
 
 	// Replicate the first range onto all of the nodes.
 	const rangeID = 1
@@ -2538,8 +2558,8 @@ func TestReplicaLazyLoad(t *testing.T) {
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 1)
 	defer mtc.Stop()
+	mtc.Start(t, 1)
 
 	mtc.stopStore(0)
 	mtc.restartStore(0)
@@ -2562,8 +2582,9 @@ func TestReplicaLazyLoad(t *testing.T) {
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	downedStoreIdx := 2
 
@@ -2613,8 +2634,9 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 func TestLeaseHolderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	leaseHolder := mtc.stores[0]
 
@@ -2647,8 +2669,8 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 	const rangeID roachpb.RangeID = 1
 	mtc.replicateRange(rangeID, 1)
 	mtc.unreplicateRange(rangeID, 0)
@@ -2721,8 +2743,9 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numStores = 3
-	mtc := startMultiTestContext(t, numStores)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, numStores)
 	// Setup replication of range 1 on store 0 to stores 1 and 2.
 	mtc.replicateRange(1, 1, 2)
 
@@ -2782,8 +2805,8 @@ func TestCheckInconsistent(t *testing.T) {
 	}
 
 	const numStores = 3
-	mtc.Start(t, numStores)
 	defer mtc.Stop()
+	mtc.Start(t, numStores)
 	// Setup replication of range 1 on store 0 to stores 1 and 2.
 	mtc.replicateRange(1, 1, 2)
 
@@ -2842,8 +2865,8 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// expect.
 	sc.RaftElectionTimeoutTicks = 100000
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, numStores)
 	defer mtc.Stop()
+	mtc.Start(t, numStores)
 	store0 := mtc.Store(0)
 	store1 := mtc.Store(1)
 
@@ -2908,8 +2931,9 @@ func TestTransferRaftLeadership(t *testing.T) {
 func TestFailedPreemptiveSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	// Replicate a range onto the two stores. This replication is
 	// important because if there was only one node to begin with, the
@@ -2940,8 +2964,8 @@ func TestRaftBlockedReplica(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Create 2 ranges by splitting range 1.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
@@ -2996,8 +3020,8 @@ func TestRangeQuiescence(t *testing.T) {
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	stopNodeLivenessHeartbeats(mtc)
 
