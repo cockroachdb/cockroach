@@ -288,15 +288,6 @@ func (r *Replica) snapshotWithContext(
 	r.mu.AssertHeld()
 	rangeID := r.RangeID
 
-	if r.exceedsDoubleSplitSizeLocked() {
-		maxBytes := r.mu.maxBytes
-		size := r.mu.state.Stats.Total()
-		log.Infof(ctx,
-			"not generating %s snapshot because replica is too large: %d > 2 * %d",
-			snapType, size, maxBytes)
-		return &OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
-	}
-
 	// See if there is already a snapshot running for this store.
 	select {
 	case <-r.mu.outSnapDone:

@@ -17,12 +17,43 @@
 package storage
 
 import (
+	"math/rand"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+const rangeID = 1
+const keySize = 1 << 7  // 128 B
+const valSize = 1 << 10 // 1 KiB
+
+func fillTestRange(rep *Replica, size int64) error {
+	src := rand.New(rand.NewSource(0))
+	for i := int64(0); i < size/int64(keySize+valSize); i++ {
+		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
+		val := randutil.RandBytes(src, valSize)
+		pArgs := putArgs(key, val)
+		if _, pErr := client.SendWrappedWith(context.Background(), rep, roachpb.Header{
+			RangeID: rangeID,
+		}, &pArgs); pErr != nil {
+			return pErr.GoError()
+		}
+	}
+	rep.mu.Lock()
+	after := rep.mu.state.Stats.Total()
+	rep.mu.Unlock()
+	if after < size {
+		return errors.Errorf("range not full after filling: wrote %d, but range at %d", size, after)
+	}
+	return nil
+}
 
 func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer tracing.Disable()()

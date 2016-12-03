@@ -4307,12 +4307,6 @@ func (r *Replica) needsSplitBySizeLocked() bool {
 	return maxBytes > 0 && size > maxBytes
 }
 
-func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
-	maxBytes := r.mu.maxBytes
-	size := r.mu.state.Stats.Total()
-	return maxBytes > 0 && size > maxBytes*2
-}
-
 func (r *Replica) setPendingSnapshotIndex(index uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
