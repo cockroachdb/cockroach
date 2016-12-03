@@ -30,8 +30,9 @@ import (
 
 func TestComputeStatsForKeySpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Create a number of ranges using splits.
 	splitKeys := []string{"a", "c", "e", "g", "i"}
