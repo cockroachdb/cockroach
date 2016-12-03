@@ -396,10 +396,8 @@ type Store struct {
 		at time.Time
 	}
 
-	// This is 1 if there is an active raft snapshot. This field must be checked
-	// and set atomically.
-	// TODO(marc): This may be better inside of `mu`, but is not currently feasible.
-	hasActiveRaftSnapshot int32
+	// Semaphore to limit concurrent snapshots.
+	snapshotSem chan struct{}
 
 	// drainLeases holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend range leases; see DrainLeases().
@@ -624,6 +622,12 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
+	// concurrentSnapshotLimit is the maximum number of snapshots that are
+	// permitted to proceed concurrently. Snapshots count against this limit from
+	// the start of their generation until they are either discarded or sent on
+	// the wire.
+	concurrentSnapshotLimit int
+
 	// RangeLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
 	RangeLeaseActiveDuration time.Duration
@@ -770,6 +774,11 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
+	if sc.concurrentSnapshotLimit == 0 {
+		// NB: setting this value higher than 1 is likely to degrade client
+		// throughput.
+		sc.concurrentSnapshotLimit = envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_LIMIT", 1)
+	}
 
 	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
 		RangeLeaseDurations(RaftElectionTimeout(sc.RaftTickInterval, sc.RaftElectionTimeoutTicks))
@@ -841,6 +850,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
+
+	s.snapshotSem = make(chan struct{}, cfg.concurrentSnapshotLimit)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
@@ -2160,12 +2171,17 @@ func (s *Store) NewSnapshot() engine.Reader {
 // AcquireRaftSnapshot returns true if a new raft snapshot can start.
 // If true is returned, the caller MUST call ReleaseRaftSnapshot.
 func (s *Store) AcquireRaftSnapshot() bool {
-	return atomic.CompareAndSwapInt32(&s.hasActiveRaftSnapshot, 0, 1)
+	select {
+	case s.snapshotSem <- struct{}{}:
+		return true
+	default:
+		return false
+	}
 }
 
 // ReleaseRaftSnapshot decrements the count of active snapshots.
 func (s *Store) ReleaseRaftSnapshot() {
-	atomic.SwapInt32(&s.hasActiveRaftSnapshot, 0)
+	<-s.snapshotSem
 }
 
 // Attrs returns the attributes of the underlying store.
