@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 )
@@ -114,8 +115,9 @@ func TestComputeTruncatableIndex(t *testing.T) {
 // removed.
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store, _ := createTestStore(t, stopper)
 	store.SetRaftLogQueueActive(false)
 
 	r, err := store.GetReplica(1)
@@ -227,8 +229,9 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("#9772")
 
-	store, _, stopper := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store, _ := createTestStore(t, stopper)
 
 	store.SetReplicaScannerActive(false)
 
