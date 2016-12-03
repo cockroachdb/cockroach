@@ -3434,12 +3434,14 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 	if !s.cfg.Transport.SendAsync(chReq) {
 		s.mu.Lock()
 		for _, beat := range beats {
-			replica := s.mu.replicas[beat.RangeID]
-			replica.addUnreachableRemoteReplica(beat.ToReplicaID)
+			if replica, ok := s.mu.replicas[beat.RangeID]; ok {
+				replica.addUnreachableRemoteReplica(beat.ToReplicaID)
+			}
 		}
 		for _, resp := range resps {
-			replica := s.mu.replicas[resp.RangeID]
-			replica.addUnreachableRemoteReplica(resp.ToReplicaID)
+			if replica, ok := s.mu.replicas[resp.RangeID]; ok {
+				replica.addUnreachableRemoteReplica(resp.ToReplicaID)
+			}
 		}
 		s.mu.Unlock()
 		return 0
