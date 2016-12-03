@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -115,8 +116,9 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	// Adjust the range descriptor to avoid existing data such as meta
 	// records and config entries during the iteration. This is a rather
@@ -146,8 +148,9 @@ func TestReplicaDataIterator(t *testing.T) {
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
-	tc.StartWithStoreConfig(t, cfg)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
 	newDesc := *tc.repl.Desc()

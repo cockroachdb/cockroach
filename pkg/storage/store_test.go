@@ -201,7 +201,6 @@ func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
 func createTestStoreWithConfig(t testing.TB, cfg *StoreConfig) (*Store, *stop.Stopper) {
-
 	store, stopper := createTestStoreWithoutStart(t, cfg)
 	// Put an empty system config into gossip.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig,
@@ -2022,8 +2021,9 @@ func TestMaybeRemove(t *testing.T) {
 func TestStoreChangeFrozen(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	store := tc.store
 
 	assertFrozen := func(b storagebase.ReplicaState_FrozenEnum) {
@@ -2167,8 +2167,9 @@ func TestStoreNoConcurrentRaftSnapshots(t *testing.T) {
 func TestStoreGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	store := tc.store
 
 	assertThreshold := func(ts hlc.Timestamp) {
@@ -2217,8 +2218,9 @@ func TestStoreGCThreshold(t *testing.T) {
 func TestStoreRangePlaceholders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	s := tc.store
 
 	s.mu.Lock()
@@ -2315,8 +2317,9 @@ func TestStoreRangePlaceholders(t *testing.T) {
 func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	s := tc.store
 	ctx := context.Background()
 
@@ -2387,8 +2390,9 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	s := tc.store
 	ctx := context.Background()
 
@@ -2472,8 +2476,9 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 func TestCanCampaignIdleReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	s := tc.store
 	ctx := context.Background()
 
