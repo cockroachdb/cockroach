@@ -58,8 +58,9 @@ func stopNodeLivenessHeartbeats(mtc *multiTestContext) {
 
 func TestNodeLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, mtc)
@@ -98,8 +99,9 @@ func TestNodeLiveness(t *testing.T) {
 // live.
 func TestNodeLivenessEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	verifyLiveness(t, mtc)
 	stopNodeLivenessHeartbeats(mtc)
@@ -149,8 +151,9 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 // restarted, the node liveness records are re-gossiped immediately.
 func TestNodeLivenessRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	// After verifying node is in liveness table, stop store.
 	verifyLiveness(t, mtc)
@@ -204,8 +207,9 @@ func TestNodeLivenessRestart(t *testing.T) {
 // might be received belatedly through gossip.
 func TestNodeLivenessSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 1)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 1)
 
 	// Verify liveness of all nodes for all nodes.
 	stopNodeLivenessHeartbeats(mtc)
@@ -254,8 +258,9 @@ func TestNodeLivenessSelf(t *testing.T) {
 
 func TestNodeLivenessGetLivenessMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 3)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	verifyLiveness(t, mtc)
 	stopNodeLivenessHeartbeats(mtc)

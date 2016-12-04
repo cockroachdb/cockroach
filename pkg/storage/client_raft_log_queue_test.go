@@ -37,7 +37,7 @@ import (
 func TestRaftLogQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var mtc multiTestContext
+	mtc := &multiTestContext{}
 
 	// Set maxBytes to something small so we can trigger the raft log truncation
 	// without adding 64MB of logs.
@@ -53,8 +53,8 @@ func TestRaftLogQueue(t *testing.T) {
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc.storeConfig = &sc
 
-	mtc.Start(t, 3)
 	defer mtc.Stop()
+	mtc.Start(t, 3)
 
 	// Write a single value to ensure we have a leader.
 	pArgs := putArgs([]byte("key"), []byte("value"))

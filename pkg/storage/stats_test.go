@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // initialStats are the stats for a Replica which has been created through
@@ -41,8 +42,9 @@ func TestRangeStatsEmpty(t *testing.T) {
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	ms := tc.repl.GetMVCCStats()
 	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
@@ -53,8 +55,9 @@ func TestRangeStatsEmpty(t *testing.T) {
 func TestRangeStatsInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,

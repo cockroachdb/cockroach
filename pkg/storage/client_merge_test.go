@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -69,8 +70,9 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	if _, _, err := createSplitRanges(store); err != nil {
 		t.Fatal(err)
@@ -98,8 +100,9 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
 		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.ZeroTimestamp, true, nil, false, f); err != nil {
@@ -177,8 +180,9 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	content := roachpb.Key("testing!")
 
@@ -305,8 +309,9 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Merge last range.
 	args := adminMergeArgs(roachpb.KeyMin)
@@ -319,8 +324,9 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 // that are not on the same stores.
 func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 4)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 4)
 
 	store := mtc.stores[0]
 
@@ -372,8 +378,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Split the range.
 	aDesc, bDesc, pErr := createSplitRanges(store)
@@ -432,8 +439,9 @@ func BenchmarkStoreRangeMerge(b *testing.B) {
 	defer tracing.Disable()()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(b, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(b, stopper, storeCfg)
 
 	// Perform initial split of ranges.
 	sArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
