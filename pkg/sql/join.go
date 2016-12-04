@@ -217,9 +217,9 @@ func (p *planner) makeJoin(
 	}
 
 	// Check that the same table name is not used on both sides.
-	for alias := range right.info.sourceAliases {
-		if _, ok := left.info.sourceAliases[alias]; ok {
-			t := alias.Table()
+	for _, alias := range right.info.sourceAliases {
+		if _, ok := left.info.sourceAliases.srcIdx(alias.name); ok {
+			t := alias.name.Table()
 			if t == "" {
 				return planDataSource{}, errors.New(
 					"cannot join columns from multiple anonymous sources (missing AS clause)")
@@ -240,8 +240,7 @@ func (p *planner) makeJoin(
 	)
 
 	if cond == nil {
-		pred = &crossPredicate{}
-		info, err = concatDataSourceInfos(leftInfo, rightInfo)
+		pred, info = p.makeCrossPredicate(leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
@@ -303,6 +302,16 @@ func (n *joinNode) ExplainTypes(regTypes func(string, string)) {
 
 // SetLimitHint implements the planNode interface.
 func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
+
+// setNeededColumns implements the planNode interface.
+func (n *joinNode) setNeededColumns(needed []bool) {
+	leftNeeded, rightNeeded := n.pred.getNeededColumns(needed)
+	n.left.plan.setNeededColumns(leftNeeded)
+	n.right.plan.setNeededColumns(rightNeeded)
+	for i, v := range needed {
+		n.columns[i].omitted = !v
+	}
+}
 
 // expandPlan implements the planNode interface.
 func (n *joinNode) expandPlan() error {

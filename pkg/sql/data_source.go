@@ -144,9 +144,35 @@ type planDataSource struct {
 // table names to column ranges.
 type columnRange []int
 
-// sourceAliases associates a table name (alias) to a set of columns
-// in the result row of a data source.
-type sourceAliases map[parser.TableName]columnRange
+// sourceAlias associates a table name (alias) to a set of columns in the result
+// row of a data source.
+type sourceAlias struct {
+	name        parser.TableName
+	columnRange columnRange
+}
+
+type sourceAliases []sourceAlias
+
+// srcIdx looks up a source by qualified name and returns the index of the
+// source (and whether we found one).
+func (s sourceAliases) srcIdx(name parser.TableName) (srcIdx int, found bool) {
+	for i := range s {
+		if s[i].name.DatabaseName == name.DatabaseName && s[i].name.TableName == name.TableName {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// columnRange looks up a source by name and returns the column range (and
+// whether we found the name).
+func (s sourceAliases) columnRange(name parser.TableName) (colRange columnRange, found bool) {
+	idx, ok := s.srcIdx(name)
+	if !ok {
+		return nil, false
+	}
+	return s[idx].columnRange, true
+}
 
 // anonymousTable is the empty table name, used when a data source
 // has no own name, e.g. VALUES, subqueries or the empty source.
@@ -168,7 +194,7 @@ func newSourceInfoForSingleTable(tn parser.TableName, columns ResultColumns) *da
 	norm := tn.NormalizedTableName()
 	return &dataSourceInfo{
 		sourceColumns: columns,
-		sourceAliases: sourceAliases{norm: fillColumnRange(0, len(columns)-1)},
+		sourceAliases: sourceAliases{{name: norm, columnRange: fillColumnRange(0, len(columns)-1)}},
 	}
 }
 
@@ -289,9 +315,10 @@ func (p *planner) getDataSource(
 		if t.As.Alias != "" {
 			// If an alias was specified, use that.
 			tableAlias.TableName = parser.Name(t.As.Alias.Normalize())
-			src.info.sourceAliases = sourceAliases{
-				tableAlias: fillColumnRange(0, len(src.info.sourceColumns)-1),
-			}
+			src.info.sourceAliases = sourceAliases{{
+				name:        tableAlias,
+				columnRange: fillColumnRange(0, len(src.info.sourceColumns)-1),
+			}}
 		}
 		colAlias := t.As.Cols
 
@@ -487,7 +514,7 @@ func (src *dataSourceInfo) expandStar(
 			return nil, nil, err
 		}
 
-		colRange, ok := src.sourceAliases[qualifiedTn]
+		colRange, ok := src.sourceAliases.columnRange(qualifiedTn)
 		if !ok {
 			return nil, nil, fmt.Errorf("table %q not found", tableName.String())
 		}
@@ -504,16 +531,16 @@ type multiSourceInfo []*dataSourceInfo
 // checkDatabaseName checks whether the given TableName is unambiguous
 // for the set of sources and if it is, qualifies the missing database name.
 func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableName, error) {
-	found := false
 	if tn.DatabaseName == "" {
 		// No database name yet. Try to find one.
+		found := false
 		for _, src := range sources {
-			for name := range src.sourceAliases {
-				if name.TableName == tn.TableName {
+			for _, alias := range src.sourceAliases {
+				if alias.name.TableName == tn.TableName {
 					if found {
 						return parser.TableName{}, fmt.Errorf("ambiguous source name: %q", tn.TableName)
 					}
-					tn.DatabaseName = name.DatabaseName
+					tn.DatabaseName = alias.name.DatabaseName
 					found = true
 				}
 			}
@@ -525,8 +552,9 @@ func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.Ta
 	}
 
 	// Database given. Check that the name is unambiguous.
+	found := false
 	for _, src := range sources {
-		if _, ok := src.sourceAliases[tn]; ok {
+		if _, ok := src.sourceAliases.srcIdx(tn); ok {
 			if found {
 				return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (within database %q)",
 					tn.TableName, tn.DatabaseName)
@@ -543,16 +571,16 @@ func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.Ta
 // checkDatabaseName checks whether the given TableName is unambiguous
 // within this source and if it is, qualifies the missing database name.
 func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableName, error) {
-	found := false
 	if tn.DatabaseName == "" {
 		// No database name yet. Try to find one.
-		for name := range src.sourceAliases {
-			if name.TableName == tn.TableName {
+		found := false
+		for _, alias := range src.sourceAliases {
+			if alias.name.TableName == tn.TableName {
 				if found {
 					return parser.TableName{}, fmt.Errorf("ambiguous source name: %q", tn.TableName)
 				}
-				tn.DatabaseName = name.DatabaseName
 				found = true
+				tn.DatabaseName = alias.name.DatabaseName
 			}
 		}
 		if !found {
@@ -561,16 +589,8 @@ func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableN
 		return tn, nil
 	}
 
-	// Database given. Check that the name is unambiguous.
-	if _, ok := src.sourceAliases[tn]; ok {
-		if found {
-			return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (within database %q)",
-				tn.TableName, tn.DatabaseName)
-		}
-		found = true
-	}
-
-	if !found {
+	// Database given.
+	if _, found := src.sourceAliases.srcIdx(tn); !found {
 		return parser.TableName{}, fmt.Errorf("table %q not selected in FROM clause", &tn)
 	}
 	return tn, nil
@@ -624,7 +644,7 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 				}
 			}
 		} else {
-			colRange, ok := src.sourceAliases[tableName]
+			colRange, ok := src.sourceAliases.columnRange(tableName)
 			if !ok {
 				// The data source "src" has no column for table tableName.
 				// Try again with the net one.
@@ -648,40 +668,41 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 
 // concatDataSourceInfos creates a new dataSourceInfo that represents
 // the side-by-side concatenation of the two data sources described by
-// its arguments.  If it detects that a table alias appears on both
-// sides, an ambiguity is reported.
-func concatDataSourceInfos(left *dataSourceInfo, right *dataSourceInfo) (*dataSourceInfo, error) {
-	aliases := make(sourceAliases)
+// its arguments.
+func concatDataSourceInfos(left *dataSourceInfo, right *dataSourceInfo) *dataSourceInfo {
+	aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
+	aliases = append(aliases, left.sourceAliases...)
+
 	nColsLeft := len(left.sourceColumns)
-	for alias, colRange := range right.sourceAliases {
-		newRange := make(columnRange, len(colRange))
-		for i, idx := range colRange {
+	for _, alias := range right.sourceAliases {
+		newRange := make(columnRange, len(alias.columnRange))
+		for i, idx := range alias.columnRange {
 			newRange[i] = idx + nColsLeft
 		}
-		aliases[alias] = newRange
-	}
-	for k, v := range left.sourceAliases {
-		aliases[k] = v
+		aliases = append(aliases, sourceAlias{
+			name:        alias.name,
+			columnRange: newRange,
+		})
 	}
 
 	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns))
 	columns = append(columns, left.sourceColumns...)
 	columns = append(columns, right.sourceColumns...)
 
-	return &dataSourceInfo{sourceColumns: columns, sourceAliases: aliases}, nil
+	return &dataSourceInfo{sourceColumns: columns, sourceAliases: aliases}
 }
 
 // findTableAlias returns the first table alias providing the column
 // index given as argument. The index must be valid.
 func (src *dataSourceInfo) findTableAlias(colIdx int) parser.TableName {
-	for alias, colRange := range src.sourceAliases {
-		for _, idx := range colRange {
+	for _, alias := range src.sourceAliases {
+		for _, idx := range alias.columnRange {
 			if colIdx == idx {
-				return alias
+				return alias.name
 			}
 		}
 	}
-	panic(fmt.Sprintf("no alias for position %d in %q", colIdx, src.sourceAliases))
+	panic(fmt.Sprintf("no alias for position %d in %v", colIdx, src.sourceAliases))
 }
 
 func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f parser.FmtFlags, colIdx int) {

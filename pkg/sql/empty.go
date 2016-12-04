@@ -33,6 +33,7 @@ func (*emptyNode) Values() parser.DTuple               { return nil }
 func (*emptyNode) ExplainTypes(_ func(string, string)) {}
 func (*emptyNode) Start() error                        { return nil }
 func (*emptyNode) SetLimitHint(_ int64, _ bool)        {}
+func (*emptyNode) setNeededColumns(_ []bool)           {}
 func (*emptyNode) MarkDebug(_ explainMode)             {}
 func (*emptyNode) expandPlan() error                   { return nil }
 func (*emptyNode) Close()                              {}

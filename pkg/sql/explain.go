@@ -157,6 +157,7 @@ func (e *explainTypesNode) Ordering() orderingInfo               { return e.resu
 func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
 func (e *explainTypesNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
+func (e *explainTypesNode) setNeededColumns(_ []bool)            {}
 func (e *explainTypesNode) MarkDebug(mode explainMode)           {}
 func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "explain", "types", []planNode{e.plan}
@@ -193,9 +194,27 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 			buf.WriteString(", ")
 		}
 		parser.Name(rCol.Name).Format(&buf, parser.FmtSimple)
-		if rCol.hidden {
-			buf.WriteString("[hidden]")
+		// Output extra properties like [hidden,omitted].
+		hasProps := false
+		outputProp := func(prop string) {
+			if hasProps {
+				buf.WriteByte(',')
+			} else {
+				buf.WriteByte('[')
+			}
+			hasProps = true
+			buf.WriteString(prop)
 		}
+		if rCol.hidden {
+			outputProp("hidden")
+		}
+		if rCol.omitted {
+			outputProp("omitted")
+		}
+		if hasProps {
+			buf.WriteByte(']')
+		}
+
 		if printTypes {
 			buf.WriteByte(' ')
 			buf.WriteString(rCol.Typ.String())
@@ -263,6 +282,7 @@ func (e *explainPlanNode) Ordering() orderingInfo               { return e.resul
 func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues             { return debugValues{} }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
+func (e *explainPlanNode) setNeededColumns(_ []bool)            {}
 func (e *explainPlanNode) MarkDebug(mode explainMode)           {}
 func (e *explainPlanNode) expandPlan() error {
 	if err := e.plan.expandPlan(); err != nil {
@@ -436,3 +456,4 @@ func (n *explainDebugNode) Values() parser.DTuple {
 func (*explainDebugNode) MarkDebug(_ explainMode)      {}
 func (*explainDebugNode) DebugValues() debugValues     { return debugValues{} }
 func (*explainDebugNode) SetLimitHint(_ int64, _ bool) {}
+func (*explainDebugNode) setNeededColumns(_ []bool)    {}
