@@ -1634,17 +1634,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
-	// Replicate the range onto all three stores
 	mtc.replicateRange(1, 1, 2)
-
-	// Send a single increment to ensure the range is up.
-	key := roachpb.Key("a")
-	incArgs := incrementArgs(key, 2)
-	if _, err := client.SendWrapped(context.Background(),
-		mtc.distSenders[0], &incArgs); err != nil {
-		t.Fatal(err)
-	}
-	mtc.waitForValues(key, []int64{2, 2, 2})
 
 	leaderIdx := -1
 	for i, store := range mtc.stores {
@@ -1654,16 +1644,16 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 		}
 	}
 	initialTerm := mtc.stores[leaderIdx].RaftStatus(1).Term
-	// Choose a follower index that is guaranteed to not be the leader
-	followerIdx := len(mtc.stores) + 1 - leaderIdx
+	// Choose a follower index that is guaranteed to not be the leader.
+	followerIdx := (leaderIdx + 1) % len(mtc.stores)
 
 	// Shut down a raft transport via the circuit breaker, and wait for two
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
-	cb := mtc.transport.GetCircuitBreaker(roachpb.NodeID(followerIdx))
+	cb := mtc.transport.GetCircuitBreaker(mtc.stores[followerIdx].Ident.NodeID)
 	cb.Break()
 
-	ticksToWait := 2 * mtc.makeStoreConfig(0).RaftElectionTimeoutTicks
+	ticksToWait := 2 * mtc.makeStoreConfig(leaderIdx).RaftElectionTimeoutTicks
 	ticks := mtc.stores[leaderIdx].Metrics().RaftTicks.Count
 	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
