@@ -1761,6 +1761,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.GossipWhenCapacityDeltaExceedsFraction = 0.5 // 50% for testing
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableScanner = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
@@ -1786,19 +1787,22 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	})
 	defer unregister()
 
-	splitFunc := func(i int) {
+	splitFunc := func(i int) *roachpb.Error {
 		splitKey := roachpb.Key(fmt.Sprintf("%02d", i))
-		args := adminSplitArgs(splitKey, splitKey)
-		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
-			RangeID: store.LookupReplica(roachpb.RKey(splitKey), nil).RangeID,
-		}, &args); pErr != nil {
-			t.Fatal(pErr)
-		}
+		_, pErr := store.LookupReplica(roachpb.RKey(splitKey), nil).AdminSplit(
+			context.TODO(),
+			roachpb.AdminSplitRequest{
+				SplitKey: splitKey,
+			},
+		)
+		return pErr
 	}
 
 	// Split 9 times; verify range count is gossiped.
 	for i := 0; i < 9; i++ {
-		splitFunc(i)
+		if pErr := splitFunc(i); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 	util.SucceedsSoon(t, func() error {
 		if err := store.GossipStore(context.Background()); err != nil {
@@ -1813,7 +1817,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	// Now, since we require 50% of range/lease count to re-gossip, verify
 	// that with 5 more splits, we gossip.
 	for i := 9; i < 14; i++ {
-		splitFunc(i)
+		if pErr := splitFunc(i); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	if rangeCount := <-rangeCountCh; rangeCount != 15 {
@@ -1822,7 +1828,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 
 	// However, with four more splits, expect no gossip.
 	for i := 14; i < 18; i++ {
-		splitFunc(i)
+		if pErr := splitFunc(i); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 	select {
 	case <-rangeCountCh:
