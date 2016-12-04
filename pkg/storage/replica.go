@@ -1433,14 +1433,29 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
 				log.Warning(ctx, errStr)
 				log.ErrEvent(ctx, errStr)
+				// TODO(tamird): This should use r.store.stopper.RunAsyncTask, though
+				// be careful about such a change as the code paths here are not well
+				// tested.
 				go func() {
 					// The command is moot, so we don't need to bother executing.
 					// However, the command queue assumes that commands don't drop
 					// out before their prerequisites, so we still have to wait it
 					// out.
+					const warnDuration = time.Minute
+					timer := time.After(warnDuration)
 					for _, ch := range chans {
 						select {
 						case <-ch:
+						case <-timer:
+							timer = nil
+							r.cmdQMu.Lock()
+							g := r.cmdQMu.global.String()
+							l := r.cmdQMu.local.String()
+							r.cmdQMu.Unlock()
+							log.Infof(r.AnnotateCtx(context.Background()),
+								"waited %s for dependencies: cmd-global:\n%s\nglobal:\n%s"+
+									"cmd-local:\n%s\nlocal:%s\n",
+								warnDuration, cmdGlobal, g, cmdLocal, l)
 						case <-r.store.stopper.ShouldQuiesce():
 							// If the process is shutting down, we return without
 							// removing this command from queue. This avoids
@@ -1936,10 +1951,10 @@ func (r *Replica) tryAddWriteCmd(
 			if tryAbandon() {
 				log.Warningf(ctx, "context cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				// Set endCmds to nil because they will be invoked in processRaftCommand.
-				endCmds = nil
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoRetry
 			}
+			// Set endCmds to nil because they will be invoked in processRaftCommand.
+			endCmds = nil
 			ctxDone = nil
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError if the
