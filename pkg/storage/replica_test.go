@@ -5868,6 +5868,51 @@ func TestReplicaCancelRaft(t *testing.T) {
 	}
 }
 
+// TestReplicaTryAbandon checks that cancelling a request that has been
+// proposed to Raft but before it has been executed correctly cleans up the
+// command queue. See #11986.
+func TestReplicaTryAbandon(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cfg := TestStoreConfig(nil)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, cfg)
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.PutRequest{
+		Span: roachpb.Span{Key: []byte("acdfg")},
+	})
+	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel the proposed command before it is proposed to Raft and do not
+	// process it further.
+	tc.repl.mu.Lock()
+	tc.repl.mu.submitProposalFn = func(*EvalResult) error {
+		cancel()
+		return nil
+	}
+	tc.repl.mu.Unlock()
+
+	_, pErr := tc.repl.addWriteCmd(ctx, ba)
+	if pErr == nil {
+		t.Fatalf("expected failure, but found success")
+	}
+
+	detail := pErr.GetDetail()
+	if _, ok := detail.(*roachpb.AmbiguousResultError); !ok {
+		t.Fatalf("expected AmbiguousResultError error; got %s (%T)", detail, detail)
+	}
+	tc.repl.cmdQMu.Lock()
+	defer tc.repl.cmdQMu.Unlock()
+	if s := tc.repl.cmdQMu.global.String(); s != "" {
+		t.Fatalf("expected empty command queue, but found\n%s", s)
+	}
+}
+
 // TestComputeChecksumVersioning checks that the ComputeChecksum post-commit
 // trigger is called if and only if the checksum version is right.
 func TestComputeChecksumVersioning(t *testing.T) {
