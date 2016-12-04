@@ -214,3 +214,4 @@ func (n *explainTraceNode) Values() parser.DTuple {
 func (*explainTraceNode) MarkDebug(_ explainMode)      {}
 func (*explainTraceNode) DebugValues() debugValues     { return debugValues{} }
 func (*explainTraceNode) SetLimitHint(_ int64, _ bool) {}
+func (*explainTraceNode) setNeededColumns(_ []bool)    {}

@@ -54,6 +54,7 @@ func (*copyNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (*copyNode) Values() parser.DTuple               { return nil }
 func (*copyNode) ExplainTypes(_ func(string, string)) {}
 func (*copyNode) SetLimitHint(_ int64, _ bool)        {}
+func (*copyNode) setNeededColumns(_ []bool)           {}
 func (*copyNode) MarkDebug(_ explainMode)             {}
 func (*copyNode) expandPlan() error                   { return nil }
 func (*copyNode) Next() (bool, error)                 { return false, nil }

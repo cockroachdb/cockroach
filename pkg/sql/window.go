@@ -772,6 +772,7 @@ func (n *windowNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*windowNode) SetLimitHint(_ int64, _ bool) {}
+func (*windowNode) setNeededColumns(_ []bool)    {}
 
 func (n *windowNode) Close() {
 	n.plan.Close()

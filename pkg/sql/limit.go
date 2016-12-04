@@ -312,3 +312,5 @@ func (n *limitNode) SetLimitHint(count int64, soft bool) {
 	}
 	n.plan.SetLimitHint(getLimit(hintCount, n.offset), soft)
 }
+
+func (*limitNode) setNeededColumns(_ []bool) {}

@@ -342,3 +342,4 @@ func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*valuesNode) SetLimitHint(_ int64, _ bool) {}
+func (*valuesNode) setNeededColumns(_ []bool)    {}

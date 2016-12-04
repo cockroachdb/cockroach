@@ -36,6 +36,9 @@ type joinPredicate interface {
 	// right size, which can be used as intermediate buffer.
 	eval(result, leftRow, rightRow parser.DTuple) (bool, error)
 
+	// getNeededColumns figures out the columns needed for the two sources.
+	getNeededColumns(neededJoined []bool) (neededLeft []bool, neededRight []bool)
+
 	// prepareRow prepares the output row by combining values from the
 	// input data sources.
 	prepareRow(result, leftRow, rightRow parser.DTuple)
@@ -58,6 +61,22 @@ var _ joinPredicate = &onPredicate{}
 var _ joinPredicate = &crossPredicate{}
 var _ joinPredicate = &equalityPredicate{}
 
+// joinPredicateBase contains fields common to all joinPredicates.
+type joinPredicateBase struct {
+	numLeftCols, numRightCols int
+}
+
+func (p *joinPredicateBase) getNeededColumnsConcat(
+	neededJoined []bool,
+) (neededLeft []bool, neededRight []bool) {
+	if len(neededJoined) != p.numLeftCols+p.numRightCols {
+		panic(fmt.Sprintf(
+			"expected %d+%d cols, got %d", p.numLeftCols, p.numRightCols, len(neededJoined),
+		))
+	}
+	return neededJoined[:p.numLeftCols], neededJoined[p.numLeftCols:]
+}
+
 // prepareRowConcat implement the simple case of CROSS JOIN or JOIN
 // with an ON clause, where the rows of the two inputs are simply
 // concatenated.
@@ -68,11 +87,18 @@ func prepareRowConcat(result parser.DTuple, leftRow parser.DTuple, rightRow pars
 
 // crossPredicate implements the predicate logic for CROSS JOIN. The
 // predicate is always true, the work done here is thus minimal.
-type crossPredicate struct{}
+type crossPredicate struct {
+	joinPredicateBase
+}
 
 func (p *crossPredicate) eval(_, _, _ parser.DTuple) (bool, error) {
 	return true, nil
 }
+
+func (p *crossPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
+	return p.getNeededColumnsConcat(neededJoined)
+}
+
 func (p *crossPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 	prepareRowConcat(result, leftRow, rightRow)
 }
@@ -84,12 +110,26 @@ func (p *crossPredicate) encode(_ []byte, _ parser.DTuple, _ int) ([]byte, bool,
 	return nil, false, nil
 }
 
+// makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
+func (p *planner) makeCrossPredicate(left, right *dataSourceInfo) (joinPredicate, *dataSourceInfo) {
+	pred := &crossPredicate{
+		joinPredicateBase: joinPredicateBase{
+			numLeftCols:  len(left.sourceColumns),
+			numRightCols: len(right.sourceColumns),
+		},
+	}
+	info := concatDataSourceInfos(left, right)
+	return pred, info
+}
+
 // onPredicate implements the predicate logic for joins with an ON clause.
 type onPredicate struct {
-	p      *planner
-	filter parser.TypedExpr
-	info   *dataSourceInfo
-	curRow parser.DTuple
+	joinPredicateBase
+	p          *planner
+	iVarHelper parser.IndexedVarHelper
+	filter     parser.TypedExpr
+	info       *dataSourceInfo
+	curRow     parser.DTuple
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -124,6 +164,17 @@ func (p *onPredicate) eval(result, leftRow, rightRow parser.DTuple) (bool, error
 	p.curRow = result
 	prepareRowConcat(p.curRow, leftRow, rightRow)
 	return sqlbase.RunFilter(p.filter, &p.p.evalCtx)
+}
+
+func (p *onPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
+	// The columns that are part of the expression are always needed.
+	neededJoined = append([]bool(nil), neededJoined...)
+	for i := range neededJoined {
+		if p.iVarHelper.IndexedVarUsed(i) {
+			neededJoined[i] = true
+		}
+	}
+	return p.getNeededColumnsConcat(neededJoined)
 }
 
 func (p *onPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
@@ -191,20 +242,21 @@ func (p *planner) makeOnPredicate(
 	left, right *dataSourceInfo, expr parser.Expr,
 ) (joinPredicate, *dataSourceInfo, error) {
 	// Output rows are the concatenation of input rows.
-	info, err := concatDataSourceInfos(left, right)
-	if err != nil {
-		return nil, nil, err
-	}
+	info := concatDataSourceInfos(left, right)
 
 	pred := &onPredicate{
+		joinPredicateBase: joinPredicateBase{
+			numLeftCols:  len(left.sourceColumns),
+			numRightCols: len(right.sourceColumns),
+		},
 		p:    p,
 		info: info,
 	}
 
 	// Determine the filter expression.
 	colInfo := multiSourceInfo{left, right}
-	iVarHelper := parser.MakeIndexedVarHelper(pred, len(info.sourceColumns))
-	filter, err := p.analyzeExpr(expr, colInfo, iVarHelper, parser.TypeBool, true, "ON")
+	pred.iVarHelper = parser.MakeIndexedVarHelper(pred, len(info.sourceColumns))
+	filter, err := p.analyzeExpr(expr, colInfo, pred.iVarHelper, parser.TypeBool, true, "ON")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -215,6 +267,8 @@ func (p *planner) makeOnPredicate(
 
 // equalityPredicate implements the predicate logic for joins with a USING clause.
 type equalityPredicate struct {
+	joinPredicateBase
+
 	p *planner
 
 	// The comparison function to use for each column. We need
@@ -276,6 +330,40 @@ func (p *equalityPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, erro
 		}
 	}
 	return true, nil
+}
+
+func (p *equalityPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
+	if !p.mergeEqualityColumns {
+		leftNeeded, rightNeeded := p.getNeededColumnsConcat(neededJoined)
+		// The equality columns are always needed.
+		for i := range p.leftEqualityIndices {
+			leftNeeded[p.leftEqualityIndices[i]] = true
+			rightNeeded[p.rightEqualityIndices[i]] = true
+		}
+		return leftNeeded, rightNeeded
+	}
+	leftNeeded := make([]bool, p.numLeftCols)
+	rightNeeded := make([]bool, p.numRightCols)
+
+	// The equality columns are always needed.
+	for i := range p.leftEqualityIndices {
+		leftNeeded[p.leftEqualityIndices[i]] = true
+		rightNeeded[p.rightEqualityIndices[i]] = true
+	}
+
+	delta := len(p.leftEqualityIndices)
+	for i := range p.leftRestIndices {
+		if neededJoined[delta+i] {
+			leftNeeded[p.leftRestIndices[i]] = true
+		}
+	}
+	delta += len(p.leftRestIndices)
+	for i := range p.rightRestIndices {
+		if neededJoined[delta+i] {
+			rightNeeded[p.rightRestIndices[i]] = true
+		}
+	}
+	return leftNeeded, rightNeeded
 }
 
 // prepareRow for equalityPredicate. First, we should check if this
@@ -473,21 +561,21 @@ func (p *planner) makeEqualityPredicate(
 
 		// Merge the mappings from table aliases to column sets from both
 		// sides into a new alias-columnset mapping for the result rows.
-		aliases := make(sourceAliases)
-		for alias, colRange := range left.sourceAliases {
-			newRange := make([]int, len(colRange))
-			for i, colIdx := range colRange {
+		aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
+		for _, alias := range left.sourceAliases {
+			newRange := make([]int, len(alias.columnRange))
+			for i, colIdx := range alias.columnRange {
 				newRange[i] = usedLeft[colIdx]
 			}
-			aliases[alias] = newRange
+			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
 
-		for alias, colRange := range right.sourceAliases {
-			newRange := make([]int, len(colRange))
-			for i, colIdx := range colRange {
+		for _, alias := range right.sourceAliases {
+			newRange := make([]int, len(alias.columnRange))
+			for i, colIdx := range alias.columnRange {
 				newRange[i] = usedRight[colIdx]
 			}
-			aliases[alias] = newRange
+			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
 
 		info = &dataSourceInfo{
@@ -499,14 +587,15 @@ func (p *planner) makeEqualityPredicate(
 		// concatenations of left and right columns.
 		info = concatInfos
 		if info == nil {
-			info, err = concatDataSourceInfos(left, right)
-			if err != nil {
-				return nil, nil, err
-			}
+			info = concatDataSourceInfos(left, right)
 		}
 	}
 
 	return &equalityPredicate{
+		joinPredicateBase: joinPredicateBase{
+			numLeftCols:  len(left.sourceColumns),
+			numRightCols: len(right.sourceColumns),
+		},
 		p:                    p,
 		leftColNames:         leftColNames,
 		rightColNames:        rightColNames,

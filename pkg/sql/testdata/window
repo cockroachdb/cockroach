@@ -487,7 +487,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) 
 3  render/filter  render 2                   (d)[decimal]
 3  render/filter  render 3                   (v)[int]
 3  render/filter  render 4                   (v)[int]
-4  scan           result                     (k int, v int, w int, f float, d decimal, s string, b bool)
+4  scan           result                     (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 
 query ITTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
@@ -505,7 +505,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 3  render/filter  render 4                                       ('a')[string]
 3  render/filter  render 5                                       (v)[int]
 3  render/filter  render 6                                       (100)[int]
-4  scan           result                                         (k int, v int, w int, f float, d decimal, s string, b bool)
+4  scan           result                                         (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 
 query ITTT
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
@@ -524,7 +524,7 @@ EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER
 3  render/filter  render 5                                         (v)[int]
 3  render/filter  render 6                                         (100)[int]
 3  render/filter  render 7                                         (k)[int]
-4  scan           result                                           (k int, v int, w int, f float, d decimal, s string, b bool)
+4  scan           result                                           (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 
 statement OK
 INSERT INTO kv VALUES

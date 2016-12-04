@@ -51,7 +51,7 @@ EXPLAIN(VERBOSE) SELECT b, a FROM foo ORDER BY @1
 0  select                                                         (b, a)                 +a
 1  sort           +a                                              (b, a)                 +a
 2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (b, a)
-3  scan           foo@primary -                                   (a, b, rowid[hidden])  +rowid,unique
+3  scan           foo@primary -                                   (a, b, rowid[hidden,omitted])  +rowid,unique
 
 statement ok
 INSERT INTO foo(a, b) VALUES (4, 'c'), (5, 'c'), (6, 'c')
@@ -80,7 +80,7 @@ EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
 0  select                                                         (m)
 1  group          min(a) GROUP BY (@2)                            (m)
 2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (a, a)
-3  scan           foo@primary -                                   (a, b, rowid[hidden])  +rowid,unique
+3  scan           foo@primary -                                   (a, b[omitted], rowid[hidden,omitted])  +rowid,unique
 
 query ITTTT
 EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2;
@@ -88,7 +88,7 @@ EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2;
 0  select                                                         (m)
 1  group          min(a) GROUP BY (@2)                            (m)
 2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (a, b)
-3  scan           foo@primary -                                   (a, b, rowid[hidden])  +rowid,unique
+3  scan           foo@primary -                                   (a, b, rowid[hidden,omitted])  +rowid,unique
 
 statement error column reference @1 not allowed in this context
 INSERT INTO foo(a, b) VALUES (@1, @2)

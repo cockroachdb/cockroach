@@ -218,6 +218,7 @@ func (n *dropDatabaseNode) Values() parser.DTuple               { return parser.
 func (n *dropDatabaseNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropDatabaseNode) ExplainTypes(_ func(string, string)) {}
 func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *dropDatabaseNode) setNeededColumns(_ []bool)           {}
 func (n *dropDatabaseNode) MarkDebug(mode explainMode)          {}
 func (n *dropDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "drop database", "", nil
@@ -398,6 +399,7 @@ func (n *dropIndexNode) Values() parser.DTuple               { return parser.DTu
 func (n *dropIndexNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropIndexNode) ExplainTypes(_ func(string, string)) {}
 func (n *dropIndexNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *dropIndexNode) setNeededColumns(_ []bool)           {}
 func (n *dropIndexNode) MarkDebug(mode explainMode)          {}
 func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "drop index", "", nil
@@ -514,6 +516,7 @@ func (n *dropViewNode) Values() parser.DTuple               { return parser.DTup
 func (n *dropViewNode) ExplainTypes(_ func(string, string)) {}
 func (n *dropViewNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropViewNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *dropViewNode) setNeededColumns(_ []bool)           {}
 func (n *dropViewNode) MarkDebug(mode explainMode)          {}
 func (n *dropViewNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "drop view", "", nil
@@ -734,6 +737,7 @@ func (n *dropTableNode) Values() parser.DTuple               { return parser.DTu
 func (n *dropTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *dropTableNode) DebugValues() debugValues            { return debugValues{} }
 func (n *dropTableNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *dropTableNode) setNeededColumns(_ []bool)           {}
 func (n *dropTableNode) MarkDebug(mode explainMode)          {}
 func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "drop table", "", nil

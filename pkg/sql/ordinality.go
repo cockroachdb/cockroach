@@ -59,7 +59,8 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	// Allocate an extra column for the ordinality values.
 	res.columns = make(ResultColumns, len(srcColumns)+1)
 	copy(res.columns, srcColumns)
-	res.columns[len(res.columns)-1] = ResultColumn{
+	newColIdx := len(res.columns) - 1
+	res.columns[newColIdx] = ResultColumn{
 		Name: "ordinality",
 		Typ:  parser.TypeInt,
 	}
@@ -67,9 +68,15 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	// Extend the dataSourceInfo with information about the
 	// new column.
 	ds.info.sourceColumns = res.columns
-	entry := ds.info.sourceAliases[anonymousTable]
-	entry = append(entry, len(res.columns)-1)
-	ds.info.sourceAliases[anonymousTable] = entry
+	if srcIdx, ok := ds.info.sourceAliases.srcIdx(anonymousTable); !ok {
+		ds.info.sourceAliases = append(ds.info.sourceAliases, sourceAlias{
+			name:        anonymousTable,
+			columnRange: []int{newColIdx},
+		})
+	} else {
+		srcAlias := &ds.info.sourceAliases[srcIdx]
+		srcAlias.columnRange = append(srcAlias.columnRange, newColIdx)
+	}
 
 	ds.plan = res
 
@@ -135,3 +142,4 @@ func (o *ordinalityNode) Start() error                          { return o.sourc
 func (o *ordinalityNode) Close()                                { o.source.Close() }
 func (o *ordinalityNode) ExplainTypes(_ func(string, string))   {}
 func (o *ordinalityNode) SetLimitHint(numRows int64, soft bool) { o.source.SetLimitHint(numRows, soft) }
+func (o *ordinalityNode) setNeededColumns(_ []bool)             {}
