@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -54,8 +55,9 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 func TestGCQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	cfg, ok := tc.gossip.GetSystemConfig()
 	if !ok {
@@ -163,8 +165,9 @@ func TestGCQueueShouldQueue(t *testing.T) {
 func TestGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
@@ -453,8 +456,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			return nil
 		}
 	tc := testContext{manualClock: manual}
-	tc.StartWithStoreConfig(t, tsc)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
@@ -566,8 +570,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 func TestGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	tc.manualClock.Set(48 * 60 * 60 * 1E9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
@@ -630,8 +635,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
 
 	// Create two last processed times both at the range start key and
 	// also at some mid-point key in order to simulate a merge.

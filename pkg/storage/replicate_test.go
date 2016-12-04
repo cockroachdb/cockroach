@@ -19,16 +19,19 @@ package storage_test
 import (
 	"testing"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestEagerReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, stopper, _ := createTestStore(t)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store, _ := createTestStore(t, stopper)
 
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.

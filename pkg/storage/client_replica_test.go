@@ -61,8 +61,8 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, 100*time.Millisecond))
 	}
 	mtc := &multiTestContext{clocks: clocks}
-	mtc.Start(t, numNodes)
 	defer mtc.Stop()
+	mtc.Start(t, numNodes)
 	mtc.replicateRange(1, 1, 2)
 
 	// Advance the lease holder's clock ahead of the followers (by more than
@@ -109,8 +109,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, 100*time.Millisecond)
 	mtc := &multiTestContext{clock: clock}
-	mtc.Start(t, 1)
 	defer mtc.Stop()
+	mtc.Start(t, 1)
 
 	ts1 := clock.Now()
 
@@ -322,8 +322,9 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	store, stopper := createTestStoreWithConfig(t, storeCfg)
+	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
@@ -480,8 +481,8 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 	mtc := &multiTestContext{}
 	mtc.storeConfig = &cfg
-	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	// First, do a write; we'll use it to determine when the dust has settled.
 	leftKey := roachpb.Key("a")
@@ -685,8 +686,8 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 		}
 	}
 	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.Start(t, 1)
 	defer mtc.Stop()
+	mtc.Start(t, 1)
 
 	// Send a read, to acquire a lease.
 	getArgs := getArgs([]byte("a"))
@@ -951,8 +952,9 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 
 func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := startMultiTestContext(t, 2)
+	mtc := &multiTestContext{}
 	defer mtc.Stop()
+	mtc.Start(t, 2)
 
 	// Up-replicate to two replicas.
 	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).RangeID, 1)
