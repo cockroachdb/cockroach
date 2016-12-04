@@ -1433,14 +1433,29 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
 				log.Warning(ctx, errStr)
 				log.ErrEvent(ctx, errStr)
+				// TODO(tamird): This should use r.store.stopper.RunAsyncTask, though
+				// be careful about such a change as the code paths here are not well
+				// tested.
 				go func() {
 					// The command is moot, so we don't need to bother executing.
 					// However, the command queue assumes that commands don't drop
 					// out before their prerequisites, so we still have to wait it
 					// out.
+					const warnDuration = time.Minute
+					timer := time.After(warnDuration)
 					for _, ch := range chans {
 						select {
 						case <-ch:
+						case <-timer:
+							timer = nil
+							r.cmdQMu.Lock()
+							g := r.cmdQMu.global.String()
+							l := r.cmdQMu.local.String()
+							r.cmdQMu.Unlock()
+							log.Infof(r.AnnotateCtx(context.Background()),
+								"waited %s for dependencies: cmd-global:\n%s\nglobal:\n%s"+
+									"cmd-local:\n%s\nlocal:%s\n",
+								warnDuration, cmdGlobal, g, cmdLocal, l)
 						case <-r.store.stopper.ShouldQuiesce():
 							// If the process is shutting down, we return without
 							// removing this command from queue. This avoids
@@ -1936,7 +1951,9 @@ func (r *Replica) tryAddWriteCmd(
 			if tryAbandon() {
 				log.Warningf(ctx, "context cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				// Set endCmds to nil because they will be invoked in processRaftCommand.
+				// Abandoning a command only abandons the context. The command will
+				// still be executed by processRaftCommand which will take care of
+				// removing the command from the command queue.
 				endCmds = nil
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoRetry
 			}
@@ -1949,12 +1966,15 @@ func (r *Replica) tryAddWriteCmd(
 			// tryAbandon fails, we iterate through the loop again to wait
 			// for the command to finish.
 			//
-			// Note that in the shutdown case, we *do not* set the endCmds
-			// var to nil. We have no expectation during shutdown that Raft
-			// will continue processing, so we need to free up the command
-			// queue so other waiters can proceed. This is safe because with
-			// the stopper quiescing, no new commands can be proposed to
-			// Raft successfully.
+			// Note that in the shutdown case, we *do not* set the endCmds var to
+			// nil. We have no expectation during shutdown that Raft will continue
+			// processing, so we need to free up the command queue so other waiters
+			// can proceed. This is safe because with the stopper quiescing, no new
+			// commands can be proposed to Raft successfully.
+			//
+			// TODO(peter): This is strange. It would make more sense to set `endCmds
+			// = nil` immediately after proposing to Raft. Does this open a hole in
+			// correctness during graceful shutdown?
 			if tryAbandon() {
 				log.Warningf(ctx, "shutdown cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
@@ -2154,11 +2174,19 @@ func (r *Replica) propose(
 		return nil, nil, err
 	}
 	// Must not use `pCmd` in the closure below as a proposal which is not
-	// present in r.mu.proposals is no longer protected by the mutex.
+	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
+	// a command only abandons the associated context. As soon as we propose a
+	// command to Raft ownership passes to the "below Raft" machinery. In
+	// particular, endCmds will be invoked when the command is applied. There are
+	// a handful of cases where the command may not be applied (or even
+	// processed): the process crashes or the local replica is removed from the
+	// range.
 	tryAbandon := func() bool {
 		r.mu.Lock()
-		_, ok := r.mu.proposals[idKey]
-		delete(r.mu.proposals, idKey)
+		cmd, ok := r.mu.proposals[idKey]
+		if ok {
+			cmd.Local.ctx = nil
+		}
 		r.mu.Unlock()
 		return ok
 	}
@@ -3153,9 +3181,12 @@ func (r *Replica) processRaftCommand(
 
 	// TODO(tschottdorf): consider the Trace situation here.
 	if cmdProposedLocally {
-		// We initiated this command, so use the caller-supplied context.
-		ctx = cmd.Local.ctx
-		cmd.Local.ctx = nil // avoid confusion
+		// We initiated this command, so use the caller-supplied context. That
+		// context may be nil if the context has been abandoned.
+		if cmd.Local.ctx != nil {
+			ctx = cmd.Local.ctx
+			cmd.Local.ctx = nil // avoid confusion
+		}
 		delete(r.mu.proposals, idKey)
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
