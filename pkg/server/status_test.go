@@ -228,8 +228,8 @@ func TestStatusLocalLogs(t *testing.T) {
 	for _, fileInfo := range wrapper.Files {
 		fName := fileInfo.Name
 		found := false
-		for i, name := range []string{"ERROR.log", "INFO.log", "WARNING.log"} {
-			if strings.Contains(wrapper.Files[i].Name, name) {
+		for _, name := range []string{"ERROR.log", "INFO.log", "WARNING.log"} {
+			if strings.Contains(fName, name) {
 				found = true
 				break
 			}
