@@ -1,7 +1,7 @@
 # On an implicit transaction, we retry implicitly and the function
 # eventually returns a result.
 query I
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
 ----
 0
 
@@ -9,19 +9,19 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart
 
 query error restart transaction: forced
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL)
 
 statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
 
-# wait until the transaction is at least 2 seconds old
-sleep 2s
+# wait until the transaction is at least 1 second
+sleep 1s
 
 statement ok
 SAVEPOINT cockroach_restart
 
 query I
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL)
 ----
 0
 
