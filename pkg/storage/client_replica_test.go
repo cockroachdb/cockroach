@@ -70,7 +70,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
+	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -123,7 +123,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	clockOffset := clock.MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
 		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0)
-		if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, &incArgs); err != nil {
+		if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -134,7 +134,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, &incArgs)
+	_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
 	if !testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
 		t.Fatalf("unexpected error %v", pErr)
 	}
@@ -328,7 +328,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
-	splits := []roachpb.AdminSplitRequest{
+	splits := []*roachpb.AdminSplitRequest{
 		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g")),
 		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e")),
 		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c")),
@@ -336,7 +336,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, split := range splits {
-		_, pErr := client.SendWrapped(context.Background(), rg1(store), &split)
+		_, pErr := client.SendWrapped(context.Background(), rg1(store), split)
 		if pErr != nil {
 			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, pErr)
 		}
@@ -487,7 +487,7 @@ func TestRangeTransferLease(t *testing.T) {
 	// First, do a write; we'll use it to determine when the dust has settled.
 	leftKey := roachpb.Key("a")
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -509,7 +509,7 @@ func TestRangeTransferLease(t *testing.T) {
 		context.Background(),
 		mtc.senders[0],
 		roachpb.Header{Replica: replica0Desc},
-		&gArgs,
+		gArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -556,7 +556,7 @@ func TestRangeTransferLease(t *testing.T) {
 		context.Background(),
 		mtc.senders[0],
 		roachpb.Header{Replica: replica0Desc},
-		&gArgs,
+		gArgs,
 	)
 	nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
@@ -573,7 +573,7 @@ func TestRangeTransferLease(t *testing.T) {
 			context.Background(),
 			mtc.senders[1],
 			roachpb.Header{Replica: replica0Desc},
-			&gArgs,
+			gArgs,
 		); pErr != nil {
 			return pErr.GoError()
 		}
@@ -626,7 +626,7 @@ func TestRangeTransferLease(t *testing.T) {
 			context.Background(),
 			mtc.senders[1],
 			roachpb.Header{Replica: replica0Desc},
-			&gArgs,
+			gArgs,
 		); pErr != nil {
 			panic(pErr)
 		}
@@ -653,7 +653,7 @@ func TestRangeTransferLease(t *testing.T) {
 			context.Background(),
 			mtc.senders[0],
 			roachpb.Header{Replica: replica0Desc},
-			&gArgs,
+			gArgs,
 		); pErr != nil {
 			return pErr.GoError()
 		}
@@ -691,7 +691,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send a read, to acquire a lease.
 	getArgs := getArgs([]byte("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &getArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), getArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -710,7 +710,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send another read and check that the pre-existing lease has not been used.
 	// Concretely, we check that a new lease is requested.
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &getArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), getArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Check that the Send above triggered a lease acquisition.
@@ -963,7 +963,7 @@ func TestRangeInfo(t *testing.T) {
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
 	if _, pErr := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), &splitArgs,
+		context.Background(), rg1(mtc.stores[0]), splitArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -987,7 +987,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify range info is not set if unrequested.
 	getArgs := getArgs(splitKey.AsRawKey())
-	reply, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &getArgs)
+	reply, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -999,7 +999,7 @@ func TestRangeInfo(t *testing.T) {
 	h := roachpb.Header{
 		ReturnRangeInfo: true,
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &getArgs)
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1015,7 +1015,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify range info on a put request.
 	putArgs := putArgs(splitKey.AsRawKey(), []byte("foo"))
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &putArgs)
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, putArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
