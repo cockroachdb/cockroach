@@ -160,6 +160,8 @@ endif
 
 .PHONY: upload-coverage
 upload-coverage:
+	$(GO) install ./vendor/github.com/wadey/gocovmerge
+	$(GO) install ./vendor/github.com/mattn/goveralls
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
