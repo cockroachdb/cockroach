@@ -171,3 +171,36 @@ test
 
 query error database "d2" does not exist
 SELECT * FROM d2.v1
+
+## drop a database containing tables with foreign key constraints, e.g. #8497
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE CHECK (a > 4),
+  CONSTRAINT c2 CHECK (a < 99)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+statement ok
+DROP DATABASE constraint_db
+
+query T
+SHOW DATABASES
+----
+information_schema
+pg_catalog
+system
+test
+
+query error database "constraint_db" does not exist
+SELECT * FROM constraint_db.t1
