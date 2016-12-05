@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"fmt"
 	"math"
 	"testing"
 )
@@ -186,15 +187,17 @@ func TestDatumOrdering(t *testing.T) {
 		expr := prepareExpr(t, td.datumExpr)
 
 		d := expr.(Datum)
+		prevVal, hasPrev := d.Prev()
+		nextVal, hasNext := d.Next()
 		if td.prev == noPrev {
-			if d.HasPrev() {
+			if hasPrev {
 				if !d.IsMin() {
-					t.Errorf("%s: value should not have a prev, yet HasPrev() true and IsMin() false (expected (!HasPrev() } IsMin()))", td.datumExpr)
+					t.Errorf("%s: value should not have a prev, yet hasPrev true and IsMin() false (expected (!hasPrev || IsMin()))", td.datumExpr)
 				}
 			}
 		} else {
-			if !d.HasPrev() && td.prev != valIsMin {
-				t.Errorf("%s: HasPrev(): got false, expected true", td.datumExpr)
+			if !hasPrev && td.prev != valIsMin {
+				t.Errorf("%s: hasPrev: got false, expected true", td.datumExpr)
 				continue
 			}
 			isMin := d.IsMin()
@@ -203,20 +206,20 @@ func TestDatumOrdering(t *testing.T) {
 				continue
 			}
 			if !isMin {
-				dPrev := d.Prev().String()
+				dPrev := fmt.Sprintf("%s", prevVal)
 				if dPrev != td.prev {
 					t.Errorf("%s: Prev(): got %s, expected %s", td.datumExpr, dPrev, td.prev)
 				}
 			}
 		}
 		if td.next == noNext {
-			if d.HasNext() {
+			if hasNext {
 				if !d.IsMax() {
-					t.Errorf("%s: value should not have a next, yet HasNext() true and IsMax() false (expected (!HasNext() || IsMax()))", td.datumExpr)
+					t.Errorf("%s: value should not have a next, yet hasNext true and IsMax() false (expected (!hasNext || IsMax()))", td.datumExpr)
 				}
 			}
 		} else {
-			if !d.HasNext() && td.next != valIsMax {
+			if !hasNext && td.next != valIsMax {
 				t.Errorf("%s: HasNext(): got false, expected true", td.datumExpr)
 				continue
 			}
@@ -226,30 +229,34 @@ func TestDatumOrdering(t *testing.T) {
 				continue
 			}
 			if !isMax {
-				dNext := d.Next().String()
+				dNext := fmt.Sprintf("%s", nextVal)
 				if dNext != td.next {
 					t.Errorf("%s: Next(): got %s, expected %s", td.datumExpr, dNext, td.next)
 				}
 			}
 		}
+
+		minVal, hasMin := d.min()
+		maxVal, hasMax := d.max()
+
 		if td.min == noMin {
-			if d.hasMin() {
-				t.Errorf("%s: hasMin() true, expected false", td.datumExpr)
+			if hasMin {
+				t.Errorf("%s: hasMin true, expected false", td.datumExpr)
 			}
 		} else {
-			dMin := d.min().String()
+			dMin := fmt.Sprintf("%s", minVal)
 			if dMin != td.min {
-				t.Errorf("%s: Min(): got %s, expected %s", td.datumExpr, dMin, td.min)
+				t.Errorf("%s: min(): got %s, expected %s", td.datumExpr, dMin, td.min)
 			}
 		}
 		if td.max == noMax {
-			if d.hasMax() {
-				t.Errorf("%s: hasMax() true, expected false", td.datumExpr)
+			if hasMax {
+				t.Errorf("%s: hasMax true, expected false", td.datumExpr)
 			}
 		} else {
-			dMax := d.max().String()
+			dMax := fmt.Sprintf("%s", maxVal)
 			if dMax != td.max {
-				t.Errorf("%s: Max(): got %s, expected %s", td.datumExpr, dMax, td.max)
+				t.Errorf("%s: max(): got %s, expected %s", td.datumExpr, dMax, td.max)
 			}
 		}
 	}
