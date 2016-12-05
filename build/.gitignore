@@ -7,3 +7,4 @@
 # NPM
 node_modules
 yarn.installed
+bin

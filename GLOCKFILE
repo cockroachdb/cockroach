@@ -2,14 +2,11 @@ cmd ./pkg/cmd/github-post
 cmd ./pkg/cmd/github-pull-request-make
 cmd ./pkg/cmd/glock-diff-parser
 cmd ./pkg/cmd/metacheck
-cmd ./pkg/cmd/protoc-gen-gogoroach
 cmd ./pkg/cmd/teamcity-trigger
 cmd ./vendor/github.com/client9/misspell/cmd/misspell
-cmd ./vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd ./vendor/github.com/cockroachdb/crlfmt
 cmd ./vendor/github.com/cockroachdb/stress
 cmd ./vendor/github.com/golang/lint/golint
-cmd ./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 cmd ./vendor/github.com/jteeuwen/go-bindata/go-bindata
 cmd ./vendor/github.com/kisielk/errcheck
 cmd ./vendor/github.com/kkaneda/returncheck
