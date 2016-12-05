@@ -17,9 +17,9 @@
 package storage
 
 import (
+	"bytes"
 	"container/heap"
 	"fmt"
-	"strings"
 
 	"golang.org/x/net/context"
 
@@ -101,6 +101,29 @@ func (c *cmd) cmdCount() int {
 	return len(c.children)
 }
 
+func (c *cmd) String() string {
+	if c == nil {
+		return "<nil>"
+	}
+	var buf bytes.Buffer
+	var readOnly string
+	if c.readOnly {
+		readOnly = " readonly"
+	}
+	fmt.Fprintf(&buf, "%d%s [%s", c.id, readOnly, roachpb.Key(c.key.Start))
+	if !roachpb.Key(c.key.End).Equal(roachpb.Key(c.key.Start).Next()) {
+		fmt.Fprintf(&buf, ",%s", roachpb.Key(c.key.End))
+	}
+	fmt.Fprintf(&buf, ")")
+
+	if !c.expanded {
+		for i := range c.children {
+			fmt.Fprintf(&buf, "\n    %d: %s", i, &c.children[i])
+		}
+	}
+	return buf.String()
+}
+
 // NewCommandQueue returns a new command queue. The boolean specifies whether
 // to enable the covering span optimization. With this optimization, whenever
 // a command consisting of multiple spans is added, a covering span is computed
@@ -123,20 +146,12 @@ func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 
 // String dumps the contents of the command queue for testing.
 func (cq *CommandQueue) String() string {
-	var keys []string
-	count := 0
+	var buf bytes.Buffer
 	cq.tree.Do(func(i interval.Interface) bool {
-		c := i.(*cmd)
-		keys = append(keys, fmt.Sprintf("%s-%s", roachpb.Key(c.key.Start), roachpb.Key(c.key.End)))
-
-		count++
-		if count > 10 {
-			keys = append(keys, "...")
-			return true
-		}
+		fmt.Fprintf(&buf, "  %s\n", i)
 		return false
 	})
-	return strings.Join(keys, ",")
+	return buf.String()
 }
 
 // prepareSpans ensures the spans all have an end key. Note that this function
