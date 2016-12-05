@@ -3312,7 +3312,8 @@ func (r *Replica) processRaftCommand(
 		if raftCmd.WriteBatch != nil {
 			writeBatch = raftCmd.WriteBatch
 		}
-		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
+		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
+			ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
 
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -3471,16 +3472,18 @@ func (r *Replica) applyRaftCommand(
 	}
 
 	r.mu.Lock()
-	oldIndex := r.mu.state.RaftAppliedIndex
+	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
+	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
 	ms := r.mu.state.Stats
 	r.mu.Unlock()
 
-	if rResult.State.RaftAppliedIndex != oldIndex+1 {
+	if rResult.State.RaftAppliedIndex != oldRaftAppliedIndex+1 {
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Errorf("applied index jumped from %d to %d", oldIndex, rResult.State.RaftAppliedIndex)))
+			errors.Errorf("applied index jumped from %d to %d",
+				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
 
 	batch := r.store.Engine().NewBatch()
@@ -3498,13 +3501,17 @@ func (r *Replica) applyRaftCommand(
 	//
 	writer := batch.Distinct()
 
-	// Advance the last applied index.
-	if err := setAppliedIndex(
-		ctx, writer, &rResult.Delta, r.RangeID, rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex,
-	); err != nil {
+	// Advance the last applied index. We use a blind write in order to avoid
+	// reading the previous applied index keys on every write operation. This
+	// requires a little additional work in order maintain the MVCC stats.
+	var appliedIndexNewMS enginepb.MVCCStats
+	if err := setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS, r.RangeID,
+		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
+	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
+		calcAppliedIndexSysBytes(r.RangeID, oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
