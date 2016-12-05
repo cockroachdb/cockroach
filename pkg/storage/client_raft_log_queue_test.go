@@ -58,7 +58,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Write a single value to ensure we have a leader.
 	pArgs := putArgs([]byte("key"), []byte("value"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &pArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +82,7 @@ func TestRaftLogQueue(t *testing.T) {
 	value := bytes.Repeat([]byte("a"), 1000) // 1KB
 	for size := int64(0); size < 2*maxBytes; size += int64(len(value)) {
 		pArgs = putArgs([]byte(fmt.Sprintf("key-%d", size)), value)
-		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &pArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), pArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
