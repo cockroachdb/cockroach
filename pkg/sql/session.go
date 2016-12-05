@@ -385,7 +385,7 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	ts.sp = nil
 	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
 		(traceSQLFor7881 && sampledFor7881) {
-		dump := tracing.FormatRawSpans(ts.CollectedSpans, true /*formatTiming*/)
+		dump := tracing.FormatRawSpans(ts.CollectedSpans)
 		if len(dump) > 0 {
 			log.Infof(sessionCtx, "SQL trace:\n%s", dump)
 		}
