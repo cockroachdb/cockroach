@@ -17,7 +17,6 @@
 package client
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -26,6 +25,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -46,14 +47,16 @@ var (
 // An example of snowball tracing being used to dump a trace around a
 // transaction. Use something similar whenever you cannot use
 // COCKROACH_TRACE_SQL.
-func Example_txnSnowballTrace() {
+func TestTxnSnowballTrace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	db := NewDB(newTestSender(nil, nil))
 	var collectedSpans []basictracer.RawSpan
 	sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
 		collectedSpans = append(collectedSpans, sp)
 	})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	ctx := opentracing.ContextWithSpan(context.TODO(), sp)
 	if err := db.Txn(ctx, func(txn *Txn) error {
@@ -61,19 +64,24 @@ func Example_txnSnowballTrace() {
 		collectedSpans = append(collectedSpans, txn.CollectedSpans...)
 		return nil
 	}); err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	log.Event(ctx, "txn complete")
 	// Cannot use ctx once Finish() is called.
 	sp.Finish()
-	dump := tracing.FormatRawSpans(collectedSpans, false /*formatTiming*/)
-	fmt.Printf("trace:\n%s", dump)
-	// Output:
-	// trace:
-	//     event:collecting spans
-	//     event:client.Txn did AutoCommit. err: <nil>
-	// txn: "internal/client/txn_test.go:63 Example_txnSnowballTrace" id=<nil> key=/Min rw=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
-	//     event:txn complete
+	dump := tracing.FormatRawSpans(collectedSpans)
+	// dump:
+	//    0.105ms      0.000ms    event:collecting spans
+	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>
+	//txn: "internal/client/txn_test.go:67 TestTxnSnowballTrace" id=<nil> key=/Min rw=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
+	//    0.278ms      0.173ms    event:txn complete
+	found, err := regexp.MatchString(".*event:collecting spans\n.*event:client.Txn did AutoCommit. err: <nil>\n.*\n.*event:txn complete.*", dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatalf("didnt match: %s", dump)
+	}
 }
 
 // TestSender mocks out some of the txn coordinator sender's
