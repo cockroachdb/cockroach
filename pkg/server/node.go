@@ -166,13 +166,28 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // engines and cluster ID. The first bootstrapped store contains a
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
-func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.UUID, error) {
+func bootstrapCluster(
+	realCfg storage.StoreConfig, engines []engine.Engine, txnMetrics kv.TxnMetrics,
+) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
+	// Copy over the important configuration parameters to avoid pulling in any
+	// configuration we don't want. If we don't do this, then the first range
+	// can end up with a lease of a different length than other ranges.
 	cfg := storage.StoreConfig{
-		Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                       realCfg.Clock,
+		RangeRetryOptions:           realCfg.RangeRetryOptions,
+		RaftTickInterval:            realCfg.RaftTickInterval,
+		CoalescedHeartbeatsInterval: realCfg.CoalescedHeartbeatsInterval,
+		RaftHeartbeatIntervalTicks:  realCfg.RaftHeartbeatIntervalTicks,
+		RaftElectionTimeoutTicks:    realCfg.RaftElectionTimeoutTicks,
+		RangeLeaseActiveDuration:    realCfg.RangeLeaseActiveDuration,
+		RangeLeaseRenewalDuration:   realCfg.RangeLeaseRenewalDuration,
+	}
+	if cfg.Clock == nil {
+		cfg.Clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	cfg.ScanInterval = 10 * time.Minute
 	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
@@ -341,7 +356,7 @@ func (n *Node) start(
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(engines, n.txnMetrics)
+			clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
 			if err != nil {
 				return err
 			}
