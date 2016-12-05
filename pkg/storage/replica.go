@@ -4365,3 +4365,134 @@ func (r *Replica) endKey() roachpb.RKey {
 func (r *Replica) Less(i btree.Item) bool {
 	return r.endKey().Less(i.(rangeKeyItem).endKey())
 }
+
+type replicaMetrics struct {
+	leader               bool
+	leaderNotLeaseholder bool
+	leaseholder          bool
+	quiescent            bool
+	// Is this the replica which collects per-range metrics? This is done either
+	// on the leader or, if there is no leader, on the largest live replica ID.
+	rangeCounter    bool
+	unavailable     bool
+	underreplicated bool
+}
+
+func (r *Replica) metrics(
+	ctx context.Context,
+	now hlc.Timestamp,
+	cfg config.SystemConfig,
+	livenessMap map[roachpb.NodeID]bool,
+) replicaMetrics {
+	r.mu.Lock()
+	raftStatus := r.raftStatusLocked()
+	lease := r.mu.state.Lease
+	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
+	desc := r.mu.state.Desc
+	r.mu.Unlock()
+
+	return calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
+		raftStatus, lease, r.store.StoreID(), quiescent)
+}
+
+func isRaftLeader(raftStatus *raft.Status) bool {
+	return raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader
+}
+
+func hasRaftLeader(raftStatus *raft.Status) bool {
+	return raftStatus != nil && raftStatus.SoftState.Lead != 0
+}
+
+func calcReplicaMetrics(
+	ctx context.Context,
+	now hlc.Timestamp,
+	cfg config.SystemConfig,
+	livenessMap map[roachpb.NodeID]bool,
+	desc *roachpb.RangeDescriptor,
+	raftStatus *raft.Status,
+	lease *roachpb.Lease,
+	storeID roachpb.StoreID,
+	quiescent bool,
+) replicaMetrics {
+	var m replicaMetrics
+
+	leaseCovers := lease.Covers(now)
+	leaseOwner := lease.OwnedBy(storeID)
+	m.leaseholder = leaseCovers && leaseOwner
+
+	// To avoid double counting, most stats are only counted on the raft
+	// leader. The lease holder count is the exception, which is counted by
+	// all replicas.
+	m.leader = isRaftLeader(raftStatus)
+	m.leaderNotLeaseholder = m.leader && leaseCovers && !leaseOwner
+
+	// We gather per-range stats on either the leader or, if there is no
+	// leader, the largest live replica ID. Note that the largest ID is an
+	// arbitrary choice. We want to select one live replica to do the
+	// counting that all replicas can agree on.
+	//
+	// Note that the current heuristics can double count. If the largest live
+	// replica ID is on a node that is partitioned from the other replicas in
+	// the range it may not know the leader even though there is one. This
+	// scenario seems rare as it requires the partitioned node to be alive
+	// enough to be performing liveness heartbeats.
+	if !hasRaftLeader(raftStatus) {
+		// The range doesn't have a leader or we don't know who the leader is.
+		highestIdx := -1
+		for i, rd := range desc.Replicas {
+			if livenessMap[rd.NodeID] {
+				if highestIdx == -1 || rd.ReplicaID > desc.Replicas[highestIdx].ReplicaID {
+					highestIdx = i
+				}
+			}
+		}
+		m.rangeCounter = (highestIdx != -1 && desc.Replicas[highestIdx].StoreID == storeID)
+	} else {
+		m.rangeCounter = m.leader
+	}
+
+	if m.rangeCounter {
+		// Count good replicas: those which are on a live node and, if there is a
+		// leader, which are not too far behind.
+		goodReplicas := calcGoodReplicas(raftStatus, desc, livenessMap)
+		if goodReplicas < computeQuorum(len(desc.Replicas)) {
+			m.unavailable = true
+		}
+		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
+			log.Error(ctx, err)
+		} else if int32(goodReplicas) < zoneConfig.NumReplicas {
+			m.underreplicated = true
+		}
+	}
+
+	return m
+}
+
+// calcGoodReplicas returns a count of the replicas which are on a live node
+// and, if there is a leader, which are not too far behind.
+func calcGoodReplicas(
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
+) int {
+	leader := isRaftLeader(raftStatus)
+	var goodReplicas int
+	for _, rd := range desc.Replicas {
+		if livenessMap[rd.NodeID] {
+			if !leader {
+				goodReplicas++
+			} else if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
+				// TODO(peter): Put more thought into this value. A single range
+				// can process thousands of ops/sec, so a replica that is 100 Raft
+				// log entries behind is fairly current.
+				const behindThreshold = 100
+				// TODO(peter): progress.Match will be 0 if this node recently
+				// became the leader. Presume such replicas are up to date until we
+				// hear otherwise. This is a bit of a hack.
+				if progress.Match == 0 ||
+					progress.Match+behindThreshold >= raftStatus.Commit {
+					goodReplicas++
+				}
+			}
+		}
+	}
+	return goodReplicas
+}
