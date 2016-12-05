@@ -16,11 +16,44 @@ SELECT ARRAY['a', 'b', 'c']
 ----
 {'a','b','c'}
 
+# array construction from subqueries
+
+query T
+SELECT ARRAY(SELECT 3)
+----
+{3}
+
+query T
+SELECT ARRAY(VALUES (1),(2),(1))
+----
+{1,2,1}
+
+query I
+SELECT (ARRAY(VALUES (1),(2),(1)))[2]
+----
+2
+
+query T
+SELECT ARRAY(VALUES ('a'),('b'),('c'))
+----
+{'a','b','c'}
+
+query error subquery must return only one column, found 2
+SELECT ARRAY(SELECT 1, 2)
+
 # TODO(nvanbenschoten) Uncomment when int[] is added as a column type.
 # query T
 # SELECT ARRAY[]:::int[]
 # ----
 # {}
+
+# decimal arrays are unsupported
+
+query error unhandled parameterized array type parser.tDecimal
+SELECT ARRAY[1.2]
+
+query error unhandled parameterized array type parser.tDecimal
+SELECT ARRAY(VALUES(1.2))
 
 # array subscript access
 
