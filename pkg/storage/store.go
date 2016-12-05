@@ -697,12 +697,15 @@ type StoreTestingKnobs struct {
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
-	// DisableReplicaGCQueue disables the replication queue.
+	// DisableReplicaGCQueue disables the replica GC queue.
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
+	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
+	// queue.
+	DisableTimeSeriesMaintenanceQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisablePeriodicGossips disables periodic gossiping.
@@ -886,6 +889,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	if cfg.TestingKnobs.DisableSplitQueue {
 		s.setSplitQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
+		s.setTimeSeriesMaintenanceQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
@@ -4005,6 +4011,9 @@ func (s *Store) setReplicateQueueActive(active bool) {
 }
 func (s *Store) setSplitQueueActive(active bool) {
 	s.splitQueue.SetDisabled(!active)
+}
+func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
+	s.tsMaintenanceQueue.SetDisabled(!active)
 }
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
