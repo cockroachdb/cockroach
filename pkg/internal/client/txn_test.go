@@ -17,10 +17,13 @@
 package client
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -38,6 +42,39 @@ var (
 	testPutResp = roachpb.PutResponse{}
 	txnKey      = roachpb.Key("test-txn")
 )
+
+// An example of snowball tracing being used to dump a trace around a
+// transaction. Use something similar whenever you cannot use
+// COCKROACH_TRACE_SQL.
+func Example_txnSnowballTrace() {
+	db := NewDB(newTestSender(nil, nil))
+	var collectedSpans []basictracer.RawSpan
+	sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
+		collectedSpans = append(collectedSpans, sp)
+	})
+	if err != nil {
+		panic(err)
+	}
+	ctx := opentracing.ContextWithSpan(context.TODO(), sp)
+	if err := db.Txn(ctx, func(txn *Txn) error {
+		log.Event(ctx, "collecting spans")
+		collectedSpans = append(collectedSpans, txn.CollectedSpans...)
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	log.Event(ctx, "txn complete")
+	// Cannot use ctx once Finish() is called.
+	sp.Finish()
+	dump := tracing.FormatRawSpans(collectedSpans, false /*formatTiming*/)
+	fmt.Printf("trace:\n%s", dump)
+	// Output:
+	// trace:
+	//     event:collecting spans
+	//     event:client.Txn did AutoCommit. err: <nil>
+	// txn: "internal/client/txn_test.go:63 Example_txnSnowballTrace" id=<nil> key=/Min rw=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
+	//     event:txn complete
+}
 
 // TestSender mocks out some of the txn coordinator sender's
 // functionality. It responds to PutRequests using testPutResp.
