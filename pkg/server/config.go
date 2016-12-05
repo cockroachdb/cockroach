@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // Context defaults.
@@ -83,6 +84,9 @@ type Config struct {
 	// connecting to the gossip network. Each item in the list can actually be
 	// multiple comma-separated addresses, kept for backward-compatibility.
 	JoinList base.JoinListType
+
+	// RetryOptions controls the retry behavior of the server.
+	RetryOptions retry.Options
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.

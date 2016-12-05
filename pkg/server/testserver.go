@@ -94,18 +94,25 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.Insecure = params.Insecure
 	cfg.SocketFile = params.SocketFile
-	if params.MetricsSampleInterval != time.Duration(0) {
+	cfg.RetryOptions = params.RetryOptions
+	if params.MetricsSampleInterval != 0 {
 		cfg.MetricsSampleInterval = params.MetricsSampleInterval
 	}
+	if params.RaftTickInterval != 0 {
+		cfg.RaftTickInterval = params.RaftTickInterval
+	}
+	if params.RaftElectionTimeoutTicks != 0 {
+		cfg.RaftElectionTimeoutTicks = params.RaftElectionTimeoutTicks
+	}
 	if knobs := params.Knobs.Store; knobs != nil {
-		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != time.Duration(0) {
+		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = mo
 		}
 	}
-	if params.ScanInterval != time.Duration(0) {
+	if params.ScanInterval != 0 {
 		cfg.ScanInterval = params.ScanInterval
 	}
-	if params.ScanMaxIdleTime != time.Duration(0) {
+	if params.ScanMaxIdleTime != 0 {
 		cfg.ScanMaxIdleTime = params.ScanMaxIdleTime
 	}
 	if params.SSLCA != "" {
