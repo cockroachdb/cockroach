@@ -102,13 +102,13 @@ func DirSet() bool { return logDir.isSet() }
 
 // logFileRE matches log files to avoid exposing non-log files accidentally
 // and it splits the details of the filename into groups for easy parsing.
-// The log file format is {process}.{host}.{username}.log.{severity}.{timestamp}
-// cockroach.Brams-MacBook-Pro.bram.log.WARNING.2015-06-09T16_10_48-04_00.30209
+// The log file format is {process}.{host}.{username}.{timestamp}.{pid}.{severity}.log
+// cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.WARNING.log
 // All underscore in process, host and username are escaped to double
 // underscores and all periods are escaped to an underscore.
 // For compatibility with Windows filenames, all colons from the timestamp
-// (RFC3339) are converted to underscores.
-var logFileRE = regexp.MustCompile(`([^\.]+)\.([^\.]+)\.([^\.]+)\.log\.(ERROR|WARNING|INFO)\.([^\.]+)\.(\d+)`)
+// (RFC3339) are converted from underscores.
+var logFileRE = regexp.MustCompile(`([^\.]+)\.([^\.]+)\.([^\.]+)\.([^\.]+)\.(\d+)\.(ERROR|WARNING|INFO)\.log`)
 
 var (
 	pid      = os.Getpid()
@@ -155,13 +155,13 @@ func logName(severity Severity, t time.Time) (name, link string) {
 	// Windows.
 	tFormatted := strings.Replace(t.Format(time.RFC3339), ":", "_", -1)
 
-	name = fmt.Sprintf("%s.%s.%s.log.%s.%s.%d",
+	name = fmt.Sprintf("%s.%s.%s.%s.%06d.%s.log",
 		removePeriods(program),
 		removePeriods(host),
 		removePeriods(userName),
-		severity.Name(),
 		tFormatted,
-		pid)
+		pid,
+		severity.Name())
 	return name, removePeriods(program) + "." + severity.Name()
 }
 
@@ -174,21 +174,21 @@ func parseLogFilename(filename string) (FileDetails, error) {
 		return FileDetails{}, errMalformedName
 	}
 
-	sev, sevFound := SeverityByName(matches[4])
-	if !sevFound {
-		return FileDetails{}, errMalformedSev
-	}
-
 	// Replace the '_'s with ':'s to restore the correct time format.
-	fixTime := strings.Replace(matches[5], "_", ":", -1)
+	fixTime := strings.Replace(matches[4], "_", ":", -1)
 	time, err := time.Parse(time.RFC3339, fixTime)
 	if err != nil {
 		return FileDetails{}, err
 	}
 
-	pid, err := strconv.ParseInt(matches[6], 10, 0)
+	pid, err := strconv.ParseInt(matches[5], 10, 0)
 	if err != nil {
 		return FileDetails{}, err
+	}
+
+	sev, sevFound := SeverityByName(matches[6])
+	if !sevFound {
+		return FileDetails{}, errMalformedSev
 	}
 
 	return FileDetails{
@@ -207,14 +207,26 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 // contains severity ("INFO", "FATAL", etc.) and t. If the file is created
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
-func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
+func create(
+	severity Severity, t time.Time, lastRotation int64,
+) (f *os.File, updatedRotation int64, filename string, err error) {
 	dir, err := logDir.get()
 	if err != nil {
-		return nil, "", err
+		return nil, lastRotation, "", err
 	}
+
+	// Ensure that the timestamp of the new file name is greater than
+	// the timestamp of the previous generated file name.
+	unix := t.Unix()
+	if unix <= lastRotation {
+		unix = lastRotation + 1
+	}
+	updatedRotation = unix
+	t = time.Unix(unix, 0)
+
+	// Generate the file name.
 	name, link := logName(severity, t)
 	fname := filepath.Join(dir, name)
-
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
@@ -223,7 +235,7 @@ func create(severity Severity, t time.Time) (f *os.File, filename string, err er
 		_ = os.Remove(symlink) // ignore err
 		err = os.Symlink(fname, symlink)
 	}
-	return f, fname, errors.Wrapf(err, "log: cannot create log")
+	return f, updatedRotation, fname, errors.Wrapf(err, "log: cannot create log")
 }
 
 var errNotAFile = errors.New("not a regular file")
