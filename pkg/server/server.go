@@ -755,6 +755,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 		switch {
 		case mode == serverpb.DrainMode_CLIENT:
 			err = s.pgServer.SetDraining(setTo)
+			s.leaseMgr.SetDraining(setTo)
 		case mode == serverpb.DrainMode_LEASES:
 			s.nodeLiveness.PauseHeartbeat(setTo)
 			err = s.node.SetDraining(setTo)

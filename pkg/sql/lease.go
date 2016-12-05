@@ -701,7 +701,7 @@ func (t *tableState) acquireNodeLease(
 	return lease, nil
 }
 
-func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
+func (t *tableState) release(lease *LeaseState, m *LeaseManager) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -714,12 +714,10 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	decRefcount := func(s *LeaseState) bool {
 		// Figure out if we'd like to remove the lease from the store asap (i.e. when
 		// the refcount drops to 0). If so, we'll need to mark the lease as released.
-		removeOnceDereferenced := false
-
-		if store.testingKnobs.RemoveOnceDereferenced {
+		removeOnceDereferenced := m.isDrainingLeases()
+		if m.LeaseStore.testingKnobs.RemoveOnceDereferenced {
 			removeOnceDereferenced = true
 		}
-
 		// Release from the store if the table has been deleted; no leases can be
 		// acquired any more.
 		if t.deleted {
@@ -746,7 +744,7 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 		return s.released
 	}
 	if decRefcount(s) {
-		t.removeLease(s, store)
+		t.removeLease(s, m.LeaseStore)
 	}
 	return nil
 }
@@ -774,7 +772,7 @@ func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
 // they're not in use any more.
 // If t has no active leases, nothing is done.
 func (t *tableState) purgeOldLeases(
-	db *client.DB, deleted bool, minVersion sqlbase.DescriptorVersion, store LeaseStore,
+	db *client.DB, deleted bool, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
 	t.mu.Lock()
 	empty := len(t.active.data) == 0
@@ -790,7 +788,7 @@ func (t *tableState) purgeOldLeases(
 	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		if !deleted {
-			lease, err = t.acquire(txn, minVersion, store)
+			lease, err = t.acquire(txn, minVersion, m.LeaseStore)
 			if err == errTableDropped {
 				deleted = true
 			}
@@ -804,7 +802,7 @@ func (t *tableState) purgeOldLeases(
 			}
 			toRelease = append([]*LeaseState(nil), t.active.data...)
 
-			t.releaseLeasesIfNotActive(toRelease, store)
+			t.releaseLeasesIfNotActive(toRelease, m.LeaseStore)
 			return nil
 		}
 		return err
@@ -815,7 +813,7 @@ func (t *tableState) purgeOldLeases(
 	if lease == nil {
 		return nil
 	}
-	return t.release(lease, store)
+	return t.release(lease, m)
 }
 
 // LeaseStoreTestingKnobs contains testing knobs.
@@ -956,8 +954,9 @@ func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey 
 // LeaseManager.mu > tableState.mu > tableNameCache.mu > LeaseState.mu
 type LeaseManager struct {
 	LeaseStore
-	mu     syncutil.Mutex
-	tables map[sqlbase.ID]*tableState
+	mu       syncutil.Mutex
+	draining bool
+	tables   map[sqlbase.ID]*tableState
 
 	// tableNames is a cache for name -> id mappings. A mapping for the cache
 	// should only be used if we currently have an active lease on the respective
@@ -1149,7 +1148,30 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	// could be bad if a lot of tables keep being created. I looked into cleaning
 	// up a bit, but it seems tricky to do with the current locking which is split
 	// between LeaseManager and tableState.
-	return t.release(lease, m.LeaseStore)
+	return t.release(lease, m)
+}
+
+func (m *LeaseManager) isDrainingLeases() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.draining
+}
+
+// SetDraining (when called with 'true') removes all inactive leases. Any leases
+// that are active will be removed once the lease's reference count drops to 0.
+func (m *LeaseManager) SetDraining(drain bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.draining = drain
+	if !drain {
+		return
+	}
+	for _, t := range m.tables {
+		t.mu.Lock()
+		toRelease := append([]*LeaseState(nil), t.active.data...)
+		t.releaseLeasesIfNotActive(toRelease, m.LeaseStore)
+		t.mu.Unlock()
+	}
 }
 
 // If create is set, cache and stopper need to be set as well.
@@ -1208,7 +1230,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
-								db, table.Dropped(), table.Version, m.LeaseStore); err != nil {
+								db, table.Dropped(), table.Version, m); err != nil {
 								log.Warningf(context.TODO(), "error purging leases for table %d(%s): %s",
 									table.ID, table.Name, err)
 							}
