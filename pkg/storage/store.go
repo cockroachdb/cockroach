@@ -3777,7 +3777,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			// TODO(peter): This is spaghetti. Break this code up into functions,
 			// such as determination of whether the current node should be recording
 			// metrics (i.e. is the leader or highest live replica ID).
-			hasLeader := isLeader || raftStatus != nil && raftStatus.SoftState.Lead != 0
+			hasLeader := raftStatus != nil && raftStatus.SoftState.Lead != 0
 			var goodReplicas int
 			highestIdx := -1
 			for i, rd := range desc.Replicas {
