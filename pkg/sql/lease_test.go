@@ -405,6 +405,59 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
+func TestLeaseManagerDrain(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+	params, _ := createTestServerParams()
+	removalTracker := csql.NewLeaseRemovalTracker()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	const descID = keys.LeaseTableID
+
+	{
+		l1 := t.mustAcquire(1, descID, 0)
+		l2 := t.mustAcquire(2, descID, 0)
+		t.mustRelease(1, l1, nil)
+		t.expectLeases(descID, "/1/1 /1/2")
+
+		t.nodes[1].SetDraining(true)
+		t.nodes[2].SetDraining(true)
+
+		// Leases cannot be acquired when in draining mode.
+		if _, err := t.acquire(1, descID, 0); !testutils.IsError(err, "cannot acquire lease when draining") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Node 1's lease has a refcount of 0 and should therefore be removed from
+		// the store.
+		if err := removalTracker.TrackRemoval(l1).WaitForRemoval(); err != nil {
+			t.Fatal(err)
+		}
+		t.expectLeases(descID, "/1/2")
+
+		// Once node 2's lease is released, the lease should be removed from the
+		// store.
+		t.mustRelease(2, l2, removalTracker)
+		t.expectLeases(descID, "")
+	}
+
+	{
+		// Check that leases with a refcount of 0 are correctly kept in the
+		// store once the drain mode has been exited.
+		t.nodes[1].SetDraining(false)
+		l1 := t.mustAcquire(1, descID, 0)
+		t.mustRelease(1, l1, nil)
+		t.expectLeases(descID, "/1/1")
+	}
+}
+
 // Test that we fail to lease a table that was marked for deletion.
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
