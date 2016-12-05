@@ -5868,6 +5868,86 @@ func TestReplicaCancelRaft(t *testing.T) {
 	}
 }
 
+// TestReplicaTryAbandon checks that cancelling a request that has been
+// proposed to Raft but before it has been executed correctly cleans up the
+// command queue. See #11986.
+func TestReplicaTryAbandon(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc := testContext{}
+	tc.Start(t, stopper)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	proposalCh := make(chan struct{})
+	proposalErrCh := make(chan error)
+
+	// Cancel the request before it is proposed to Raft.
+	tc.repl.mu.Lock()
+	tc.repl.mu.submitProposalFn = func(result *EvalResult) error {
+		cancel()
+		go func() {
+			<-proposalCh
+			tc.repl.mu.Lock()
+			proposalErrCh <- defaultSubmitProposalLocked(tc.repl, result)
+			tc.repl.mu.Unlock()
+		}()
+		return nil
+	}
+	tc.repl.mu.Unlock()
+
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.PutRequest{
+		Span: roachpb.Span{Key: []byte("acdfg")},
+	})
+	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		t.Fatal(err)
+	}
+	_, pErr := tc.repl.addWriteCmd(ctx, ba)
+	if pErr == nil {
+		t.Fatalf("expected failure, but found success")
+	}
+	detail := pErr.GetDetail()
+	if _, ok := detail.(*roachpb.AmbiguousResultError); !ok {
+		t.Fatalf("expected AmbiguousResultError error; got %s (%T)", detail, detail)
+	}
+
+	// Despite the cancellation the request should still be occupying the
+	// proposals map and command queue.
+	func() {
+		tc.repl.mu.Lock()
+		defer tc.repl.mu.Unlock()
+		if len(tc.repl.mu.proposals) == 0 {
+			t.Fatal("expected non-empty proposals map")
+		}
+	}()
+
+	func() {
+		tc.repl.cmdQMu.Lock()
+		defer tc.repl.cmdQMu.Unlock()
+		if s := tc.repl.cmdQMu.global.String(); s == "" {
+			t.Fatal("expected non-empty command queue")
+		}
+	}()
+
+	// Allow the proposal to go through.
+	close(proposalCh)
+	if err := <-proposalErrCh; err != nil {
+		t.Fatal(err)
+	}
+
+	// Even though we cancelled the command it will still get executed and the
+	// command queue cleaned up.
+	util.SucceedsSoon(t, func() error {
+		tc.repl.cmdQMu.Lock()
+		defer tc.repl.cmdQMu.Unlock()
+		if s := tc.repl.cmdQMu.global.String(); s != "" {
+			return errors.Errorf("expected empty command queue, but found\n%s", s)
+		}
+		return nil
+	})
+}
+
 // TestComputeChecksumVersioning checks that the ComputeChecksum post-commit
 // trigger is called if and only if the checksum version is right.
 func TestComputeChecksumVersioning(t *testing.T) {
