@@ -186,12 +186,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
 	//
-	// Such a loop loop occurs with the DistSender attempts a connection to the
+	// Such a loop occurs when the DistSender attempts a connection to the
 	// local server during shutdown, and receives an internal server error (HTTP
 	// Code 5xx). This is the correct error for a server to return when it is
 	// shutting down, and is normally retryable in a cluster environment.
 	// However, on a single-node setup (such as a test), retries will never
-	// succeed because the only server has been shut down; thus, thus the
+	// succeed because the only server has been shut down; thus, the
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()

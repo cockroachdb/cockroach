@@ -33,7 +33,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// A Stores provides methods to access a collection of stores. There's
+// Stores provides methods to access a collection of stores. There's
 // a visitor pattern and also an implementation of the client.Sender
 // interface which directs a call to the appropriate store based on
 // the call's key range. Stores also implements the gossip.Storage
