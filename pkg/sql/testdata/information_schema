@@ -588,10 +588,6 @@ def                 constraint_db      t1_a_key         constraint_db  t1       
 def                 constraint_db      fk               constraint_db  t2          FOREIGN KEY
 def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
 
-# TODO(nvanbenschoten) blocked on #8497.
-#statement ok
-#DROP DATABASE constraint_db
-
 
 ## information_schema.key_column_usage
 
@@ -697,6 +693,9 @@ NULL     root     def            system             zones       GRANT           
 NULL     root     def            system             zones       INSERT          NULL          NULL
 NULL     root     def            system             zones       SELECT          NULL          NULL
 NULL     root     def            system             zones       UPDATE          NULL          NULL
+
+statement ok
+DROP DATABASE constraint_db
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)
