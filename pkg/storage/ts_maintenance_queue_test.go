@@ -219,7 +219,13 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableScanner: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop()
 	tsrv := s.(*server.TestServer)
 	tsdb := tsrv.TsDB()
