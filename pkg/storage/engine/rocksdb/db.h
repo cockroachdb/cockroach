@@ -257,6 +257,26 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 // memory and other resources. At least one kv entry must have been added.
 DBStatus DBSstFileWriterClose(DBSstFileWriter* fw);
 
+typedef struct DBWriteBatch DBWriteBatch;
+
+// Creates a new batch for constructing BatchReprs. It is the caller's
+// responsibility to call DBWriteBatchClose().
+DBWriteBatch* DBWriteBatchNew();
+
+// Closes the WriteBatch, freeing memory and other resources.
+void DBWriteBatchClose(DBWriteBatch* b);
+
+// Sets the database entry for "key" to "value".
+DBStatus DBWriteBatchPut(DBWriteBatch* b, DBKey key, DBSlice value);
+
+// Returns the internal batch representation. The returned value is only valid
+// until the next call to a method using the DBWriteBatch and should thus be
+// copied immediately.
+DBSlice DBWriteBatchRepr(DBWriteBatch *b);
+
+DBStatus DBWriteBatchVerify(
+  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

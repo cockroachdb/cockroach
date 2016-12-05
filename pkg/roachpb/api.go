@@ -448,6 +448,9 @@ func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 // Method implements the Request interface.
 func (*DeprecatedVerifyChecksumRequest) Method() Method { return Noop }
 
+// Method implements the Request interface.
+func (*WriteBatchRequest) Method() Method { return WriteBatch }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -625,6 +628,12 @@ func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (dvcr *DeprecatedVerifyChecksumRequest) ShallowCopy() Request {
 	shallowCopy := *dvcr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *WriteBatchRequest) ShallowCopy() Request {
+	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -840,3 +849,4 @@ func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV |
 func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }
+func (*WriteBatchRequest) flags() int               { return isWrite | isRange | isAlone }

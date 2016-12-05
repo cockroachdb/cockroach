@@ -2081,12 +2081,11 @@ inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
 // in (*MVCCStats).AgeTo. Passing now_nanos in is semantically tricky if there
 // is a chance that we run into values ahead of now_nanos. Instead, now_nanos
 // should be taken as a hint but determined by the max timestamp encountered.
-MVCCStatsResult MVCCComputeStats(
-    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
+MVCCStatsResult MVCCComputeStatsInternal(
+    rocksdb::Iterator *const iter_rep, DBKey start, DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
   memset(&stats, 0, sizeof(stats));
 
-  rocksdb::Iterator *const iter_rep = iter->rep.get();
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
 
@@ -2193,6 +2192,11 @@ MVCCStatsResult MVCCComputeStats(
   return stats;
 }
 
+MVCCStatsResult MVCCComputeStats(
+    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
+      return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
+}
+
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
@@ -2256,5 +2260,55 @@ DBStatus DBSstFileWriterClose(DBSstFileWriter* fw) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+  return kSuccess;
+}
+
+struct DBWriteBatch {
+  rocksdb::WriteBatch batch;
+};
+
+DBWriteBatch* DBWriteBatchNew() {
+  return new DBWriteBatch();
+}
+
+void DBWriteBatchClose(DBWriteBatch* b) {
+  delete b;
+}
+
+DBStatus DBWriteBatchPut(DBWriteBatch* b, DBKey key, DBSlice value) {
+  b->batch.Put(EncodeKey(key), ToSlice(value));
+  return kSuccess;
+}
+
+DBSlice DBWriteBatchRepr(DBWriteBatch *b) {
+  return ToDBSlice(b->batch.Data());
+}
+
+DBStatus DBWriteBatchVerify(
+  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats
+) {
+  // TODO(dan): Inserting into a batch just to iterate over it is unfortunate.
+  // Consider replacing this with WriteBatch's Iterate/Handler mechanism and
+  // computing MVCC stats on the post-ApplyBatchRepr engine. splitTrigger does
+  // the latter and it's a headache for propEvalKV, so wait to see how that
+  // settles out before doing it that way.
+  rocksdb::WriteBatchWithIndex batch(&kComparator, 0, true);
+  DBBatchInserter inserter(&batch);
+  rocksdb::WriteBatch b(ToString(repr));
+  b.Iterate(&inserter);
+  std::unique_ptr<rocksdb::Iterator> iter;
+  iter.reset(batch.NewIteratorWithBase(rocksdb::NewEmptyIterator()));
+
+  iter->SeekToFirst();
+  if (iter->Valid() && kComparator.Compare(iter->key(), EncodeKey(start)) < 0) {
+    return FmtStatus("key not in request range");
+  }
+  iter->SeekToLast();
+  if (iter->Valid() && kComparator.Compare(iter->key(), EncodeKey(end)) >= 0) {
+    return FmtStatus("key not in request range");
+  }
+
+  *stats = MVCCComputeStatsInternal(iter.get(), start, end, now_nanos);
+
   return kSuccess;
 }

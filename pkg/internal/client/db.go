@@ -398,6 +398,13 @@ func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, with
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// WriteBatch TODO(dan)
+func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byte) error {
+	b := &Batch{}
+	b.writeBatch(begin, end, data)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
