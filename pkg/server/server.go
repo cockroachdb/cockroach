@@ -749,18 +749,20 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.DrainMode, error) {
 	for _, mode := range modes {
-		var err error
 		switch {
 		case mode == serverpb.DrainMode_CLIENT:
-			err = s.pgServer.SetDraining(setTo)
+			err := s.pgServer.SetDraining(setTo)
+			s.leaseMgr.SetDraining(setTo)
+			if err != nil {
+				return nil, err
+			}
 		case mode == serverpb.DrainMode_LEASES:
 			s.nodeLiveness.PauseHeartbeat(setTo)
-			err = s.node.SetDraining(setTo)
+			if err := s.node.SetDraining(setTo); err != nil {
+				return nil, err
+			}
 		default:
-			err = errors.Errorf("unknown drain mode: %v (%d)", mode, mode)
-		}
-		if err != nil {
-			return nil, err
+			return nil, errors.Errorf("unknown drain mode: %v (%d)", mode, mode)
 		}
 	}
 	var nowOn []serverpb.DrainMode
