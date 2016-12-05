@@ -906,7 +906,9 @@ func MVCCPut(
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
 // of the semantics. MVCCBlindPut skips retrieving the existing metadata for
 // the key requiring the caller to guarantee no versions for the key currently
-// exist.
+// exist in order for stats to be updated properly. If a previous version of
+// the key does exist it is up to the caller to properly account for their
+// existence in updating the stats.
 func MVCCBlindPut(
 	ctx context.Context,
 	engine Writer,
