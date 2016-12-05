@@ -153,11 +153,13 @@ type TxnCoordSender struct {
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
-	syncutil.Mutex                               // protects txns and txnStats
-	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
-	linearizable      bool                       // enables linearizable behaviour
-	stopper           *stop.Stopper
-	metrics           TxnMetrics
+	txnMu             struct {
+		syncutil.Mutex
+		txns map[uuid.UUID]*txnMetadata // txn key to metadata
+	}
+	linearizable bool // enables linearizable behaviour
+	stopper      *stop.Stopper
+	metrics      TxnMetrics
 }
 
 var _ client.Sender = &TxnCoordSender{}
@@ -180,11 +182,11 @@ func NewTxnCoordSender(
 		clock:             clock,
 		heartbeatInterval: base.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
-		txns:              map[uuid.UUID]*txnMetadata{},
 		linearizable:      linearizable,
 		stopper:           stopper,
 		metrics:           txnMetrics,
 	}
+	tc.txnMu.txns = map[uuid.UUID]*txnMetadata{}
 
 	tc.stopper.RunWorker(func() {
 		ctx := tc.AnnotateCtx(context.Background())
@@ -326,8 +328,8 @@ func (tc *TxnCoordSender) Send(
 		}
 
 		if pErr := func() *roachpb.Error {
-			tc.Lock()
-			defer tc.Unlock()
+			tc.txnMu.Lock()
+			defer tc.txnMu.Unlock()
 			if pErr := tc.maybeRejectClientLocked(ctx, *ba.Txn); pErr != nil {
 				return pErr
 			}
@@ -339,7 +341,7 @@ func (tc *TxnCoordSender) Send(
 
 			// Populate et.IntentSpans, taking into account both any existing
 			// and new writes, and taking care to perform proper deduplication.
-			txnMeta := tc.txns[txnID]
+			txnMeta := tc.txnMu.txns[txnID]
 			distinctSpans := true
 			if txnMeta != nil {
 				et.IntentSpans = txnMeta.keys
@@ -455,9 +457,9 @@ func (tc *TxnCoordSender) Send(
 		}()
 	}
 	if br.Txn.Status != roachpb.PENDING {
-		tc.Lock()
+		tc.txnMu.Lock()
 		tc.cleanupTxnLocked(ctx, *br.Txn)
-		tc.Unlock()
+		tc.txnMu.Unlock()
 	}
 	return br, nil
 }
@@ -472,7 +474,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	if !txn.Writing {
 		return nil
 	}
-	txnMeta, ok := tc.txns[*txn.ID]
+	txnMeta, ok := tc.txnMu.txns[*txn.ID]
 	// Check whether the transaction is still tracked and has a chance of
 	// completing. It's possible that the coordinator learns about the
 	// transaction having terminated from a heartbeat, and GC queue correctness
@@ -560,7 +562,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
 	log.Event(ctx, "coordinator stops")
-	txnMeta, ok := tc.txns[*txn.ID]
+	txnMeta, ok := tc.txnMu.txns[*txn.ID]
 	// The heartbeat might've already removed the record. Or we may have already
 	// closed txnEnd but we are racing with the heartbeat cleanup.
 	if !ok || txnMeta.txnEnd == nil {
@@ -582,7 +584,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Tran
 func (tc *TxnCoordSender) unregisterTxnLocked(
 	txnID uuid.UUID,
 ) (duration, restarts int64, status roachpb.TransactionStatus) {
-	txnMeta := tc.txns[txnID] // guaranteed to exist
+	txnMeta := tc.txnMu.txns[txnID] // guaranteed to exist
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
@@ -592,7 +594,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(
 
 	txnMeta.keys = nil
 
-	delete(tc.txns, txnID)
+	delete(tc.txnMu.txns, txnID)
 
 	return duration, restarts, status
 }
@@ -616,9 +618,9 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 		defer ticker.Stop()
 	}
 	defer func() {
-		tc.Lock()
+		tc.txnMu.Lock()
 		duration, restarts, status := tc.unregisterTxnLocked(txnID)
-		tc.Unlock()
+		tc.txnMu.Unlock()
 		tc.updateStats(duration, restarts, status, false)
 	}()
 
@@ -630,10 +632,10 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	{
-		tc.Lock()
-		txnMeta := tc.txns[txnID] // do not leak to outer scope
+		tc.txnMu.Lock()
+		txnMeta := tc.txnMu.txns[txnID] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		tc.Unlock()
+		tc.txnMu.Unlock()
 	}
 	if closer == nil {
 		// Avoid race in which a Txn is cleaned up before the heartbeat
@@ -668,13 +670,13 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 // (which it then clears from txnMeta), and asynchronously tries to abort the
 // transaction.
 func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
-	tc.Lock()
-	txnMeta := tc.txns[txnID]
+	tc.txnMu.Lock()
+	txnMeta := tc.txnMu.txns[txnID]
 	// Clone the intents and the txn to avoid data races.
 	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), txnMeta.keys...))
 	txnMeta.keys = nil
 	txn := txnMeta.txn.Clone()
-	tc.Unlock()
+	tc.txnMu.Unlock()
 
 	// Since we don't hold the lock continuously, it's possible that two aborts
 	// raced here. That's fine (and probably better than the alternative, which
@@ -709,11 +711,11 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 }
 
 func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
-	tc.Lock()
-	txnMeta := tc.txns[txnID]
+	tc.txnMu.Lock()
+	txnMeta := tc.txnMu.txns[txnID]
 	txn := txnMeta.txn.Clone()
 	hasAbandoned := txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow())
-	tc.Unlock()
+	tc.txnMu.Unlock()
 
 	if txn.Status != roachpb.PENDING {
 		// A previous iteration has already determined that the transaction is
@@ -781,9 +783,9 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// transactions (which may find out that they have to restart in that way),
 	// but in particular makes sure that they notice when they've been aborted
 	// (in which case we'll give them an error on their next request).
-	tc.Lock()
-	tc.txns[txnID].txn.Update(&txn)
-	tc.Unlock()
+	tc.txnMu.Lock()
+	tc.txnMu.txns[txnID].txn.Update(&txn)
+	tc.txnMu.Unlock()
 
 	return true
 }
@@ -800,8 +802,8 @@ func (tc *TxnCoordSender) updateState(
 	pErr *roachpb.Error,
 ) *roachpb.Error {
 
-	tc.Lock()
-	defer tc.Unlock()
+	tc.txnMu.Lock()
+	defer tc.txnMu.Unlock()
 
 	if ba.Txn == nil {
 		// Not a transactional request.
@@ -861,7 +863,7 @@ func (tc *TxnCoordSender) updateState(
 
 	txnID := *newTxn.ID
 
-	txnMeta := tc.txns[txnID]
+	txnMeta := tc.txnMu.txns[txnID]
 	// For successful transactional requests, keep the written intents and
 	// the updated transaction record to be sent along with the reply.
 	// The transaction metadata is created with the first writing operation.
@@ -911,7 +913,7 @@ func (tc *TxnCoordSender) updateState(
 					timeoutDuration:  tc.clientTimeout,
 					txnEnd:           make(chan struct{}),
 				}
-				tc.txns[txnID] = txnMeta
+				tc.txnMu.txns[txnID] = txnMeta
 
 				if err := tc.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 					tc.heartbeatLoop(ctx, txnID)
