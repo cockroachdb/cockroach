@@ -166,14 +166,20 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // engines and cluster ID. The first bootstrapped store contains a
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
-func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.UUID, error) {
+func bootstrapCluster(
+	cfg storage.StoreConfig, engines []engine.Engine, txnMetrics kv.TxnMetrics,
+) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	cfg := storage.StoreConfig{
-		Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+	// Make sure that the store config has a valid clock and that it doesn't
+	// try to use gossip, since that can introduce race conditions.
+	if cfg.Clock == nil {
+		cfg.Clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
+	cfg.Gossip = nil
+	cfg.TestingKnobs = storage.StoreTestingKnobs{}
 	cfg.ScanInterval = 10 * time.Minute
 	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.ConsistencyCheckInterval = 10 * time.Minute
@@ -341,7 +347,7 @@ func (n *Node) start(
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(engines, n.txnMetrics)
+			clusterID, err := bootstrapCluster(n.storeCfg, engines, n.txnMetrics)
 			if err != nil {
 				return err
 			}

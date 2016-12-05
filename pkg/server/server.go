@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -193,7 +194,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// However, on a single-node setup (such as a test), retries will never
 	// succeed because the only server has been shut down; thus, the
 	// DistSender needs to know that it should not retry in this situation.
-	retryOpts := base.DefaultRetryOptions()
+	retryOpts := s.cfg.RetryOptions
+	if retryOpts == (retry.Options{}) {
+		retryOpts = base.DefaultRetryOptions()
+	}
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
 		AmbientCtx:      s.cfg.AmbientCtx,
@@ -302,6 +306,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Gossip:                         s.gossip,
 		NodeLiveness:                   s.nodeLiveness,
 		Transport:                      s.raftTransport,
+		RangeRetryOptions:              s.cfg.RetryOptions,
 		RaftTickInterval:               s.cfg.RaftTickInterval,
 		ScanInterval:                   s.cfg.ScanInterval,
 		ScanMaxIdleTime:                s.cfg.ScanMaxIdleTime,
