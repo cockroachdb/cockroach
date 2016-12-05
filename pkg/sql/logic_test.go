@@ -992,6 +992,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	if query.sorter != nil {
 		query.sorter(len(cols), results)
+		query.sorter(len(cols), query.expectedResults)
 	}
 
 	if query.expectedHash != "" {
