@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -136,9 +138,23 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	// Shorten the raft tick interval and election timeout to make range leases
+	// much shorter than normal. This keeps us from having to wait so long for
+	// the replaced node's leases to time out, but has still shown itself to be
+	// long enough to avoid flakes.
+	serverArgs := base.TestServerArgs{
+		RaftTickInterval:         10 * time.Millisecond,
+		RaftElectionTimeoutTicks: 10,
+		RetryOptions: retry.Options{
+			InitialBackoff: 10 * time.Millisecond,
+			MaxBackoff:     50 * time.Millisecond,
+		},
+	}
+
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
+			ServerArgs:      serverArgs,
 		})
 	defer tc.Stopper().Stop()
 
@@ -146,17 +162,14 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// Replacing the first node would be better from an adversarial testing
 	// perspective because it typically has the most leases on it, but that also
 	// causes the test to take significantly longer as a result.
-	// TODO(a-robinson): Try switching back to using the first node once we start
-	// actively draining leases from nodes that are going down (#10765).
-	oldNodeIdx := 1
-	newServerArgs := base.TestServerArgs{
-		Addr:          tc.Servers[oldNodeIdx].ServingAddr(),
-		PartOfCluster: true,
-		JoinAddr:      tc.Servers[0].ServingAddr(),
-	}
+	oldNodeIdx := 0
+	newServerArgs := serverArgs
+	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingAddr()
+	newServerArgs.PartOfCluster = true
+	newServerArgs.JoinAddr = tc.Servers[1].ServingAddr()
 	tc.StopServer(oldNodeIdx)
 	tc.AddServer(t, newServerArgs)
-	tc.WaitForStores(t, tc.Server(0).Gossip())
+	tc.WaitForStores(t, tc.Server(1).Gossip())
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first
