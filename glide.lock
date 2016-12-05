@@ -1,5 +1,5 @@
-hash: 936f209181dbc61da290ad09e7164e1f364fbf4200befb293f06be0c1126dd00
-updated: 2016-12-02T22:51:30.769759354Z
+hash: f97869d3329aea5fd9e34771aaf95ad59b296f03c9095d9ad5017ed8d2bcd1fd
+updated: 2016-12-02T23:03:47.30088231-05:00
 imports:
 - name: cloud.google.com/go
   version: 2b8eb373216db8c887f4934051ab8338581e3656
@@ -54,7 +54,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: f61b4ae5adde2b8dbaa4b4f88c73c9be85ae3404
+  version: d844440ffbf5e88c3d3d3e18fc80d184156696f9
   subpackages:
   - raft
   - raft/raftpb
@@ -336,7 +336,7 @@ imports:
   - transform
   - unicode/norm
 - name: golang.org/x/tools
-  version: e04df2157ae7263e17159baabadc99fb03fc7514
+  version: 366e27042d04e36bdf2d0033252e4e29f958f175
   subpackages:
   - cmd/goimports
   - cmd/goyacc
