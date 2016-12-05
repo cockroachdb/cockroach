@@ -13,11 +13,9 @@ cmd ./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 cmd ./vendor/github.com/jteeuwen/go-bindata/go-bindata
 cmd ./vendor/github.com/kisielk/errcheck
 cmd ./vendor/github.com/kkaneda/returncheck
-cmd ./vendor/github.com/mattn/goveralls
 cmd ./vendor/github.com/mdempsky/unconvert
 cmd ./vendor/github.com/mibk/dupl
 cmd ./vendor/github.com/robfig/glock
-cmd ./vendor/github.com/wadey/gocovmerge
 cmd ./vendor/golang.org/x/tools/cmd/goimports
 cmd ./vendor/golang.org/x/tools/cmd/goyacc
 cmd ./vendor/golang.org/x/tools/cmd/stringer
