@@ -19,6 +19,7 @@ package base
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -53,7 +54,10 @@ type TestServerArgs struct {
 
 	// Fields copied to the server.Config.
 	Insecure                 bool
+	RetryOptions             retry.Options
 	MetricsSampleInterval    time.Duration
+	RaftTickInterval         time.Duration
+	RaftElectionTimeoutTicks int
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration
