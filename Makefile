@@ -185,7 +185,7 @@ check:
 clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
-	rm -f .bootstrap
+	rm -f .bootstrap build/bin/*
 
 .PHONY: protobuf
 protobuf:

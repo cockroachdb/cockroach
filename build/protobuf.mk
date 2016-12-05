@@ -26,16 +26,14 @@ PROTOBUF_ROOT  := $(GOGOPROTO_ROOT)/protobuf
 
 NATIVE_ROOT := $(PKG_ROOT)/storage/engine/rocksdb
 
-# Ensure we have an unambiguous GOPATH
-GOPATH := $(realpath $(ORG_ROOT)/../../..)
-#                                   ^  ^~ GOPATH
-#                                   |~ GOPATH/src
+export GOBIN := $(realpath $(REPO_ROOT)/build/bin)
 
-GOPATH_BIN      := $(GOPATH)/bin
-PROTOC          := $(GOPATH_BIN)/protoc
-PLUGIN_SUFFIX   := gogoroach
-PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
-GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
+PROTOC                := $(GOBIN)/protoc
+PLUGIN_PREFIX         := $(GOBIN)/protoc-gen
+GOGO                  := gogoroach
+GOGO_PLUGIN           := $(PLUGIN_PREFIX)-$(GOGO)
+GOGOPROTO_PROTO       := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
+GRPC_GATEWAY_PLUGIN   := $(PLUGIN_PREFIX)-grpc-gateway
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
 COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
@@ -66,13 +64,21 @@ CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 .PHONY: protos
 protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(GW_SOURCES)
 
+$(PROTOC): build/bin/.bootstrap
+
+.PHONY: build/bin/.bootstrap
+build/bin/.bootstrap:
+	go install $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
+	go install $(REPO_ROOT)/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
+	go install $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
 
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(GOGO_PLUGIN) --$(GOGO)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	done
 	sed -i~ -E '/gogoproto/d' $(GO_SOURCES)
 	sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
@@ -82,8 +88,8 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 
 $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
-	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(GRPC_GATEWAY_PLUGIN) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(GRPC_GATEWAY_PLUGIN) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
 
 $(REPO_ROOT)/build/yarn.installed: $(REPO_ROOT)/build/package.json
 	cd $(REPO_ROOT)/build && yarn install
