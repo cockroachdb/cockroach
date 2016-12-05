@@ -666,6 +666,10 @@ func (p *planner) removeFK(ref sqlbase.ForeignKeyReference, table *sqlbase.Table
 			return err
 		}
 	}
+	if table.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
+	}
 	idx, err := table.FindIndexByID(ref.Index)
 	if err != nil {
 		return err
@@ -678,6 +682,10 @@ func (p *planner) removeInterleave(ref sqlbase.ForeignKeyReference) error {
 	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
 	if err != nil {
 		return err
+	}
+	if table.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
 	}
 	idx, err := table.FindIndexByID(ref.Index)
 	if err != nil {
@@ -846,6 +854,10 @@ func (p *planner) removeFKBackReference(
 	if err != nil {
 		return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
 	}
+	if t.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
+	}
 	targetIdx, err := t.FindIndexByID(idx.ForeignKey.Index)
 	if err != nil {
 		return err
@@ -868,6 +880,10 @@ func (p *planner) removeInterleaveBackReference(
 	t, err := sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
 	if err != nil {
 		return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
+	}
+	if t.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
 	}
 	targetIdx, err := t.FindIndexByID(ancestor.IndexID)
 	if err != nil {
