@@ -3727,103 +3727,28 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		// TODO(peter): Move this logic into a method on Replica and add unit
-		// tests.
-		rep.mu.Lock()
-		raftStatus := rep.raftStatusLocked()
-		lease := rep.mu.state.Lease
-		if rep.mu.quiescent || rep.mu.internalRaftGroup == nil {
-			quiescentCount++
-		}
-		desc := rep.mu.state.Desc
-		rep.mu.Unlock()
-
-		leaseCovers := lease.Covers(timestamp)
-		leaseOwned := lease.OwnedBy(s.Ident.StoreID)
-
-		// To avoid double counting, most stats are only counted on the raft
-		// leader. The lease holder count is the exception, which is counted by
-		// all replicas.
-		isLeader := raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader
-		if isLeader {
+		metrics := rep.metrics(ctx, timestamp, cfg, livenessMap)
+		if metrics.leader {
 			raftLeaderCount++
-
-			if leaseCovers {
-				if leaseOwned {
-					leaseHolderCount++
-				} else {
-					raftLeaderNotLeaseHolderCount++
-				}
+			if metrics.leaseValid && !metrics.leaseholder {
+				raftLeaderNotLeaseHolderCount++
 			}
-		} else if leaseCovers && leaseOwned {
+		}
+		if metrics.leaseholder {
 			leaseHolderCount++
 		}
-
-		if livenessMap != nil {
-			// We gather per-range stats on either the leader or, if there is no
-			// leader, the largest live replica ID. Note that the largest ID is an
-			// arbitrary choice. We want to select one live replica to do the
-			// counting that all replicas can agree on.
-			//
-			// Note that the current heuristics can double count. If the largest live
-			// replica ID is on a node that is partitioned from the other replicas in
-			// the range it may not know the leader even though there is one. This
-			// scenario seems rare as it requires the partitioned node to be alive
-			// enough to be performing liveness heartbeats.
-			//
-			// Count good replicas: those which are on a live node and, if there is
-			// a leader, which are not too far behind.
-			//
-			// TODO(peter): This is spaghetti. Break this code up into functions,
-			// such as determination of whether the current node should be recording
-			// metrics (i.e. is the leader or highest live replica ID).
-			hasLeader := isLeader || raftStatus != nil && raftStatus.SoftState.Lead != 0
-			var goodReplicas int
-			highestIdx := -1
-			for i, rd := range desc.Replicas {
-				if livenessMap[rd.NodeID] {
-					if !hasLeader &&
-						(highestIdx == -1 || rd.ReplicaID > desc.Replicas[highestIdx].ReplicaID) {
-						highestIdx = i
-					}
-
-					if !isLeader {
-						goodReplicas++
-					} else if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
-						// TODO(peter): Put more thought into this value. A single range
-						// can process thousands of ops/sec, so a replica that is 100 Raft
-						// log entries behind is fairly current.
-						//
-						// TODO(peter): progress.Match will be 0 if this node recently
-						// became the leader. Presume such replicas are up to date until we
-						// hear otherwise. This is a bit of a hack.
-						const behindThreshold = 100
-						if progress.Match == 0 ||
-							progress.Match+behindThreshold >= raftStatus.Commit {
-							goodReplicas++
-						}
-					}
-				}
+		if metrics.quiescent {
+			quiescentCount++
+		}
+		if metrics.rangeCounter {
+			rangeCount++
+			if metrics.unavailable {
+				unavailableRangeCount++
 			}
-
-			// If this replica is the leader or there isn't a leader and it is the
-			// highest replica ID, it does the counting.
-			if isLeader || (highestIdx != -1 && desc.Replicas[highestIdx].StoreID == s.StoreID()) {
-				rangeCount++
-				if goodReplicas < computeQuorum(len(desc.Replicas)) {
-					unavailableRangeCount++
-				}
-
-				if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
-					log.Error(ctx, err)
-				} else {
-					if int32(goodReplicas) < zoneConfig.NumReplicas {
-						underreplicatedRangeCount++
-					}
-				}
+			if metrics.underreplicated {
+				underreplicatedRangeCount++
 			}
 		}
-
 		return true // more
 	})
 

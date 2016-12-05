@@ -6888,3 +6888,218 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 		t.Fatalf("transaction was mutated during evaluation: %s", pretty.Diff(&origTxn, txn))
 	}
 }
+
+// TODO(peter): Test replicaMetrics.leaseholder.
+func TestReplicaMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	progress := func(vals ...uint64) map[uint64]raft.Progress {
+		m := make(map[uint64]raft.Progress)
+		for i, v := range vals {
+			m[uint64(i+1)] = raft.Progress{Match: v}
+		}
+		return m
+	}
+	status := func(lead uint64, progress map[uint64]raft.Progress) *raft.Status {
+		status := &raft.Status{
+			Progress: progress,
+		}
+		// The commit index is set so that a progress.Match value of 1 is behind
+		// and 2 is ok.
+		status.HardState.Commit = 102
+		if lead == 1 {
+			status.SoftState.RaftState = raft.StateLeader
+		} else {
+			status.SoftState.RaftState = raft.StateFollower
+		}
+		status.SoftState.Lead = lead
+		return status
+	}
+	desc := func(ids ...int) roachpb.RangeDescriptor {
+		var d roachpb.RangeDescriptor
+		for i, id := range ids {
+			d.Replicas = append(d.Replicas, roachpb.ReplicaDescriptor{
+				ReplicaID: roachpb.ReplicaID(i + 1),
+				StoreID:   roachpb.StoreID(id),
+				NodeID:    roachpb.NodeID(id),
+			})
+		}
+		return d
+	}
+	live := func(ids ...roachpb.NodeID) map[roachpb.NodeID]bool {
+		m := make(map[roachpb.NodeID]bool)
+		for _, id := range ids {
+			m[id] = true
+		}
+		return m
+	}
+
+	testCases := []struct {
+		replicas   int32
+		storeID    roachpb.StoreID
+		desc       roachpb.RangeDescriptor
+		raftStatus *raft.Status
+		liveness   map[roachpb.NodeID]bool
+		expected   replicaMetrics
+	}{
+		// The leader of a 1-replica range is up.
+		{1, 1, desc(1), status(1, progress(2)), live(1),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// The leader of a 2-replica range is up (only 1 replica present).
+		{2, 1, desc(1), status(1, progress(2)), live(1),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: true,
+			}},
+		// The leader of a 2-replica range is up.
+		{2, 1, desc(1, 2), status(1, progress(2)), live(1),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     true,
+				underreplicated: true,
+			}},
+		// Both replicas of a 2-replica range are up to date.
+		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// Both replicas of a 2-replica range are up to date (local replica is not leader)
+		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2),
+			replicaMetrics{
+				leader:          false,
+				rangeCounter:    false,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// Both replicas of a 2-replica range are live, but follower is behind.
+		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     true,
+				underreplicated: true,
+			}},
+		// Both replicas of a 2-replica range are up to date, but follower is dead.
+		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     true,
+				underreplicated: true,
+			}},
+		// The leader of a 3-replica range is up.
+		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     true,
+				underreplicated: true,
+			}},
+		// All replicas of a 3-replica range are up to date.
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// All replicas of a 3-replica range are up to date (match = 0 is
+		// considered up to date).
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 0)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// All replica of a 3-replica range are live but one replica is behind.
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: true,
+			}},
+		// All replica of a 3-replica range are live but two replicas are behind.
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     true,
+				underreplicated: true,
+			}},
+		// All replica of a 3-replica range are up to date, but one replica is dead.
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: true,
+			}},
+		// All replica of a 3-replica range are up to date, but two replicas are dead.
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1),
+			replicaMetrics{
+				leader:          true,
+				rangeCounter:    true,
+				unavailable:     true,
+				underreplicated: true,
+			}},
+		// Range has no leader, local replica is the range counter.
+		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          false,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// Range has no leader, local replica is the range counter.
+		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          false,
+				rangeCounter:    true,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// Range has no leader, local replica is not the range counter.
+		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          false,
+				rangeCounter:    false,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+		// Range has no leader, local replica is not the range counter.
+		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
+			replicaMetrics{
+				leader:          false,
+				rangeCounter:    false,
+				unavailable:     false,
+				underreplicated: false,
+			}},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			zoneConfig := config.ZoneConfig{NumReplicas: c.replicas}
+			defer config.TestingSetDefaultZoneConfig(zoneConfig)()
+
+			metrics := calcReplicaMetrics(
+				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
+				c.liveness, &c.desc, c.raftStatus, &roachpb.Lease{},
+				c.storeID, false)
+			if c.expected != metrics {
+				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
+			}
+		})
+	}
+}
