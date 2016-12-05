@@ -396,6 +396,9 @@ func (t *logicTest) close() {
 			t.Fatal(err)
 		}
 	}
+	if _, err := t.db.Exec("DELETE FROM system.eventlog"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := t.db.Exec("DELETE FROM system.users WHERE username=$1", server.TestUser); err != nil {
 		t.Fatal(err)
 	}
