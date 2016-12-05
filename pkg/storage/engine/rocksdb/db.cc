@@ -2306,8 +2306,24 @@ struct DBSstFileWriter {
 };
 
 DBSstFileWriter* DBSstFileWriterNew() {
+  // TODO(dan): Right now, backup is the only user of this code, so that's what
+  // the options are tuned for. If something else starts using it, we'll likely
+  // have to add some configurability.
+
+  rocksdb::BlockBasedTableOptions table_options;
+  // Larger block size (4kb default) means smaller file at the expense of more
+  // scanning during lookups.
+  table_options.block_size = 64 * 1024;
+  // The original LevelDB compatible format. We explicitly set the checksum too
+  // to guard against the silent version upconversion. See
+  // https://github.com/facebook/rocksdb/blob/972f96b3fbae1a4675043bdf4279c9072ad69645/include/rocksdb/table.h#L198
+  table_options.format_version = 0;
+  table_options.checksum = rocksdb::kCRC32c;
+
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;
+  options->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+
   return new DBSstFileWriter(options);
 }
 

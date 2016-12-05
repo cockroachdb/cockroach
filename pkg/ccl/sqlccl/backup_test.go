@@ -13,7 +13,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"hash/crc32"
+	"io/ioutil"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -386,6 +388,41 @@ func TestPresplitRanges(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBackupLevelDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numAccounts = 1
+
+	// TODO(dan): This test doesn't need multiple nodes, but the test setup
+	// hangs with 1. Investigate.
+	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
+
+	// Verify that the sstables are in LevelDB format by checking the trailer
+	// magic.
+	var magic = []byte("\x57\xfb\x80\x8b\x24\x75\x47\xdb")
+	foundSSTs := 0
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if filepath.Ext(path) == ".sst" {
+			foundSSTs++
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.HasSuffix(data, magic) {
+				t.Fatalf("trailer magic is not LevelDB sstable: %s", path)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if foundSSTs == 0 {
+		t.Fatal("found no sstables")
 	}
 }
 
