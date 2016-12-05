@@ -15,6 +15,15 @@ NULL
 false
 true
 
+# The following test ensures that the "rowsort" directive
+# in TestLogic does its work properly.
+query B rowsort
+SELECT c FROM t ORDER BY c
+----
+false
+NULL
+true
+
 query B
 SELECT c FROM t ORDER BY c DESC
 ----
