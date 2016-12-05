@@ -59,8 +59,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
-	return roachpb.AdminSplitRequest{
+func adminSplitArgs(key, splitKey roachpb.Key) *roachpb.AdminSplitRequest {
+	return &roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
 			Key: key,
 		},
@@ -84,7 +84,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
 		args := adminSplitArgs(roachpb.KeyMin, key)
-		_, pErr := client.SendWrapped(context.Background(), rg1(store), &args)
+		_, pErr := client.SendWrapped(context.Background(), rg1(store), args)
 		if !testutils.IsPError(pErr, "cannot split") {
 			t.Errorf("%q: unexpected split error %s", key, pErr)
 		}
@@ -103,7 +103,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 
 	key := keys.MakeRowSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
 	args := adminSplitArgs(key, key)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
@@ -173,7 +173,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 
 	// Split between col1Key and col2Key by splitting before col2Key.
 	args := adminSplitArgs(col2Key, col2Key)
-	_, err := client.SendWrapped(context.Background(), rg1(store), &args)
+	_, err := client.SendWrapped(context.Background(), rg1(store), args)
 	if err != nil {
 		t.Fatalf("%s: split unexpected error: %s", col1Key, err)
 	}
@@ -210,18 +210,18 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 
 	// First, write some values left and right of the proposed split key.
 	pArgs := putArgs([]byte("c"), []byte("foo"))
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &pArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	pArgs = putArgs([]byte("x"), []byte("bar"))
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &pArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Split the range.
 	splitKey := roachpb.Key("m")
 	args := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -271,16 +271,16 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	args := adminSplitArgs(roachpb.KeyMin, []byte("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(store), &args); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err != nil {
 		t.Fatal(err)
 	}
 	// This second split will try to split at end of first split range.
-	if _, err := client.SendWrapped(context.Background(), rg1(store), &args); err == nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
 	args = adminSplitArgs(roachpb.KeyMin, []byte("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(store), &args); err == nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 }
@@ -302,7 +302,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	for i := 0; i < concurrentCount; i++ {
 		go func() {
 			args := adminSplitArgs(roachpb.KeyMin, splitKey)
-			_, pErr := client.SendWrapped(context.Background(), rg1(store), &args)
+			_, pErr := client.SendWrapped(context.Background(), rg1(store), args)
 			errCh <- pErr
 		}()
 	}
@@ -360,11 +360,11 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// First, write some values left and right of the proposed split key.
 	pArgs := putArgs([]byte("c"), content)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &pArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	pArgs = putArgs([]byte("x"), content)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &pArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -378,7 +378,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	lTxn.Sequence++
 	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Txn: &lTxn,
-	}, &lIncArgs); pErr != nil {
+	}, lIncArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
@@ -386,7 +386,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	rTxn.Sequence++
 	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Txn: &rTxn,
-	}, &rIncArgs); pErr != nil {
+	}, rIncArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -399,7 +399,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Split the range.
 	args := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -427,7 +427,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Try to get values from both left and right of where the split happened.
 	gArgs := getArgs([]byte("c"))
-	if reply, pErr := client.SendWrapped(context.Background(), rg1(store), &gArgs); pErr != nil {
+	if reply, pErr := client.SendWrapped(context.Background(), rg1(store), gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, pErr := reply.(*roachpb.GetResponse).Value.GetBytes(); pErr != nil {
 		t.Fatal(pErr)
@@ -437,7 +437,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	gArgs = getArgs([]byte("x"))
 	if reply, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		RangeID: newRng.RangeID,
-	}, &gArgs); pErr != nil {
+	}, gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
@@ -449,7 +449,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// which remains in the old range.
 	_, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Txn: &lTxn,
-	}, &lIncArgs)
+	}, lIncArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("unexpected idempotency failure: %v", pErr)
 	}
@@ -459,7 +459,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	_, pErr = client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		RangeID: newRng.RangeID,
 		Txn:     &rTxn,
-	}, &rIncArgs)
+	}, rIncArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("unexpected idempotency failure: %v", pErr)
 	}
@@ -509,7 +509,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	keyPrefix = keys.MakeRowSentinelKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
@@ -544,7 +544,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		RangeID: repl.RangeID,
-	}, &args); pErr != nil {
+	}, args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -619,7 +619,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	keyPrefix = keys.MakeRowSentinelKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
@@ -639,7 +639,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		RangeID: repl.RangeID,
-	}, &args); pErr != nil {
+	}, args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -694,7 +694,7 @@ func fillRange(
 		pArgs := putArgs(key, val)
 		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
 			RangeID: rangeID,
-		}, &pArgs)
+		}, pArgs)
 		// When the split occurs in the background, our writes may start failing.
 		// We know we can stop writing when this happens.
 		if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); ok {
@@ -929,17 +929,17 @@ func runSetupSplitSnapshotRace(
 	// First, do a couple of writes; we'll use these to determine when
 	// the dust has settled.
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Split the system range from the rest of the keyspace.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, keys.SystemMax)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -962,7 +962,7 @@ func runSetupSplitSnapshotRace(
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(keys.SystemMax, roachpb.Key("m"))
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -994,7 +994,7 @@ func runSetupSplitSnapshotRace(
 	// failure and render the range unable to achieve quorum after
 	// restart (in the SnapshotWins branch).
 	incArgs = incrementArgs(rightKey, 3)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1026,7 +1026,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 		// Perform a write on the left range and wait for it to propagate.
 		incArgs := incrementArgs(leftKey, 10)
-		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
@@ -1037,7 +1037,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 		// Write to the right range.
 		incArgs = incrementArgs(rightKey, 20)
-		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
@@ -1058,7 +1058,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 
 		// Perform a write on the right range.
 		incArgs := incrementArgs(rightKey, 20)
-		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1082,13 +1082,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 		// it helps wake up dormant ranges that would otherwise have to wait
 		// for retry timeouts.
 		incArgs = incrementArgs(leftKey, 10)
-		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
 
 		incArgs = incrementArgs(rightKey, 200)
-		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
@@ -1158,7 +1158,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 			args := getArgs(key(i))
 			var h roachpb.Header
 			h.Timestamp = ts(i)
-			_, pErr := client.SendWrappedWith(context.Background(), rg1(store), h, &args)
+			_, pErr := client.SendWrappedWith(context.Background(), rg1(store), h, args)
 			errChan <- pErr
 		}(i)
 	}
@@ -1167,7 +1167,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 
 	func() {
 		args := adminSplitArgs(roachpb.KeyMin, splitKey)
-		if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+		if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}()
@@ -1187,7 +1187,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 			t.Fatal(err)
 		}
 		h.RangeID = store.LookupReplica(keyAddr, nil).RangeID
-		_, respH, pErr := storage.SendWrapped(context.Background(), store, h, &args)
+		_, respH, pErr := storage.SendWrapped(context.Background(), store, h, args)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -1428,7 +1428,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// range).
 			splitKey := roachpb.Key(encoding.EncodeVarintDescending([]byte("a"), int64(i)))
 			splitArgs := adminSplitArgs(keys.SystemMax, splitKey)
-			_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &splitArgs)
+			_, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs)
 			errChan <- pErr
 		}()
 		go func() {
@@ -1501,17 +1501,17 @@ func TestLeaderAfterSplit(t *testing.T) {
 	rightKey := roachpb.Key("z")
 
 	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -1526,7 +1526,7 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 
 	// Perform initial split of ranges.
 	sArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
-	if _, err := client.SendWrapped(context.Background(), rg1(store), &sArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(store), sArgs); err != nil {
 		b.Fatal(err)
 	}
 
@@ -1538,7 +1538,7 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 
 	// Merge the b range back into the a range.
 	mArgs := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(context.Background(), rg1(store), &mArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), rg1(store), mArgs); err != nil {
 		b.Fatal(err)
 	}
 
@@ -1546,13 +1546,13 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Split the range.
 		b.StartTimer()
-		if _, err := client.SendWrapped(context.Background(), rg1(store), &sArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), rg1(store), sArgs); err != nil {
 			b.Fatal(err)
 		}
 
 		// Merge the ranges.
 		b.StopTimer()
-		if _, err := client.SendWrapped(context.Background(), rg1(store), &mArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), rg1(store), mArgs); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -1570,7 +1570,7 @@ func writeRandomDataToRange(
 		pArgs := putArgs(key, val)
 		if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 			RangeID: rangeID,
-		}, &pArgs); pErr != nil {
+		}, pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -1694,7 +1694,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 
 	// First, create a split after addressing records.
 	args := adminSplitArgs(roachpb.KeyMin, keys.SystemPrefix)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), &args); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1712,7 +1712,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 		args := adminSplitArgs(keys.SystemMax, splitKey.AsRawKey())
 		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
 			RangeID: store.LookupReplica(splitKey, nil).RangeID,
-		}, &args)
+		}, args)
 		doneSplit <- pErr
 	}()
 
