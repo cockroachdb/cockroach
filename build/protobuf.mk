@@ -66,6 +66,14 @@ CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 .PHONY: protos
 protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(GW_SOURCES)
 
+$(PROTOC): goinstall
+
+.PHONY: goinstall
+goinstall:
+	go install $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
+	go install $(REPO_ROOT)/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
+	go install $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
 
