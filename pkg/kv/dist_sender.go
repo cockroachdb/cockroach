@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,6 +59,60 @@ const (
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 500
 )
+
+var (
+	metaDistSenderBatchCount = metric.Metadata{
+		Name: "distsender.batches",
+		Help: "Number of batches processed",
+	}
+	metaDistSenderPartialBatchCount = metric.Metadata{
+		Name: "distsender.batches.partial",
+		Help: "Number of partial batches processed",
+	}
+	metaTransportSentCount = metric.Metadata{
+		Name: "distsender.rpc.sent",
+		Help: "Number of RPCs sent",
+	}
+	metaTransportLocalSentCount = metric.Metadata{
+		Name: "distsender.rpc.sent.local",
+		Help: "Number of local RPCs sent",
+	}
+	metaDistSenderSendNextTimeoutCount = metric.Metadata{
+		Name: "distsender.rpc.sent.sendnexttimeout",
+		Help: "Number of RPCs sent due to outstanding RPCs not returning promptly",
+	}
+	metaDistSenderNextReplicaErrCount = metric.Metadata{
+		Name: "distsender.rpc.sent.nextreplicaerror",
+		Help: "Number of RPCs sent due to per-replica errors",
+	}
+	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
+		Name: "distsender.errors.notleaseholder",
+		Help: "Number of NotLeaseHolderErrors encountered",
+	}
+)
+
+// DistSenderMetrics is the set of metrics for a given distributed sender.
+type DistSenderMetrics struct {
+	BatchCount             *metric.Counter
+	PartialBatchCount      *metric.Counter
+	SentCount              *metric.Counter
+	LocalSentCount         *metric.Counter
+	SendNextTimeoutCount   *metric.Counter
+	NextReplicaErrCount    *metric.Counter
+	NotLeaseHolderErrCount *metric.Counter
+}
+
+func makeDistSenderMetrics() DistSenderMetrics {
+	return DistSenderMetrics{
+		BatchCount:             metric.NewCounter(metaDistSenderBatchCount),
+		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
+		SentCount:              metric.NewCounter(metaTransportSentCount),
+		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
+		SendNextTimeoutCount:   metric.NewCounter(metaDistSenderSendNextTimeoutCount),
+		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
+		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+	}
+}
 
 // A firstRangeMissingError indicates that the first range has not yet
 // been gossiped. This will be the case for a node which hasn't yet
@@ -88,7 +143,8 @@ type DistSender struct {
 	// gossip provides up-to-date information about the start of the
 	// key range, used to find the replica metadata for arbitrary key
 	// ranges.
-	gossip *gossip.Gossip
+	gossip  *gossip.Gossip
+	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache           *rangeDescriptorCache
 	rangeLookupMaxRanges int32
@@ -142,8 +198,9 @@ type DistSenderConfig struct {
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
-		clock:  cfg.Clock,
-		gossip: g,
+		clock:   cfg.Clock,
+		gossip:  g,
+		metrics: makeDistSenderMetrics(),
 	}
 
 	ds.AmbientContext = cfg.AmbientCtx
@@ -214,6 +271,12 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 			})
 	}
 	return ds
+}
+
+// Metrics returns a struct which contains metrics related to the distributed
+// sender's activity.
+func (ds *DistSender) Metrics() DistSenderMetrics {
+	return ds.metrics
 }
 
 // GetParallelSendCount returns the number of parallel batch requests
@@ -333,6 +396,7 @@ func (ds *DistSender) sendRPC(
 		ctx:              ctx,
 		SendNextTimeout:  ds.sendNextTimeout,
 		transportFactory: ds.transportFactory,
+		metrics:          &ds.metrics,
 	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
@@ -522,6 +586,8 @@ var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	ds.metrics.BatchCount.Inc(1)
+
 	tracing.AnnotateTrace()
 
 	if pErr := ds.initAndVerifyBatch(ctx, &ba); pErr != nil {
@@ -816,8 +882,11 @@ func (ds *DistSender) sendPartialBatch(
 	evictToken *EvictionToken,
 	isFirst bool,
 ) response {
+	ds.metrics.PartialBatchCount.Inc(1)
+
 	var reply *roachpb.BatchResponse
 	var pErr *roachpb.Error
+
 	isReverse := ba.IsReverse()
 
 	// Truncate the request to range descriptor.
@@ -1078,6 +1147,7 @@ func (ds *DistSender) sendToReplicas(
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
+				ds.metrics.SendNextTimeoutCount.Inc(1)
 				log.VEventf(opts.ctx, 2, "timeout, trying next peer")
 				pending++
 				transport.SendNext(done)
@@ -1148,6 +1218,7 @@ func (ds *DistSender) sendToReplicas(
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
+				ds.metrics.NextReplicaErrCount.Inc(1)
 				log.VEventf(opts.ctx, 2, "error, trying next peer: %s", err)
 				pending++
 				transport.SendNext(done)
@@ -1185,6 +1256,7 @@ func (ds *DistSender) handlePerReplicaError(
 	case *roachpb.NodeUnavailableError:
 		return true
 	case *roachpb.NotLeaseHolderError:
+		ds.metrics.NotLeaseHolderErrCount.Inc(1)
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
 			leaseHolder := *tErr.LeaseHolder
