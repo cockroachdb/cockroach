@@ -114,7 +114,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		args := adminSplitArgs(k, k)
 		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
 			RangeID: repl.RangeID,
-		}, &args); pErr != nil {
+		}, args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}

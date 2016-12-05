@@ -1068,8 +1068,8 @@ func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Repli
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key roachpb.Key) roachpb.GetRequest {
-	return roachpb.GetRequest{
+func getArgs(key roachpb.Key) *roachpb.GetRequest {
+	return &roachpb.GetRequest{
 		Span: roachpb.Span{
 			Key: key,
 		},
@@ -1078,8 +1078,8 @@ func getArgs(key roachpb.Key) roachpb.GetRequest {
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
-	return roachpb.PutRequest{
+func putArgs(key roachpb.Key, value []byte) *roachpb.PutRequest {
+	return &roachpb.PutRequest{
 		Span: roachpb.Span{
 			Key: key,
 		},
@@ -1089,8 +1089,8 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 
 // incrementArgs returns an IncrementRequest addressed to the default replica
 // for the specified key.
-func incrementArgs(key roachpb.Key, inc int64) roachpb.IncrementRequest {
-	return roachpb.IncrementRequest{
+func incrementArgs(key roachpb.Key, inc int64) *roachpb.IncrementRequest {
+	return &roachpb.IncrementRequest{
 		Span: roachpb.Span{
 			Key: key,
 		},
@@ -1098,8 +1098,8 @@ func incrementArgs(key roachpb.Key, inc int64) roachpb.IncrementRequest {
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID roachpb.RangeID) roachpb.TruncateLogRequest {
-	return roachpb.TruncateLogRequest{
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *roachpb.TruncateLogRequest {
+	return &roachpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,
 	}
