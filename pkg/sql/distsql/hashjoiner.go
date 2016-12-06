@@ -87,10 +87,8 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		h.output.Close(err)
 		return
 	}
-	if err := h.probePhase(); err != nil {
-		h.output.Close(err)
-		return
-	}
+	err := h.probePhase()
+	h.output.Close(err)
 }
 
 // buildPhase constructs our internal hash map of rows seen, this is done
