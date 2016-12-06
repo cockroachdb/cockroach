@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-[[ ! $GIT_REFLOG_ACTION =~ pull[[:space:]]+--rebase ]] && exit 0
-
-make .bootstrap
+if [ "$1" != "$2" ]; then # previous ref != new ref.
+  exec git submodule update --init
+fi
