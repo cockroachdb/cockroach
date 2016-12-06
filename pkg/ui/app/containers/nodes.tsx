@@ -2,6 +2,7 @@ import _ from "lodash";
 import * as React from "react";
 import { IRouter, IInjectedProps } from "react-router";
 import { connect } from "react-redux";
+import { PageConfig, PageConfigItem } from "../components/pageconfig";
 
 import { refreshNodes } from "../redux/apiReducers";
 import Selector, { SelectorOption } from "../components/selector";
@@ -93,21 +94,19 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
     let node = this.props.params[nodeIDAttr] || "";
 
     return <div>
-      <section className="page-config">
-        <ul className="page-config__list">
-          <li className="page-config__item">
-            <Selector title="Graph" options={this.state.nodeOptions}
-                      selected={node} onChange={this.nodeChange} />
-          </li>
-          <li className="page-config__item">
-            <Selector title="Dashboard" options={dashboards}
-                      selected={dashboard} onChange={this.dashChange} />
-          </li>
-          <li className="page-config__item">
-              {displayTimescale ? <TimeScaleSelector /> : null }
-          </li>
-        </ul>
-      </section>
+      <PageConfig>
+        <PageConfigItem>
+          <Selector title="Graph" options={this.state.nodeOptions}
+                    selected={node} onChange={this.nodeChange} />
+        </PageConfigItem>
+        <PageConfigItem>
+          <Selector title="Dashboard" options={dashboards}
+                    selected={dashboard} onChange={this.dashChange} />
+        </PageConfigItem>
+        <PageConfigItem>
+            {displayTimescale ? <TimeScaleSelector /> : null }
+        </PageConfigItem>
+      </PageConfig>
       { this.props.children }
     </div>;
   }

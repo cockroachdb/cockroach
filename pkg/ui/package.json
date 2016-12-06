@@ -36,6 +36,7 @@
       "react-router": "npm:react-router@^3.0.0",
       "react-router-redux": "npm:react-router-redux@^4.0.5",
       "react-select": "npm:react-select@^1.0.0-rc.2",
+      "react-sticky": "npm:react-sticky@^5.0.5",
       "redux": "npm:redux@^3.5.2",
       "redux-thunk": "npm:redux-thunk@^2.1.0",
       "reselect": "npm:reselect@^2.5.3",

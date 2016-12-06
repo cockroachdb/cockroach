@@ -8,14 +8,15 @@ interface SummaryStatProps {
   format?: (i: number) => string;
 }
 
-function computeValue(value: number, format?: (i: number) => string): string {
+function numberToString(n: number) {
+  return n.toString();
+}
+
+function computeValue(value: number, format: (n: number) => string = numberToString) {
   if (!_.isNumber(value)) {
     return "-";
   }
-  if (_.isFunction(format)) {
-    return format(value);
-  }
-  return value.toString();
+  return format(value);
 }
 
 // SummaryBar is a simple component backing a common motif in our UI: a 

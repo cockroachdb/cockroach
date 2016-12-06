@@ -36,7 +36,16 @@ $subnav-background  = $secondary-gray-4
     clear both
 
 .page-config
+  padding-top 12px
+  padding-bottom 12px
   padding-left 24px
+  z-index 2
+  position relative
+
+  &--fixed
+    background-color $secondary-gray-4
+    border-bottom 1px solid $lighter-gray
+
   &__list
     clearfix()
 
@@ -48,7 +57,7 @@ $subnav-background  = $secondary-gray-4
 .header
   color $dark-blue
   font-size 24px
-  padding 24px
+  padding 24px 24px 12px
   text-transform uppercase
   font-face lato
   letter-spacing 5px
@@ -69,8 +78,7 @@ $subnav-background  = $secondary-gray-4
   background-color white
 
 .section
-  padding-left 24px
-  padding-top 24px
+  padding 12px 24px
   max-width 1350px
   clearfix()
 

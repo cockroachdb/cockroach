@@ -1,6 +1,7 @@
 import * as React from "react";
 import _ from "lodash";
 import { IInjectedProps } from "react-router";
+import { StickyContainer } from "react-sticky";
 
 import { TitledComponent } from "../interfaces/layout";
 import NavigationBar from "../components/layoutSidebar";
@@ -37,12 +38,12 @@ export default class extends React.Component<IInjectedProps, {}> {
       <TimeWindowManager/>
       <Banner/>
       <NavigationBar/>
-      <div className="page">
+      <StickyContainer className="page">
         <section className="header">
           { title }
         </section>
         { children }
-      </div>
+      </StickyContainer>
     </div>;
   }
 }
