@@ -1477,6 +1477,23 @@ func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (DBool,
 	return DBool(re.MatchString(string(*str.(*DString)))), nil
 }
 
+// MultipleResultsError is returned by QueryRow when more than one result is
+// encountered.
+type MultipleResultsError struct {
+	SQL string // the query that produced this error
+}
+
+func (e *MultipleResultsError) Error() string {
+	return fmt.Sprintf("%s: unexpected multiple results", e.SQL)
+}
+
+// EvalPlanner is a limited planner that can be used from EvalContext.
+type EvalPlanner interface {
+	// QueryRow executes a SQL query string where exactly 1 result row is
+	// expected and returns that row.
+	QueryRow(sql string, args ...interface{}) (DTuple, error)
+}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
@@ -1499,6 +1516,8 @@ type EvalContext struct {
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
+
+	Planner EvalPlanner
 
 	ReCache *RegexpCache
 	tmpDec  inf.Dec
@@ -1707,7 +1726,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return d, nil
 	}
 
-	switch expr.Type.(type) {
+	switch typ := expr.Type.(type) {
 	case *BoolColType:
 		switch v := d.(type) {
 		case *DBool:
@@ -1950,6 +1969,37 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
 		case *DInterval:
 			return d, nil
+		}
+	case *PGOIDType:
+		switch v := d.(type) {
+		case *DInt:
+			return v, nil
+		case *DString:
+			queryOid := func(table_name string, col_name string, obj_name string) (Datum, error) {
+				results, err := ctx.Planner.QueryRow(
+					fmt.Sprintf("SELECT oid FROM pg_catalog.%s WHERE %s = %s", table_name, col_name, v))
+				if err != nil {
+					if _, ok := err.(*MultipleResultsError); ok {
+						return nil, errors.Errorf("more than one %s named %s", obj_name, v)
+					}
+					return nil, err
+				}
+				if results.Len() == 0 {
+					return nil, errors.Errorf("%s %s does not exist", obj_name, v)
+				}
+				return results[0], nil
+			}
+
+			switch typ {
+			case oidPseudoTypeRegClass:
+				return queryOid("pg_class", "relname", "relation")
+			case oidPseudoTypeRegProc:
+				return queryOid("pg_proc", "proname", "function")
+			case oidPseudoTypeRegNamespace:
+				return queryOid("pg_namespace", "nspname", "namespace")
+			case oidPseudoTypeRegType:
+				return queryOid("pg_type", "typname", "type")
+			}
 		}
 	}
 
