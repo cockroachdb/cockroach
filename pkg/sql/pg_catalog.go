@@ -40,7 +40,6 @@ var (
 )
 
 const (
-	pgCatalogName          = "pg_catalog"
 	cockroachIndexEncoding = "prefix"
 )
 
@@ -610,13 +609,13 @@ CREATE TABLE pg_catalog.pg_depend (
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		db, err := p.getDatabaseDesc("pg_catalog")
+		db, err := p.getDatabaseDesc(pgCatalogName)
 		if err != nil {
 			return errors.New("could not find pg_catalog")
 		}
 		pgConstraintDesc, err := p.getTableDesc(
 			&parser.TableName{
-				DatabaseName: "pg_catalog",
+				DatabaseName: pgCatalogName,
 				TableName:    "pg_constraint"})
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_constraint")
@@ -625,7 +624,7 @@ CREATE TABLE pg_catalog.pg_depend (
 
 		pgClassDesc, err := p.getTableDesc(
 			&parser.TableName{
-				DatabaseName: "pg_catalog",
+				DatabaseName: pgCatalogName,
 				TableName:    "pg_class"})
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
