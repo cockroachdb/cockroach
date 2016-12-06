@@ -112,7 +112,7 @@ func saveState(
 	if err := setTxnSpanGCThreshold(ctx, eng, ms, rangeID, &state.TxnSpanGCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := setTruncatedState(ctx, eng, ms, rangeID, *state.TruncatedState); err != nil {
+	if err := setTruncatedState(ctx, eng, ms, rangeID, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := setMVCCStats(ctx, eng, rangeID, state.Stats); err != nil {
@@ -286,13 +286,13 @@ func setTruncatedState(
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	rangeID roachpb.RangeID,
-	truncState roachpb.RaftTruncatedState,
+	truncState *roachpb.RaftTruncatedState,
 ) error {
-	if (truncState == roachpb.RaftTruncatedState{}) {
+	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
 	return engine.MVCCPutProto(ctx, eng, ms,
-		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
+		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, truncState)
 }
 
 func loadGCThreshold(
