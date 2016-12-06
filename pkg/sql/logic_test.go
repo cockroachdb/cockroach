@@ -1251,6 +1251,17 @@ func (t *logicTest) signalIgnoredError(err error, pos string, sql string) {
 	t.perErrorSummary[errmsg] = append(t.perErrorSummary[errmsg], buf.String())
 }
 
+// Error overloads testing.T.Error to handle printing the
+// per-query "FAIL" marker when -show-sql is set. It also
+// registers the error to the failure counter.
+func (t *logicTest) Error(args ...interface{}) {
+	if *showSQL {
+		fmt.Println("\t-- FAIL")
+	}
+	t.T.Error(args...)
+	t.failures++
+}
+
 // Errorf overloads testing.T.Errorf to handle printing the
 // per-query "FAIL" marker when -show-sql is set. It also
 // registers the error to the failure counter.
@@ -1260,6 +1271,15 @@ func (t *logicTest) Errorf(format string, args ...interface{}) {
 	}
 	t.T.Errorf(format, args...)
 	t.failures++
+}
+
+// Fatal overloads testing.T.Fatal to ensure the fatal error message
+// is printed on its own line when -show-sql is set.
+func (t *logicTest) Fatal(args ...interface{}) {
+	if *showSQL {
+		fmt.Println()
+	}
+	t.T.Fatal(args...)
 }
 
 // Fatalf overloads testing.T.Fatalf to ensure the fatal error message
