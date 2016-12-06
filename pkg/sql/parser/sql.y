@@ -96,7 +96,10 @@ func (u *sqlSymUnion) numVal() *NumVal {
     return u.val.(*NumVal)
 }
 func (u *sqlSymUnion) strVal() *StrVal {
-    return u.val.(*StrVal)
+    if stmt, ok := u.val.(*StrVal); ok {
+        return stmt
+    }
+    return nil
 }
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
@@ -321,6 +324,7 @@ func (u *sqlSymUnion) window() Window {
 %type <Statement> stmt
 
 %type <Statement> alter_table_stmt
+%type <Statement> backup_stmt
 %type <Statement> copy_from_stmt
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
@@ -351,6 +355,8 @@ func (u *sqlSymUnion) window() Window {
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
+
+%type <*StrVal> opt_incremental
 
 %type <*Select> select_no_parens
 %type <SelectStatement> select_clause select_with_parens simple_select values_clause
@@ -575,7 +581,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
-%token <str>   BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
 %token <str>   CASCADE CASE CAST CHAR
@@ -601,7 +607,7 @@ func (u *sqlSymUnion) window() Window {
 
 %token <str>   HAVING HELP HIGH HOUR
 
-%token <str>   IF IFNULL ILIKE IN INTERLEAVE
+%token <str>   INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -629,7 +635,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str>   RENAME REPEATABLE
-%token <str>   RELEASE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
+%token <str>   RELEASE RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   STATUS SAVEPOINT SEARCH SECOND SELECT
@@ -752,6 +758,7 @@ stmt_list:
 
 stmt:
   alter_table_stmt
+| backup_stmt
 | copy_from_stmt
 | create_stmt
 | delete_stmt
@@ -935,6 +942,25 @@ opt_collate_clause:
 alter_using:
   USING a_expr { return unimplemented(sqllex) }
 | /* EMPTY */ {}
+
+/* TODO(dan): backup/restore all databases, only certain tables, etc */
+backup_stmt:
+  BACKUP DATABASE name TO SCONST opt_incremental /* unimplemented */
+  {
+    $$.val = &Backup{Database: Name($3), To: &StrVal{s: $5}, IncrementalFrom: $6.strVal()}
+  }
+| RESTORE DATABASE name FROM SCONST /* unimplemented */
+  {
+    $$.val = &Restore{Database: Name($3), From: &StrVal{s: $5}}
+  }
+
+opt_incremental:
+  INCREMENTAL FROM SCONST
+  {
+    $$.val = &StrVal{s: $3}
+  }
+| /* EMPTY */ {}
+
 
 copy_from_stmt:
   COPY qualified_name FROM STDIN
@@ -4802,6 +4828,7 @@ unreserved_keyword:
 | ADD
 | ALTER
 | AT
+| BACKUP
 | BEGIN
 | BLOB
 | BY
@@ -4835,6 +4862,7 @@ unreserved_keyword:
 | HELP
 | HIGH
 | HOUR
+| INCREMENTAL
 | INDEXES
 | INSERT
 | INTERLEAVE
@@ -4881,6 +4909,7 @@ unreserved_keyword:
 | RELEASE
 | RENAME
 | REPEATABLE
+| RESTORE
 | RESTRICT
 | REVOKE
 | ROLLBACK
