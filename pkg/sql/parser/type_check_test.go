@@ -122,6 +122,9 @@ func TestTypeCheckError(t *testing.T) {
 		{`NULLIF(1, '5')`, `incompatible NULLIF expressions: expected 1 to be of type string, found type int`},
 		{`COALESCE(1, 2, 3, 4, '5')`, `incompatible COALESCE expressions: expected 1 to be of type string, found type int`},
 		{`ARRAY[]`, `cannot determine type of empty array`},
+		{`ANNOTATE_TYPE('a', int)`, `incompatible type annotation for 'a' as int, found type: string`},
+		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
+		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
