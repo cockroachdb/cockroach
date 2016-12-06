@@ -19,7 +19,6 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -116,18 +115,6 @@ func DatumToEncDatum(typ ColumnType_Kind, d parser.Datum) EncDatum {
 		Type:  typ,
 		Datum: d,
 	}
-}
-
-// DatumToEncDatumWithInferredType initializes an EncDatum with the given
-// Datum, setting its Type automatically. This does not work if the base
-// Datum's type is DNull, in which case an error is returned.
-func DatumToEncDatumWithInferredType(datum parser.Datum) (EncDatum, error) {
-	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.ResolvedType().String())]
-	if !ok {
-		return EncDatum{}, errors.Errorf(
-			"Unknown type %s, could not convert to EncDatum", datum.ResolvedType())
-	}
-	return DatumToEncDatum(ColumnType_Kind(dType), datum), nil
 }
 
 // UnsetDatum ensures subsequent IsUnset() calls return false.
@@ -246,6 +233,17 @@ func (r EncDatumRow) String() string {
 	var b bytes.Buffer
 	r.stringToBuf(&DatumAlloc{}, &b)
 	return b.String()
+}
+
+// DTupleToEncDatumRow converts a parser.DTuple to an EncDatumRow.
+func DTupleToEncDatumRow(row EncDatumRow, types []ColumnType_Kind, tuple parser.DTuple) {
+	if len(row) != len(tuple) || len(tuple) != len(types) {
+		panic(fmt.Sprintf("Length mismatch (%d, %d and %d) between row, types and tuple",
+			len(row), len(types), len(tuple)))
+	}
+	for i, datum := range tuple {
+		row[i] = DatumToEncDatum(types[i], datum)
+	}
 }
 
 // EncDatumRowToDTuple converts a given EncDatumRow to a DTuple.
