@@ -103,11 +103,10 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 // 1) all entries exclusive of hi are fetched, 2) > maxBytes of
 // entries data is fetched, or 3) a cache miss occurs.
 func (rec *raftEntryCache) getEntries(
-	rangeID roachpb.RangeID, lo, hi, maxBytes uint64,
+	ents []raftpb.Entry, rangeID roachpb.RangeID, lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, uint64, uint64) {
 	rec.Lock()
 	defer rec.Unlock()
-	var ents []raftpb.Entry
 	var ent raftpb.Entry
 	var bytes uint64
 	nextIndex := lo
