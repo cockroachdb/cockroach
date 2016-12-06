@@ -5617,7 +5617,7 @@ func TestEntries(t *testing.T) {
 		if tc.setup != nil {
 			tc.setup()
 		}
-		cacheEntries, _, _ := repl.store.raftEntryCache.getEntries(rangeID, tc.lo, tc.hi, tc.maxBytes)
+		cacheEntries, _, _ := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
 		if len(cacheEntries) != tc.expCacheCount {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}

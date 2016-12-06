@@ -89,20 +89,22 @@ func entries(
 	if lo > hi {
 		return nil, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
-	// Scan over the log to find the requested entries in the range [lo, hi),
-	// stopping once we have enough.
-	ents := make([]raftpb.Entry, 0, hi-lo)
-	size := uint64(0)
 
-	hitEnts, hitSize, hitIndex := eCache.getEntries(rangeID, lo, hi, maxBytes)
+	n := hi - lo
+	if n > 100 {
+		n = 100
+	}
+	ents := make([]raftpb.Entry, 0, n)
+
+	ents, size, hitIndex := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
-	if uint64(len(hitEnts)) == hi-lo || (maxBytes > 0 && hitSize > maxBytes) {
-		return hitEnts, nil
+	if uint64(len(ents)) == hi-lo || (maxBytes > 0 && size > maxBytes) {
+		return ents, nil
 	}
 
-	ents = append(ents, hitEnts...)
-	size += hitSize
+	// Scan over the log to find the requested entries in the range [lo, hi),
+	// stopping once we have enough.
 	expectedIndex := hitIndex
 
 	var ent raftpb.Entry
