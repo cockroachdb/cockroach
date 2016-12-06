@@ -130,7 +130,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </GraphGroup>
 
           <GraphGroup groupId="node.resources" hide={dashboard !== "resources"}>
-            <h2>System Resources</h2>
             <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
                 <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
