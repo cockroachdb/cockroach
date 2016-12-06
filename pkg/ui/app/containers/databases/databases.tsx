@@ -5,7 +5,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import { IRouter, IInjectedProps } from "react-router";
 
-import Selector, { SelectorOption } from "../../components/selector";
+import Selector, { SelectorOption } from "../../components/dropdown";
 import { PageConfig, PageConfigItem } from "../../components/pageconfig";
 
 import { AdminUIState } from "../../redux/state";

@@ -5,7 +5,7 @@ import { connect } from "react-redux";
 import { PageConfig, PageConfigItem } from "../components/pageconfig";
 
 import { refreshNodes } from "../redux/apiReducers";
-import Selector, { SelectorOption } from "../components/selector";
+import Selector, { SelectorOption } from "../components/dropdown";
 import { AdminUIState } from "../redux/state";
 
 import {
