@@ -102,16 +102,31 @@ func (h *hashJoiner) buildPhase() error {
 			return err
 		}
 
-		encoded, err := h.encode(scratch, rrow, h.rightEqCols)
+		encoded, hasNull, err := h.encode(scratch, rrow, h.rightEqCols)
 		if err != nil {
 			return err
+		}
+
+		scratch = encoded[:0]
+
+		if hasNull {
+			// A row that has a NULL in an equality column will not match anything.
+			// Output it or throw it away.
+			if h.joinType == rightOuter || h.joinType == fullOuter {
+				row, err := h.render(nil, rrow)
+				if err != nil {
+					return err
+				}
+				if row != nil && !h.output.PushRow(row) {
+					return nil
+				}
+			}
+			continue
 		}
 
 		b, _ := h.buckets[string(encoded)]
 		b.rows = append(b.rows, rrow)
 		h.buckets[string(encoded)] = b
-
-		scratch = encoded[:0]
 	}
 }
 
@@ -131,9 +146,25 @@ func (h *hashJoiner) probePhase() error {
 			break
 		}
 
-		encoded, err := h.encode(scratch, lrow, h.leftEqCols)
+		encoded, hasNull, err := h.encode(scratch, lrow, h.leftEqCols)
 		if err != nil {
 			return err
+		}
+		scratch = encoded[:0]
+
+		if hasNull {
+			// A row that has a NULL in an equality column will not match anything.
+			// Output it or throw it away.
+			if h.joinType == leftOuter || h.joinType == fullOuter {
+				row, err := h.render(lrow, nil)
+				if err != nil {
+					return err
+				}
+				if row != nil && !h.output.PushRow(row) {
+					return nil
+				}
+			}
+			continue
 		}
 
 		b, ok := h.buckets[string(encoded)]
@@ -158,7 +189,6 @@ func (h *hashJoiner) probePhase() error {
 				}
 			}
 		}
-		scratch = encoded[:0]
 	}
 
 	if h.joinType == innerJoin || h.joinType == leftOuter {
@@ -185,14 +215,18 @@ func (h *hashJoiner) probePhase() error {
 
 // encode returns the encoding for the grouping columns, this is then used as
 // our group key to determine which bucket to add to.
+// If the row contains any NULLs, hasNull is true and no encoding is returned.
 func (h *hashJoiner) encode(
 	appendTo []byte, row sqlbase.EncDatumRow, cols columns,
-) (encoding []byte, err error) {
+) (encoding []byte, hasNull bool, err error) {
 	for _, colIdx := range cols {
+		if row[colIdx].IsNull() {
+			return nil, true, nil
+		}
 		appendTo, err = row[colIdx].Encode(&h.datumAlloc, sqlbase.DatumEncoding_VALUE, appendTo)
 		if err != nil {
-			return appendTo, err
+			return appendTo, false, err
 		}
 	}
-	return appendTo, nil
+	return appendTo, false, nil
 }
