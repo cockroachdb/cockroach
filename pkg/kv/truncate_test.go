@@ -177,6 +177,9 @@ func TestTruncate(t *testing.T) {
 		var reqs int
 		for j, arg := range ba.Requests {
 			req := arg.GetInner()
+			if _, ok := req.(*roachpb.NoopRequest); ok {
+				continue
+			}
 			if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
 				t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
 					h.Key, h.EndKey, test.expKeys[j][0], test.expKeys[j][1])
