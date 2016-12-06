@@ -240,7 +240,12 @@ func (h *hashJoiner) encode(
 		if row[colIdx].IsNull() {
 			return nil, true, nil
 		}
-		appendTo, err = row[colIdx].Encode(&h.datumAlloc, sqlbase.DatumEncoding_VALUE, appendTo)
+		// Note: we cannot compare VALUE encodings because they contain column IDs
+		// which can vary.
+		// TODO(radu): we should figure out what encoding is readily available and
+		// use that (though it needs to be consistent across all rows). We could add
+		// functionality to compare VALUE encodings ignoring the column ID.
+		appendTo, err = row[colIdx].Encode(&h.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}
