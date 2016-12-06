@@ -251,6 +251,14 @@ func (p *planner) newPlan(
 		p.txn.SetSystemConfigTrigger()
 	}
 
+	for _, planHook := range planHooks {
+		if fn, header, err := planHook(p.ctx(), stmt, p.execCfg); err != nil {
+			return nil, err
+		} else if fn != nil {
+			return &funcNode{f: fn, header: header}, nil
+		}
+	}
+
 	switch n := stmt.(type) {
 	case *parser.AlterTable:
 		return p.AlterTable(n)
