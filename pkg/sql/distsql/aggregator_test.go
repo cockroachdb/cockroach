@@ -34,12 +34,11 @@ import (
 //      CONCAT_AGG
 //      STDDEV
 //      VARIANCE
-// TODO(irfansharif): Replicate sql/testdata and TestLogic for distsql, this kind of manual
-// case-by-case testing is error prone making it very easy to miss edge cases.
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [15]sqlbase.EncDatum{}
+	null := sqlbase.EncDatum{Datum: parser.DNull}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
@@ -49,6 +48,76 @@ func TestAggregator(t *testing.T) {
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
+		{
+			// SELECT MIN(@0), MAX(@0), COUNT(@0), AVG(@0), SUM(@0), STDDEV(@0),
+			// VARIANCE(@0) GROUP BY [] (no rows).
+			spec: AggregatorSpec{
+				Types: []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT},
+				Exprs: []AggregatorSpec_Expr{
+					{
+						Func:   AggregatorSpec_MIN,
+						ColIdx: 0,
+					},
+					{
+						Func:   AggregatorSpec_MAX,
+						ColIdx: 0,
+					},
+					{
+						Func:   AggregatorSpec_COUNT,
+						ColIdx: 0,
+					},
+					{
+						Func:   AggregatorSpec_AVG,
+						ColIdx: 0,
+					},
+					{
+						Func:   AggregatorSpec_SUM,
+						ColIdx: 0,
+					},
+					{
+						Func:   AggregatorSpec_STDDEV,
+						ColIdx: 0,
+					},
+					{
+						Func:   AggregatorSpec_VARIANCE,
+						ColIdx: 0,
+					},
+				},
+			},
+			input: sqlbase.EncDatumRows{},
+			expected: sqlbase.EncDatumRows{
+				{null, null, v[0], null, null, null, null},
+			},
+		},
+		{
+			// SELECT @2, COUNT(@1), GROUP BY @2.
+			spec: AggregatorSpec{
+				Types:     []sqlbase.ColumnType_Kind{sqlbase.ColumnType_INT, sqlbase.ColumnType_INT},
+				GroupCols: []uint32{1},
+				Exprs: []AggregatorSpec_Expr{
+					{
+						Func:   AggregatorSpec_IDENT,
+						ColIdx: 1,
+					},
+					{
+						Func:   AggregatorSpec_COUNT,
+						ColIdx: 0,
+					},
+				},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[1], v[2]},
+				{v[3], null},
+				{v[6], v[2]},
+				{v[7], v[2]},
+				{v[8], v[4]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{null, v[1]},
+				{v[4], v[1]},
+				{v[2], v[3]},
+			},
+		},
 		{
 			// SELECT @2, COUNT(@1), GROUP BY @2.
 			spec: AggregatorSpec{
