@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 )
@@ -27,40 +28,30 @@ import (
 func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error) {
 	c := exec.Command(cmd, args...)
 	c.Dir = f.Cwd
-	var outBuf, errBuf bytes.Buffer
-	{
-		p, err := c.StdinPipe()
-		if err != nil {
-			return "", "", err
-		}
-		_ = p.Close() // no input
-	}
-	f.logf("+ %s %s\n", cmd, strings.Join(args, " "))
 	o, err := c.StdoutPipe()
 	if err != nil {
 		return "", "", err
 	}
+	var outBuf bytes.Buffer
+	go func() {
+		reader := io.TeeReader(o, &outBuf)
+		for scanner := bufio.NewScanner(reader); scanner.Scan(); {
+			f.logf("%s\n", scanner.Text())
+		}
+	}()
 	e, err := c.StderrPipe()
 	if err != nil {
 		return "", "", err
 	}
-	scanO := bufio.NewScanner(o)
-	scanE := bufio.NewScanner(e)
+	var errBuf bytes.Buffer
 	go func() {
-		for scanO.Scan() {
-			line := scanO.Text() + "\n"
-			_, _ = outBuf.WriteString(line)
-			f.logf("%s", line)
-		}
-	}()
-	go func() {
-		for scanE.Scan() {
-			line := scanE.Text() + "\n"
-			_, _ = errBuf.WriteString(line)
-			f.logf("%s", line)
+		reader := io.TeeReader(e, &errBuf)
+		for scanner := bufio.NewScanner(reader); scanner.Scan(); {
+			f.logf("%s\n", scanner.Text())
 		}
 	}()
 
+	f.logf("+ %s %s\n", cmd, strings.Join(args, " "))
 	if err := c.Run(); err != nil {
 		return "", "", err
 	}
