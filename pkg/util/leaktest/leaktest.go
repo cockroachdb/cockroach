@@ -14,14 +14,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/petermattis/goid"
+
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // interestingGoroutines returns all goroutines we care about for the purpose
 // of leak checking. It excludes testing or runtime ones.
-func interestingGoroutines() (gs []string) {
+func interestingGoroutines() map[int64]string {
 	buf := make([]byte, 2<<20)
 	buf = buf[:runtime.Stack(buf, true)]
+	gs := make(map[int64]string)
 	for _, g := range strings.Split(string(buf), "\n\n") {
 		sl := strings.SplitN(g, "\n", 2)
 		if len(sl) != 2 {
@@ -51,20 +54,16 @@ func interestingGoroutines() (gs []string) {
 			strings.Contains(stack, "runtime.CPUProfile") {
 			continue
 		}
-		gs = append(gs, g)
+		gs[goid.ExtractGID([]byte(g))] = g
 	}
-	sort.Strings(gs)
-	return
+	return gs
 }
 
 // AfterTest snapshots the currently-running goroutines and returns a
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
-	orig := map[string]bool{}
-	for _, g := range interestingGoroutines() {
-		orig[g] = true
-	}
+	orig := interestingGoroutines()
 	return func() {
 		if t.Failed() {
 			return
@@ -77,9 +76,9 @@ func AfterTest(t testing.TB) func() {
 		deadline := timeutil.Now().Add(5 * time.Second)
 		for {
 			var leaked []string
-			for _, g := range interestingGoroutines() {
-				if !orig[g] {
-					leaked = append(leaked, g)
+			for id, stack := range interestingGoroutines() {
+				if _, ok := orig[id]; !ok {
+					leaked = append(leaked, stack)
 				}
 			}
 			if len(leaked) == 0 {
@@ -89,6 +88,7 @@ func AfterTest(t testing.TB) func() {
 				time.Sleep(50 * time.Millisecond)
 				continue
 			}
+			sort.Strings(leaked)
 			for _, g := range leaked {
 				t.Errorf("Leaked goroutine: %v", g)
 			}
