@@ -61,3 +61,6 @@ ROLLBACK
 
 statement error pq: table "system.t" does not exist
 BEGIN TRANSACTION; SELECT * FROM system.t; INSERT INTO t(a) VALUES (1);
+
+statement ok
+COMMIT
