@@ -27,6 +27,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -97,6 +98,14 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 // maintenance queue.
 func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() {
 	forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
+}
+
+// ConsistencyQueueShouldQueue invokes the shouldQueue method on the
+// store's consistency queue.
+func (s *Store) ConsistencyQueueShouldQueue(
+	ctx context.Context, now hlc.Timestamp, r *Replica, cfg config.SystemConfig,
+) (bool, float64) {
+	return s.consistencyQueue.shouldQueue(ctx, now, r, cfg)
 }
 
 // GetDeadReplicas exports s.deadReplicas for tests.
