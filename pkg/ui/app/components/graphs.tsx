@@ -109,7 +109,8 @@ class AxisDomain {
     this.max = _.max(_.values<number>(this.stackedSum));
   }
 
-  // ticks computes 3 tick values for a graph given the current max/min.
+  // ticks computes tick values for a graph given the current max/min and 
+  // tickCount.
   ticks(transform: (n: number) => any = _.identity): number[] {
     let increment = (this.max - this.min) / (this.tickCount + 1);
     let tix: number[] = [];

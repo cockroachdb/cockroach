@@ -4,45 +4,38 @@
  * ! = Potentially difficult to implement
  *
  * - All Pages / Shared Components
- *    - Left Navigation Bar Style
- *      - New Icons
- *      - Color
- *      - Spacing
- *    - Titles
- *    - "Last Updated" on pages
- *    - Per-page controls bar
- *      - Fixed Scrolling
- *      - Fix selector width
- *      - CSS Polish
- *    - Right-side Summary Sections
- *      - CSS Polish
+ *    - "Last Updated"
+ *    - Dropdowns
+ *      - Automatic Width to fit current selection
+ *      - Match menu styling to design
+ *      - Fix 1px offset bug
+ *    - Timespan Selector
+ *      - Add Dropdown Styling
+ *      - Add Left/Right Buttons
+ *      - Add current time window display
  *    - Tables
  *      - CSS Match to design
  *      - Management of column widths
  * - Cluster Page
- *    - Fix widths of selectors
- *    ! Selectors
- *    ! Timespan Selector Styling
  *    - Alert notifications
  *      - Mismatched/Out-of-date Version
  *      - Help us
  *    - Right-side Summary Section
+ *      - Link to Nodes page
  *      - Stats
- *        - Total Nodes
- *        - Capacity Used
  *        - Unavailable Ranges
- *        - Queries Per Second
- *        - P50 Latency
- *        - P99 Latency
- *      - Events
- *    - graphs
- *      ! Appearance
- *        - Ticks
- *        - Grid
- *        - Text
- *        - COlors
+ *        - Queries Per Second?
+ *      - Events?
+ *    - Graphs
+ *      - Intelligent Tick Selection
+ *      - Always label Y-axis units
+ *      - Appearance
+ *        - New Colors
+ *      - Tooltip when hover over title
  *      - Show full domain for time span (#10362)
- *    -
+ *    - Code block syntax highlighting
+ *      - Choose keywords correctly
+ *      - Fix bug on direct page load
  * - Databases Page
  *    - Last Updated Column
  *      - Retrieve/Filter events
@@ -54,15 +47,18 @@
  *      - Display in table list column
  *      - Display alert on table details page
  *    - Table details page
+ *      - Schema Change notification
+ *      - Fill out summary stats
  *      - Back Button
- *      - Syntax highlighting colors
- *      - Syntax highlighting keywords
+ *      - Column widths for grants table
  * - Nodes page
  *  - Table Style
  *  - Add Summary Section
  *  - Remove Link from Navigation Bar
  * - Helpus Page
- *  - *Pending design*
+ *  - New Navigation Bar Icon
+ *  - Header links
+ *  - New form field Appearance
  *
  * NICE TO HAVE:
  *  - Create a "NodeStatusProvider" similar to "MetricsDataProvider", allowing

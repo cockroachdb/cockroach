@@ -89,14 +89,15 @@ System.config({
     "nvd3": "npm:nvd3@1.8.4",
     "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
-    "react": "npm:react@15.4.0",
+    "react": "npm:react@15.4.1",
     "react-addons-test-utils": "npm:react-addons-test-utils@15.4.0",
-    "react-dom": "npm:react-dom@15.4.0",
+    "react-dom": "npm:react-dom@15.4.1",
     "react-paginate": "npm:react-paginate@2.2.3",
     "react-redux": "npm:react-redux@4.4.6",
     "react-router": "npm:react-router@3.0.0",
     "react-router-redux": "npm:react-router-redux@4.0.7",
     "react-select": "npm:react-select@1.0.0-rc.2",
+    "react-sticky": "npm:react-sticky@5.0.5",
     "redux": "npm:redux@3.6.0",
     "redux-thunk": "npm:redux-thunk@2.1.0",
     "reselect": "npm:reselect@2.5.4",
@@ -105,7 +106,7 @@ System.config({
     "ts": "github:frankwallis/plugin-typescript@5.3.0",
     "ts-runtime": "npm:babel-runtime@6.18.0",
     "typescript": "npm:typescript@1.8.10",
-    "whatwg-fetch": "npm:whatwg-fetch@2.0.0",
+    "whatwg-fetch": "npm:whatwg-fetch@2.0.1",
     "github:capaj/systemjs-hot-reloader@0.6.0": {
       "debug": "npm:debug@2.3.2",
       "socket.io-client": "github:socketio/socket.io-client@1.5.1",
@@ -447,7 +448,7 @@ System.config({
     },
     "npm:encoding@0.1.12": {
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
-      "iconv-lite": "npm:iconv-lite@0.4.13"
+      "iconv-lite": "npm:iconv-lite@0.4.15"
     },
     "npm:entities@1.1.1": {
       "systemjs-json": "github:systemjs/plugin-json@0.1.2"
@@ -463,7 +464,7 @@ System.config({
       "object.entries": "npm:object.entries@1.0.3",
       "object.values": "npm:object.values@1.0.3",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react": "npm:react@15.4.0",
+      "react": "npm:react@15.4.1",
       "uuid": "npm:uuid@2.0.3"
     },
     "npm:es-abstract@1.6.1": {
@@ -551,7 +552,7 @@ System.config({
     "npm:https-browserify@0.0.0": {
       "http": "github:jspm/nodelibs-http@1.7.1"
     },
-    "npm:iconv-lite@0.4.13": {
+    "npm:iconv-lite@0.4.15": {
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "stream": "github:jspm/nodelibs-stream@0.1.0",
@@ -590,7 +591,7 @@ System.config({
     },
     "npm:isomorphic-fetch@2.2.1": {
       "node-fetch": "npm:node-fetch@1.6.3",
-      "whatwg-fetch": "npm:whatwg-fetch@2.0.0"
+      "whatwg-fetch": "npm:whatwg-fetch@2.0.1"
     },
     "npm:lcid@1.0.0": {
       "invert-kv": "npm:invert-kv@1.0.0",
@@ -761,20 +762,20 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:react-addons-create-fragment@15.4.0": {
-      "react": "npm:react@15.4.0"
+      "react": "npm:react@15.4.1"
     },
     "npm:react-addons-test-utils@15.4.0": {
-      "react-dom": "npm:react-dom@15.4.0"
+      "react-dom": "npm:react-dom@15.4.1"
     },
-    "npm:react-dom@15.4.0": {
+    "npm:react-dom@15.4.1": {
       "fbjs": "npm:fbjs@0.8.6",
       "loose-envify": "npm:loose-envify@1.3.0",
       "object-assign": "npm:object-assign@4.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react": "npm:react@15.4.0"
+      "react": "npm:react@15.4.1"
     },
     "npm:react-input-autosize@1.1.0": {
-      "react": "npm:react@15.4.0"
+      "react": "npm:react@15.4.1"
     },
     "npm:react-paginate@2.2.3": {
       "classnames": "npm:classnames@2.2.5",
@@ -782,7 +783,7 @@ System.config({
       "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "react-addons-create-fragment": "npm:react-addons-create-fragment@15.4.0",
-      "react-dom": "npm:react-dom@15.4.0",
+      "react-dom": "npm:react-dom@15.4.1",
       "util": "github:jspm/nodelibs-util@0.1.0"
     },
     "npm:react-redux@4.4.6": {
@@ -791,7 +792,7 @@ System.config({
       "lodash": "npm:lodash@4.17.2",
       "loose-envify": "npm:loose-envify@1.3.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react": "npm:react@15.4.0"
+      "react": "npm:react@15.4.1"
     },
     "npm:react-router@3.0.0": {
       "history": "npm:history@3.2.1",
@@ -799,16 +800,21 @@ System.config({
       "invariant": "npm:invariant@2.2.2",
       "loose-envify": "npm:loose-envify@1.3.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
-      "react": "npm:react@15.4.0",
+      "react": "npm:react@15.4.1",
       "warning": "npm:warning@3.0.0"
     },
     "npm:react-select@1.0.0-rc.2": {
       "classnames": "npm:classnames@2.2.5",
-      "react": "npm:react@15.4.0",
-      "react-dom": "npm:react-dom@15.4.0",
+      "react": "npm:react@15.4.1",
+      "react-dom": "npm:react-dom@15.4.1",
       "react-input-autosize": "npm:react-input-autosize@1.1.0"
     },
-    "npm:react@15.4.0": {
+    "npm:react-sticky@5.0.5": {
+      "process": "github:jspm/nodelibs-process@0.1.2",
+      "react": "npm:react@15.4.1",
+      "react-dom": "npm:react-dom@15.4.1"
+    },
+    "npm:react@15.4.1": {
       "fbjs": "npm:fbjs@0.8.6",
       "loose-envify": "npm:loose-envify@1.3.0",
       "object-assign": "npm:object-assign@4.1.0",
