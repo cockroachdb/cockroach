@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
 set -e
 
-[[ ! $GIT_REFLOG_ACTION =~ pull ]] && exit 0
-
-make .bootstrap
+exec git submodule update --init
