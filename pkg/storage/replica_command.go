@@ -1599,7 +1599,7 @@ func (r *Replica) TruncateLog(
 	pd.Replicated.State.TruncatedState = tState
 	pd.Replicated.RaftLogDelta = &diff.SysBytes
 
-	return reply, pd, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
+	return reply, pd, setTruncatedState(ctx, batch, ms, r.RangeID, tState)
 }
 
 func newFailedLeaseTrigger() EvalResult {
