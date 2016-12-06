@@ -42,13 +42,14 @@ import (
 // aggregator's output schema is comprised of what is specified by the
 // accompanying SELECT expressions.
 type aggregator struct {
-	input      RowSource
-	output     RowReceiver
-	ctx        context.Context
-	rows       *RowBuffer
-	funcs      []*aggregateFuncHolder
-	datumAlloc sqlbase.DatumAlloc
-	rowAlloc   sqlbase.EncDatumRowAlloc
+	input       RowSource
+	output      RowReceiver
+	ctx         context.Context
+	rows        *RowBuffer
+	funcs       []*aggregateFuncHolder
+	outputTypes []sqlbase.ColumnType_Kind
+	datumAlloc  sqlbase.DatumAlloc
+	rowAlloc    sqlbase.EncDatumRowAlloc
 
 	groupCols columns
 	inputCols columns
@@ -59,18 +60,20 @@ func newAggregator(
 	ctx *FlowCtx, spec *AggregatorSpec, input RowSource, output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
-		input:     input,
-		output:    output,
-		ctx:       log.WithLogTag(ctx.Context, "Agg", nil),
-		rows:      &RowBuffer{},
-		buckets:   make(map[string]struct{}),
-		inputCols: make(columns, len(spec.Exprs)),
-		groupCols: make(columns, len(spec.GroupCols)),
+		input:       input,
+		output:      output,
+		ctx:         log.WithLogTag(ctx.Context, "Agg", nil),
+		rows:        &RowBuffer{},
+		buckets:     make(map[string]struct{}),
+		inputCols:   make(columns, len(spec.Exprs)),
+		outputTypes: make([]sqlbase.ColumnType_Kind, len(spec.Exprs)),
+		groupCols:   make(columns, len(spec.GroupCols)),
 	}
 
-	ag.inputCols = make(columns, len(spec.Exprs))
+	inputTypes := make([]sqlbase.ColumnType_Kind, len(spec.Exprs))
 	for i, expr := range spec.Exprs {
 		ag.inputCols[i] = expr.ColIdx
+		inputTypes[i] = spec.Types[expr.ColIdx]
 	}
 	copy(ag.groupCols, spec.GroupCols)
 
@@ -79,14 +82,22 @@ func newAggregator(
 	// (which just returns the last value added to them for a bucket) to provide
 	// grouped-by values for each bucket.  ag.funcs is updated to contain all
 	// the functions which need to be fed values.
-	eh := &exprHelper{types: spec.Types}
+	eh := &exprHelper{types: inputTypes}
 	eh.vars = parser.MakeIndexedVarHelper(eh, len(eh.types))
-	for _, expr := range spec.Exprs {
-		fn, err := ag.extractFunc(expr, eh)
+	for i, expr := range spec.Exprs {
+		fn, retType, err := ag.extractFunc(expr, eh)
 		if err != nil {
 			return nil, err
 		}
 		ag.funcs = append(ag.funcs, fn)
+
+		// The aggregate function extracted is an identity function, the return
+		// type of this therefore being the i-th input type.
+		if retType == nil {
+			ag.outputTypes[i] = inputTypes[i]
+		} else {
+			ag.outputTypes[i] = sqlbase.DatumTypeToColumnKind(retType)
+		}
 	}
 
 	return ag, nil
@@ -166,6 +177,12 @@ func (ag *aggregator) accumulateRows() error {
 }
 
 func (ag *aggregator) computeAggregates() error {
+	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
+	// aggregated.
+	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
+		ag.buckets[""] = struct{}{}
+	}
+
 	// Render the results.
 	tuple := make(parser.DTuple, 0, len(ag.funcs))
 	for bucket := range ag.buckets {
@@ -175,18 +192,7 @@ func (ag *aggregator) computeAggregates() error {
 		}
 
 		row := ag.rowAlloc.AllocRow(len(tuple))
-		if len(row) != len(tuple) {
-			return errors.Errorf(
-				"Length mismatch (%d and %d) between row and tuple", len(row), len(tuple))
-		}
-		for i, datum := range tuple {
-			encD, err := sqlbase.DatumToEncDatumWithInferredType(datum)
-			if err != nil {
-				return err
-			}
-			row[i] = encD
-		}
-
+		sqlbase.DTupleToEncDatumRow(row, ag.outputTypes, tuple)
 		if ok := ag.rows.PushRow(row); !ok {
 			return errors.Errorf("unable to add row %s", row)
 		}
@@ -257,13 +263,16 @@ func (ag *aggregator) encode(appendTo []byte, row sqlbase.EncDatumRow) (encoding
 }
 
 // extractFunc returns an aggregateFuncHolder for a given SelectExpr specifying
-// an aggregation function.
+// an aggregation function, along with the return type of the function. If the
+// return type is nil (provided error != nil) we are returning an identity
+// aggregation function, the return type of which is whatever is fed into the
+// function itself.
 func (ag *aggregator) extractFunc(
 	expr AggregatorSpec_Expr, eh *exprHelper,
-) (*aggregateFuncHolder, error) {
+) (*aggregateFuncHolder, parser.Type, error) {
 	if expr.Func == AggregatorSpec_IDENT {
 		fn := ag.newAggregateFuncHolder(parser.NewIdentAggregate)
-		return fn, nil
+		return fn, nil, nil
 	}
 
 	// In order to reuse the aggregate functions as defined in the parser
@@ -278,17 +287,17 @@ func (ag *aggregator) extractFunc(
 		Exprs: []parser.Expr{eh.vars.IndexedVar(int(expr.ColIdx))},
 	}
 
-	_, err := p.TypeCheck(nil, parser.TypeAny)
+	t, err := p.TypeCheck(nil, parser.TypeAny)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if agg := p.GetAggregateConstructor(); agg != nil {
 		fn := ag.newAggregateFuncHolder(agg)
 		if expr.Distinct {
 			fn.seen = make(map[string]struct{})
 		}
-		return fn, nil
+		return fn, t.ResolvedType(), nil
 	}
-	return nil, errors.Errorf("unable to get aggregate constructor for %s",
+	return nil, nil, errors.Errorf("unable to get aggregate constructor for %s",
 		AggregatorSpec_Func_name[int32(expr.Func)])
 }
