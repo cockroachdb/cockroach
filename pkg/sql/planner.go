@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -119,9 +118,8 @@ type queryRunner interface {
 
 	// The following methods run SQL queries.
 
-	// queryRow executes a SQL query string where exactly 1 result row is
-	// expected and returns that row.
-	queryRow(sql string, args ...interface{}) (parser.DTuple, error)
+	// parser.EvalPlanner gives us the QueryRow method.
+	parser.EvalPlanner
 
 	// queryRows executes a SQL query string where multiple result rows are returned.
 	queryRows(sql string, args ...interface{}) ([]parser.DTuple, error)
@@ -212,6 +210,7 @@ func (p *planner) resetContexts() {
 		Location:   &p.session.Location,
 		Database:   p.session.Database,
 		SearchPath: p.session.SearchPath,
+		Planner:    p,
 	}
 }
 
@@ -297,8 +296,8 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	return p.makePlan(stmt, false)
 }
 
-// queryRow implements the queryRunner interface.
-func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+// QueryRow implements the parser.EvalPlanner interface.
+func (p *planner) QueryRow(sql string, args ...interface{}) (parser.DTuple, error) {
 	rows, err := p.queryRows(sql, args...)
 	if err != nil {
 		return nil, err
@@ -309,7 +308,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	case 1:
 		return rows[0], nil
 	default:
-		return nil, errors.Errorf("%s: unexpected multiple results", sql)
+		return nil, &parser.MultipleResultsError{SQL: sql}
 	}
 }
 
