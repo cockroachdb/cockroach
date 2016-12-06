@@ -349,8 +349,12 @@ func (ba BatchRequest) String() string {
 			continue
 		}
 		req := arg.GetInner()
-		h := req.Header()
-		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
+		if _, ok := req.(*NoopRequest); ok {
+			str = append(str, req.Method().String())
+		} else {
+			h := req.Header()
+			str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
+		}
 	}
 	return strings.Join(str, ", ")
 }

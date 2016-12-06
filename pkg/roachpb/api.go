@@ -267,10 +267,10 @@ func (rh *Span) SetHeader(other Span) {
 }
 
 // Header implements the Request interface.
-func (*NoopRequest) Header() Span { return Span{} }
+func (*NoopRequest) Header() Span { panic("NoopRequest has no span") }
 
 // SetHeader implements the Request interface.
-func (*NoopRequest) SetHeader(_ Span) {}
+func (*NoopRequest) SetHeader(_ Span) { panic("NoopRequest has no span") }
 
 // SetHeader implements the Response interface.
 func (rh *ResponseHeader) SetHeader(other ResponseHeader) {
@@ -446,7 +446,7 @@ func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
-func (*DeprecatedVerifyChecksumRequest) Method() Method { return Noop }
+func (*DeprecatedVerifyChecksumRequest) Method() Method { return DeprecatedVerifyChecksum }
 
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {

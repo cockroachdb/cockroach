@@ -134,7 +134,11 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
-		h := union.GetInner().Header()
+		inner := union.GetInner()
+		if _, ok := inner.(*roachpb.NoopRequest); ok {
+			continue
+		}
+		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
 		if err != nil {
 			return nil, err
@@ -169,7 +173,11 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
-		h := union.GetInner().Header()
+		inner := union.GetInner()
+		if _, ok := inner.(*roachpb.NoopRequest); ok {
+			continue
+		}
+		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
 		if err != nil {
 			return nil, err
