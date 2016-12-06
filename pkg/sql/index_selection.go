@@ -651,11 +651,11 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 							c.TypedLeft(),
 							c.TypedRight(),
 						)
-					} else if c.Right.(parser.Datum).HasNext() {
+					} else if nextRightVal, hasNext := c.Right.(parser.Datum).Next(); hasNext {
 						*startExpr = parser.NewTypedComparisonExpr(
 							parser.GE,
 							c.TypedLeft(),
-							c.Right.(parser.Datum).Next(),
+							nextRightVal,
 						)
 					} else {
 						*startExpr = c
@@ -671,11 +671,11 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 							c.TypedLeft(),
 							c.TypedRight(),
 						)
-					} else if c.Right.(parser.Datum).HasPrev() {
+					} else if prevRightVal, hasPrev := c.Right.(parser.Datum).Prev(); hasPrev {
 						*endExpr = parser.NewTypedComparisonExpr(
 							parser.LE,
 							c.TypedLeft(),
-							c.Right.(parser.Datum).Prev(),
+							prevRightVal,
 						)
 					} else {
 						*endExpr = c
@@ -963,16 +963,26 @@ func encodeInclusiveEndValue(
 	needExclusiveKey := false
 	if isLastEndConstraint {
 		if dir == encoding.Ascending {
-			if datum.IsMax() || !datum.HasNext() {
+			if datum.IsMax() {
 				needExclusiveKey = true
 			} else {
-				datum = datum.Next()
+				nextVal, hasNext := datum.Next()
+				if !hasNext {
+					needExclusiveKey = true
+				} else {
+					datum = nextVal
+				}
 			}
 		} else {
-			if datum.IsMin() || !datum.HasPrev() {
+			if datum.IsMin() {
 				needExclusiveKey = true
 			} else {
-				datum = datum.Prev()
+				prevVal, hasPrev := datum.Prev()
+				if !hasPrev {
+					needExclusiveKey = true
+				} else {
+					datum = prevVal
+				}
 			}
 		}
 	}
