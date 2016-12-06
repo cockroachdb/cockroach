@@ -38,9 +38,6 @@ TABLE abc
 1 2 3
 
 query error invalid table name
-TABLE abc[TRUE]
-
-query error invalid table name
 TABLE abc.*
 
 query III colnames
@@ -149,7 +146,7 @@ query error table "bar.kv" not selected in FROM clause
 SELECT bar.kv.* FROM kv
 
 # Don't panic with invalid names (#8024)
-query error invalid column name: "kv.*"
+query error cannot use "kv.\*" in this context
 SELECT kv.*[1] FROM kv
 
 query T colnames

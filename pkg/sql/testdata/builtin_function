@@ -1126,10 +1126,10 @@ query error pq: cos\(\): cannot use "\*" in this context
 SELECT COS(*) FROM system.namespace
 
 # Don't panic with invalid names (#8045)
-query error invalid column name: "nonexistent.\*"
+query error rtrim\(\): cannot use "nonexistent.\*" in this context
 SELECT TRIM(TRAILING nonexistent.*[1])
 
-query error invalid column name: "foo.\*"
+query error rtrim\(\): cannot use "foo.\*" in this context
 SELECT TRIM(TRAILING foo.*[1]) FROM (VALUES (1)) AS foo(x)
 
 # Don't panic with invalid names (#8044)
