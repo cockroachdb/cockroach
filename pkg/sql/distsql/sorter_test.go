@@ -173,6 +173,12 @@ func TestSorter(t *testing.T) {
 
 		s := newSorter(&flowCtx, &ss, in, out)
 		s.Run(nil)
+		if out.err != nil {
+			t.Fatal(out.err)
+		}
+		if !out.closed {
+			t.Fatalf("output RowReceiver not closed")
+		}
 
 		var retRows sqlbase.EncDatumRows
 		for {

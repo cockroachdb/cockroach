@@ -348,6 +348,13 @@ func TestMergeJoiner(t *testing.T) {
 
 		m.Run(nil)
 
+		if out.err != nil {
+			t.Fatal(out.err)
+		}
+		if !out.closed {
+			t.Fatalf("output RowReceiver not closed")
+		}
+
 		var retRows sqlbase.EncDatumRows
 		for {
 			row, err := out.NextRow()
