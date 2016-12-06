@@ -674,6 +674,14 @@ func TestStyle(t *testing.T) {
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.y:SA4006",
 				// Generated file containing many unused postgres error codes.
 				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",
+
+				// OpenTracing deprecated LogEvent, but lightstep requires we keep using
+				// it (the internal representation recorded by LogFields is different).
+				// TODO(radu/dt): Remove when all callsites switch to LogFields.
+				"github.com/cockroachdb/cockroach/pkg/server/node.go:SA1019",
+				"github.com/cockroachdb/cockroach/pkg/sql/trace.go:SA1019",
+				"github.com/cockroachdb/cockroach/pkg/util/log/trace.go:SA1019",
+				"github.com/cockroachdb/cockroach/pkg/util/tracing/*:SA1019",
 			}, " "),
 			// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
 			// produces many false positives unless it inspects all our packages.
