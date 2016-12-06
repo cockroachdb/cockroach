@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
+if [ "$1" != "$2" ]; then # previous ref != new ref.
+  git submodule update --init
+fi
+
 [[ ! $GIT_REFLOG_ACTION =~ pull[[:space:]]+--rebase ]] && exit 0
 
 make .bootstrap
