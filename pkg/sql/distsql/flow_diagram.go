@@ -106,6 +106,25 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return "HashJoiner", details
 }
 
+func (s *SorterSpec) summary() (string, []string) {
+	details := []string{s.OutputOrdering.diagramString()}
+	if s.OrderingMatchLen != 0 {
+		details = append(details, fmt.Sprintf("match len: %d", s.OrderingMatchLen))
+	}
+	if s.Limit != 0 {
+		details = append(details, fmt.Sprintf("limit: %d", s.Limit))
+	}
+	return "Sorter", details
+}
+
+func (e *EvaluatorSpec) summary() (string, []string) {
+	var details []string
+	for _, expr := range e.Exprs {
+		details = append(details, expr.Expr)
+	}
+	return "Evaluator", details
+}
+
 // TODO(radu): implement summary() for other core types.
 
 func (is *InputSyncSpec) summary() (string, []string) {
