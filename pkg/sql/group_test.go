@@ -51,10 +51,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, d.expr, sel)
 		group := &groupNode{planner: p}
-		_, err := extractAggregatesVisitor{n: group}.extract(expr)
-		if err != nil {
-			t.Fatal(err)
-		}
+		(extractAggregatesVisitor{n: group}).extract(expr)
 		ordering := desiredAggregateOrdering(group.funcs)
 		if !reflect.DeepEqual(d.ordering, ordering) {
 			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
