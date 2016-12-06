@@ -142,6 +142,32 @@ func (ed *EncDatum) IsUnset() bool {
 	return ed.encoded == nil && ed.Datum == nil
 }
 
+// IsNull returns true if the EncDatum value is NULL. Equivalent to checking if
+// ed.Datum is DNull after calling EnsureDecoded.
+func (ed *EncDatum) IsNull() bool {
+	if ed.Datum != nil {
+		return ed.Datum == parser.DNull
+	}
+	if ed.encoded == nil {
+		panic("IsNull on unset EncDatum")
+	}
+	switch ed.encoding {
+	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
+		_, isNull := encoding.DecodeIfNull(ed.encoded)
+		return isNull
+
+	case DatumEncoding_VALUE:
+		_, _, _, typ, err := encoding.DecodeValueTag(ed.encoded)
+		if err != nil {
+			panic(err)
+		}
+		return typ == encoding.Null
+
+	default:
+		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
+	}
+}
+
 // EnsureDecoded ensures that the Datum field is set (decoding if it is not).
 func (ed *EncDatum) EnsureDecoded(a *DatumAlloc) error {
 	if ed.Datum != nil {
