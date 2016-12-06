@@ -684,6 +684,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
 		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
+	cfg.NodeLiveness = m.nodeLivenesses[idx]
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{
@@ -759,6 +760,15 @@ func (m *multiTestContext) addStore(idx int) {
 	store.WaitForInit()
 
 	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper)
+	// Wait until we see the first heartbeat.
+	util.SucceedsSoon(m.t, func() error {
+		if live, err := m.nodeLivenesses[idx].IsLive(nodeID); err != nil {
+			return err
+		} else if !live {
+			return errors.Errorf("node %d not yet live", nodeID)
+		}
+		return nil
+	})
 }
 
 func (m *multiTestContext) nodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {

@@ -62,14 +62,26 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 func (q *consistencyQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (bool, float64) {
+	shouldQ, priority := true, float64(0)
 	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
 			log.ErrEventf(ctx, "consistency queue last processed timestamp: %s", err)
 		}
-		return shouldQueueAgain(now, lpTS, q.interval)
+		if shouldQ, priority = shouldQueueAgain(now, lpTS, q.interval); !shouldQ {
+			return false, 0
+		}
 	}
-	return true, 0
+	// Check if all replicas are live.
+	for _, rep := range repl.Desc().Replicas {
+		if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
+			log.ErrEventf(ctx, "node %d liveness failed: %s", rep.NodeID, err)
+			return false, 0
+		} else if !live {
+			return false, 0
+		}
+	}
+	return true, priority
 }
 
 // process() is called on every range for which this node is a lease holder.
