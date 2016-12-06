@@ -38,8 +38,6 @@ type joinerBase struct {
 	combinedRow sqlbase.EncDatumRow
 }
 
-// err := init(flowCtx, inputs, output, spec.OutputColumns,
-// 	spec.Type, spec.LeftTypes, spec.RightTypes, spec.Expr)
 func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
 	inputs []RowSource,
