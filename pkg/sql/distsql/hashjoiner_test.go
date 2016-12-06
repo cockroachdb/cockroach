@@ -30,7 +30,7 @@ import (
 
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	v := [6]sqlbase.EncDatum{}
+	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
 	}
@@ -332,6 +332,163 @@ func TestHashJoiner(t *testing.T) {
 			expected: sqlbase.EncDatumRows{
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
+			},
+		},
+
+		// Tests for behavior when input contains NULLs.
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0, 1},
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightEqColumns: []uint32{0, 1},
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_INNER,
+				OutputColumns: []uint32{0, 1, 2, 3, 4},
+				// Implicit @1,@2 = @3,@4 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[1], null},
+					{null, v[2]},
+					{null, null},
+				},
+				{
+					{v[0], v[0], v[4]},
+					{v[1], null, v[5]},
+					{null, v[2], v[6]},
+					{null, null, v[7]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], v[0], v[0], v[4]},
+			},
+		},
+
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0, 1},
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightEqColumns: []uint32{0, 1},
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_LEFT_OUTER,
+				OutputColumns: []uint32{0, 1, 2, 3, 4},
+				// Implicit @1,@2 = @3,@4 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[1], null},
+					{null, v[2]},
+					{null, null},
+				},
+				{
+					{v[0], v[0], v[4]},
+					{v[1], null, v[5]},
+					{null, v[2], v[6]},
+					{null, null, v[7]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], v[0], v[0], v[4]},
+				{v[1], null, null, null, null},
+				{null, v[2], null, null, null},
+				{null, null, null, null, null},
+			},
+		},
+
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0, 1},
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightEqColumns: []uint32{0, 1},
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_RIGHT_OUTER,
+				OutputColumns: []uint32{0, 1, 2, 3, 4},
+				// Implicit @1,@2 = @3,@4 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[1], null},
+					{null, v[2]},
+					{null, null},
+				},
+				{
+					{v[0], v[0], v[4]},
+					{v[1], null, v[5]},
+					{null, v[2], v[6]},
+					{null, null, v[7]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], v[0], v[0], v[4]},
+				{null, null, v[1], null, v[5]},
+				{null, null, null, v[2], v[6]},
+				{null, null, null, null, v[7]},
+			},
+		},
+
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0, 1},
+				LeftTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				RightEqColumns: []uint32{0, 1},
+				RightTypes: []sqlbase.ColumnType_Kind{
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+					sqlbase.ColumnType_INT,
+				},
+				Type:          JoinType_FULL_OUTER,
+				OutputColumns: []uint32{0, 1, 2, 3, 4},
+				// Implicit @1,@2 = @3,@4 constraint.
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0], v[0]},
+					{v[1], null},
+					{null, v[2]},
+					{null, null},
+				},
+				{
+					{v[0], v[0], v[4]},
+					{v[1], null, v[5]},
+					{null, v[2], v[6]},
+					{null, null, v[7]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], v[0], v[0], v[4]},
+				{null, null, v[1], null, v[5]},
+				{null, null, null, v[2], v[6]},
+				{null, null, null, null, v[7]},
+				{v[1], null, null, null, null},
+				{null, v[2], null, null, null},
+				{null, null, null, null, null},
 			},
 		},
 	}
