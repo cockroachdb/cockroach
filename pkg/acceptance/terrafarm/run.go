@@ -23,17 +23,23 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error) {
 	c := exec.Command(cmd, args...)
 	c.Dir = f.Cwd
+
+	var wg sync.WaitGroup
+
 	o, err := c.StdoutPipe()
 	if err != nil {
 		return "", "", err
 	}
 	var outBuf bytes.Buffer
 	go func() {
+		wg.Add(1)
+		defer wg.Done()
 		reader := io.TeeReader(o, &outBuf)
 		for scanner := bufio.NewScanner(reader); scanner.Scan(); {
 			f.logf("%s\n", scanner.Text())
@@ -45,6 +51,8 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 	}
 	var errBuf bytes.Buffer
 	go func() {
+		wg.Add(1)
+		defer wg.Done()
 		reader := io.TeeReader(e, &errBuf)
 		for scanner := bufio.NewScanner(reader); scanner.Scan(); {
 			f.logf("%s\n", scanner.Text())
@@ -52,9 +60,8 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 	}()
 
 	f.logf("+ %s %s\n", cmd, strings.Join(args, " "))
-	if err := c.Run(); err != nil {
-		return "", "", err
-	}
+	err = c.Run()
+	wg.Wait()
 	return outBuf.String(), errBuf.String(), err
 }
 
