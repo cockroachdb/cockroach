@@ -67,6 +67,10 @@ type distSQLPlanner struct {
 
 const resolverPolicy = distsql.BinPackingLeaseHolderChoice
 
+// If true, the plan diagram (in JSON) is printed for each plan (used for
+// debugging).
+const printPlanDiagram = false
+
 func newDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
@@ -861,6 +865,17 @@ func (dsp *distSQLPlanner) PlanAndRun(
 			nodeIDMap[p.node] = idx
 		}
 		flows[idx].Processors = append(flows[idx].Processors, p.spec)
+	}
+
+	if printPlanDiagram {
+		nodeNames := make([]string, len(nodeIDs))
+		for i, n := range nodeIDs {
+			nodeNames[i] = n.String()
+		}
+
+		var buf bytes.Buffer
+		distsql.GeneratePlanDiagram(flows, nodeNames, &buf)
+		fmt.Println(buf.String())
 	}
 
 	// Start the flows on all other nodes.
