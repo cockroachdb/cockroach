@@ -20,50 +20,38 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
-func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error) {
+func (f *Farmer) run(cmd string, args ...string) (string, string, error) {
 	c := exec.Command(cmd, args...)
 	c.Dir = f.Cwd
+	var wg sync.WaitGroup
 	var outBuf, errBuf bytes.Buffer
-	{
-		p, err := c.StdinPipe()
+	for writer, fn := range map[io.Writer]func() (io.ReadCloser, error){
+		&outBuf: c.StdoutPipe,
+		&errBuf: c.StderrPipe,
+	} {
+		r, err := fn()
 		if err != nil {
-			return "", "", err
+			return outBuf.String(), errBuf.String(), err
 		}
-		_ = p.Close() // no input
+		wg.Add(1)
+		go func(writer io.Writer) {
+			defer wg.Done()
+			scanner := bufio.NewScanner(io.TeeReader(r, writer))
+			for scanner.Scan() {
+				f.logf("%s\n", scanner.Text())
+			}
+		}(writer)
 	}
-	f.logf("+ %s %s\n", cmd, strings.Join(args, " "))
-	o, err := c.StdoutPipe()
-	if err != nil {
-		return "", "", err
-	}
-	e, err := c.StderrPipe()
-	if err != nil {
-		return "", "", err
-	}
-	scanO := bufio.NewScanner(o)
-	scanE := bufio.NewScanner(e)
-	go func() {
-		for scanO.Scan() {
-			line := scanO.Text() + "\n"
-			_, _ = outBuf.WriteString(line)
-			f.logf("%s", line)
-		}
-	}()
-	go func() {
-		for scanE.Scan() {
-			line := scanE.Text() + "\n"
-			_, _ = errBuf.WriteString(line)
-			f.logf("%s", line)
-		}
-	}()
 
-	if err := c.Run(); err != nil {
-		return "", "", err
-	}
+	f.logf("+ %s %s\n", cmd, strings.Join(args, " "))
+	err := c.Run()
+	wg.Wait()
 	return outBuf.String(), errBuf.String(), err
 }
 
