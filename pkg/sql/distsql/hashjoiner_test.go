@@ -349,6 +349,13 @@ func TestHashJoiner(t *testing.T) {
 
 		h.Run(nil)
 
+		if out.err != nil {
+			t.Fatal(out.err)
+		}
+		if !out.closed {
+			t.Fatalf("output RowReceiver not closed")
+		}
+
 		var expected []string
 		for _, row := range c.expected {
 			expected = append(expected, row.String())
