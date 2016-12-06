@@ -21,10 +21,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestEncDatum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	a := &DatumAlloc{}
 	v := EncDatum{}
 	if !v.IsUnset() {
@@ -39,6 +42,9 @@ func TestEncDatum(t *testing.T) {
 	if x.IsUnset() {
 		t.Errorf("unset after DatumToEncDatum()")
 	}
+	if x.IsNull() {
+		t.Errorf("null after DatumToEncDatum()")
+	}
 
 	encoded, err := x.Encode(a, DatumEncoding_ASCENDING_KEY, nil)
 	if err != nil {
@@ -49,6 +55,9 @@ func TestEncDatum(t *testing.T) {
 
 	if y.IsUnset() {
 		t.Errorf("unset after EncDatumFromEncoded")
+	}
+	if y.IsNull() {
+		t.Errorf("null after EncDatumFromEncoded")
 	}
 	if enc, ok := y.Encoding(); !ok {
 		t.Error("no encoding after EncDatumFromEncoded")
@@ -79,6 +88,9 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != DatumEncoding_DESCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
+	if z.IsNull() {
+		t.Errorf("null after EncDatumFromEncoded")
+	}
 	err = z.EnsureDecoded(a)
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +102,37 @@ func TestEncDatum(t *testing.T) {
 	if !y.IsUnset() {
 		t.Error("not unset after UnsetDatum()")
 	}
+}
+
+func TestEncDatumNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Verify DNull is null.
+	n := DatumToEncDatum(ColumnType_INT, parser.DNull)
+	if !n.IsNull() {
+		t.Error("DNull not null")
+	}
+
+	var alloc DatumAlloc
+	rng, _ := randutil.NewPseudoRand()
+
+	// Generate random EncDatums (some of which are null), and verify that a datum
+	// created from its encoding has the same IsNull() value.
+	for cases := 0; cases < 100; cases++ {
+		a := RandEncDatum(rng)
+
+		for enc := range DatumEncoding_name {
+			encoded, err := a.Encode(&alloc, DatumEncoding(enc), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := EncDatumFromEncoded(ColumnType_INT, DatumEncoding(enc), encoded)
+			if a.IsNull() != b.IsNull() {
+				t.Errorf("before: %s (null=%t)  after: %s (null=%t)", a, a.IsNull(), b, b.IsNull())
+			}
+		}
+	}
+
 }
 
 // checkEncDatumCmp encodes the given values using the given encodings,
@@ -134,6 +177,8 @@ func checkEncDatumCmp(
 }
 
 func TestEncDatumCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	a := &DatumAlloc{}
 	rng, _ := randutil.NewPseudoRand()
 
@@ -183,6 +228,8 @@ func TestEncDatumCompare(t *testing.T) {
 }
 
 func TestEncDatumFromBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	var alloc DatumAlloc
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 20; test++ {
@@ -228,6 +275,8 @@ func TestEncDatumFromBuffer(t *testing.T) {
 }
 
 func TestEncDatumRowCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	v := [5]EncDatum{}
 	for i := range v {
 		v[i] = DatumToEncDatum(ColumnType_INT, parser.NewDInt(parser.DInt(i)))
@@ -334,6 +383,8 @@ func TestEncDatumRowCompare(t *testing.T) {
 }
 
 func TestEncDatumRowAlloc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
