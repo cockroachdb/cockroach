@@ -549,7 +549,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			}
 
 			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
-			if t.Type == parser.Distinct {
+			if t.Type == parser.DistinctFuncType {
 				f.seen = make(map[string]struct{})
 			}
 			v.n.funcs = append(v.n.funcs, f)
