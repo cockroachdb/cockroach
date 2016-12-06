@@ -197,6 +197,8 @@ func (ed *EncDatum) Encoding() (DatumEncoding, bool) {
 
 // Encode appends the encoded datum to the given slice using the requested
 // encoding.
+// Note: DatumEncoding_VALUE encodings are not unique because they can contain
+// a column ID so they should not be used to test for equality.
 func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([]byte, error) {
 	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches
