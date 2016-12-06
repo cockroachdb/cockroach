@@ -35,7 +35,6 @@ func TestResolveFunction(t *testing.T) {
 		{`""`, ``, `invalid function name: ""`},
 		{`foo.*.baz`, ``, `invalid function name: foo.*.baz`},
 		{`foo.*`, ``, `invalid function name: foo.*`},
-		{`foo[bar]`, ``, `invalid function name: foo\[bar\]`},
 	}
 
 	searchPath := []string{"pg_catalog"}

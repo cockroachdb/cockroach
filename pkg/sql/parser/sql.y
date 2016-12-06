@@ -418,6 +418,8 @@ func (u *sqlSymUnion) window() Window {
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
 %type <UnresolvedName> indirection opt_indirection
+%type <UnresolvedName> qname_indirection
+%type <NamePart> name_indirection_elem
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
@@ -465,7 +467,7 @@ func (u *sqlSymUnion) window() Window {
 %type <*IndexHints> opt_index_hints
 %type <*IndexHints> index_hints_param
 %type <*IndexHints> index_hints_param_list
-%type <Expr>  a_expr b_expr c_expr a_expr_const
+%type <Expr>  a_expr b_expr c_expr a_expr_const d_expr
 %type <Expr>  substr_from substr_for
 %type <Expr>  in_expr
 %type <Expr>  having_clause
@@ -3806,6 +3808,26 @@ b_expr:
 // parentheses, such as function arguments; that cannot introduce ambiguity to
 // the b_expr syntax.
 c_expr:
+  d_expr
+| d_expr indirection
+  {
+    $$.val = &IndirectionExpr{
+      Expr: $1.expr(),
+      Indirection: $2.unresolvedName(),
+    }
+  }
+| case_expr
+| EXISTS select_with_parens
+  {
+    $$.val = &ExistsExpr{Subquery: &Subquery{Select: $2.selectStmt()}}
+  }
+
+// Productions that can be followed by a postfix operator.
+//
+// Currently we support array indexing (see c_expr above), but these
+// are also the expressions which later can be followed with `.xxx` when
+// we support field subscripting syntax.
+d_expr:
   qualified_name
   {
     $$.val = $1.unresolvedName()
@@ -3824,46 +3846,18 @@ c_expr:
     }
     $$.val = NewOrdinalReference(int(colNum-1))
   }
-| PLACEHOLDER opt_indirection
+| PLACEHOLDER
   {
-    placeholder := NewPlaceholder($1)
-    if indirection := $2.unresolvedName(); indirection != nil {
-      $$.val = &IndirectionExpr{
-        Expr: placeholder,
-        Indirection: indirection,
-      }
-    } else {
-      $$.val = placeholder
-    }
+    $$.val = NewPlaceholder($1)
   }
-| '(' a_expr ')' opt_indirection
+| '(' a_expr ')'
   {
-    paren := &ParenExpr{Expr: $2.expr()}
-    if indirection := $4.unresolvedName(); indirection != nil {
-      $$.val = &IndirectionExpr{
-        Expr: paren,
-        Indirection: indirection,
-      }
-    } else {
-      $$.val = paren
-    }
+    $$.val = &ParenExpr{Expr: $2.expr()}
   }
-| case_expr
 | func_expr
 | select_with_parens %prec UMINUS
   {
     $$.val = &Subquery{Select: $1.selectStmt()}
-  }
-| select_with_parens indirection
-  {
-    $$.val = &IndirectionExpr{
-      Expr: &Subquery{Select: $1.selectStmt()},
-      Indirection: $2.unresolvedName(),
-    }
-  }
-| EXISTS select_with_parens
-  {
-    $$.val = &ExistsExpr{Subquery: &Subquery{Select: $2.selectStmt()}}
   }
 | ARRAY select_with_parens
   {
@@ -4434,15 +4428,7 @@ case_arg:
   }
 
 indirection_elem:
-  name_indirection
-  {
-    $$.val = $1.namePart()
-  }
-| glob_indirection
-  {
-    $$.val = $1.namePart()
-  }
-| '[' a_expr ']'
+  '[' a_expr ']'
   {
     $$.val = &ArraySubscript{Begin: $2.expr()}
   }
@@ -4468,6 +4454,26 @@ glob_indirection:
   '.' '*'
   {
     $$.val = UnqualifiedStar{}
+  }
+
+name_indirection_elem:
+  glob_indirection
+  {
+    $$.val = $1.namePart()
+  }
+| name_indirection
+  {
+    $$.val = $1.namePart()
+  }
+
+qname_indirection:
+  name_indirection_elem
+  {
+    $$.val = UnresolvedName{$1.namePart()}
+  }
+| qname_indirection name_indirection_elem
+  {
+    $$.val = append($1.unresolvedName(), $2.namePart())
   }
 
 indirection:
@@ -4599,7 +4605,7 @@ qualified_name:
   {
     $$.val = UnresolvedName{Name($1)}
   }
-| name indirection
+| name qname_indirection
   {
     $$.val = append(UnresolvedName{Name($1)}, $2.unresolvedName()...)
   }
@@ -4665,7 +4671,7 @@ func_name:
   {
     $$.val = UnresolvedName{Name($1)}
   }
-| name indirection
+| name qname_indirection
   {
     $$.val = append(UnresolvedName{Name($1)}, $2.unresolvedName()...)
   }

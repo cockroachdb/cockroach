@@ -740,8 +740,6 @@ func TestParse2(t *testing.T) {
 		// See #1957.
 		{`SELECT+y[array[]]`,
 			`SELECT + y[ARRAY[]]`},
-		{`SELECT(0)FROM y[array[]]`,
-			`SELECT (0) FROM y[ARRAY[]]`},
 		{`SELECT a FROM t UNION DISTINCT SELECT 1 FROM t`,
 			`SELECT a FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t EXCEPT DISTINCT SELECT 1 FROM t`,
@@ -1099,6 +1097,69 @@ SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
 			`syntax error at or near "EOF"
 CREATE USER foo WITH PASSWORD
                              ^
+`,
+		},
+		{
+			`ALTER TABLE t RENAME TO t[TRUE]`,
+			`syntax error at or near "["
+ALTER TABLE t RENAME TO t[TRUE]
+                         ^
+`,
+		},
+		{
+			`SELECT (1 + 2).*`,
+			`syntax error at or near "."
+SELECT (1 + 2).*
+              ^
+`,
+		},
+		{
+			`TABLE abc[TRUE]`,
+			`syntax error at or near "["
+TABLE abc[TRUE]
+         ^
+`,
+		},
+		{
+			`UPDATE kv SET k[0] = 9`,
+			`syntax error at or near "["
+UPDATE kv SET k[0] = 9
+               ^
+`,
+		},
+		{
+			`SELECT (ARRAY['a', 'b', 'c']).name`,
+			`syntax error at or near "."
+SELECT (ARRAY['a', 'b', 'c']).name
+                             ^
+`,
+		},
+		{
+			`SELECT (0) FROM y[array[]]`,
+			`syntax error at or near "["
+SELECT (0) FROM y[array[]]
+                 ^
+`,
+		},
+		{
+			`INSERT INTO kv (k[0]) VALUES ('hello')`,
+			`syntax error at or near "["
+INSERT INTO kv (k[0]) VALUES ('hello')
+                 ^
+`,
+		},
+		{
+			`SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]`,
+			`syntax error at or near "["
+SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
+                                                                 ^
+`,
+		},
+		{
+			`SELECT EXISTS(SELECT 1)[1]`,
+			`syntax error at or near "["
+SELECT EXISTS(SELECT 1)[1]
+                       ^
 `,
 		},
 	}

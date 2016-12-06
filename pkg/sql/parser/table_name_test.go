@@ -40,10 +40,7 @@ func TestNormalizeTableName(t *testing.T) {
 		{`foo`, ``, ``, `no database specified`},
 		{`foo@bar`, ``, ``, `syntax error`},
 		{`test.foo.bar`, ``, ``, `invalid table name: "test.foo.bar"`},
-		{`test.foo[bar]`, ``, ``, `invalid table name: "test.foo\[bar\]"`},
-		{`test.foo.bar[blah]`, ``, ``, `invalid table name: "test.foo.bar\[blah\]"`},
 		{`test.*`, ``, ``, `invalid table name: "test.*"`},
-		{`test[blah]`, ``, ``, `invalid table name: "test\[blah\]"`},
 	}
 
 	for _, tc := range testCases {

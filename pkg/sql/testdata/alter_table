@@ -19,9 +19,6 @@ RowIdx Key            Value Disposition
 statement error invalid table name
 ALTER TABLE t RENAME TO t.*
 
-statement error invalid table name
-ALTER TABLE t RENAME TO t[TRUE]
-
 statement ok
 ALTER TABLE t ADD b INT
 
