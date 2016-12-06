@@ -25,4 +25,8 @@ const (
 	// transaction fails to be heartbeat within 2x the heartbeat interval,
 	// it may be aborted by conflicting txns.
 	DefaultHeartbeatInterval = 5 * time.Second
+
+	// SlowRequestThreshold is the amount of time to wait before considering a
+	// request to be "slow".
+	SlowRequestThreshold = 60 * time.Second
 )

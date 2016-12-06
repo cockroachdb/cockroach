@@ -38,6 +38,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -937,6 +938,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 		}
 
 		// Wait for the range lease to finish, or the context to expire.
+		slowTimer := time.After(base.SlowRequestThreshold)
 		select {
 		case pErr := <-llChan:
 			if pErr != nil {
@@ -954,6 +956,13 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			}
 			log.Event(ctx, "lease acquisition succeeded")
 			continue
+		case <-slowTimer:
+			slowTimer = nil
+			log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
+				base.SlowRequestThreshold)
+			r.store.metrics.SlowLeaseRequests.Inc(1)
+			defer r.store.metrics.SlowLeaseRequests.Dec(1)
+
 		case <-ctx.Done():
 			log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
 		case <-r.store.Stopper().ShouldStop():
@@ -1441,21 +1450,22 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// However, the command queue assumes that commands don't drop
 					// out before their prerequisites, so we still have to wait it
 					// out.
-					const warnDuration = time.Minute
-					timer := time.After(warnDuration)
+					slowTimer := time.After(base.SlowRequestThreshold)
 					for _, ch := range chans {
 						select {
 						case <-ch:
-						case <-timer:
-							timer = nil
+						case <-slowTimer:
+							slowTimer = nil
 							r.cmdQMu.Lock()
 							g := r.cmdQMu.global.String()
 							l := r.cmdQMu.local.String()
 							r.cmdQMu.Unlock()
-							log.Infof(r.AnnotateCtx(context.Background()),
-								"waited %s for dependencies: cmd-global:\n%s\nglobal:\n%s"+
+							log.Warningf(r.AnnotateCtx(context.Background()),
+								"have been waiting %s for dependencies: cmd-global:\n%s\nglobal:\n%s"+
 									"cmd-local:\n%s\nlocal:%s\n",
-								warnDuration, cmdGlobal, g, cmdLocal, l)
+								base.SlowRequestThreshold, cmdGlobal, g, cmdLocal, l)
+							r.store.metrics.SlowCommandQueueRequests.Inc(1)
+							defer r.store.metrics.SlowCommandQueueRequests.Dec(1)
 						case <-r.store.stopper.ShouldQuiesce():
 							// If the process is shutting down, we return without
 							// removing this command from queue. This avoids
@@ -1926,6 +1936,7 @@ func (r *Replica) tryAddWriteCmd(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
+	slowTimer := time.After(base.SlowRequestThreshold)
 	for {
 		select {
 		case propResult := <-ch:
@@ -1943,6 +1954,13 @@ func (r *Replica) tryAddWriteCmd(
 				r.store.intentResolver.processIntentsAsync(r, propResult.Intents)
 			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
+		case <-slowTimer:
+			slowTimer = nil
+			log.Warningf(ctx, "have been waiting %s for proposing command %s",
+				base.SlowRequestThreshold, ba)
+			r.store.metrics.SlowRaftRequests.Inc(1)
+			defer r.store.metrics.SlowRaftRequests.Dec(1)
+
 		case <-ctxDone:
 			// If our context was cancelled, return an AmbiguousResultError
 			// if the command isn't already being executed and using our
