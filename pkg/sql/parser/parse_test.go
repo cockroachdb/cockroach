@@ -607,6 +607,10 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX d.a@i SPLIT AT (2)`},
 		{`ALTER INDEX i SPLIT AT (1)`},
 		{`ALTER INDEX d.i SPLIT AT (2)`},
+
+		{`BACKUP DATABASE foo TO 'bar'`},
+		{`BACKUP DATABASE foo TO 'bar' INCREMENTAL FROM 'baz'`},
+		{`RESTORE DATABASE foo FROM 'bar'`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)

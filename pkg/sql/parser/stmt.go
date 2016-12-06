@@ -81,6 +81,12 @@ func (*AlterTable) StatementType() StatementType { return DDL }
 func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 
 // StatementType implements the Statement interface.
+func (*Backup) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Backup) StatementTag() string { return "BACKUP" }
+
+// StatementType implements the Statement interface.
 func (*BeginTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -240,6 +246,12 @@ func (n *RenameTable) StatementTag() string {
 	}
 	return "RENAME TABLE"
 }
+
+// StatementType implements the Statement interface.
+func (*Restore) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Restore) StatementTag() string { return "RESTORE" }
 
 // StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }
@@ -411,6 +423,7 @@ func (n *AlterTableDropColumn) String() string     { return AsString(n) }
 func (n *AlterTableDropConstraint) String() string { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
 func (n *AlterTableSetDefault) String() string     { return AsString(n) }
+func (n *Backup) String() string                   { return AsString(n) }
 func (n *BeginTransaction) String() string         { return AsString(n) }
 func (n *CommitTransaction) String() string        { return AsString(n) }
 func (n *CopyFrom) String() string                 { return AsString(n) }
@@ -437,6 +450,7 @@ func (n *RenameColumn) String() string             { return AsString(n) }
 func (n *RenameDatabase) String() string           { return AsString(n) }
 func (n *RenameIndex) String() string              { return AsString(n) }
 func (n *RenameTable) String() string              { return AsString(n) }
+func (n *Restore) String() string                  { return AsString(n) }
 func (n *Revoke) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string      { return AsString(n) }
 func (n *RollbackTransaction) String() string      { return AsString(n) }
