@@ -89,6 +89,10 @@ var (
 		Name: "distsender.errors.notleaseholder",
 		Help: "Number of NotLeaseHolderErrors encountered",
 	}
+	metaSlowDistSenderRequests = metric.Metadata{
+		Name: "requests.slow.distsender",
+		Help: "Number of requests that have been stuck for a long time in the dist sender",
+	}
 )
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
@@ -100,6 +104,7 @@ type DistSenderMetrics struct {
 	SendNextTimeoutCount   *metric.Counter
 	NextReplicaErrCount    *metric.Counter
 	NotLeaseHolderErrCount *metric.Counter
+	SlowRequestsCount      *metric.IncrementableGauge
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -111,6 +116,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		SendNextTimeoutCount:   metric.NewCounter(metaDistSenderSendNextTimeoutCount),
 		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		SlowRequestsCount:      metric.NewIncrementableGauge(metaSlowDistSenderRequests),
 	}
 }
 
@@ -1140,6 +1146,7 @@ func (ds *DistSender) sendToReplicas(
 	// other replicas.
 	var sendNextTimer timeutil.Timer
 	defer sendNextTimer.Stop()
+	slowTimer := time.After(base.SlowRequestThreshold)
 	for {
 		sendNextTimer.Reset(opts.SendNextTimeout)
 		select {
@@ -1152,6 +1159,13 @@ func (ds *DistSender) sendToReplicas(
 				pending++
 				transport.SendNext(done)
 			}
+
+		case <-slowTimer:
+			slowTimer = nil
+			log.Warningf(opts.ctx, "have been waiting %s sending RPC for batch: %s",
+				base.SlowRequestThreshold, args.Summary())
+			ds.metrics.SlowRequestsCount.Inc(1)
+			defer ds.metrics.SlowRequestsCount.Dec(1)
 
 		case call := <-done:
 			pending--
