@@ -72,6 +72,7 @@ set spawn_id $shell_spawn_id
 expect {
     "out of memory" {}
     "cannot allocate memory" {}
+    "std::bad_alloc" {}
     timeout {exit 1}
 }
 eexpect ":/# "
