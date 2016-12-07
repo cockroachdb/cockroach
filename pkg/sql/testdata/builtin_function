@@ -1354,3 +1354,13 @@ date
 timestamptz
 bytes
 int[]
+
+query T
+SELECT pg_catalog.pg_get_userbyid((SELECT oid FROM pg_roles WHERE rolname='root'))
+----
+root
+
+query T
+SELECT pg_catalog.pg_get_userbyid(20)
+----
+unknown (OID=20)
