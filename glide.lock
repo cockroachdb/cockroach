@@ -1,5 +1,5 @@
 hash: f97869d3329aea5fd9e34771aaf95ad59b296f03c9095d9ad5017ed8d2bcd1fd
-updated: 2016-12-02T23:03:47.30088231-05:00
+updated: 2016-12-06T20:35:54.139578972Z
 imports:
 - name: cloud.google.com/go
   version: 2b8eb373216db8c887f4934051ab8338581e3656
@@ -42,7 +42,7 @@ imports:
 - name: github.com/cockroachdb/cmux
   version: b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 - name: github.com/cockroachdb/cockroach-go
-  version: 31611c0501c812f437d4861d87d117053967c955
+  version: 2c874f130e4765aea4655923ff11c4c111397a41
   subpackages:
   - crdb
 - name: github.com/cockroachdb/crlfmt
@@ -54,7 +54,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: d844440ffbf5e88c3d3d3e18fc80d184156696f9
+  version: cfd10b4bbfc6a9a1cf2d3f5ec8e31dae31e15122
   subpackages:
   - raft
   - raft/raftpb
@@ -63,7 +63,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: c59995570762ec8ef1b1d5a0b147600622979cb1
+  version: 67095fbce3e4b079c3db62d08836548854a4b7ad
   subpackages:
   - digest
   - reference
@@ -102,7 +102,7 @@ imports:
 - name: github.com/docker/go-units
   version: e30f1e79f3cd72542f2026ceec18d3bd67ab859c
 - name: github.com/dustin/go-humanize
-  version: 2064d2b8b5e33b3e5d175b3d9c5b90ba7b212665
+  version: ef638b6c2e62b857442c6443dace9366a48c0ee2
 - name: github.com/elastic/gosigar
   version: 77904081ae782b3d34334a142e1d98c4f9d88336
   subpackages:
@@ -161,7 +161,7 @@ imports:
 - name: github.com/google/btree
   version: 925471ac9e2131377a91e1595defec898166fe49
 - name: github.com/google/go-github
-  version: dccec7b5f17234b8219494c2b5b03af034e08c04
+  version: 171a9316fc826fdb616072bd967483452eb1e2cf
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -230,7 +230,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: bdcc175572fd7abece6c831e643891b9331bc9e7
 - name: github.com/opencontainers/runc
-  version: 4271a8b5aec07d69f128df5474dea064d4694832
+  version: 5974b4c7a1a4d4579c0c25cbb01b0070d1285bbc
   subpackages:
   - libcontainer/user
 - name: github.com/opentracing/basictracer-go
@@ -243,7 +243,7 @@ imports:
   - ext
   - log
 - name: github.com/pborman/uuid
-  version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
+  version: 5007efa264d92316c43112bc573e754bc889b7b1
 - name: github.com/petermattis/goid
   version: caab6446a35a918488a0f52d4b0bd088a60f3511
 - name: github.com/pkg/errors
@@ -322,7 +322,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sys
-  version: ca83bd2cb9abb47839b50eb4da612f00158f5870
+  version: 478fcf54317e52ab69f40bb4c7a1520288d7f7ea
   subpackages:
   - unix
   - windows
@@ -336,7 +336,7 @@ imports:
   - transform
   - unicode/norm
 - name: golang.org/x/tools
-  version: 366e27042d04e36bdf2d0033252e4e29f958f175
+  version: ae1141fc8b3e38d9e074b383af516745815897c3
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -402,7 +402,7 @@ imports:
 - name: honnef.co/go/ssa
   version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
-  version: 333d80cd00e6fbc09e8c8e45587a1dbfcddbda2c
+  version: 866016499c1224a2f7f52e783b44ca72a51fa46c
   subpackages:
   - pure
   - vrp
