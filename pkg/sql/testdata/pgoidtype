@@ -41,6 +41,21 @@ SELECT 'blah'::REGNAMESPACE
 query error type 'blah' does not exist
 SELECT 'blah'::REGTYPE
 
+## Test other cast syntaxes
+
+query I
+SELECT CAST ('pg_constraint' AS REGCLASS)
+----
+402060402
+
+# This forces the b_expr form of the cast syntax.
+query I
+SELECT ('pg_constraint')::REGCLASS
+----
+402060402
+
+## Test visibility of pg_* via oid casts.
+
 statement ok
 CREATE TABLE a (id INT)
 
