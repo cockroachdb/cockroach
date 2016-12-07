@@ -327,7 +327,7 @@ type logicQuery struct {
 // https://github.com/gregrahn/sqllogictest/ for a github mirror of the
 // sqllogictest source.
 type logicTest struct {
-	*testing.T
+	t *testing.T
 	// the database server instantiated for this input file.
 	srv serverutils.TestServerInterface
 	// map of built clients. Needs to be persisted so that we can
@@ -421,7 +421,7 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.ServingAddr(), "TestLogic", url.User(user))
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, t.srv.ServingAddr(), "TestLogic", url.User(user))
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
@@ -452,7 +452,7 @@ func (t *logicTest) setup() {
 			},
 		},
 	}
-	t.srv, _, _ = serverutils.StartServer(t.T, params)
+	t.srv, _, _ = serverutils.StartServer(t.t, params)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
@@ -1101,7 +1101,7 @@ func TestLogic(t *testing.T) {
 	totalUnsupported := 0
 	lastProgress := timeutil.Now()
 	l := logicTest{
-		T:               t,
+		t:               t,
 		verbose:         testing.Verbose() || log.V(1),
 		perErrorSummary: make(map[string][]string),
 	}
@@ -1113,7 +1113,7 @@ func TestLogic(t *testing.T) {
 			// the `t` given to this anonymous function may be different
 			// from the t above, so re-bind it to `l` for the duration of
 			// the test.
-			l.T = t
+			l.t = t
 			defer l.close()
 			l.setup()
 			if err := l.processTestFile(path); err != nil {
@@ -1251,24 +1251,44 @@ func (t *logicTest) signalIgnoredError(err error, pos string, sql string) {
 	t.perErrorSummary[errmsg] = append(t.perErrorSummary[errmsg], buf.String())
 }
 
-// Errorf overloads testing.T.Errorf to handle printing the
-// per-query "FAIL" marker when -show-sql is set. It also
-// registers the error to the failure counter.
+// Error is a wrapper around testing.T.Error that handles printing the per-query
+// "FAIL" marker when -show-sql is set. It also registers the error to the
+// failure counter.
+func (t *logicTest) Error(args ...interface{}) {
+	if *showSQL {
+		fmt.Println("\t-- FAIL")
+	}
+	t.t.Error(args...)
+	t.failures++
+}
+
+// Errorf is a wrapper around testing.T.Errorf that handles printing the
+// per-query "FAIL" marker when -show-sql is set. It also registers the error to
+// the failure counter.
 func (t *logicTest) Errorf(format string, args ...interface{}) {
 	if *showSQL {
 		fmt.Println("\t-- FAIL")
 	}
-	t.T.Errorf(format, args...)
+	t.t.Errorf(format, args...)
 	t.failures++
 }
 
-// Fatalf overloads testing.T.Fatalf to ensure the fatal error message
+// Fatal is a wrapper around testing.T.Fatal that ensures the fatal error message
 // is printed on its own line when -show-sql is set.
+func (t *logicTest) Fatal(args ...interface{}) {
+	if *showSQL {
+		fmt.Println()
+	}
+	t.t.Fatal(args...)
+}
+
+// Fatalf is a wrapper around testing.T.Fatalf that ensures the fatal error
+// message is printed on its own line when -show-sql is set.
 func (t *logicTest) Fatalf(format string, args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
-	t.T.Fatalf(format, args...)
+	t.t.Fatalf(format, args...)
 }
 
 // finishOne marks completion of a single test. It handles
