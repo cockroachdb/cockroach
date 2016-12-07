@@ -287,6 +287,14 @@ var (
 		Help: "Duration of Store mutex critical sections"}
 	metaMuSchedulerNanos = metric.Metadata{Name: "mutex.schedulernanos",
 		Help: "Duration of Raft Scheduler mutex critical sections"}
+
+	// Slow request metrics.
+	metaSlowCommandQueueRequests = metric.Metadata{Name: "requests.slow.commandqueue",
+		Help: "Number of requests that have been stuck for a long time in the command queue"}
+	metaSlowLeaseRequests = metric.Metadata{Name: "requests.slow.lease",
+		Help: "Number of requests that have been stuck for a long time acquiring a lease"}
+	metaSlowRaftRequests = metric.Metadata{Name: "requests.slow.raft",
+		Help: "Number of requests that have been stuck for a long time in raft"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -450,6 +458,11 @@ type StoreMetrics struct {
 	MuRaftNanos         *metric.Histogram
 	MuReplicaNanos      *metric.Histogram
 	MuCommandQueueNanos *metric.Histogram
+
+	// Slow request counts.
+	SlowCommandQueueRequests *metric.Gauge
+	SlowLeaseRequests        *metric.Gauge
+	SlowRaftRequests         *metric.Gauge
 
 	// Stats for efficient merges.
 	mu struct {
@@ -632,6 +645,11 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 			metaMuSchedulerNanos, time.Minute,
 			time.Second.Nanoseconds(), 1,
 		),
+
+		// Wedge request counters.
+		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),
+		SlowLeaseRequests:        metric.NewGauge(metaSlowLeaseRequests),
+		SlowRaftRequests:         metric.NewGauge(metaSlowRaftRequests),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp

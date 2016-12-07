@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,16 @@ var emptyMetadata = Metadata{Name: ""}
 func TestGauge(t *testing.T) {
 	g := NewGauge(emptyMetadata)
 	g.Update(10)
+	if v := g.Value(); v != 10 {
+		t.Fatalf("unexpected value: %d", v)
+	}
+	var wg sync.WaitGroup
+	for i := int64(0); i < 10; i++ {
+		wg.Add(2)
+		go func(i int64) { g.Inc(i); wg.Done() }(i)
+		go func(i int64) { g.Dec(i); wg.Done() }(i)
+	}
+	wg.Wait()
 	if v := g.Value(); v != 10 {
 		t.Fatalf("unexpected value: %d", v)
 	}
