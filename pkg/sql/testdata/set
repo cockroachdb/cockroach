@@ -110,9 +110,22 @@ TIME ZONE                      UTC
 TRANSACTION ISOLATION LEVEL    SERIALIZABLE
 TRANSACTION PRIORITY           NORMAL
 
+## Test that our no-op compatibility vars work
+
 statement ok
 SET APPLICATION_NAME = 'hello'
 
 statement ok
 SET EXTRA_FLOAT_DIGITS = 3
 
+statement ok
+SET CLIENT_MIN_MESSAGES = 'debug'
+
+statement ok
+SET STANDARD_CONFORMING_STRINGS = 'on'
+
+statement ok
+SET CLIENT_ENCODING = 'UTF8'
+
+statement ok
+SET SEARCH_PATH = 'blah'
