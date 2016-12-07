@@ -679,7 +679,7 @@ var Builtins = map[string][]Builtin{
 			category:   categoryIDGeneration,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				return NewDInt(generateUniqueInt(ctx.NodeID)), nil
+				return NewDInt(GenerateUniqueInt(ctx.NodeID)), nil
 			},
 		},
 	},
@@ -1976,20 +1976,20 @@ var uniqueIntState struct {
 
 var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 
-func generateUniqueInt(nodeID roachpb.NodeID) DInt {
-	// Unique ints are composed of the current time at a 10-microsecond
-	// granularity and the node-id. The node-id is stored in the lower 15 bits of
-	// the returned value and the timestamp is stored in the upper 48 bits. The
-	// top-bit is left empty so that negative values are not returned. The 48-bit
-	// timestamp field provides for 89 years of timestamps. We use a custom epoch
-	// (Jan 1, 2015) in order to utilize the entire timestamp range.
-	//
-	// Note that generateUniqueInt() imposes a limit on node IDs while
-	// generateUniqueBytes() does not.
-	//
-	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
-	// periodically to avoid the clock ever going backwards (e.g. due to NTP
-	// adjustment)?
+// GenerateUniqueInt creates a unique int composed of the current time at a
+// 10-microsecond granularity and the node-id. The node-id is stored in the
+// lower 15 bits of the returned value and the timestamp is stored in the upper
+// 48 bits. The top-bit is left empty so that negative values are not returned.
+// The 48-bit timestamp field provides for 89 years of timestamps. We use a
+// custom epoch (Jan 1, 2015) in order to utilize the entire timestamp range.
+//
+// Note that GenerateUniqueInt() imposes a limit on node IDs while
+// generateUniqueBytes() does not.
+//
+// TODO(pmattis): Do we have to worry about persisting the milliseconds value
+// periodically to avoid the clock ever going backwards (e.g. due to NTP
+// adjustment)?
+func GenerateUniqueInt(nodeID roachpb.NodeID) DInt {
 	const precision = uint64(10 * time.Microsecond)
 	const nodeIDBits = 15
 

@@ -53,7 +53,7 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against a cockroach database.
 `,
-	RunE:         maybeDecorateGRPCError(runTerm),
+	RunE:         MaybeDecorateGRPCError(runTerm),
 	SilenceUsage: true,
 }
 

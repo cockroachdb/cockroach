@@ -56,9 +56,9 @@ func (tk tableKey) Name() string {
 	return tk.name
 }
 
-// getKeysForTableDescriptor retrieves the KV keys corresponding
+// GetKeysForTableDescriptor retrieves the KV keys corresponding
 // to the zone, name and descriptor of a table.
-func getKeysForTableDescriptor(
+func GetKeysForTableDescriptor(
 	tableDesc *sqlbase.TableDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
 	zoneKey = sqlbase.MakeZoneKey(tableDesc.ID)
