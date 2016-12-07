@@ -394,7 +394,7 @@ func (e *Executor) Prepare(
 			session.planner.avoidCachedDescriptors = false
 		}()
 
-		setTxnTimestamps(txn, *protoTS)
+		SetTxnTimestamps(txn, *protoTS)
 	}
 
 	plan, err := session.planner.prepare(stmt)
@@ -579,7 +579,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			txnState.txn = txn
 
 			if protoTS != nil {
-				setTxnTimestamps(txnState.txn, *protoTS)
+				SetTxnTimestamps(txnState.txn, *protoTS)
 			}
 
 			var err error
@@ -1508,7 +1508,7 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	return &ts, nil
 }
 
-// setTxnTimestamps sets the transaction's proto timestamps and deadline
+// SetTxnTimestamps sets the transaction's proto timestamps and deadline
 // to ts. This is for use with AS OF queries, and should be called in the
 // retry block (except in the case of prepare which doesn't use retry). The
 // deadline-checking code checks that the `Timestamp` field of the proto
@@ -1516,7 +1516,7 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 // it won't ever exceed the deadline, and thus setting the deadline here is
 // not strictly needed. However, it doesn't do anything incorrect and it will
 // possibly find problems if things change in the future, so it is left in.
-func setTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
+func SetTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
 	txn.Proto.Timestamp = ts
 	txn.Proto.OrigTimestamp = ts
 	txn.Proto.MaxTimestamp = ts

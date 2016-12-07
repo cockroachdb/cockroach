@@ -279,7 +279,7 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 	b.ResetTimer()
 
 	const batchSize = 1000
-	batch := &rocksDBBatchBuilder{}
+	batch := &RocksDBBatchBuilder{}
 	for i := 0; i < b.N; i += batchSize {
 		end := i + batchSize
 		if end > b.N {

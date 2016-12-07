@@ -37,7 +37,7 @@ var dumpCmd = &cobra.Command{
 	Long: `
 Dump SQL tables of a cockroach database.
 `,
-	RunE:         maybeDecorateGRPCError(runDump),
+	RunE:         MaybeDecorateGRPCError(runDump),
 	SilenceUsage: true,
 }
 
@@ -52,10 +52,11 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	return dumpTable(os.Stdout, conn, args[0], args[1])
+	return DumpTable(os.Stdout, conn, args[0], args[1])
 }
 
-func dumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) error {
+// DumpTable dumps the specified table to w.
+func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) error {
 	const limit = 100
 
 	// Escape names since they can't be used in placeholders.

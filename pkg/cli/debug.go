@@ -50,7 +50,7 @@ var debugKeysCmd = &cobra.Command{
 	Long: `
 Pretty-prints all keys in a store.
 `,
-	RunE: maybeDecorateGRPCError(runDebugKeys),
+	RunE: MaybeDecorateGRPCError(runDebugKeys),
 }
 
 func parseRangeID(arg string) (roachpb.RangeID, error) {
@@ -152,7 +152,7 @@ Pretty-prints all keys and values in a range. By default, includes unreplicated
 state like the raft HardState. With --replicated, only includes data covered by
  the consistency checker.
 `,
-	RunE: maybeDecorateGRPCError(runDebugRangeData),
+	RunE: MaybeDecorateGRPCError(runDebugRangeData),
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
@@ -196,7 +196,7 @@ var debugRangeDescriptorsCmd = &cobra.Command{
 	Long: `
 Prints all range descriptors in a store with a history of changes.
 `,
-	RunE: maybeDecorateGRPCError(runDebugRangeDescriptors),
+	RunE: MaybeDecorateGRPCError(runDebugRangeDescriptors),
 }
 
 func descStr(desc roachpb.RangeDescriptor) string {
@@ -413,7 +413,7 @@ var debugRaftLogCmd = &cobra.Command{
 	Long: `
 Prints all log entries in a store for the given range.
 `,
-	RunE: maybeDecorateGRPCError(runDebugRaftLog),
+	RunE: MaybeDecorateGRPCError(runDebugRaftLog),
 }
 
 func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
@@ -496,7 +496,7 @@ ranges individually.
 
 Uses a hard-coded GC policy with a 24 hour TTL for old versions.
 `,
-	RunE: maybeDecorateGRPCError(runDebugGCCmd),
+	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
 }
 
 func runDebugGCCmd(cmd *cobra.Command, args []string) error {
@@ -575,7 +575,7 @@ Perform local consistency checks of a single store.
 Capable of detecting the following errors:
 * Raft logs that are inconsistent with their metadata
 `,
-	RunE: maybeDecorateGRPCError(runDebugCheckStoreCmd),
+	RunE: MaybeDecorateGRPCError(runDebugCheckStoreCmd),
 }
 
 type replicaCheckInfo struct {
@@ -687,7 +687,7 @@ var debugCompactCmd = &cobra.Command{
 	Long: `
 Compact the sstables in a store.
 `,
-	RunE: maybeDecorateGRPCError(runDebugCompact),
+	RunE: MaybeDecorateGRPCError(runDebugCompact),
 }
 
 func runDebugCompact(cmd *cobra.Command, args []string) error {
@@ -730,7 +730,7 @@ total files and 14 files that are 129 MiB in size.
 The suffixes K, M, G and T are used for terseness to represent KiB, MiB, GiB
 and TiB.
 `,
-	RunE: maybeDecorateGRPCError(runDebugSSTables),
+	RunE: MaybeDecorateGRPCError(runDebugSSTables),
 }
 
 func runDebugSSTables(cmd *cobra.Command, args []string) error {

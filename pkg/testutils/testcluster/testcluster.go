@@ -176,7 +176,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	// TODO(peter): We should replace the hardcoded 3 with the default ZoneConfig
 	// replication factor.
 	if args.ReplicationMode == base.ReplicationAuto && nodes >= 3 {
-		if err := tc.waitForFullReplication(); err != nil {
+		if err := tc.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -503,9 +503,9 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 	return nil, errors.Errorf("store not found")
 }
 
-// waitForFullReplication waits until all stores in the cluster
+// WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
-func (tc *TestCluster) waitForFullReplication() error {
+func (tc *TestCluster) WaitForFullReplication() error {
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond * 10,
 		MaxBackoff:     time.Millisecond * 100,

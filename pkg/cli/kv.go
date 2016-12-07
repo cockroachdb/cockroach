@@ -45,7 +45,8 @@ func addrWithDefaultHost(addr string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
-func makeDBClient() (*client.DB, *stop.Stopper, error) {
+// MakeDBClient creates a kv client for use in cli tools.
+func MakeDBClient() (*client.DB, *stop.Stopper, error) {
 	conn, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
@@ -74,14 +75,14 @@ var getCmd = &cobra.Command{
 Fetches and displays the value for <key>.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runGet),
+	RunE:         MaybeDecorateGRPCError(runGet),
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return usageAndError(cmd)
 	}
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -114,7 +115,7 @@ in pairs on the command line.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runPut),
+	RunE:         MaybeDecorateGRPCError(runPut),
 }
 
 func runPut(cmd *cobra.Command, args []string) error {
@@ -135,7 +136,7 @@ func runPut(cmd *cobra.Command, args []string) error {
 		b.Put(k, v)
 	}
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -156,7 +157,7 @@ pass nil for expValue. The expValue defaults to 1 if not specified.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runCPut),
+	RunE:         MaybeDecorateGRPCError(runCPut),
 }
 
 func runCPut(cmd *cobra.Command, args []string) error {
@@ -164,7 +165,7 @@ func runCPut(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -201,7 +202,7 @@ flags.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runInc),
+	RunE:         MaybeDecorateGRPCError(runInc),
 }
 
 func runInc(cmd *cobra.Command, args []string) error {
@@ -209,7 +210,7 @@ func runInc(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -246,7 +247,7 @@ Deletes the values of one or more keys.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runDel),
+	RunE:         MaybeDecorateGRPCError(runDel),
 }
 
 func runDel(cmd *cobra.Command, args []string) error {
@@ -263,7 +264,7 @@ func runDel(cmd *cobra.Command, args []string) error {
 		b.Del(key)
 	}
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -283,7 +284,7 @@ Deletes the values for the range of keys [startKey, endKey).
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runDelRange),
+	RunE:         MaybeDecorateGRPCError(runDelRange),
 }
 
 func runDelRange(cmd *cobra.Command, args []string) error {
@@ -291,7 +292,7 @@ func runDelRange(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -323,7 +324,7 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 are retrieved.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runScan),
+	RunE:         MaybeDecorateGRPCError(runScan),
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -335,7 +336,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -361,7 +362,7 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 are retrieved.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runReverseScan),
+	RunE:         MaybeDecorateGRPCError(runReverseScan),
 }
 
 func runReverseScan(cmd *cobra.Command, args []string) error {
@@ -372,7 +373,7 @@ func runReverseScan(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
