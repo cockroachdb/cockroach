@@ -123,7 +123,7 @@ func (ss *sortAllStrategy) Execute(s *sorter) error {
 		}
 
 		if log.V(3) {
-			log.Infof(s.ctx, "pushing row %s\n", row)
+			log.Infof(s.ctx, "pushing row %s", row)
 		}
 
 		// Push the row to the output; stop if they don't need more rows.
@@ -201,7 +201,7 @@ func (ss *sortTopKStrategy) Execute(s *sorter) error {
 		}
 
 		if log.V(3) {
-			log.Infof(s.ctx, "pushing row %s\n", row)
+			log.Infof(s.ctx, "pushing row %s", row)
 		}
 
 		// Push the row to the output; stop if they don't need more rows.
@@ -272,7 +272,7 @@ func (ss *sortChunksStrategy) Execute(s *sorter) error {
 		// for the first s.matchLen ordering columns.
 		for {
 			if log.V(3) {
-				log.Infof(s.ctx, "pushing row %s\n", nextRow)
+				log.Infof(s.ctx, "pushing row %s", nextRow)
 			}
 			ss.Add(nextRow)
 
