@@ -105,6 +105,7 @@ DATABASE                       foo
 DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE
 MAX_INDEX_KEYS                 32
 SEARCH_PATH                    pg_catalog
+SERVER_VERSION                 9.5.0
 SYNTAX                         Modern
 TIME ZONE                      UTC
 TRANSACTION ISOLATION LEVEL    SERIALIZABLE

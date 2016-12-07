@@ -28,6 +28,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	// PgServerVersion is the latest version of postgres that we claim to support.
+	PgServerVersion = "9.5.0"
+)
+
 var varGen = map[string]func(p *planner) string{
 	`DATABASE`:                      func(p *planner) string { return p.session.Database },
 	`DEFAULT_TRANSACTION_ISOLATION`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
@@ -37,6 +42,7 @@ var varGen = map[string]func(p *planner) string{
 	`TRANSACTION PRIORITY`:          func(p *planner) string { return p.txn.UserPriority.String() },
 	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
 	`SEARCH_PATH`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
+	`SERVER_VERSION`:                func(_ *planner) string { return PgServerVersion },
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))
