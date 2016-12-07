@@ -15,6 +15,8 @@
 package migrations
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/net/context"
@@ -23,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -43,8 +47,8 @@ var (
 // node versions are currently running within the cluster.
 var backwardCompatibleMigrations = []migrationDescriptor{
 	{
-		name:   "example migration",
-		workFn: exampleNoopMigration,
+		name:   "use unique_rowid in system.eventlog",
+		workFn: eventlogUniqueRowID,
 	},
 }
 
@@ -232,6 +236,50 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
-func exampleNoopMigration(ctx context.Context, r runner) error {
+func checkQueryResults(results []sql.Result, numResults int) error {
+	if a, e := len(results), numResults; a != e {
+		return errors.Errorf("number of results %d != expected %d", a, e)
+	}
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
 	return nil
+}
+
+// This migration is a little unusual in that it can only safely be run via a
+// stop-the-world upgrade. See #5887 for background discussion.
+func eventlogUniqueRowID(ctx context.Context, r runner) error {
+	// The series of statements to be run in order to update the system.eventlog
+	// table to replace "uniqueID BYTES DEFAULT experimental_unique_bytes()" with
+	// "uniqueID INT DEFAULT unique_rowid()". We have to truncate eventlog2 after
+	// creating it to avoid inserting duplicate rows in the case that it had been
+	// created but not renamed in a previous attempt.
+	modifySchemaStmts := []string{
+		fmt.Sprintf("CREATE TABLE IF NOT EXISTS system.eventlog2 %s;", sqlbase.NewEventLogTableFields),
+		"TRUNCATE TABLE system.eventlog2;",
+		"INSERT INTO system.eventlog2 SELECT timestamp, eventType, targetID, reportingID, info FROM system.eventlog;",
+		"DROP TABLE IF EXISTS system.eventlog;",
+		"ALTER TABLE system.eventlog2 RENAME TO system.eventlog;",
+	}
+
+	// If we don't disable event logging, dropping the eventlog table will fail
+	// when it tries to log the drop event.
+	sql.EventLoggingEnabled = false
+	defer func() { sql.EventLoggingEnabled = true }()
+
+	// System tables can only be modified by a privileged internal user.
+	session := sql.NewSession(ctx, sql.SessionArgs{User: security.NodeUser}, r.sqlExecutor, nil, nil)
+	defer session.Finish(r.sqlExecutor)
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		res := r.sqlExecutor.ExecuteStatements(session, strings.Join(modifySchemaStmts, " "), nil)
+		err = checkQueryResults(res.ResultList, len(modifySchemaStmts))
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", err)
+	}
+	return err
 }

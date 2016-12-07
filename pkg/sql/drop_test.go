@@ -318,7 +318,7 @@ func TestDropTable(t *testing.T) {
 	createKVTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+2, "kv")
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -485,6 +485,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
+	params.SkipSystemMigrations = true
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 

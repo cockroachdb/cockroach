@@ -128,7 +128,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	// test the tables with non-specific NewDefaultPrivilegeDescriptor
 	for _, test := range []testcase{
 		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
-		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
+		{keys.EventLogTableID, sqlbase.DeprecatedEventLogTableSchema, sqlbase.EventLogTable},
 		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 	} {

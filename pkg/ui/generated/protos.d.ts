@@ -4059,11 +4059,11 @@ getInfo?() : string;
 
 
 
-unique_id?: ByteBuffer;
+unique_id?: Long;
 		
 
-getUniqueId?() : ByteBuffer;
-		setUniqueId?(uniqueId : ByteBuffer): void;
+getUniqueId?() : Long;
+		setUniqueId?(uniqueId : Long): void;
 		
 
 

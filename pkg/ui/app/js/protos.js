@@ -2336,9 +2336,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                                 },
                                                 {
                                                     "rule": "optional",
-                                                    "type": "bytes",
+                                                    "type": "int64",
                                                     "name": "unique_id",
-                                                    "id": 6,
+                                                    "id": 7,
                                                     "options": {
                                                         "(gogoproto.customname)": "UniqueID"
                                                     }

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -39,9 +40,10 @@ func TestRenameTable(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	counter := int64(keys.MaxReservedDescID)
-
-	counter++
+	// The first non-reserved ID ends up going to the system.eventlog table,
+	// which gets created by a system migration, so we have to start with the
+	// second non-reserved ID in this test.
+	counter := int64(keys.MaxReservedDescID) + 2
 	oldDBID := sqlbase.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
@@ -61,6 +63,8 @@ func TestRenameTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := desc.GetTable()
+	log.Infof(context.TODO(), "desc: %+v", desc)
+	log.Infof(context.TODO(), "tableDesc: %+v", tableDesc)
 	if tableDesc.Name != oldName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, tableDesc)
 	}
@@ -129,10 +133,17 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// renameUnblocked is used to block the rename schema change until the test
 	// doesn't need the old name->id mapping to exist anymore.
 	renameUnblocked := make(chan interface{})
+	migrationRenameDone := false
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &SchemaChangerTestingKnobs{
 				RenameOldNameNotInUseNotification: func() {
+					// Let the rename done by the eventlog system migration complete
+					// successfully. Without this, the testserver can't start up.
+					if !migrationRenameDone {
+						migrationRenameDone = true
+						return
+					}
 					<-renameUnblocked
 				},
 			},

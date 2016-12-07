@@ -785,7 +785,7 @@ func TestAdminAPIEvents(t *testing.T) {
 			if len(e.Info) == 0 {
 				t.Errorf("%d: missing/empty Info", i)
 			}
-			if len(e.UniqueID) == 0 {
+			if e.UniqueID == 0 {
 				t.Errorf("%d: missing/empty UniqueID", i)
 			}
 		}

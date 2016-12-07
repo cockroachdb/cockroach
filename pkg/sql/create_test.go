@@ -43,7 +43,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	expectedCounter := int64(keys.MaxReservedDescID + 1)
+	expectedCounter := int64(keys.MaxReservedDescID + 2)
 
 	// Test values before creating the database.
 	// descriptor ID counter.
@@ -91,7 +91,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		if a, e := len(kvs), server.GetBootstrapSchema().SystemDescriptorCount(); a != e {
+		if a, e := len(kvs), server.GetBootstrapSchema().SystemDescriptorCount()+1; a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
 	}

@@ -76,8 +76,11 @@ CREATE TABLE system.lease (
   PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
-	// EventLogTableSchema describes the schema of the event log table.
-	EventLogTableSchema = `
+	// DeprecatedEventLogTableSchema describes the schema of the eventlog table.
+	// It has been updated to use the unique_rowid() function for generating
+	// its uniqueID field. This schema will soon be removed from the repo in order
+	// to allow us to deprecate experimental_unique_bytes().
+	DeprecatedEventLogTableSchema = `
 CREATE TABLE system.eventlog (
   timestamp    TIMESTAMP  NOT NULL,
   eventType    STRING     NOT NULL,
@@ -87,6 +90,19 @@ CREATE TABLE system.eventlog (
   uniqueID     BYTES      DEFAULT experimental_unique_bytes(),
   PRIMARY KEY (timestamp, uniqueID)
 );`
+
+	// NewEventLogTableFields defines the new fields in the eventlog table schema.
+	// Defined outside of a CREATE TABLE statement in order to let them be used
+	// in the migration from the old to the new eventlog table schema.
+	NewEventLogTableFields = `(
+  timestamp    TIMESTAMP  NOT NULL,
+  eventType    STRING     NOT NULL,
+  targetID     INT        NOT NULL,
+  reportingID  INT        NOT NULL,
+  info         STRING,
+  uniqueID     INT        DEFAULT unique_rowid(),
+  PRIMARY KEY (timestamp, uniqueID)
+)`
 
 	// RangeEventTableSchema defines the schema of the event log table. It is
 	// currently envisioned as a wide table; many different event types can be
