@@ -72,7 +72,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
+	var id = sqlbase.ID(keys.MaxReservedDescID + 3)
 	var node = roachpb.NodeID(2)
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil)
 
@@ -168,7 +168,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
+	var id = sqlbase.ID(keys.MaxReservedDescID + 3)
 	var node = roachpb.NodeID(2)
 	stopper := stop.NewStopper()
 	leaseMgr := csql.NewLeaseManager(
@@ -340,6 +340,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 			AsyncExecQuickly: true,
 		},
 	}
+	params.SkipSystemMigrations = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
@@ -1177,6 +1178,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 		},
 	}
+	params.SkipSystemMigrations = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
