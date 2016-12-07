@@ -77,7 +77,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 
 	// Set up a dummy logicTest structure to use that code.
 	l := &logicTest{
-		T:       t.T,
+		t:       t.T,
 		srv:     t.cluster.Server(nodeIdx),
 		db:      db,
 		user:    security.RootUser,
