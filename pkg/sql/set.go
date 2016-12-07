@@ -146,11 +146,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch parser.Name(s).Normalize() {
-		case parser.ReNormalizeName("off"):
-			return nil, fmt.Errorf("STANDARD_CONFORMING_STRINGS=off not supported")
-		case parser.ReNormalizeName("on"):
-		default:
+		if parser.Name(s).Normalize() != parser.ReNormalizeName("on") {
 			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
 		}
 	case `CLIENT_MIN_MESSAGES`:
