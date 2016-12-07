@@ -212,37 +212,37 @@ func (a *Allocator) AllocateTarget(
 	rangeID roachpb.RangeID,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
+	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeID)
 	if a.options.UseRuleSolver {
-		sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID)
-		// When there are throttled stores that do match, we shouldn't send
-		// the replica to purgatory.
-		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
-		}
-
-		candidates := allocateRuleSolver.Solve(
+		candidates := allocateCandidates(
 			sl,
 			constraints,
 			existing,
 			a.storePool.getNodeLocalities(existing),
 			a.storePool.deterministic,
 		)
-		candidates = candidates.onlyValid()
-		if len(candidates) == 0 {
-			return nil, &allocatorError{
-				required: constraints.Constraints,
-			}
+		if log.V(3) {
+			log.Infof(context.TODO(), "allocate candidates: %s", candidates)
 		}
-		chosenCandidate := candidates.selectGood(a.randGen).store
-		return &chosenCandidate, nil
+		if len(candidates) != 0 {
+			chosenCandidate := candidates.selectGood(a.randGen).store
+			return &chosenCandidate, nil
+		}
+
+		// When there are throttled stores that do match, we shouldn't send
+		// the replica to purgatory.
+		if throttledStoreCount > 0 {
+			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+		}
+		return nil, &allocatorError{
+			required: constraints.Constraints,
+		}
 	}
 
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
 		existingNodes[repl.NodeID] = struct{}{}
 	}
-
-	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeID)
 
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
@@ -273,11 +273,6 @@ func (a *Allocator) AllocateTarget(
 // that have greater than the average number of replicas. Failing that, it
 // falls back to selecting a random target from any of the existing
 // replicas. It also will exclude any replica that lives on leaseStoreID.
-//
-// TODO(mrtracy): removeTarget eventually needs to accept the attributes from
-// the zone config associated with the provided replicas. This will allow it to
-// make correct decisions in the case of ranges with heterogeneous replica
-// requirements (i.e. multiple data centers).
 func (a Allocator) RemoveTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
@@ -301,13 +296,15 @@ func (a Allocator) RemoveTarget(
 	var badStoreID roachpb.StoreID
 
 	if a.options.UseRuleSolver {
-		candidates := removeRuleSolver.Solve(
+		candidates := removeCandidates(
 			sl,
 			constraints,
-			existing,
 			a.storePool.getNodeLocalities(existing),
 			a.storePool.deterministic,
 		)
+		if log.V(3) {
+			log.Infof(context.TODO(), "remove candidates: %s", candidates)
+		}
 		if len(candidates) != 0 {
 			badStoreID = candidates.selectBad(a.randGen).store.StoreID
 		}
@@ -358,13 +355,11 @@ func (a Allocator) RebalanceTarget(
 	if !a.options.AllowRebalance {
 		return nil, nil
 	}
+	sl, _, _ := a.storePool.getStoreList(rangeID)
 
 	if a.options.UseRuleSolver {
-		sl, _, _ := a.storePool.getStoreList(rangeID)
-		if log.V(3) {
-			log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
-		}
-
+		// TODO(bram): ShouldRebalance should be part of rebalanceCandidates
+		// and decision made afterward, not it's own function.
 		var shouldRebalance bool
 		for _, repl := range existing {
 			if leaseStoreID == repl.StoreID {
@@ -380,50 +375,20 @@ func (a Allocator) RebalanceTarget(
 			return nil, nil
 		}
 
-		// Load the exiting storesIDs into a map so to eliminate having to loop
-		// through the existing descriptors more than once.
-		existingStoreIDs := make(map[roachpb.StoreID]struct{})
-		for _, repl := range existing {
-			existingStoreIDs[repl.StoreID] = struct{}{}
-		}
-
-		// Split the store list into existing and candidate stores lists so that
-		// we can call solve independently on both store lists.
-		var existingDescs []roachpb.StoreDescriptor
-		var candidateDescs []roachpb.StoreDescriptor
-		for _, desc := range sl.stores {
-			if _, ok := existingStoreIDs[desc.StoreID]; ok {
-				existingDescs = append(existingDescs, desc)
-			} else {
-				candidateDescs = append(candidateDescs, desc)
-			}
-		}
-
-		existingStoreList := makeStoreList(existingDescs)
-		candidateStoreList := makeStoreList(candidateDescs)
-
-		localities := a.storePool.getNodeLocalities(existing)
-		existingCandidates := rebalanceExisting.Solve(
-			existingStoreList,
+		existingCandidates, candidates := rebalanceCandidates(
+			sl,
 			constraints,
 			existing,
-			localities,
-			a.storePool.deterministic,
-		)
-		candidates := rebalance.Solve(
-			candidateStoreList,
-			constraints,
-			existing,
-			localities,
+			a.storePool.getNodeLocalities(existing),
 			a.storePool.deterministic,
 		)
 
-		/*
-			fmt.Printf("existing: %s\n", existingCandidates)
-			fmt.Printf("candidates: %s\n", candidates)
-		*/
+		if log.V(3) {
+			log.Infof(context.TODO(), "existing replicas: %s", existingCandidates)
+			log.Infof(context.TODO(), "candidates: %s", candidates)
+		}
 
-		// Find all candidates that are better than the worst existing.
+		// Find all candidates that are better than the worst existing replica.
 		targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
 		if len(targets) != 0 {
 			target := targets.selectGood(a.randGen).store
@@ -432,7 +397,6 @@ func (a Allocator) RebalanceTarget(
 		return nil, nil
 	}
 
-	sl, _, _ := a.storePool.getStoreList(rangeID)
 	sl = sl.filter(constraints)
 	if log.V(3) {
 		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
