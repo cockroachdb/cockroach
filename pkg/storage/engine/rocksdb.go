@@ -863,7 +863,7 @@ type rocksDBBatch struct {
 	flushedSize        int
 	prefixIter         rocksDBBatchIterator
 	normalIter         rocksDBBatchIterator
-	builder            rocksDBBatchBuilder
+	builder            RocksDBBatchBuilder
 	distinct           distinctBatch
 	distinctOpen       bool
 	distinctNeedsFlush bool

@@ -157,7 +157,7 @@ func TestDumpBytes(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	if err := dumpTable(&b, conn, "d", "t"); err != nil {
+	if err := DumpTable(&b, conn, "d", "t"); err != nil {
 		t.Fatal(err)
 	}
 	dump := b.String()
@@ -172,7 +172,7 @@ func TestDumpBytes(t *testing.T) {
 	if err := conn.Exec(dump, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := dumpTable(&b, conn, "o", "t"); err != nil {
+	if err := DumpTable(&b, conn, "o", "t"); err != nil {
 		t.Fatal(err)
 	}
 	dump2 := b.String()
@@ -322,7 +322,7 @@ func TestDumpRandom(t *testing.T) {
 		check("d.t")
 
 		var buf bytes.Buffer
-		if err := dumpTable(&buf, conn, "d", "t"); err != nil {
+		if err := DumpTable(&buf, conn, "d", "t"); err != nil {
 			t.Fatal(err)
 		}
 		dump := buf.String()
@@ -340,7 +340,7 @@ func TestDumpRandom(t *testing.T) {
 
 		check("o.t")
 
-		if err := dumpTable(&buf, conn, "o", "t"); err != nil {
+		if err := DumpTable(&buf, conn, "o", "t"); err != nil {
 			t.Fatal(err)
 		}
 		dump2 := buf.String()

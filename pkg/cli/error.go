@@ -23,9 +23,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type cmdFn func(*cobra.Command, []string) error
-
-func maybeDecorateGRPCError(wrapped cmdFn) cmdFn {
+// MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
+// message to the user.
+func MaybeDecorateGRPCError(
+	wrapped func(*cobra.Command, []string) error,
+) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
 

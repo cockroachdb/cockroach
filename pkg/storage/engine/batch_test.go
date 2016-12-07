@@ -675,7 +675,7 @@ func TestBatchBuilder(t *testing.T) {
 	batch.flushes++
 	defer batch.Close()
 
-	builder := &rocksDBBatchBuilder{}
+	builder := &RocksDBBatchBuilder{}
 
 	testData := []struct {
 		key string
@@ -730,7 +730,7 @@ func TestBatchBuilderStress(t *testing.T) {
 			batch.flushes++
 			defer batch.Close()
 
-			builder := &rocksDBBatchBuilder{}
+			builder := &RocksDBBatchBuilder{}
 
 			for j := 0; j < count; j++ {
 				var ts hlc.Timestamp

@@ -983,7 +983,7 @@ func truncateAndDropTable(
 
 	// Finished deleting all the table data, now delete the table meta data.
 	return db.Txn(ctx, func(txn *client.Txn) error {
-		zoneKey, nameKey, descKey := getKeysForTableDescriptor(tableDesc)
+		zoneKey, nameKey, descKey := GetKeysForTableDescriptor(tableDesc)
 		// Delete table descriptor
 		b := &client.Batch{}
 		b.Del(descKey)

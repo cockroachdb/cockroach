@@ -113,7 +113,7 @@ func Backup(
 		txn := client.NewTxn(ctx, db)
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
-			setTxnTimestamps(txn, endTime)
+			SetTxnTimestamps(txn, endTime)
 
 			rangeDescs, err = AllRangeDescriptors(txn)
 			if err != nil {
@@ -152,7 +152,7 @@ func Backup(
 		txn := client.NewTxn(ctx, db)
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
-			setTxnTimestamps(txn, endTime)
+			SetTxnTimestamps(txn, endTime)
 
 			// TODO(dan): Iterate with some batch size.
 			kvs, err = txn.Scan(backupDescs[i].StartKey, backupDescs[i].EndKey, 0)
@@ -358,7 +358,7 @@ func restoreTable(
 		// our keys will, too. We should someday figure out how to overwrite an
 		// existing table and steal its ID.
 		var err error
-		newTableID, err = generateUniqueDescID(txn)
+		newTableID, err = GenerateUniqueDescID(txn)
 		return err
 	}); err != nil {
 		return err
@@ -486,7 +486,7 @@ func restoreTableDesc(
 		// fix the empty range interleaved table TODO below.
 		existingDataPrefix := roachpb.Key(keys.MakeTablePrefix(uint32(existingTable.ID)))
 		b.DelRange(existingDataPrefix, existingDataPrefix.PrefixEnd(), false)
-		zoneKey, _, descKey := getKeysForTableDescriptor(existingTable)
+		zoneKey, _, descKey := GetKeysForTableDescriptor(existingTable)
 		// Delete the desc and zone entries. Leave the name because the new
 		// table is using it.
 		b.Del(descKey)

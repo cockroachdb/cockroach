@@ -102,7 +102,9 @@ func (d descriptorAlreadyExistsErr) Error() string {
 	return fmt.Sprintf("%s %q already exists", d.desc.TypeName(), d.name)
 }
 
-func generateUniqueDescID(txn *client.Txn) (sqlbase.ID, error) {
+// GenerateUniqueDescID returns the next available Descriptor ID and increments
+// the counter.
+func GenerateUniqueDescID(txn *client.Txn) (sqlbase.ID, error) {
 	// Increment unique descriptor counter.
 	ir, err := txn.Inc(keys.DescIDGenerator, 1)
 	if err != nil {
@@ -135,7 +137,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	id, err := generateUniqueDescID(p.txn)
+	id, err := GenerateUniqueDescID(p.txn)
 	if err != nil {
 		return false, err
 	}
