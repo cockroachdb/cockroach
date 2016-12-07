@@ -3000,16 +3000,29 @@ func (s *Store) processRaftRequest(
 			}
 
 			if needTombstone {
-				// Write a tombstone key in order to prevent the replica from receiving
-				// messages from its previous incarnation.
-				if err := r.setTombstoneKey(ctx, r.store.Engine(), r.mu.state.Desc); err != nil {
-					return roachpb.NewError(err)
-				}
+				// Bump the min replica ID, but don't write the tombstone key. The
+				// tombstone key is not expected to be present when normal replica data
+				// is present and applySnapshot would delete the key in most cases. If
+				// Raft has decided the snapshot shouldn't be applied we would be
+				// writing the tombstone key incorrectly.
+				r.mu.Lock()
+				r.mu.minReplicaID = r.mu.state.Desc.NextReplicaID
+				r.mu.Unlock()
 			}
 
 			// Apply the snapshot, as Raft told us to.
 			if err := r.applySnapshot(ctx, inSnap, ready.Snapshot, ready.HardState); err != nil {
 				return roachpb.NewError(err)
+			}
+
+			tombstoneKey := keys.RaftTombstoneKey(r.RangeID)
+			var tombstone roachpb.RaftTombstone
+			if ok, err := engine.MVCCGetProto(
+				ctx, s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone,
+			); err != nil {
+				log.Warningf(ctx, "unable to retrieve tombstone: %s", err)
+			} else if ok {
+				log.Fatalf(ctx, "tombstone should not exist")
 			}
 
 			// NB: See the defer at the start of this block for the removal of the
