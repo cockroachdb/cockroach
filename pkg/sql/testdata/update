@@ -38,9 +38,6 @@ UPDATE kv SET kv.k = 9
 statement error compound types not supported yet: "k.\*"
 UPDATE kv SET k.* = 9
 
-statement error compound types not supported yet: "k\[0\]"
-UPDATE kv SET k[0] = 9
-
 statement error compound types not supported yet: "k\.v"
 UPDATE kv SET k.v = 9
 

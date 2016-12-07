@@ -399,10 +399,10 @@ INSERT INTO return AS r VALUES (5, 6)
 # statement ok
 # INSERT INTO return AS r VALUES (5, 6) RETURNING r.a
 
-statement error invalid column name: "x.*"
+statement error cannot use "x.\*" in this context
 INSERT INTO return VALUES (1, 2) RETURNING x.*[1]
 
-statement error compound types not supported yet: "x\[1\]"
+statement error column name "x" not found
 INSERT INTO return VALUES (1, 2) RETURNING x[1]
 
 statement ok
@@ -473,9 +473,6 @@ INSERT INTO kv (kv.k) VALUES ('hello')
 
 statement error compound types not supported yet: "k.\*"
 INSERT INTO kv (k.*) VALUES ('hello')
-
-statement error compound types not supported yet: "k\[0\]"
-INSERT INTO kv (k[0]) VALUES ('hello')
 
 statement error compound types not supported yet: "k.v"
 INSERT INTO kv (k.v) VALUES ('hello')
