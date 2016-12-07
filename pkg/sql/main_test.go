@@ -22,12 +22,16 @@ import (
 	"os"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -190,6 +194,29 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 		TestingCommandFilter: cmdFilters.runFilters,
 	}
 	return params, &cmdFilters
+}
+
+// Add a placeholder implementation to test the plan hook. It accepts statements
+// of the form `SHOW planhook` and returns a single row with the string value
+// 'planhook'.
+func init() {
+	testingPlanHook := func(
+		ctx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+	) (func() ([]parser.DTuple, error), sql.ResultColumns, error) {
+		show, ok := stmt.(*parser.Show)
+		if !ok || show.Name != "planhook" {
+			return nil, nil, nil
+		}
+		header := sql.ResultColumns{
+			{Name: "value", Typ: parser.TypeString},
+		}
+		return func() ([]parser.DTuple, error) {
+			return []parser.DTuple{
+				{parser.NewDString(show.Name)},
+			}, nil
+		}, header, nil
+	}
+	sql.AddPlanHook(testingPlanHook)
 }
 
 func TestMain(m *testing.M) {
