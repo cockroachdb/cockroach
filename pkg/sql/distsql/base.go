@@ -100,7 +100,7 @@ func (n *noopProcessor) Run(wg *sync.WaitGroup) {
 			return
 		}
 		if log.V(3) {
-			log.Infof(n.flowCtx.Context, "noop: pushing row %s\n", row)
+			log.Infof(n.flowCtx.Context, "noop: pushing row %s", row)
 		}
 		if !n.output.PushRow(row) {
 			return

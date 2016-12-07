@@ -19,6 +19,8 @@ package distsql
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -83,18 +85,18 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
-	if err := h.buildPhase(); err != nil {
+	if err := h.buildPhase(ctx); err != nil {
 		h.output.Close(err)
 		return
 	}
-	err := h.probePhase()
+	err := h.probePhase(ctx)
 	h.output.Close(err)
 }
 
 // buildPhase constructs our internal hash map of rows seen, this is done
 // entirely from the right stream with the encoding/group key generated using the
 // left equality columns.
-func (h *hashJoiner) buildPhase() error {
+func (h *hashJoiner) buildPhase(ctx context.Context) error {
 	var scratch []byte
 	for {
 		rrow, err := h.inputs[1].NextRow()
@@ -117,6 +119,9 @@ func (h *hashJoiner) buildPhase() error {
 				if err != nil {
 					return err
 				}
+				if log.V(3) && row != nil {
+					log.Infof(ctx, "pushing row %s", row)
+				}
 				if row != nil && !h.output.PushRow(row) {
 					return nil
 				}
@@ -135,7 +140,7 @@ func (h *hashJoiner) buildPhase() error {
 // merging of the two rows if matched. Behaviour for outer joins is as expected,
 // i.e. for RIGHT OUTER joins if no corresponding left row is seen an empty
 // DNull row is emitted instead.
-func (h *hashJoiner) probePhase() error {
+func (h *hashJoiner) probePhase(ctx context.Context) error {
 	var scratch []byte
 	for {
 		lrow, err := h.inputs[0].NextRow()
@@ -160,6 +165,9 @@ func (h *hashJoiner) probePhase() error {
 				if err != nil {
 					return err
 				}
+				if log.V(3) && row != nil {
+					log.Infof(ctx, "pushing row %s", row)
+				}
 				if row != nil && !h.output.PushRow(row) {
 					return nil
 				}
@@ -173,6 +181,9 @@ func (h *hashJoiner) probePhase() error {
 			if err != nil {
 				return err
 			}
+			if log.V(3) && row != nil {
+				log.Infof(ctx, "pushing row %s", row)
+			}
 			if row != nil && !h.output.PushRow(row) {
 				return nil
 			}
@@ -183,6 +194,9 @@ func (h *hashJoiner) probePhase() error {
 				row, err := h.render(lrow, rrow)
 				if err != nil {
 					return err
+				}
+				if log.V(3) && row != nil {
+					log.Infof(ctx, "pushing row %s", row)
 				}
 				if row != nil && !h.output.PushRow(row) {
 					return nil
@@ -202,6 +216,9 @@ func (h *hashJoiner) probePhase() error {
 				row, err := h.render(nil, rrow)
 				if err != nil {
 					return err
+				}
+				if log.V(3) && row != nil {
+					log.Infof(ctx, "pushing row %s", row)
 				}
 				if row != nil && !h.output.PushRow(row) {
 					return nil
@@ -223,7 +240,12 @@ func (h *hashJoiner) encode(
 		if row[colIdx].IsNull() {
 			return nil, true, nil
 		}
-		appendTo, err = row[colIdx].Encode(&h.datumAlloc, sqlbase.DatumEncoding_VALUE, appendTo)
+		// Note: we cannot compare VALUE encodings because they contain column IDs
+		// which can vary.
+		// TODO(radu): we should figure out what encoding is readily available and
+		// use that (though it needs to be consistent across all rows). We could add
+		// functionality to compare VALUE encodings ignoring the column ID.
+		appendTo, err = row[colIdx].Encode(&h.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}

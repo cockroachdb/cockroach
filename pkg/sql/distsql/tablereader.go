@@ -122,7 +122,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 			return
 		}
 		if log.V(3) {
-			log.Infof(ctx, "pushing row %s\n", outRow)
+			log.Infof(ctx, "pushing row %s", outRow)
 		}
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.

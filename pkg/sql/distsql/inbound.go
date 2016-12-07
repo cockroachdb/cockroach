@@ -77,7 +77,7 @@ func ProcessInboundStream(
 				break
 			}
 			if log.V(3) {
-				log.Infof(ctx, "inbound stream pushing row %s\n", row)
+				log.Infof(ctx, "inbound stream pushing row %s", row)
 			}
 			if !dst.PushRow(row) {
 				// Rest of rows not needed.
