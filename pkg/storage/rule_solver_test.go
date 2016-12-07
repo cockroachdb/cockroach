@@ -31,268 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TODO(bram): This test suite is not even close to exhaustive. The scores are
-// not checked and each rule should have many more test cases. Also add a
-// corrupt replica test and remove the 0 range ID used when calling
-// getStoreList.
-func TestRuleSolver(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper, _, _, storePool := createTestStorePool(
-		TestTimeUntilStoreDeadOff,
-		/* deterministic */ true,
-	)
-	defer stopper.Stop()
-
-	storeUSa15 := roachpb.StoreID(1) // us-a-1-5
-	storeUSa1 := roachpb.StoreID(2)  // us-a-1
-	storeUSb := roachpb.StoreID(3)   // us-b
-	storeDead := roachpb.StoreID(4)
-	storeEurope := roachpb.StoreID(5) // eur-a-1-5
-
-	mockStorePool(storePool, []roachpb.StoreID{storeUSa15, storeUSa1, storeUSb, storeEurope}, []roachpb.StoreID{storeDead}, nil)
-
-	// tierSetup returns a tier struct constructed using the passed in values.
-	// If any value is an empty string, it is not included.
-	tierSetup := func(datacenter, floor, rack, slot string) []roachpb.Tier {
-		var tiers []roachpb.Tier
-		if datacenter != "" {
-			tiers = append(tiers, roachpb.Tier{Key: "datacenter", Value: datacenter})
-		}
-		if floor != "" {
-			tiers = append(tiers, roachpb.Tier{Key: "floor", Value: floor})
-		}
-		if rack != "" {
-			tiers = append(tiers, roachpb.Tier{Key: "rack", Value: rack})
-		}
-		if slot != "" {
-			tiers = append(tiers, roachpb.Tier{Key: "slot", Value: slot})
-		}
-		return tiers
-	}
-
-	// capacitySetup returns a store capacity in which the total capacity is
-	// always 100 and available and range count are passed in.
-	capacitySetup := func(available int64, rangeCount int32) roachpb.StoreCapacity {
-		return roachpb.StoreCapacity{
-			Capacity:   100,
-			Available:  available,
-			RangeCount: rangeCount,
-		}
-	}
-
-	storePool.mu.Lock()
-
-	storePool.mu.storeDetails[storeUSa15].desc.Attrs.Attrs = []string{"a"}
-	storePool.mu.storeDetails[storeUSa15].desc.Node.Locality.Tiers = tierSetup("us", "a", "1", "5")
-	storePool.mu.storeDetails[storeUSa15].desc.Capacity = capacitySetup(1, 99)
-	storePool.mu.nodeLocalities[roachpb.NodeID(storeUSa15)] = storePool.mu.storeDetails[storeUSa15].desc.Node.Locality
-
-	storePool.mu.storeDetails[storeUSa1].desc.Attrs.Attrs = []string{"a", "b"}
-	storePool.mu.storeDetails[storeUSa1].desc.Node.Locality.Tiers = tierSetup("us", "a", "1", "")
-	storePool.mu.storeDetails[storeUSa1].desc.Capacity = capacitySetup(100, 0)
-	storePool.mu.nodeLocalities[roachpb.NodeID(storeUSa1)] = storePool.mu.storeDetails[storeUSa1].desc.Node.Locality
-
-	storePool.mu.storeDetails[storeUSb].desc.Attrs.Attrs = []string{"a", "b", "c"}
-	storePool.mu.storeDetails[storeUSb].desc.Node.Locality.Tiers = tierSetup("us", "b", "", "")
-	storePool.mu.storeDetails[storeUSb].desc.Capacity = capacitySetup(50, 50)
-	storePool.mu.nodeLocalities[roachpb.NodeID(storeUSb)] = storePool.mu.storeDetails[storeUSb].desc.Node.Locality
-
-	storePool.mu.storeDetails[storeEurope].desc.Node.Locality.Tiers = tierSetup("eur", "a", "1", "5")
-	storePool.mu.storeDetails[storeEurope].desc.Capacity = capacitySetup(60, 40)
-	storePool.mu.nodeLocalities[roachpb.NodeID(storeEurope)] = storePool.mu.storeDetails[storeEurope].desc.Node.Locality
-
-	storePool.mu.Unlock()
-
-	testCases := []struct {
-		name            string
-		rule            rule
-		c               config.Constraints
-		existing        []roachpb.ReplicaDescriptor
-		expectedValid   []roachpb.StoreID
-		expectedInvalid []roachpb.StoreID
-	}{
-		{
-			name:          "no constraints or rules",
-			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
-		},
-		{
-			name: "white list rule",
-			rule: func(store roachpb.StoreDescriptor, _ solveState) (bool, float64, float64) {
-				switch store.StoreID {
-				case storeUSa15:
-					return true, 0, 0
-				case storeUSb:
-					return true, 1, 0
-				default:
-					return false, 0, 0
-				}
-			},
-			expectedValid:   []roachpb.StoreID{storeUSb, storeUSa15},
-			expectedInvalid: []roachpb.StoreID{storeEurope, storeUSa1},
-		},
-		{
-			name: "ruleReplicasUniqueNodes - 2 available nodes",
-			rule: ruleReplicasUniqueNodes,
-			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: roachpb.NodeID(storeUSa15)},
-				{NodeID: roachpb.NodeID(storeUSb)},
-			},
-			expectedValid:   []roachpb.StoreID{storeEurope, storeUSa1},
-			expectedInvalid: []roachpb.StoreID{storeUSb, storeUSa15},
-		},
-		{
-			name: "ruleReplicasUniqueNodes - 0 available nodes",
-			rule: ruleReplicasUniqueNodes,
-			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: roachpb.NodeID(storeUSa15)},
-				{NodeID: roachpb.NodeID(storeUSa1)},
-				{NodeID: roachpb.NodeID(storeUSb)},
-				{NodeID: roachpb.NodeID(storeEurope)},
-			},
-			expectedValid:   nil,
-			expectedInvalid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
-		},
-		{
-			name: "ruleConstraints - required constraints",
-			rule: ruleConstraints,
-			c: config.Constraints{
-				Constraints: []config.Constraint{
-					{Value: "b", Type: config.Constraint_REQUIRED},
-				},
-			},
-			expectedValid:   []roachpb.StoreID{storeUSb, storeUSa1},
-			expectedInvalid: []roachpb.StoreID{storeEurope, storeUSa15},
-		},
-		{
-			name: "ruleConstraints - required locality constraints",
-			rule: ruleConstraints,
-			c: config.Constraints{
-				Constraints: []config.Constraint{
-					{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
-				},
-			},
-			expectedValid:   []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15},
-			expectedInvalid: []roachpb.StoreID{storeEurope},
-		},
-		{
-			name: "ruleConstraints - prohibited constraints",
-			rule: ruleConstraints,
-			c: config.Constraints{
-				Constraints: []config.Constraint{
-					{Value: "b", Type: config.Constraint_PROHIBITED},
-				},
-			},
-			expectedValid:   []roachpb.StoreID{storeEurope, storeUSa15},
-			expectedInvalid: []roachpb.StoreID{storeUSb, storeUSa1},
-		},
-		{
-			name: "ruleConstraints - prohibited locality constraints",
-			rule: ruleConstraints,
-			c: config.Constraints{
-				Constraints: []config.Constraint{
-					{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
-				},
-			},
-			expectedValid:   []roachpb.StoreID{storeEurope},
-			expectedInvalid: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15},
-		},
-		{
-			name: "ruleConstraints - positive constraints",
-			rule: ruleConstraints,
-			c: config.Constraints{
-				Constraints: []config.Constraint{
-					{Value: "a"},
-					{Value: "b"},
-					{Value: "c"},
-				},
-			},
-			expectedValid: []roachpb.StoreID{storeUSb, storeUSa1, storeUSa15, storeEurope},
-		},
-		{
-			name: "ruleConstraints - positive locality constraints",
-			rule: ruleConstraints,
-			c: config.Constraints{
-				Constraints: []config.Constraint{
-					{Key: "datacenter", Value: "eur"},
-				},
-			},
-			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
-		},
-		{
-			name:          "ruleDiversity - no existing replicas",
-			rule:          ruleDiversity,
-			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
-		},
-		{
-			name: "ruleDiversity - one existing replicas",
-			rule: ruleDiversity,
-			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: roachpb.NodeID(storeUSa15)},
-			},
-			expectedValid: []roachpb.StoreID{storeEurope, storeUSb, storeUSa1, storeUSa15},
-		},
-		{
-			name: "ruleDiversity - two existing replicas",
-			rule: ruleDiversity,
-			existing: []roachpb.ReplicaDescriptor{
-				{NodeID: roachpb.NodeID(storeUSa15)},
-				{NodeID: roachpb.NodeID(storeEurope)},
-			},
-			expectedValid: []roachpb.StoreID{storeUSb, storeUSa1, storeEurope, storeUSa15},
-		},
-		{
-			name:            "ruleCapacityMax",
-			rule:            ruleCapacityMax,
-			expectedValid:   []roachpb.StoreID{storeEurope, storeUSb, storeUSa1},
-			expectedInvalid: []roachpb.StoreID{storeUSa15},
-		},
-		{
-			name:          "ruleCapacity",
-			rule:          ruleCapacity,
-			expectedValid: []roachpb.StoreID{storeUSa1, storeEurope, storeUSb, storeUSa15},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			var solver ruleSolver
-			if tc.rule != nil {
-				solver = ruleSolver{tc.rule}
-			}
-			sl, _, _ := storePool.getStoreList(roachpb.RangeID(0))
-			candidates := solver.Solve(
-				sl,
-				tc.c,
-				tc.existing,
-				storePool.getNodeLocalities(tc.existing),
-				storePool.deterministic,
-			)
-			valid := candidates.onlyValid()
-			invalid := candidates[len(valid):]
-
-			if len(valid) != len(tc.expectedValid) {
-				t.Fatalf("length of valid %+v should match %+v", valid, tc.expectedValid)
-			}
-			for i, expected := range tc.expectedValid {
-				if actual := valid[i].store.StoreID; actual != expected {
-					t.Errorf("valid[%d].store.StoreID = %d; not %d; %+v",
-						i, actual, expected, valid)
-				}
-			}
-			if len(invalid) != len(tc.expectedInvalid) {
-				t.Fatalf("length of invalids %+v should match %+v", invalid, tc.expectedInvalid)
-			}
-			for i, expected := range tc.expectedInvalid {
-				if actual := invalid[i].store.StoreID; actual != expected {
-					t.Errorf("invalid[%d].store.StoreID = %d; not %d; %+v",
-						i, actual, expected, invalid)
-				}
-			}
-		})
-	}
-}
-
 func TestOnlyValid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -520,6 +258,372 @@ func TestBetterThan(t *testing.T) {
 		betterThan := testCandidateList.betterThan(testCandidateList[i])
 		if e, a := expectedResults[i], len(betterThan); e != a {
 			t.Errorf("expected %d results, actual %d", e, a)
+		}
+	}
+}
+
+func TestPreexistingReplicaCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var existing []roachpb.ReplicaDescriptor
+	for i := 2; i < 10; i += 2 {
+		existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(i)})
+	}
+	for i := 1; i < 10; i++ {
+		if e, a := i%2 != 0, preexistingReplicaCheck(roachpb.NodeID(i), existing); e != a {
+			t.Errorf("NodeID %d expected to be %t, got %t", i, e, a)
+		}
+	}
+}
+
+// testStoreTierSetup returns a tier struct constructed using the passed in values.
+// If any value is an empty string, it is not included.
+func testStoreTierSetup(datacenter, floor, rack, slot string) []roachpb.Tier {
+	var tiers []roachpb.Tier
+	if datacenter != "" {
+		tiers = append(tiers, roachpb.Tier{Key: "datacenter", Value: datacenter})
+	}
+	if floor != "" {
+		tiers = append(tiers, roachpb.Tier{Key: "floor", Value: floor})
+	}
+	if rack != "" {
+		tiers = append(tiers, roachpb.Tier{Key: "rack", Value: rack})
+	}
+	if slot != "" {
+		tiers = append(tiers, roachpb.Tier{Key: "slot", Value: slot})
+	}
+	return tiers
+}
+
+// testStoreCapacitySetup returns a store capacity in which the total capacity
+// is always 100 and available and range count are passed in.
+func testStoreCapacitySetup(available int64, rangeCount int32) roachpb.StoreCapacity {
+	return roachpb.StoreCapacity{
+		Capacity:   100,
+		Available:  available,
+		RangeCount: rangeCount,
+	}
+}
+
+// This is a collection of test stores used by a suite of tests.
+var (
+	testStoreUSa15  = roachpb.StoreID(1) // us-a-1-5
+	testStoreUSa1   = roachpb.StoreID(2) // us-a-1
+	testStoreUSb    = roachpb.StoreID(3) // us-b
+	testStoreEurope = roachpb.StoreID(4) // eur-a-1-5
+
+	testStores = []roachpb.StoreDescriptor{
+		{
+			StoreID: testStoreUSa15,
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"a"},
+			},
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(testStoreUSa15),
+				Locality: roachpb.Locality{
+					Tiers: testStoreTierSetup("us", "a", "1", "5"),
+				},
+			},
+			Capacity: testStoreCapacitySetup(1, 99),
+		},
+		{
+			StoreID: testStoreUSa1,
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"a", "b"},
+			},
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(testStoreUSa1),
+				Locality: roachpb.Locality{
+					Tiers: testStoreTierSetup("us", "a", "1", ""),
+				},
+			},
+			Capacity: testStoreCapacitySetup(100, 0),
+		},
+		{
+			StoreID: testStoreUSb,
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"a", "b", "c"},
+			},
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(testStoreUSb),
+				Locality: roachpb.Locality{
+					Tiers: testStoreTierSetup("us", "b", "", ""),
+				},
+			},
+			Capacity: testStoreCapacitySetup(50, 50),
+		},
+		{
+			StoreID: testStoreEurope,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(testStoreEurope),
+				Locality: roachpb.Locality{
+					Tiers: testStoreTierSetup("eur", "a", "1", "5"),
+				},
+			},
+			Capacity: testStoreCapacitySetup(60, 40),
+		},
+	}
+)
+
+func TestConstraintCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name        string
+		constraints []config.Constraint
+		expected    map[roachpb.StoreID]int
+	}{
+		{
+			name: "required constraint",
+			constraints: []config.Constraint{
+				{Value: "b", Type: config.Constraint_REQUIRED},
+			},
+			expected: map[roachpb.StoreID]int{
+				testStoreUSa1: 0,
+				testStoreUSb:  0,
+			},
+		},
+		{
+			name: "required locality constraints",
+			constraints: []config.Constraint{
+				{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
+			},
+			expected: map[roachpb.StoreID]int{
+				testStoreUSa15: 0,
+				testStoreUSa1:  0,
+				testStoreUSb:   0,
+			},
+		},
+		{
+			name: "prohibited constraints",
+			constraints: []config.Constraint{
+				{Value: "b", Type: config.Constraint_PROHIBITED},
+			},
+			expected: map[roachpb.StoreID]int{
+				testStoreUSa15:  0,
+				testStoreEurope: 0,
+			},
+		},
+		{
+			name: "prohibited locality constraints",
+			constraints: []config.Constraint{
+				{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
+			},
+			expected: map[roachpb.StoreID]int{
+				testStoreEurope: 0,
+			},
+		},
+		{
+			name: "positive constraints",
+			constraints: []config.Constraint{
+				{Value: "a"},
+				{Value: "b"},
+				{Value: "c"},
+			},
+			expected: map[roachpb.StoreID]int{
+				testStoreUSa15:  1,
+				testStoreUSa1:   2,
+				testStoreUSb:    3,
+				testStoreEurope: 0,
+			},
+		},
+		{
+			name: "positive locality constraints",
+			constraints: []config.Constraint{
+				{Key: "datacenter", Value: "eur"},
+			},
+			expected: map[roachpb.StoreID]int{
+				testStoreUSa15:  0,
+				testStoreUSa1:   0,
+				testStoreUSb:    0,
+				testStoreEurope: 1,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, s := range testStores {
+				valid, positive := constraintCheck(s, config.Constraints{Constraints: tc.constraints})
+				expectedPositive, ok := tc.expected[s.StoreID]
+				if valid != ok {
+					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
+					continue
+				}
+				if positive != expectedPositive {
+					t.Errorf("expected store %d to have %d positives, but got %d", s.StoreID, expectedPositive, positive)
+				}
+			}
+		})
+	}
+}
+
+func TestDiversityScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		existing []roachpb.NodeID
+		expected map[roachpb.StoreID]float64
+	}{
+		{
+			name: "no existing replicas",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:  1,
+				testStoreUSa1:   1,
+				testStoreUSb:    1,
+				testStoreEurope: 1,
+			},
+		},
+		{
+			name: "one existing replicas",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:  0,
+				testStoreUSa1:   1.0 / 4.0,
+				testStoreUSb:    1.0 / 2.0,
+				testStoreEurope: 1,
+			},
+		},
+		{
+			name: "two existing replicas",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+				roachpb.NodeID(testStoreEurope),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:  0,
+				testStoreUSa1:   1.0 / 4.0,
+				testStoreUSb:    1.0 / 2.0,
+				testStoreEurope: 0,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			for _, nodeID := range tc.existing {
+				for _, s := range testStores {
+					if s.Node.NodeID == nodeID {
+						existingNodeLocalities[roachpb.NodeID(s.Node.NodeID)] = s.Node.Locality
+					}
+				}
+			}
+			for _, s := range testStores {
+				actualScore := diversityScore(s, existingNodeLocalities)
+				expectedScore, ok := tc.expected[s.StoreID]
+				if !ok {
+					t.Fatalf("no expected score found for storeID %d", s.StoreID)
+				}
+				if actualScore != expectedScore {
+					t.Errorf("store %d expected diversity score: %.2f, actual %.2f", s.StoreID, expectedScore, actualScore)
+				}
+			}
+		})
+	}
+}
+
+func TestDiversityRemovalScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		expected map[roachpb.StoreID]float64
+	}{
+		{
+			name: "four existing replicas",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:  1,
+				testStoreUSa1:   1,
+				testStoreUSb:    1,
+				testStoreEurope: 1.0 / 2.0,
+			},
+		},
+		{
+			name: "three existing replicas - testStoreUSa15",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa1:   1,
+				testStoreUSb:    1,
+				testStoreEurope: 1.0 / 2.0,
+			},
+		},
+		{
+			name: "three existing replicas - testStoreUSa1",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:  1,
+				testStoreUSb:    1,
+				testStoreEurope: 1.0 / 2.0,
+			},
+		},
+		{
+			name: "three existing replicas - testStoreUSb",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:  1,
+				testStoreUSa1:   1,
+				testStoreEurope: 1.0 / 4.0,
+			},
+		},
+		{
+			name: "three existing replicas - testStoreEurope",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15: 1.0 / 2.0,
+				testStoreUSa1:  1.0 / 2.0,
+				testStoreUSb:   1.0 / 4.0,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			for _, s := range testStores {
+				if _, ok := tc.expected[s.StoreID]; ok {
+					existingNodeLocalities[roachpb.NodeID(s.Node.NodeID)] = s.Node.Locality
+				}
+			}
+			for _, s := range testStores {
+				if _, ok := tc.expected[s.StoreID]; !ok {
+					continue
+				}
+				actualScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+				expectedScore, ok := tc.expected[s.StoreID]
+				if !ok {
+					t.Fatalf("no expected score found for storeID %d", s.StoreID)
+				}
+				if actualScore != expectedScore {
+					t.Errorf("store %d expected diversity removal score: %.2f, actual %.2f", s.StoreID, expectedScore, actualScore)
+				}
+			}
+		})
+	}
+}
+
+// TestCapacityScore tests both capacityScore and maxCapacityCheck.
+func TestCapacityScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	expectedCheck := map[roachpb.StoreID]bool{
+		testStoreUSa15:  false,
+		testStoreUSa1:   true,
+		testStoreUSb:    true,
+		testStoreEurope: true,
+	}
+	expectedScore := map[roachpb.StoreID]float64{
+		testStoreUSa15:  1.0 / 100.0,
+		testStoreUSa1:   1.0,
+		testStoreUSb:    1.0 / 51.0,
+		testStoreEurope: 1.0 / 41.0,
+	}
+
+	for _, s := range testStores {
+		if e, a := expectedScore[s.StoreID], capacityScore(s); e != a {
+			t.Errorf("store %d expected capacity score: %.2f, actual %.2f", s.StoreID, e, a)
+		}
+		if e, a := expectedCheck[s.StoreID], maxCapacityCheck(s); e != a {
+			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
 	}
 }
