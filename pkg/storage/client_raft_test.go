@@ -1899,6 +1899,18 @@ func TestRaftRemoveRace(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		mtc.unreplicateRange(rangeID, 2)
 		mtc.replicateRange(rangeID, 2)
+
+		// Verify the tombstone key does not exist. See #12130.
+		tombstoneKey := keys.RaftTombstoneKey(rangeID)
+		var tombstone roachpb.RaftTombstone
+		if ok, err := engine.MVCCGetProto(
+			context.Background(), mtc.stores[2].Engine(), tombstoneKey,
+			hlc.ZeroTimestamp, true, nil, &tombstone,
+		); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Fatal("tombstone should not exist")
+		}
 	}
 }
 
