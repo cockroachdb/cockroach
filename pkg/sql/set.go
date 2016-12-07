@@ -79,13 +79,6 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
 
-	case `EXTRA_FLOAT_DIGITS`:
-		// These settings are sent by the JDBC driver but we silently ignore them.
-
-	case `APPLICATION_NAME`:
-		// These settings are sent by the clients to improve query logging on the server,
-		// but we silently ignore them.
-
 	case `DEFAULT_TRANSACTION_ISOLATION`:
 		// It's unfortunate that clients want us to support both SET
 		// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the
@@ -121,6 +114,28 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
 		}
+
+	// These settings are sent by various client drivers but we silently ignore
+	// them.
+	case `EXTRA_FLOAT_DIGITS`:
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+	case `APPLICATION_NAME`:
+	// Set by clients to improve query logging.
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
+	case `CLIENT_ENCODING`:
+	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
+	case `SEARCH_PATH`:
+	// Controls the schema search order. We don't really support this as we
+	// don't have first-class support for schemas.
+	// TODO(jordan) can we hook this up to EvalContext.SearchPath without
+	// breaking things?
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+	case `STANDARD_CONFORMING_STRINGS`:
+	// If true, escape backslash literals in strings. We do this by default.
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+	case `CLIENT_MIN_MESSAGES`:
+	// Controls returned message verbosity. We don't support this.
+	// See https://www.postgresql.org/docs/9.6/static/runtime-config-compatible.html
 
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
