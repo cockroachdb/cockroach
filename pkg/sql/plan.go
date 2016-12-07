@@ -251,6 +251,19 @@ func (p *planner) newPlan(
 		p.txn.SetSystemConfigTrigger()
 	}
 
+	// TODO(dan): This iteration makes the plan dispatch no longer constant
+	// time. We could fix that with a map of `reflect.Type` but including
+	// reflection in such a primary codepath is unfortunate. Instead, the
+	// upcoming IR work will provide unique numeric type tags, which will
+	// elegantly solve this.
+	for _, planHook := range planHooks {
+		if fn, header, err := planHook(p.ctx(), stmt, p.execCfg); err != nil {
+			return nil, err
+		} else if fn != nil {
+			return &hookFnNode{f: fn, header: header}, nil
+		}
+	}
+
 	switch n := stmt.(type) {
 	case *parser.AlterTable:
 		return p.AlterTable(n)
