@@ -3714,9 +3714,9 @@ a_expr:
 // eliminate all the boolean-keyword-operator productions from b_expr.
 b_expr:
   c_expr
-| b_expr TYPECAST typename
+| b_expr TYPECAST cast_target
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: castShort}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), syntaxMode: castShort}
   }
 | b_expr TYPEANNOTATE typename
   {
@@ -3980,7 +3980,7 @@ func_expr_common_subexpr:
 | USER { return unimplemented(sqllex) }
 | CAST '(' a_expr AS cast_target ')'
   {
-    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType(), syntaxMode: castExplicit}
+    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), syntaxMode: castExplicit}
   }
 | ANNOTATE_TYPE '(' a_expr ',' typename ')'
   {
