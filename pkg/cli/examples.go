@@ -33,7 +33,7 @@ Available examples:
   quotes from the eponymous TV show.
 - intro: a database containing a single table with a hidden message.
 `,
-	RunE: maybeDecorateGRPCError(runGenExamplesCmd),
+	RunE: MaybeDecorateGRPCError(runGenExamplesCmd),
 }
 
 func runGenExamplesCmd(cmd *cobra.Command, args []string) error {

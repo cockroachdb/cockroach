@@ -420,7 +420,7 @@ func (n *createViewNode) Start() error {
 		return err
 	}
 
-	id, err := generateUniqueDescID(n.p.txn)
+	id, err := GenerateUniqueDescID(n.p.txn)
 	if err != nil {
 		return nil
 	}
@@ -601,7 +601,7 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	id, err := generateUniqueDescID(n.p.txn)
+	id, err := GenerateUniqueDescID(n.p.txn)
 	if err != nil {
 		return err
 	}

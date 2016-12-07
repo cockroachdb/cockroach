@@ -30,8 +30,8 @@ const (
 	maxVarintLen32       = 5
 )
 
-// A rocksDBBatchBuilder constructs a RocksDB batch representation. From the
-// RocksDB code, the representation of a batch is:
+// RocksDBBatchBuilder is used to construct the RocksDB batch representation.
+// From the RocksDB code, the representation of a batch is:
 //
 //   WriteBatch::rep_ :=
 //      sequence: fixed64
@@ -50,7 +50,7 @@ const (
 //      len: varint32
 //      data: uint8[len]
 //
-// The rocksDBBatchBuilder code currently only supports kTypeValue
+// The RocksDBBatchBuilder code currently only supports kTypeValue
 // (batchTypeValue), kTypeDeletion (batchTypeDeletion)and kTypeMerge
 // (batchTypeMerge) operations. Before a batch is written to the RocksDB
 // write-ahead-log, the sequence number is 0. The "fixed32" format is little
@@ -63,15 +63,15 @@ const (
 //
 // The <wall_time> and <logical> portions of the key are encoded as 64 and
 // 32-bit big-endian integers. A custom RocksDB comparator is used to maintain
-// the desired ordering as these keys do not sort lexicographically
-// correctly. Note that the encoding of these keys needs to match up with the
-// encoding in rocksdb/db.cc:EncodeKey().
-type rocksDBBatchBuilder struct {
+// the desired ordering as these keys do not sort lexicographically correctly.
+// Note that the encoding of these keys needs to match up with the encoding in
+// rocksdb/db.cc:EncodeKey().
+type RocksDBBatchBuilder struct {
 	repr  []byte
 	count int
 }
 
-func (b *rocksDBBatchBuilder) maybeInit() {
+func (b *RocksDBBatchBuilder) maybeInit() {
 	if b.repr == nil {
 		b.repr = make([]byte, headerSize, initialBatchSize)
 	}
@@ -80,7 +80,7 @@ func (b *rocksDBBatchBuilder) maybeInit() {
 // Finish returns the constructed batch representation. After calling Finish,
 // the builder may be used to construct another batch, but the returned []byte
 // is only valid until the next builder method is called.
-func (b *rocksDBBatchBuilder) Finish() []byte {
+func (b *RocksDBBatchBuilder) Finish() []byte {
 	repr := b.getRepr()
 	b.repr = b.repr[:headerSize]
 	b.count = 0
@@ -88,7 +88,7 @@ func (b *rocksDBBatchBuilder) Finish() []byte {
 }
 
 // getRepr constructs the batch representation and returns it.
-func (b *rocksDBBatchBuilder) getRepr() []byte {
+func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()
 	buf := b.repr[8:headerSize]
 	v := uint32(b.count)
@@ -99,7 +99,7 @@ func (b *rocksDBBatchBuilder) getRepr() []byte {
 	return b.repr
 }
 
-func (b *rocksDBBatchBuilder) grow(n int) {
+func (b *RocksDBBatchBuilder) grow(n int) {
 	newSize := len(b.repr) + n
 	if newSize > cap(b.repr) {
 		newCap := 2 * cap(b.repr)
@@ -145,7 +145,7 @@ func putUint64(b []byte, v uint64) {
 // encodeKey encodes an MVCC key into the batch, reserving extra bytes in
 // b.repr for use in encoding a value as well. This encoding must match with
 // the encoding in engine/db.cc:EncodeKey().
-func (b *rocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
+func (b *RocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
 	length := 1 + len(key.Key)
 	timestampLength := 0
 	if key.Timestamp != hlc.ZeroTimestamp {
@@ -175,7 +175,7 @@ func (b *rocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
 	b.repr[len(b.repr)-1-extra] = byte(timestampLength)
 }
 
-func (b *rocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag byte) {
+func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag byte) {
 	b.maybeInit()
 	b.count++
 
@@ -192,15 +192,21 @@ func (b *rocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag byte
 	copy(b.repr[pos+n:], value)
 }
 
-func (b *rocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
+// Put sets the given key to the value provided.
+func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	b.encodeKeyValue(key, value, batchTypeValue)
 }
 
-func (b *rocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
+// Merge is a high-performance write operation used for values which are
+// accumulated over several writes. Multiple values can be merged sequentially
+// into a single key; a subsequent read will return a "merged" value which is
+// computed from the original merged values.
+func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
 	b.encodeKeyValue(key, value, batchTypeMerge)
 }
 
-func (b *rocksDBBatchBuilder) Clear(key MVCCKey) {
+// Clear removes the item from the db with the given key.
+func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	b.maybeInit()
 	b.count++
 	pos := len(b.repr)

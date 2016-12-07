@@ -37,7 +37,7 @@ By default, this places man pages into the "man/man1" directory under the curren
 Use "--path=PATH" to override the output directory. For example, to install man pages globally on
 many Unix-like systems, use "--path=/usr/local/share/man/man1".
 `,
-	RunE: maybeDecorateGRPCError(runGenManCmd),
+	RunE: MaybeDecorateGRPCError(runGenManCmd),
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
@@ -88,7 +88,7 @@ override the file location.
 Note that for the generated file to work on OS X, you'll need to install Homebrew's bash-completion
 package (or an equivalent) and follow the post-install instructions.
 `,
-	RunE: maybeDecorateGRPCError(runGenAutocompleteCmd),
+	RunE: MaybeDecorateGRPCError(runGenAutocompleteCmd),
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {

@@ -35,7 +35,7 @@ var lsRangesCmd = &cobra.Command{
 Lists the ranges in a cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runLsRanges),
+	RunE:         MaybeDecorateGRPCError(runLsRanges),
 }
 
 func runLsRanges(cmd *cobra.Command, args []string) error {
@@ -57,7 +57,7 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 	}
 	endKey := keys.Meta2Prefix.PrefixEnd()
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ var splitRangeCmd = &cobra.Command{
 Splits the range containing <key> at <key>.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runSplitRange),
+	RunE:         MaybeDecorateGRPCError(runSplitRange),
 }
 
 func runSplitRange(cmd *cobra.Command, args []string) error {
@@ -101,7 +101,7 @@ func runSplitRange(cmd *cobra.Command, args []string) error {
 
 	key := roachpb.Key(args[0])
 
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}

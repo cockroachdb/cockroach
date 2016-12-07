@@ -79,7 +79,7 @@ uninitialized, specify the --join flag to point to any healthy node
 `,
 	Example:      `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runStart),
+	RunE:         MaybeDecorateGRPCError(runStart),
 }
 
 func setDefaultSizeParameters(ctx *server.Config) {
@@ -522,7 +522,7 @@ will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runQuit),
+	RunE:         MaybeDecorateGRPCError(runQuit),
 }
 
 // doShutdown attempts to trigger a server shutdown. When given an empty
@@ -629,7 +629,7 @@ restarted. A failed or incomplete invocation of this command can be rolled back
 using the --undo flag, or by restarting all the nodes in the cluster.
 `,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runFreezeCluster),
+	RunE:         MaybeDecorateGRPCError(runFreezeCluster),
 }
 
 func runFreezeCluster(_ *cobra.Command, _ []string) error {

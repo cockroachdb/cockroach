@@ -46,7 +46,7 @@ var lsNodesCmd = &cobra.Command{
 	commands.
 	`,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runLsNodes),
+	RunE:         MaybeDecorateGRPCError(runLsNodes),
 }
 
 func runLsNodes(cmd *cobra.Command, args []string) error {
@@ -102,7 +102,7 @@ var statusNodeCmd = &cobra.Command{
 	is specified, this will display the status for all nodes in the cluster.
 	`,
 	SilenceUsage: true,
-	RunE:         maybeDecorateGRPCError(runStatusNode),
+	RunE:         MaybeDecorateGRPCError(runStatusNode),
 }
 
 func runStatusNode(cmd *cobra.Command, args []string) error {

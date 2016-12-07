@@ -50,7 +50,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	base := args[0]
 
 	ctx := context.Background()
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ var backupCmd = &cobra.Command{
 	Use:   "backup [options] <basepath>",
 	Short: "backup all SQL tables",
 	Long:  "Exports a consistent snapshot of all SQL tables to storage.",
-	RunE:  maybeDecorateGRPCError(runBackup),
+	RunE:  MaybeDecorateGRPCError(runBackup),
 }
 
 func runRestore(cmd *cobra.Command, args []string) error {
@@ -79,7 +79,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	base := args[0]
 
 	ctx := context.Background()
-	kvDB, stopper, err := makeDBClient()
+	kvDB, stopper, err := MakeDBClient()
 	if err != nil {
 		return err
 	}
@@ -105,5 +105,5 @@ var restoreCmd = &cobra.Command{
 	Use:   "restore [options] <basepath>",
 	Short: "restore SQL tables from a backup",
 	Long:  "Imports one or all SQL tables, restoring them to a previously snapshotted state.",
-	RunE:  maybeDecorateGRPCError(runRestore),
+	RunE:  MaybeDecorateGRPCError(runRestore),
 }
