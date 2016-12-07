@@ -380,6 +380,46 @@ func (g *GaugeFloat64) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
+// An IncrementableGauge is the same as a gauge, but with additional methods
+// to atomically increment or decrement the value of the gauge.
+type IncrementableGauge struct {
+	syncutil.Mutex
+	Gauge
+}
+
+// NewIncrementableGauge creates a IncrementableGauge.
+func NewIncrementableGauge(metadata Metadata) *IncrementableGauge {
+	return &IncrementableGauge{Gauge: Gauge{metadata, metrics.NewGauge()}}
+}
+
+// Update updates the gauge's value.
+func (g *IncrementableGauge) Update(v int64) {
+	g.Lock()
+	g.Gauge.Update(v)
+	g.Unlock()
+}
+
+// Value returns the gauge's current value.
+func (g *IncrementableGauge) Value() int64 {
+	g.Lock()
+	defer g.Unlock()
+	return g.Gauge.Value()
+}
+
+// Inc increments the gauge's value.
+func (g *IncrementableGauge) Inc(i int64) {
+	g.Lock()
+	g.Gauge.Update(g.Gauge.Value() + i)
+	g.Unlock()
+}
+
+// Dec decrements the gauge's value.
+func (g *IncrementableGauge) Dec(i int64) {
+	g.Lock()
+	g.Gauge.Update(g.Gauge.Value() - i)
+	g.Unlock()
+}
+
 // A Rate is a exponential weighted moving average.
 type Rate struct {
 	mu       syncutil.Mutex // protects fields below
