@@ -39,7 +39,11 @@ func (*StarDatum) Variable() {}
 
 // Format implements the NodeFormatter interface.
 func (*StarDatum) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('*')
+	if f.starDatumFormat != nil {
+		f.starDatumFormat(buf, f)
+	} else {
+		buf.WriteByte('*')
+	}
 }
 
 func (s *StarDatum) String() string { return AsString(s) }

@@ -33,6 +33,9 @@ type fmtFlags struct {
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
 	indexedVarFormat func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int)
+	// starDatumFormat is an optional interceptor for StarDatum.Format calls,
+	// can be used to customize the formatting of StarDatums.
+	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -68,6 +71,12 @@ func FmtIndexedVarFormat(
 	fn func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int),
 ) FmtFlags {
 	return &fmtFlags{indexedVarFormat: fn}
+}
+
+// FmtStarDatumFormat returns FmtFlags that customizes the printing of
+// StarDatums using the provided function.
+func FmtStarDatumFormat(fn func(buf *bytes.Buffer, f FmtFlags)) FmtFlags {
+	return &fmtFlags{starDatumFormat: fn}
 }
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
