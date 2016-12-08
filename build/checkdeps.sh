@@ -14,7 +14,7 @@ echo "checking that 'vendor' matches manifest"
 
 echo "checking that all deps are in 'vendor''"
 
-missing=$(cat GLOCKFILE | cut -f2 -d' ' | grep -v '^./pkg/' | awk '{print} END {print "./pkg/..."}' \
+missing=$(sed -n 's,[[:space:]]*_[[:space:]]*"\(.*\)",\1,p' build/tool_imports.go | awk '{print} END {print "./pkg/..."}' \
   | xargs go list -f '{{ join .Deps "\n"}}{{"\n"}}{{ join .TestImports "\n"}}{{"\n"}}{{ join .XTestImports "\n"}}' \
   | grep -v '^github.com/cockroachdb/cockroach' \
   | sort | uniq \

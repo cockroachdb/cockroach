@@ -40,9 +40,12 @@ and checked out as a submodule at `./vendor`.
 ## Updating Dependencies
 This snapshot was built and is managed using `glide`.
 
-The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
+The [docs](https://github.com/Masterminds/glide) have detailed instructgions, but in brief:
 * run `./scripts/glide.sh` in `cockroachdb/cockroach`.
 * add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
+	- Note: if you are adding a non-import dependency (e.g. a binary tool to be used in development),
+		please add a dummy import to `build/tool_imports.go`. This is a workaround for an upstream issue:
+		https://github.com/Masterminds/glide/issues/690.
 * update dependencies to their latest version with `./scripts/glide.sh up`
   - to pin a dependency to a particular version, add a `version: ...` line to `glide.yaml`, then update.
   - to update a pinned dependency, change the version in `glide.yaml`, then update.
