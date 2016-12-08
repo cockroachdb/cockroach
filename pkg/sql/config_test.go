@@ -19,6 +19,8 @@ package sql_test
 import (
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -27,12 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 var configID = sqlbase.ID(1)
@@ -66,7 +66,7 @@ func forceNewConfig(t *testing.T, s *server.TestServer) config.SystemConfig {
 func waitForConfigChange(t *testing.T, s *server.TestServer) config.SystemConfig {
 	var foundDesc sqlbase.Descriptor
 	var cfg config.SystemConfig
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		var ok bool
 		if cfg, ok = s.Gossip().GetSystemConfig(); ok {
 			if val := cfg.GetValue(configDescKey); val != nil {

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -91,7 +90,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	const minThreshold = 0.9
 	minReplicas := int(math.Floor(minThreshold * (float64(numReplicas) / numNodes)))
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		counts := countReplicas()
 		for _, c := range counts {
 			if c < minReplicas {
@@ -147,7 +146,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	// Up-replicate the new range to all servers to create redundant replicas.
 	// Add replicas to all of the nodes. Only 2 of these calls will succeed
 	// because the range is already replicated to the other 3 nodes.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
 			_, err := tc.AddReplicas(testKey, tc.Target(i))
 			if err != nil {
@@ -164,7 +163,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	// Ensure that the replicas for the new range down replicate.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if c := countReplicas(); c != replicaCount {
 			return errors.Errorf("replica count = %d", c)
 		}

@@ -287,7 +287,7 @@ func TestSendRPCOrder(t *testing.T) {
 					Attrs: tc.attrs,
 				},
 			}
-			g.NodeID.Reset(t, nd.NodeID)
+			g.NodeID.Reset(nd.NodeID)
 			if err := g.SetNodeDescriptor(nd); err != nil {
 				t.Fatal(err)
 			}
@@ -361,7 +361,7 @@ func TestOwnNodeCertain(t *testing.T) {
 		NodeID:  expNodeID,
 		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
 	}
-	g.NodeID.Reset(t, nd.NodeID)
+	g.NodeID.Reset(nd.NodeID)
 	if err := g.SetNodeDescriptor(nd); err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +643,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 	// Once Gossip fires the callbacks, we should see a cache eviction and thus,
 	// a new cache hit.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		call()
 		if exp, act := int32(2), atomic.LoadInt32(&numFirstRange); exp != act {
 			return errors.Errorf("expected %d first range lookups, got %d", exp, act)
@@ -989,11 +989,11 @@ func TestGetNodeDescriptor(t *testing.T) {
 	ds := NewDistSender(DistSenderConfig{
 		Clock: clock,
 	}, g)
-	g.NodeID.Reset(t, 5)
+	g.NodeID.Reset(5)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 5}); err != nil {
 		t.Fatal(err)
 	}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		desc := ds.getNodeDescriptor()
 		if desc != nil && desc.NodeID == 5 {
 			return nil

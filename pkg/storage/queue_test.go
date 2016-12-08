@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -332,7 +332,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	}
 
 	testQueue.blocker <- struct{}{}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", pc)
 		}
@@ -346,7 +346,7 @@ func TestBaseQueueProcess(t *testing.T) {
 	})
 
 	testQueue.blocker <- struct{}{}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc < 2 {
 			return errors.Errorf("expected >= %d processed replicas; got %d", 2, pc)
 		}
@@ -453,7 +453,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// Check our config.
 	var sysCfg config.SystemConfig
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		var ok bool
 		sysCfg, ok = s.cfg.Gossip.GetSystemConfig()
 		if !ok {
@@ -475,7 +475,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
 	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 2 {
 			return errors.Errorf("expected %d processed replicas; got %d", 2, pc)
 		}
@@ -507,7 +507,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
 	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 3 {
 			return errors.Errorf("expected %d processed replicas; got %d", 3, pc)
 		}
@@ -575,7 +575,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		bq.MaybeAdd(r, hlc.ZeroTimestamp)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
 		}
@@ -609,7 +609,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	// Now, signal that purgatoried replicas should retry.
 	testQueue.pChan <- struct{}{}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount*2 {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
 		}
@@ -644,7 +644,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	testQueue.err = nil
 	testQueue.pChan <- struct{}{}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount*3 {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
 		}
@@ -716,7 +716,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	}
 
 	ptQueue.blocker <- struct{}{}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if pc := ptQueue.getProcessed(); pc != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", pc)
 		}
@@ -763,7 +763,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	bq.Start(tc.Clock(), stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if v := bq.successes.Count(); v != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", v)
 		}

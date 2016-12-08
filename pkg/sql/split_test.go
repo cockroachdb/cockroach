@@ -21,16 +21,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 // getRangeKeys returns the end keys of all ranges.
@@ -86,7 +86,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// We split up to the largest allocated descriptor ID, be it a table
 	// or a database.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
 			return err
@@ -113,7 +113,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
 			return err

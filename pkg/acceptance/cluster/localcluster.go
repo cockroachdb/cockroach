@@ -48,7 +48,6 @@ import (
 	roachClient "github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -749,7 +748,10 @@ func (l *LocalCluster) stop(ctx context.Context) {
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
 		maybePanic(n.Kill(ctx))
 		if crashed && outputLogDir == "" {
-			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
+			outputLogDir, err = ioutil.TempDir("", "crashed_nodes")
+			if err != nil {
+				panic(err)
+			}
 		}
 		if crashed || l.logDir != "" {
 			// TODO(bdarnell): make these filenames more consistent with

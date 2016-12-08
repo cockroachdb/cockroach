@@ -29,13 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, nl := range mtc.nodeLivenesses {
 			for _, g := range mtc.gossips {
 				live, err := nl.IsLive(g.NodeID.Get())
@@ -128,7 +127,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	}
 
 	// Verify that the epoch has been advanced.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		newLiveness, err := mtc.nodeLivenesses[0].GetLiveness(deadNodeID)
 		if err != nil {
 			return err
@@ -207,7 +206,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 
 	// Restart store and verify gossip contains liveness record for nodes 1&2.
 	mtc.restartStore(0)
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		keysMu.Lock()
 		defer keysMu.Unlock()
 		sort.Strings(keysMu.keys)
@@ -242,7 +241,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
 		atomic.AddInt32(&count, 1)
 	})
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if err := g.AddInfoProto(key, &storage.Liveness{
 			NodeID: 1,
 			Epoch:  2,

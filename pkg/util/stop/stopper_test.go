@@ -23,15 +23,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 func TestStopper(t *testing.T) {
@@ -290,7 +290,7 @@ func TestStopperNumTasks(t *testing.T) {
 		// Close the channel to let the task proceed.
 		close(c)
 		expNum := len(tasks[i+1:])
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if nt := s.NumTasks(); nt != expNum {
 				return errors.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, nt)
 			}

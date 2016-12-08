@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
@@ -145,7 +145,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		defer sendHeartbeats()()
 
 		// Should become healthy in the presence of heartbeats.
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if !clientCtx.IsConnHealthy(remoteAddr) {
 				return errors.Errorf("expected %s to be healthy", remoteAddr)
 			}
@@ -154,7 +154,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	}()
 
 	// Should become unhealthy again in the absence of heartbeats.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
 		}
@@ -165,7 +165,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		defer sendHeartbeats()()
 
 		// Should become healthy again in the presence of heartbeats.
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if !clientCtx.IsConnHealthy(remoteAddr) {
 				return errors.Errorf("expected %s to be healthy", remoteAddr)
 			}
@@ -254,7 +254,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	connectChan <- struct{}{}
 
 	// Everything is normal; should become healthy.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
@@ -276,7 +276,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	closeConns()
 
 	// Should become unhealthy now that the connection was closed.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
 		}
@@ -285,7 +285,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// Should become healthy again after GRPC reconnects.
 	connectChan <- struct{}{}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
@@ -299,7 +299,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	closeConns()
 
 	// Should become unhealthy again now that the connection was closed.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
 		}
@@ -345,7 +345,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	}
 
 	expectedOffset := RemoteOffset{Offset: 10, Uncertainty: 0, MeasuredAt: 10}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
@@ -362,7 +362,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientAdvancing.setAdvancementInterval(
 		maximumPingDurationMult*clientClock.MaxOffset() + 1*time.Nanosecond)
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
@@ -404,7 +404,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	}
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
@@ -414,7 +414,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		return nil
 	})
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		serverCtx.RemoteClocks.mu.Lock()
 		defer serverCtx.RemoteClocks.mu.Unlock()
 
@@ -503,7 +503,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 
 	// Wait until all nodes are connected to all other nodes.
 	for _, nodeCtx := range nodeCtxs {
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			nodeCtx.ctx.RemoteClocks.mu.Lock()
 			defer nodeCtx.ctx.RemoteClocks.mu.Unlock()
 

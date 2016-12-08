@@ -24,6 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -38,8 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // senderFn is a function that implements a Sender.
@@ -311,7 +312,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Verify 3 heartbeats.
 	var heartbeatTS hlc.Timestamp
 	for i := 0; i < 3; i++ {
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			txn, pErr := getTxn(sender, &initialTxn.Proto)
 			if pErr != nil {
 				t.Fatal(pErr)
@@ -342,7 +343,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		}
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		sender.txnMu.Lock()
 		defer sender.txnMu.Unlock()
 		if txnMeta, ok := sender.txnMu.txns[*initialTxn.Proto.ID]; !ok {
@@ -375,7 +376,7 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (*roachpb.Transacti
 }
 
 func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		coord.txnMu.Lock()
 		l := len(coord.txnMu.txns)
 		coord.txnMu.Unlock()
@@ -635,7 +636,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 
 	txnID := *txn.Proto.ID
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
 		sender.txnMu.Lock()
 		_, ok := sender.txnMu.txns[txnID]
@@ -701,7 +702,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 
 	// After the context is cancelled, the transaction should be cleaned up.
 	cancel()
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
 		sender.txnMu.Lock()
 		_, ok := sender.txnMu.txns[txnID]
@@ -1146,7 +1147,7 @@ func checkTxnMetrics(
 ) {
 	metrics := sender.metrics
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		testcases := []struct {
 			name string
 			a, e int64

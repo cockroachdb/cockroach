@@ -29,16 +29,15 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/net/context"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -129,7 +128,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 		SysCount:          1,
 		LastUpdateNanos:   1,
 	}
-	if err := util.NoZeroField(&goldMS); err != nil {
+	if err := zerofields.NoZeroField(&goldMS); err != nil {
 		t.Fatal(err) // prevent rot as fields are added
 	}
 

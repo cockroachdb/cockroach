@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -39,12 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -75,7 +74,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	}
 
 	// Wait for that command to execute on all the followers.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
 			val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
@@ -349,7 +348,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			EndKey: keys.RangeMetaKey(roachpb.RKeyMax),
 		},
 	}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		_, pErr := client.SendWrapped(context.Background(), rg1(store), &scanArgs)
 		return pErr.GoError()
 	})
@@ -537,7 +536,7 @@ func TestRangeTransferLease(t *testing.T) {
 
 	// Move the lease to replica 1.
 	var newHolderDesc roachpb.ReplicaDescriptor
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		var err error
 		newHolderDesc, err = replica1.GetReplicaDescriptor()
 		return err
@@ -568,7 +567,7 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 
 	// Check that replica1 now has the lease (or gets it soon).
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if _, pErr := client.SendWrappedWith(
 			context.Background(),
 			mtc.senders[1],
@@ -640,7 +639,7 @@ func TestRangeTransferLease(t *testing.T) {
 	// Now unblock the extension.
 	extensionSem <- struct{}{}
 	// Check that the transfer to replica1 eventually happens.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if _, pErr := client.SendWrappedWith(
 			context.Background(),
 			mtc.senders[0],
@@ -883,7 +882,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 
 	// A read on the new lease holder does not necessarily succeed immediately,
 	// since it might take a while for it to apply the transfer.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// We can't reliably do a CONSISTENT read here, even though we're reading
 		// from the supposed lease holder, because this node might initially be
 		// unaware of the new lease and so the request might bounce around for a
@@ -976,7 +975,7 @@ func TestRangeInfo(t *testing.T) {
 	// Get the replicas for each side of the split. This is done within
 	// a SucceedsSoon loop to ensure the split completes.
 	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *storage.Replica
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
 		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin, nil)
 		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey, nil)

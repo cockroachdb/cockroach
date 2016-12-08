@@ -24,8 +24,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -84,7 +84,7 @@ func TestAdminAPITableStats(t *testing.T) {
 
 	// The new SQL table may not yet have split into its own range. Wait for
 	// this to occur, and for full replication.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if err := httputil.GetJSON(client, url, &tsResponse); err != nil {
 			return err
 		}

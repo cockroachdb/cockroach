@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -178,7 +178,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// There can be a delay from when the truncation command is issued and the
 	// indexes updating.
 	var cFirst, cTruncatable, cOldest uint64
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		var err error
 		cFirst, cTruncatable, cOldest, err = getIndexes()
 		if err != nil {

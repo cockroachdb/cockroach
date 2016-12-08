@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -55,8 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/pkg/errors"
 )
 
 func adminSplitArgs(key, splitKey roachpb.Key) *roachpb.AdminSplitRequest {
@@ -734,7 +733,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 		// Wait for the range to be split along table boundaries.
 		expectedRSpan := roachpb.RSpan{Key: roachpb.RKey(tableBoundary), EndKey: roachpb.RKeyMax}
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			repl = store.LookupReplica(tableBoundary, nil)
 			if actualRSpan := repl.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
 				return errors.Errorf("expected range %s to span %s", repl, expectedRSpan)
@@ -752,7 +751,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Verify that the range is in fact split.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
 		rngDesc := repl.Desc()
 		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
@@ -786,7 +785,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	}
 
 	// Verify that the range is split and the new range has the correct max bytes.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		newRng := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
@@ -864,7 +863,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
-		util.SucceedsSoonDepth(1, t, func() error {
+		testutils.SucceedsSoonDepth(1, t, func() error {
 			rows, err := store.DB().Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 			if err != nil {
 				return err
@@ -969,7 +968,7 @@ func runSetupSplitSnapshotRace(
 	// Get the right range's ID. Since the split was performed on node
 	// 1, it is currently 11 and not 3 as might be expected.
 	var rightRangeID roachpb.RangeID
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).RangeID
 		if rightRangeID == leftRangeID {
 			return errors.Errorf("store 1 hasn't processed split yet")
@@ -1724,7 +1723,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	// SucceedsSoon because of the chance the GC is initiated before
 	// the range is fully split, meaning the initial GC may fail because
 	// it spans ranges.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		return store.ManualGC(store.LookupReplica(splitKey, nil))
 	})
 
@@ -1735,7 +1734,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 
 	// Now verify that the meta2/splitKey meta2 record is present; do this
 	// within a SucceedSoon in order to give the intents time to resolve.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		val, intents, err := engine.MVCCGet(context.Background(), store.Engine(),
 			keys.RangeMetaKey(splitKey), hlc.MaxTimestamp, true, nil)
 		if err != nil {
@@ -1802,7 +1801,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 			t.Fatal(pErr)
 		}
 	}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if err := store.GossipStore(context.Background()); err != nil {
 			t.Fatal(err)
 		}

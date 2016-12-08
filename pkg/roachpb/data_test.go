@@ -25,16 +25,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/gogo/protobuf/proto"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {
@@ -420,14 +421,14 @@ var nonZeroTxn = Transaction{
 
 func TestTransactionUpdate(t *testing.T) {
 	txn := nonZeroTxn
-	if err := util.NoZeroField(txn); err != nil {
+	if err := zerofields.NoZeroField(txn); err != nil {
 		t.Fatal(err)
 	}
 
 	var txn2 Transaction
 	txn2.Update(&txn)
 
-	if err := util.NoZeroField(txn2); err != nil {
+	if err := zerofields.NoZeroField(txn2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -438,7 +439,7 @@ func TestTransactionUpdate(t *testing.T) {
 	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
 
-	if err := util.NoZeroField(txn3); err != nil {
+	if err := zerofields.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -116,7 +116,7 @@ func TestRangeSplitMeta(t *testing.T) {
 		log.Infof(context.Background(), "split at key %q complete", splitKey)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if _, _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, nil); err != nil {
 			return errors.Errorf("failed to verify no dangling intents: %s", err)
 		}
@@ -197,7 +197,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	go startTestWriter(s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
 
 	// Check that we split 5 times in allotted time.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Scan the txn records.
 		rows, err := s.DB.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
@@ -218,7 +218,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// intents. We do this using a SucceedsSoon construct to account
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if _, _, _, err := engine.MVCCScan(context.Background(), s.Eng, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, nil); err != nil {
 			return errors.Errorf("failed to verify no dangling intents: %s", err)
 		}

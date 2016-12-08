@@ -19,13 +19,13 @@ package storage_test
 import (
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 func TestComputeStatsForKeySpan(t *testing.T) {
@@ -49,7 +49,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 	}
 
 	// Wait for splits to finish.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		repl := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
 		if actualRSpan := repl.Desc().RSpan(); !actualRSpan.Key.Equal(roachpb.RKey("i")) {
 			return errors.Errorf("expected range %s to begin at key 'i'", repl)

@@ -126,7 +126,7 @@ func TestRetryableError(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Wait until the client becomes healthy and shut down the server.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if !clientContext.IsConnHealthy(addr) {
 			return errors.Errorf("client not yet healthy")
 		}
@@ -134,7 +134,7 @@ func TestRetryableError(t *testing.T) {
 	})
 	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if clientContext.IsConnHealthy(addr) {
 			return errors.Errorf("client not yet unhealthy")
 		}
