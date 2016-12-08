@@ -945,12 +945,14 @@ alter_using:
 
 /* TODO(dan): backup/restore all databases, only certain tables, etc */
 backup_stmt:
-  BACKUP DATABASE name TO SCONST opt_incremental /* unimplemented */
+  BACKUP DATABASE name TO SCONST opt_incremental
   {
+    /* SKIP DOC */
     $$.val = &Backup{Database: Name($3), To: &StrVal{s: $5}, IncrementalFrom: $6.strVal()}
   }
-| RESTORE DATABASE name FROM SCONST /* unimplemented */
+| RESTORE DATABASE name FROM SCONST
   {
+    /* SKIP DOC */
     $$.val = &Restore{Database: Name($3), From: &StrVal{s: $5}}
   }
 
