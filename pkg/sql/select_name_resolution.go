@@ -101,18 +101,14 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 			return false, expr
 		}
 
-		if strings.EqualFold(fd.Name, "random") {
-			// `random()` changes values every row. So report we found
-			// a dependent variable.
-			// TODO(knz): in the future we may have more than one built-in
-			// function that has different values for every row. In that
-			// case, the property becomes an attribute of the
-			// built-in. However then overload resolution (type checking)
-			// must occur before this property can be detected. This
-			// would be a more significant refactoring, which is why
-			// we don't do this yet.
+		if fd.HasRowDependentOverloads {
+			// TODO(knz): this property should really be an attribute of the
+			// individual overloads. By looking at the name-level property
+			// indicator, we are marking a function as row-dependent as
+			// soon as one overload is, even if the particular overload
+			// that would be selected by type checking for this FuncExpr
+			// is constant. This could be more fine-grained.
 			v.foundDependentVars = true
-			break
 		}
 
 		// Check for invalid use of *, which, if it is an argument, is the only argument.
@@ -152,10 +148,6 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 			t = t.CopyNode()
 			t.Exprs[0] = parser.StarDatumInstance
-
-			// the StartDatumInstance refers implicitly to columns,
-			// so it is a dependent variable.
-			v.foundDependentVars = true
 
 			return true, t
 		}

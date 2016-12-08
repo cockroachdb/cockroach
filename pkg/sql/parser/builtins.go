@@ -111,6 +111,11 @@ type Builtin struct {
 	// can be evaluated on a different node without sending over the EvalContext.
 	ctxDependent bool
 
+	// Set to true when a function may change at every row whether or
+	// not it is applied to an expression that contains row-dependent
+	// variables. Used e.g. by `random` and aggregate functions.
+	RowDependent bool
+
 	class          FunctionClass
 	category, Info string
 
@@ -188,8 +193,7 @@ func init() {
 	names := make([]string, 0, len(Builtins))
 	funDefs = make(map[string]*FunctionDefinition)
 	for name, def := range Builtins {
-		fdef := &FunctionDefinition{Name: name, Definition: def}
-		funDefs[name] = fdef
+		funDefs[name] = newFunctionDefinition(name, def)
 		names = append(names, name)
 	}
 
@@ -651,9 +655,10 @@ var Builtins = map[string][]Builtin{
 
 	"random": {
 		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeFloat,
-			impure:     true,
+			Types:        ArgTypes{},
+			ReturnType:   TypeFloat,
+			impure:       true,
+			RowDependent: true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDFloat(DFloat(rand.Float64())), nil
 			},

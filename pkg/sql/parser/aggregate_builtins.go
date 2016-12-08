@@ -27,7 +27,7 @@ import (
 func initAggregateBuiltins() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
 	for k, v := range Aggregates {
-		for _, a := range v {
+		for i, a := range v {
 			if !a.impure {
 				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
 			}
@@ -43,7 +43,15 @@ func initAggregateBuiltins() {
 				panic(fmt.Sprintf("aggregate functions should have WindowFunc constructors, "+
 					"found %v", a))
 			}
+
+			// The aggregate functions are considered "row dependent". This is
+			// because each aggregate function application receives the set of
+			// grouped rows as implicit parameter. It may have a different
+			// value in every group, so it cannot be considered constant in
+			// the context of a data source.
+			v[i].RowDependent = true
 		}
+
 		Builtins[k] = v
 	}
 }
