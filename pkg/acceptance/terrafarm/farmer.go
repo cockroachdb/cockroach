@@ -211,12 +211,12 @@ func (f *Farmer) Exec(i int, cmd string) error {
 }
 
 // NewClient implements the Cluster interface.
-func (f *Farmer) NewClient(ctx context.Context, t testing.TB, i int) *client.DB {
+func (f *Farmer) NewClient(ctx context.Context, i int) (*client.DB, error) {
 	conn, err := f.RPCContext.GRPCDial(f.Addr(ctx, i, base.DefaultPort))
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return client.NewDB(client.NewSender(conn))
+	return client.NewDB(client.NewSender(conn)), nil
 }
 
 // PGUrl returns a URL string for the given node postgres server.
