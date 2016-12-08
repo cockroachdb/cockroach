@@ -53,15 +53,18 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 		}
 		buf.WriteString(in[start:i])
 		ln := utf8.RuneLen(r)
-		if ln < 0 || r == utf8.RuneError {
+		if ln < 0 {
 			start = i + 1
 		} else {
 			start = i + ln
 		}
 		if r == utf8.RuneError {
-			// Errors are due to invalid unicode points, so escape the byte (Go guarantees
-			// that it's a byte in the case of an error).
+			// Errors are due to invalid unicode points, so escape the bytes.
+			// Make sure this is run at least once in case ln == -1.
 			buf.Write(hexMap[in[i]])
+			for ri := 1; ri < ln; ri++ {
+				buf.Write(hexMap[in[i+ri]])
+			}
 		} else if ln == 1 {
 			// For single-byte runes, do the same as encodeSQLBytes.
 			if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
