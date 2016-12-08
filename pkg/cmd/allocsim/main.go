@@ -21,25 +21,29 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"text/tabwriter"
 	"time"
+
+	"github.com/olekukonko/tablewriter"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
-	"golang.org/x/net/context"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
 var numNodes = flag.Int("n", 4, "number of nodes")
+var duration = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
 var blockSize = flag.Int("b", 1000, "block size")
 
 func newRand() *rand.Rand {
@@ -53,11 +57,7 @@ func newRand() *rand.Rand {
 //
 // TODO(peter): Allow configuration of per-node locality settings and
 // zone-config constraints.
-//
-// TODO(peter): Add a -duration flag which controls how long the simulation is
-// run. When the duration is reached, print a summary of the current state of
-// the world and exit with PASS/FAIL if the replica/lease holder distribution
-// is within/exceeds acceptable bounds.
+
 type allocSim struct {
 	*localcluster.Cluster
 	stats struct {
@@ -243,6 +243,68 @@ func (a *allocSim) monitor(d time.Duration) {
 	}
 }
 
+func printFinalStats(name string, counts []int) {
+	var max, total int
+	var mean, maxDiff float64
+	min := math.MaxInt32
+	for _, count := range counts {
+		if count > max {
+			max = count
+		}
+		if count < min {
+			min = count
+		}
+		mean += float64(count) / float64(len(counts))
+		total += count
+	}
+	percentsRow := make([]string, len(counts)+1)
+	percentsRow[0] = "% total"
+	diffsRow := make([]string, len(counts)+1)
+	diffsRow[0] = "% from mean"
+	for i, count := range counts {
+		percentsRow[i+1] = fmt.Sprintf("%.1f", float64(count)/float64(total)*100)
+		diff := math.Abs((float64(count)-mean)/mean) * 100
+		if diff > maxDiff {
+			maxDiff = diff
+		}
+		diffsRow[i+1] = fmt.Sprintf("%.1f", diff)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetAutoFormatHeaders(false)
+	table.SetAlignment(tablewriter.ALIGN_RIGHT)
+
+	header := make([]string, len(counts)+1)
+	header[0] = name
+	for i := 0; i < len(counts); i++ {
+		header[i+1] = fmt.Sprintf("%d", 1)
+	}
+	table.SetHeader(header)
+	table.Append(percentsRow)
+	table.Append(diffsRow)
+	table.Render()
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.AlignRight)
+	fmt.Fprintf(w, "Minimum\t %d\n", min)
+	fmt.Fprintf(w, "Maximum\t %d\n", max)
+	fmt.Fprintf(w, "Mean\t %.1f\n", mean)
+	fmt.Fprintf(w, "Maximum Diff\t %.1f%%\n", maxDiff)
+	w.Flush()
+}
+
+func (a *allocSim) finalStatus() {
+	a.ranges.Lock()
+	defer a.ranges.Unlock()
+
+	// TOTO(bram): With the addition of localities, these stats will have to be
+	// updated.
+
+	fmt.Printf("\n\nTotal Ranges: %d\n", a.ranges.count)
+
+	printFinalStats("Replicas", a.ranges.replicas)
+	printFinalStats("Leases", a.ranges.leases)
+}
+
 func main() {
 	flag.Parse()
 
@@ -257,17 +319,22 @@ func main() {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
+	c.Start("allocsim", *workers, flag.Args(), []string{})
+	c.UpdateZoneConfig(1, 1<<20)
+
+	a := newAllocSim(c)
+
 	go func() {
-		s := <-signalCh
-		log.Infof(context.Background(), "signal received: %v", s)
+		select {
+		case s := <-signalCh:
+			log.Infof(context.Background(), "signal received: %v", s)
+		case <-time.After(*duration):
+			log.Infof(context.Background(), "finished run of: %s", *duration)
+		}
+		a.finalStatus()
 		c.Close()
 		os.Exit(1)
 	}()
 
-	c.Start("allocsim", *workers, flag.Args(),
-		[]string{"COCKROACH_METRICS_SAMPLE_INTERVAL=2s"})
-	c.UpdateZoneConfig(1, 1<<20)
-
-	a := newAllocSim(c)
 	a.run(*workers)
 }
