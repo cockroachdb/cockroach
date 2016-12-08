@@ -200,7 +200,7 @@ var statusReportParams = map[string]string{
 	// of this package. We specify this version to avoid having to support old
 	// code paths which various client tools fall back to if they can't
 	// determine that the server is new enough.
-	"server_version": "9.5.0",
+	"server_version": sql.PgServerVersion,
 }
 
 // handleAuthentication should discuss with the client to arrange
