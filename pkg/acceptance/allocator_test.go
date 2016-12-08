@@ -137,6 +137,9 @@ func (at *allocatorTest) Cleanup(t *testing.T) {
 func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f = MakeFarmer(t, at.Prefix, stopper)
 
+	// Add a block writer that acts as a load generator.
+	at.f.BlockWriterInstances = 1
+
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
 	}

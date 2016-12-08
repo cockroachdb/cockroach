@@ -59,10 +59,11 @@ type Farmer struct {
 	// state.
 	StateFile string
 	// AddVars are additional Terraform variables to be set during calls to Add.
-	AddVars     map[string]string
-	KeepCluster string
-	nodes       []string
-	RPCContext  *rpc.Context
+	AddVars              map[string]string
+	KeepCluster          string
+	nodes                []string
+	BlockWriterInstances int
+	RPCContext           *rpc.Context
 }
 
 func (f *Farmer) refresh() {
@@ -101,6 +102,7 @@ func (f *Farmer) Add(nodes int) error {
 	args := []string{
 		fmt.Sprintf("-var=num_instances=\"%d\"", nodes),
 		fmt.Sprintf("-var=stores=%s", f.Stores),
+		fmt.Sprintf("-var=example_block_writer_instances=\"%d\"", f.BlockWriterInstances),
 	}
 
 	// Disable update checks for test clusters by setting the required environment
