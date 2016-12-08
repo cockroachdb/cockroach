@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -37,15 +38,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/olekukonko/tablewriter"
 )
 
 const firstRange = roachpb.RangeID(1)
@@ -842,7 +842,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 				// Ensure gossiped store descriptor changes have propagated.
-				util.SucceedsSoon(t, func() error {
+				testutils.SucceedsSoon(t, func() error {
 					sl, _, _ := a.storePool.getStoreList(firstRange)
 					for j, s := range sl.stores {
 						if a, e := s.Capacity.RangeCount, tc.cluster[j].rangeCount; a != e {

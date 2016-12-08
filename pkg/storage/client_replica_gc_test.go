@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -57,7 +56,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			if crt == nil || crt.ChangeType != roachpb.REMOVE_REPLICA {
 				return nil
 			}
-			util.SucceedsSoon(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 				r, err := mtc.stores[0].GetReplica(rangeID)
 				if err != nil {
 					return err
@@ -77,7 +76,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc.unreplicateRange(rangeID, 1)
 
 	// Make sure the range is removed from the store.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if _, err := mtc.stores[1].GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {
 			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
 		}
@@ -115,7 +114,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 
 	// Make sure the range is removed from the store.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		store := mtc.stores[1]
 		store.ForceReplicaGCScanAndProcess()
 		if _, err := store.GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {

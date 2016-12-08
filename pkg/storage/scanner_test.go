@@ -21,14 +21,13 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/google/btree"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -203,7 +202,7 @@ func TestScannerAddToQueues(t *testing.T) {
 
 	// Start scanner and verify that all ranges are added to both queues.
 	s.Start(clock, stopper)
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if q1.count() != count || q2.count() != count {
 			return errors.Errorf("q1 or q2 count != %d; got %d, %d", count, q1.count(), q2.count())
 		}
@@ -212,7 +211,7 @@ func TestScannerAddToQueues(t *testing.T) {
 
 	// Remove first range and verify it does not exist in either range.
 	rng := ranges.remove(0, t)
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// This is intentionally inside the loop, otherwise this test races as
 		// our removal of the range may be processed before a stray re-queue.
 		// Removing on each attempt makes sure we clean this up as we retry.
@@ -244,7 +243,7 @@ func TestScannerTiming(t *testing.T) {
 		25 * time.Millisecond,
 	}
 	for i, duration := range durations {
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			ranges := newTestRangeSet(count, t)
 			q := &testQueue{}
 			s := newReplicaScanner(log.AmbientContext{}, duration, 0, ranges)
@@ -319,7 +318,7 @@ func TestScannerDisabled(t *testing.T) {
 	defer stopper.Stop()
 
 	// Verify queue gets all ranges.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if q.count() != count {
 			return errors.Errorf("expected %d replicas; have %d", count, q.count())
 		}
@@ -333,7 +332,7 @@ func TestScannerDisabled(t *testing.T) {
 
 	// Now, disable the scanner.
 	s.SetDisabled(true)
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if s.waitEnabledCount() == lastWaitEnabledCount {
 			return errors.Errorf("expected scanner to stop when disabled")
 		}
@@ -348,7 +347,7 @@ func TestScannerDisabled(t *testing.T) {
 		return true
 	})
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if qc := q.count(); qc != 0 {
 			return errors.Errorf("expected queue to be empty after replicas removed from scanner; got %d", qc)
 		}

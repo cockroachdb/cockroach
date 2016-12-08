@@ -30,13 +30,12 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -49,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -263,7 +261,7 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 		return err
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if _, ok := tc.gossip.GetSystemConfig(); !ok {
 			return errors.Errorf("expected system config to be set")
 		}
@@ -598,7 +596,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
 		_, pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
@@ -971,7 +969,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		cfg, ok := tc.gossip.GetSystemConfig()
 		if !ok {
 			return errors.Errorf("expected system config to be set")
@@ -1731,7 +1729,7 @@ func TestAcquireLease(t *testing.T) {
 			}
 			// Since the command we sent above does not get blocked on the lease
 			// extension, we need to wait for it to go through.
-			util.SucceedsSoon(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 				newLease, _ := tc.repl.getLease()
 				if !lease.Expiration.Less(newLease.Expiration) {
 					return errors.Errorf("lease did not get extended: %+v to %+v", lease, newLease)
@@ -2205,7 +2203,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	cmd3Done := startBlockingCmd(ctx, key1, key2)
 
 	// Wait until both commands are in the command queue.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
 		chans := tc.repl.cmdQMu.global.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
 		tc.repl.cmdQMu.Unlock()
@@ -3645,7 +3643,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 
 			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate abort cache entry */)
 
-			util.SucceedsSoon(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 				if gr, _, err := tc.repl.Get(
 					ctx, tc.engine, roachpb.Header{},
 					roachpb.GetRequest{Span: roachpb.Span{
@@ -3706,7 +3704,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	// happened and subsequently issue a bogus Put which is likely to make it
 	// into Raft only after a rogue GCRequest (at least sporadically), which
 	// would trigger a Fatal from the command filter.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&count) == 0 {
 			return errors.Errorf("intent resolution not attempted yet")
 		} else if err := tc.store.DB().Put(context.TODO(), "panama", "banana"); err != nil {
@@ -3786,7 +3784,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 		}}, false /* !wait */, false /* !poison; irrelevant */); pErr != nil {
 		t.Fatal(pErr)
 	}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if atomic.LoadInt32(&seen) > 0 {
 			return nil
 		}
@@ -5456,7 +5454,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// In the loop, wait until the intent is aborted. Then write a "real" value
 	// there and verify that we can now load the data as expected.
 	v := roachpb.MakeValueFromString("foo")
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if err := engine.MVCCPut(context.Background(), repl.store.Engine(), &enginepb.MVCCStats{},
 			keys.SystemConfigSpan.Key, repl.store.Clock().Now(), v, nil); err != nil {
 			return err
@@ -5942,7 +5940,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 
 	// Even though we cancelled the command it will still get executed and the
 	// command queue cleaned up.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
 		if s := tc.repl.cmdQMu.global.String(); s != "" {

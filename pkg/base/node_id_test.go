@@ -45,7 +45,7 @@ func TestNodeIDContainer(t *testing.T) {
 		}
 	}
 
-	n.Reset(t, 6)
+	n.Reset(6)
 	if val := n.Get(); val != 6 {
 		t.Errorf("value should be 6, not %d", val)
 	}

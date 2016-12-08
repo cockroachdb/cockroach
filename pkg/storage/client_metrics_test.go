@@ -21,15 +21,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/pkg/errors"
 )
 
 func checkGauge(t *testing.T, g *metric.Gauge, e int64) {
@@ -66,7 +66,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	// non-local intent resolution.
 	for _, s := range stores {
 		m := s.Metrics()
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if a := m.IntentCount.Value(); a != 0 {
 				return fmt.Errorf("expected intent count to be zero, was %d", a)
 			}

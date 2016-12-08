@@ -32,7 +32,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -141,7 +140,7 @@ func transferMoney(client *testClient, numAccounts, maxTransfer int) error {
 // Verify accounts.
 func verifyAccounts(t *testing.T, client *testClient) {
 	var sum int
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Hold the read lock on the client to prevent it being restarted by
 		// chaos monkey.
 		client.RLock()

@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
@@ -38,7 +38,7 @@ func testBuildInfoInner(
 	CheckGossip(ctx, t, c, 20*time.Second, HasPeers(c.NumNodes()))
 
 	var details serverpb.DetailsResponse
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		select {
 		case <-stopper.ShouldStop():
 			t.Fatalf("interrupted")

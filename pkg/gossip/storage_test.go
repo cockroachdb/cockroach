@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -117,7 +118,7 @@ func TestGossipStorage(t *testing.T) {
 	network.RunUntilFullyConnected()
 
 	// Wait long enough for storage to get the expected number of addresses.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for i := range stores {
 			p := &stores[i]
 
@@ -203,7 +204,7 @@ func TestGossipStorage(t *testing.T) {
 		}
 	})
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
 			return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
 		}
@@ -256,7 +257,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 
 	// Wait long enough for storage to get the expected number of
 	// addresses and no pending cleanups.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for i := range stores {
 			p := &stores[i]
 			if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, p.Len(); expected != actual {

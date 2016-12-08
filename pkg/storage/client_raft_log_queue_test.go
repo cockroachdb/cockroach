@@ -22,14 +22,14 @@ import (
 	"math"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 // TestRaftLogQueue verifies that the raft log queue correctly truncates the
@@ -90,7 +90,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// Sadly, occasionally the queue has a race with the force processing so
 	// this succeeds within will captures those rare cases.
 	var afterTruncationIndex uint64
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Force a truncation check.
 		for _, store := range mtc.stores {
 			store.ForceRaftLogScanAndProcess()

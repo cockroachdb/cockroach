@@ -19,16 +19,16 @@ package sql_test
 import (
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 func TestSplitAtTableBoundary(t *testing.T) {
@@ -54,7 +54,7 @@ SELECT tables.id FROM system.namespace tables
 	tableStartKey := keys.MakeTablePrefix(tableID)
 
 	// Wait for new table to split.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		desc, err := tc.LookupRange(keys.MakeRowSentinelKey(tableStartKey))
 		if err != nil {
 			t.Fatal(err)

@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -271,7 +270,7 @@ func startBankTransfers(t testing.TB, stopper *stop.Stopper, sqlDB *gosql.DB, nu
 		const update = `UPDATE bench.bank
 				SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
 				WHERE id IN ($1, $2)`
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return nil // All done.
@@ -317,7 +316,7 @@ func TestBackupRestoreBank(t *testing.T) {
 		}
 
 		var newSquaresSum int64
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum)
 			if squaresSum == newSquaresSum {
 				return errors.Errorf("squared deviation didn't change, still %d", newSquaresSum)
@@ -330,7 +329,7 @@ func TestBackupRestoreBank(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum)
 			if squaresSum == newSquaresSum {
 				return errors.Errorf("squared deviation didn't change, still %d", newSquaresSum)

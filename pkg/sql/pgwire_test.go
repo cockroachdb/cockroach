@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,11 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 func trivialQuery(pgURL url.URL) error {
@@ -1189,7 +1188,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 
 	// Verify connection counter.
 	expectConns := func(n int) {
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if conns := s.MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
 				return errors.Errorf("connections %d != expected %d", conns, n)
 			}
@@ -1305,17 +1304,17 @@ func TestPGWireAuth(t *testing.T) {
 
 		t.Run("RootUserAuth", func(t *testing.T) {
 			// Authenticate as root with certificate and expect success.
-			rootPgUrl, cleanupFn := sqlutils.PGUrl(
+			rootPgURL, cleanupFn := sqlutils.PGUrl(
 				t, s.ServingAddr(), "TestPGWireAuth", url.User(security.RootUser))
 			defer cleanupFn()
-			if err := trivialQuery(rootPgUrl); err != nil {
+			if err := trivialQuery(rootPgURL); err != nil {
 				t.Fatal(err)
 			}
 
 			// Create server.TestUser with a unicode password and a user with a
 			// unicode username for later tests.
 			// Only root is allowed to create users.
-			db, err := gosql.Open("postgres", rootPgUrl.String())
+			db, err := gosql.Open("postgres", rootPgURL.String())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1336,47 +1335,47 @@ func TestPGWireAuth(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			unicodeUserPgUrl := url.URL{
+			unicodeUserPgURL := url.URL{
 				Scheme:   "postgres",
 				User:     url.User(unicodeUser),
 				Host:     net.JoinHostPort(host, port),
 				RawQuery: "sslmode=require",
 			}
-			if err := trivialQuery(unicodeUserPgUrl); !testutils.IsError(err, "pq: invalid password") {
+			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "pq: invalid password") {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
 			// Supply correct password.
-			unicodeUserPgUrl.User = url.UserPassword(unicodeUser, "蟑♫螂")
-			if err := trivialQuery(unicodeUserPgUrl); err != nil {
+			unicodeUserPgURL.User = url.UserPassword(unicodeUser, "蟑♫螂")
+			if err := trivialQuery(unicodeUserPgURL); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
 
 	t.Run("TestUserAuth", func(t *testing.T) {
-		testUserPgUrl, cleanupFn := sqlutils.PGUrl(
+		testUserPgURL, cleanupFn := sqlutils.PGUrl(
 			t, s.ServingAddr(), "TestPGWireAuth", url.User(server.TestUser))
 		defer cleanupFn()
 		// No password supplied but valid certificate should result in
 		// successful authentication.
-		if err := trivialQuery(testUserPgUrl); err != nil {
+		if err := trivialQuery(testUserPgURL); err != nil {
 			t.Fatal(err)
 		}
 
 		// Test case insensitivity for certificate and password authentication.
-		testUserPgUrl.User = url.User("TesTUser")
-		if err := trivialQuery(testUserPgUrl); err != nil {
+		testUserPgURL.User = url.User("TesTUser")
+		if err := trivialQuery(testUserPgURL); err != nil {
 			t.Fatal(err)
 		}
 
 		// Remove certificates to default to password authentication.
-		testUserPgUrl.RawQuery = "sslmode=require"
+		testUserPgURL.RawQuery = "sslmode=require"
 
 		// Even though the correct password is supplied (empty string), this
 		// should fail because we do not support password authentication for
 		// users with empty passwords.
-		if err := trivialQuery(testUserPgUrl); !testutils.IsError(err, "pq: invalid password") {
+		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "pq: invalid password") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

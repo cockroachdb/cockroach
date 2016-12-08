@@ -65,8 +65,9 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 	}
 }
 
-// Reset changes the NodeID regardless of the old value. Can only be used from
-// testing code.
-func (n *NodeIDContainer) Reset(_ util.Tester, val roachpb.NodeID) {
+// Reset changes the NodeID regardless of the old value.
+//
+// Should only be used in testing code.
+func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 	atomic.StoreInt32(&n.nodeID, int32(val))
 }
