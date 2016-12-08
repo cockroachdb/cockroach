@@ -4438,6 +4438,7 @@ func calcReplicaMetrics(
 	m.leaseValid = lease.Covers(now)
 	m.leaseholder = m.leaseValid && leaseOwner
 	m.leader = isRaftLeader(raftStatus)
+	m.quiescent = quiescent
 
 	// We gather per-range stats on either the leader or, if there is no leader,
 	// the first live replica in the descriptor. Note that the first live replica
