@@ -173,15 +173,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.registry,
 	)
-	s.storePool = storage.NewStorePool(
-		s.cfg.AmbientCtx,
-		s.gossip,
-		s.clock,
-		s.rpcContext,
-		s.cfg.TimeUntilStoreDead,
-		s.stopper,
-		/* deterministic */ false,
-	)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
@@ -228,6 +219,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
+
+	s.storePool = storage.NewStorePool(
+		s.cfg.AmbientCtx,
+		s.gossip,
+		s.clock,
+		storage.MakeStorePoolNodeLivenessFunc(s.nodeLiveness),
+		s.cfg.TimeUntilStoreDead,
+		/* deterministic */ false,
+	)
 
 	s.raftTransport = storage.NewRaftTransport(
 		s.cfg.AmbientCtx, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,

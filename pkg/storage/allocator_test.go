@@ -30,7 +30,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -175,13 +174,14 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 // use in tests. Stopper must be stopped by the caller.
 func createTestAllocator(
 	deterministic bool, useRuleSolver bool,
-) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff, deterministic)
+) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock, *mockNodeLiveness) {
+	stopper, g, manualClock, storePool, mnl := createTestStorePool(
+		TestTimeUntilStoreDeadOff, deterministic, true /* defaultNodeLiveness */)
 	a := MakeAllocator(storePool, AllocatorOptions{
 		AllowRebalance: true,
 		UseRuleSolver:  useRuleSolver,
 	})
-	return stopper, g, storePool, a, manualClock
+	return stopper, g, storePool, a, manualClock, mnl
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the store
@@ -195,24 +195,22 @@ func mockStorePool(
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
-	storePool.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
+	liveNodeSet := map[roachpb.NodeID]struct{}{}
+	storePool.mu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
-		detail := newStoreDetail(context.TODO())
+		liveNodeSet[roachpb.NodeID(storeID)] = struct{}{}
+		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-
-		storePool.mu.storeDetails[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
-		detail := newStoreDetail(context.TODO())
-		detail.dead = true
+		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		storePool.mu.storeDetails[storeID] = detail
 	}
 	for storeID, detail := range storePool.mu.storeDetails {
 		for _, replica := range deadReplicas {
@@ -222,6 +220,13 @@ func mockStorePool(
 			detail.deadReplicas[replica.RangeID] = append(detail.deadReplicas[replica.RangeID], replica.Replica)
 		}
 	}
+
+	// Set the node liveness function using the set we constructed.
+	storePool.mu.nodeLiveness =
+		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) bool {
+			_, ok := liveNodeSet[nodeID]
+			return ok
+		}
 }
 
 func runToggleRuleSolver(t *testing.T, test func(useRuleSolver bool, t *testing.T)) {
@@ -237,7 +242,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* UseRuleSolver */ useRuleSolver,
 		)
@@ -264,7 +269,7 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, sp, a, _ := createTestAllocator(
+		stopper, g, sp, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -300,7 +305,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, _, _, a, _ := createTestAllocator(
+		stopper, _, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -324,7 +329,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -382,7 +387,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -420,7 +425,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("without rule solver", func(t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ false,
 		)
@@ -474,7 +479,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	})
 
 	t.Run("with rule solver", func(t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ true,
 		)
@@ -696,7 +701,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	}
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -824,7 +829,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				}
 				// Deterministic is required when stressing as test case 8 may rebalance
 				// to different configurations.
-				stopper, g, _, a, _ := createTestAllocator(
+				stopper, g, _, a, _, _ := createTestAllocator(
 					/* deterministic */ true,
 					/* UseRuleSolver */ useRuleSolver,
 				)
@@ -899,7 +904,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	}
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -940,7 +945,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator(
+	stopper, g, _, a, _, _ := createTestAllocator(
 		/* deterministic */ true,
 		/* useRuleSolver */ false,
 	)
@@ -1003,7 +1008,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 
 func TestAllocatorShouldTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator(
+	stopper, g, _, a, _, _ := createTestAllocator(
 		/* deterministic */ true,
 		/* useRuleSolver */ false,
 	)
@@ -1118,7 +1123,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	}
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -1524,7 +1529,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 	}
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, _, sp, a, _ := createTestAllocator(
+		stopper, _, sp, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ useRuleSolver,
 		)
@@ -1621,7 +1626,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	runToggleRuleSolver(t, func(useRuleSolver bool, t *testing.T) {
-		stopper, g, _, a, _ := createTestAllocator(
+		stopper, g, _, a, _, _ := createTestAllocator(
 			/* deterministic */ false,
 			/* useRuleSolver */ false,
 		)
@@ -1761,9 +1766,8 @@ func exampleRebalancingCore(useRuleSolver bool) {
 		log.AmbientContext{},
 		g,
 		clock,
-		nil,
+		makeMockNodeLiveness(true /* defaultNodeLiveness */).nodeLivenessFunc,
 		TestTimeUntilStoreDeadOff,
-		stopper,
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(sp, AllocatorOptions{

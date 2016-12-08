@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"container/heap"
 	"fmt"
 	"sort"
 	"time"
@@ -28,14 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -56,40 +52,37 @@ const (
 	defaultDeclinedReservationsTimeout = 0 * time.Second
 )
 
-type storeDetail struct {
-	ctx         context.Context
-	desc        *roachpb.StoreDescriptor
-	dead        bool
-	timesDied   int
-	foundDeadOn hlc.Timestamp
-	// throttledUntil is when an throttled store can be considered available
-	// again due to a failed or declined Reserve RPC.
-	throttledUntil  time.Time
-	lastUpdatedTime hlc.Timestamp // This is also the priority for the queue.
-	index           int           // index of the item in the heap, required for heap.Interface
-	deadReplicas    map[roachpb.RangeID][]roachpb.ReplicaDescriptor
-}
+// A NodeLivenessFunc accepts a node ID, current time and threshold before
+// a node is considered dead and returns whether or not the node is live.
+type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) bool
 
-// markDead sets the storeDetail to dead(inactive).
-func (sd *storeDetail) markDead(foundDeadOn hlc.Timestamp) {
-	sd.dead = true
-	sd.foundDeadOn = foundDeadOn
-	sd.timesDied++
-	if sd.desc != nil {
-		// sd.desc can still be nil if it was markedAlive and enqueued in getStoreDetailLocked
-		// and never markedAlive again.
-		log.Warningf(
-			sd.ctx, "store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID,
-		)
+// MakeStorePoolNodeLivenessFunc returns a function which determines
+// whether or not a node is alive based on information provided by
+// the specified NodeLiveness.
+func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
+	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) bool {
+		// Mark the store dead if the node it's on is not live.
+		liveness, err := nodeLiveness.GetLiveness(nodeID)
+		if err != nil {
+			return false
+		}
+		deadAsOf := liveness.Expiration.GoTime().Add(threshold)
+		return now.Before(deadAsOf)
 	}
 }
 
-// markAlive sets the storeDetail to alive(active) and saves the updated time
-// and descriptor.
-func (sd *storeDetail) markAlive(foundAliveOn hlc.Timestamp, storeDesc *roachpb.StoreDescriptor) {
-	sd.desc = storeDesc
-	sd.dead = false
-	sd.lastUpdatedTime = foundAliveOn
+// StorePoolNodeLivenessTrue is a NodeLivenessFunc which always returns true.
+func StorePoolNodeLivenessTrue(_ roachpb.NodeID, _ time.Time, _ time.Duration) bool {
+	return true
+}
+
+type storeDetail struct {
+	desc *roachpb.StoreDescriptor
+	// throttledUntil is when an throttled store can be considered available
+	// again due to a failed or declined Reserve RPC.
+	throttledUntil  time.Time
+	lastUpdatedTime time.Time
+	deadReplicas    map[roachpb.RangeID][]roachpb.ReplicaDescriptor
 }
 
 // isThrottled returns whether the store is currently throttled.
@@ -113,15 +106,36 @@ const (
 	storeStatusAvailable
 )
 
+func (sd *storeDetail) isDead(
+	now time.Time, threshold time.Duration, livenessFn NodeLivenessFunc,
+) bool {
+	// The store is considered dead if it hasn't been updated via gossip
+	// within the liveness threshold.
+	deadAsOf := sd.lastUpdatedTime.Add(threshold)
+	if now.After(deadAsOf) {
+		return true
+	}
+	// If there's no descriptor (meaning no gossip ever arrived for this
+	// store), we can't check the node liveness, so presume this node live.
+	if sd.desc == nil {
+		return false
+	}
+	// Even if the store has been updated via gossip, we still rely on
+	// the node liveness to determine whether it is considered live.
+	return !livenessFn(sd.desc.Node.NodeID, now, threshold)
+}
+
 // status returns the current status of the store.
-func (sd *storeDetail) status(now time.Time, rangeID roachpb.RangeID) storeStatus {
+func (sd *storeDetail) status(
+	now time.Time, threshold time.Duration, rangeID roachpb.RangeID, nl NodeLivenessFunc,
+) storeStatus {
 	// The store must be alive and it must have a descriptor to be considered
 	// alive.
-	if sd.dead || sd.desc == nil {
+	if sd.isDead(now, threshold, nl) || sd.desc == nil {
 		return storeStatusDead
 	}
 
-	// The store must not have a recent declined reservation to be available.
+	// The store must not be throttled from recently declining a reservation.
 	if sd.isThrottled(now) {
 		return storeStatusThrottled
 	}
@@ -134,70 +148,6 @@ func (sd *storeDetail) status(now time.Time, rangeID roachpb.RangeID) storeStatu
 	return storeStatusAvailable
 }
 
-// storePoolPQ implements the heap.Interface (which includes sort.Interface)
-// and holds storeDetail. storePoolPQ is not threadsafe.
-type storePoolPQ []*storeDetail
-
-// Len implements the sort.Interface.
-func (pq storePoolPQ) Len() int {
-	return len(pq)
-}
-
-// Less implements the sort.Interface.
-func (pq storePoolPQ) Less(i, j int) bool {
-	return pq[i].lastUpdatedTime.Less(pq[j].lastUpdatedTime)
-}
-
-// Swap implements the sort.Interface.
-func (pq storePoolPQ) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index, pq[j].index = i, j
-}
-
-// Push implements the heap.Interface.
-func (pq *storePoolPQ) Push(x interface{}) {
-	n := len(*pq)
-	item := x.(*storeDetail)
-	item.index = n
-	*pq = append(*pq, item)
-}
-
-// Pop implements the heap.Interface.
-func (pq *storePoolPQ) Pop() interface{} {
-	old := *pq
-	n := len(old)
-	item := old[n-1]
-	item.index = -1 // for safety
-	*pq = old[0 : n-1]
-	return item
-}
-
-// peek returns the next value in the priority queue without dequeuing it.
-func (pq storePoolPQ) peek() *storeDetail {
-	if len(pq) == 0 {
-		return nil
-	}
-	return (pq)[0]
-}
-
-// enqueue either adds the detail to the queue or updates its location in the
-// priority queue.
-func (pq *storePoolPQ) enqueue(detail *storeDetail) {
-	if detail.index < 0 {
-		heap.Push(pq, detail)
-	} else {
-		heap.Fix(pq, detail.index)
-	}
-}
-
-// dequeue removes the next detail from the priority queue.
-func (pq *storePoolPQ) dequeue() *storeDetail {
-	if len(*pq) == 0 {
-		return nil
-	}
-	return heap.Pop(pq).(*storeDetail)
-}
-
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
@@ -205,17 +155,13 @@ type StorePool struct {
 
 	clock                       *hlc.Clock
 	timeUntilStoreDead          time.Duration
-	rpcContext                  *rpc.Context
 	failedReservationsTimeout   time.Duration
 	declinedReservationsTimeout time.Duration
-	resolver                    NodeAddressResolver
 	deterministic               bool
 	mu                          struct {
 		syncutil.RWMutex
-		// Each storeDetail is contained in both a map and a priorityQueue;
-		// pointers are used so that data can be kept in sync.
+		nodeLiveness   NodeLivenessFunc
 		storeDetails   map[roachpb.StoreID]*storeDetail
-		queue          storePoolPQ
 		nodeLocalities map[roachpb.NodeID]roachpb.Locality
 	}
 }
@@ -226,31 +172,28 @@ func NewStorePool(
 	ambient log.AmbientContext,
 	g *gossip.Gossip,
 	clock *hlc.Clock,
-	rpcContext *rpc.Context,
+	nodeLiveness NodeLivenessFunc,
 	timeUntilStoreDead time.Duration,
-	stopper *stop.Stopper,
 	deterministic bool,
 ) *StorePool {
 	sp := &StorePool{
 		AmbientContext:     ambient,
 		clock:              clock,
 		timeUntilStoreDead: timeUntilStoreDead,
-		rpcContext:         rpcContext,
 		failedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_FAILED_RESERVATION_TIMEOUT",
 			defaultFailedReservationsTimeout),
 		declinedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_DECLINED_RESERVATION_TIMEOUT",
 			defaultDeclinedReservationsTimeout),
-		resolver:      GossipAddressResolver(g),
 		deterministic: deterministic,
 	}
+	sp.mu.nodeLiveness = nodeLiveness
 	sp.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
-	heap.Init(&sp.mu.queue)
 	sp.mu.nodeLocalities = make(map[roachpb.NodeID]roachpb.Locality)
+
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
 	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
 	g.RegisterCallback(deadReplicasRegex, sp.deadReplicasGossipUpdate)
-	sp.start(stopper)
 
 	return sp
 }
@@ -266,12 +209,12 @@ func (sp *StorePool) String() string {
 	sort.Sort(ids)
 
 	var buf bytes.Buffer
-	now := timeutil.Now()
+	now := sp.clock.Now().GoTime()
 
 	for _, id := range ids {
 		detail := sp.mu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		if detail.dead {
+		if detail.isDead(now, sp.timeUntilStoreDead, sp.mu.nodeLiveness) {
 			_, _ = buf.WriteString("*")
 		}
 		fmt.Fprintf(&buf, ": range-count=%d fraction-used=%.2f",
@@ -296,11 +239,10 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	// Does this storeDetail exist yet?
 	detail := sp.getStoreDetailLocked(storeDesc.StoreID)
-	detail.markAlive(sp.clock.Now(), &storeDesc)
+	detail.desc = &storeDesc
+	detail.lastUpdatedTime = sp.clock.Now().GoTime()
 	sp.mu.nodeLocalities[storeDesc.Node.NodeID] = storeDesc.Node.Locality
-	sp.mu.queue.enqueue(detail)
 }
 
 // deadReplicasGossipUpdate is the gossip callback used to keep the StorePool up to date.
@@ -322,53 +264,10 @@ func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 	detail.deadReplicas = deadReplicas
 }
 
-// start will run continuously and mark stores as offline if they haven't been
-// heard from in longer than timeUntilStoreDead.
-func (sp *StorePool) start(stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
-		var timeoutTimer timeutil.Timer
-		defer timeoutTimer.Stop()
-		for {
-			var timeout time.Duration
-			sp.mu.Lock()
-			detail := sp.mu.queue.peek()
-			if detail == nil {
-				// No stores yet, wait the full timeout.
-				timeout = sp.timeUntilStoreDead
-			} else {
-				// Check to see if the store should be marked as dead.
-				deadAsOf := detail.lastUpdatedTime.GoTime().Add(sp.timeUntilStoreDead)
-				now := sp.clock.Now()
-				if now.GoTime().After(deadAsOf) {
-					deadDetail := sp.mu.queue.dequeue()
-					deadDetail.markDead(now)
-					// The next store might be dead as well, set the timeout to
-					// 0 to process it immediately.
-					timeout = 0
-				} else {
-					// Store is still alive, schedule the next check for when
-					// it should timeout.
-					timeout = deadAsOf.Sub(now.GoTime())
-				}
-			}
-			sp.mu.Unlock()
-			timeoutTimer.Reset(timeout)
-			select {
-			case <-timeoutTimer.C:
-				timeoutTimer.Read = true
-			case <-stopper.ShouldStop():
-				return
-			}
-		}
-	})
-}
-
 // newStoreDetail makes a new storeDetail struct. It sets index to be -1 to
 // ensure that it will be processed by a queue immediately.
-func newStoreDetail(ctx context.Context) *storeDetail {
+func newStoreDetail() *storeDetail {
 	return &storeDetail{
-		ctx:          ctx,
-		index:        -1,
 		deadReplicas: make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor),
 	}
 }
@@ -384,13 +283,10 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 		// network). The first time this occurs, presume the store is
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
-		ctx := sp.AnnotateCtx(context.TODO())
-		detail = newStoreDetail(ctx)
+		detail = newStoreDetail()
+		detail.lastUpdatedTime = sp.clock.Now().GoTime()
 		sp.mu.storeDetails[storeID] = detail
-		detail.markAlive(sp.clock.Now(), nil)
-		sp.mu.queue.enqueue(detail)
 	}
-
 	return detail
 }
 
@@ -415,11 +311,12 @@ func (sp *StorePool) deadReplicas(
 	defer sp.mu.Unlock()
 
 	var deadReplicas []roachpb.ReplicaDescriptor
+	now := sp.clock.Now().GoTime()
 outer:
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		if detail.dead {
+		if detail.isDead(now, sp.timeUntilStoreDead, sp.mu.nodeLiveness) {
 			deadReplicas = append(deadReplicas, repl)
 			continue
 		}
@@ -536,10 +433,10 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	var throttledStoreCount int
 	var storeDescriptors []roachpb.StoreDescriptor
 
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	for _, storeID := range storeIDs {
 		detail := sp.mu.storeDetails[storeID]
-		switch detail.status(now, rangeID) {
+		switch detail.status(now, sp.timeUntilStoreDead, rangeID, sp.mu.nodeLiveness) {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++
