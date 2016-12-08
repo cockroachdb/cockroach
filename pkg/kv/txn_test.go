@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -33,10 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 // TestTxnDBBasics verifies that a simple transaction can be run and
@@ -374,14 +373,12 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 // uncertainty, which interferes with the tests. The feature is disabled simply
 // by poisoning the gossip NodeID; this may break other functionality which
 // is usually not relevant in uncertainty tests.
-func disableOwnNodeCertain(t *testing.T, tc *localtestcluster.LocalTestCluster) {
+func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) error {
 	distSender := tc.Sender.(*TxnCoordSender).wrapped.(*DistSender)
 	desc := distSender.getNodeDescriptor()
 	desc.NodeID = 999
-	distSender.gossip.NodeID.Reset(t, desc.NodeID)
-	if err := distSender.gossip.SetNodeDescriptor(desc); err != nil {
-		panic(err)
-	}
+	distSender.gossip.NodeID.Reset(desc.NodeID)
+	return distSender.gossip.SetNodeDescriptor(desc)
 }
 
 // TestUncertaintyRestart verifies that a transaction which finds a write in
@@ -398,7 +395,9 @@ func TestUncertaintyRestart(t *testing.T) {
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	defer s.Stop()
-	disableOwnNodeCertain(t, s)
+	if err := disableOwnNodeCertain(s); err != nil {
+		t.Fatal(err)
+	}
 	s.Manual.Increment(s.Clock.MaxOffset().Nanoseconds() + 1)
 
 	var key = roachpb.Key("a")
@@ -454,7 +453,9 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	defer s.Stop()
-	disableOwnNodeCertain(t, s)
+	if err := disableOwnNodeCertain(s); err != nil {
+		t.Fatal(err)
+	}
 
 	offsetNS := int64(100)
 	keySlow := roachpb.Key("slow")
@@ -684,7 +685,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		// Wait till split complete.
 		// Check that we split 1 times in allotted time.
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			// Scan the meta records.
 			rows, serr := s.DB.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 			if serr != nil {

@@ -288,7 +288,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	// Wait for gossip to startup.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for i, g := range m.gossips {
 			if _, ok := g.GetSystemConfig(); !ok {
 				return errors.Errorf("system config not available at index %d", i)
@@ -370,7 +370,7 @@ func (m *multiTestContext) gossipStores() {
 		timestamps[storeKey] = infoStatus.Infos[storeKey].OrigStamp
 	}
 	// Wait until all stores know about each other.
-	util.SucceedsSoon(m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
 			nodeID := m.stores[i].Ident.NodeID
 			infoStatus := m.gossips[i].GetInfoStatus()
@@ -392,7 +392,7 @@ func (m *multiTestContext) gossipStores() {
 // storePools have received those descriptors.
 func (m *multiTestContext) initGossipNetwork() {
 	m.gossipStores()
-	util.SucceedsSoon(m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
 			if _, alive, _ := m.storePools[i].GetStoreList(roachpb.RangeID(0)); alive != len(m.stores) {
 				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
@@ -801,7 +801,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper)
 	// Wait until we see the first heartbeat.
-	util.SucceedsSoon(m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		if live, err := m.nodeLivenesses[idx].IsLive(nodeID); err != nil {
 			return err
 		} else if !live {
@@ -881,7 +881,7 @@ func (m *multiTestContext) restartStore(i int) {
 
 	cfg.NodeLiveness.StartHeartbeat(context.Background(), stopper)
 	// Wait until we see the first heartbeat.
-	util.SucceedsSoon(m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		if live, err := cfg.NodeLiveness.IsLive(roachpb.NodeID(i + 1)); err != nil || !live {
 			return errors.New("node not live")
 		}
@@ -988,7 +988,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 	}
 
 	// Wait for the replication to complete on all destination nodes.
-	util.SucceedsSoon(m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		for i, dest := range dests {
 			repl, err := m.stores[dest].GetReplica(rangeID)
 			if err != nil {
@@ -1074,7 +1074,7 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 // at the given key to match the expected slice (across all engines).
 // Fails the test if they do not match.
 func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
-	util.SucceedsSoonDepth(1, m.t, func() error {
+	testutils.SucceedsSoonDepth(1, m.t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
@@ -1142,7 +1142,7 @@ func (m *multiTestContext) expireLeasesWithoutIncrementingEpochs() {
 // specified rangeID.
 func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
 	var raftLeaderRepl *storage.Replica
-	util.SucceedsSoonDepth(1, m.t, func() error {
+	testutils.SucceedsSoonDepth(1, m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
 		var latestTerm uint64

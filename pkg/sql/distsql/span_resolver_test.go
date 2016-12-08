@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -75,7 +75,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		}
 		// Wait for everybody to apply the new lease, so that we can rely on the
 		// lease discovery done later by the SpanResolver to be up to date.
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			for j := 0; j < 3; j++ {
 				target := tc.Target(j)
 				rt, err := tc.FindRangeLeaseHolder(rowRanges[i], &target)

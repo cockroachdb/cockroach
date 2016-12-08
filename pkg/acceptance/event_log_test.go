@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	csql "github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -54,7 +54,7 @@ func testEventLogInner(
 	// Verify that a node_join message was logged for each node in the cluster.
 	// We expect there to eventually be one such message for each node in the
 	// cluster, and each message must be correctly formatted.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		db := makePGClient(t, c.PGUrl(ctx, 0))
 		defer db.Close()
 
@@ -125,7 +125,7 @@ func testEventLogInner(
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		db := makePGClient(t, c.PGUrl(ctx, 0))
 		defer db.Close()
 

@@ -216,7 +216,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	for _, peer := range peers {
 		c := newClient(log.AmbientContext{}, local.GetNodeAddr(), makeMetrics())
 
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
 			if err != nil {
 				return err
@@ -333,7 +333,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 
 	local.startClient(peerAddr)
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
 				return nil
@@ -342,7 +342,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 		return errors.Errorf("node %d not yet connected", peerNodeID)
 	})
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, resolver := range local.GetResolvers() {
 			if resolver.Addr() == peerAddrStr {
 				return nil
@@ -356,7 +356,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 
 	peerStopper.Stop()
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
 				return errors.Errorf("node %d still connected", peerNodeID)
@@ -369,7 +369,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	defer peerStopper.Stop()
 	startGossipAtAddr(peerNodeID, peerAddr, peerStopper, t, metric.NewRegistry())
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
 				return nil
