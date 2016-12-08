@@ -191,3 +191,8 @@ SELECT (1,2,3)[1]
 
 query error cannot subscript type tuple{int, int, int} because it is not an array
 SELECT ROW (1,2,3)[1]
+
+# Ensure grouping by an array column works
+
+statement ok
+SELECT conkey FROM pg_catalog.pg_constraint GROUP BY conkey
