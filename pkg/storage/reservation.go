@@ -15,6 +15,8 @@
 package storage
 
 import (
+	"sync"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,8 +36,9 @@ const (
 // reservationRequest represents a request for a replica reservation.
 type reservationRequest struct {
 	StoreRequestHeader
-	RangeID   roachpb.RangeID
-	RangeSize int64
+	RangeID    roachpb.RangeID
+	RangeSize  int64
+	CanDecline bool
 }
 
 // reservationResponse represents a response from the reservation system.
@@ -49,7 +52,8 @@ type bookie struct {
 	maxReservations  int   // Maximum number of allowed reservations.
 	maxReservedBytes int64 // Maximum bytes allowed for all reservations combined.
 	mu               struct {
-		syncutil.Mutex                                               // Protects all values within the mu struct.
+		syncutil.Mutex        // Protects all values within the mu struct.
+		cond                  *sync.Cond
 		reservationsByRangeID map[roachpb.RangeID]reservationRequest // All active reservations
 		size                  int64                                  // Total bytes required for all reservations.
 	}
@@ -62,6 +66,7 @@ func newBookie(metrics *StoreMetrics) *bookie {
 		maxReservations:  envutil.EnvOrDefaultInt("COCKROACH_MAX_RESERVATIONS", defaultMaxReservations),
 		maxReservedBytes: envutil.EnvOrDefaultBytes("COCKROACH_MAX_RESERVED_BYTES", defaultMaxReservedBytes),
 	}
+	b.mu.cond = sync.NewCond(&b.mu)
 	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]reservationRequest)
 	return b
 }
@@ -79,64 +84,85 @@ func (b *bookie) Reserve(
 		Reserved: false,
 	}
 
-	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
-		// If the reservation is a repeat of an already existing one, just
-		// update it. This can occur when an RPC repeats.
-		if olderReservation.NodeID == req.NodeID && olderReservation.StoreID == req.StoreID {
-			// To update the reservation, fill the original one and add the
-			// new one.
-			if log.V(2) {
-				log.Infof(ctx, "[r%d], updating existing reservation", req.RangeID)
+	for {
+		if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
+			// If the reservation is a repeat of an already existing one, just
+			// update it. This can occur when an RPC repeats.
+			if olderReservation.NodeID == req.NodeID && olderReservation.StoreID == req.StoreID {
+				// To update the reservation, fill the original one and add the
+				// new one.
+				if log.V(2) {
+					log.Infof(ctx, "[r%d], updating existing reservation", req.RangeID)
+				}
+				b.fillReservationLocked(ctx, olderReservation)
+			} else {
+				if log.V(2) {
+					log.Infof(ctx, "[r%d] unable to update due to pre-existing reservation", req.RangeID)
+				}
+				if req.CanDecline {
+					return resp
+				}
+				b.mu.cond.Wait()
+				continue
 			}
-			b.fillReservationLocked(ctx, olderReservation)
-		} else {
-			if log.V(2) {
-				log.Infof(ctx, "[r%d] unable to update due to pre-existing reservation", req.RangeID)
-			}
-			return resp
 		}
-	}
 
-	// Do we have too many current reservations?
-	if len(b.mu.reservationsByRangeID) >= b.maxReservations {
-		if log.V(1) {
-			log.Infof(ctx, "[r%d] unable to book reservation, too many reservations (current:%d, max:%d)",
-				req.RangeID, len(b.mu.reservationsByRangeID), b.maxReservations)
-		}
-		return resp
-	}
-
-	// Can we accommodate the requested number of bytes (doubled for safety) on
-	// the hard drive?
-	// TODO(bram): Explore if doubling the requested size enough?
-	// Store `available` in case it changes between if and log.
-	available := b.metrics.Available.Value()
-	if b.mu.size+(req.RangeSize*2) > available {
-		if log.V(1) {
-			log.Infof(ctx, "[r%d] unable to book reservation, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
-				req.RangeID, req.RangeSize, b.mu.size, available)
-		}
-		return resp
-	}
-
-	// Do we have enough reserved space free for the reservation?
-	if b.mu.size+req.RangeSize > b.maxReservedBytes {
-		if log.V(1) {
-			log.Infof(ctx, "[r%d] unable to book reservation, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
-				req.RangeID, req.RangeSize, b.mu.size, b.maxReservedBytes)
-		}
-		return resp
-	}
-
-	// Make sure that we don't add back a destroyed replica.
-	for _, rep := range deadReplicas {
-		if req.RangeID == rep.RangeID {
+		// Do we have too many current reservations?
+		if len(b.mu.reservationsByRangeID) >= b.maxReservations {
 			if log.V(1) {
-				log.Infof(ctx, "[r%d] unable to book reservation, the replica has been destroyed",
-					req.RangeID)
+				log.Infof(ctx, "[r%d] unable to book reservation, too many reservations (current:%d, max:%d)",
+					req.RangeID, len(b.mu.reservationsByRangeID), b.maxReservations)
 			}
-			return reservationResponse{Reserved: false}
+			if req.CanDecline {
+				return resp
+			}
+			b.mu.cond.Wait()
+			continue
 		}
+
+		// Can we accommodate the requested number of bytes (doubled for safety) on
+		// the hard drive?
+		// TODO(bram): Explore if doubling the requested size enough?
+		// Store `available` in case it changes between if and log.
+		available := b.metrics.Available.Value()
+		if b.mu.size+(req.RangeSize*2) > available {
+			if log.V(1) {
+				log.Infof(ctx, "[r%d] unable to book reservation, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
+					req.RangeID, req.RangeSize, b.mu.size, available)
+			}
+			if req.CanDecline {
+				return resp
+			}
+			b.mu.cond.Wait()
+			continue
+		}
+
+		// Do we have enough reserved space free for the reservation?
+		if b.mu.size+req.RangeSize > b.maxReservedBytes {
+			if log.V(1) {
+				log.Infof(ctx, "[r%d] unable to book reservation, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
+					req.RangeID, req.RangeSize, b.mu.size, b.maxReservedBytes)
+			}
+			if req.CanDecline {
+				return resp
+			}
+			b.mu.cond.Wait()
+			continue
+		}
+
+		// Make sure that we don't add back a destroyed replica.
+		if req.CanDecline {
+			for _, rep := range deadReplicas {
+				if req.RangeID == rep.RangeID {
+					if log.V(1) {
+						log.Infof(ctx, "[r%d] unable to book reservation, the replica has been destroyed",
+							req.RangeID)
+					}
+					return reservationResponse{Reserved: false}
+				}
+			}
+		}
+		break
 	}
 
 	b.mu.reservationsByRangeID[req.RangeID] = req
@@ -170,6 +196,7 @@ func (b *bookie) Fill(ctx context.Context, rangeID roachpb.RangeID) bool {
 	}
 
 	b.fillReservationLocked(ctx, res)
+	b.mu.cond.Signal()
 	return true
 }
 

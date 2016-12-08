@@ -87,8 +87,9 @@ func TestBookieReserve(t *testing.T) {
 					StoreID: roachpb.StoreID(i),
 					NodeID:  roachpb.NodeID(i),
 				},
-				RangeID:   roachpb.RangeID(testCase.rangeID),
-				RangeSize: int64(testCase.rangeID),
+				RangeID:    roachpb.RangeID(testCase.rangeID),
+				RangeSize:  int64(testCase.rangeID),
+				CanDecline: true,
 			}
 			if resp := b.Reserve(ctx, req, testCase.deadReplicas); resp.Reserved != testCase.expSuc {
 				if testCase.expSuc {
@@ -118,8 +119,9 @@ func TestBookieReserve(t *testing.T) {
 			StoreID: 100,
 			NodeID:  100,
 		},
-		RangeID:   100,
-		RangeSize: 100,
+		RangeID:    100,
+		RangeSize:  100,
+		CanDecline: true,
 	}
 	for i := 1; i < 10; i++ {
 		if !b.Reserve(context.Background(), repeatReq, nil).Reserved {
@@ -134,8 +136,9 @@ func TestBookieReserve(t *testing.T) {
 			StoreID: 200,
 			NodeID:  200,
 		},
-		RangeID:   200,
-		RangeSize: 200,
+		RangeID:    200,
+		RangeSize:  200,
+		CanDecline: true,
 	}
 
 	b.mu.Lock()
@@ -165,8 +168,9 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 				StoreID: roachpb.StoreID(i),
 				NodeID:  roachpb.NodeID(i),
 			},
-			RangeID:   roachpb.RangeID(i),
-			RangeSize: 1,
+			RangeID:    roachpb.RangeID(i),
+			RangeSize:  1,
+			CanDecline: true,
 		}
 		if !b.Reserve(context.Background(), req, nil).Reserved {
 			t.Errorf("%d: could not add reservation", i)
@@ -179,8 +183,9 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 			StoreID: roachpb.StoreID(previousReserved + 1),
 			NodeID:  roachpb.NodeID(previousReserved + 1),
 		},
-		RangeID:   roachpb.RangeID(previousReserved + 1),
-		RangeSize: 1,
+		RangeID:    roachpb.RangeID(previousReserved + 1),
+		RangeSize:  1,
+		CanDecline: true,
 	}
 	if b.Reserve(context.Background(), overbookedReq, nil).Reserved {
 		t.Errorf("expected reservation to fail due to too many already existing reservations, but it succeeded")
@@ -205,8 +210,9 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 				StoreID: roachpb.StoreID(i),
 				NodeID:  roachpb.NodeID(i),
 			},
-			RangeID:   roachpb.RangeID(i),
-			RangeSize: 1,
+			RangeID:    roachpb.RangeID(i),
+			RangeSize:  1,
+			CanDecline: true,
 		}
 		if !b.Reserve(context.Background(), req, nil).Reserved {
 			t.Errorf("%d: could not add reservation", i)
@@ -219,12 +225,50 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 			StoreID: roachpb.StoreID(previousReservedBytes + 1),
 			NodeID:  roachpb.NodeID(previousReservedBytes + 1),
 		},
-		RangeID:   roachpb.RangeID(previousReservedBytes + 1),
-		RangeSize: 1,
+		RangeID:    roachpb.RangeID(previousReservedBytes + 1),
+		RangeSize:  1,
+		CanDecline: true,
 	}
 	if b.Reserve(context.Background(), overbookedReq, nil).Reserved {
 		t.Errorf("expected reservation to fail due to too many already existing reservations, but it succeeded")
 	}
 	// The same numbers from the last call to verifyBookie.
 	verifyBookie(t, b, previousReservedBytes, int64(previousReservedBytes))
+}
+
+func TestBookieCannotDecline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b := createTestBookie(1, defaultMaxReservedBytes)
+
+	req := reservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			StoreID: 1,
+			NodeID:  1,
+		},
+		RangeID:    1,
+		CanDecline: false,
+	}
+	if !b.Reserve(context.Background(), req, nil).Reserved {
+		t.Fatalf("could not add reservation")
+	}
+
+	go func() {
+		// Concurrently fill the existing reservation to unblock the overbooked
+		// one. This won't fail every time if the overbooked reservation doesn't
+		// wait, but it will fail often enough.
+		b.Fill(context.Background(), 1)
+	}()
+
+	overbookedReq := reservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			StoreID: 1,
+			NodeID:  1,
+		},
+		RangeID:    2,
+		CanDecline: false,
+	}
+	if !b.Reserve(context.Background(), overbookedReq, nil).Reserved {
+		t.Fatalf("could not add reservation")
+	}
 }
