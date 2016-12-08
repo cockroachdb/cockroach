@@ -237,6 +237,11 @@ func (r *Replica) GetRaftLogSize() int64 {
 	return r.mu.raftLogSize
 }
 
+// StorePoolNodeLivenessTrue is a NodeLivenessFunc which always returns true.
+func StorePoolNodeLivenessTrue(_ roachpb.NodeID, _ time.Time, _ time.Duration) bool {
+	return true
+}
+
 // GetStoreList is the same function as GetStoreList exposed for tests only.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
 	return sp.getStoreList(rangeID)
