@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -168,46 +167,28 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 	return nil
 }
 
-// splitRangeAtKey splits the range for a table with schema
+// splitRangeAtVal splits the range for a table with schema
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
-func splitRangeAtKey(
+func splitRangeAtVal(
 	ts *server.TestServer, tableDesc *sqlbase.TableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
-	if len(tableDesc.Columns) != 1 {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Errorf("expected table with one col, got: %+v", tableDesc)
-	}
-	if tableDesc.Columns[0].Type.Kind != sqlbase.ColumnType_INT {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Errorf("expected table with one INT col, got: %+v", tableDesc)
-	}
-
 	if len(tableDesc.Indexes) != 0 {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Errorf("expected table with just a PK, got: %+v", tableDesc)
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Errorf("expected table with just a PK, got: %+v", tableDesc)
 	}
-	if len(tableDesc.PrimaryIndex.ColumnIDs) != 1 ||
-		tableDesc.PrimaryIndex.ColumnIDs[0] != tableDesc.Columns[0].ID ||
-		tableDesc.PrimaryIndex.ColumnDirections[0] != sqlbase.IndexDescriptor_ASC {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Errorf("table with unexpected PK: %+v", tableDesc)
+	pik, err := sqlbase.MakePrimaryIndexKey(tableDesc, pk)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
 
-	pik := primaryIndexKey(tableDesc, parser.NewDInt(parser.DInt(pk)))
-	startKey := keys.MakeFamilyKey(pik, uint32(tableDesc.Families[0].ID))
+	startKey := keys.MakeRowSentinelKey(pik)
 	leftRange, rightRange, err := ts.SplitRange(startKey)
 	if err != nil {
-		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Wrapf(err, "failed to split at row: %d", pk)
+		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
+			errors.Wrapf(err, "failed to split at row: %d", pk)
 	}
 	return leftRange, rightRange, nil
-}
-
-func primaryIndexKey(tableDesc *sqlbase.TableDescriptor, val parser.Datum) roachpb.Key {
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	colIDtoRowIndex := map[sqlbase.ColumnID]int{tableDesc.Columns[0].ID: 0}
-	pk, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, []parser.Datum{val}, primaryIndexKeyPrefix)
-	if err != nil {
-		panic(err)
-	}
-	return roachpb.Key(pk)
 }
 
 func TestSpanResolver(t *testing.T) {
@@ -360,7 +341,7 @@ func setupRanges(
 	for i, val := range values {
 		var err error
 		var l roachpb.RangeDescriptor
-		l, rowRanges[i], err = splitRangeAtKey(s, tableDesc, val)
+		l, rowRanges[i], err = splitRangeAtVal(s, tableDesc, val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -472,11 +453,16 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 }
 
 func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
-	di := parser.NewDInt(parser.DInt(i))
-	dj := parser.NewDInt(parser.DInt(j))
+	makeKey := func(val int) roachpb.Key {
+		key, err := sqlbase.MakePrimaryIndexKey(tableDesc, val)
+		if err != nil {
+			panic(err)
+		}
+		return key
+	}
 	return roachpb.Span{
-		Key:    primaryIndexKey(tableDesc, di),
-		EndKey: primaryIndexKey(tableDesc, dj),
+		Key:    makeKey(i),
+		EndKey: makeKey(j),
 	}
 }
 
