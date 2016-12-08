@@ -136,3 +136,12 @@ SET CLIENT_ENCODING = 'other'
 
 statement ok
 SET SEARCH_PATH = 'blah'
+
+statement ok
+SET DIST_SQL = ALWAYS
+
+statement ok
+SET DIST_SQL = ON
+
+statement ok
+SET DIST_SQL = OFF
