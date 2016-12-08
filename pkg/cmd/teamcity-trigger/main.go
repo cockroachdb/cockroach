@@ -22,10 +22,11 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/abourget/teamcity"
 	"github.com/kisielk/gotool"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 var buildTypeID = flag.String("build", "Cockroach_Nightlies_Stress", "the TeamCity build ID to start")
@@ -34,9 +35,6 @@ var branchName = flag.String("branch", "", "the VCS branch to build")
 const teamcityServerURLEnv = "TC_SERVER_URL"
 const teamcityAPIUserEnv = "TC_API_USER"
 const teamcityAPIPasswordEnv = "TC_API_PASSWORD"
-
-const tagsKey = "env.TAGS"
-const stressTag = "stress"
 
 func main() {
 	flag.Parse()
@@ -74,14 +72,9 @@ func runTC(queueBuildFn func(map[string]string)) {
 	for _, properties := range []map[string]string{
 		{}, // uninstrumented
 		{"env.GOFLAGS": "-race"},
-		{tagsKey: "deadlock"},
+		{"env.TAGS": "deadlock"},
 	} {
-		if tags, ok := properties[tagsKey]; ok {
-			properties[tagsKey] = strings.Join([]string{tags, stressTag}, " ")
-		} else {
-			properties[tagsKey] = stressTag
-		}
-
+		properties[testutils.StressEnv] = strconv.FormatBool(true)
 		for _, propEvalKV := range []bool{true, false} {
 			properties["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
 
