@@ -124,7 +124,10 @@ func testGossipRestartInner(
 		CheckGossip(ctx, t, c, waitTime, hasSentinel)
 
 		for i := 0; i < num; i++ {
-			db := c.NewClient(ctx, t, i)
+			db, err := c.NewClient(ctx, i)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if i == 0 {
 				if err := db.Del(ctx, "count"); err != nil {
 					t.Fatal(err)

@@ -254,7 +254,9 @@ func chaosMonkey(
 			time.Sleep(time.Second)
 		}
 		c.Assert(ctx, state.t)
-		cluster.Consistent(ctx, state.t, c)
+		if err := cluster.Consistent(ctx, c); err != nil {
+			state.t.Error(err)
+		}
 		log.Warningf(ctx, "round %d: cluster recovered", curRound)
 	}
 }

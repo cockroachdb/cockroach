@@ -33,7 +33,7 @@ type Cluster interface {
 	// NumNodes returns the number of nodes in the cluster, running or not.
 	NumNodes() int
 	// NewClient returns a kv client for the given node.
-	NewClient(context.Context, testing.TB, int) *client.DB
+	NewClient(context.Context, int) (*client.DB, error)
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(context.Context, int) string
 	// InternalIP returns the address used for inter-node communication.
@@ -64,16 +64,18 @@ type Cluster interface {
 
 // Consistent performs a replication consistency check on all the ranges
 // in the cluster. It depends on a majority of the nodes being up.
-func Consistent(ctx context.Context, t testing.TB, c Cluster) {
-	if c.NumNodes() <= 0 {
-		return
-	}
+func Consistent(ctx context.Context, c Cluster) error {
 	// Always connect to the first node in the cluster.
-	kvClient := c.NewClient(ctx, t, 0)
+	kvClient, err := c.NewClient(ctx, 0)
+	if err != nil {
+		return err
+	}
 	// Set withDiff to false because any failure results in a second consistency check
 	// being called with withDiff=true.
-	if err := kvClient.CheckConsistency(ctx, keys.LocalMax,
-		keys.MaxKey, false /* withDiff*/); err != nil {
-		t.Fatal(err)
-	}
+	return kvClient.CheckConsistency(
+		ctx,
+		keys.LocalMax,
+		keys.MaxKey,
+		false, /* withDiff*/
+	)
 }

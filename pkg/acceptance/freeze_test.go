@@ -154,7 +154,10 @@ func testFreezeClusterInner(
 			t.Fatal(err)
 		}
 
-		db := c.NewClient(ctx, t, 0)
+		db, err := c.NewClient(ctx, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		if _, err := db.Scan(ctx, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			t.Fatal(err)
