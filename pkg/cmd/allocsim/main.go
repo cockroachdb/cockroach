@@ -21,25 +21,28 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
-	"golang.org/x/net/context"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
 var numNodes = flag.Int("n", 4, "number of nodes")
+var duration = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
 var blockSize = flag.Int("b", 1000, "block size")
 
 func newRand() *rand.Rand {
@@ -53,11 +56,7 @@ func newRand() *rand.Rand {
 //
 // TODO(peter): Allow configuration of per-node locality settings and
 // zone-config constraints.
-//
-// TODO(peter): Add a -duration flag which controls how long the simulation is
-// run. When the duration is reached, print a summary of the current state of
-// the world and exit with PASS/FAIL if the replica/lease holder distribution
-// is within/exceeds acceptable bounds.
+
 type allocSim struct {
 	*localcluster.Cluster
 	stats struct {
@@ -183,38 +182,63 @@ func (a *allocSim) rangeStats(d time.Duration) {
 	}
 }
 
+func printLine(inputs []string, underscores bool) {
+	var buf bytes.Buffer
+	for i, input := range inputs {
+		switch i {
+		case 0:
+			fmt.Fprintf(&buf, "%8.8s", input)
+		case 1, 2, 3:
+			fmt.Fprintf(&buf, " %8.8s", input)
+		default:
+			// All replica and lease counts need 9 characters instead of 8.
+			fmt.Fprintf(&buf, " %9.9s", input)
+		}
+	}
+	if !underscores {
+		fmt.Println(buf.String())
+		return
+	}
+	fmt.Println(strings.Replace(buf.String(), " ", "_", -1))
+}
+
 func (a *allocSim) monitor(d time.Duration) {
-	const padding = "__________"
-
-	formatHeader := func(numReplicas int) string {
-		var buf bytes.Buffer
-		_, _ = buf.WriteString("_elapsed__ops/sec___errors_replicas")
-		for i := 1; i <= numReplicas; i++ {
-			node := fmt.Sprintf("%d", i)
-			fmt.Fprintf(&buf, "%s%s", padding[:len(padding)-len(node)], node)
-		}
-		return buf.String()
-	}
-
-	formatNodes := func(replicas, leases []int) string {
-		var buf bytes.Buffer
-		for i := range replicas {
-			alive := a.Nodes[i].Alive()
-			if !alive {
-				_, _ = buf.WriteString("\033[0;31;49m")
-			}
-			fmt.Fprintf(&buf, "%*s", len(padding), fmt.Sprintf("%d/%d", replicas[i], leases[i]))
-			if !alive {
-				_, _ = buf.WriteString("\033[0m")
-			}
-		}
-		return buf.String()
-	}
-
 	start := timeutil.Now()
 	lastTime := start
-	var numReplicas int
 	var lastOps uint64
+	columnCount := *numNodes + 4
+	header := make([]string, columnCount, columnCount)
+	header[0] = "elapsed"
+	header[1] = "ops/sec"
+	header[2] = "errors"
+	header[3] = "replicas"
+	for i := 0; i < *numNodes; i++ {
+		header[i+4] = fmt.Sprintf("%d", i)
+	}
+
+	const deadPre = "\033[0;31;49m"
+	const deadPost = "\033[0m]"
+	formatRow := func(
+		elapsed time.Duration,
+		ops float64,
+		errs uint64,
+		replicaTotal int,
+		replicas, leases []int) []string {
+		row := make([]string, columnCount, columnCount)
+		row[0] = fmt.Sprintf("%s", elapsed)
+		row[1] = fmt.Sprintf("%.1f", ops)
+		row[2] = fmt.Sprintf("%d", errs)
+		row[3] = fmt.Sprintf("%d", replicaTotal)
+		for i := range replicas {
+			var pre, post string
+			if !a.Nodes[i].Alive() {
+				pre = deadPre
+				post = deadPost
+			}
+			row[4+i] = fmt.Sprintf("%s%d/%d%s", pre, replicas[i], leases[i], post)
+		}
+		return row
+	}
 
 	for ticks := 0; true; ticks++ {
 		time.Sleep(d)
@@ -229,18 +253,58 @@ func (a *allocSim) monitor(d time.Duration) {
 		leases := a.ranges.leases
 		a.ranges.Unlock()
 
-		if ticks%20 == 0 || numReplicas != len(replicas) {
-			numReplicas = len(replicas)
-			fmt.Println(formatHeader(numReplicas))
+		if ticks%20 == 0 {
+			printLine(header, true)
 		}
-
-		fmt.Printf("%8s %8.1f %8d %8d%s\n",
+		printLine(formatRow(
 			time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
-			float64(ops-lastOps)/elapsed, atomic.LoadUint64(&a.stats.errors),
-			ranges, formatNodes(replicas, leases))
+			float64(ops-lastOps)/elapsed,
+			atomic.LoadUint64(&a.stats.errors),
+			ranges,
+			replicas,
+			leases,
+		), false)
 		lastTime = now
 		lastOps = ops
 	}
+}
+
+func (a *allocSim) finalStatus() {
+	a.ranges.Lock()
+	defer a.ranges.Unlock()
+
+	// TOTO(bram): With the addition of localities, these stats will have to be
+	// updated.
+	columnCount := *numNodes + 4
+	header := make([]string, columnCount, columnCount)
+	header[0] = "stats"
+	for i := 0; i < *numNodes; i++ {
+		header[i+4] = fmt.Sprintf("%d", i)
+	}
+	printLine(header, true)
+
+	genStats := func(name string, counts []int) {
+		var total float64
+		for _, count := range counts {
+			total += float64(count)
+		}
+		row := make([]string, columnCount, columnCount)
+		row[0] = name
+		row[1] = "(total%"
+		row[2] = "/ diff%)"
+		mean := total / float64(len(counts))
+		for i, count := range counts {
+			var percent, fromMean float64
+			if total != 0 {
+				percent = float64(count) / total * 100
+				fromMean = math.Abs((float64(count) - mean) / total * 100)
+			}
+			row[i+4] = fmt.Sprintf("%#2.1f/%#2.1f", percent, fromMean)
+		}
+		printLine(row, false)
+	}
+	genStats("replicas", a.ranges.replicas)
+	genStats("leases", a.ranges.leases)
 }
 
 func main() {
@@ -256,18 +320,23 @@ func main() {
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	a := newAllocSim(c)
 
 	go func() {
-		s := <-signalCh
-		log.Infof(context.Background(), "signal received: %v", s)
+		var exitStatus int
+		select {
+		case s := <-signalCh:
+			log.Infof(context.Background(), "signal received: %v", s)
+			exitStatus = 1
+		case <-time.After(*duration):
+			log.Infof(context.Background(), "finished run of: %s", *duration)
+		}
+		a.finalStatus()
 		c.Close()
-		os.Exit(1)
+		os.Exit(exitStatus)
 	}()
 
-	c.Start("allocsim", *workers, flag.Args(),
-		[]string{"COCKROACH_METRICS_SAMPLE_INTERVAL=2s"})
+	c.Start("allocsim", *workers, flag.Args(), []string{})
 	c.UpdateZoneConfig(1, 1<<20)
-
-	a := newAllocSim(c)
 	a.run(*workers)
 }
