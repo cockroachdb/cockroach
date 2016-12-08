@@ -1768,7 +1768,9 @@ func (r *Replica) applyNewLeaseLocked(
 	pd.Replicated.BlockReads = !isExtension
 	pd.Replicated.State.Lease = &lease
 	pd.Local.leaseMetricsResult = proto.Bool(true)
-	pd.Local.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
+	if l := r.mu.state.Lease; l == nil || l.Replica.StoreID != lease.Replica.StoreID {
+		pd.Local.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
+	}
 	// TODO(tschottdorf): having traced the origin of this call back to
 	// rev 6281926, it seems that we should only be doing this when the
 	// lease holder has changed. However, it's likely not a big deal to
@@ -1825,7 +1827,6 @@ func (r *Replica) CheckConsistency(
 	}
 	var inconsistencyCount uint32
 	var wg sync.WaitGroup
-	sp := r.store.cfg.StorePool
 	for _, replica := range desc.Replicas {
 		if replica == localReplica {
 			continue
@@ -1834,12 +1835,12 @@ func (r *Replica) CheckConsistency(
 		replica := replica // per-iteration copy
 		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
 			defer wg.Done()
-			addr, err := sp.resolver(replica.NodeID)
+			addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
 			if err != nil {
 				log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
 				return
 			}
-			conn, err := sp.rpcContext.GRPCDial(addr.String())
+			conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String())
 			if err != nil {
 				log.Error(ctx,
 					errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
