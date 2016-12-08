@@ -29,7 +29,7 @@ import (
 	"github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
+	otext "github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
 )
 
@@ -61,7 +61,7 @@ func JoinOrNew(
 			// Copy baggage items to tags so they show up in the Lightstep UI.
 			sp.Context().ForeachBaggageItem(func(k, v string) bool { sp.SetTag(k, v); return true })
 
-			sp.LogEvent(opName)
+			sp.LogFields(otlog.String("event", opName))
 			return sp, nil
 		case opentracing.ErrSpanContextNotFound:
 		default:
@@ -87,7 +87,7 @@ func JoinOrNewSnowball(
 	if err == nil {
 		// We definitely want to sample a Snowball trace.
 		// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
-		ext.SamplingPriority.Set(sp, 1)
+		otext.SamplingPriority.Set(sp, 1)
 		sp.SetBaggageItem(Snowball, "1")
 	}
 	return sp, err
@@ -166,21 +166,24 @@ func netTraceIntegrator() func(basictracer.SpanEvent) {
 		case basictracer.EventTag:
 			tr.LazyPrintf("%s:%v", t.Key, t.Value)
 		case basictracer.EventLogFields:
-			var buf bytes.Buffer
-			for i, f := range t.Fields {
-				if i > 0 {
-					buf.WriteByte(' ')
-				}
-				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
-			}
-
-			tr.LazyPrintf("%s", buf.String())
-		case basictracer.EventLog:
-			if t.Payload != nil {
-				tr.LazyPrintf("%s (payload %v)", t.Event, t.Payload)
+			// TODO(radu): when LightStep supports arbitrary fields, we should make
+			// the formatting of the message consistent with that. Until then we treat
+			// legacy events that just have an "event" key specially.
+			if len(t.Fields) == 1 && t.Fields[0].Key() == "event" {
+				tr.LazyPrintf("%s", t.Fields[0].Value())
 			} else {
-				tr.LazyPrintf("%s", t.Event)
+				var buf bytes.Buffer
+				for i, f := range t.Fields {
+					if i > 0 {
+						buf.WriteByte(' ')
+					}
+					fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
+				}
+
+				tr.LazyPrintf("%s", buf.String())
 			}
+		case basictracer.EventLog:
+			panic("EventLog is deprecated")
 		}
 	}
 }

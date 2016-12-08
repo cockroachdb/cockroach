@@ -57,7 +57,7 @@ func TestTeeTracer(t *testing.T) {
 		t.Fatal(err)
 	}
 	span2 := tr.StartSpan("y", opentracing.FollowsFrom(decodedCtx))
-	span2.LogEvent("event2")
+	span2.LogKV("event", "event2")
 	if e, a := "baggage-value", span2.BaggageItem("baggage"); a != e {
 		t.Errorf("expected %s, got %s", e, a)
 	}
