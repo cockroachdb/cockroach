@@ -17,8 +17,10 @@
 package localtestcluster
 
 import (
+	"testing"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,14 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -62,7 +62,7 @@ type LocalTestCluster struct {
 	Sender            client.Sender
 	Stopper           *stop.Stopper
 	Latency           time.Duration // sleep for each RPC sent
-	tester            util.Tester
+	tester            testing.TB
 }
 
 // InitSenderFn is a callback used to initiate the txn coordinator (we don't
@@ -82,7 +82,7 @@ type InitSenderFn func(
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSender InitSenderFn) {
+func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSender InitSenderFn) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)

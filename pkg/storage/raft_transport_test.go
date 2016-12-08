@@ -22,11 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -427,7 +426,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 
 	// However, sending repeated messages should begin dropping once
 	// the circuit breaker does trip.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
 			return errors.Errorf("expected circuit breaker to trip")
 		}
@@ -440,7 +439,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	// Keep sending commit=2 until breaker resets and we receive the
 	// first instance. It's possible an earlier message for commit=1
 	// snuck in.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 2}) {
 			clientTransport.GetCircuitBreaker(serverReplica.NodeID).Reset()
 		}
@@ -549,7 +548,7 @@ func TestReopenConnection(t *testing.T) {
 	if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
 		t.Errorf("unexpectedly failed sending first message to recently downed node")
 	}
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
 			return errors.Errorf("expected circuit breaker to trip")
 		}
@@ -561,7 +560,7 @@ func TestReopenConnection(t *testing.T) {
 	rttc.GossipNode(replacementReplica.NodeID, serverAddr)
 
 	// Sending messages to the old store should still be safe.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
 			return errors.Errorf("expected circuit breaker to trip")
 		}
@@ -571,7 +570,7 @@ func TestReopenConnection(t *testing.T) {
 	// Keep sending commit=2 until breaker resets and we receive the
 	// first instance. It's possible an earlier message for commit=1
 	// snuck in.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if !rttc.Send(clientReplica, replacementReplica, 1, raftpb.Message{Commit: 2}) {
 			t.Error("unexpectedly failed sending to replacement replica")
 		}

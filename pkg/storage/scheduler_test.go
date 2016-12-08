@@ -20,13 +20,14 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 func TestRangeIDChunk(t *testing.T) {
@@ -199,7 +200,7 @@ func TestSchedulerLoop(t *testing.T) {
 	s.Start(stopper)
 	s.EnqueueRaftTick(1, 2, 3)
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		const expected = "ready=[] request=[] tick=[1:1,2:1,3:1]"
 		if s := p.String(); expected != s {
 			return errors.Errorf("expected %s, but got %s", expected, s)
@@ -232,7 +233,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	for _, c := range testCases {
 		s.signal(s.enqueueN(c.state, 1, 1, 1, 1, 1))
 
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if s := p.String(); c.expected != s {
 				return errors.Errorf("expected %s, but got %s", c.expected, s)
 			}

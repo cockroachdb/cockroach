@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -741,7 +740,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		ts[i] = s.Clock().Now()
 		log.Infof(context.TODO(), "%d: %s %d", i, key, ts[i])
 		if i == 0 {
-			util.SucceedsSoon(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 				// Enforce that when we write the second key, it's written
 				// with a strictly higher timestamp. We're dropping logical
 				// ticks and the clock may just have been pushed into the

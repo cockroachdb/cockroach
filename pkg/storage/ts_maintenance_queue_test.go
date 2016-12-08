@@ -32,10 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -132,7 +132,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	}
 
 	// Wait for splits to complete and system config to be available.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if a, e := store.ReplicaCount(), len(expectedEndKeys); a != e {
 			return fmt.Errorf("expected %d replicas in store; found %d", a, e)
 		}
@@ -147,7 +147,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	store.ForceTimeSeriesMaintenanceQueueProcess()
 
 	// Wait for processing to complete.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		model.Lock()
 		defer model.Unlock()
 		if a, e := model.containsCalled, len(expectedStartKeys); a != e {
@@ -168,7 +168,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	}
 	model.Unlock()
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		keys := []roachpb.RKey{roachpb.RKeyMin}
 		for _, k := range splitKeys {
 			keys = append(keys, roachpb.RKey(k))
@@ -201,7 +201,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	// Move clock forward and force to scan again.
 	manual.Increment(storage.TimeSeriesMaintenanceInterval.Nanoseconds())
 	store.ForceTimeSeriesMaintenanceQueueProcess()
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		model.Lock()
 		defer model.Unlock()
 		if a, e := model.containsCalled, len(expectedStartKeys)*2; a != e {
@@ -307,7 +307,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	store.ForceTimeSeriesMaintenanceQueueProcess()
 
 	// Verify the older datapoint has been pruned.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		actualDatapoints, err = getDatapoints()
 		if err != nil {
 			return err

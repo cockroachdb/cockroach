@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1177,7 +1176,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, test := range testData {
 			if mb := test.repl.GetMaxBytes(); mb != test.expMaxBytes {
 				return errors.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
@@ -1701,7 +1700,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		}
 		// However, it will be read eventually, as B's intent can be
 		// resolved asynchronously as txn B is committed.
-		util.SucceedsSoon(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); pErr != nil {
@@ -1911,7 +1910,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 
 	// Scan the range repeatedly until we've verified count.
 	sArgs := scanArgs(keys[0], keys[9].Next())
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &sArgs); pErr != nil {
@@ -2483,7 +2482,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		s.mu.Lock()
 		numPlaceholders := len(s.mu.replicaPlaceholders)
 		s.mu.Unlock()

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -502,7 +502,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), *txns[strKey].ID)
@@ -675,7 +675,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	}
 
 	// Verify GC.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		for _, lpv := range lastProcessedVals {
 			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.ZeroTimestamp, true, nil, &ts)
 			if err != nil {

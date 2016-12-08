@@ -160,7 +160,7 @@ func gossipSucceedsSoon(
 		disconnected <- c
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		select {
 		case client := <-disconnected:
 			// If the client wasn't able to connect, restart it.
@@ -325,7 +325,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	local.startClient(&lAddr)
 	local.mu.Unlock()
 	local.manage()
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		ok := local.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
 		if !ok && verifyServerMaps(local, 0) {
 			return nil
@@ -354,7 +354,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Unlock()
 	local.manage()
 	remote.manage()
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
 		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
@@ -393,7 +393,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	remote.mu.Unlock()
 	local.manage()
 	remote.manage()
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// Verify that the remote server has only a single incoming
 		// connection and the local server has only a single outgoing
 		// connection.
@@ -447,7 +447,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		gnode.Start(ln.Addr())
 	}
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		// The first gossip node should have two gossip client address
 		// in nodeMap if these three gossip nodes registered success.
 		g[0].mu.Lock()
@@ -500,7 +500,7 @@ func TestClientRetryBootstrap(t *testing.T) {
 	local.bootstrap()
 	local.manage()
 
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		_, err := remote.GetInfo("local-key")
 		return err
 	})

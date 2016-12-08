@@ -23,15 +23,16 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 // Test that abruptly closing a pgwire connection releases all leases held by
@@ -81,7 +82,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 		t.Fatalf("expected one lease, found: %d", len(leases))
 	}
 	// Wait for the lease to be released.
-	util.SucceedsSoon(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		ts.mu.Lock()
 		refcount := ts.active.data[0].refcount
 		ts.mu.Unlock()

@@ -17,7 +17,9 @@
 package security_test
 
 import (
+	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -25,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -36,48 +37,54 @@ func TestGenerateCerts(t *testing.T) {
 	security.ResetReadFileFn()
 	defer ResetTest()
 
-	certsDir := util.CreateTempDir(t, "certs_test")
-	defer util.CleanupDir(certsDir)
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	// Try certs generation with empty Certs dir argument.
-	err := security.RunCreateCACert("", "", 512)
-	if err == nil {
+	if err := security.RunCreateCACert("", "", 512); err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
-	err = security.RunCreateNodeCert(
+	if err := security.RunCreateNodeCert(
 		"", "", "", "",
-		512, []string{"localhost"})
-	if err == nil {
+		512, []string{"localhost"},
+	); err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Try generating node certs without CA certs present.
-	err = security.RunCreateNodeCert(
+	if err := security.RunCreateNodeCert(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCAKey),
 		filepath.Join(certsDir, security.EmbeddedNodeCert),
 		filepath.Join(certsDir, security.EmbeddedNodeKey),
-		512, []string{"localhost"})
-	if err == nil {
+		512, []string{"localhost"},
+	); err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Now try in the proper order.
-	err = security.RunCreateCACert(
+	if err := security.RunCreateCACert(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCAKey),
-		512)
-	if err != nil {
+		512,
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = security.RunCreateNodeCert(
+	if err := security.RunCreateNodeCert(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCAKey),
 		filepath.Join(certsDir, security.EmbeddedNodeCert),
 		filepath.Join(certsDir, security.EmbeddedNodeKey),
-		512, []string{"localhost"})
-	if err != nil {
+		512, []string{"localhost"},
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 }
@@ -89,50 +96,57 @@ func TestUseCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
 	defer ResetTest()
-	certsDir := util.CreateTempDir(t, "certs_test")
-	defer util.CleanupDir(certsDir)
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
-	err := security.RunCreateCACert(
+	if err := security.RunCreateCACert(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCAKey),
-		512)
-	if err != nil {
+		512,
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = security.RunCreateNodeCert(
+	if err := security.RunCreateNodeCert(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCAKey),
 		filepath.Join(certsDir, security.EmbeddedNodeCert),
 		filepath.Join(certsDir, security.EmbeddedNodeKey),
-		512, []string{"127.0.0.1"})
-	if err != nil {
+		512, []string{"127.0.0.1"},
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = security.RunCreateClientCert(
+	if err := security.RunCreateClientCert(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCAKey),
 		filepath.Join(certsDir, security.EmbeddedRootCert),
 		filepath.Join(certsDir, security.EmbeddedRootKey),
-		512, security.RootUser)
-	if err != nil {
+		512, security.RootUser,
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
 	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
-	_, err = security.LoadServerTLSConfig(
+	if _, err := security.LoadServerTLSConfig(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey))
-	if err != nil {
+		filepath.Join(certsDir, security.EmbeddedNodeKey),
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	_, err = security.LoadClientTLSConfig(
+	if _, err := security.LoadClientTLSConfig(
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey))
-	if err != nil {
+		filepath.Join(certsDir, security.EmbeddedNodeKey),
+	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 

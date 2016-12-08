@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,18 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package util
+package testutils
 
 import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func TestSucceedsSoon(t *testing.T) {
@@ -39,21 +36,4 @@ func TestSucceedsSoon(t *testing.T) {
 		}
 		return errors.Errorf("%s elapsed, waiting until %s elapses", elapsed, duration)
 	})
-}
-
-func TestNoZeroField(t *testing.T) {
-	type foo struct {
-		X, Y int
-	}
-	testFoo := foo{1, 2}
-	if err := NoZeroField(&testFoo); err != nil {
-		t.Fatal(err)
-	}
-	if err := NoZeroField(interface{}(testFoo)); err != nil {
-		t.Fatal(err)
-	}
-	testFoo.Y = 0
-	if err := NoZeroField(&testFoo); err == nil {
-		t.Fatal("expected an error")
-	}
 }

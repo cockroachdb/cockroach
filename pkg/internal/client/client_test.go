@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -259,7 +258,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 				}()
 				// Block until the non-transactional client has pushed us at
 				// least once.
-				util.SucceedsSoon(t, func() error {
+				testutils.SucceedsSoon(t, func() error {
 					mu.Lock()
 					defer mu.Unlock()
 					if _, ok := mu.m[string(key)]; ok {
