@@ -152,6 +152,11 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 			t = t.CopyNode()
 			t.Exprs[0] = parser.StarDatumInstance
+
+			// the StartDatumInstance refers implicitly to columns,
+			// so it is a dependent variable.
+			v.foundDependentVars = true
+
 			return true, t
 		}
 		return true, t
