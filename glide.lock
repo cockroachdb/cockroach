@@ -36,7 +36,7 @@ imports:
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
-  version: b5ca031b93fde49bfa2ba99aba423136aebf3c06
+  version: 894d369c4ea259b65f75563feeb06bea322a8450
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
