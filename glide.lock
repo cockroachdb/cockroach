@@ -1,5 +1,5 @@
-hash: f97869d3329aea5fd9e34771aaf95ad59b296f03c9095d9ad5017ed8d2bcd1fd
-updated: 2016-12-06T20:35:54.139578972Z
+hash: f1146668d1b64c6bb73e2a2f888975bf6e026ac486e26bcc47aecac5cc5b180c
+updated: 2016-12-08T04:22:04.906667276Z
 imports:
 - name: cloud.google.com/go
   version: 2b8eb373216db8c887f4934051ab8338581e3656
@@ -42,7 +42,7 @@ imports:
 - name: github.com/cockroachdb/cmux
   version: b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 - name: github.com/cockroachdb/cockroach-go
-  version: 2c874f130e4765aea4655923ff11c4c111397a41
+  version: 140a8c585a33363479fceb56093c277032a17894
   subpackages:
   - crdb
 - name: github.com/cockroachdb/crlfmt
@@ -54,7 +54,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: cfd10b4bbfc6a9a1cf2d3f5ec8e31dae31e15122
+  version: b713113094826715b431bab47ba2b8e1991cc056
   subpackages:
   - raft
   - raft/raftpb
@@ -63,7 +63,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 67095fbce3e4b079c3db62d08836548854a4b7ad
+  version: 844b92879f179f16a26ce441631880aa3079b7f4
   subpackages:
   - digest
   - reference
@@ -157,11 +157,13 @@ imports:
   - jsonpb
   - proto
   - protoc-gen-go/descriptor
+  - protoc-gen-go/generator
+  - protoc-gen-go/plugin
   - ptypes/timestamp
 - name: github.com/google/btree
   version: 925471ac9e2131377a91e1595defec898166fe49
 - name: github.com/google/go-github
-  version: 171a9316fc826fdb616072bd967483452eb1e2cf
+  version: 43e7458cf61b30944e822345dc028a649d7f87b4
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -174,6 +176,10 @@ imports:
   version: 84398b94e188ee336f307779b57b3aa91af7063c
   subpackages:
   - protoc-gen-grpc-gateway
+  - protoc-gen-grpc-gateway/descriptor
+  - protoc-gen-grpc-gateway/generator
+  - protoc-gen-grpc-gateway/gengateway
+  - protoc-gen-grpc-gateway/httprule
   - runtime
   - runtime/internal
   - third_party/googleapis/google/api
@@ -188,10 +194,14 @@ imports:
   - go-bindata
 - name: github.com/kisielk/errcheck
   version: db0ca22445717d1b2c51ac1034440e0a2a2de645
+  subpackages:
+  - internal/errcheck
 - name: github.com/kisielk/gotool
   version: 0de1eaf82fa3f583ce21fde859f1e7e0c5e9b220
 - name: github.com/kkaneda/returncheck
   version: bf081fa7155e3a27df1f056a49d50685edfa5b1b
+  subpackages:
+  - internal
 - name: github.com/kr/pretty
   version: cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 - name: github.com/kr/text
@@ -223,6 +233,12 @@ imports:
   version: beb68d938016d2dec1d1b078054f4d3db25f97be
 - name: github.com/mibk/dupl
   version: f008fcf5e62793d38bda510ee37aab8b0c68e76c
+  subpackages:
+  - job
+  - output
+  - suffixtree
+  - syntax
+  - syntax/golang
 - name: github.com/Microsoft/go-winio
   version: 24a3e3d3fc7451805e09d11e11e95d9a0a4f205e
 - name: github.com/montanaflynn/stats
@@ -230,7 +246,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: bdcc175572fd7abece6c831e643891b9331bc9e7
 - name: github.com/opencontainers/runc
-  version: 5974b4c7a1a4d4579c0c25cbb01b0070d1285bbc
+  version: 34f23cb99c30040e2ca82442eeb22d15a757f78d
   subpackages:
   - libcontainer/user
 - name: github.com/opentracing/basictracer-go
@@ -278,8 +294,6 @@ imports:
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
   version: 55eb11d21d2a31a3cc93838241d04800f52e823d
-  subpackages:
-  - formatters/logstash
 - name: github.com/spf13/cobra
   version: 9495bc009a56819bdb0ddbc1a373e29c140bc674
   subpackages:
@@ -335,16 +349,20 @@ imports:
   - language
   - transform
   - unicode/norm
+  - width
 - name: golang.org/x/tools
-  version: ae1141fc8b3e38d9e074b383af516745815897c3
+  version: 3d92dd60033c312e3ae7cac319c792271cf67e37
   subpackages:
   - cmd/goimports
   - cmd/goyacc
   - cmd/stringer
+  - cover
   - go/ast/astutil
   - go/buildutil
+  - go/gcimporter15
   - go/loader
   - go/types/typeutil
+  - imports
 - name: google.golang.org/api
   version: 3ef9447cad8d725923ca024dab57786299cf745a
   subpackages:
@@ -375,8 +393,6 @@ imports:
   subpackages:
   - compute/metadata
   - internal
-  - internal/opts
-  - storage
 - name: google.golang.org/grpc
   version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
   subpackages:
