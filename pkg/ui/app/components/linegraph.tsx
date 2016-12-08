@@ -7,7 +7,7 @@ import _ from "lodash";
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";
 import {
-  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ProcessDataPoints,
+  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ProcessDataPoints, seriesPalette,
 } from "./graphs";
 import Visualization from "./visualization";
 
@@ -15,7 +15,7 @@ import Visualization from "./visualization";
 const CHART_MARGINS: nvd3.Margin = {top: 20, right: 60, bottom: 20, left: 60};
 
 // Maximum number of series we will show in the legend. If there are more we hide the legend.
-const MAX_LEGEND_SERIES: number = 3;
+const MAX_LEGEND_SERIES: number = 4;
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -31,8 +31,6 @@ interface LineGraphProps extends MetricsDataComponentProps {
  * axis.
  */
 export class LineGraph extends React.Component<LineGraphProps, {}> {
-  static colors: d3.scale.Ordinal<string, string> = d3.scale.category10();
-
   // The SVG Element in the DOM used to render the graph.
   svgEl: SVGElement;
 
@@ -75,6 +73,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       .showYAxis(true)
       .showXAxis(this.props.xAxis || true)
       .xScale(d3.time.scale())
+      .color(seriesPalette)
       .margin(CHART_MARGINS);
 
     this.chart.xAxis

@@ -7,7 +7,7 @@ import _ from "lodash";
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";
 import {
-  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ProcessDataPoints,
+  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ProcessDataPoints, seriesPalette,
 } from "./graphs";
 import Visualization from "./visualization";
 
@@ -73,6 +73,7 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
       .showYAxis(true)
       .showXAxis(this.props.xAxis || true)
       .xScale(d3.time.scale())
+      .color(seriesPalette)
       .margin(CHART_MARGINS);
 
     this.chart.showControls(false);
