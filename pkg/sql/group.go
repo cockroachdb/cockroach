@@ -37,45 +37,54 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		return nil, nil
 	}
 
-	groupBy := append([]parser.Expr(nil), n.GroupBy...)
+	groupByExprs := make([]parser.Expr, len(n.GroupBy))
 
-	// Start by normalizing the GROUP BY expressions (to match what has been done to
-	// the SELECT expressions in addRender) so that we can compare to them later.
+	// A SELECT clause is valid if all its expressions are valid as well, one
+	// of the criteria for a valid expression is if it appears verbatim in one
+	// of the GROUP BY clauses.
+	// NB: "verbatim" above is defined using a string-equality comparison
+	// as an approximation of a recursive tree-equality comparison.
+	//
+	// For example:
+	// Valid:   `SELECT UPPER(k), SUM(v) FROM kv GROUP BY UPPER(k)`
+	// - `UPPER(k)` appears in GROUP BY.
+	// Invalid: `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
+	// - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
+	//
+	// In the construction of the outer selectNode, when renders are added (via
+	// addRender()), the expressions are normalized. In order to compare these
+	// normalized render expressions to GROUP BY expressions, we need to
+	// normalize the GROUP BY expressions as well.
 	// This is done before determining if aggregation is being performed, because
 	// that determination is made during validation, which will require matching
 	// expressions.
-	for i := range groupBy {
-		// Hold on to the original raw GROUP BY expression, which will be replaced by the
-		// original raw SELECT expression in the case of a GROUP BY <ordinal>. We will
-		// perform some verification on this which requires that the expression has not
-		// been modified by upper layers.
-		rawExpr := groupBy[i]
-
-		expr := parser.StripParens(rawExpr)
+	for i, expr := range n.GroupBy {
+		expr = parser.StripParens(expr)
 
 		// Check whether the GROUP BY clause refers to a rendered column
-		// specified in the original query.
+		// (specified in the original query) by index, e.g. `SELECT a, SUM(b)
+		// FROM y GROUP BY 1`.
 		col, err := p.colIndex(s.numOriginalCols, expr, "GROUP BY")
 		if err != nil {
 			return nil, err
 		}
 
 		if col != -1 {
-			groupBy[i] = s.render[col]
-			rawExpr = n.Exprs[col].Expr
+			groupByExprs[i] = s.render[col]
+			expr = n.Exprs[col].Expr
 		} else {
 			// We do not need to fully analyze the GROUP BY expression here
 			// (as per analyzeExpr) because this is taken care of by addRender
 			// below.
-			resolved, _, err := p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
+			resolvedExpr, _, err := p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 			if err != nil {
 				return nil, err
 			}
-			groupBy[i] = resolved
+			groupByExprs[i] = resolvedExpr
 		}
 
 		if err := p.parser.AssertNoAggregationOrWindowing(
-			rawExpr, "GROUP BY", p.session.SearchPath,
+			expr, "GROUP BY", p.session.SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -83,8 +92,8 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 
 	// Normalize and check the HAVING expression too if it exists.
 	var typedHaving parser.TypedExpr
-	var err error
 	if n.Having != nil {
+		var err error
 		typedHaving, err = p.analyzeExpr(n.Having.Expr, s.sourceInfo, s.ivarHelper,
 			parser.TypeBool, true, "HAVING")
 		if err != nil {
@@ -99,46 +108,60 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		render:  s.render,
 	}
 
-	visitor := extractAggregatesVisitor{
+	aggVisitor := extractAggregatesVisitor{
 		n:           group,
-		groupStrs:   make(map[string]struct{}, len(groupBy)),
+		groupStrs:   make(map[string]struct{}, len(groupByExprs)),
 		groupedCopy: new(extractAggregatesVisitor),
 	}
 
-	for _, e := range groupBy {
-		visitor.groupStrs[e.String()] = struct{}{}
+	checkVisitor := checkQueryVisitor{
+		groupStrs:   make(map[string]struct{}, len(groupByExprs)),
+		groupedCopy: new(checkQueryVisitor),
+	}
+
+	for _, e := range groupByExprs {
+		aggVisitor.groupStrs[e.String()] = struct{}{}
+		checkVisitor.groupStrs[e.String()] = struct{}{}
 	}
 
 	// A copy of the visitor that is used when a subtree appears in the GROUP BY.
 	// One copy is allocated up-front, rather than potentially several on-the-fly,
 	// to reduce allocations.
-	*visitor.groupedCopy = visitor
-	visitor.groupedCopy.groupedCopy = nil
+	*aggVisitor.groupedCopy = aggVisitor
+	aggVisitor.groupedCopy.groupedCopy = nil
+
+	*checkVisitor.groupedCopy = checkVisitor
+	checkVisitor.groupedCopy.groupedCopy = nil
+
+	// Loop over the render expressions and check for any malformed queries.
+	for _, r := range group.render {
+		if err := checkVisitor.check(r); err != nil {
+			return nil, err
+		}
+	}
+
+	if typedHaving != nil {
+		if err := checkVisitor.check(typedHaving); err != nil {
+			return nil, err
+		}
+		group.having = typedHaving
+	}
 
 	// Loop over the render expressions and extract any aggregate functions --
 	// IndexedVars are also replaced (with identAggregates, which just return the last
 	// value added to them for a bucket) to provide grouped-by values for each bucket.
 	// After extraction, group.render will be entirely rendered from aggregateFuncHolders,
 	// and group.funcs will contain all the functions which need to be fed values.
-	for i := range group.render {
-		typedExpr, err := visitor.extract(group.render[i])
-		if err != nil {
-			return nil, err
-		}
-		group.render[i] = typedExpr
+	for i, r := range group.render {
+		group.render[i] = aggVisitor.extract(r)
 	}
 
 	if typedHaving != nil {
-		var err error
-		typedHaving, err = visitor.extract(typedHaving)
-		if err != nil {
-			return nil, err
-		}
-		group.having = typedHaving
+		group.having = aggVisitor.extract(typedHaving)
 	}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
-	group.addNullBucketIfEmpty = len(groupBy) == 0
+	group.addNullBucketIfEmpty = len(groupByExprs) == 0
 
 	group.buckets = make(map[string]struct{})
 
@@ -167,7 +190,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	s.resetRenderColumns(newRenders, newColumns)
 
 	// Add the group-by expressions so they are available for bucketing.
-	for _, g := range groupBy {
+	for _, g := range groupByExprs {
 		if err := s.addRender(parser.SelectExpr{Expr: g}, parser.TypeAny); err != nil {
 			return nil, err
 		}
@@ -510,14 +533,82 @@ type extractAggregatesVisitor struct {
 	groupStrs map[string]struct{}
 
 	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
-	groupedCopy         *extractAggregatesVisitor
-	subAggregateVisitor parser.IsAggregateVisitor
-	err                 error
+	groupedCopy   *extractAggregatesVisitor
+	subAggVisitor parser.IsAggregateVisitor
 }
 
 var _ parser.Visitor = &extractAggregatesVisitor{}
 
 func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+	// This expression is in the GROUP BY - switch to the visitor that will accept
+	// IndexedVars for this and any subtrees.
+	if _, ok := v.groupStrs[expr.String()]; ok && v.groupedCopy != nil && v != v.groupedCopy {
+		expr, _ = parser.WalkExpr(v.groupedCopy, expr)
+		return false, expr
+	}
+
+	switch t := expr.(type) {
+	case *parser.FuncExpr:
+		if agg := t.GetAggregateConstructor(); agg != nil {
+			if len(t.Exprs) != 1 {
+				// Type checking has already run on these expressions thus
+				// if an aggregate function of the wrong arity gets here,
+				// something has gone really wrong. Additionally the query
+				// checker is not functioning correctly as it should have
+				// panicked there.
+				panic("query checker did not detect multiple arguments for aggregator")
+			}
+			argExpr := t.Exprs[0]
+
+			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
+			if t.Type == parser.Distinct {
+				f.seen = make(map[string]struct{})
+			}
+			v.n.funcs = append(v.n.funcs, f)
+			return false, f
+		}
+	case *parser.IndexedVar:
+		if v.groupedCopy != nil {
+			panic("query checker did not detect column not appearing in GROUP BY clauses or aggregation function")
+		}
+		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
+		v.n.funcs = append(v.n.funcs, f)
+		return false, f
+	}
+
+	if t, ok := expr.(parser.TypedExpr); ok {
+		defer v.subAggVisitor.Reset()
+		parser.WalkExprConst(&v.subAggVisitor, expr)
+
+		if !v.subAggVisitor.Aggregated {
+			f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
+			v.n.funcs = append(v.n.funcs, f)
+			return false, f
+		}
+	}
+	return true, expr
+}
+
+func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+
+// Extract aggregateFuncHolders from exprs that use aggregation.
+func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) parser.TypedExpr {
+	expr, _ := parser.WalkExpr(&v, typedExpr)
+	return expr.(parser.TypedExpr)
+}
+
+type checkQueryVisitor struct {
+	groupStrs map[string]struct{}
+
+	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
+	groupedCopy   *checkQueryVisitor
+	subAggVisitor parser.IsAggregateVisitor
+	err           error
+}
+
+var _ parser.Visitor = &checkQueryVisitor{}
+
+func (v *checkQueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -541,19 +632,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 			argExpr := t.Exprs[0]
 
-			defer v.subAggregateVisitor.Reset()
-			parser.WalkExprConst(&v.subAggregateVisitor, argExpr)
-			if v.subAggregateVisitor.Aggregated {
+			defer v.subAggVisitor.Reset()
+			if parser.WalkExprConst(&v.subAggVisitor, argExpr); v.subAggVisitor.Aggregated {
 				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s()", t.Func)
-				return false, expr
 			}
-
-			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
-			if t.Type == parser.Distinct {
-				f.seen = make(map[string]struct{})
-			}
-			v.n.funcs = append(v.n.funcs, f)
-			return false, f
+			return false, expr
 		}
 	case *parser.IndexedVar:
 		if v.groupedCopy != nil {
@@ -561,16 +644,14 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				t.String())
 			return true, expr
 		}
-		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
-		v.n.funcs = append(v.n.funcs, f)
-		return false, f
+		return false, expr
 	}
 	return true, expr
 }
 
-func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*checkQueryVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-// Extract aggregateFuncHolders from exprs that use aggregation and check if they are valid.
+// Check if expr provided is valid.
 // An expression is valid if:
 // - it is an aggregate expression, or
 // - it appears verbatim in groupBy, or
@@ -589,12 +670,9 @@ func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { retur
 // - `k` appears in GROUP BY, so `UPPER(k)` is OK, but...
 // Invalid:    `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
 // - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
-func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) (parser.TypedExpr, error) {
-	expr, _ := parser.WalkExpr(&v, typedExpr)
-	if v.err != nil {
-		return nil, v.err
-	}
-	return expr.(parser.TypedExpr), nil
+func (v checkQueryVisitor) check(typedExpr parser.TypedExpr) error {
+	parser.WalkExpr(&v, typedExpr)
+	return v.err
 }
 
 var _ parser.TypedExpr = &aggregateFuncHolder{}
@@ -681,9 +759,7 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 		found = a.create()
 	}
 
-	datum := found.Result()
-
-	return datum, nil
+	return found.Result(), nil
 }
 
 func (a *aggregateFuncHolder) ResolvedType() parser.Type {
