@@ -5527,12 +5527,14 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:949
 		{
+			/* SKIP DOC */
 			sqlVAL.union.val = &Backup{Database: Name(sqlDollar[3].str), To: &StrVal{s: sqlDollar[5].str}, IncrementalFrom: sqlDollar[6].union.strVal()}
 		}
 	case 60:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:953
 		{
+			/* SKIP DOC */
 			sqlVAL.union.val = &Restore{Database: Name(sqlDollar[3].str), From: &StrVal{s: sqlDollar[5].str}}
 		}
 	case 61:
