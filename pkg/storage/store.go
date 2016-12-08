@@ -2630,23 +2630,22 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 
 	ctx := s.AnnotateCtx(stream.Context())
 
-	if header.CanDecline {
-		// Check the bookie to see if we can apply the snapshot.
-		resp := s.reserve(ctx, reservationRequest{
-			StoreRequestHeader: StoreRequestHeader{
-				NodeID:  s.nodeDesc.NodeID,
-				StoreID: s.StoreID(),
-			},
-			RangeSize: header.RangeSize,
-			RangeID:   header.State.Desc.RangeID,
+	// Check the bookie to see if we can apply the snapshot.
+	resp := s.reserve(ctx, reservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			NodeID:  s.nodeDesc.NodeID,
+			StoreID: s.StoreID(),
+		},
+		RangeSize:  header.RangeSize,
+		RangeID:    header.State.Desc.RangeID,
+		CanDecline: header.CanDecline,
+	})
+	if !resp.Reserved {
+		return stream.Send(&SnapshotResponse{
+			Status: SnapshotResponse_DECLINED,
 		})
-		if !resp.Reserved {
-			return stream.Send(&SnapshotResponse{
-				Status: SnapshotResponse_DECLINED,
-			})
-		}
-		defer s.bookie.Fill(ctx, header.State.Desc.RangeID)
 	}
+	defer s.bookie.Fill(ctx, header.State.Desc.RangeID)
 
 	// Check to see if the snapshot can be applied but don't attempt to add
 	// a placeholder here, because we're not holding the replica's raftMu.
