@@ -151,9 +151,8 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 		log.AmbientContext{},
 		cfg.Gossip,
 		cfg.Clock,
-		rpcContext,
+		StorePoolNodeLivenessTrue,
 		TestTimeUntilStoreDeadOff,
-		stopper,
 		/* deterministic */ false,
 	)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
