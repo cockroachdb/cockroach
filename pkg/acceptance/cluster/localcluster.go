@@ -781,7 +781,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 }
 
 // NewClient implements the Cluster interface.
-func (l *LocalCluster) NewClient(ctx context.Context, t testing.TB, i int) *roachClient.DB {
+func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
 		User:       security.NodeUser,
 		SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
@@ -790,9 +790,9 @@ func (l *LocalCluster) NewClient(ctx context.Context, t testing.TB, i int) *roac
 	}, hlc.NewClock(hlc.UnixNano, 0), l.stopper)
 	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return roachClient.NewDB(roachClient.NewSender(conn))
+	return roachClient.NewDB(roachClient.NewSender(conn)), nil
 }
 
 // InternalIP returns the IP address used for inter-node communication.
