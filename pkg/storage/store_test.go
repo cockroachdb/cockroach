@@ -2649,3 +2649,44 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		}
 	}
 }
+
+func TestReserveSnapshotThrottling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc := testContext{}
+	tc.Start(t, stopper)
+	s := tc.store
+
+	ctx := context.Background()
+	cleanup, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := s.ReservationCount(); n != 1 {
+		t.Fatalf("expected 1 reservation, but found %d", n)
+	}
+
+	// Verify we don't allow concurrent snapshots by spawning a goroutine which
+	// will execute the cleanup after a short delay but only if another snapshot
+	// was not allowed through.
+	var boom int32
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		if atomic.LoadInt32(&boom) == 0 {
+			cleanup()
+		}
+	}()
+
+	cleanup2, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atomic.StoreInt32(&boom, 1)
+	cleanup2()
+
+	if n := s.ReservationCount(); n != 0 {
+		t.Fatalf("expected 0 reservations, but found %d", n)
+	}
+}
