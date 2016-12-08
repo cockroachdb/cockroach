@@ -1003,44 +1003,46 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 		}
 
 		// Wait for the range lease to finish, or the context to expire.
-		slowTimer := time.After(base.SlowRequestThreshold)
-		select {
-		case pErr = <-llChan:
-			if pErr != nil {
-				// Getting a LeaseRejectedError back means someone else got there
-				// first, or the lease request was somehow invalid due to a
-				// concurrent change. Convert the error to a NotLeaseHolderError.
-				if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
-					lease, _ := r.getLease()
-					var err error
-					if !r.IsLeaseValid(lease, r.store.Clock().Now()) {
-						err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
-					} else {
-						err = newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
+		pErr = func() *roachpb.Error {
+			slowTimer := time.After(base.SlowRequestThreshold)
+			for {
+				select {
+				case pErr = <-llChan:
+					if pErr != nil {
+						// Getting a LeaseRejectedError back means someone else got there
+						// first, or the lease request was somehow invalid due to a
+						// concurrent change. Convert the error to a NotLeaseHolderError.
+						if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
+							lease, _ := r.getLease()
+							var err error
+							if !r.IsLeaseValid(lease, r.store.Clock().Now()) {
+								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
+							} else {
+								err = newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
+							}
+							pErr = roachpb.NewError(err)
+						}
+						return pErr
 					}
-					pErr = roachpb.NewError(err)
+					log.Eventf(ctx, "lease acquisition succeeded: %+v", status.lease)
+					return nil
+				case <-slowTimer:
+					slowTimer = nil
+					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
+						base.SlowRequestThreshold)
+					r.store.metrics.SlowLeaseRequests.Inc(1)
+					defer r.store.metrics.SlowLeaseRequests.Dec(1)
+				case <-ctx.Done():
+					log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
+					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
+				case <-r.store.Stopper().ShouldStop():
+					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				}
-				return LeaseStatus{}, pErr
 			}
-			log.Eventf(ctx, "lease acquisition succeeded: %+v", status.lease)
-			continue
-		case <-slowTimer:
-			slowTimer = nil
-			log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
-				base.SlowRequestThreshold)
-			r.store.metrics.SlowLeaseRequests.Inc(1)
-			defer r.store.metrics.SlowLeaseRequests.Dec(1)
-
-		case <-ctx.Done():
-			log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
-			pErr = roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
-		case <-r.store.Stopper().ShouldStop():
-			pErr = roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
+		}()
+		if pErr != nil {
+			return LeaseStatus{}, pErr
 		}
-		if pErr == nil {
-			panic("pErr is nil")
-		}
-		return LeaseStatus{}, pErr
 	}
 }
 
