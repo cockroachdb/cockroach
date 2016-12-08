@@ -318,20 +318,6 @@ SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
 NULL 1
 
 query II
-SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
-----
-NULL 1
-4 2
-2 3
-
-query II
-SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
-----
-NULL 1
-4 2
-2 3
-
-query II
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
 ----
 2 3
@@ -784,3 +770,24 @@ EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
 0 /ab/primary/5/b 50   PARTIAL
 0 /ab/primary/5   NULL BUFFERED
 0 0               (5)  ROW
+
+query ITT
+EXPLAIN SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+----
+0   sort    +"COUNT(k)"
+1   group   v, count(k) GROUP BY (@3)
+2   scan    kv@primary
+
+query ITT
+EXPLAIN SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+----
+0   sort    +"COUNT(*)"
+1   group   v, count(*) GROUP BY (@3)
+2   scan    kv@primary
+
+query ITT
+EXPLAIN SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+----
+0   sort    +"COUNT(1)"
+1   group   v, count(1) GROUP BY (@3)
+2   scan    kv@primary
