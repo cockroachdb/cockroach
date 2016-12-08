@@ -1098,8 +1098,12 @@ func (m *multiTestContext) expireLeases() {
 	m.expireLeasesWithoutIncrementingEpochs()
 
 	// Increment epochs.
+	m.mu.RLock()
+	nls := append([]*storage.NodeLiveness(nil), m.nodeLivenesses...)
+	m.mu.RUnlock()
+
 	ctx := context.Background()
-	for idx, nl := range m.nodeLivenesses {
+	for idx, nl := range nls {
 		l, err := nl.Self()
 		if err != nil {
 			continue
