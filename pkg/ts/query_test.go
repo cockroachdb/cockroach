@@ -69,7 +69,14 @@ var (
 					Min:    proto.Float64(10),
 				},
 				{
-					Offset: 6,
+					Offset: 5,
+					Count:  1,
+					Sum:    0,
+					Max:    proto.Float64(0),
+					Min:    proto.Float64(0),
+				},
+				{
+					Offset: 9,
 					Count:  2,
 					Sum:    80,
 					Max:    proto.Float64(50),
@@ -515,32 +522,50 @@ func TestInterpolation(t *testing.T) {
 	}
 
 	testCases := []struct {
-		expected  []float64
-		extractFn extractFn
+		expected   []float64
+		derivative tspb.TimeSeriesQueryDerivative
+		extractFn  extractFn
 	}{
 		{
-			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 24, 28, 32, 36, 40, 0},
+			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 15, 10, 5, 0, 10, 20, 30, 40, 0},
+			tspb.TimeSeriesQueryDerivative_NONE,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
 			},
 		},
 		{
-			[]float64{3.4, 4.2, 5, 7.5, 10, 20, 30, 34, 38, 42, 46, 50, 0},
+			[]float64{3.4, 4.2, 5, 7.5, 10, 20, 30, 22.5, 15, 7.5, 0, 12.5, 25, 37.5, 50, 0},
+			tspb.TimeSeriesQueryDerivative_NONE,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Maximum()
 			},
 		},
 		{
-			[]float64{3.4, 4.2, 5, 7.5, 10, 35, 60, 64, 68, 72, 76, 80, 0},
+			[]float64{3.4, 4.2, 5, 7.5, 10, 35, 60, 45, 30, 15, 0, 20, 40, 60, 80, 0},
+			tspb.TimeSeriesQueryDerivative_NONE,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Sum
+			},
+		},
+		{
+			[]float64{0.8, 0.8, 0.8, 2.5, 2.5, 5, 5, -5, -5, -5, -5, 10, 10, 10, 10, 0},
+			tspb.TimeSeriesQueryDerivative_DERIVATIVE,
+			func(s roachpb.InternalTimeSeriesSample) float64 {
+				return s.Average()
+			},
+		},
+		{
+			[]float64{0.8, 0.8, 0.8, 2.5, 2.5, 5, 5, 0, 0, 0, 0, 10, 10, 10, 10, 0},
+			tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE,
+			func(s roachpb.InternalTimeSeriesSample) float64 {
+				return s.Average()
 			},
 		},
 	}
 
 	for i, tc := range testCases {
 		actual := make([]float64, 0, len(tc.expected))
-		iter := newInterpolatingIterator(ds, 0, 10, tc.extractFn, downsampleSum)
+		iter := newInterpolatingIterator(ds, 0, 10, tc.extractFn, downsampleSum, tc.derivative)
 		for i := 0; i < len(tc.expected); i++ {
 			iter.advanceTo(int32(i))
 			actual = append(actual, iter.value())
@@ -579,25 +604,25 @@ func TestAggregation(t *testing.T) {
 		aggFunc  func(ui aggregatingIterator) float64
 	}{
 		{
-			[]float64{4.4, 12, 17.5, 35, 40, 80, 56},
+			[]float64{4.4, 12, 17.5, 35, 40, 36, 92, 56},
 			func(ui aggregatingIterator) float64 {
 				return ui.sum()
 			},
 		},
 		{
-			[]float64{3.4, 7, 10, 25, 20, 40, 56},
+			[]float64{3.4, 7, 10, 25, 20, 36, 52, 56},
 			func(ui aggregatingIterator) float64 {
 				return ui.max()
 			},
 		},
 		{
-			[]float64{1, 5, 7.5, 10, 20, 40, 0},
+			[]float64{1, 5, 7.5, 10, 20, 0, 40, 0},
 			func(ui aggregatingIterator) float64 {
 				return ui.min()
 			},
 		},
 		{
-			[]float64{2.2, 6, 8.75, 17.5, 20, 40, 28},
+			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 28},
 			func(ui aggregatingIterator) float64 {
 				return ui.avg()
 			},
@@ -610,8 +635,12 @@ func TestAggregation(t *testing.T) {
 	for i, tc := range testCases {
 		actual := make([]float64, 0, len(tc.expected))
 		iters := aggregatingIterator{
-			newInterpolatingIterator(dataSpan1, 0, 10, extractFn, downsampleSum),
-			newInterpolatingIterator(dataSpan2, 0, 10, extractFn, downsampleSum),
+			newInterpolatingIterator(
+				dataSpan1, 0, 10, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
+			),
+			newInterpolatingIterator(
+				dataSpan2, 0, 10, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
+			),
 		}
 		iters.init()
 		for iters.isValid() {
@@ -711,11 +740,6 @@ func (tm *testModel) assertQuery(
 	}
 
 	// Iterate over data in all dataSpans and construct expected datapoints.
-	var startOffset int32
-	isDerivative := q.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE
-	if isDerivative {
-		startOffset = -1
-	}
 	extractFn, err := getExtractionFunction(q.GetDownsampler())
 	if err != nil {
 		tm.t.Fatal(err)
@@ -726,7 +750,12 @@ func (tm *testModel) assertQuery(
 	}
 	var iters aggregatingIterator
 	for _, ds := range dataSpans {
-		iters = append(iters, newInterpolatingIterator(*ds, startOffset, sampleDuration, extractFn, downsampleFn))
+		iters = append(
+			iters,
+			newInterpolatingIterator(
+				*ds, 0, sampleDuration, extractFn, downsampleFn, q.GetDerivative(),
+			),
+		)
 	}
 
 	iters.init()
@@ -756,30 +785,12 @@ func (tm *testModel) assertQuery(
 		}
 	}
 
-	var last tspb.TimeSeriesDatapoint
-	if isDerivative {
-		last = currentVal()
-		if iters.offset() < 0 {
-			iters.advance()
-		}
-	}
 	for iters.isValid() && iters.timestamp() <= end {
-		current := currentVal()
-		result := current
-		if isDerivative {
-			dTime := (current.TimestampNanos - last.TimestampNanos) / int64(time.Second)
-			if dTime == 0 {
-				result.Value = 0
-			} else {
-				result.Value = (current.Value - last.Value) / float64(dTime)
-			}
-			if result.Value < 0 &&
-				q.GetDerivative() == tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
-				result.Value = 0
-			}
+		result := currentVal()
+		if q.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
+			result.Value = result.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
 		}
 		expectedDatapoints = append(expectedDatapoints, result)
-		last = current
 		iters.advance()
 	}
 
