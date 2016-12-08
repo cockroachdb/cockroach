@@ -5,7 +5,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import { IRouter, IInjectedProps } from "react-router";
 
-import Selector, { SelectorOption } from "../../components/dropdown";
+import Dropdown, { DropdownOption } from "../../components/dropdown";
 import { PageConfig, PageConfigItem } from "../../components/pageconfig";
 
 import { AdminUIState } from "../../redux/state";
@@ -41,8 +41,8 @@ class DatabaseListNav extends React.Component<{selected: string}, {}> {
   render() {
     return <PageConfig>
       <PageConfigItem>
-        <Selector title="View" options={databasePages} selected={this.props.selected}
-                  onChange={(selected: SelectorOption) => {
+        <Dropdown title="View" options={databasePages} selected={this.props.selected}
+                  onChange={(selected: DropdownOption) => {
                     this.context.router.push(`databases/${selected.value}`);
                   }} />
       </PageConfigItem>

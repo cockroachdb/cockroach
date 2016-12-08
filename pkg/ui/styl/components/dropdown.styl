@@ -18,4 +18,24 @@
     vertical-align middle
     width 200px
 
+  &__side-arrow
+    font-family Lato-Bold
+    display none
+    color $secondary-blue-3
+    cursor pointer
+    &:first-child
+      border-right 1px solid $grey-blue
+      padding 1rem 20px
+    &:last-child
+      border-left 1px solid $grey-blue
+      padding 1rem 20px
+    &[disabled]
+      background-color $lighter-gray
+      cursor auto
+      polyline
+        stroke $light-gray
+  &--side-arrows
+    padding 0
+    .dropdown__side-arrow
+      display inline
 // NOTE: react-select styles can be found in shame.styl
