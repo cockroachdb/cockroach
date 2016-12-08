@@ -43,6 +43,9 @@ This snapshot was built and is managed using `glide`.
 The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
 * run `./scripts/glide.sh` in `cockroachdb/cockroach`.
 * add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
+	nb: glide uses `import` statements as the starting point when determining what to vendor.
+	- if you are importing your new depenency in code, you should be fine.
+	- if you are not (e.g. a binary tool), you need to add it to build/tool_imports.go to force an import.
 * update dependencies to their latest version with `./scripts/glide.sh up`
   - to pin a dependency to a particular version, add a `version: ...` line to `glide.yaml`, then update.
   - to update a pinned dependency, change the version in `glide.yaml`, then update.

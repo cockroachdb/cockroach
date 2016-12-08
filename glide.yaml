@@ -11,39 +11,10 @@ import:
   version: 7248742ae7127347a52ab9d215451c213b7b59da
 - package: github.com/gogo/protobuf
   version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
-- package: github.com/grpc-ecosystem/grpc-gateway
-  subpackages:
-  - protoc-gen-grpc-gateway
 - package: golang.org/x/net
   version: 97edce0b2e423f6a8debb459af47f4a3cb4ff954
 - package: google.golang.org/grpc
   version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
-- package: github.com/jteeuwen/go-bindata
-  subpackages:
-  - go-bindata
-- package: github.com/mattn/goveralls
-- package: github.com/client9/misspell
-  subpackages:
-  - cmd/misspell
-- package: github.com/cockroachdb/crlfmt
-- package: github.com/cockroachdb/stress
-- package: github.com/golang/lint
-  subpackages:
-  - golint
-- package: github.com/kisielk/errcheck
-- package: github.com/kkaneda/returncheck
-- package: github.com/mdempsky/unconvert
-- package: github.com/mibk/dupl
-- package: github.com/robfig/glock
-- package: github.com/wadey/gocovmerge
-- package: golang.org/x/tools
-  subpackages:
-  - cmd/goimports
-  - cmd/goyacc
-  - cmd/stringer
-- package: github.com/golang/glog
-- package: github.com/pborman/uuid
-- package: github.com/agtorre/gocolorize
 - package: google.golang.org/api
   version: 3ef9447cad8d725923ca024dab57786299cf745a
 - package: cloud.google.com/go
