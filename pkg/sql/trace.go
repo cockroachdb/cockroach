@@ -24,8 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/opentracing/basictracer-go"
-	"github.com/opentracing/opentracing-go"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 )
 
 // explainTraceNode is a planNode that wraps another node and converts DebugValues() results to a
@@ -124,10 +125,10 @@ func (n *explainTraceNode) Next() (bool, error) {
 			n.exhausted = true
 			sp := opentracing.SpanFromContext(n.txn.Context)
 			if err != nil {
-				sp.LogEvent(err.Error())
+				sp.LogFields(otlog.String("event", err.Error()))
 				return false, err
 			}
-			sp.LogEvent("tracing completed")
+			sp.LogFields(otlog.String("event", "tracing completed"))
 			sp.Finish()
 			sp = nil
 			n.txn.Context = opentracing.ContextWithSpan(n.txn.Context, nil)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 )
@@ -126,14 +127,15 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 		}
 
 		if sp != nil {
-			// TODO(radu): use sp.LogFields with "event" or "error" key.
-			sp.LogEvent(msg)
+			// TODO(radu): pass tags directly to sp.LogKV when LightStep supports
+			// that.
+			sp.LogFields(otlog.String("event", msg))
 			if isErr {
 				// TODO(radu): figure out a way to signal that this is an error. We
-				// could use LogEventWithPayload and pass an error or special sentinel
-				// as the payload. Things like NetTraceIntegrator would need to be
-				// modified to understand the difference. We could also set a special
-				// Tag or Baggage on the span. See #8827 for more discussion.
+				// could use a different "error" key (provided it shows up in
+				// LightStep). Things like NetTraceIntegrator would need to be modified
+				// to understand the difference. We could also set a special Tag or
+				// Baggage on the span. See #8827 for more discussion.
 			}
 		} else {
 			el.Lock()

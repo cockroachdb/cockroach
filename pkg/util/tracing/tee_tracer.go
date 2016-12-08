@@ -192,24 +192,24 @@ func (ts *TeeSpan) LogKV(alternatingKeyValues ...interface{}) {
 }
 
 // LogEvent is part of the opentracing.Span interface.
+//
+// Deprecated: use LogKV/LogFields.
 func (ts *TeeSpan) LogEvent(event string) {
-	for _, sp := range ts.spans {
-		sp.LogEvent(event)
-	}
+	panic("deprecated")
 }
 
 // LogEventWithPayload is part of the opentracing.Span interface.
+//
+// Deprecated: use LogKV/LogFields.
 func (ts *TeeSpan) LogEventWithPayload(event string, payload interface{}) {
-	for _, sp := range ts.spans {
-		sp.LogEventWithPayload(event, payload)
-	}
+	panic("deprecated")
 }
 
 // Log is part of the opentracing.Span interface.
+//
+// Deprecated: use LogKV/LogFields.
 func (ts *TeeSpan) Log(data opentracing.LogData) {
-	for _, sp := range ts.spans {
-		sp.Log(data)
-	}
+	panic("deprecated")
 }
 
 // SetBaggageItem is part of the opentracing.Span interface.
