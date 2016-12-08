@@ -45,8 +45,10 @@ func testingTracer(ev *events) opentracing.Tracer {
 				*ev = append(*ev, fmt.Sprintf("%s:start", op))
 			case basictracer.EventFinish:
 				*ev = append(*ev, fmt.Sprintf("%s:finish", op))
+			case basictracer.EventLogFields:
+				*ev = append(*ev, fmt.Sprintf("%s:%s", op, t.Fields[0].Value()))
 			case basictracer.EventLog:
-				*ev = append(*ev, fmt.Sprintf("%s:%s", op, t.Event))
+				panic("deprecated")
 			}
 		}
 	}
