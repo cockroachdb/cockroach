@@ -11,13 +11,17 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
-// +build !gc
+package testutils
 
-package sql_test
+import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 
-func (*logicTest) traceStart(_ string) {}
+// StressEnv is the environment variable used to signal that the process is
+// running as part of CockroachDB's nightly stress tests.
+const StressEnv = "COCKROACH_NIGHTLY_STRESS"
 
-func (*logicTest) traceStop() {}
+// Stress returns true iff the process is running as part of CockroachDB's
+// nightly stress tests.
+func Stress() bool {
+	return envutil.EnvOrDefaultBool(StressEnv, false)
+}

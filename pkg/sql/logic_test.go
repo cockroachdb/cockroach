@@ -14,8 +14,6 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-// +build !stress
-
 package sql_test
 
 import (
@@ -1042,6 +1040,10 @@ func (t *logicTest) success(file string) {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if testutils.Stress() {
+		t.Skip()
+	}
 
 	var globs []string
 	if *bigtest {

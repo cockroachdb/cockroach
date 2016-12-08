@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-// +build !stress,gc
+// +build gc
 
 package sql_test
 
