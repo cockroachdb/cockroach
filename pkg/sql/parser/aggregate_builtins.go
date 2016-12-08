@@ -71,6 +71,11 @@ type AggregateFunc interface {
 // execution.
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
+	"array_agg": {
+		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate),
+		makeAggBuiltin(TypeString, TypeStringArray, newStringArrayAggregate),
+	},
+
 	"avg": {
 		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate),
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate),
@@ -149,6 +154,7 @@ func countImpls() []Builtin {
 	return r
 }
 
+var _ AggregateFunc = &arrayAggregate{}
 var _ AggregateFunc = &avgAggregate{}
 var _ AggregateFunc = &countAggregate{}
 var _ AggregateFunc = &MaxAggregate{}
@@ -185,6 +191,37 @@ func (a *identAggregate) Add(datum Datum) {
 // Result returns the value most recently passed to Add.
 func (a *identAggregate) Result() Datum {
 	return a.val
+}
+
+type arrayAggregate struct {
+	arr        *DArray
+	sawNonNull bool
+}
+
+func newIntArrayAggregate() AggregateFunc {
+	return &arrayAggregate{arr: NewDArray(TypeInt)}
+}
+
+func newStringArrayAggregate() AggregateFunc {
+	return &arrayAggregate{arr: NewDArray(TypeString)}
+}
+
+// Add accumulates the passed datum into the array.
+func (a *arrayAggregate) Add(datum Datum) {
+	if datum != DNull {
+		a.sawNonNull = true
+	}
+	if err := a.arr.Append(datum); err != nil {
+		panic(fmt.Sprintf("error appending to array: %s", err))
+	}
+}
+
+// Result returns an array of all datums passed to Add.
+func (a *arrayAggregate) Result() Datum {
+	if a.sawNonNull {
+		return a.arr
+	}
+	return DNull
 }
 
 type avgAggregate struct {
