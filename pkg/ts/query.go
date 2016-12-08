@@ -399,19 +399,27 @@ func (dsi *downsamplingIterator) computeEnd() {
 //
 // Values for missing offsets are computed using linear interpolation from the
 // nearest real samples preceding and following the missing offset.
+//
+// If the derivative option is set, value() will return the derivative of the
+// series at the current offset in units per offset.
 type interpolatingIterator struct {
-	offset   int32                // Current offset within dataSpan
-	nextReal downsamplingIterator // Next sample with an offset >= iterator's offset
-	prevReal downsamplingIterator // Prev sample with offset < iterator's offset
+	offset     int32                // Current offset within dataSpan
+	nextReal   downsamplingIterator // Next sample with an offset >= iterator's offset
+	prevReal   downsamplingIterator // Prev sample with offset < iterator's offset
+	derivative tspb.TimeSeriesQueryDerivative
 }
 
 // newInterpolatingIterator returns an interpolating iterator for the given
-// dataSpan. The iterator is initialized to position startOffset, which should
-// be 0 when querying non-derivatives and -1 when querying a derivative. Values
+// dataSpan. The iterator is initialized to position startOffset. Values
 // returned by the iterator will be generated from samples using the supplied
 // downsampleFn.
 func newInterpolatingIterator(
-	ds dataSpan, startOffset int32, sampleNanos int64, extractFn extractFn, downsampleFn downsampleFn,
+	ds dataSpan,
+	startOffset int32,
+	sampleNanos int64,
+	extractFn extractFn,
+	downsampleFn downsampleFn,
+	derivative tspb.TimeSeriesQueryDerivative,
 ) interpolatingIterator {
 	if len(ds.datas) == 0 {
 		return interpolatingIterator{}
@@ -419,8 +427,9 @@ func newInterpolatingIterator(
 
 	nextReal := newDownsamplingIterator(ds, startOffset, sampleNanos, extractFn, downsampleFn)
 	iterator := interpolatingIterator{
-		offset:   startOffset,
-		nextReal: nextReal,
+		offset:     startOffset,
+		nextReal:   nextReal,
+		derivative: derivative,
 	}
 
 	prevReal := nextReal
@@ -460,26 +469,40 @@ func (ii *interpolatingIterator) midTimestamp() int64 {
 	return dsi.underlyingData.startNanos + (int64(ii.offset) * dsi.sampleNanos) + (dsi.sampleNanos / 2)
 }
 
-// value returns the value at the current offset of this iterator.
+// value returns the value at the current offset of this iterator, or the
+// derivative at the current offset.
 func (ii *interpolatingIterator) value() float64 {
 	if !ii.isValid() {
 		return 0
 	}
-	if ii.nextReal.offset() == ii.offset {
+	isDerivative := ii.derivative != tspb.TimeSeriesQueryDerivative_NONE
+	if !isDerivative && ii.nextReal.offset() == ii.offset {
 		return ii.nextReal.value()
 	}
-	// Cannot interpolate if previous value is invalid.
+	// Cannot interpolate or compute derivative if previous value is invalid.
 	if !ii.prevReal.isValid() {
 		return 0
 	}
 
-	// Linear interpolation of value at the current offset.
+	// Linear interpolation of derivative or value at the current offset.
 	off := float64(ii.offset)
-	nextAvg := ii.nextReal.value()
+	nextVal := ii.nextReal.value()
 	nextOff := float64(ii.nextReal.offset())
-	prevAvg := ii.prevReal.value()
+	prevVal := ii.prevReal.value()
 	prevOff := float64(ii.prevReal.offset())
-	return prevAvg + (nextAvg-prevAvg)*(off-prevOff)/(nextOff-prevOff)
+
+	// Note: The derivative value could be factored out into a variable and used
+	// for all of these returns, but doing so seems to introduce a greater
+	// incidence of floating point artifacts.
+	if !isDerivative {
+		return prevVal + (nextVal-prevVal)*(off-prevOff)/(nextOff-prevOff)
+	}
+	deriv := (nextVal - prevVal) / (nextOff - prevOff)
+	if ii.derivative == tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE &&
+		deriv < 0 {
+		return 0
+	}
+	return deriv
 }
 
 // An aggregatingIterator jointly advances multiple interpolatingIterators,
@@ -606,14 +629,6 @@ func (ai aggregatingIterator) timestamp() int64 {
 	return ai[0].midTimestamp()
 }
 
-// offset returns the current offset of the iterator.
-func (ai aggregatingIterator) offset() int32 {
-	if !ai.isValid() {
-		return 0
-	}
-	return ai[0].offset
-}
-
 // sum returns the sum of the current values of the interpolatingIterators being
 // aggregated.
 func (ai aggregatingIterator) sum() float64 {
@@ -659,22 +674,37 @@ func (ai aggregatingIterator) min() float64 {
 // Query returns datapoints for the named time series during the supplied time
 // span.  Data is returned as a series of consecutive data points.
 //
-// Data is queried only at the queryResolution supplied: if data for the named
-// time series is not stored at the given resolution, an empty result will be
-// returned.
+// Raw data is queried only at the queryResolution supplied: if data for the
+// named time series is not stored at the given resolution, an empty result will
+// be returned.
 //
-// Data is downsampled into intervals of the given sampleDuration, which must
-// have a length >= queryResolution.SampleDuration(), and must be an even
-// multiple of queryResolution.SampleDuration().
+// Raw data is converted into query results through a number of processing
+// steps, which are executed in the following order:
 //
-// All data stored on the server is downsampled to some degree; the data points
-// returned represent the average value within a sample period. Each datapoint's
-// timestamp falls in the middle of the sample period it represents.
+// 1. Downsampling
+// 2. Rate calculation (if requested)
+// 3. Interpolation and Aggregation
+//
+// Raw data stored on the server is already downsampled into samples with
+// interval length queryResolution.SampleDuration(); however, Result data can be
+// further downsampled into a longer sample intervals based on a provided
+// sampleDuration. sampleDuration must have a sample duration which is a
+// positive integer multiple of the queryResolution's sample duration. The
+// downsampling operation can compute a sum, total, max or min. Each downsampled
+// datapoint's timestamp falls in the middle of the sample period it represents.
+//
+// After downsampling, values can be converted into a rate if requested by the
+// query. Each data point's value is replaced by the derivative of the series at
+// that timestamp, computed by comparing the datapoint to its predecessor. If a
+// query requests a derivative, the returned value for each datapoint is
+// expressed in units per second.
 //
 // If data for the named time series was collected from multiple sources, each
 // returned datapoint will represent the sum of datapoints from all sources at
 // the same time. The returned string slices contains a list of all sources for
-// the metric which were aggregated to produce the result.
+// the metric which were aggregated to produce the result. In the case where one
+// series is missing a data point that is present in other series, the missing
+// data points for that series will be interpolated using linear interpolation.
 func (db *DB) Query(
 	ctx context.Context,
 	query tspb.Query,
@@ -761,14 +791,6 @@ func (db *DB) Query(
 		return nil, nil, err
 	}
 
-	// If we are returning a derivative, iteration needs to start at offset -1
-	// (in order to correctly compute the rate of change at offset 0).
-	var startOffset int32
-	isDerivative := query.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE
-	if isDerivative {
-		startOffset = -1
-	}
-
 	// Create an interpolatingIterator for each dataSpan, adding each iterator
 	// into a aggregatingIterator collection. This is also where we compute a
 	// list of all sources with data present in the query.
@@ -777,7 +799,7 @@ func (db *DB) Query(
 	for name, span := range sourceSpans {
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
-			*span, startOffset, sampleDuration, extractor, downsampler,
+			*span, 0, sampleDuration, extractor, downsampler, query.GetDerivative(),
 		))
 	}
 
@@ -805,42 +827,17 @@ func (db *DB) Query(
 		return nil, sources, nil
 	}
 
-	var last tspb.TimeSeriesDatapoint
-	if isDerivative {
-		last = tspb.TimeSeriesDatapoint{
-			TimestampNanos: iters.timestamp(),
-			Value:          valueFn(),
-		}
-		// For derivatives, the iterator was initialized at offset -1 in order
-		// to calculate the rate of change at offset zero. However, in some
-		// cases (such as the very first value recorded) offset -1 is not
-		// available. In this case, we treat the rate-of-change at the first
-		// offset as zero.
-		if iters.offset() < 0 {
-			iters.advance()
-		}
-	}
 	var responseData []tspb.TimeSeriesDatapoint
+
 	for iters.isValid() && iters.timestamp() <= endNanos {
-		current := tspb.TimeSeriesDatapoint{
+		response := tspb.TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          valueFn(),
 		}
-		response := current
-		if isDerivative {
-			dTime := (current.TimestampNanos - last.TimestampNanos) / time.Second.Nanoseconds()
-			if dTime == 0 {
-				response.Value = 0
-			} else {
-				response.Value = (current.Value - last.Value) / float64(dTime)
-			}
-			if response.Value < 0 &&
-				query.GetDerivative() == tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
-				response.Value = 0
-			}
+		if query.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
+			response.Value = response.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
 		}
 		responseData = append(responseData, response)
-		last = current
 		iters.advance()
 	}
 
