@@ -43,9 +43,10 @@ func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 func TestRuleSolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	stopper, _, _, storePool := createTestStorePool(
+	stopper, _, _, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff,
 		/* deterministic */ false,
+		/* defaultNodeLiveness */ true,
 	)
 	defer stopper.Stop()
 

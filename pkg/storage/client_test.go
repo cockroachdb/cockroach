@@ -151,9 +151,8 @@ func createTestStoreWithEngine(
 		log.AmbientContext{},
 		storeCfg.Gossip,
 		storeCfg.Clock,
-		rpcContext,
+		storage.StorePoolNodeLivenessTrue,
 		storage.TestTimeUntilStoreDeadOff,
-		stopper,
 		/* deterministic */ false,
 	)
 	storeCfg.Transport = storage.NewDummyRaftTransport()
@@ -602,9 +601,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 		cfg = storage.TestStoreConfig(m.clocks[i])
 	}
 	cfg.Transport = m.transport
-	cfg.DB = m.dbs[i]
 	cfg.Gossip = m.gossips[i]
-	cfg.StorePool = m.storePools[i]
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
 	return cfg
@@ -647,14 +644,13 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	m.dbs[idx] = client.NewDB(sender)
 }
 
-func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
+func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
 	m.storePools[idx] = storage.NewStorePool(
 		log.AmbientContext{},
 		m.gossips[idx],
 		m.clock,
-		m.rpcContext,
+		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
 		m.timeUntilStoreDead,
-		stopper,
 		/* deterministic */ false,
 	)
 }
@@ -716,17 +712,19 @@ func (m *multiTestContext) addStore(idx int) {
 		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
 	}
 
-	m.populateStorePool(idx, stopper)
-	m.populateDB(idx, stopper)
-
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
 	cfg.SetDefaults()
+	m.populateDB(idx, stopper)
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
 		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
+	m.populateStorePool(idx, m.nodeLivenesses[idx])
+	cfg.DB = m.dbs[idx]
 	cfg.NodeLiveness = m.nodeLivenesses[idx]
+	cfg.StorePool = m.storePools[idx]
+
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{
@@ -859,16 +857,17 @@ func (m *multiTestContext) restartStore(i int) {
 	m.mu.Lock()
 	stopper := stop.NewStopper()
 	m.stoppers[i] = stopper
-	m.populateDB(i, stopper)
-	m.populateStorePool(i, stopper)
-
 	cfg := m.makeStoreConfig(i)
 	cfg.SetDefaults()
+	m.populateDB(i, stopper)
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
 		log.AmbientContext{Tracer: tracing.NewTracer()}, m.clocks[i], m.dbs[i], m.gossips[i],
 		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
+	m.populateStorePool(i, m.nodeLivenesses[i])
+	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
+	cfg.StorePool = m.storePools[i]
 	store := storage.NewStore(cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	m.stores[i] = store
 
