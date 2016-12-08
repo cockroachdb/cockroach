@@ -37,7 +37,10 @@ func TestPut(t *testing.T) {
 }
 
 func testPutInner(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	db := c.NewClient(ctx, t, 0)
+	db, err := c.NewClient(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	errs := make(chan error, c.NumNodes())
 	start := timeutil.Now()
@@ -76,7 +79,9 @@ func testPutInner(ctx context.Context, t *testing.T, c cluster.Cluster, cfg clus
 			loadedCount := atomic.LoadInt64(&count)
 			log.Infof(ctx, "%d (%d/s)", loadedCount, loadedCount-baseCount)
 			c.Assert(ctx, t)
-			cluster.Consistent(ctx, t, c)
+			if err := cluster.Consistent(ctx, c); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 

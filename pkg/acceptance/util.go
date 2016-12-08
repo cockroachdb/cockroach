@@ -399,7 +399,10 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			// Reconnect on every iteration; gRPC will eagerly tank the connection
 			// on transport errors. Always talk to node 0 because it's guaranteed
 			// to exist.
-			client := c.NewClient(ctx, t, 0)
+			client, err := c.NewClient(ctx, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			var desc roachpb.RangeDescriptor
 			if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {

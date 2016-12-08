@@ -238,8 +238,8 @@ func chaosMonkey(
 
 		preCount := state.counts()
 
-		madeProgress := func() bool {
-			newCounts := state.counts()
+		madeProgress := func(lastIdx int) bool {
+			newCounts := state.counts()[:lastIdx]
 			for i := range newCounts {
 				if newCounts[i] > preCount[i] {
 					return true
@@ -250,11 +250,19 @@ func chaosMonkey(
 
 		// Sleep until at least one client is writing successfully.
 		log.Warningf(ctx, "round %d: monkey sleeping while cluster recovers...", curRound)
-		for !state.done() && !madeProgress() {
+		for !state.done() && !madeProgress(len(preCount)) {
 			time.Sleep(time.Second)
 		}
 		c.Assert(ctx, state.t)
-		cluster.Consistent(ctx, state.t, c)
+
+		// Sleep until the first client is writing successfully, as that is the
+		// node that will be used by cluster.Consistent().
+		for !state.done() && !madeProgress(1) {
+			time.Sleep(time.Second)
+		}
+		if err := cluster.Consistent(ctx, c); err != nil {
+			state.t.Error(err)
+		}
 		log.Warningf(ctx, "round %d: cluster recovered", curRound)
 	}
 }
