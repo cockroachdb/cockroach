@@ -30,7 +30,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -176,7 +175,8 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 func createTestAllocator(
 	deterministic bool, useRuleSolver bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff, deterministic)
+	stopper, g, manualClock, storePool, _ := createTestStorePool(
+		TestTimeUntilStoreDeadOff, deterministic, true /* defaultNodeLiveness */)
 	a := MakeAllocator(storePool, AllocatorOptions{
 		AllowRebalance: true,
 		UseRuleSolver:  useRuleSolver,
@@ -195,24 +195,22 @@ func mockStorePool(
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
-	storePool.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
+	liveNodeSet := map[roachpb.NodeID]struct{}{}
+	storePool.mu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
-		detail := newStoreDetail(context.TODO())
+		liveNodeSet[roachpb.NodeID(storeID)] = struct{}{}
+		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-
-		storePool.mu.storeDetails[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
-		detail := newStoreDetail(context.TODO())
-		detail.dead = true
+		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		storePool.mu.storeDetails[storeID] = detail
 	}
 	for storeID, detail := range storePool.mu.storeDetails {
 		for _, replica := range deadReplicas {
@@ -222,6 +220,13 @@ func mockStorePool(
 			detail.deadReplicas[replica.RangeID] = append(detail.deadReplicas[replica.RangeID], replica.Replica)
 		}
 	}
+
+	// Set the node liveness function using the set we constructed.
+	storePool.nodeLivenessFn =
+		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) bool {
+			_, ok := liveNodeSet[nodeID]
+			return ok
+		}
 }
 
 func runToggleRuleSolver(t *testing.T, test func(useRuleSolver bool, t *testing.T)) {
@@ -1761,9 +1766,8 @@ func exampleRebalancingCore(useRuleSolver bool) {
 		log.AmbientContext{},
 		g,
 		clock,
-		nil,
+		newMockNodeLiveness(true /* defaultNodeLiveness */).nodeLivenessFunc,
 		TestTimeUntilStoreDeadOff,
-		stopper,
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(sp, AllocatorOptions{
