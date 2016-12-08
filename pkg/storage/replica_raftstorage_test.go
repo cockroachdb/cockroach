@@ -78,7 +78,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	}
 	rep.SetMaxBytes(snapSize)
 
-	if pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+	if _, pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 

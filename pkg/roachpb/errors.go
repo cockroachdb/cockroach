@@ -258,7 +258,12 @@ func (e *NotLeaseHolderError) Error() string {
 }
 
 func (e *NotLeaseHolderError) message(_ *Error) string {
-	return fmt.Sprintf("range %d: replica %s not lease holder; %s is", e.RangeID, e.Replica, e.LeaseHolder)
+	if e.LeaseHolder == nil {
+		return fmt.Sprintf("range %d: replica %s not lease holder; lease holder unknown", e.RangeID, e.Replica)
+	} else if e.Lease != nil {
+		return fmt.Sprintf("range %d: replica %s not lease holder; current lease is %s", e.RangeID, e.Replica, e.Lease)
+	}
+	return fmt.Sprintf("range %d: replica %s not lease holder; replica %s is", e.RangeID, e.Replica, *e.LeaseHolder)
 }
 
 var _ ErrorDetailInterface = &NotLeaseHolderError{}

@@ -1007,7 +1007,6 @@ func runSetupSplitSnapshotRace(
 	// 3 is already stopped.
 	mtc.stopStore(4)
 	mtc.stopStore(5)
-	mtc.expireLeases()
 
 	testFn(mtc, leftKey, rightKey)
 }
@@ -1092,7 +1091,6 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
-
 	})
 }
 

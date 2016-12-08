@@ -206,7 +206,7 @@ func (rlq *raftLogQueue) shouldQueue(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	ctx context.Context, _ *LeaseStatus, r *Replica, _ config.SystemConfig,
 ) error {
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
