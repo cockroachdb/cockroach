@@ -190,7 +190,7 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 func (s *Store) ReservationCount() int {
 	s.bookie.mu.Lock()
 	defer s.bookie.mu.Unlock()
-	return len(s.bookie.mu.reservationsByRangeID)
+	return s.bookie.mu.reservations
 }
 
 func (r *Replica) RaftLock() {

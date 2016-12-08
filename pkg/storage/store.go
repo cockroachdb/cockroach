@@ -2632,20 +2632,20 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 
 	if header.CanDecline {
 		// Check the bookie to see if we can apply the snapshot.
-		resp := s.reserve(ctx, reservationRequest{
+		if fill, reserved := s.bookie.Reserve(ctx, reservationRequest{
 			StoreRequestHeader: StoreRequestHeader{
 				NodeID:  s.nodeDesc.NodeID,
 				StoreID: s.StoreID(),
 			},
 			RangeSize: header.RangeSize,
 			RangeID:   header.State.Desc.RangeID,
-		})
-		if !resp.Reserved {
+		}); reserved {
+			defer fill()
+		} else {
 			return stream.Send(&SnapshotResponse{
 				Status: SnapshotResponse_DECLINED,
 			})
 		}
-		defer s.bookie.Fill(ctx, header.State.Desc.RangeID)
 	}
 
 	// Check to see if the snapshot can be applied but don't attempt to add
@@ -3921,11 +3921,6 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 		return true // want more
 	})
 	return
-}
-
-// reserve requests a reservation from the store's bookie.
-func (s *Store) reserve(ctx context.Context, req reservationRequest) reservationResponse {
-	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

@@ -38,72 +38,41 @@ type reservationRequest struct {
 	RangeSize int64
 }
 
-// reservationResponse represents a response from the reservation system.
-type reservationResponse struct {
-	Reserved bool
-}
-
 // bookie contains a store's replica reservations.
 type bookie struct {
 	metrics          *StoreMetrics
 	maxReservations  int   // Maximum number of allowed reservations.
 	maxReservedBytes int64 // Maximum bytes allowed for all reservations combined.
 	mu               struct {
-		syncutil.Mutex                                               // Protects all values within the mu struct.
-		reservationsByRangeID map[roachpb.RangeID]reservationRequest // All active reservations
-		size                  int64                                  // Total bytes required for all reservations.
+		syncutil.Mutex
+		reservations  int
+		reservedBytes int64
 	}
 }
 
 // newBookie creates a reservations system.
 func newBookie(metrics *StoreMetrics) *bookie {
-	b := &bookie{
+	return &bookie{
 		metrics:          metrics,
 		maxReservations:  envutil.EnvOrDefaultInt("COCKROACH_MAX_RESERVATIONS", defaultMaxReservations),
 		maxReservedBytes: envutil.EnvOrDefaultBytes("COCKROACH_MAX_RESERVED_BYTES", defaultMaxReservedBytes),
 	}
-	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]reservationRequest)
-	return b
 }
 
-// Reserve a new replica. Reservations can be rejected due to having too many
-// outstanding reservations already or not having enough free disk space.
-// Accepted reservations return a ReservationResponse with Reserved set to true.
-func (b *bookie) Reserve(
-	ctx context.Context, req reservationRequest, deadReplicas []roachpb.ReplicaIdent,
-) reservationResponse {
+// Reserve attempts to reserve a replica and returns a boolean indicating
+// success. If successful, the returned function must be called when the
+// returned reservation is no longer needed.
+func (b *bookie) Reserve(ctx context.Context, req reservationRequest) (func(), bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	resp := reservationResponse{
-		Reserved: false,
-	}
-
-	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
-		// If the reservation is a repeat of an already existing one, just
-		// update it. This can occur when an RPC repeats.
-		if olderReservation.NodeID == req.NodeID && olderReservation.StoreID == req.StoreID {
-			// To update the reservation, fill the original one and add the
-			// new one.
-			if log.V(2) {
-				log.Infof(ctx, "[r%d], updating existing reservation", req.RangeID)
-			}
-			b.fillReservationLocked(ctx, olderReservation)
-		} else {
-			if log.V(2) {
-				log.Infof(ctx, "[r%d] unable to update due to pre-existing reservation", req.RangeID)
-			}
-			return resp
-		}
-	}
-
 	// Do we have too many current reservations?
-	if len(b.mu.reservationsByRangeID) >= b.maxReservations {
+	if b.mu.reservations >= b.maxReservations {
 		if log.V(1) {
 			log.Infof(ctx, "[r%d] unable to book reservation, too many reservations (current:%d, max:%d)",
-				req.RangeID, len(b.mu.reservationsByRangeID), b.maxReservations)
+				req.RangeID, b.mu.reservations, b.maxReservations)
 		}
-		return resp
+		return nil, false
 	}
 
 	// Can we accommodate the requested number of bytes (doubled for safety) on
@@ -111,36 +80,25 @@ func (b *bookie) Reserve(
 	// TODO(bram): Explore if doubling the requested size enough?
 	// Store `available` in case it changes between if and log.
 	available := b.metrics.Available.Value()
-	if b.mu.size+(req.RangeSize*2) > available {
+	if b.mu.reservedBytes+(req.RangeSize*2) > available {
 		if log.V(1) {
 			log.Infof(ctx, "[r%d] unable to book reservation, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
-				req.RangeID, req.RangeSize, b.mu.size, available)
+				req.RangeID, req.RangeSize, b.mu.reservedBytes, available)
 		}
-		return resp
+		return nil, false
 	}
 
 	// Do we have enough reserved space free for the reservation?
-	if b.mu.size+req.RangeSize > b.maxReservedBytes {
+	if b.mu.reservedBytes+req.RangeSize > b.maxReservedBytes {
 		if log.V(1) {
 			log.Infof(ctx, "[r%d] unable to book reservation, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
-				req.RangeID, req.RangeSize, b.mu.size, b.maxReservedBytes)
+				req.RangeID, req.RangeSize, b.mu.reservedBytes, b.maxReservedBytes)
 		}
-		return resp
+		return nil, false
 	}
 
-	// Make sure that we don't add back a destroyed replica.
-	for _, rep := range deadReplicas {
-		if req.RangeID == rep.RangeID {
-			if log.V(1) {
-				log.Infof(ctx, "[r%d] unable to book reservation, the replica has been destroyed",
-					req.RangeID)
-			}
-			return reservationResponse{Reserved: false}
-		}
-	}
-
-	b.mu.reservationsByRangeID[req.RangeID] = req
-	b.mu.size += req.RangeSize
+	b.mu.reservations++
+	b.mu.reservedBytes += req.RangeSize
 
 	// Update the store metrics.
 	b.metrics.ReservedReplicaCount.Inc(1)
@@ -150,44 +108,19 @@ func (b *bookie) Reserve(
 		log.Infof(ctx, "[r%s] new reservation, size=%d", req.RangeID, req.RangeSize)
 	}
 
-	resp.Reserved = true
-	return resp
-}
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
 
-// Fill removes a reservation. Returns true when the reservation has been
-// successfully removed.
-func (b *bookie) Fill(ctx context.Context, rangeID roachpb.RangeID) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// Lookup the reservation.
-	res, ok := b.mu.reservationsByRangeID[rangeID]
-	if !ok {
 		if log.V(2) {
-			log.Infof(ctx, "[r%d] reservation not found", rangeID)
+			log.Infof(ctx, "[r%d] filling reservation", req.RangeID)
 		}
-		return false
-	}
 
-	b.fillReservationLocked(ctx, res)
-	return true
-}
+		b.mu.reservations--
+		b.mu.reservedBytes -= req.RangeSize
 
-// fillReservationLocked fills a reservation. It requires that the bookie's
-// lock is held. This should only be called internally.
-func (b *bookie) fillReservationLocked(ctx context.Context, res reservationRequest) {
-	if log.V(2) {
-		log.Infof(ctx, "[r%d] filling reservation", res.RangeID)
-	}
-
-	// Remove it from reservationsByRangeID. Note that we don't remove it from the
-	// queue since it will expire and remove itself.
-	delete(b.mu.reservationsByRangeID, res.RangeID)
-
-	// Adjust the total reserved size.
-	b.mu.size -= res.RangeSize
-
-	// Update the store metrics.
-	b.metrics.ReservedReplicaCount.Dec(1)
-	b.metrics.Reserved.Dec(res.RangeSize)
+		// Update the store metrics.
+		b.metrics.ReservedReplicaCount.Dec(1)
+		b.metrics.Reserved.Dec(req.RangeSize)
+	}, true
 }
