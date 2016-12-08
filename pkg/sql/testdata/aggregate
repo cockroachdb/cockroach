@@ -332,6 +332,13 @@ NULL 1
 2 3
 
 query II
+SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+----
+NULL 1
+4 2
+2 3
+
+query II
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
 ----
 2 3

@@ -101,18 +101,16 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 			return false, expr
 		}
 
-		if strings.EqualFold(fd.Name, "random") {
-			// `random()` changes values every row. So report we found
-			// a dependent variable.
-			// TODO(knz): in the future we may have more than one built-in
-			// function that has different values for every row. In that
-			// case, the property becomes an attribute of the
+		if strings.EqualFold(fd.Name, "random") ||
+			strings.EqualFold(fd.Name, "count") {
+			// `count()` and `random()` change values every row. So report
+			// we found a dependent variable.
+			// TODO(knz): this property should really be an attribute of the
 			// built-in. However then overload resolution (type checking)
-			// must occur before this property can be detected. This
-			// would be a more significant refactoring, which is why
-			// we don't do this yet.
+			// must occur before this property can be detected. This would
+			// be a more significant refactoring, which is why we don't do
+			// this yet.
 			v.foundDependentVars = true
-			break
 		}
 
 		// Check for invalid use of *, which, if it is an argument, is the only argument.
@@ -152,10 +150,6 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 			t = t.CopyNode()
 			t.Exprs[0] = parser.StarDatumInstance
-
-			// the StartDatumInstance refers implicitly to columns,
-			// so it is a dependent variable.
-			v.foundDependentVars = true
 
 			return true, t
 		}
