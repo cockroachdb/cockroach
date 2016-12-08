@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -29,17 +30,18 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
-	"golang.org/x/net/context"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
 var numNodes = flag.Int("n", 4, "number of nodes")
+var timeout = flag.Duration("timeout", math.MaxInt64, "how long to run allocsim for")
 var blockSize = flag.Int("b", 1000, "block size")
 
 func newRand() *rand.Rand {
@@ -258,8 +260,12 @@ func main() {
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	go func() {
-		s := <-signalCh
-		log.Infof(context.Background(), "signal received: %v", s)
+		select {
+		case s := <-signalCh:
+			log.Infof(context.Background(), "signal received: %v", s)
+		case <-time.After(*timeout):
+			log.Infof(context.Background(), "finished run of: %s", *timeout)
+		}
 		c.Close()
 		os.Exit(1)
 	}()
