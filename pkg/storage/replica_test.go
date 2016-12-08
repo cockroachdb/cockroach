@@ -7088,15 +7088,16 @@ func TestReplicaMetrics(t *testing.T) {
 				underreplicated: false,
 			}},
 	}
-	for _, c := range testCases {
+	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			zoneConfig := config.ZoneConfig{NumReplicas: c.replicas}
 			defer config.TestingSetDefaultZoneConfig(zoneConfig)()
 
+			c.expected.quiescent = i%2 == 0
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
 				c.liveness, &c.desc, c.raftStatus, &roachpb.Lease{},
-				c.storeID, false)
+				c.storeID, c.expected.quiescent)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
