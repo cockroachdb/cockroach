@@ -66,8 +66,12 @@ var (
 		Help: "Number of ranges with fewer live replicas than the replication target"}
 
 	// Lease request metrics.
-	metaLeaseRequestSuccessCount = metric.Metadata{Name: "leases.success"}
-	metaLeaseRequestErrorCount   = metric.Metadata{Name: "leases.error"}
+	metaLeaseRequestSuccessCount  = metric.Metadata{Name: "leases.success"}
+	metaLeaseRequestErrorCount    = metric.Metadata{Name: "leases.error"}
+	metaLeaseTransferSuccessCount = metric.Metadata{Name: "leasestransfers.success"}
+	metaLeaseTransferErrorCount   = metric.Metadata{Name: "leasestransfers.error"}
+	metaLeaseExpirationCount      = metric.Metadata{Name: "leases.expiration"}
+	metaLeaseEpochCount           = metric.Metadata{Name: "leases.epoch"}
 
 	// Storage metrics.
 	metaLiveBytes       = metric.Metadata{Name: "livebytes"}
@@ -327,8 +331,12 @@ type StoreMetrics struct {
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
-	LeaseRequestSuccessCount *metric.Counter
-	LeaseRequestErrorCount   *metric.Counter
+	LeaseRequestSuccessCount  *metric.Counter
+	LeaseRequestErrorCount    *metric.Counter
+	LeaseTransferSuccessCount *metric.Counter
+	LeaseTransferErrorCount   *metric.Counter
+	LeaseExpirationCount      *metric.Gauge
+	LeaseEpochCount           *metric.Gauge
 
 	// Storage metrics.
 	LiveBytes       *metric.Gauge
@@ -500,8 +508,12 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
 
 		// Lease request metrics.
-		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
-		LeaseRequestErrorCount:   metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseRequestSuccessCount:  metric.NewCounter(metaLeaseRequestSuccessCount),
+		LeaseRequestErrorCount:    metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
+		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
+		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
+		LeaseEpochCount:           metric.NewGauge(metaLeaseEpochCount),
 
 		// Storage metrics.
 		LiveBytes:       metric.NewGauge(metaLiveBytes),
@@ -729,5 +741,13 @@ func (sm *StoreMetrics) leaseRequestComplete(success bool) {
 		sm.LeaseRequestSuccessCount.Inc(1)
 	} else {
 		sm.LeaseRequestErrorCount.Inc(1)
+	}
+}
+
+func (sm *StoreMetrics) leaseTransferComplete(success bool) {
+	if success {
+		sm.LeaseTransferSuccessCount.Inc(1)
+	} else {
+		sm.LeaseTransferErrorCount.Inc(1)
 	}
 }

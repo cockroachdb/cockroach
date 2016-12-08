@@ -4448,6 +4448,7 @@ type replicaMetrics struct {
 	leader      bool
 	leaseValid  bool
 	leaseholder bool
+	leaseType   roachpb.LeaseType
 	quiescent   bool
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
@@ -4498,6 +4499,7 @@ func calcReplicaMetrics(
 	if status.state == leaseValid {
 		m.leaseValid = true
 		leaseOwner = status.lease.OwnedBy(storeID)
+		m.leaseType = status.lease.Type()
 	}
 	m.leaseholder = m.leaseValid && leaseOwner
 	m.leader = isRaftLeader(raftStatus)
