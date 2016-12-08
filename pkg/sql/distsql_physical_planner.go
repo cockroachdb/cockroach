@@ -14,6 +14,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package sql
 
@@ -124,7 +125,7 @@ func (v *distSQLExprCheckVisitor) VisitPost(expr parser.Expr) parser.Expr { retu
 
 // checkExpr verifies that an expression doesn't contain things that are not yet
 // supported by distSQL, like subqueries.
-func checkExpr(expr parser.Expr) error {
+func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
 	if expr == nil {
 		return nil
 	}
@@ -167,7 +168,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 				typ.FamilyEqual(parser.TypeIntArray) {
 				return false, errors.Errorf("unsupported render type %s", typ)
 			}
-			if err := checkExpr(e); err != nil {
+			if err := dsp.checkExpr(e); err != nil {
 				return false, err
 			}
 		}
@@ -183,7 +184,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		if n.joinType != joinTypeInner {
 			return false, errors.Errorf("only inner join supported")
 		}
-		if err := checkExpr(n.pred.filter); err != nil {
+		if err := dsp.checkExpr(n.pred.filter); err != nil {
 			return false, err
 		}
 		shouldRunDistLeft, err := dsp.CheckSupport(n.left.plan)
@@ -205,7 +206,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		// We recommend running scans distributed only if we have a filtering
 		// expression.
 		if n.filter != nil {
-			if err := checkExpr(n.filter); err != nil {
+			if err := dsp.checkExpr(n.filter); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -282,7 +283,7 @@ type physicalPlan struct {
 
 	// resultRouters identifies the output routers which output the results of the
 	// plan. These are the routers to which we have to connect new streams in
-	// order to extend the plan. All routers have the same "schema".
+	// order to extend the plan. All result routers have the same "schema".
 	//
 	// We assume all processors have a single output so we only need the processor
 	// index.
@@ -581,7 +582,11 @@ func (dsp *distSQLPlanner) createTableReaders(
 	if err != nil {
 		return physicalPlan{}, err
 	}
-	var p physicalPlan
+
+	p := physicalPlan{
+		ordering:           ordering,
+		planToStreamColMap: planToStreamColMap,
+	}
 	for _, sp := range spanPartitions {
 		proc := processor{
 			node: sp.node,
@@ -600,8 +605,6 @@ func (dsp *distSQLPlanner) createTableReaders(
 
 		pIdx := p.addProcessor(proc)
 		p.resultRouters = append(p.resultRouters, pIdx)
-		p.planToStreamColMap = planToStreamColMap
-		p.ordering = ordering
 	}
 	return p, nil
 }
@@ -695,13 +698,11 @@ func (dsp *distSQLPlanner) selectRenders(
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
-func (dsp *distSQLPlanner) addSorters(
-	planCtx *planningCtx, p *physicalPlan, n *sortNode, sourceNode planNode,
-) {
+func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *sortNode) {
 	sorterSpec := distsql.SorterSpec{
 		OutputOrdering: dsp.convertOrdering(n.ordering, p.planToStreamColMap),
 		OrderingMatchLen: uint32(computeOrderingMatch(
-			n.ordering, sourceNode.Ordering(), false, /* reverse */
+			n.ordering, n.plan.Ordering(), false, /* reverse */
 		)),
 	}
 	if len(sorterSpec.OutputOrdering.Columns) != len(n.ordering) {
@@ -1033,8 +1034,9 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
+
 		if n.sort != nil {
-			dsp.addSorters(planCtx, &plan, n.sort, n.source)
+			dsp.addSorters(planCtx, &plan, n.sort)
 		}
 		return plan, nil
 
