@@ -27,6 +27,7 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -792,7 +793,7 @@ func (n *Node) batchInternal(
 		// back with the response. This is more expensive, but then again,
 		// those are individual requests traced by users, so they can be.
 		if sp.BaggageItem(tracing.Snowball) != "" {
-			sp.LogEvent("delegating to snowball tracing")
+			sp.LogFields(otlog.String("event", "delegating to snowball tracing"))
 			sp.Finish()
 
 			snowball = new(snowballInfo)
