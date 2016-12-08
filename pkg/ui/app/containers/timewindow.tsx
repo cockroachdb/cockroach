@@ -51,6 +51,12 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
       return;
     }
 
+    // Exact time ranges can't expire.
+    if (props.timeWindow.scale.windowEnd) {
+      // this.setWindow(props);
+      return;
+    }
+
     let now = props.now ? props.now() : moment();
     let currentEnd = props.timeWindow.currentWindow.end;
     let expires = currentEnd.clone().add(props.timeWindow.scale.windowValid);
@@ -71,11 +77,19 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
    * current time.
    */
   setWindow(props: TimeWindowManagerProps) {
-    let now = props.now ? props.now() : moment();
-    props.setTimeWindow({
-      start: now.clone().subtract(props.timeWindow.scale.windowSize),
-      end: now,
-    });
+    if (!props.timeWindow.scale.windowEnd) {
+      let now = props.now ? props.now() : moment();
+      props.setTimeWindow({
+        start: now.clone().subtract(props.timeWindow.scale.windowSize),
+        end: now,
+      });
+    } else {
+      let windowEnd = props.timeWindow.scale.windowEnd;
+      props.setTimeWindow({
+        start: windowEnd.clone().subtract(props.timeWindow.scale.windowSize),
+        end: windowEnd,
+      });
+    }
   }
 
   componentWillMount() {
