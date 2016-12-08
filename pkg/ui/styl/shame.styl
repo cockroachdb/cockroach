@@ -27,6 +27,36 @@
 
 .Select-input > input
   padding 0 !important
+
+.Select-menu-outer
+  width auto !important
+  top calc(100% + 21px) !important
+  border none !important
+  box-shadow 0 2px 4px rgba(0, 0, 0, .2) !important
+  font-family Lato
+  font-size 14px
+  text-transform none
+  letter-spacing 0
+  border-radius 4px
+
+.Select-input {
+  position absolute !important
+  top 0 !important
+}
+
+.Select-value-label {
+  display block !important
+}
+.Select-value {
+  position relative !important
+  white-space nowrap !important
+  max-width 250px !important
+}
+
+.Select
+  display inline-block
+  width 100%
+
 // @stylint on
 
 // NVD3 Style overrides.

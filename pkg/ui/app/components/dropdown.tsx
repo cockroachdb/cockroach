@@ -19,9 +19,9 @@ interface SelectorOwnProps {
 export default class Selector extends React.Component<SelectorOwnProps, {}> {
   render() {
     let {selected, options, onChange} = this.props;
-    return <div className="dropdown-option">
-      <span className="dropdown-option__title">{ this.props.title }:</span>
-      <Select className="dropdown-option__select" clearable={false} options={options} value={selected} onChange={onChange} />
+    return <div className="dropdown">
+      <span className="dropdown__title">{ this.props.title }:</span>
+      <Select className="dropdown__select" clearable={false} options={options} value={selected} onChange={onChange} />
     </div>;
   }
 }
