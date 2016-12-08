@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -29,18 +30,20 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
-	"golang.org/x/net/context"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
 var numNodes = flag.Int("n", 4, "number of nodes")
+var timeout = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
 var blockSize = flag.Int("b", 1000, "block size")
+var rebalanceThreshold = flag.Float64("rebalanceThreshold", 0.05, "acceptable range for leases and replicas to deviate from the mean")
 
 func newRand() *rand.Rand {
 	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -53,11 +56,7 @@ func newRand() *rand.Rand {
 //
 // TODO(peter): Allow configuration of per-node locality settings and
 // zone-config constraints.
-//
-// TODO(peter): Add a -duration flag which controls how long the simulation is
-// run. When the duration is reached, print a summary of the current state of
-// the world and exit with PASS/FAIL if the replica/lease holder distribution
-// is within/exceeds acceptable bounds.
+
 type allocSim struct {
 	*localcluster.Cluster
 	stats struct {
@@ -243,6 +242,53 @@ func (a *allocSim) monitor(d time.Duration) {
 	}
 }
 
+func getStats(counts []int) (min, max int, mean, highestDiff float64) {
+	min = math.MaxInt16
+	for _, count := range counts {
+		if count > max {
+			max = count
+		}
+		if count < min {
+			min = count
+		}
+		mean += float64(count) / float64(len(counts))
+	}
+	minDiff := (mean - float64(min)) / mean
+	maxDiff := (float64(max) - mean) / mean
+	if minDiff > maxDiff {
+		highestDiff = minDiff
+	} else {
+		highestDiff = maxDiff
+	}
+	return
+}
+
+func (a *allocSim) finalStatus() {
+	a.ranges.Lock()
+	defer a.ranges.Unlock()
+
+	// TOTO(bram): With the addition of localities, these stats will have to be
+	// updated.
+
+	fmt.Printf("\n\nTotal Ranges: %d\n", a.ranges.count)
+
+	minReplicas, maxReplicas, meanReplicas, replicasDiff := getStats(a.ranges.replicas)
+	fmt.Printf("Replicas:\n")
+	fmt.Printf("\tMinimum: %d\n", minReplicas)
+	fmt.Printf("\tMaximum: %d\n", maxReplicas)
+	fmt.Printf("\tMean: %.1f\n", meanReplicas)
+	fmt.Printf("\tHighest Percent Diff: %.1f%%\n", replicasDiff*100)
+	fmt.Printf("\tScore: %t\n", replicasDiff < *rebalanceThreshold)
+
+	minLease, maxLeases, meanLeases, leasesDiff := getStats(a.ranges.leases)
+	fmt.Printf("Leases:\n")
+	fmt.Printf("\tMinimum: %d\n", minLease)
+	fmt.Printf("\tMaximum: %d\n", maxLeases)
+	fmt.Printf("\tMean: %.1f\n", meanLeases)
+	fmt.Printf("\tHighest Percent Diff: %.1f%%\n", leasesDiff*100)
+	fmt.Printf("\tScore: %t\n", leasesDiff < *rebalanceThreshold)
+}
+
 func main() {
 	flag.Parse()
 
@@ -257,17 +303,23 @@ func main() {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	go func() {
-		s := <-signalCh
-		log.Infof(context.Background(), "signal received: %v", s)
-		c.Close()
-		os.Exit(1)
-	}()
-
 	c.Start("allocsim", *workers, flag.Args(),
 		[]string{"COCKROACH_METRICS_SAMPLE_INTERVAL=2s"})
 	c.UpdateZoneConfig(1, 1<<20)
 
 	a := newAllocSim(c)
+
+	go func() {
+		select {
+		case s := <-signalCh:
+			log.Infof(context.Background(), "signal received: %v", s)
+		case <-time.After(*timeout):
+			log.Infof(context.Background(), "finished run of: %s", *timeout)
+		}
+		a.finalStatus()
+		c.Close()
+		os.Exit(1)
+	}()
+
 	a.run(*workers)
 }
