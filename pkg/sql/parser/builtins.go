@@ -1389,6 +1389,25 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 	},
+	"pg_catalog.pg_get_userbyid": {
+		Builtin{
+			Types: NamedArgTypes{
+				{"role_oid", TypeInt},
+			},
+			ReturnType: TypeString,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				oid := args[0]
+				t, err := ctx.Planner.QueryRow("SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
+				if err != nil {
+					return nil, err
+				}
+				if len(t) == 0 {
+					return NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
+				}
+				return t[0], nil
+			},
+		},
+	},
 }
 
 var substringImpls = []Builtin{
