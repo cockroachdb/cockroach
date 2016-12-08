@@ -6,12 +6,17 @@
 .has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
   color $secondary-blue-3 !important
 
-.Select-option.is-selected
-  color $secondary-blue-3 !important
+.Select-option
+  padding 10px 25px !important
+  &.is-selected
+    color $secondary-blue-3 !important
 
 .Select-value
   line-height inherit !important
   height auto !important
+  position relative !important
+  white-space nowrap !important
+  max-width 250px !important
 
 .Select-control
   line-height inherit !important
@@ -24,6 +29,8 @@
 .Select-input
   line-height inherit !important
   height auto !important
+  position absolute !important
+  top 0 !important
 
 .Select-input > input
   padding 0 !important
@@ -33,29 +40,50 @@
   top calc(100% + 21px) !important
   border none !important
   box-shadow 0 2px 4px rgba(0, 0, 0, .2) !important
+  max-height 200px !important
   font-family Lato
   font-size 14px
   text-transform none
   letter-spacing 0
   border-radius 4px
+  padding 0 0
 
-.Select-input {
-  position absolute !important
-  top 0 !important
-}
+.Select-menu
+  max-height 200px !important
 
-.Select-value-label {
+.Select-value-label
   display block !important
-}
-.Select-value {
-  position relative !important
-  white-space nowrap !important
-  max-width 250px !important
-}
 
 .Select
   display inline-block
   width 100%
+  &__side-arrow
+    font-family Lato-Bold
+    display none
+    color $secondary-blue-3
+    margin-top -11px
+    margin-bottom -11px
+    padding-top 11px
+    padding-bottom 11px
+    cursor pointer
+    &:first-child
+      border-right 1px solid $grey-blue
+      padding-right 20px
+    &:last-child
+      border-left 1px solid $grey-blue
+      padding-left 20px
+  &--side-arrows
+    .Select-value
+      padding 0 20px !important
+    .Select-arrow-zone
+      display none
+    .Select__side-arrow
+      display inline
+  &--no-right-arrow
+    .Select__side-arrow:last-child
+      display none
+    .Select-value
+      padding 0 0 0 20px !important
 
 // @stylint on
 
