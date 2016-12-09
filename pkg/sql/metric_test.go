@@ -46,20 +46,20 @@ func TestQueryCounts(t *testing.T) {
 		txnCommitCount   int64
 		txnRollbackCount int64
 	}{
-		{"", 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{"BEGIN; END", 1, 0, 0, 0, 0, 0, 0, 1, 0},
-		{"SELECT 1", 1, 1, 0, 0, 0, 0, 0, 1, 0},
-		{"CREATE DATABASE mt", 1, 1, 0, 0, 0, 1, 0, 1, 0},
-		{"CREATE TABLE mt.n (num INTEGER)", 1, 1, 0, 0, 0, 2, 0, 1, 0},
-		{"INSERT INTO mt.n VALUES (3)", 1, 1, 0, 1, 0, 2, 0, 1, 0},
-		{"UPDATE mt.n SET num = num + 1", 1, 1, 1, 1, 0, 2, 0, 1, 0},
-		{"DELETE FROM mt.n", 1, 1, 1, 1, 1, 2, 0, 1, 0},
-		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 1, 1, 1, 1, 1, 3, 0, 1, 0},
-		{"EXPLAIN SELECT * FROM mt.n", 1, 1, 1, 1, 1, 3, 1, 1, 0},
-		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 2, 1, 2, 1, 1, 3, 1, 2, 0},
-		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 2, 4, 2, 1, 1, 3, 1, 2, 0},
-		{"DROP TABLE mt.n", 2, 4, 2, 1, 1, 4, 1, 2, 0},
-		{"SET database = system", 2, 4, 2, 1, 1, 4, 2, 2, 0},
+		{"", 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"BEGIN; END", 1, 0, 0, 0, 0, 1, 0, 1, 0},
+		{"SELECT 1", 1, 1, 0, 0, 0, 1, 0, 1, 0},
+		{"CREATE DATABASE mt", 1, 1, 0, 0, 0, 2, 0, 1, 0},
+		{"CREATE TABLE mt.n (num INTEGER)", 1, 1, 0, 0, 0, 3, 0, 1, 0},
+		{"INSERT INTO mt.n VALUES (3)", 1, 1, 0, 1, 0, 3, 0, 1, 0},
+		{"UPDATE mt.n SET num = num + 1", 1, 1, 1, 1, 0, 3, 0, 1, 0},
+		{"DELETE FROM mt.n", 1, 1, 1, 1, 1, 3, 0, 1, 0},
+		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 1, 1, 1, 1, 1, 4, 0, 1, 0},
+		{"EXPLAIN SELECT * FROM mt.n", 1, 1, 1, 1, 1, 4, 1, 1, 0},
+		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 2, 1, 2, 1, 1, 4, 1, 2, 0},
+		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 2, 4, 2, 1, 1, 4, 1, 2, 0},
+		{"DROP TABLE mt.n", 2, 4, 2, 1, 1, 5, 1, 2, 0},
+		{"SET database = system", 2, 4, 2, 1, 1, 5, 2, 2, 0},
 	}
 
 	for _, tc := range testcases {
