@@ -451,7 +451,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b
 ----
 0  select                                                                          (y)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (y)
-2  join           HASH JOIN, INNER ON EQUALS((x),(x))                              (x, y[omitted], rowid[hidden,omitted], x, y, rowid[hidden,omitted])
+2  join           HASH JOIN, INNER ON EQUALS((x),(x))                              (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y, rowid[hidden,omitted])
 

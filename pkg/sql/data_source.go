@@ -711,32 +711,6 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 	return srcIdx, colIdx, nil
 }
 
-// concatDataSourceInfos creates a new dataSourceInfo that represents
-// the side-by-side concatenation of the two data sources described by
-// its arguments.
-func concatDataSourceInfos(left *dataSourceInfo, right *dataSourceInfo) *dataSourceInfo {
-	aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
-	aliases = append(aliases, left.sourceAliases...)
-
-	nColsLeft := len(left.sourceColumns)
-	for _, alias := range right.sourceAliases {
-		newRange := make(columnRange, len(alias.columnRange))
-		for i, idx := range alias.columnRange {
-			newRange[i] = idx + nColsLeft
-		}
-		aliases = append(aliases, sourceAlias{
-			name:        alias.name,
-			columnRange: newRange,
-		})
-	}
-
-	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns))
-	columns = append(columns, left.sourceColumns...)
-	columns = append(columns, right.sourceColumns...)
-
-	return &dataSourceInfo{sourceColumns: columns, sourceAliases: aliases}
-}
-
 // findTableAlias returns the first table alias providing the column
 // index given as argument. The index must be valid.
 func (src *dataSourceInfo) findTableAlias(colIdx int) parser.TableName {
