@@ -462,7 +462,7 @@ func (n *joinNode) hashJoinStart() error {
 			return nil
 		}
 		row := n.right.plan.Values()
-		encoding, _, err := n.pred.encode(scratch, row, rightSide)
+		encoding, _, err := n.pred.encode(scratch, row, n.pred.rightEqualityIndices)
 		if err != nil {
 			return err
 		}
@@ -636,7 +636,7 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 		}
 
 		lrow := n.left.plan.Values()
-		encoding, containsNull, err := n.pred.encode(scratch, lrow, leftSide)
+		encoding, containsNull, err := n.pred.encode(scratch, lrow, n.pred.leftEqualityIndices)
 		if err != nil {
 			return false, err
 		}

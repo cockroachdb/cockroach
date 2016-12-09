@@ -270,17 +270,7 @@ func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 
 // encode returns the encoding of a row from a given side (left or right),
 // according to the columns specified by the equality constraints.
-func (p *joinPredicate) encode(b []byte, row parser.DTuple, side int) ([]byte, bool, error) {
-	var cols []int
-	switch side {
-	case rightSide:
-		cols = p.rightEqualityIndices
-	case leftSide:
-		cols = p.leftEqualityIndices
-	default:
-		panic("invalid side provided, only leftSide or rightSide applicable")
-	}
-
+func (p *joinPredicate) encode(b []byte, row parser.DTuple, cols []int) ([]byte, bool, error) {
 	var err error
 	containsNull := false
 	for _, colIdx := range cols {
