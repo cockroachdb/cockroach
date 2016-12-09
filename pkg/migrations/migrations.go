@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,8 +44,8 @@ var (
 // node versions are currently running within the cluster.
 var backwardCompatibleMigrations = []migrationDescriptor{
 	{
-		name:   "example migration",
-		workFn: exampleNoopMigration,
+		name:   "default UniqueID to uuid_v4 in system.eventlog",
+		workFn: eventlogUniqueIdDefault,
 	},
 }
 
@@ -232,6 +233,32 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
-func exampleNoopMigration(ctx context.Context, r runner) error {
+func checkQueryResults(results []sql.Result, numResults int) error {
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
+	if a, e := len(results), numResults; a != e {
+		return errors.Errorf("number of results %d != expected %d", a, e)
+	}
 	return nil
+}
+
+func eventlogUniqueIdDefault(ctx context.Context, r runner) error {
+	const alterStmt = "ALTER TABLE system.eventlog ALTER COLUMN uniqueID SET DEFAULT uuid_v4();"
+
+	// System tables can only be modified by a privileged internal user.
+	session := sql.NewSession(ctx, sql.SessionArgs{User: security.NodeUser}, r.sqlExecutor, nil, nil)
+	defer session.Finish(r.sqlExecutor)
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
+		err = checkQueryResults(res.ResultList, 1)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", err)
+	}
+	return err
 }
