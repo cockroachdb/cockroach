@@ -1963,6 +1963,16 @@ func (r *Replica) tryAddWriteCmd(
 		} else {
 			lease = status.lease
 		}
+	} else {
+		// For lease commands, use the provided previous lease for verification.
+		switch t := ba.Requests[0].GetInner().(type) {
+		case *roachpb.RequestLeaseRequest:
+			lease = t.PrevLease
+		case *roachpb.TransferLeaseRequest:
+			lease = t.PrevLease
+		default:
+			return nil, roachpb.NewErrorf("unhandled lease request %s", t), proposalNoRetry
+		}
 	}
 
 	if !isNonKV {
@@ -3248,18 +3258,16 @@ func (r *Replica) processRaftCommand(
 	// TODO(spencer): remove the special-casing for the pre-epoch range
 	// leases.
 	verifyLease := func() error {
-		// Commands which skip lease checks and freeze requests do not
-		// verify the proposer's lease against the replica's current lease.
-		//
-		// TODO(spencer): need to verify the proposer's lease against the
-		// current lease even for RequestLease and TransferLease
-		// commands. See #10414.
-		if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() ||
-			raftCmd.BatchRequest.IsFreeze() {
+		// Freeze commands do not verify lease.
+		if raftCmd.BatchRequest.IsFreeze() {
 			return nil
 		}
 		// Handle the case of pre-epoch-based-leases command.
 		if raftCmd.OriginLease == nil {
+			// Skip verification for lease commands for legacy case.
+			if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() {
+				return nil
+			}
 			l, origin := r.mu.state.Lease, raftCmd.OriginReplica
 			if l.OwnedBy(origin.StoreID) && ts.Less(l.DeprecatedStartStasis) {
 				return nil

@@ -832,7 +832,7 @@ func (*TransferLeaseRequest) flags() int {
 	// But it can't be checked at propose time through the
 	// `redirectOnOrAcquireLease` call because, by the time that call is made, the
 	// replica has registered that a transfer is in progress and
-	// `redirectOrAcquire` already tentatively redirects to the future lease
+	// `redirectOnOrAcquire` already tentatively redirects to the future lease
 	// holder.
 	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }

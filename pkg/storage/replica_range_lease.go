@@ -131,13 +131,15 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
-			Span:  reqSpan,
-			Lease: reqLease,
+			Span:      reqSpan,
+			Lease:     reqLease,
+			PrevLease: status.lease,
 		}
 	} else {
 		leaseReq = &roachpb.RequestLeaseRequest{
-			Span:  reqSpan,
-			Lease: reqLease,
+			Span:      reqSpan,
+			Lease:     reqLease,
+			PrevLease: status.lease,
 		}
 	}
 
