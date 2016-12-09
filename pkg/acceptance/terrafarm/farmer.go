@@ -47,6 +47,11 @@ const (
 	KeepClusterNever = "never"
 )
 
+type node struct {
+	hostname  string
+	processes []string
+}
+
 // A Farmer sets up and manipulates a test cluster via terraform.
 type Farmer struct {
 	Output      io.Writer
@@ -61,38 +66,50 @@ type Farmer struct {
 	// AddVars are additional Terraform variables to be set during calls to Add.
 	AddVars     map[string]string
 	KeepCluster string
-	nodes       []string
+	nodes       []node
 	RPCContext  *rpc.Context
 }
 
 func (f *Farmer) refresh() {
-	f.nodes = f.output("instances")
+	if len(f.nodes) != 0 {
+		return
+	}
+	nodes := f.output("instances")
+	f.nodes = make([]node, len(nodes))
+	for i, host := range nodes {
+		f.nodes[i] = node{
+			hostname:  host,
+			processes: []string{"cockroach"},
+		}
+	}
 }
 
 // FirstInstance returns the address of the first instance.
 func (f *Farmer) FirstInstance() string {
-	if len(f.nodes) == 0 {
-		f.refresh()
-	}
-	return f.nodes[0]
+	f.refresh()
+	return f.nodes[0].hostname
 }
 
 // Nodes returns a (copied) slice of provisioned nodes' host names.
-func (f *Farmer) Nodes() (hosts []string) {
-	if len(f.nodes) == 0 {
-		f.refresh()
+func (f *Farmer) Nodes() []string {
+	f.refresh()
+	hosts := make([]string, len(f.nodes))
+	for i, node := range f.nodes {
+		hosts[i] = node.hostname
 	}
-	return append(hosts, f.nodes...)
+	return hosts
 }
 
 // Hostname implements the Cluster interface.
 func (f *Farmer) Hostname(i int) string {
-	return f.Nodes()[i]
+	f.refresh()
+	return f.nodes[i].hostname
 }
 
 // NumNodes returns the number of nodes.
 func (f *Farmer) NumNodes() int {
-	return len(f.Nodes())
+	f.refresh()
+	return len(f.nodes)
 }
 
 // Add provisions the given number of nodes.
@@ -275,16 +292,10 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // restarts or node deaths occurred). Tests can call this periodically to
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
-// TODO(cuongdo): doesn't handle load generators (photos, block_writer)
 func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
-	for _, item := range []struct {
-		typ   string
-		hosts []string
-	}{
-		{"cockroach", f.Nodes()},
-	} {
-		for _, host := range item.hosts {
-			f.AssertState(ctx, t, host, item.typ, "RUNNING")
+	for _, node := range f.nodes {
+		for _, process := range node.processes {
+			f.AssertState(ctx, t, node.hostname, process, "RUNNING")
 		}
 	}
 }
@@ -333,15 +344,31 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 
 // Start starts the given process on the ith node.
 func (f *Farmer) Start(ctx context.Context, i int, process string) error {
-	_, _, err := f.execSupervisor(f.Nodes()[i], "start "+process)
-	return err
+	for _, p := range f.nodes[i].processes {
+		if p == process {
+			return errors.Errorf("already started process '%s'", process)
+		}
+	}
+	if _, _, err := f.execSupervisor(f.Nodes()[i], "start "+process); err != nil {
+		return err
+	}
+	f.nodes[i].processes = append(f.nodes[i].processes, process)
+	return nil
 }
 
 // Stop stops the given process on the ith node. This is useful for terminating
 // a load generator cleanly to get stats outputted upon process termination.
 func (f *Farmer) Stop(ctx context.Context, i int, process string) error {
-	_, _, err := f.execSupervisor(f.Nodes()[i], "stop "+process)
-	return err
+	for idx, p := range f.nodes[i].processes {
+		if p == process {
+			if _, _, err := f.execSupervisor(f.Nodes()[i], "stop "+process); err != nil {
+				return err
+			}
+			f.nodes[i].processes = append(f.nodes[i].processes[:idx], f.nodes[i].processes[idx+1:]...)
+			return nil
+		}
+	}
+	return errors.Errorf("unable to find process '%s'", process)
 }
 
 // URL returns the HTTP(s) endpoint.
