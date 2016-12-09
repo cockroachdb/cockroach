@@ -1653,6 +1653,14 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	cb := mtc.transport.GetCircuitBreaker(mtc.stores[followerIdx].Ident.NodeID)
 	cb.Break()
 
+	// Send a command to ensure Raft is aware of lost follower so that it won't
+	// quiesce (which would prevent heartbeats).
+	if _, err := client.SendWrappedWith(
+		context.Background(), rg1(mtc.stores[0]), roachpb.Header{RangeID: 1},
+		incrementArgs(roachpb.Key("a"), 1)); err != nil {
+		t.Fatal(err)
+	}
+
 	ticksToWait := 2 * mtc.makeStoreConfig(leaderIdx).RaftElectionTimeoutTicks
 	ticks := mtc.stores[leaderIdx].Metrics().RaftTicks.Count
 	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {

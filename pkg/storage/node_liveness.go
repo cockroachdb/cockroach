@@ -97,7 +97,7 @@ func NewNodeLiveness(
 	db *client.DB,
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
-	heartbeatInterval time.Duration,
+	renewalDuration time.Duration,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
 		ambientCtx:        ambient,
@@ -105,7 +105,7 @@ func NewNodeLiveness(
 		db:                db,
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
-		heartbeatInterval: heartbeatInterval,
+		heartbeatInterval: livenessThreshold - renewalDuration,
 		metrics: LivenessMetrics{
 			HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 			HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
@@ -200,7 +200,10 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 	} else {
 		newLiveness = *liveness
 	}
-	newLiveness.Expiration = nl.clock.Now().Add(nl.livenessThreshold.Nanoseconds(), 0)
+	// We need to add the maximum clock offset to the expiration because it's
+	// used when determining liveness for a node.
+	newLiveness.Expiration = nl.clock.Now().Add(
+		(nl.livenessThreshold + nl.clock.MaxOffset()).Nanoseconds(), 0)
 	err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
 		// Update liveness to actual value on mismatch.
 		defer func() {
