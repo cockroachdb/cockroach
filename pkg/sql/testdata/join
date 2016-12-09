@@ -21,6 +21,20 @@ NULL    42
   42  NULL
   42    42
 
+# Check that name resolution chokes on ambiguity when it needs to.
+query error column reference "x" is ambiguous
+SELECT x FROM onecolumn AS a, onecolumn AS b
+
+# Check that name resolution does not choke on ambiguity if an
+# unqualified column name is requested and there is an anonymous
+# source providing this name in addition to two or more named sources
+# that also provide it.
+query I colnames
+SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b LIMIT 1
+----
+x
+1
+
 query II colnames
 SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
