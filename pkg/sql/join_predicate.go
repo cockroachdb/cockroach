@@ -59,11 +59,6 @@ type joinPredicate interface {
 
 var _ joinPredicate = &equalityPredicate{}
 
-// joinPredicateBase contains fields common to all joinPredicates.
-type joinPredicateBase struct {
-	numLeftCols, numRightCols int
-}
-
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
 func (p *planner) makeCrossPredicate(
 	left, right *dataSourceInfo,
@@ -189,9 +184,11 @@ func (p *planner) makeOnPredicate(
 
 // equalityPredicate implements the predicate logic for joins with a USING clause.
 type equalityPredicate struct {
-	joinPredicateBase
-
 	p *planner
+
+	// numLeft/RightCols are the number of columns in the left and right
+	// operands.
+	numLeftCols, numRightCols int
 
 	// The comparison function to use for each column. We need
 	// different functions because each USING column may have a different
@@ -519,11 +516,9 @@ func (p *planner) makeEqualityPredicate(
 	}
 
 	pred := &equalityPredicate{
-		joinPredicateBase: joinPredicateBase{
-			numLeftCols:  len(left.sourceColumns),
-			numRightCols: len(right.sourceColumns),
-		},
 		p:                        p,
+		numLeftCols:              len(left.sourceColumns),
+		numRightCols:             len(right.sourceColumns),
 		leftColNames:             leftColNames,
 		rightColNames:            rightColNames,
 		numMergedEqualityColumns: numMergedEqualityColumns,
