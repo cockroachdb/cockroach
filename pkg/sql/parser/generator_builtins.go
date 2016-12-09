@@ -121,6 +121,7 @@ func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory) Builtin {
 			}
 			return &DTable{gen}, nil
 		},
+		category: categoryCompatibility,
 	}
 }
 
