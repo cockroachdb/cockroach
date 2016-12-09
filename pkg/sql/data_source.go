@@ -663,35 +663,39 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 		c.TableName.DatabaseName = tableName.DatabaseName
 	}
 
+	findColHelper := func(src *dataSourceInfo, iSrc, srcIdx, colIdx int, idx int) (int, int, error) {
+		col := src.sourceColumns[idx]
+		if parser.ReNormalizeName(col.Name) == colName {
+			if colIdx != invalidColIdx {
+				return invalidSrcIdx, invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
+			}
+			srcIdx = iSrc
+			colIdx = idx
+		}
+		return srcIdx, colIdx, nil
+	}
+
 	colIdx = invalidColIdx
 	for iSrc, src := range sources {
-		findColHelper := func(src *dataSourceInfo, iSrc, srcIdx, colIdx int, idx int) (int, int, error) {
-			col := src.sourceColumns[idx]
-			if parser.ReNormalizeName(col.Name) == colName {
-				if colIdx != invalidColIdx {
-					return invalidSrcIdx, invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
-				}
-				srcIdx = iSrc
-				colIdx = idx
-			}
-			return srcIdx, colIdx, nil
+		colRange, ok := src.sourceAliases.columnRange(tableName)
+		if !ok {
+			// The data source "src" has no column for table tableName.
+			// Try again with the net one.
+			continue
 		}
+		for _, idx := range colRange {
+			srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
+			if err != nil {
+				return srcIdx, colIdx, err
+			}
+		}
+	}
 
-		if tableName.Table() == "" {
+	if colIdx == invalidColIdx && tableName.Table() == "" {
+		// Try harder: unqualified column names can look at all
+		// columns, not just columns of the anonymous table.
+		for iSrc, src := range sources {
 			for idx := 0; idx < len(src.sourceColumns); idx++ {
-				srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
-				if err != nil {
-					return srcIdx, colIdx, err
-				}
-			}
-		} else {
-			colRange, ok := src.sourceAliases.columnRange(tableName)
-			if !ok {
-				// The data source "src" has no column for table tableName.
-				// Try again with the net one.
-				continue
-			}
-			for _, idx := range colRange {
 				srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
 				if err != nil {
 					return srcIdx, colIdx, err
