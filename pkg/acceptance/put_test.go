@@ -79,7 +79,7 @@ func testPutInner(ctx context.Context, t *testing.T, c cluster.Cluster, cfg clus
 			loadedCount := atomic.LoadInt64(&count)
 			log.Infof(ctx, "%d (%d/s)", loadedCount, loadedCount-baseCount)
 			c.Assert(ctx, t)
-			if err := cluster.Consistent(ctx, c); err != nil {
+			if err := cluster.Consistent(ctx, c, 0); err != nil {
 				t.Fatal(err)
 			}
 		}
