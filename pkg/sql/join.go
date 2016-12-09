@@ -367,7 +367,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 func (n *joinNode) Columns() ResultColumns { return n.columns }
 
 // Ordering implements the planNode interface.
-func (n *joinNode) Ordering() orderingInfo { return n.left.plan.Ordering() }
+func (n *joinNode) Ordering() orderingInfo { return orderingInfo{} }
 
 // MarkDebug implements the planNode interface.
 func (n *joinNode) MarkDebug(mode explainMode) {
