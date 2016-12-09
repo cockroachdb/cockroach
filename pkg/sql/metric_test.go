@@ -74,20 +74,32 @@ func TestQueryCounts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		checkCounterEQ(t, s, sql.MetaTxnBegin, tc.txnBeginCount)
-		checkCounterEQ(t, s, sql.MetaTxnCommit, tc.txnCommitCount)
-		checkCounterEQ(t, s, sql.MetaTxnRollback, tc.txnRollbackCount)
-		checkCounterEQ(t, s, sql.MetaTxnAbort, 0)
-		checkCounterEQ(t, s, sql.MetaSelect, tc.selectCount)
-		checkCounterEQ(t, s, sql.MetaUpdate, tc.updateCount)
-		checkCounterEQ(t, s, sql.MetaInsert, tc.insertCount)
-		checkCounterEQ(t, s, sql.MetaDelete, tc.deleteCount)
-		checkCounterEQ(t, s, sql.MetaDdl, tc.ddlCount)
-		checkCounterEQ(t, s, sql.MetaMisc, tc.miscCount)
-
-		// Everything after this query will also fail, so quit now to avoid deluge of errors.
-		if t.Failed() {
-			t.FailNow()
+		if err := checkCounterEQ(s, sql.MetaTxnBegin, tc.txnBeginCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaTxnRollback, tc.txnRollbackCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaTxnAbort, 0); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaSelect, tc.selectCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaUpdate, tc.updateCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaInsert, tc.insertCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaDelete, tc.deleteCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaDdl, tc.ddlCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaMisc, tc.miscCount); err != nil {
+			t.Fatalf("%q: %s", tc.query, err)
 		}
 	}
 }
@@ -134,11 +146,21 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkCounterEQ(t, s, sql.MetaTxnAbort, 1)
-	checkCounterEQ(t, s, sql.MetaTxnBegin, 1)
-	checkCounterEQ(t, s, sql.MetaTxnRollback, 0)
-	checkCounterEQ(t, s, sql.MetaTxnCommit, 0)
-	checkCounterEQ(t, s, sql.MetaInsert, 1)
+	if err := checkCounterEQ(s, sql.MetaTxnAbort, 1); err != nil {
+		t.Error(err)
+	}
+	if err := checkCounterEQ(s, sql.MetaTxnBegin, 1); err != nil {
+		t.Error(err)
+	}
+	if err := checkCounterEQ(s, sql.MetaTxnRollback, 0); err != nil {
+		t.Error(err)
+	}
+	if err := checkCounterEQ(s, sql.MetaTxnCommit, 0); err != nil {
+		t.Error(err)
+	}
+	if err := checkCounterEQ(s, sql.MetaInsert, 1); err != nil {
+		t.Error(err)
+	}
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
@@ -158,7 +180,13 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	checkCounterEQ(t, s, sql.MetaTxnAbort, 1)
-	checkCounterEQ(t, s, sql.MetaTxnBegin, 1)
-	checkCounterEQ(t, s, sql.MetaSelect, 1)
+	if err := checkCounterEQ(s, sql.MetaTxnAbort, 1); err != nil {
+		t.Error(err)
+	}
+	if err := checkCounterEQ(s, sql.MetaTxnBegin, 1); err != nil {
+		t.Error(err)
+	}
+	if err := checkCounterEQ(s, sql.MetaSelect, 1); err != nil {
+		t.Error(err)
+	}
 }
