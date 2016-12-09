@@ -968,7 +968,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.restartStore(0)
 
 			// Expire existing leases (i.e. move the clock forward, but don't
-			// increment epochs). This allows node 3 to grab the lease later
+			// increment epochs). This allows node 2 to grab the lease later
 			// in the test.
 			mtc.expireLeasesWithoutIncrementingEpochs()
 			// Drain leases from nodes 0 and 1 to prevent them from grabbing any new

@@ -1712,7 +1712,7 @@ func (r *Replica) addAdminCmd(
 	}
 
 	// Admin commands always require the range lease.
-	status, pErr := r.redirectOnOrAcquireLease(ctx)
+	_, pErr := r.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -1728,7 +1728,7 @@ func (r *Replica) addAdminCmd(
 		reply, pErr = r.AdminMerge(ctx, *tArgs)
 		resp = &reply
 	case *roachpb.AdminTransferLeaseRequest:
-		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target, status))
+		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
@@ -1946,10 +1946,17 @@ func (r *Replica) tryAddWriteCmd(
 	}
 
 	var lease *roachpb.Lease
-	if !ba.IsSingleSkipLeaseCheckRequest() {
-		// This replica must have range lease to process a write, except when it's
-		// an attempt to unfreeze the Range. These are a special case in which any
-		// replica will propose it to get back to an active state.
+	// For lease commands, use the provided previous lease for verification.
+	if ba.IsSingleSkipLeaseCheckRequest() {
+		var err error
+		if lease, err = ba.GetPrevLeaseForLeaseRequest(); err != nil {
+			return nil, roachpb.NewError(err), proposalNoRetry
+		}
+	} else {
+		// Other write commands require that this replica has the range
+		// lease, except when it's an attempt to unfreeze the Range. These
+		// are a special case in which any replica will propose it to get
+		// back to an active state.
 		var status LeaseStatus
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
@@ -3248,18 +3255,16 @@ func (r *Replica) processRaftCommand(
 	// TODO(spencer): remove the special-casing for the pre-epoch range
 	// leases.
 	verifyLease := func() error {
-		// Commands which skip lease checks and freeze requests do not
-		// verify the proposer's lease against the replica's current lease.
-		//
-		// TODO(spencer): need to verify the proposer's lease against the
-		// current lease even for RequestLease and TransferLease
-		// commands. See #10414.
-		if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() ||
-			raftCmd.BatchRequest.IsFreeze() {
+		// Freeze commands do not verify lease.
+		if raftCmd.BatchRequest.IsFreeze() {
 			return nil
 		}
 		// Handle the case of pre-epoch-based-leases command.
 		if raftCmd.OriginLease == nil {
+			// Skip verification for lease commands for legacy case.
+			if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() {
+				return nil
+			}
 			l, origin := r.mu.state.Lease, raftCmd.OriginReplica
 			if l.OwnedBy(origin.StoreID) && ts.Less(l.DeprecatedStartStasis) {
 				return nil

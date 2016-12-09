@@ -18,9 +18,10 @@ package roachpb
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -147,6 +148,20 @@ func (ba *BatchRequest) IsNonKV() bool {
 // request, and that request has the skipLeaseCheck flag set.
 func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
 	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
+}
+
+// GetPrevLeaseForLeaseRequest returns the previous lease, at the time
+// of proposal, for a request lease or transfer lease request. If the
+// batch does not contain a single lease request, returns an error.
+func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() (*Lease, error) {
+	if !ba.IsSingleSkipLeaseCheckRequest() {
+		return nil, errors.Errorf("not a single lease request batch: %s", ba)
+	}
+	lr, ok := ba.Requests[0].GetInner().(leaseRequestor)
+	if !ok {
+		return nil, errors.Errorf("request %T does not implement leaseRequestor", ba.Requests[0])
+	}
+	return lr.prevLease(), nil
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the

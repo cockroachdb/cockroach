@@ -205,9 +205,7 @@ func (rlq *raftLogQueue) shouldQueue(
 // process truncates the raft log of the range if the replica is the raft
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
-func (rlq *raftLogQueue) process(
-	ctx context.Context, _ *LeaseStatus, r *Replica, _ config.SystemConfig,
-) error {
+func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.SystemConfig) error {
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
 		return err

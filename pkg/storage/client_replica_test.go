@@ -514,10 +514,9 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 
 	origLease, _ := replica0.GetLease()
-	status := replica0.LeaseStatus(origLease, mtc.clock.Now())
 	{
 		// Transferring the lease to ourself should be a no-op.
-		if err := replica0.AdminTransferLease(replica0Desc.StoreID, status); err != nil {
+		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
 		newLease, _ := replica0.GetLease()
@@ -529,7 +528,7 @@ func TestRangeTransferLease(t *testing.T) {
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := replica0.AdminTransferLease(1000, status); !testutils.IsError(err, expected) {
+		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
@@ -542,7 +541,7 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if err := replica0.AdminTransferLease(newHolderDesc.StoreID, status); err != nil {
+	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -631,8 +630,7 @@ func TestRangeTransferLease(t *testing.T) {
 	transferErrCh := make(chan error)
 	go func() {
 		// Transfer back from replica1 to replica0.
-		status = replica1.LeaseStatus(replica1Lease, mtc.clock.Now())
-		transferErrCh <- replica1.AdminTransferLease(replica0Desc.StoreID, status)
+		transferErrCh <- replica1.AdminTransferLease(replica0Desc.StoreID)
 	}()
 	// Wait for the transfer to be blocked by the extension.
 	<-transferBlocked

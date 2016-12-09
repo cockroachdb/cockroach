@@ -132,6 +132,25 @@ type Request interface {
 	flags() int
 }
 
+// leaseRequestor is implemented by requests dealing with leases.
+// Implementors return the previous lease at the time the request
+// was proposed.
+type leaseRequestor interface {
+	prevLease() *Lease
+}
+
+var _ leaseRequestor = &RequestLeaseRequest{}
+
+func (rlr *RequestLeaseRequest) prevLease() *Lease {
+	return rlr.PrevLease
+}
+
+var _ leaseRequestor = &TransferLeaseRequest{}
+
+func (tlr *TransferLeaseRequest) prevLease() *Lease {
+	return tlr.PrevLease
+}
+
 // Response is an interface for RPC responses.
 type Response interface {
 	proto.Message
@@ -599,14 +618,14 @@ func (tlr *TruncateLogRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (llr *RequestLeaseRequest) ShallowCopy() Request {
-	shallowCopy := *llr
+func (rlr *RequestLeaseRequest) ShallowCopy() Request {
+	shallowCopy := *rlr
 	return &shallowCopy
 }
 
 // ShallowCopy implements the Request interface.
-func (lt *TransferLeaseRequest) ShallowCopy() Request {
-	shallowCopy := *lt
+func (tlr *TransferLeaseRequest) ShallowCopy() Request {
+	shallowCopy := *tlr
 	return &shallowCopy
 }
 
@@ -832,8 +851,8 @@ func (*TransferLeaseRequest) flags() int {
 	// But it can't be checked at propose time through the
 	// `redirectOnOrAcquireLease` call because, by the time that call is made, the
 	// replica has registered that a transfer is in progress and
-	// `redirectOrAcquire` already tentatively redirects to the future lease
-	// holder.
+	// `redirectOnOrAcquireLease` already tentatively redirects to the
+	// future lease holder.
 	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }
 func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV | isRange }

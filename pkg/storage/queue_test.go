@@ -53,9 +53,7 @@ func (tq *testQueueImpl) shouldQueue(
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(
-	_ context.Context, _ *LeaseStatus, _ *Replica, _ config.SystemConfig,
-) error {
+func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
@@ -679,7 +677,7 @@ type processTimeoutQueueImpl struct {
 }
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, _ *LeaseStatus, r *Replica, _ config.SystemConfig,
+	ctx context.Context, r *Replica, _ config.SystemConfig,
 ) error {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -732,9 +730,7 @@ type processTimeQueueImpl struct {
 	testQueueImpl
 }
 
-func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *LeaseStatus, _ *Replica, _ config.SystemConfig,
-) error {
+func (pq *processTimeQueueImpl) process(_ context.Context, _ *Replica, _ config.SystemConfig) error {
 	time.Sleep(5 * time.Millisecond)
 	return nil
 }
