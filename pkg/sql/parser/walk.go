@@ -503,6 +503,9 @@ func (expr *DString) Walk(_ Visitor) Expr { return expr }
 func (expr *DCollatedString) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DName) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DTimestamp) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

@@ -116,6 +116,10 @@ func MakeColumnDefDescs(
 		col.Type.Kind = ColumnType_STRING
 		col.Type.Width = int32(t.N)
 		colDatumType = parser.TypeString
+	case *parser.NameColType:
+		col.Type.Kind = ColumnType_NAME
+		col.Type.Width = int32(t.N)
+		colDatumType = parser.TypeName
 	case *parser.BytesColType:
 		col.Type.Kind = ColumnType_BYTES
 		colDatumType = parser.TypeBytes
@@ -446,6 +450,11 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *parser.DName:
+		if dir == encoding.Ascending {
+			return encoding.EncodeStringAscending(b, string(t.DString)), nil
+		}
+		return encoding.EncodeStringDescending(b, string(t.DString)), nil
 	case *parser.DBytes:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(*t)), nil
@@ -510,6 +519,8 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Dec), nil
 	case *parser.DString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
+	case *parser.DName:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.DString)), nil
 	case *parser.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *parser.DDate:
@@ -813,6 +824,7 @@ type DatumAlloc struct {
 	dintAlloc         []parser.DInt
 	dfloatAlloc       []parser.DFloat
 	dstringAlloc      []parser.DString
+	dnameAlloc        []parser.DName
 	dbytesAlloc       []parser.DBytes
 	ddecimalAlloc     []parser.DDecimal
 	ddateAlloc        []parser.DDate
@@ -850,6 +862,18 @@ func (a *DatumAlloc) NewDString(v parser.DString) *parser.DString {
 	buf := &a.dstringAlloc
 	if len(*buf) == 0 {
 		*buf = make([]parser.DString, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDName allocates a DName.
+func (a *DatumAlloc) NewDName(v parser.DName) *parser.DName {
+	buf := &a.dnameAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DName, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -987,6 +1011,14 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDString(parser.DString(r)), rkey, err
+	case parser.TypeName:
+		var r string
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+		}
+		return a.NewDName(parser.DName{DString: parser.DString(r)}), rkey, err
 	case parser.TypeBytes:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -1066,6 +1098,10 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)
 		return a.NewDString(parser.DString(data)), b, err
+	case parser.TypeName:
+		var data []byte
+		b, data, err = encoding.DecodeBytesValue(b)
+		return a.NewDName(parser.DName{DString: parser.DString(data)}), b, err
 	case parser.TypeBytes:
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)

@@ -95,6 +95,8 @@ func pgTypeForParserType(t parser.Type) pgType {
 		return pgType{oid.T_numeric, -1}
 	case parser.TypeString:
 		return pgType{oid.T_text, -1}
+	case parser.TypeName:
+		return pgType{oid.T_name, 64}
 	case parser.TypeDate:
 		return pgType{oid.T_date, 8}
 	case parser.TypeTimestamp:
@@ -106,7 +108,9 @@ func pgTypeForParserType(t parser.Type) pgType {
 	case parser.TypeStringArray:
 		return pgType{oid.T__text, -1}
 	case parser.TypeIntArray:
-		return pgType{oid.T__int8, -1}
+		return pgType{oid.T_int2vector, -1}
+	case parser.TypeNameArray:
+		return pgType{oid.T__name, -1}
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := t.FamilyEqual
@@ -172,6 +176,9 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
+
+	case *parser.DName:
+		b.writeLengthPrefixedString(string(v.DString))
 
 	case *parser.DDate:
 		t := time.Unix(int64(*v)*secondsInDay, 0)
@@ -636,6 +643,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			d = parser.NewDString(string(b))
 		default:
 			return d, errors.Errorf("unsupported text format code: %d", code)
+		}
+	case oid.T_name:
+		switch code {
+		case formatText, formatBinary:
+			d = parser.NewDName(string(b))
+		default:
+			return d, errors.Errorf("unsupported name format code: %d", code)
 		}
 	case oid.T_bytea:
 		switch code {

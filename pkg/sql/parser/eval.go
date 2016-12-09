@@ -798,7 +798,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeString,
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDString(string(*left.(*DString) + *right.(*DString))), nil
+				return NewDString(string(*left.(DStringBacked).BackingDString() + *right.(DStringBacked).BackingDString())), nil
 			},
 		},
 		BinOp{
@@ -893,7 +893,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DString) == *right.(*DString)), nil
+				return DBool(*left.(DStringBacked).BackingDString() == *right.(DStringBacked).BackingDString()), nil
 			},
 		},
 		CmpOp{
@@ -901,6 +901,20 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			RightType: TypeCollatedString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return DBool(bytes.Equal(left.(*DCollatedString).key, right.(*DCollatedString).key)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeName,
+			RightType: TypeString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(left.(*DName).DString == *right.(*DString)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeString,
+			RightType: TypeName,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(*left.(*DString) == right.(*DName).DString), nil
 			},
 		},
 		CmpOp{
@@ -1048,7 +1062,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DString) < *right.(*DString)), nil
+				return DBool(*left.(DStringBacked).BackingDString() < *right.(DStringBacked).BackingDString()), nil
 			},
 		},
 		CmpOp{
@@ -1202,7 +1216,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DString) <= *right.(*DString)), nil
+				return DBool(*left.(DStringBacked).BackingDString() <= *right.(DStringBacked).BackingDString()), nil
 			},
 		},
 		CmpOp{
@@ -1374,12 +1388,40 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 				return matchLike(ctx, left, right, false)
 			},
 		},
+		CmpOp{
+			LeftType:  TypeName,
+			RightType: TypeString,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				return matchLike(ctx, left, right, false)
+			},
+		},
+		CmpOp{
+			LeftType:  TypeString,
+			RightType: TypeName,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				return matchLike(ctx, left, right, false)
+			},
+		},
 	},
 
 	ILike: {
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				return matchLike(ctx, left, right, true)
+			},
+		},
+		CmpOp{
+			LeftType:  TypeName,
+			RightType: TypeString,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				return matchLike(ctx, left, right, true)
+			},
+		},
+		CmpOp{
+			LeftType:  TypeString,
+			RightType: TypeName,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				return matchLike(ctx, left, right, true)
 			},
@@ -1391,7 +1433,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				key := similarToKey(*right.(*DString))
+				key := similarToKey(*right.(DStringBacked).BackingDString())
 				return matchRegexpWithKey(ctx, left, key)
 			},
 		},
@@ -1402,7 +1444,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				key := regexpKey{s: string(*right.(*DString)), caseInsensitive: false}
+				key := regexpKey{s: string(*right.(DStringBacked).BackingDString()), caseInsensitive: false}
 				return matchRegexpWithKey(ctx, left, key)
 			},
 		},
@@ -1413,7 +1455,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeString,
 			RightType: TypeString,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				key := regexpKey{s: string(*right.(*DString)), caseInsensitive: true}
+				key := regexpKey{s: string(*right.(DStringBacked).BackingDString()), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
 			},
 		},
@@ -1456,7 +1498,7 @@ func makeEvalTupleIn(typ Type) CmpOp {
 }
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (DBool, error) {
-	pattern := string(*right.(*DString))
+	pattern := string(*right.(DStringBacked).BackingDString())
 	like := optimizedLikeFunc(pattern, caseInsensitive)
 	if like == nil {
 		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
@@ -1466,7 +1508,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (DBool
 		}
 		like = re.MatchString
 	}
-	return DBool(like(string(*left.(*DString)))), nil
+	return DBool(like(string(*left.(DStringBacked).BackingDString()))), nil
 }
 
 func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (DBool, error) {
@@ -1474,7 +1516,7 @@ func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (DBool,
 	if err != nil {
 		return DBool(false), err
 	}
-	return DBool(re.MatchString(string(*str.(*DString)))), nil
+	return DBool(re.MatchString(string(*str.(DStringBacked).BackingDString()))), nil
 }
 
 // MultipleResultsError is returned by QueryRow when more than one result is
@@ -2482,6 +2524,11 @@ func (t dNull) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DString) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DName) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
