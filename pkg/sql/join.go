@@ -240,7 +240,7 @@ func (p *planner) makeJoin(
 	)
 
 	if cond == nil {
-		pred, info = p.makeCrossPredicate(leftInfo, rightInfo)
+		pred, info, err = p.makeCrossPredicate(leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
@@ -336,7 +336,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 	switch n.joinType {
 	case joinTypeInner:
 		jType := "INNER"
-		if _, ok := n.pred.(*crossPredicate); ok {
+		if p, ok := n.pred.(*equalityPredicate); ok && len(p.leftColNames) == 0 {
 			jType = "CROSS"
 		}
 		buf.WriteString(jType)
