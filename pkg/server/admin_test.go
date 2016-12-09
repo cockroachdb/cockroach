@@ -738,7 +738,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		eventType sql.EventLogType
 		expCount  int
 	}{
-		{"", 7},
+		{"", 8},
 		{sql.EventLogNodeJoin, 1},
 		{sql.EventLogNodeRestart, 0},
 		{sql.EventLogDropDatabase, 0},
