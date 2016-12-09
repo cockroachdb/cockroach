@@ -74,6 +74,7 @@ var Aggregates = map[string][]Builtin{
 	"array_agg": {
 		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate),
 		makeAggBuiltin(TypeString, TypeStringArray, newStringArrayAggregate),
+		makeAggBuiltin(TypeName, TypeNameArray, newNameArrayAggregate),
 	},
 
 	"avg": {
@@ -204,6 +205,10 @@ func newIntArrayAggregate() AggregateFunc {
 
 func newStringArrayAggregate() AggregateFunc {
 	return &arrayAggregate{arr: NewDArray(TypeString)}
+}
+
+func newNameArrayAggregate() AggregateFunc {
+	return &arrayAggregate{arr: NewDArray(TypeName)}
 }
 
 // Add accumulates the passed datum into the array.

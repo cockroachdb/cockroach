@@ -97,6 +97,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 			p[i] = byte(1 + rng.Intn(127))
 		}
 		return parser.NewDString(string(p))
+	case ColumnType_NAME:
+		return &parser.DName{DString: *RandDatum(rng, ColumnType_STRING, false).(*parser.DString)}
 	case ColumnType_BYTES:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)

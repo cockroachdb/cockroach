@@ -36,7 +36,9 @@ var oidToDatum = map[oid.Oid]parser.Type{
 	oid.T_interval:    parser.TypeInterval,
 	oid.T_numeric:     parser.TypeDecimal,
 	oid.T_text:        parser.TypeString,
+	oid.T_name:        parser.TypeName,
 	oid.T__text:       parser.TypeStringArray,
+	oid.T__name:       parser.TypeNameArray,
 	oid.T__int2:       parser.TypeIntArray,
 	oid.T__int4:       parser.TypeIntArray,
 	oid.T__int8:       parser.TypeIntArray,
@@ -57,6 +59,7 @@ var datumToOid = map[reflect.Type]oid.Oid{
 	reflect.TypeOf(parser.TypeInterval):    oid.T_interval,
 	reflect.TypeOf(parser.TypeDecimal):     oid.T_numeric,
 	reflect.TypeOf(parser.TypeString):      oid.T_text,
+	reflect.TypeOf(parser.TypeName):        oid.T_name,
 	reflect.TypeOf(parser.TypeTimestamp):   oid.T_timestamp,
 	reflect.TypeOf(parser.TypeTimestampTZ): oid.T_timestamptz,
 	reflect.TypeOf(parser.TypeTuple):       oid.T_record,
@@ -80,6 +83,8 @@ func DatumToOid(typ parser.Type) (oid.Oid, bool) {
 			return oid.T__int8, true
 		case parser.TypeStringArray:
 			return oid.T__text, true
+		case parser.TypeNameArray:
+			return oid.T__name, true
 		case parser.TypeAnyArray:
 			return oid.T_anyarray, true
 		}

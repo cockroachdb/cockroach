@@ -38,6 +38,7 @@ message ColumnType {
     STRING = 7;     // STRING(width)
     BYTES = 8;
     TIMESTAMPTZ = 9;
+    NAME = 10;
 
     // Array types.
     //
