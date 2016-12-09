@@ -670,6 +670,94 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 }
 
+// TestLeaseMetricsOnSplitAndTransfer verifies that lease-related metrics
+// are updated after splitting a range and then initiating one successful
+// and one failing lease transfer.
+func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var injectLeaseTransferError atomic.Value
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableSplitQueue = true
+	sc.TestingKnobs.TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if args, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
+				if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
+					// Note that we can't just return an error here as we only
+					// end up counting failures in the metrics if the command
+					// makes it through to being executed. So use a fake store ID.
+					args.Lease.Replica.StoreID = roachpb.StoreID(1000)
+				}
+			}
+			return nil
+		}
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	// Up-replicate to two replicas.
+	keyMinReplica0 := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	mtc.replicateRange(keyMinReplica0.RangeID, 1)
+
+	// Split the key space at key "a".
+	splitKey := roachpb.RKey("a")
+	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
+	if _, pErr := client.SendWrapped(
+		context.Background(), rg1(mtc.stores[0]), splitArgs,
+	); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Now, a successful transfer from LHS replica 0 to replica 1.
+	injectLeaseTransferError.Store(false)
+	if err := mtc.dbs[0].AdminTransferLease(
+		context.TODO(), keyMinReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
+	); err != nil {
+		t.Fatalf("unable to transfer lease to replica 1: %s", err)
+	}
+
+	// Next a failed transfer from RHS replica 0 to replica 1.
+	injectLeaseTransferError.Store(true)
+	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey, nil)
+	if err := mtc.dbs[0].AdminTransferLease(
+		context.TODO(), keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
+	); err == nil {
+		t.Fatal("expected an error transferring to an unknown store ID")
+	}
+
+	metrics := mtc.stores[0].Metrics()
+	if a, e := metrics.LeaseTransferSuccessCount.Count(), int64(1); a != e {
+		t.Errorf("expected %d lease transfer successes; got %d", e, a)
+	}
+	if a, e := metrics.LeaseTransferErrorCount.Count(), int64(1); a != e {
+		t.Errorf("expected %d lease transfer errors; got %d", e, a)
+	}
+
+	// Expire current leases and put a key to RHS of split to request
+	// an epoch-based lease.
+	testutils.SucceedsSoon(t, func() error {
+		mtc.expireLeases()
+		if err := mtc.stores[0].DB().Put(context.TODO(), "a", "foo"); err != nil {
+			return err
+		}
+
+		// Update replication gauges on store 1 and verify we have 1 each of
+		// expiration and epoch leases. These values are counted from store 1
+		// because it will have the higher replica IDs. Expire leases to make
+		// sure that epoch-based leases are used for the split range.
+		if err := mtc.stores[1].ComputeMetrics(context.Background(), 0); err != nil {
+			return err
+		}
+		metrics = mtc.stores[1].Metrics()
+		if a, e := metrics.LeaseExpirationCount.Value(), int64(1); a != e {
+			return errors.Errorf("expected %d expiration lease count; got %d", e, a)
+		}
+		if a, e := metrics.LeaseEpochCount.Value(), int64(1); a != e {
+			return errors.Errorf("expected %d epoch lease count; got %d", e, a)
+		}
+		return nil
+	})
+}
+
 // Test that leases held before a restart are not used after the restart.
 // See replica.mu.minLeaseProposedTS for the reasons why this isn't allowed.
 func TestLeaseNotUsedAfterRestart(t *testing.T) {

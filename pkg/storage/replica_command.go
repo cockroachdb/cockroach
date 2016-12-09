@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -1602,9 +1601,14 @@ func (r *Replica) TruncateLog(
 	return reply, pd, setTruncatedState(ctx, batch, ms, r.RangeID, tState)
 }
 
-func newFailedLeaseTrigger() EvalResult {
+func newFailedLeaseTrigger(isTransfer bool) EvalResult {
 	var trigger EvalResult
-	trigger.Local.leaseMetricsResult = new(bool)
+	trigger.Local.leaseMetricsResult = new(leaseMetricsType)
+	if isTransfer {
+		*trigger.Local.leaseMetricsResult = leaseTransferError
+	} else {
+		*trigger.Local.leaseMetricsResult = leaseRequestError
+	}
 	return trigger
 }
 
@@ -1665,17 +1669,17 @@ func (r *Replica) RequestLease(
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
 			rErr.Message = "extension moved start timestamp backwards"
-			return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
+			return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(false /* isTransfer */), rErr
 		}
 		if args.Lease.Type() == roachpb.LeaseExpiration {
 			args.Lease.Expiration.Forward(prevLease.Expiration)
 		}
 	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
-		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
+		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 	args.Lease.Start = effectiveStart
-	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, isExtension)
+	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, isExtension, false /* isTransfer */)
 }
 
 // TransferLease sets the lease holder for the range.
@@ -1698,7 +1702,7 @@ func (r *Replica) TransferLease(
 		prevLease := r.mu.state.Lease
 		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	}
-	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, false /* isExtension */)
+	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, false /* isExtension */, true /* isTransfer */)
 }
 
 // applyNewLeaseLocked checks that the lease contains a valid interval and that
@@ -1722,6 +1726,7 @@ func (r *Replica) applyNewLeaseLocked(
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
 	isExtension bool,
+	isTransfer bool,
 ) (roachpb.RequestLeaseResponse, EvalResult, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
@@ -1730,7 +1735,7 @@ func (r *Replica) applyNewLeaseLocked(
 	if (lease.Type() == roachpb.LeaseExpiration && !lease.Start.Less(lease.Expiration)) ||
 		(lease.Type() == roachpb.LeaseEpoch && !lease.Expiration.Equal(hlc.ZeroTimestamp)) {
 		// This amounts to a bug.
-		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(),
+		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: lease,
@@ -1741,7 +1746,7 @@ func (r *Replica) applyNewLeaseLocked(
 
 	// Verify that requesting replica is part of the current replica set.
 	if _, ok := r.mu.state.Desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
-		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(),
+		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: lease,
@@ -1752,7 +1757,7 @@ func (r *Replica) applyNewLeaseLocked(
 	var reply roachpb.RequestLeaseResponse
 	// Store the lease to disk & in-memory.
 	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
-		return reply, newFailedLeaseTrigger(), err
+		return reply, newFailedLeaseTrigger(isTransfer), err
 	}
 
 	var pd EvalResult
@@ -1767,9 +1772,14 @@ func (r *Replica) applyNewLeaseLocked(
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
 	pd.Replicated.State.Lease = &lease
-	pd.Local.leaseMetricsResult = proto.Bool(true)
 	if l := r.mu.state.Lease; l == nil || l.Replica.StoreID != lease.Replica.StoreID {
 		pd.Local.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
+	}
+	pd.Local.leaseMetricsResult = new(leaseMetricsType)
+	if isTransfer {
+		*pd.Local.leaseMetricsResult = leaseTransferSuccess
+	} else {
+		*pd.Local.leaseMetricsResult = leaseRequestSuccess
 	}
 	// TODO(tschottdorf): having traced the origin of this call back to
 	// rev 6281926, it seems that we should only be doing this when the

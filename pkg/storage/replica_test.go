@@ -868,6 +868,12 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	if err := assert(metrics.LeaseRequestErrorCount.Count(), 0, 0); err != nil {
 		t.Fatal(err)
 	}
+	if err := tc.repl.store.updateReplicationGauges(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := metrics.LeaseExpirationCount.Value(), int64(1); a != e {
+		t.Fatalf("expected expiration lease count of %d; got %d", e, a)
+	}
 
 	now := tc.Clock().Now()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
@@ -886,6 +892,13 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}
 	if err := assert(metrics.LeaseRequestErrorCount.Count(), 0, 0); err != nil {
 		t.Fatal(err)
+	}
+	// The expiration count should still be 1, as this is a gauge.
+	if err := tc.repl.store.updateReplicationGauges(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := metrics.LeaseExpirationCount.Value(), int64(1); a != e {
+		t.Fatalf("expected expiration lease count of %d; got %d", e, a)
 	}
 
 	// Make lease request fail by requesting overlapping lease from bogus Replica.
