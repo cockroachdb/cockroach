@@ -23,6 +23,8 @@ GOFLAGS :=
 # Set to 1 to use static linking for all builds (including tests).
 STATIC :=
 
+COCKROACH := ./cockroach
+
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
 PKG          := ./pkg/...
@@ -35,6 +37,7 @@ BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
+STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
 BUILDMODE    := install
 SUFFIX       :=
 export GOPATH := $(realpath ../../../..)
@@ -73,6 +76,12 @@ all: build test check
 .PHONY: build
 build: BUILDMODE = build -i -o cockroach$(SUFFIX)
 build: install
+
+.PHONY: start
+start: build
+start:
+	$(COCKROACH) start $(STARTFLAGS)
+
 
 .PHONY: install
 install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
