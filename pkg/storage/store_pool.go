@@ -128,10 +128,7 @@ func (sd *storeDetail) isDead(
 func (sd *storeDetail) status(
 	now time.Time, threshold time.Duration, rangeID roachpb.RangeID, nl NodeLivenessFunc,
 ) storeStatus {
-	// TODO(spencer): there are two ideas of dead in this code right now.
-	// This method considers a node dead if isDead() is true OR if sd.desc
-	// is null. Dead should mean one thing or the other, not both.
-	if sd.isDead(now, threshold, nl) || sd.desc == nil {
+	if sd.isDead(now, threshold, nl) {
 		return storeStatusDead
 	}
 	if sd.isThrottled(now) {
@@ -437,8 +434,10 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 		case storeStatusReplicaCorrupted:
 			aliveStoreCount++
 		case storeStatusAvailable:
-			aliveStoreCount++
-			storeDescriptors = append(storeDescriptors, *detail.desc)
+			if detail.desc != nil {
+				aliveStoreCount++
+				storeDescriptors = append(storeDescriptors, *detail.desc)
+			}
 		}
 	}
 
