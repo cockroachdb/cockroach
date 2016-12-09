@@ -134,7 +134,7 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 	if err := f.StartLoad(ctx, cl.Process, *flagCLTWriters); err != nil {
 		t.Fatal(err)
 	}
-	cl.assert(ctx, t, f)
+	f.Assert(ctx, t)
 
 	// Run load, checking the health of the cluster periodically.
 	const healthCheckInterval = 2 * time.Minute
@@ -147,7 +147,7 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 		case <-healthCheckTimer.C:
 			// Check that all nodes are up and that queries are being processed.
 			healthCheckTimer.Read = true
-			cl.assert(ctx, t, f)
+			f.Assert(ctx, t)
 			queryCount, err := cl.queryCount(f)
 			if err != nil {
 				t.Fatal(err)
@@ -165,7 +165,7 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 			log.Infof(ctx, "health check ok %s (%.1f qps)", timeutil.Now().Sub(start), qps)
 		case <-ctx.Done():
 			log.Infof(ctx, "load test finished")
-			cl.assert(ctx, t, f)
+			f.Assert(ctx, t)
 			if err := f.Stop(ctx, 0, cl.Process); err != nil {
 				t.Error(err)
 			}
@@ -190,14 +190,6 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 		return ""
 	}
 	return regexp.MustCompile(`([a-z])0[0a-z]+`).ReplaceAllString(timeout.String(), `$1`)
-}
-
-// assert fails the test if CockroachDB or the load generators are down.
-func (cl continuousLoadTest) assert(ctx context.Context, t testing.TB, f *terrafarm.Farmer) {
-	f.Assert(ctx, t)
-	for _, host := range f.Nodes()[0:*flagCLTWriters] {
-		f.AssertState(ctx, t, host, cl.Process, "RUNNING")
-	}
 }
 
 func TestContinuousLoad_BlockWriter(t *testing.T) {
