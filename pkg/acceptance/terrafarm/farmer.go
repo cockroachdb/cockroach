@@ -62,6 +62,7 @@ type Farmer struct {
 	AddVars     map[string]string
 	KeepCluster string
 	nodes       []string
+	processes   [][]string
 	RPCContext  *rpc.Context
 }
 
@@ -275,7 +276,6 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // restarts or node deaths occurred). Tests can call this periodically to
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
-// TODO(cuongdo): doesn't handle load generators (photos, block_writer)
 func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
 	for _, item := range []struct {
 		typ   string
@@ -285,6 +285,11 @@ func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
 	} {
 		for _, host := range item.hosts {
 			f.AssertState(ctx, t, host, item.typ, "RUNNING")
+		}
+	}
+	for i, processes := range f.processes {
+		for _, process := range processes {
+			f.AssertState(ctx, t, f.Nodes()[i], process, "RUNNING")
 		}
 	}
 }
@@ -333,7 +338,15 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 
 // Start starts the given process on the ith node.
 func (f *Farmer) Start(ctx context.Context, i int, process string) error {
-	_, _, err := f.execSupervisor(f.Nodes()[i], "start "+process)
+	name := "start " + process
+	_, _, err := f.execSupervisor(f.Nodes()[i], name)
+	if err == nil {
+		extendBy := f.NumNodes() - len(f.processes)
+		if extendBy > 0 {
+			f.processes = append(f.processes, make([][]string, extendBy)...)
+		}
+		f.processes[i] = append(f.processes[i], name)
+	}
 	return err
 }
 
