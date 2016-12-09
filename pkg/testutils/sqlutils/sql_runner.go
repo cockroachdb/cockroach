@@ -19,6 +19,7 @@ package sqlutils
 import (
 	gosql "database/sql"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -85,54 +86,48 @@ func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
 	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
 }
 
-// CheckQueryResults checks that the rows returned by a query match the expected
-// response.
-func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
-	file, line, _ := caller.Lookup(1)
-	info := fmt.Sprintf("%s:%d query '%s'", file, line, query)
-
+// QueryStr runs a Query and converts the result to a string matrix; nulls are
+// represented as "NULL". Empty results are represented by an empty (but
+// non-nil) slice. Kills the test on errors.
+func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
 	rows := sr.Query(query)
 	cols, err := rows.Columns()
 	if err != nil {
-		sr.Error(err)
-		return
-	}
-	if len(expected) > 0 && len(cols) != len(expected[0]) {
-		sr.Errorf("%s: wrong number of columns %d", info, len(cols))
-		return
+		sr.Fatal(err)
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
 		vals[i] = new(interface{})
 	}
-	i := 0
-	for ; rows.Next(); i++ {
-		if i >= len(expected) {
-			sr.Errorf("%s: expected %d rows, got more", info, len(expected))
-			return
-		}
+	res := [][]string{}
+	for i := 0; rows.Next(); i++ {
 		if err := rows.Scan(vals...); err != nil {
-			sr.Error(err)
-			return
+			sr.Fatal(err)
 		}
+		row := make([]string, len(vals))
 		for j, v := range vals {
 			if val := *v.(*interface{}); val != nil {
-				var s string
 				switch t := val.(type) {
 				case []byte:
-					s = string(t)
+					row[j] = string(t)
 				default:
-					s = fmt.Sprint(val)
+					row[j] = fmt.Sprint(val)
 				}
-				if expected[i][j] != s {
-					sr.Errorf("%s: expected %v, found %v", info, expected[i][j], s)
-				}
-			} else if expected[i][j] != "NULL" {
-				sr.Errorf("%s: expected %v, found %v", info, expected[i][j], "NULL")
+			} else {
+				row[j] = "NULL"
 			}
 		}
+		res = append(res, row)
 	}
-	if i != len(expected) {
-		sr.Errorf("%s: found %d rows, expected %d", info, i, len(expected))
+	return res
+}
+
+// CheckQueryResults checks that the rows returned by a query match the expected
+// response.
+func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
+	res := sr.QueryStr(query)
+	if !reflect.DeepEqual(res, expected) {
+		file, line, _ := caller.Lookup(1)
+		sr.Errorf("%s:%d query '%s': expected:\n%v\ngot:%v\n", file, line, query, expected, res)
 	}
 }
