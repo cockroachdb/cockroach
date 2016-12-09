@@ -87,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -187,6 +188,11 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.EndNodes))
 	at.f.Assert(ctx, t)
 
+	log.Infof(ctx, "starting load on cluster")
+	if err := at.startLoad(ctx, at.f); err != nil {
+		t.Fatal(err)
+	}
+
 	log.Info(ctx, "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(ctx, t); err != nil {
 		t.Fatal(err)
@@ -264,6 +270,28 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 	log.Infof(context.Background(), "stdDev(replica count) = %.2f", stdDev)
 
 	return nil
+}
+
+func (at *allocatorTest) startLoad(ctx context.Context, f *terrafarm.Farmer) error {
+	if *flagCLTWriters > len(f.Nodes()) {
+		return errors.Errorf("writers (%d) > nodes (%d)", *flagCLTWriters, len(f.Nodes()))
+	}
+
+	// We may have to retry restarting the load generators, because CockroachDB
+	// might have been started too recently to start accepting connections.
+	started := make(map[int]bool)
+	return util.RetryForDuration(10*time.Second, func() error {
+		for i := 0; i < *flagCLTWriters; i++ {
+			if !started[i] {
+				for _, loadGenerator := range []string{"block_writer", "photos"} {
+					if err := f.Start(ctx, i, loadGenerator); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
 }
 
 type replicationStats struct {
