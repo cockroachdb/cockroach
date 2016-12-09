@@ -202,7 +202,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, status *LeaseStatus, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -215,7 +215,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signalling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, status, repl, sysCfg); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, sysCfg); err != nil {
 			if IsPreemptiveSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -237,7 +237,7 @@ func (rq *replicateQueue) process(
 }
 
 func (rq *replicateQueue) processOneChange(
-	ctx context.Context, status *LeaseStatus, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
 
@@ -308,7 +308,7 @@ func (rq *replicateQueue) processOneChange(
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
 			// leases.
-			transferred, err := rq.transferLease(ctx, repl, status, desc, zone, false /* checkTransferLeaseSource */)
+			transferred, err := rq.transferLease(ctx, repl, desc, zone, false /* checkTransferLeaseSource */)
 			if err != nil {
 				return false, err
 			}
@@ -345,7 +345,7 @@ func (rq *replicateQueue) processOneChange(
 		if rq.canTransferLease() {
 			// We require the lease in order to process replicas, so
 			// repl.store.StoreID() corresponds to the lease-holder's store ID.
-			transferred, err := rq.transferLease(ctx, repl, status, desc, zone, true /* checkTransferLeaseSource */)
+			transferred, err := rq.transferLease(ctx, repl, desc, zone, true /* checkTransferLeaseSource */)
 			if err != nil {
 				return false, err
 			}
@@ -388,7 +388,6 @@ func (rq *replicateQueue) processOneChange(
 func (rq *replicateQueue) transferLease(
 	ctx context.Context,
 	repl *Replica,
-	status *LeaseStatus,
 	desc *roachpb.RangeDescriptor,
 	zone config.ZoneConfig,
 	checkTransferLeaseSource bool,
@@ -403,7 +402,7 @@ func (rq *replicateQueue) transferLease(
 	); target != (roachpb.ReplicaDescriptor{}) {
 		rq.metrics.TransferLeaseCount.Inc(1)
 		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-		if err := repl.AdminTransferLease(target.StoreID, *status); err != nil {
+		if err := repl.AdminTransferLease(target.StoreID); err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 		}
 		rq.lastLeaseTransfer.Store(timeutil.Now())

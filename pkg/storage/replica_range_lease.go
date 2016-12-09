@@ -131,13 +131,15 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
-			Span:  reqSpan,
-			Lease: reqLease,
+			Span:      reqSpan,
+			Lease:     reqLease,
+			PrevLease: status.lease,
 		}
 	} else {
 		leaseReq = &roachpb.RequestLeaseRequest{
-			Span:  reqSpan,
-			Lease: reqLease,
+			Span:      reqSpan,
+			Lease:     reqLease,
+			PrevLease: status.lease,
 		}
 	}
 
@@ -284,14 +286,6 @@ type LeaseStatus struct {
 	liveness  *Liveness      // liveness if epoch-based lease
 }
 
-// GetLeaseStatus gets the lease status for the replica's current
-// lease in relation to the specified timestamp.
-func (r *Replica) GetLeaseStatus(timestamp hlc.Timestamp) LeaseStatus {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
-}
-
 // leaseStatus returns lease status. If the lease is epoch-based,
 // the liveness field will be set to the liveness used to compute
 // its state, unless state == leaseError.
@@ -423,7 +417,7 @@ func (r *Replica) requestLeaseLocked(status LeaseStatus) <-chan *roachpb.Error {
 // blocks until the transfer is done. If a transfer is already in progress,
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaseHolderError is returned.
-func (r *Replica) AdminTransferLease(target roachpb.StoreID, status LeaseStatus) error {
+func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -433,6 +427,7 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID, status LeaseStatus)
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
+		status := r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
 		if status.lease.OwnedBy(target) {
 			// The target is already the lease holder. Nothing to do.
 			return nil, nil, nil

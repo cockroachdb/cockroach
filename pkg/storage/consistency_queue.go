@@ -85,15 +85,13 @@ func (q *consistencyQueue) shouldQueue(
 }
 
 // process() is called on every range for which this node is a lease holder.
-func (q *consistencyQueue) process(
-	ctx context.Context, status *LeaseStatus, repl *Replica, _ config.SystemConfig,
-) error {
+func (q *consistencyQueue) process(ctx context.Context, repl *Replica, _ config.SystemConfig) error {
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
 		log.Error(ctx, pErr.GoError())
 	}
 	// Update the last processed time for this queue.
-	if err := repl.setQueueLastProcessed(ctx, q.name, status.timestamp); err != nil {
+	if err := repl.setQueueLastProcessed(ctx, q.name, repl.store.Clock().Now()); err != nil {
 		log.ErrEventf(ctx, "failed to update last processed time: %v", err)
 	}
 	return nil

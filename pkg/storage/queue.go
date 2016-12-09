@@ -143,9 +143,8 @@ type queueImpl interface {
 
 	// process accepts lease status, a replica, and the system config
 	// and executes queue-specific work on it. The Replica is guaranteed
-	// to be initialized. If the queue requires a lease, LeaseStatus
-	// will be valid and non-nil; otherwise, LeaseStatus will be nil.
-	process(context.Context, *LeaseStatus, *Replica, config.SystemConfig) error
+	// to be initialized.
+	process(context.Context, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -558,11 +557,8 @@ func (bq *baseQueue) processReplica(
 	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease
 	// and renew or acquire if necessary.
-	var status *LeaseStatus
 	if bq.needsLease {
-		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		ls, pErr := repl.redirectOnOrAcquireLease(ctx)
-		if pErr != nil {
+		if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 			switch v := pErr.GetDetail().(type) {
 			case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
 				log.VEventf(queueCtx, 3, "%s; skipping", v)
@@ -572,11 +568,10 @@ func (bq *baseQueue) processReplica(
 			}
 		}
 		log.Event(ctx, "got range lease")
-		status = &ls
 	}
 
 	log.VEventf(queueCtx, 3, "processing")
-	if err := bq.impl.process(ctx, status, repl, cfg); err != nil {
+	if err := bq.impl.process(ctx, repl, cfg); err != nil {
 		return err
 	}
 	log.Event(ctx, "done")
