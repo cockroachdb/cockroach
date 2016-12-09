@@ -58,7 +58,6 @@ type joinPredicate interface {
 }
 
 var _ joinPredicate = &onPredicate{}
-var _ joinPredicate = &crossPredicate{}
 var _ joinPredicate = &equalityPredicate{}
 
 // joinPredicateBase contains fields common to all joinPredicates.
@@ -85,41 +84,9 @@ func prepareRowConcat(result parser.DTuple, leftRow parser.DTuple, rightRow pars
 	copy(result[len(leftRow):], rightRow)
 }
 
-// crossPredicate implements the predicate logic for CROSS JOIN. The
-// predicate is always true, the work done here is thus minimal.
-type crossPredicate struct {
-	joinPredicateBase
-}
-
-func (p *crossPredicate) eval(_, _, _ parser.DTuple) (bool, error) {
-	return true, nil
-}
-
-func (p *crossPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
-	return p.getNeededColumnsConcat(neededJoined)
-}
-
-func (p *crossPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
-	prepareRowConcat(result, leftRow, rightRow)
-}
-func (p *crossPredicate) start() error                        { return nil }
-func (p *crossPredicate) expand() error                       { return nil }
-func (p *crossPredicate) format(_ *bytes.Buffer)              {}
-func (p *crossPredicate) explainTypes(_ func(string, string)) {}
-func (p *crossPredicate) encode(_ []byte, _ parser.DTuple, _ int) ([]byte, bool, error) {
-	return nil, false, nil
-}
-
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
-func (p *planner) makeCrossPredicate(left, right *dataSourceInfo) (joinPredicate, *dataSourceInfo) {
-	pred := &crossPredicate{
-		joinPredicateBase: joinPredicateBase{
-			numLeftCols:  len(left.sourceColumns),
-			numRightCols: len(right.sourceColumns),
-		},
-	}
-	info := concatDataSourceInfos(left, right)
-	return pred, info
+func (p *planner) makeCrossPredicate(left, right *dataSourceInfo) (joinPredicate, *dataSourceInfo, error) {
+	return p.makeEqualityPredicate(left, right, nil, nil, false, nil)
 }
 
 // onPredicate implements the predicate logic for joins with an ON clause.
@@ -295,11 +262,13 @@ type equalityPredicate struct {
 }
 
 func (p *equalityPredicate) format(buf *bytes.Buffer) {
-	buf.WriteString(" ON EQUALS((")
-	p.leftColNames.Format(buf, parser.FmtSimple)
-	buf.WriteString("),(")
-	p.rightColNames.Format(buf, parser.FmtSimple)
-	buf.WriteString("))")
+	if len(p.leftColNames) > 0 {
+		buf.WriteString(" ON EQUALS((")
+		p.leftColNames.Format(buf, parser.FmtSimple)
+		buf.WriteString("),(")
+		p.rightColNames.Format(buf, parser.FmtSimple)
+		buf.WriteString("))")
+	}
 }
 func (p *equalityPredicate) start() error                        { return nil }
 func (p *equalityPredicate) expand() error                       { return nil }
