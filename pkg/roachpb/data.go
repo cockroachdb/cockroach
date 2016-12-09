@@ -1124,3 +1124,9 @@ func (kv KeyValueByKey) Swap(i, j int) {
 }
 
 var _ sort.Interface = KeyValueByKey{}
+
+// ReplicationTarget identifies a node/store pair.
+type ReplicationTarget struct {
+	NodeID  NodeID
+	StoreID StoreID
+}

@@ -254,23 +254,17 @@ func (tc *TestCluster) SplitRange(
 	return tc.Servers[0].SplitRange(splitKey)
 }
 
-// ReplicationTarget identifies a node/store pair.
-type ReplicationTarget struct {
-	NodeID  roachpb.NodeID
-	StoreID roachpb.StoreID
-}
-
 // Target returns a ReplicationTarget for the specified server.
-func (tc *TestCluster) Target(serverIdx int) ReplicationTarget {
+func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
 	s := tc.Servers[serverIdx]
-	return ReplicationTarget{
+	return roachpb.ReplicationTarget{
 		NodeID:  s.GetNode().Descriptor.NodeID,
 		StoreID: s.GetFirstStoreID(),
 	}
 }
 
 func (tc *TestCluster) changeReplicas(
-	action roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...ReplicationTarget,
+	action roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	var rangeDesc roachpb.RangeDescriptor
 
@@ -323,7 +317,7 @@ func (tc *TestCluster) changeReplicas(
 // The method blocks until a snapshot of the range has been copied to all the
 // new replicas and the new replicas become part of the Raft group.
 func (tc *TestCluster) AddReplicas(
-	startKey roachpb.Key, targets ...ReplicationTarget,
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 	rangeDesc, err := tc.changeReplicas(
@@ -356,7 +350,7 @@ func (tc *TestCluster) AddReplicas(
 
 // RemoveReplicas removes one or more replicas from a range.
 func (tc *TestCluster) RemoveReplicas(
-	startKey roachpb.Key, targets ...ReplicationTarget,
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
 }
@@ -370,7 +364,7 @@ func (tc *TestCluster) RemoveReplicas(
 // lease holder has applied it (so it might not know immediately that it is the
 // new lease holder).
 func (tc *TestCluster) TransferRangeLease(
-	rangeDesc roachpb.RangeDescriptor, dest ReplicationTarget,
+	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) error {
 	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
 		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
@@ -384,7 +378,7 @@ func (tc *TestCluster) TransferRangeLease(
 // without verifying if the lease is still active. Instead, it returns a time-
 // stamp taken off the queried node's clock.
 func (tc *TestCluster) FindRangeLease(
-	rangeDesc roachpb.RangeDescriptor, hint *ReplicationTarget,
+	rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
 ) (_ *roachpb.Lease, now hlc.Timestamp, _ error) {
 	if hint != nil {
 		var ok bool
@@ -393,7 +387,7 @@ func (tc *TestCluster) FindRangeLease(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
-		hint = &ReplicationTarget{
+		hint = &roachpb.ReplicationTarget{
 			NodeID:  rangeDesc.Replicas[0].NodeID,
 			StoreID: rangeDesc.Replicas[0].StoreID}
 	}
@@ -441,29 +435,29 @@ func (tc *TestCluster) FindRangeLease(
 // different hints can yield different results. The one server that's guaranteed
 // to have applied the transfer is the previous lease holder.
 func (tc *TestCluster) FindRangeLeaseHolder(
-	rangeDesc roachpb.RangeDescriptor, hint *ReplicationTarget,
-) (ReplicationTarget, error) {
+	rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
+) (roachpb.ReplicationTarget, error) {
 	lease, now, err := tc.FindRangeLease(rangeDesc, hint)
 	if err != nil {
-		return ReplicationTarget{}, err
+		return roachpb.ReplicationTarget{}, err
 	}
 	if lease == nil {
-		return ReplicationTarget{}, errors.New("no active lease")
+		return roachpb.ReplicationTarget{}, errors.New("no active lease")
 	}
 	// Find lease replica in order to examine the lease state.
 	store, err := tc.findMemberStore(lease.Replica.StoreID)
 	if err != nil {
-		return ReplicationTarget{}, err
+		return roachpb.ReplicationTarget{}, err
 	}
 	replica, err := store.GetReplica(rangeDesc.RangeID)
 	if err != nil {
-		return ReplicationTarget{}, err
+		return roachpb.ReplicationTarget{}, err
 	}
 	if !replica.IsLeaseValid(lease, now) {
-		return ReplicationTarget{}, errors.New("no valid lease")
+		return roachpb.ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica
-	return ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
+	return roachpb.ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
 }
 
 // WaitForSplitAndReplication waits for a range which starts with

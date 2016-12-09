@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -101,7 +102,7 @@ func TestManualReplication(t *testing.T) {
 	// Transfer the lease to node 1.
 	leaseHolder, err := tc.FindRangeLeaseHolder(
 		tableRangeDesc,
-		&ReplicationTarget{
+		&roachpb.ReplicationTarget{
 			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
 			StoreID: tc.Servers[0].GetFirstStoreID(),
 		})
@@ -123,7 +124,7 @@ func TestManualReplication(t *testing.T) {
 	// new lease.
 	leaseHolder, err = tc.FindRangeLeaseHolder(
 		tableRangeDesc,
-		&ReplicationTarget{
+		&roachpb.ReplicationTarget{
 			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
 			StoreID: tc.Servers[0].GetFirstStoreID(),
 		})
