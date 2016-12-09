@@ -63,10 +63,10 @@ type Cluster interface {
 }
 
 // Consistent performs a replication consistency check on all the ranges
-// in the cluster. It depends on a majority of the nodes being up.
-func Consistent(ctx context.Context, c Cluster) error {
-	// Always connect to the first node in the cluster.
-	kvClient, err := c.NewClient(ctx, 0)
+// in the cluster. It depends on a majority of the nodes being up, and does
+// the check against the node at index i.
+func Consistent(ctx context.Context, c Cluster, i int) error {
+	kvClient, err := c.NewClient(ctx, i)
 	if err != nil {
 		return err
 	}

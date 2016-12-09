@@ -188,6 +188,7 @@ func chaosMonkey(
 	c cluster.Cluster,
 	stopClients bool,
 	pickNodes func() []int,
+	consistentIdx int,
 ) {
 	defer close(state.teardown)
 	for curRound := uint64(1); !state.done(); curRound++ {
@@ -255,7 +256,7 @@ func chaosMonkey(
 		}
 		c.Assert(ctx, state.t)
 
-		if err := cluster.Consistent(ctx, c); err != nil {
+		if err := cluster.Consistent(ctx, c, consistentIdx); err != nil {
 			state.t.Error(err)
 		}
 		log.Warningf(ctx, "round %d: cluster recovered", curRound)
@@ -356,7 +357,7 @@ func testClusterRecoveryInner(
 	pickNodes := func() []int {
 		return rnd.Perm(num)[:rnd.Intn(num)+1]
 	}
-	go chaosMonkey(ctx, &state, c, true, pickNodes)
+	go chaosMonkey(ctx, &state, c, true, pickNodes, 0)
 
 	waitClientsStop(ctx, num, &state, stall)
 
@@ -401,9 +402,10 @@ func testNodeRestartInner(
 		clients:  make([]testClient, 1),
 	}
 
+	clientIdx := num - 1
 	client := &state.clients[0]
 	client.Lock()
-	client.db = makePGClient(t, c.PGUrl(ctx, num-1))
+	client.db = makePGClient(t, c.PGUrl(ctx, clientIdx))
 	client.Unlock()
 	go transferMoneyLoop(ctx, 0, &state, *numAccounts, *maxTransfer)
 
@@ -415,9 +417,9 @@ func testNodeRestartInner(
 	rnd, seed := randutil.NewPseudoRand()
 	log.Warningf(ctx, "monkey starts (seed %d)", seed)
 	pickNodes := func() []int {
-		return []int{rnd.Intn(num - 1)}
+		return []int{rnd.Intn(clientIdx)}
 	}
-	go chaosMonkey(ctx, &state, c, false, pickNodes)
+	go chaosMonkey(ctx, &state, c, false, pickNodes, clientIdx)
 
 	waitClientsStop(ctx, 1, &state, stall)
 
