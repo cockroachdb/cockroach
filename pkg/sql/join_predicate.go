@@ -292,12 +292,6 @@ type equalityPredicate struct {
 	// contain one column for every pair of columns tested for equality.
 	// This is the desired behavior for USING and NATURAL JOIN.
 	mergeEqualityColumns bool
-
-	// left/rightEqualityIndices give the position of non-merged columns on
-	// the left and right input row arrays, respectively. This is used
-	// when mergeEqualityColumns is true.
-	leftRestIndices  []int
-	rightRestIndices []int
 }
 
 func (p *equalityPredicate) format(buf *bytes.Buffer) {
@@ -352,15 +346,15 @@ func (p *equalityPredicate) getNeededColumns(neededJoined []bool) ([]bool, []boo
 	}
 
 	delta := len(p.leftEqualityIndices)
-	for i := range p.leftRestIndices {
+	for i := 0; i < p.numLeftCols; i++ {
 		if neededJoined[delta+i] {
-			leftNeeded[p.leftRestIndices[i]] = true
+			leftNeeded[i] = true
 		}
 	}
-	delta += len(p.leftRestIndices)
-	for i := range p.rightRestIndices {
+	delta += p.numLeftCols
+	for i := 0; i < p.numRightCols; i++ {
 		if neededJoined[delta+i] {
-			rightNeeded[p.rightRestIndices[i]] = true
+			rightNeeded[i] = true
 		}
 	}
 	return leftNeeded, rightNeeded
@@ -373,31 +367,20 @@ func (p *equalityPredicate) getNeededColumns(neededJoined []bool) ([]bool, []boo
 // the USING columns; then the non-USING values from the left input
 // row, then the non-USING values from the right input row.
 func (p *equalityPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
-	if !p.mergeEqualityColumns {
-		// Columns are not merged, simply emit them all.
-		copy(result[:len(leftRow)], leftRow)
-		copy(result[len(leftRow):], rightRow)
-		return
-	}
-
-	d := 0
-	for k, j := range p.leftEqualityIndices {
-		// The result for merged columns must be computed as per COALESCE().
-		if leftRow[j] != parser.DNull {
-			result[d] = leftRow[j]
-		} else {
-			result[d] = rightRow[p.rightEqualityIndices[k]]
+	offset := 0
+	if p.mergeEqualityColumns {
+		for k, j := range p.leftEqualityIndices {
+			// The result for merged columns must be computed as per COALESCE().
+			if leftRow[j] != parser.DNull {
+				result[offset] = leftRow[j]
+			} else {
+				result[offset] = rightRow[p.rightEqualityIndices[k]]
+			}
+			offset++
 		}
-		d++
 	}
-	for _, j := range p.leftRestIndices {
-		result[d] = leftRow[j]
-		d++
-	}
-	for _, j := range p.rightRestIndices {
-		result[d] = rightRow[j]
-		d++
-	}
+	copy(result[offset:offset+len(leftRow)], leftRow)
+	copy(result[offset+len(leftRow):], rightRow)
 }
 
 func (p *equalityPredicate) encode(b []byte, row parser.DTuple, side int) ([]byte, bool, error) {
@@ -537,35 +520,41 @@ func (p *planner) makeEqualityPredicate(
 		}
 	}
 
-	var leftRestIndices, rightRestIndices []int
-
 	if mergeEqualityColumns {
-		// Find out which columns are not involved in the predicate.
-		leftRestIndices = make([]int, 0, len(left.sourceColumns)-1)
-		for i := range left.sourceColumns {
-			if usedLeft[i] == invalidColIdx {
-				leftRestIndices = append(leftRestIndices, i)
-				usedLeft[i] = len(columns)
-				columns = append(columns, left.sourceColumns[i])
+		// Now, prepare/complete the metadata for the result columns.
+		// The structure of the join data source results is like this:
+		// - first, all the equality/USING columns;
+		// - then all the left columns,
+		// - then all the right columns,
+		// The duplicate columns appended after the equality/USING columns
+		// are hidden so that they are invisible to star expansion, but
+		// not omitted so that they can still be selected separately.
+
+		// Finish collecting the column definitions from the left and
+		// right data sources.
+		for i, c := range left.sourceColumns {
+			if usedLeft[i] != invalidColIdx {
+				c.hidden = true
 			}
+			columns = append(columns, c)
+		}
+		for i, c := range right.sourceColumns {
+			if usedRight[i] != invalidColIdx {
+				c.hidden = true
+			}
+			columns = append(columns, c)
 		}
 
-		rightRestIndices = make([]int, 0, len(right.sourceColumns)-1)
-		for i := range right.sourceColumns {
-			if usedRight[i] == invalidColIdx {
-				rightRestIndices = append(rightRestIndices, i)
-				usedRight[i] = len(columns)
-				columns = append(columns, right.sourceColumns[i])
-			}
-		}
-
-		// Merge the mappings from table aliases to column sets from both
-		// sides into a new alias-columnset mapping for the result rows.
+		// Compute the mappings from table aliases to column sets from
+		// both sides into a new alias-columnset mapping for the result
+		// rows. This is similar to what concatDataSources() does, but
+		// here we also shift the indices from both sides to accommodate
+		// the join columns generated at the beginning.
 		aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
 		for _, alias := range left.sourceAliases {
 			newRange := make([]int, len(alias.columnRange))
 			for i, colIdx := range alias.columnRange {
-				newRange[i] = usedLeft[colIdx]
+				newRange[i] = colIdx + len(leftEqualityIndices)
 			}
 			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
@@ -573,10 +562,18 @@ func (p *planner) makeEqualityPredicate(
 		for _, alias := range right.sourceAliases {
 			newRange := make([]int, len(alias.columnRange))
 			for i, colIdx := range alias.columnRange {
-				newRange[i] = usedRight[colIdx]
+				newRange[i] = colIdx + len(leftEqualityIndices) + len(left.sourceColumns)
 			}
 			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
+
+		// All the equality/using columns at the beginning belong to an
+		// anonymous data source.
+		usingRange := make([]int, len(leftEqualityIndices))
+		for i := range usingRange {
+			usingRange[i] = i
+		}
+		aliases = append(aliases, sourceAlias{name: anonymousTable, columnRange: usingRange})
 
 		info = &dataSourceInfo{
 			sourceColumns: columns,
@@ -603,7 +600,5 @@ func (p *planner) makeEqualityPredicate(
 		usingCmp:             cmpOps,
 		leftEqualityIndices:  leftEqualityIndices,
 		rightEqualityIndices: rightEqualityIndices,
-		leftRestIndices:      leftRestIndices,
-		rightRestIndices:     rightRestIndices,
 	}, info, nil
 }
