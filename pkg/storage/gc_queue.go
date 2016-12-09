@@ -326,9 +326,7 @@ func processAbortCache(
 // 6) scan the abort cache table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(
-	ctx context.Context, status *LeaseStatus, repl *Replica, sysCfg config.SystemConfig,
-) error {
+func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.SystemConfig) error {
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
 	defer snap.Close()
@@ -339,7 +337,8 @@ func (gcq *gcQueue) process(
 		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
-	gcKeys, info, err := RunGC(ctx, desc, snap, status.timestamp, zone.GC,
+	now := repl.store.Clock().Now()
+	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(ctx, gcq.store.DB(), now, txn, typ)
 		},
@@ -369,7 +368,7 @@ func (gcq *gcQueue) process(
 
 	// Technically not needed since we're talking directly to the Range.
 	ba.RangeID = desc.RangeID
-	ba.Timestamp = status.timestamp
+	ba.Timestamp = now
 	ba.Add(&gcArgs)
 	if _, pErr := repl.Send(ctx, ba); pErr != nil {
 		log.ErrEvent(ctx, pErr.String())

@@ -619,6 +619,9 @@ message TruncateLogResponse {
 message RequestLeaseRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Lease lease = 2 [(gogoproto.nullable) = false];
+  // The previous lease is specified by the caller to verify
+  // it has not changed when executing this command.
+  optional Lease prev_lease = 3;
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()
@@ -636,6 +639,9 @@ message RequestLeaseRequest {
 message TransferLeaseRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Lease lease = 2 [(gogoproto.nullable) = false];
+  // The previous lease is specified by the caller to verify
+  // it has not changed when executing this command.
+  optional Lease prev_lease = 3;
 }
 
 // LeaseInfoRequest is the argument to the LeaseInfo() method, for getting
