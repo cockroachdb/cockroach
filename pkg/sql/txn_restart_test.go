@@ -799,7 +799,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			// Check that the commit counter was incremented. It could have been
 			// incremented by more than 1 because of the transactions we use to force
 			// aborts, plus who knows what else the server is doing in the background.
-			checkCounterGE(t, s, sql.MetaTxnCommit, commitCount+1)
+			if err := checkCounterGE(s, sql.MetaTxnCommit, commitCount+1); err != nil {
+				t.Error(err)
+			}
 			// Clean up the table for the next test iteration.
 			_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
 			if err != nil {
