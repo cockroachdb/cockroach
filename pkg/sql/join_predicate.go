@@ -31,10 +31,10 @@ const (
 )
 
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
-func (p *planner) makeCrossPredicate(
+func makeCrossPredicate(
 	left, right *dataSourceInfo,
 ) (*joinPredicate, *dataSourceInfo, error) {
-	return p.makeEqualityPredicate(left, right, nil, nil, 0, nil)
+	return makeEqualityPredicate(left, right, nil, nil, 0, nil)
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
@@ -56,7 +56,7 @@ func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 // equality columns in the equalityPredicate, which enables faster
 // joins.  The concatInfos argument, if provided, must be a
 // precomputed concatenation of the left and right dataSourceInfos.
-func (p *planner) optimizeOnPredicate(
+func optimizeOnPredicate(
 	pred *joinPredicate, left, right *dataSourceInfo, concatInfos *dataSourceInfo,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	c, ok := pred.filter.(*parser.ComparisonExpr)
@@ -124,7 +124,7 @@ func (p *planner) optimizeOnPredicate(
 func (p *planner) makeOnPredicate(
 	left, right *dataSourceInfo, expr parser.Expr,
 ) (*joinPredicate, *dataSourceInfo, error) {
-	pred, info, err := p.makeEqualityPredicate(left, right, nil, nil, 0, nil)
+	pred, info, err := makeEqualityPredicate(left, right, nil, nil, 0, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -136,13 +136,11 @@ func (p *planner) makeOnPredicate(
 	}
 	pred.filter = filter
 
-	return p.optimizeOnPredicate(pred, left, right, info)
+	return optimizeOnPredicate(pred, left, right, info)
 }
 
 // joinPredicate implements the predicate logic for joins with a USING clause.
 type joinPredicate struct {
-	p *planner
-
 	// numLeft/RightCols are the number of columns in the left and right
 	// operands.
 	numLeftCols, numRightCols int
@@ -207,14 +205,16 @@ func (p *joinPredicate) format(buf *bytes.Buffer) {
 // eval for equalityPredicate compares the columns that participate in
 // the equality, returning true if and only if all predicate columns
 // compare equal.
-func (p *joinPredicate) eval(result, leftRow, rightRow parser.DTuple) (bool, error) {
+func (p *joinPredicate) eval(
+	ctx *parser.EvalContext, result, leftRow, rightRow parser.DTuple,
+) (bool, error) {
 	for i := range p.leftEqualityIndices {
 		leftVal := leftRow[p.leftEqualityIndices[i]]
 		rightVal := rightRow[p.rightEqualityIndices[i]]
 		if leftVal == parser.DNull || rightVal == parser.DNull {
 			return false, nil
 		}
-		res, err := p.cmpFunctions[i](&p.p.evalCtx, leftVal, rightVal)
+		res, err := p.cmpFunctions[i](ctx, leftVal, rightVal)
 		if err != nil {
 			return false, err
 		}
@@ -226,7 +226,7 @@ func (p *joinPredicate) eval(result, leftRow, rightRow parser.DTuple) (bool, err
 		p.curRow = result
 		copy(p.curRow[p.numMergedEqualityColumns:p.numMergedEqualityColumns+len(leftRow)], leftRow)
 		copy(p.curRow[p.numMergedEqualityColumns+len(leftRow):], rightRow)
-		return sqlbase.RunFilter(p.filter, &p.p.evalCtx)
+		return sqlbase.RunFilter(p.filter, ctx)
 	}
 	return true, nil
 }
@@ -316,7 +316,7 @@ func pickUsingColumn(cols ResultColumns, colName string, context string) (int, p
 
 // makeUsingPredicate constructs a joinPredicate object for joins with
 // a USING clause.
-func (p *planner) makeUsingPredicate(
+func makeUsingPredicate(
 	left, right *dataSourceInfo, colNames parser.NameList,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	seenNames := make(map[string]struct{})
@@ -330,11 +330,11 @@ func (p *planner) makeUsingPredicate(
 		seenNames[colName] = struct{}{}
 	}
 
-	return p.makeEqualityPredicate(left, right, colNames, colNames, len(colNames), nil)
+	return makeEqualityPredicate(left, right, colNames, colNames, len(colNames), nil)
 }
 
 // makeEqualityPredicate constructs a joinPredicate object for joins.
-func (p *planner) makeEqualityPredicate(
+func makeEqualityPredicate(
 	left, right *dataSourceInfo,
 	leftColNames, rightColNames parser.NameList,
 	numMergedEqualityColumns int,
@@ -472,7 +472,6 @@ func (p *planner) makeEqualityPredicate(
 	}
 
 	pred := &joinPredicate{
-		p:                        p,
 		numLeftCols:              len(left.sourceColumns),
 		numRightCols:             len(right.sourceColumns),
 		leftColNames:             leftColNames,

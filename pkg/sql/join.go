@@ -239,16 +239,16 @@ func (p *planner) makeJoin(
 	)
 
 	if cond == nil {
-		pred, info, err = p.makeCrossPredicate(leftInfo, rightInfo)
+		pred, info, err = makeCrossPredicate(leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
 			pred, info, err = p.makeOnPredicate(leftInfo, rightInfo, t.Expr)
 		case parser.NaturalJoinCond:
 			cols := commonColumns(leftInfo, rightInfo)
-			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, cols)
+			pred, info, err = makeUsingPredicate(leftInfo, rightInfo, cols)
 		case *parser.UsingJoinCond:
-			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, t.Cols)
+			pred, info, err = makeUsingPredicate(leftInfo, rightInfo, t.Cols)
 		}
 	}
 	if err != nil {
@@ -313,7 +313,7 @@ func (n *joinNode) setNeededColumns(needed []bool) {
 
 // expandPlan implements the planNode interface.
 func (n *joinNode) expandPlan() error {
-	if err := n.pred.p.expandSubqueryPlans(n.pred.filter); err != nil {
+	if err := n.planner.expandSubqueryPlans(n.pred.filter); err != nil {
 		return err
 	}
 	if err := n.left.plan.expandPlan(); err != nil {
@@ -354,7 +354,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 	if n.swapped {
 		subplans[0], subplans[1] = subplans[1], subplans[0]
 	}
-	subplans = n.pred.p.collectSubqueryPlans(n.pred.filter, subplans)
+	subplans = n.planner.collectSubqueryPlans(n.pred.filter, subplans)
 
 	return "join", buf.String(), subplans
 }
@@ -377,7 +377,7 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 
 // Start implements the planNode interface.
 func (n *joinNode) Start() error {
-	if err := n.pred.p.startSubqueryPlans(n.pred.filter); err != nil {
+	if err := n.planner.startSubqueryPlans(n.pred.filter); err != nil {
 		return err
 	}
 
@@ -588,7 +588,7 @@ func (n *joinNode) nestedLoopJoinNext() (bool, error) {
 		if n.swapped {
 			leftRow, rightRow = rightRow, leftRow
 		}
-		passesFilter, err := n.pred.eval(n.output, leftRow, rightRow)
+		passesFilter, err := n.pred.eval(&n.planner.evalCtx, n.output, leftRow, rightRow)
 		if err != nil {
 			return false, err
 		}
@@ -720,7 +720,7 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 		// We iterate through all the rows in the bucket attempting to match the
 		// filter, if the filter passes we add it to the buffer.
 		for _, rrow := range b.Rows() {
-			passesFilter, err := n.pred.eval(n.output, lrow, rrow)
+			passesFilter, err := n.pred.eval(&n.planner.evalCtx, n.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}
