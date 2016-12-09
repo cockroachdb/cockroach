@@ -98,16 +98,6 @@ func (f *Farmer) FirstInstance() string {
 	return f.Hostname(0)
 }
 
-// Nodes returns a (copied) slice of provisioned nodes' host names.
-func (f *Farmer) Nodes() []string {
-	f.initNodes()
-	hosts := make([]string, len(f.nodes))
-	for i, node := range f.nodes {
-		hosts[i] = node.hostname
-	}
-	return hosts
-}
-
 // Hostname implements the Cluster interface.
 func (f *Farmer) Hostname(i int) string {
 	return f.initNodes()[i].hostname
@@ -173,9 +163,8 @@ func (f *Farmer) CollectLogs() {
 		fmt.Fprint(os.Stderr, err)
 		return
 	}
-	hosts := append(f.Nodes())
 	const src = "logs"
-	for i, host := range hosts {
+	for i, node := range f.nodes {
 		var dest string
 		if i < f.NumNodes() {
 			dest = "node." + dest
@@ -184,9 +173,9 @@ func (f *Farmer) CollectLogs() {
 			dest = "writer." + dest
 		}
 		dest += strconv.Itoa(i)
-		if err := f.scp(host, f.defaultKeyFile(), src,
+		if err := f.scp(node.hostname, f.defaultKeyFile(), src,
 			filepath.Join(f.AbsLogDir(), dest)); err != nil {
-			f.logf("error collecting %s from host %s: %s\n", src, host, err)
+			f.logf("error collecting %s from host %s: %s\n", src, node.hostname, err)
 		}
 	}
 }
@@ -226,7 +215,7 @@ func (f *Farmer) MustDestroy(t testing.TB) {
 
 // Exec executes the given command on the i-th node.
 func (f *Farmer) Exec(i int, cmd string) error {
-	stdout, stderr, err := f.ssh(f.Nodes()[i], f.defaultKeyFile(), cmd)
+	stdout, stderr, err := f.ssh(f.Hostname(i), f.defaultKeyFile(), cmd)
 	if err != nil {
 		return fmt.Errorf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
 	}
@@ -244,7 +233,7 @@ func (f *Farmer) NewClient(ctx context.Context, i int) (*client.DB, error) {
 
 // PGUrl returns a URL string for the given node postgres server.
 func (f *Farmer) PGUrl(ctx context.Context, i int) string {
-	host := f.Nodes()[i]
+	host := f.Hostname(i)
 	return fmt.Sprintf("postgresql://%s@%s:26257/system?sslmode=disable", security.RootUser, host)
 }
 
@@ -254,7 +243,7 @@ func (f *Farmer) InternalIP(ctx context.Context, i int) net.IP {
 	// might do it: `curl -sS http://instance-data/latest/meta-data/public-ipv4`.
 	// See https://flummox-engineering.blogspot.com/2014/01/get-ip-address-of-google-compute-engine.html
 	cmd := `curl -sS "http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip" -H "X-Google-Metadata-Request: True"`
-	stdout, stderr, err := f.ssh(f.Nodes()[i], f.defaultKeyFile(), cmd)
+	stdout, stderr, err := f.ssh(f.Hostname(i), f.defaultKeyFile(), cmd)
 	if err != nil {
 		panic(errors.Wrapf(err, stderr+"\n"+stdout))
 	}
@@ -282,7 +271,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 			err = fmt.Errorf("no nodes found: %v", err)
 			continue
 		}
-		for i := range f.Nodes() {
+		for i := 0; i < f.NumNodes(); i++ {
 			if err = f.Exec(i, "nslookup "+instance); err != nil {
 				break
 			}
@@ -344,7 +333,7 @@ func (f *Farmer) Kill(ctx context.Context, i int) error {
 func (f *Farmer) Restart(ctx context.Context, i int) error {
 	_ = f.Kill(ctx, i)
 	// supervisorctl is horrible with exit codes (cockroachdb/cockroach-prod#59).
-	_, _, err := f.execSupervisor(f.Nodes()[i], "start cockroach")
+	_, _, err := f.execSupervisor(f.Hostname(i), "start cockroach")
 	return err
 }
 
@@ -355,7 +344,7 @@ func (f *Farmer) Start(ctx context.Context, i int, process string) error {
 			return errors.Errorf("already started process '%s'", process)
 		}
 	}
-	if _, _, err := f.execSupervisor(f.Nodes()[i], "start "+process); err != nil {
+	if _, _, err := f.execSupervisor(f.Hostname(i), "start "+process); err != nil {
 		return err
 	}
 	f.nodes[i].processes = append(f.nodes[i].processes, process)
@@ -367,7 +356,7 @@ func (f *Farmer) Start(ctx context.Context, i int, process string) error {
 func (f *Farmer) Stop(ctx context.Context, i int, process string) error {
 	for idx, p := range f.nodes[i].processes {
 		if p == process {
-			if _, _, err := f.execSupervisor(f.Nodes()[i], "stop "+process); err != nil {
+			if _, _, err := f.execSupervisor(f.Hostname(i), "stop "+process); err != nil {
 				return err
 			}
 			f.nodes[i].processes = append(f.nodes[i].processes[:idx], f.nodes[i].processes[idx+1:]...)
@@ -379,12 +368,12 @@ func (f *Farmer) Stop(ctx context.Context, i int, process string) error {
 
 // URL returns the HTTP(s) endpoint.
 func (f *Farmer) URL(ctx context.Context, i int) string {
-	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
+	return "http://" + net.JoinHostPort(f.Hostname(i), base.DefaultHTTPPort)
 }
 
 // Addr returns the host and port from the node in the format HOST:PORT.
 func (f *Farmer) Addr(ctx context.Context, i int, port string) string {
-	return net.JoinHostPort(f.Nodes()[i], port)
+	return net.JoinHostPort(f.Hostname(i), port)
 }
 
 func (f *Farmer) logf(format string, args ...interface{}) {
@@ -395,8 +384,8 @@ func (f *Farmer) logf(format string, args ...interface{}) {
 
 // StartLoad starts n loadGenerator processes.
 func (f *Farmer) StartLoad(ctx context.Context, loadGenerator string, n int) error {
-	if n > len(f.Nodes()) {
-		return errors.Errorf("writers (%d) > nodes (%d)", n, len(f.Nodes()))
+	if n > f.NumNodes() {
+		return errors.Errorf("writers (%d) > nodes (%d)", n, f.NumNodes())
 	}
 
 	// We may have to retry restarting the load generators, because CockroachDB
