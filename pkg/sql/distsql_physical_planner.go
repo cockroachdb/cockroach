@@ -1,5 +1,4 @@
 // Copyright 2016 The Cockroach Authors.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -142,7 +142,9 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 	switch n := tree.(type) {
 	case *selectTopNode:
 		if n.group != nil {
-			return false, errors.Errorf("grouping not supported yet")
+			if _, err := dsp.CheckSupport(n.group); err != nil {
+				return false, err
+			}
 		}
 		if n.window != nil {
 			return false, errors.Errorf("windows not supported yet")
@@ -224,6 +226,19 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 			return false, err
 		}
 		return dsp.CheckSupport(n.index)
+
+	case *groupNode:
+		if n.having != nil {
+			return false, errors.Errorf("group with having not supported yet")
+		}
+		for _, fholder := range n.funcs {
+			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
+				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
+					return false, errors.Errorf("ARRAY_AGG aggregation not supported yet")
+				}
+			}
+		}
+		return false, nil
 
 	default:
 		return false, errors.Errorf("unsupported node %T", tree)
@@ -355,29 +370,47 @@ func mergePlans(
 }
 
 // The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
-// refer to columns. We format the expression using an IndexedVar formatting
-// interceptor. A columnMap can optionally be used to remap the indices.
+// refer to columns. We format the expression using the IndexedVar and StarDatum
+// formatting interceptors. A columnMap can optionally be used to remap the
+// indices.
 func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsql.Expression {
 	if expr == nil {
 		return distsql.Expression{}
 	}
+
+	// TODO(irfansharif): currently there’s no nice way to “compose” FmtFlags
+	// out of multiple FmtFlag‘s (this unit does not exist today).
+	// By introducing such composability, the flags below can be constructed
+	// once and reused for subsequent calls. Additionally the construction of
+	// the flags would not need to inspect expression type.
 	var f parser.FmtFlags
-	if columnMap == nil {
-		f = parser.FmtIndexedVarFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				fmt.Fprintf(buf, "@%d", idx+1)
+	switch expr.(type) {
+	case *parser.StarDatum:
+		// By default parser.StarDatum is rendered as a DInt(0), but formatting
+		// this as 0 we can replicate this behavior in distsql.
+		f = parser.FmtStarDatumFormat(
+			func(buf *bytes.Buffer, _ parser.FmtFlags) {
+				fmt.Fprintf(buf, "0")
 			},
 		)
-	} else {
-		f = parser.FmtIndexedVarFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				remappedIdx := columnMap[idx]
-				if remappedIdx < 0 {
-					panic(fmt.Sprintf("unmapped index %d", idx))
-				}
-				fmt.Fprintf(buf, "@%d", remappedIdx+1)
-			},
-		)
+	default:
+		if columnMap == nil {
+			f = parser.FmtIndexedVarFormat(
+				func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+					fmt.Fprintf(buf, "@%d", idx+1)
+				},
+			)
+		} else {
+			f = parser.FmtIndexedVarFormat(
+				func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+					remappedIdx := columnMap[idx]
+					if remappedIdx < 0 {
+						panic(fmt.Sprintf("unmapped index %d", idx))
+					}
+					fmt.Fprintf(buf, "@%d", remappedIdx+1)
+				},
+			)
+		}
 	}
 	var buf bytes.Buffer
 	expr.Format(&buf, f)
@@ -649,20 +682,24 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 // corresponding to the select node itself. An evaluator stage is added if the
 // select node has any expressions which are not just simple column references.
 //
-// TODO(irfansharif): An evaluator stage is also added if there isn't a strict
-// 1-1 mapping between n.Columns() and n.source.plan.Columns(). Arguably simple
-// multiplexing or column re-mapping is too lightweight to warrant an entire
-// evaluator processor, but the current implementations of certain processors
-// don't have mappings to push such multiplexing/column re-mapping down to
-// the processor. This happens for when `n.top.group != nil` because
-// aggregators don't have internal mappings, also for `n.top.sort != nil`
+// An evaluator stage is also added in some cases where a strict 1-1 mapping is
+// required between the planNode columns and the distSQL streams.
+// Arguably simple multiplexing or column re-mapping is too lightweight to
+// warrant an entire evaluator processor, but the current implementations of
+// certain processors don't have mappings to push such multiplexing/column
+// re-mapping down to the processor. This happens for when n.top.group != nil
+// because aggregators don't have internal mappings, also for n.top.sort != nil
 // because sorters are not configured to output only specific columns.
 //
-// For e.g. for `SELECT COUNT(k), SUM(k) GROUP BY k`, if the output schema of a
-// `scanNode` is [k], the input schema of the `groupNode` (and by parity
-// aggregators as well) is [k k k]. In order to multiplex `[k]` to `[k k k]` we
+// For e.g. for 'SELECT COUNT(k), SUM(k) GROUP BY k', if the output schema of a
+// scanNode is [k], the input schema of the groupNode (and by parity
+// aggregators as well) is [k k k]. In order to multiplex [k] to [k k k] we
 // add an evaluator stage. The specs for such processors can definitely be
 // improved upon.
+//
+// TODO(irfansharif): Add "projections" for sorters to "hide" certain columns.
+// TODO(irfansharif): Add multiplexing/column re-mapping logic to aggregators,
+// this avoids the need to add an evaluator before the aggregator.
 func (dsp *distSQLPlanner) selectRenders(
 	planCtx *planningCtx, p *physicalPlan, n *selectNode,
 ) error {
@@ -786,6 +823,71 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 	// We now have a single result stream.
 	p.resultRouters = p.resultRouters[:1]
 	p.resultRouters[0] = pIdx
+}
+
+// addAggregators adds aggregators corresponding to a groupNode and updates the plan to
+// reflect the groupNode. An evaluator stage is added if necessary.
+// Invariants assumed:
+//  - There is strictly no "pre-evaluation" necessary. If the given query is
+//  'SELECT COUNT(k), v + w FROM kv GROUP BY v + w', the evaluation of the first
+//  'v + w' is done at the source of the groupNode.
+//  - We only operate on the following expressions:
+//      - ONLY aggregation functions, with arguments pre-evaluated. So for
+//        COUNT(k + v), we assume a stream of evaluated 'k + v' values.
+//      - Expressions that CONTAIN an aggregation function, e.g. 'COUNT(k) + 1'.
+//        This is evaluated the post aggregation evaluator attached after.
+//      - Expressions that also appear verbatim in the GROUP BY expressions.
+//        For 'SELECT k GROUP BY k', the aggregation function added is IDENT,
+//        therefore k just passes through unchanged.
+//    All other expressions simply pass through unchanged, for e.g. '1' in
+//    'SELECT 1 GROUP BY k'.
+func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan, n *groupNode) {
+	aggExprs := dsp.extractAggExprs(n.render)
+	types := dsp.getTypesForPlanResult(p.planToStreamColMap, n.plan)
+	// The way our planNode construction currently orders columns between
+	// groupNode and its source is that the first len(n.funcs) columns are the
+	// arguments for the aggregation functions. The remaining columns are
+	// columns we group by.
+	// For 'SELECT 1, SUM(k) GROUP BY k', the output schema of groupNode's
+	// source will be [1 k k], with 1, k being arguments fed to the aggregation
+	// functions and k being the column we group by.
+	groupCols := make([]uint32, 0, len(n.plan.Columns())-len(n.funcs))
+	for i := len(n.funcs); i < len(n.plan.Columns()); i++ {
+		groupCols = append(groupCols, uint32(i))
+	}
+
+	aggregatorSpec := distsql.AggregatorSpec{
+		Exprs:     aggExprs,
+		Types:     types,
+		GroupCols: groupCols,
+	}
+	// TODO(irfansharif): Some possible optimizations:
+	//  - We could add a local "no grouping" stage to pre-aggregate results
+	//    before the final aggregation.
+	//  - We could route by hash to multiple final aggregators.
+	dsp.addSingleGroupStage(
+		p, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{Aggregator: &aggregatorSpec},
+	)
+
+	evalExprs, needEval := dsp.extractPostAggrExprs(n.render)
+	if needEval {
+		// Add a stage with Evaluator processors.
+		postevalSpec := distsql.EvaluatorSpec{
+			Exprs: make([]distsql.Expression, len(evalExprs)),
+		}
+
+		for i := range evalExprs {
+			postevalSpec.Exprs[i] = distSQLExpression(evalExprs[i], p.planToStreamColMap)
+		}
+
+		dsp.addSingleGroupStage(
+			p, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{Evaluator: &postevalSpec},
+		)
+	}
+
+	// Remove any columns that were only used for grouping.
+	p.planToStreamColMap = p.planToStreamColMap[:len(n.Columns())]
+	p.ordering = dsp.convertOrdering(n.desiredOrdering, p.planToStreamColMap)
 }
 
 func (dsp *distSQLPlanner) createPlanForIndexJoin(
@@ -1068,6 +1170,10 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		plan, err := dsp.createPlanForNode(planCtx, n.source)
 		if err != nil {
 			return physicalPlan{}, err
+		}
+
+		if n.group != nil {
+			dsp.addAggregators(planCtx, &plan, n.group)
 		}
 
 		if n.sort != nil {

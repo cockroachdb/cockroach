@@ -689,6 +689,9 @@ var _ parser.TypedExpr = &aggregateFuncHolder{}
 var _ parser.VariableExpr = &aggregateFuncHolder{}
 
 type aggregateFuncHolder struct {
+	// expr must either contain an aggregation function (SUM, COUNT, etc.) or an
+	// expression that also appears as one of the GROUP BY expressions (v+w in
+	// SELECT v+w FROM kvw GROUP BY v+w).
 	expr          parser.TypedExpr
 	arg           parser.TypedExpr
 	create        func() parser.AggregateFunc
