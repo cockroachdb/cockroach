@@ -18,10 +18,15 @@
 package sql
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -65,4 +70,97 @@ func TestDistSQLPlanner(t *testing.T) {
 			{"nine"},
 		},
 	)
+}
+
+func TestDistSQLJoin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Skip("TODO(radu): work in progress")
+
+	// This test sets up a distributed join between two tables:
+	//  - a NumToSquare table of size n that maps integers from 1 to n to their
+	//    squares
+	//  - a NumToStr table of size n*n that maps integers to their string
+	//  representations.
+	const n = 100
+
+	tc := serverutils.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+			},
+		})
+	defer tc.Stopper().Stop()
+	cdb := tc.Server(0).KVClient().(*client.DB)
+
+	sqlutils.CreateTable(
+		t, tc.ServerConn(0), "NumToSquare", "x INT PRIMARY KEY, xsquared INT",
+		n,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) parser.Datum {
+			return parser.NewDInt(parser.DInt(row * row))
+		}),
+	)
+
+	sqlutils.CreateTable(
+		t, tc.ServerConn(0), "NumToStr", "y INT PRIMARY KEY, str STRING",
+		n*n,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
+	)
+	// TODO(radu): this approach should be generalized into test infrastructure
+	// (perhaps by adding functionality to logic tests).
+	descNumToStr := sqlbase.GetTableDescriptor(cdb, "test", "NumToStr")
+
+	pik, err := sqlbase.MakePrimaryIndexKey(descNumToStr, n*n/2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	splitKey := keys.MakeRowSentinelKey(pik)
+	_, rightRange, err := tc.Server(0).SplitRange(splitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	splitKey = rightRange.StartKey.AsRawKey()
+	rightRange, err = tc.AddReplicas(splitKey, tc.Target(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tc.TransferRangeLease(rightRange, tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tc.RemoveReplicas(splitKey, tc.Target(0)); err != nil {
+		t.Fatal(err)
+	}
+
+	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
+	r.Exec("SET DIST_SQL = ALWAYS")
+	res := r.QueryStr("SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared")
+	// Verify that res contains one entry for each integer, with the string
+	// representation of its square, e.g.:
+	//  [1, one]
+	//  [2, two]
+	//  [3, nine]
+	//  [4, one-six]
+	// (but not necessarily in order).
+	if len(res) != n {
+		t.Fatalf("expected %d rows, got %d", n, len(res))
+	}
+	resMap := make(map[int]string)
+	for _, row := range res {
+		if len(row) != 2 {
+			t.Fatalf("invalid row %v", row)
+		}
+		n, err := strconv.Atoi(row[0])
+		if err != nil {
+			t.Fatalf("error parsing row %v: %s", row, err)
+		}
+		resMap[n] = row[1]
+	}
+	for i := 1; i <= n; i++ {
+		if resMap[i] != sqlutils.IntToEnglish(i*i) {
+			t.Errorf("invalid string for %d: %s", i, resMap[i])
+		}
+	}
 }
