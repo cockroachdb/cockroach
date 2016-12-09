@@ -33,6 +33,17 @@ import (
 	"github.com/pkg/errors"
 )
 
+// leaseMetricsType is used to distinguish between various lease
+// operations and potentially outcomes.
+type leaseMetricsType int
+
+const (
+	leaseRequestSuccess leaseMetricsType = iota
+	leaseRequestError
+	leaseTransferSuccess
+	leaseTransferError
+)
+
 // LocalEvalResult is data belonging to a proposal that is only relevant
 // on the node on which the command was proposed.
 //
@@ -80,7 +91,7 @@ type LocalEvalResult struct {
 	// - proposal does not fail fast and goes through Raft
 	// - downstream-of-Raft logic identifies a conflict and returns an error
 	// The downstream-of-Raft logic does not exist at time of writing.
-	leaseMetricsResult *bool
+	leaseMetricsResult *leaseMetricsType
 
 	// When set (in which case we better be the first range), call
 	// gossipFirstRange if the Replica holds the lease.
@@ -669,7 +680,12 @@ func (r *Replica) handleLocalEvalResult(
 
 	if originReplica.StoreID == r.store.StoreID() {
 		if lResult.leaseMetricsResult != nil {
-			r.store.metrics.leaseRequestComplete(*lResult.leaseMetricsResult)
+			switch metric := *lResult.leaseMetricsResult; metric {
+			case leaseRequestSuccess, leaseRequestError:
+				r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
+			case leaseTransferSuccess, leaseTransferError:
+				r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
+			}
 		}
 		if lResult.maybeGossipNodeLiveness != nil {
 			r.maybeGossipNodeLiveness(*lResult.maybeGossipNodeLiveness)

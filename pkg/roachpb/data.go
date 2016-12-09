@@ -968,9 +968,11 @@ func (l Lease) OwnedBy(storeID StoreID) bool {
 type LeaseType int
 
 const (
+	// LeaseNone specifies no lease, to be used as a default value.
+	LeaseNone LeaseType = iota
 	// LeaseExpiration allows range operations while the wall clock is
 	// within the expiration timestamp.
-	LeaseExpiration LeaseType = iota
+	LeaseExpiration
 	// LeaseEpoch allows range operations while the node liveness epoch
 	// is equal to the lease epoch.
 	LeaseEpoch
