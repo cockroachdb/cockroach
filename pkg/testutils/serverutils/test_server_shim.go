@@ -97,6 +97,11 @@ type TestServerInterface interface {
 	// GetFirstStoreID is a utility function returning the StoreID of the first
 	// store on this node.
 	GetFirstStoreID() roachpb.StoreID
+
+	// SplitRange splits the range containing splitKey.
+	SplitRange(
+		splitKey roachpb.Key,
+	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
