@@ -151,6 +151,47 @@ type sourceAlias struct {
 	columnRange columnRange
 }
 
+func (src *dataSourceInfo) String() string {
+	var buf bytes.Buffer
+	for i := range src.sourceColumns {
+		if i > 0 {
+			buf.WriteByte('\t')
+		}
+		fmt.Fprintf(&buf, "%d", i)
+	}
+	buf.WriteString("\toutput column positions\n")
+	for i, c := range src.sourceColumns {
+		if i > 0 {
+			buf.WriteByte('\t')
+		}
+		if c.hidden {
+			buf.WriteByte('*')
+		}
+		buf.WriteString(c.Name)
+	}
+	buf.WriteString("\toutput column names\n")
+	for _, a := range src.sourceAliases {
+		for i := range src.sourceColumns {
+			if i > 0 {
+				buf.WriteByte('\t')
+			}
+			for _, j := range a.columnRange {
+				if i == j {
+					buf.WriteString("x")
+					break
+				}
+			}
+		}
+		if a.name == anonymousTable {
+			buf.WriteString("\t<anonymous table>")
+		} else {
+			fmt.Fprintf(&buf, "\t'%s'", a.name.String())
+		}
+		fmt.Fprintf(&buf, " - %q\n", a.columnRange)
+	}
+	return buf.String()
+}
+
 type sourceAliases []sourceAlias
 
 // srcIdx looks up a source by qualified name and returns the index of the
