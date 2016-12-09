@@ -154,6 +154,11 @@ func (s *Store) SetSplitQueueActive(active bool) {
 	s.setSplitQueueActive(active)
 }
 
+// SetConsistencyQueueActive enables or disables the consistency queue.
+func (s *Store) SetConsistencyQueueActive(active bool) {
+	s.setConsistencyQueueActive(active)
+}
+
 // SetReplicaScannerActive enables or disables the scanner. Note that while
 // inactive, removals are still processed.
 func (s *Store) SetReplicaScannerActive(active bool) {
