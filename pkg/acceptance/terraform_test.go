@@ -56,8 +56,8 @@ func TestFiveNodesAndWriters(t *testing.T) {
 	defer f.MustDestroy(t)
 	assertClusterUp := func() {
 		f.Assert(ctx, t)
-		for _, host := range f.Nodes() {
-			f.AssertState(ctx, t, host, "block_writer", "RUNNING")
+		for i := 0; i < f.NumNodes(); i++ {
+			f.AssertState(ctx, t, f.Hostname(i), "block_writer", "RUNNING")
 		}
 	}
 
