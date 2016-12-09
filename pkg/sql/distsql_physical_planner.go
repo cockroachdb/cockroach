@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -140,7 +141,9 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 	switch n := tree.(type) {
 	case *selectTopNode:
 		if n.group != nil {
-			return errors.Errorf("grouping not supported yet")
+			if err := dsp.CheckSupport(n.group); err != nil {
+				return err
+			}
 		}
 		if n.window != nil {
 			return errors.Errorf("windows not supported yet")
@@ -180,6 +183,19 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 			return err
 		}
 		return dsp.CheckSupport(n.table)
+
+	case *groupNode:
+		if n.having != nil {
+			return errors.Errorf("group with having not supported yet")
+		}
+		for _, fholder := range n.funcs {
+			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
+				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
+					return errors.Errorf("ARRAY_AGG aggregation not supported yet")
+				}
+			}
+		}
+		return nil
 
 	default:
 		return errors.Errorf("unsupported node %T", tree)
@@ -267,29 +283,47 @@ func (p *physicalPlan) addProcessor(proc processor) processorIdx {
 }
 
 // The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
-// refer to columns. We format the expression using an IndexedVar formatting
-// interceptor. A columnMap can optionally be used to remap the indices.
+// refer to columns, we format the expression using the IndexedVar and StarDatum
+// formatting interceptors. A columnMap can optionally be used to remap the
+// indices.
 func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsql.Expression {
 	if expr == nil {
 		return distsql.Expression{}
 	}
+
+	// TODO(irfansharif): currently there’s no nice way to “compose” FmtFlags
+	// out of multiple FmtFlag‘s (this unit does not exist today).
+	// By introducing such composability, the flags below can be constructed
+	// once and reused for subsequent calls. Additionally the construction of
+	// the flags would not need to inspect expression type.
 	var f parser.FmtFlags
-	if columnMap == nil {
-		f = parser.FmtIndexedVarFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				fmt.Fprintf(buf, "@%d", idx+1)
+	switch expr.(type) {
+	case *parser.StarDatum:
+		// By default parser.StarDatum is rendered as a DInt(0), but formatting
+		// this as 0 we can replicate this behavior in distsql.
+		f = parser.FmtStarDatumFormat(
+			func(buf *bytes.Buffer, _ parser.FmtFlags) {
+				fmt.Fprintf(buf, "0")
 			},
 		)
-	} else {
-		f = parser.FmtIndexedVarFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				remappedIdx := columnMap[idx]
-				if remappedIdx < 0 {
-					panic(fmt.Sprintf("unmapped index %d", idx))
-				}
-				fmt.Fprintf(buf, "@%d", remappedIdx+1)
-			},
-		)
+	default:
+		if columnMap == nil {
+			f = parser.FmtIndexedVarFormat(
+				func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+					fmt.Fprintf(buf, "@%d", idx+1)
+				},
+			)
+		} else {
+			f = parser.FmtIndexedVarFormat(
+				func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+					remappedIdx := columnMap[idx]
+					if remappedIdx < 0 {
+						panic(fmt.Sprintf("unmapped index %d", idx))
+					}
+					fmt.Fprintf(buf, "@%d", remappedIdx+1)
+				},
+			)
+		}
 	}
 	var buf bytes.Buffer
 	expr.Format(&buf, f)
@@ -673,6 +707,225 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 	p.resultRouters[0] = pIdx
 }
 
+type preAggExprVisitor struct {
+	exprs []distsql.AggregatorSpec_Expr
+}
+
+var _ parser.Visitor = &preAggExprVisitor{}
+
+// Our base case is when our expression is of type `*aggregateFuncHolder`, in
+// which case we construct the equivalent AggregatorSpec_Expr and accumulate it.
+// If our expression is NOT of the type `*aggregateFuncHolder` we may have an
+// expression like `COUNT(k) + 1`, we recurse.
+func (v *preAggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
+	if _, ok := expr.(*aggregateFuncHolder); !ok {
+		return true, expr
+	}
+
+	fholder := expr.(*aggregateFuncHolder)
+	if _, ok := fholder.expr.(*parser.FuncExpr); !ok {
+		aggexpr := distsql.AggregatorSpec_Expr{
+			Func: distsql.AggregatorSpec_IDENT,
+		}
+		v.exprs = append(v.exprs, aggexpr)
+		return false, expr
+	}
+
+	f := fholder.expr.(*parser.FuncExpr)
+	aggexpr := distsql.AggregatorSpec_Expr{
+		Func: distsql.AggregatorSpec_Func(
+			distsql.AggregatorSpec_Func_value[strings.ToUpper(
+				f.Func.FunctionReference.String(),
+			)],
+		),
+		Distinct: f.Type == parser.Distinct,
+	}
+	v.exprs = append(v.exprs, aggexpr)
+	return false, expr
+}
+
+func (v *preAggExprVisitor) VisitPost(expr parser.Expr) parser.Expr {
+	return expr
+}
+
+func (v preAggExprVisitor) extract(typedExpr parser.TypedExpr) []distsql.AggregatorSpec_Expr {
+	parser.WalkExpr(&v, typedExpr)
+	return v.exprs
+}
+
+// extractPreAggExprs translates the render expressions into the form needed by
+// the AggregatorSpec where per "aggregation function" we specify the function
+// type (`SUM`, `COUNT`, `AVG`, etc) and the column this function is going to be
+// operating on (@1, @2, @1, etc).
+// In order to this we need to "flatten" out the render expressions, the
+// following examples detail out what we mean by this.
+// - `SELECT COUNT(k), SUM(v + w), v + w FROM kv GROUP BY v + w`
+//   The output schema of groupNode's source here is [k v+w v+w v+w]`, the render
+//   expressions we are concerned with are [k v+w v+w]. We see that for `COUNT`
+//   the stream it needs to be fed is the first, for `SUM` it is the second, for
+//   `v + ` we add an `IDENT` aggregation function.
+//   Already we see that for the n-th aggregation function we operate on the
+//   n-th stream.
+// - `SELECT COUNT(k) + COUNT(v) FROM kv`
+//   The output schema of groupNode's source here is [k v], the render
+//   expressions we are concerned with are [k v]. We see that we need a `COUNT`
+//   to operate on the first stream, another `COUNT` to operate on the second.
+//   Again we see that for the n-th aggregation function we operate on the n-th
+//   stream (note, this is distinct from the n-th render expression).
+func (dsp *distSQLPlanner) extractPreAggExprs(
+	render []parser.TypedExpr,
+) (aggExprs []distsql.AggregatorSpec_Expr) {
+	v := preAggExprVisitor{}
+	for _, expr := range render {
+		aggExprs = append(aggExprs, v.extract(expr)...)
+	}
+	for i := range aggExprs {
+		aggExprs[i].ColIdx = uint32(i)
+	}
+	return aggExprs
+}
+
+type postAggExprVisitor struct {
+	count int
+}
+
+var _ parser.Visitor = &postAggExprVisitor{}
+
+func (v *postAggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
+	return true, expr
+}
+
+// Our base case is the *aggregateFuncHolder, every time we come across one we
+// substitute it with an ordinal reference. An expression of any other type is
+// left as is.
+//
+// We make the deliberate choice of doing this transformation in VisitPost
+// instead of VisitPre, an example to demonstrate why is that if we have
+// `SELECT COUNT(k) + COUNT(v) FROM kv`, for our render expression
+// `COUNT(k) + COUNT(v)` we want it to be substituted by `@1 + @2`. Therefore we
+// need to first substitute the "leaf nodes" of this expression (`COUNT(k)`,
+// `COUNT(v)`) before evaluating the binary "+" expression.
+func (v *postAggExprVisitor) VisitPost(expr parser.Expr) parser.Expr {
+	if _, ok := expr.(*aggregateFuncHolder); !ok {
+		return expr
+	}
+
+	newExpr := parser.NewOrdinalReference(v.count)
+	v.count++
+	return newExpr
+}
+
+func (v *postAggExprVisitor) extract(typedExpr parser.TypedExpr) parser.TypedExpr {
+	expr, _ := parser.WalkExpr(v, typedExpr)
+	return expr.(parser.TypedExpr)
+}
+
+// extractPostAggrExprs returns a list of expressions to be evaluated following
+// the aggregation stage.
+// For e.g. if we have `SELECT COUNT(k)+COUNT(v) FROM kv`, the output schema of
+// our aggregator would be [count(k) count(v)], but the output schema of the
+// current groupNode implementation is [count(k)+count(v)], to bridge this gap
+// we need to introduce an aggregator with the expression [@1 + @2].
+// There's one subtle thing to note here:
+// - We need to account for the "flattening" of the render expressions that had
+//   to take place earlier.
+//
+// The following example details out the considerations we had to make.
+// - `SELECT COUNT(k), COUNT(v), COUNT(k) + COUNT(v) FROM kv`
+// The output schema of our aggregator is [count(k) count(v) count(k) count(v)].
+// The post aggregation evaluator we need to add has to be instantiated with the
+// expression [@1 @2 @3 + @4].
+// Note that, as before, the n-th render expression is distinct from the n-th
+// stream. Therefore we need to maintain this "counter" state as we iterate
+// through each of the render expressions, assigning a monotonically increasing
+// ordinal reference to each instance of an *aggregateFuncHolder (our base
+// case).
+// To this end we have a pointer receiver for postAggExprVisitor.extract(...).
+//
+// Additionally if we see that all of our evalExprs are simply of type
+// *parser.IndexedVar, we have an evaluator that simply forwards every single
+// row without any transformation/evaluation. In this case we return false for
+// needEval.
+func (dsp *distSQLPlanner) extractPostAggrExprs(
+	render []parser.TypedExpr,
+) (evalExprs []parser.TypedExpr, needEval bool) {
+	v := postAggExprVisitor{}
+	for _, expr := range render {
+		result := v.extract(expr)
+		if _, ok := result.(*parser.IndexedVar); !ok {
+			needEval = true
+		}
+		evalExprs = append(evalExprs, result)
+	}
+	return evalExprs, needEval
+}
+
+func (dsp *distSQLPlanner) getTypes(resCols ResultColumns) []sqlbase.ColumnType_Kind {
+	columnTypes := make([]sqlbase.ColumnType_Kind, 0, len(resCols))
+	for _, col := range resCols {
+		columnTypes = append(columnTypes, sqlbase.DatumTypeToColumnKind(col.Typ))
+	}
+	return columnTypes
+}
+
+// addAggregators adds aggregators corresponding to a groupNode and updates the plan to
+// reflect the groupNode. An evaluator stage is added if necessary.
+// Invariants assumed:
+//  - There is strictly no "pre-evaluation" necessary. If the given query is
+//  `SELECT COUNT(k), v + w FROM kv GROUP BY v + w`, the evaluation of the first
+//  `v + w` is done at the source of the groupNode.
+//  - We only operate on the following expressions:
+//      - ONLY aggregation functions, with arguments pre-evaluated. So for
+//        `COUNT(k + v)`, we assume a stream of evaluated `k + v` values.
+//      - Expressions that CONTAIN an aggregation function, e.g. `COUNT(k) + 1`.
+//        This is evaluated the post aggregation evaluator attached after.
+//    All other expressions simply pass through unchanged, for e.g. `1` in
+//    `SELECT 1, SUM(k) GROUP BY k`.
+func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan, n *groupNode) {
+	aggExprs := dsp.extractPreAggExprs(n.render)
+	types := dsp.getTypes(n.plan.Columns())
+	// The way our planNode construction currently orders columns between
+	// groupNode and it's source is that the first len(n.funcs) columns are the
+	// arguments for the aggregation functions. The remaining columns are
+	// columns we group by.
+	// For `SELECT 1, SUM(k) GROUP BY k`, the output schema of groupNode's
+	// source will be [1 k k], with 1, k being arguments fed to the aggregation
+	// functions and k being the column we group by.
+	groupCols := make([]uint32, 0, len(n.plan.Columns())-len(n.funcs))
+	for i := len(n.funcs); i < len(n.plan.Columns()); i++ {
+		groupCols = append(groupCols, uint32(i))
+	}
+
+	aggregatorSpec := distsql.AggregatorSpec{
+		Exprs:     aggExprs,
+		Types:     types,
+		GroupCols: groupCols,
+	}
+	dsp.addSingleGroupStage(
+		p, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{Aggregator: &aggregatorSpec},
+	)
+
+	evalExprs, needEval := dsp.extractPostAggrExprs(n.render)
+	if needEval {
+		// Add a stage with Evaluator processors.
+		postevalSpec := distsql.EvaluatorSpec{
+			Exprs: make([]distsql.Expression, len(evalExprs)),
+		}
+
+		for i := range evalExprs {
+			postevalSpec.Exprs[i] = distSQLExpression(evalExprs[i], p.planToStreamColMap)
+		}
+
+		dsp.addSingleGroupStage(
+			p, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{Evaluator: &postevalSpec},
+		)
+	}
+
+	// Remove any columns that were only used for grouping.
+	p.planToStreamColMap = p.planToStreamColMap[:len(n.Columns())]
+	p.ordering = dsp.convertOrdering(n.desiredOrdering, p.planToStreamColMap)
+}
+
 func (dsp *distSQLPlanner) createPlanForIndexJoin(
 	planCtx *planningCtx, n *indexJoinNode,
 ) (physicalPlan, error) {
@@ -745,6 +998,11 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		plan, err := dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
+		}
+
+		n.plan = n.group.wrap(n.plan)
+		if n.group != nil {
+			dsp.addAggregators(planCtx, &plan, n.group)
 		}
 
 		var squash bool

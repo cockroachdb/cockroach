@@ -7,21 +7,38 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIITRRRRBB
-SELECT MIN(1), MAX(1), COUNT(1), ARRAY_AGG(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false) FROM kv
+query IIIRRRRBB
+SELECT MIN(1), MAX(1), COUNT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL
 
-query IIITRRRRBB
-SELECT MIN(v), MAX(v), COUNT(v), ARRAY_AGG(v), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1) FROM kv
+# Aggregate functions return NULL if there are no rows.
+query T
+SELECT ARRAY_AGG(1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL
+NULL
+
+query IIIRRRRBB
+SELECT MIN(v), MAX(v), COUNT(v), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1) FROM kv
+----
+NULL NULL 0 NULL NULL NULL NULL NULL NULL
+
+query T
+SELECT ARRAY_AGG(v) FROM kv
+----
+NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIITRRRRBB
-SELECT MIN(1), COUNT(1), MAX(1), ARRAY_AGG(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true)
+query IIIRRRRBB
+SELECT MIN(1), COUNT(1), MAX(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true)
 ----
-1 1 1 {1} 1 1 NULL NULL true true
+1 1 1 1 1 NULL NULL true true
+
+# Aggregate functions triggers aggregation and computation when there is no source.
+query T
+SELECT ARRAY_AGG(1)
+----
+{1}
 
 statement OK
 INSERT INTO kv VALUES
@@ -33,10 +50,16 @@ INSERT INTO kv VALUES
 (8, 4, 2, 'A')
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
-query IIITRRRRBB
-SELECT MIN(1), COUNT(1), MAX(1), ARRAY_AGG(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true) FROM kv
+query IIIRRRRBB
+SELECT MIN(1), COUNT(1), MAX(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true) FROM kv
 ----
-1 6 1 {1,1,1,1,1,1} 1 6 0 0 true true
+1 6 1 1 6 0 0 true true
+
+# Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
+query T
+SELECT ARRAY_AGG(1) FROM kv
+----
+{1,1,1,1,1,1}
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
 query I rowsort
