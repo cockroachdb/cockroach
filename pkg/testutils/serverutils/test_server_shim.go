@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -92,6 +93,11 @@ type TestServerInterface interface {
 	// WriteSummaries records summaries of time-series data, which is required for
 	// any tests that query server stats.
 	WriteSummaries() error
+
+	// SplitRange splits the range containing splitKey.
+	SplitRange(
+		splitKey roachpb.Key,
+	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
