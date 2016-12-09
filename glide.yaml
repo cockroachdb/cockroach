@@ -6,7 +6,7 @@ import:
   subpackages:
   - cmd/protoc
 - package: github.com/cockroachdb/c-rocksdb
-  version: b5ca031b93fde49bfa2ba99aba423136aebf3c06
+  version: 894d369c4ea259b65f75563feeb06bea322a8450
 - package: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
 - package: github.com/gogo/protobuf
