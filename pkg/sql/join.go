@@ -293,7 +293,9 @@ func (p *planner) makeJoin(
 
 // ExplainTypes implements the planNode interface.
 func (n *joinNode) ExplainTypes(regTypes func(string, string)) {
-	n.pred.explainTypes(regTypes)
+	if n.pred.filter != nil {
+		regTypes("filter", parser.AsStringWithFlags(n.pred.filter, parser.FmtShowTypes))
+	}
 }
 
 // SetLimitHint implements the planNode interface.
@@ -311,7 +313,7 @@ func (n *joinNode) setNeededColumns(needed []bool) {
 
 // expandPlan implements the planNode interface.
 func (n *joinNode) expandPlan() error {
-	if err := n.pred.expand(); err != nil {
+	if err := n.pred.p.expandSubqueryPlans(n.pred.filter); err != nil {
 		return err
 	}
 	if err := n.left.plan.expandPlan(); err != nil {
@@ -375,7 +377,7 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 
 // Start implements the planNode interface.
 func (n *joinNode) Start() error {
-	if err := n.pred.start(); err != nil {
+	if err := n.pred.p.startSubqueryPlans(n.pred.filter); err != nil {
 		return err
 	}
 

@@ -52,20 +52,6 @@ func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 	p.info.FormatVar(buf, f, idx)
 }
 
-func (p *joinPredicate) expand() error {
-	return p.p.expandSubqueryPlans(p.filter)
-}
-
-func (p *joinPredicate) start() error {
-	return p.p.startSubqueryPlans(p.filter)
-}
-
-func (p *joinPredicate) explainTypes(regTypes func(string, string)) {
-	if p.filter != nil {
-		regTypes("filter", parser.AsStringWithFlags(p.filter, parser.FmtShowTypes))
-	}
-}
-
 // optimizeOnPredicate tries to turn the filter in an onPredicate into
 // equality columns in the equalityPredicate, which enables faster
 // joins.  The concatInfos argument, if provided, must be a
