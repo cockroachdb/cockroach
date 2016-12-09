@@ -233,10 +233,9 @@ func (p *planner) makeJoin(
 	// now we simply default to hash joins if using NATURAL JOIN or
 	// USING, nested loop joins for ON predicates.
 	var (
-		info      *dataSourceInfo
-		pred      joinPredicate
-		algorithm joinAlgorithm
-		err       error
+		info *dataSourceInfo
+		pred *equalityPredicate
+		err  error
 	)
 
 	if cond == nil {
@@ -245,23 +244,20 @@ func (p *planner) makeJoin(
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
 			pred, info, err = p.makeOnPredicate(leftInfo, rightInfo, t.Expr)
-			switch pred.(type) {
-			case *equalityPredicate:
-				algorithm = hashJoin
-			default:
-				algorithm = nestedLoopJoin
-			}
 		case parser.NaturalJoinCond:
 			cols := commonColumns(leftInfo, rightInfo)
 			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, cols)
-			algorithm = hashJoin
 		case *parser.UsingJoinCond:
 			pred, info, err = p.makeUsingPredicate(leftInfo, rightInfo, t.Cols)
-			algorithm = hashJoin
 		}
 	}
 	if err != nil {
 		return planDataSource{}, err
+	}
+
+	algorithm := hashJoin
+	if len(pred.leftEqualityIndices) == 0 {
+		algorithm = nestedLoopJoin
 	}
 
 	n := &joinNode{
@@ -336,7 +332,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 	switch n.joinType {
 	case joinTypeInner:
 		jType := "INNER"
-		if p, ok := n.pred.(*equalityPredicate); ok && len(p.leftColNames) == 0 {
+		if p, ok := n.pred.(*equalityPredicate); ok && len(p.leftColNames) == 0 && p.filter == nil {
 			jType = "CROSS"
 		}
 		buf.WriteString(jType)
@@ -356,7 +352,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 	if n.swapped {
 		subplans[0], subplans[1] = subplans[1], subplans[0]
 	}
-	if p, ok := n.pred.(*onPredicate); ok {
+	if p, ok := n.pred.(*equalityPredicate); ok {
 		subplans = p.p.collectSubqueryPlans(p.filter, subplans)
 	}
 
