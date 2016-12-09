@@ -559,40 +559,42 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 }
 
 // selectRenders takes a physicalPlan that produces the results corresponding to
-// the select data source (a n.source) and updates it to produce results
-// corresponding to the select node itself. An evaluator stage is added if the
-// select node has any expressions which are not just simple column references.
+// the select data source (n.source, a planDataSource) and updates it to produce
+// results corresponding to the select node itself. An evaluator stage is added
+// if the select node has any expressions which are not just simple column
+// references, or there isn't a strict 1-1 mapping between n.Columns() and
+// n.source.plan.Columns().
+// TODO(irfansharif): Arguably simple multiplexing or column re-mapping is too
+// lightweight to warrant an entire evaluator processor, but the current
+// implementations of certain processors don't have mappings to push such
+// multiplexing/column re-re-mapping down to the processor.
+// For e.g. for `SELECT COUNT(k), SUM(k) GROUP BY k`, if the output schema of a
+// `scanNode` is [k], the input schema of the `groupNode` (and by parity
+// aggregators as well) is [k k k]. In order to multiplex `[k]` to `[k k k]` we
+// add an evaluator stage. The specs for such processors can definitely be
+// improved upon.
 func (dsp *distSQLPlanner) selectRenders(
 	planCtx *planningCtx, p *physicalPlan, n *selectNode,
 ) error {
-	// First check if we need an Evaluator, or we are just returning values.
 	needEval := false
-	for _, e := range n.render {
-		if _, ok := e.(*parser.IndexedVar); !ok {
-			needEval = true
-			break
+
+	// We are simply looking for a 1-1 mapping between n.Columns() and
+	// n.source.plan.Columns(). If there isn't one, in order to bridge the
+	// gap between the two we will need the evaluator.
+	if len(n.Columns()) != len(n.source.plan.Columns()) {
+		needEval = true
+	} else {
+		for i, c := range n.source.plan.Columns() {
+			if c != n.columns[i] {
+				needEval = true
+			}
 		}
 	}
+
 	if !needEval {
-		// We don't need an evaluator stage. However, we do need to update
-		// p.planToStreamColMap to make the plan correspond to the selectNode
-		// (rather than n.source).
-		planToStreamColMap := make([]int, len(n.render))
-		for i := range planToStreamColMap {
-			planToStreamColMap[i] = -1
-		}
-		for i, e := range n.render {
-			idx := e.(*parser.IndexedVar).Idx
-			streamCol := p.planToStreamColMap[idx]
-			if streamCol == -1 {
-				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
-			}
-			planToStreamColMap[i] = streamCol
-		}
-		p.planToStreamColMap = planToStreamColMap
-		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
 		return nil
 	}
+
 	// Add a stage with Evaluator processors.
 	evalSpec := distsql.EvaluatorSpec{
 		Exprs: make([]distsql.Expression, len(n.render)),
