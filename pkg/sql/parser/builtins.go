@@ -77,12 +77,13 @@ const (
 var _ = NormalClass
 
 const (
-	categoryIDGeneration = "ID Generation"
-	categorySystemInfo   = "System Info"
-	categoryDateAndTime  = "Date and Time"
-	categoryString       = "String and Byte"
-	categoryMath         = "Math and Numeric"
-	categoryComparison   = "Comparison"
+	categoryComparison    = "Comparison"
+	categoryCompatibility = "Compatibility"
+	categoryDateAndTime   = "Date and Time"
+	categoryIDGeneration  = "ID Generation"
+	categoryMath          = "Math and Numeric"
+	categoryString        = "String and Byte"
+	categorySystemInfo    = "System Info"
 )
 
 // Builtin is a built-in function.
@@ -1364,6 +1365,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return args[0], nil
 			},
+			category: categoryCompatibility,
 		},
 		Builtin{
 			Types: NamedArgTypes{
@@ -1375,6 +1377,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return args[0], nil
 			},
+			category: categoryCompatibility,
 		},
 	},
 
@@ -1387,6 +1390,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(args[0].ResolvedType().String()), nil
 			},
+			category: categoryCompatibility,
 		},
 	},
 	"pg_catalog.pg_get_userbyid": {
@@ -1406,6 +1410,7 @@ var Builtins = map[string][]Builtin{
 				}
 				return t[0], nil
 			},
+			category: categoryCompatibility,
 		},
 	},
 }
