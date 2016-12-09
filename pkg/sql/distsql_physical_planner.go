@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -67,9 +68,9 @@ type distSQLPlanner struct {
 
 const resolverPolicy = distsql.BinPackingLeaseHolderChoice
 
-// If true, the plan diagram (in JSON) is printed for each plan (used for
+// If true, the plan diagram (in JSON) is logged for each plan (used for
 // debugging).
-const printPlanDiagram = false
+var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
 func newDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
@@ -867,7 +868,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 		flows[idx].Processors = append(flows[idx].Processors, p.spec)
 	}
 
-	if printPlanDiagram {
+	if logPlanDiagram {
 		nodeNames := make([]string, len(nodeIDs))
 		for i, n := range nodeIDs {
 			nodeNames[i] = n.String()
@@ -875,9 +876,9 @@ func (dsp *distSQLPlanner) PlanAndRun(
 
 		var buf bytes.Buffer
 		if err := distsql.GeneratePlanDiagram(flows, nodeNames, &buf); err != nil {
-			fmt.Println("Error generating diagram: ", err)
+			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
-			fmt.Println(buf.String())
+			log.Infof(ctx, "Plan diagram JSON:\n%s", buf.String())
 		}
 	}
 

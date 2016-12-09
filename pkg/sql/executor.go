@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -72,7 +73,7 @@ var (
 	MetaQuery       = metric.Metadata{Name: "sql.query.count"}
 )
 
-// TODO(radu): experimental code for testing distSQL flows.
+// distSQLExecMode controls if and when the Executor uses DistSQL.
 type distSQLExecMode int
 
 const (
@@ -83,7 +84,25 @@ const (
 	// distSQLOnly means that we only use distSQL; unsupported queries fail.
 	distSQLAlways
 )
-const testDistSQL distSQLExecMode = distSQLOff
+
+func distSQLExecModeFromString(val string) distSQLExecMode {
+	switch strings.ToUpper(val) {
+	case "OFF":
+		return distSQLOff
+	case "ON":
+		return distSQLOn
+	case "ALWAYS":
+		return distSQLAlways
+	default:
+		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
+	}
+}
+
+// defaultDistSQLMode controls the default DistSQL mode (see above). It can
+// still be overridden per-session using `SET DIST_SQL = ...`.
+var defaultDistSQLMode = distSQLExecModeFromString(
+	envutil.EnvOrDefaultString("COCKROACH_DISTSQL_MODE", "OFF"),
+)
 
 type traceResult struct {
 	tag   string
@@ -1230,7 +1249,7 @@ func (e *Executor) execClassic(plan planNode, result *Result) error {
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
 // on the session settings.
 func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, error) {
-	distSQLMode := testDistSQL
+	distSQLMode := defaultDistSQLMode
 	if session.DistSQLMode != distSQLOff {
 		distSQLMode = session.DistSQLMode
 	}
