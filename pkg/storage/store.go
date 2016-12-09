@@ -390,7 +390,6 @@ type Store struct {
 	startedAt    int64
 	nodeDesc     *roachpb.NodeDescriptor
 	initComplete sync.WaitGroup // Signaled by async init tasks
-	bookie       *bookie
 
 	idleReplicaElectionTime struct {
 		syncutil.Mutex
@@ -398,7 +397,8 @@ type Store struct {
 	}
 
 	// Semaphore to limit concurrent snapshots.
-	snapshotSem chan struct{}
+	snapshotSem      chan struct{}
+	snapshotApplySem chan struct{}
 
 	// drainLeases holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend range leases; see DrainLeases().
@@ -629,6 +629,10 @@ type StoreConfig struct {
 	// the wire.
 	concurrentSnapshotLimit int
 
+	// concurrentSnapshotApplyLimit is the maximum number of snapshots that are
+	// permitted to be applied concurrently.
+	concurrentSnapshotApplyLimit int
+
 	// RangeLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
 	RangeLeaseActiveDuration time.Duration
@@ -786,6 +790,12 @@ func (sc *StoreConfig) SetDefaults() {
 		// throughput.
 		sc.concurrentSnapshotLimit = envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_LIMIT", 1)
 	}
+	if sc.concurrentSnapshotApplyLimit == 0 {
+		// NB: setting this value higher than 1 is likely to degrade client
+		// throughput.
+		sc.concurrentSnapshotApplyLimit =
+			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
+	}
 
 	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
 		RangeLeaseDurations(RaftElectionTimeout(sc.RaftTickInterval, sc.RaftElectionTimeoutTicks))
@@ -858,6 +868,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.Unlock()
 
 	s.snapshotSem = make(chan struct{}, cfg.concurrentSnapshotLimit)
+	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
@@ -1029,9 +1040,6 @@ func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent,
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
-
-	// Add the bookie to the store.
-	s.bookie = newBookie(s.metrics)
 
 	// Read the store ident if not already initialized. "NodeID != 0" implies
 	// the store has already been initialized.
@@ -2616,10 +2624,49 @@ func (s *Store) maybeUpdateTransaction(
 	return txn, nil
 }
 
+func (s *Store) reserveSnapshot(
+	ctx context.Context, header *SnapshotRequest_Header, stream SnapshotResponseStream,
+) (func(), error) {
+	if header.CanDecline {
+		select {
+		case s.snapshotApplySem <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-s.stopper.ShouldStop():
+			return nil, errors.Errorf("stopped")
+		default:
+			return nil, stream.Send(&SnapshotResponse{Status: SnapshotResponse_DECLINED})
+		}
+	} else {
+		select {
+		case s.snapshotApplySem <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-s.stopper.ShouldStop():
+			return nil, errors.Errorf("stopped")
+		}
+	}
+
+	s.metrics.ReservedReplicaCount.Inc(1)
+	s.metrics.Reserved.Inc(header.RangeSize)
+	return func() {
+		s.metrics.ReservedReplicaCount.Dec(1)
+		s.metrics.Reserved.Dec(header.RangeSize)
+		<-s.snapshotApplySem
+	}, nil
+}
+
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
 func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
+
+	ctx := s.AnnotateCtx(stream.Context())
+	cleanup, err := s.reserveSnapshot(ctx, header, stream)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	sendSnapError := func(err error) error {
 		return stream.Send(&SnapshotResponse{
@@ -2628,33 +2675,12 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 		})
 	}
 
-	ctx := s.AnnotateCtx(stream.Context())
-
-	if header.CanDecline {
-		// Check the bookie to see if we can apply the snapshot.
-		resp := s.reserve(ctx, reservationRequest{
-			StoreRequestHeader: StoreRequestHeader{
-				NodeID:  s.nodeDesc.NodeID,
-				StoreID: s.StoreID(),
-			},
-			RangeSize: header.RangeSize,
-			RangeID:   header.State.Desc.RangeID,
-		})
-		if !resp.Reserved {
-			return stream.Send(&SnapshotResponse{
-				Status: SnapshotResponse_DECLINED,
-			})
-		}
-		defer s.bookie.Fill(ctx, header.State.Desc.RangeID)
-	}
-
 	// Check to see if the snapshot can be applied but don't attempt to add
 	// a placeholder here, because we're not holding the replica's raftMu.
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	_, err := s.canApplySnapshot(ctx, header.State.Desc)
-	if err != nil {
+	if _, err := s.canApplySnapshot(ctx, header.State.Desc); err != nil {
 		return sendSnapError(
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
 		)
@@ -3932,11 +3958,6 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 		return true // want more
 	})
 	return
-}
-
-// reserve requests a reservation from the store's bookie.
-func (s *Store) reserve(ctx context.Context, req reservationRequest) reservationResponse {
-	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue
