@@ -241,7 +241,7 @@ type equalityPredicate struct {
 	// The comparison function to use for each column. We need
 	// different functions because each USING column may have a different
 	// type (and they may be heterogeneous between left and right).
-	usingCmp []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error)
+	cmpFunctions []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error)
 
 	// left/rightEqualityIndices give the position of USING columns
 	// on the left and right input row arrays, respectively.
@@ -255,9 +255,10 @@ type equalityPredicate struct {
 	// Used mainly for pretty-printing.
 	rightColNames parser.NameList
 
-	// mergeEqualityColumns specifies that the result row must only
-	// contain one column for every pair of columns tested for equality.
-	// This is the desired behavior for USING and NATURAL JOIN.
+	// mergeEqualityColumns specifies that the result row must contain
+	// one coalesced heading column for every pair of columns tested for
+	// equality. This is the desired behavior for USING and NATURAL
+	// JOIN.
 	mergeEqualityColumns bool
 }
 
@@ -284,7 +285,7 @@ func (p *equalityPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, erro
 		if leftVal == parser.DNull || rightVal == parser.DNull {
 			return false, nil
 		}
-		res, err := p.usingCmp[i](&p.p.evalCtx, leftVal, rightVal)
+		res, err := p.cmpFunctions[i](&p.p.evalCtx, leftVal, rightVal)
 		if err != nil {
 			return false, err
 		}
@@ -566,7 +567,7 @@ func (p *planner) makeEqualityPredicate(
 		leftColNames:         leftColNames,
 		rightColNames:        rightColNames,
 		mergeEqualityColumns: mergeEqualityColumns,
-		usingCmp:             cmpOps,
+		cmpFunctions:         cmpOps,
 		leftEqualityIndices:  leftEqualityIndices,
 		rightEqualityIndices: rightEqualityIndices,
 	}, info, nil
