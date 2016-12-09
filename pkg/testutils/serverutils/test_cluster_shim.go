@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -48,6 +49,23 @@ type TestClusterInterface interface {
 	// Stopper retrieves the stopper for this test cluster. Tests should call or
 	// defer the Stop() method on this stopper after starting a test cluster.
 	Stopper() *stop.Stopper
+
+	// Target returns a ReplicationTarget for the specified server.
+	Target(serverIdx int) roachpb.ReplicationTarget
+
+	// AddReplicas adds replicas for the range that contains the given key.
+	AddReplicas(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
+	// RemoveReplicas removes one or more replicas from a range.
+	RemoveReplicas(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
+	// TransferRangeLease transfers the lease for a range from whoever has it to
+	// a particular store. That store must already have a replica of the range.
+	TransferRangeLease(rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget) error
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim
