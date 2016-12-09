@@ -92,8 +92,14 @@ type storeStatus int
 
 // These are the possible values for a storeStatus.
 const (
-	// The store is not yet available or has been timed out.
+	// The store's node is not live or no gossip has been received from
+	// the store for more than the timeUntilStoreDead threshold.
 	storeStatusDead storeStatus = iota
+	// The store isn't available because it hasn't gossiped yet. This
+	// status lasts until either gossip is received from the store or
+	// the timeUntilStoreDead threshold has passed, at which point its
+	// status will change to dead.
+	storeStatusUnavailable
 	// The store is alive but it is throttled.
 	storeStatusThrottled
 	// The store is alive but a replica for the same rangeID was recently
@@ -115,7 +121,8 @@ func (sd *storeDetail) isDead(
 		return true
 	}
 	// If there's no descriptor (meaning no gossip ever arrived for this
-	// store), we can't check the node liveness, so presume this node live.
+	// store), we can't check the node liveness, so return false, though
+	// the actual status will be unavailable.
 	if sd.desc == nil {
 		return false
 	}
@@ -128,11 +135,11 @@ func (sd *storeDetail) isDead(
 func (sd *storeDetail) status(
 	now time.Time, threshold time.Duration, rangeID roachpb.RangeID, nl NodeLivenessFunc,
 ) storeStatus {
-	// TODO(spencer): there are two ideas of dead in this code right now.
-	// This method considers a node dead if isDead() is true OR if sd.desc
-	// is null. Dead should mean one thing or the other, not both.
-	if sd.isDead(now, threshold, nl) || sd.desc == nil {
+	if sd.isDead(now, threshold, nl) {
 		return storeStatusDead
+	}
+	if sd.desc == nil {
+		return storeStatusUnavailable
 	}
 	if sd.isThrottled(now) {
 		return storeStatusThrottled
@@ -430,7 +437,7 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	now := sp.clock.PhysicalTime()
 	for _, storeID := range storeIDs {
 		detail := sp.mu.storeDetails[storeID]
-		switch detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn) {
+		switch s := detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++
@@ -439,6 +446,10 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 		case storeStatusAvailable:
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.desc)
+		case storeStatusDead, storeStatusUnavailable:
+			// Do nothing; this node cannot be used.
+		default:
+			panic(fmt.Sprintf("unknown store status: %d", s))
 		}
 	}
 
