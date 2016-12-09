@@ -648,33 +648,67 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the select node itself. An evaluator stage is added if the
 // select node has any expressions which are not just simple column references.
+//
+// TODO(irfansharif): An evaluator stage is also added if there isn't a strict
+// 1-1 mapping between n.Columns() and n.source.plan.Columns(). Arguably simple
+// multiplexing or column re-mapping is too lightweight to warrant an entire
+// evaluator processor, but the current implementations of certain processors
+// don't have mappings to push such multiplexing/column re-mapping down to
+// the processor. This happens for when `n.top.group != nil` because
+// aggregators don't have internal mappings, also for `n.top.sort != nil`
+// because sorters are not configured to output only specific columns.
+//
+// For e.g. for `SELECT COUNT(k), SUM(k) GROUP BY k`, if the output schema of a
+// `scanNode` is [k], the input schema of the `groupNode` (and by parity
+// aggregators as well) is [k k k]. In order to multiplex `[k]` to `[k k k]` we
+// add an evaluator stage. The specs for such processors can definitely be
+// improved upon.
 func (dsp *distSQLPlanner) selectRenders(
 	planCtx *planningCtx, p *physicalPlan, n *selectNode,
 ) error {
 	// First check if we need an Evaluator, or we are just returning values.
 	needEval := false
-	for _, e := range n.render {
-		if _, ok := e.(*parser.IndexedVar); !ok {
+
+	if n.top.group != nil || n.top.sort != nil {
+		// We are simply looking for a 1-1 mapping between n.Columns() and
+		// n.source.plan.Columns(). If there isn't one, in order to bridge the
+		// gap between the two we will need the evaluator.
+		if len(n.Columns()) != len(n.source.plan.Columns()) {
 			needEval = true
-			break
-		}
-	}
-	if !needEval {
-		// We don't need an evaluator stage. However, we do need to update
-		// p.planToStreamColMap to make the plan correspond to the selectNode
-		// (rather than n.source).
-		planToStreamColMap := makePlanToStreamColMap(len(n.render))
-		for i, e := range n.render {
-			idx := e.(*parser.IndexedVar).Idx
-			streamCol := p.planToStreamColMap[idx]
-			if streamCol == -1 {
-				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
+		} else {
+			for i, c := range n.source.plan.Columns() {
+				if c != n.columns[i] {
+					needEval = true
+				}
 			}
-			planToStreamColMap[i] = streamCol
 		}
-		p.planToStreamColMap = planToStreamColMap
-		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-		return nil
+		if !needEval {
+			return nil
+		}
+	} else {
+		for _, e := range n.render {
+			if _, ok := e.(*parser.IndexedVar); !ok {
+				needEval = true
+				break
+			}
+		}
+		if !needEval {
+			// We don't need an evaluator stage. However, we do need to update
+			// p.planToStreamColMap to make the plan correspond to the selectNode
+			// (rather than n.source).
+			planToStreamColMap := makePlanToStreamColMap(len(n.render))
+			for i, e := range n.render {
+				idx := e.(*parser.IndexedVar).Idx
+				streamCol := p.planToStreamColMap[idx]
+				if streamCol == -1 {
+					panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
+				}
+				planToStreamColMap[i] = streamCol
+			}
+			p.planToStreamColMap = planToStreamColMap
+			p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
+			return nil
+		}
 	}
 	// Add a stage with Evaluator processors.
 	evalSpec := distsql.EvaluatorSpec{
