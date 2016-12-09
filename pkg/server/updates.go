@@ -55,6 +55,7 @@ func init() {
 const updateCheckFrequency = time.Hour * 24
 const updateCheckJitterSeconds = 120
 const updateCheckRetryFrequency = time.Hour
+const updateMaxVersionsToReport = 3
 
 const optinKey = serverUIDataKeyPrefix + "optin-reporting"
 
@@ -209,6 +210,12 @@ func (s *Server) checkForUpdates(ctx context.Context) {
 		return
 	}
 
+	// Ideally the updates server only returns the most relevant updates for us,
+	// but if it replied with an excessive number of updates, limit log spam by
+	// only printing the first few.
+	if len(r.Details) > updateMaxVersionsToReport {
+		r.Details = r.Details[:updateMaxVersionsToReport]
+	}
 	for _, v := range r.Details {
 		log.Infof(ctx, "A new version is available: %s, details: %s", v.Version, v.Details)
 	}
