@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 )
@@ -358,4 +359,21 @@ func (f *Farmer) logf(format string, args ...interface{}) {
 	if f.Output != nil {
 		fmt.Fprintf(f.Output, format, args...)
 	}
+}
+
+func (f *Farmer) StartLoad(ctx context.Context, process string, num int) error {
+	if num > len(f.Nodes()) {
+		return errors.Errorf("writers (%d) > nodes (%d)", num, len(f.Nodes()))
+	}
+
+	// We may have to retry restarting the load generators, because CockroachDB
+	// might have been started too recently to start accepting connections.
+	for i := 0; i < num; i++ {
+		if err := util.RetryForDuration(10*time.Second, func() error {
+			return f.Start(ctx, i, process)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

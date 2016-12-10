@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -85,26 +84,6 @@ func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 	return count, nil
 }
 
-func (cl continuousLoadTest) startLoad(ctx context.Context, f *terrafarm.Farmer) error {
-	if *flagCLTWriters > len(f.Nodes()) {
-		return errors.Errorf("writers (%d) > nodes (%d)", *flagCLTWriters, len(f.Nodes()))
-	}
-
-	// We may have to retry restarting the load generators, because CockroachDB
-	// might have been started too recently to start accepting connections.
-	started := make(map[int]bool)
-	return util.RetryForDuration(10*time.Second, func() error {
-		for i := 0; i < *flagCLTWriters; i++ {
-			if !started[i] {
-				if err := f.Start(ctx, i, cl.Process); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	})
-}
-
 // Run performs a continuous load test with the given parameters, checking the
 // health of the cluster regularly. Any failure of a CockroachDB node or load
 // generator constitutes a test failure. The test runs for the duration given
@@ -152,7 +131,7 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 	}
 	CheckGossip(ctx, t, f, longWaitTime, HasPeers(cl.NumNodes))
 	start := timeutil.Now()
-	if err := cl.startLoad(ctx, f); err != nil {
+	if err := f.StartLoad(ctx, cl.Process, *flagCLTWriters); err != nil {
 		t.Fatal(err)
 	}
 	cl.assert(ctx, t, f)
