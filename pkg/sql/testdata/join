@@ -441,3 +441,20 @@ EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b
 2  join           NESTED LOOP JOIN, INNER ON a.x < b.y                             (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
+
+# Ensure that the ordering information for the result of joins is sane. (#12037)
+query ITTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
+				INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
+----
+0   select                                                (k, u, w)            +u
+1   sort            +u                                    (k, u, w)            +u
+2   render/filter   from (""."".k, ""."".u, "".b.w)       (k, u, w)
+3   join            HASH JOIN, INNER ON EQUALS((k),(k))   (k, u, w)
+4   select                                                (u, k)               +k
+5   sort            +k                                    (u, k)               +k
+6   render/filter   from ("".a.u, "".a.k)                 (u, k)
+7   select                                                (column1, column2)
+8   values          2 columns, 2 rows                     (column1, column2)
+4   select                                                (column1, column2)
+5   values          2 columns, 2 rows                     (column1, column2)
