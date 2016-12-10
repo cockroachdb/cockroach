@@ -308,7 +308,7 @@ x  x  y  b  d  e
 query ITT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(x))
+0  join  INNER ON EQUALS((x),(x))
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
@@ -316,7 +316,7 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 query ITT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+0  join  INNER ON EQUALS((x),(y))
 1  scan  twocolumn@primary
 1  scan  twocolumn@primary
 
@@ -324,7 +324,7 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 query ITT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-0  join  NESTED LOOP JOIN, INNER ON a.x = 44
+0  join  INNER ON a.x = 44
 1  scan  twocolumn@primary
 1  scan  twocolumn@primary
 
@@ -332,7 +332,7 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 query ITT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+0  join  INNER ON EQUALS((x),(y))
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
@@ -340,7 +340,7 @@ EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 query ITT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+0  join  INNER ON EQUALS((x),(y))
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
@@ -349,9 +349,9 @@ query ITT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit  count: 1
-1  join   NESTED LOOP JOIN, INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
-2  join   HASH JOIN, INNER ON EQUALS((x),(b))
-3  join   NESTED LOOP JOIN, CROSS
+1  join   INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
+2  join   INNER ON EQUALS((x),(b))
+3  join   CROSS
 4  scan   onecolumn@primary
 4  scan   twocolumn@primary
 3  scan   onecolumn@primary
@@ -432,7 +432,7 @@ EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 0  select                                                                          (x, y)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x, y)
-2  join           NESTED LOOP JOIN, CROSS                                          (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
+2  join           CROSS                                                            (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
 
@@ -442,7 +442,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
 0  select                                                                                     (y)
 1  render/filter  from (""."".x, *"".a.x, "".a.y, *"".a.rowid, *"".b.x, "".b.y, *"".b.rowid)  (y)
-2  join           HASH JOIN, INNER ON EQUALS((x),(x))                                         (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])
+2  join           INNER ON EQUALS((x),(x))                                                    (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                           (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                           (x, y, rowid[hidden,omitted])
 
@@ -451,7 +451,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b
 ----
 0  select                                                                          (y)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (y)
-2  join           HASH JOIN, INNER ON EQUALS((x),(x))                              (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
+2  join           INNER ON EQUALS((x),(x))                                         (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y, rowid[hidden,omitted])
 
@@ -460,7 +460,7 @@ EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b
 ----
 0  select                                                                          (x)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x)
-2  join           NESTED LOOP JOIN, INNER ON a.x < b.y                             (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
+2  join           INNER ON a.x < b.y                                               (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
 
@@ -472,7 +472,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, 
 0   select                                                              (k, u, w)            +u
 1   sort            +u                                                  (k, u, w)            +u
 2   render/filter   from (""."".k, ""."".u, *""."".k, *"".b.k, "".b.w)  (k, u, w)
-3   join            HASH JOIN, INNER ON EQUALS((k),(k))                 (k, u, k[hidden,omitted], k[hidden,omitted], w)
+3   join            INNER ON EQUALS((k),(k))                            (k, u, k[hidden,omitted], k[hidden,omitted], w)
 4   select                                                              (u, k)               +k
 5   sort            +k                                                  (u, k)               +k
 6   render/filter   from ("".a.u, "".a.k)                               (u, k)

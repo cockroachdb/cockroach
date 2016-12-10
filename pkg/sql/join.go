@@ -26,17 +26,11 @@ import (
 )
 
 type joinType int
-type joinAlgorithm int
 
 const (
 	joinTypeInner joinType = iota
 	joinTypeLeftOuter
 	joinTypeFullOuter
-)
-
-const (
-	nestedLoopJoin joinAlgorithm = iota
-	hashJoin
 )
 
 // bucket here is the set of rows for a given group key (comprised of
@@ -107,9 +101,8 @@ func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
-	planner       *planner
-	joinType      joinType
-	joinAlgorithm joinAlgorithm
+	planner  *planner
+	joinType joinType
 
 	// The data sources.
 	left    planDataSource
@@ -124,26 +117,6 @@ type joinNode struct {
 
 	// output contains the last generated row of results from this node.
 	output parser.DTuple
-
-	// rightRows contains a copy of all rows from the data source on the
-	// right of the join.
-	rightRows *valuesNode
-
-	// rightMatched remembers which of the right rows have matched in a
-	// full outer join. Not applicable for Hash Joins.
-	rightMatched []bool
-
-	// rightIdx indicates the current right row.
-	// In a full outer join, the value becomes negative during the last pass
-	// searching for unmatched right rows. Not applicable for Hash Joins.
-	rightIdx int
-
-	// passedFilter turns to true when the current left row has matched
-	// at least one right row. Not applicable for Hash Joins.
-	passedFilter bool
-
-	// TODO(irfansharif): Re-write nested loop joins to use the internal buffer
-	// instead and avoid all the tricky state management in the outer loop.
 
 	// buffer is our intermediate row store where we effectively 'stash' a batch
 	// of results at once, this is then used for subsequent calls to Next() and
@@ -255,34 +228,24 @@ func (p *planner) makeJoin(
 		return planDataSource{}, err
 	}
 
-	algorithm := hashJoin
-	if len(pred.leftEqualityIndices) == 0 {
-		algorithm = nestedLoopJoin
-	}
-
 	n := &joinNode{
-		planner:       p,
-		left:          left,
-		right:         right,
-		joinType:      typ,
-		joinAlgorithm: algorithm,
-		pred:          pred,
-		columns:       info.sourceColumns,
-		swapped:       swapped,
+		planner:  p,
+		left:     left,
+		right:    right,
+		joinType: typ,
+		pred:     pred,
+		columns:  info.sourceColumns,
+		swapped:  swapped,
 	}
 
-	if algorithm == nestedLoopJoin {
-		n.rightRows = p.newContainerValuesNode(right.plan.Columns(), 0)
-	} else if algorithm == hashJoin {
-		n.buffer = &RowBuffer{
-			RowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.Columns(), 0),
-		}
+	n.buffer = &RowBuffer{
+		RowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.Columns(), 0),
+	}
 
-		n.bucketsMemAcc = p.session.TxnState.OpenAccount()
-		n.buckets = buckets{
-			buckets:      make(map[string]*bucket),
-			rowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0),
-		}
+	n.bucketsMemAcc = p.session.TxnState.OpenAccount()
+	n.buckets = buckets{
+		buckets:      make(map[string]*bucket),
+		rowContainer: NewRowContainer(p.session.TxnState.makeBoundAccount(), n.right.plan.Columns(), 0),
 	}
 
 	return planDataSource{
@@ -325,12 +288,6 @@ func (n *joinNode) expandPlan() error {
 // ExplainPlan implements the planNode interface.
 func (n *joinNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	var buf bytes.Buffer
-	switch n.joinAlgorithm {
-	case nestedLoopJoin:
-		buf.WriteString("NESTED LOOP JOIN, ")
-	case hashJoin:
-		buf.WriteString("HASH JOIN, ")
-	}
 	switch n.joinType {
 	case joinTypeInner:
 		jType := "INNER"
@@ -389,17 +346,8 @@ func (n *joinNode) Start() error {
 	}
 
 	if n.explain != explainDebug {
-		switch n.joinAlgorithm {
-		case nestedLoopJoin:
-			if err := n.nestedLoopJoinStart(); err != nil {
-				return err
-			}
-		case hashJoin:
-			if err := n.hashJoinStart(); err != nil {
-				return err
-			}
-		default:
-			panic("unsupported JOIN algorithm")
+		if err := n.hashJoinStart(); err != nil {
+			return err
 		}
 	}
 
@@ -418,34 +366,7 @@ func (n *joinNode) Start() error {
 			n.emptyLeft[i] = parser.DNull
 		}
 	}
-	// If needed, allocate an array of booleans to remember which
-	// right rows have matched.
-	if n.joinAlgorithm == nestedLoopJoin && n.joinType == joinTypeFullOuter && n.rightRows != nil {
-		n.rightMatched = make([]bool, n.rightRows.rows.Len())
-	}
 
-	return nil
-}
-
-func (n *joinNode) nestedLoopJoinStart() error {
-	// Load all the rows from the right side in memory.
-	for {
-		hasRow, err := n.right.plan.Next()
-		if err != nil {
-			return err
-		}
-		if !hasRow {
-			break
-		}
-		row := n.right.plan.Values()
-		if _, err := n.rightRows.rows.AddRow(row); err != nil {
-			return err
-		}
-	}
-	if n.rightRows.Len() == 0 {
-		n.rightRows.Close()
-		n.rightRows = nil
-	}
 	return nil
 }
 
@@ -495,122 +416,7 @@ func (n *joinNode) Next() (res bool, err error) {
 	if n.explain == explainDebug {
 		return n.debugNext()
 	}
-	switch n.joinAlgorithm {
-	case nestedLoopJoin:
-		return n.nestedLoopJoinNext()
-	case hashJoin:
-		return n.hashJoinNext()
-	default:
-		panic("unsupported JOIN algorithm")
-	}
-}
 
-func (n *joinNode) nestedLoopJoinNext() (bool, error) {
-	var leftRow, rightRow parser.DTuple
-	var nRightRows int
-
-	if n.rightRows == nil {
-		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
-			// No rows on right; don't even try.
-			return false, nil
-		}
-		nRightRows = 0
-	} else {
-		nRightRows = n.rightRows.Len()
-	}
-
-	// We fetch one row at a time until we find one that passes the filter.
-	for {
-		curRightIdx := n.rightIdx
-
-		if curRightIdx < 0 {
-			// Going through the remaining right row of a full outer join.
-			curRightIdx = (-curRightIdx) - 1
-			n.rightIdx--
-			if curRightIdx < nRightRows {
-				if n.rightMatched[curRightIdx] {
-					continue
-				}
-				leftRow = n.emptyLeft
-				rightRow = n.rightRows.rows.At(curRightIdx)
-				break
-			} else {
-				// Both right and left exhausted.
-				return false, nil
-			}
-		}
-
-		if curRightIdx == 0 {
-			leftHasRow, err := n.left.plan.Next()
-			if err != nil {
-				return false, err
-			}
-
-			if !leftHasRow && n.rightMatched != nil {
-				// Go through the remaining right rows.
-				n.left.plan.Close()
-				n.rightIdx = -1
-				continue
-			}
-
-			if !leftHasRow {
-				// Both left and right are exhausted; done.
-				return false, nil
-			}
-		}
-
-		leftRow = n.left.plan.Values()
-
-		if curRightIdx >= nRightRows {
-			n.rightIdx = 0
-			if (n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter) && !n.passedFilter {
-				// If nothing was emitted in the previous batch of right rows,
-				// insert a tuple of NULLs on the right.
-				rightRow = n.emptyRight
-				if n.swapped {
-					leftRow, rightRow = rightRow, leftRow
-				}
-				break
-			}
-			n.passedFilter = false
-			continue
-		}
-
-		emptyRight := false
-		if nRightRows > 0 {
-			rightRow = n.rightRows.rows.At(curRightIdx)
-			n.rightIdx = curRightIdx + 1
-		} else {
-			emptyRight = true
-			rightRow = n.emptyRight
-		}
-
-		if n.swapped {
-			leftRow, rightRow = rightRow, leftRow
-		}
-		passesFilter, err := n.pred.eval(&n.planner.evalCtx, n.output, leftRow, rightRow)
-		if err != nil {
-			return false, err
-		}
-
-		if passesFilter {
-			n.passedFilter = true
-			if n.rightMatched != nil && !emptyRight {
-				// FULL OUTER JOIN, mark the rows as matched.
-				n.rightMatched[curRightIdx] = true
-			}
-			break
-		}
-	}
-
-	// Got a row from both right and left; prepareRow the result.
-	n.pred.prepareRow(n.output, leftRow, rightRow)
-	return true, nil
-}
-
-// TODO(irfansharif): Currently hash joins are implemented only for USING and
-// NATURAL, predicate extraction for ON ignored.
-func (n *joinNode) hashJoinNext() (bool, error) {
 	if len(n.buckets.Buckets()) == 0 {
 		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
 			// No rows on right; don't even try.
@@ -762,14 +568,7 @@ func (n *joinNode) hashJoinNext() (bool, error) {
 
 // Values implements the planNode interface.
 func (n *joinNode) Values() parser.DTuple {
-	switch n.joinAlgorithm {
-	case nestedLoopJoin:
-		return n.output
-	case hashJoin:
-		return n.buffer.Values()
-	default:
-		panic("unsupported JOIN algorithm")
-	}
+	return n.buffer.Values()
 }
 
 // DebugValues implements the planNode interface.
@@ -788,21 +587,11 @@ func (n *joinNode) DebugValues() debugValues {
 
 // Close implements the planNode interface.
 func (n *joinNode) Close() {
-	switch n.joinAlgorithm {
-	case nestedLoopJoin:
-		if n.rightRows != nil {
-			n.rightRows.Close()
-			n.rightRows = nil
-		}
-		n.rightMatched = nil
-	case hashJoin:
-		n.buffer.Close()
-		n.buffer = nil
-		n.buckets.Close()
-		n.bucketsMemAcc.Wtxn(n.planner.session).Close()
-	default:
-		panic("unsupported JOIN algorithm")
-	}
+	n.buffer.Close()
+	n.buffer = nil
+	n.buckets.Close()
+	n.bucketsMemAcc.Wtxn(n.planner.session).Close()
+
 	n.right.plan.Close()
 	n.left.plan.Close()
 }
