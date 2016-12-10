@@ -12,9 +12,9 @@ query error expected true to be of type string, found type bool
 SELECT ARRAY['a', true, 1]
 
 query T
-SELECT ARRAY['a', 'b', 'c']
+SELECT ARRAY['a,', 'b{', 'c}', 'd']
 ----
-{'a','b','c'}
+{'a,','b{','c}',d}
 
 # array construction from subqueries
 
@@ -31,7 +31,7 @@ SELECT ARRAY(VALUES (1),(2),(1))
 query T
 SELECT ARRAY(VALUES ('a'),('b'),('c'))
 ----
-{'a','b','c'}
+{a,b,c}
 
 query error subquery must return only one column, found 2
 SELECT ARRAY(SELECT 1, 2)

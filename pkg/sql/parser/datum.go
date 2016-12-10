@@ -552,7 +552,7 @@ func (d *DString) max() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLString(buf, string(*d))
+	encodeSQLStringWithFlags(buf, string(*d), f)
 }
 
 // Size implements the Datum interface.
