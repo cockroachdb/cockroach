@@ -777,7 +777,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(*EvalResult) error {
+	repl.mu.submitProposalFn = func(*ProposalData) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -1776,7 +1776,7 @@ func TestLeaseConcurrent(t *testing.T) {
 
 			var seen int32
 			tc.repl.mu.Lock()
-			tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
+			tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
 				ll, ok := cmd.Request.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
@@ -1796,8 +1796,8 @@ func TestLeaseConcurrent(t *testing.T) {
 						// When we complete the command, we have to remove it from the map;
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
-						delete(tc.repl.mu.proposals, cmd.Local.idKey)
-						cmd.Local.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						delete(tc.repl.mu.proposals, cmd.idKey)
+						cmd.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, cmd); err != nil {
@@ -5300,7 +5300,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Mock propose to return an roachpb.RaftGroupDeletedError.
-	submitProposalFn := func(*EvalResult) error {
+	submitProposalFn := func(*ProposalData) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 
@@ -5899,7 +5899,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 
 	// Cancel the request before it is proposed to Raft.
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(result *EvalResult) error {
+	tc.repl.mu.submitProposalFn = func(result *ProposalData) error {
 		cancel()
 		go func() {
 			<-proposalCh
@@ -6166,7 +6166,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 
 	// Stop the command from being proposed to the raft group and being removed.
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *EvalResult) error { return nil }
+	repl.mu.submitProposalFn = func(p *ProposalData) error { return nil }
 	lease := repl.mu.state.Lease
 	repl.mu.Unlock()
 
@@ -6188,7 +6188,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// re-proposed.
 	commandProposed := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *EvalResult) error {
+	repl.mu.submitProposalFn = func(p *ProposalData) error {
 		if p.Request.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
 		}
@@ -6257,10 +6257,10 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
-		if v := cmd.Local.ctx.Value(magicKey{}); v != nil {
+	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
+		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				cmd.MaxLeaseIndex = wrongLeaseIndex
+				cmd.command.MaxLeaseIndex = wrongLeaseIndex
 			}
 		}
 		return defaultSubmitProposalLocked(tc.repl, cmd)
@@ -6365,11 +6365,11 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
-				delete(repl.mu.proposals, cmd.Local.idKey)
+				delete(repl.mu.proposals, cmd.idKey)
 			} else if err := repl.submitProposalLocked(cmd); err != nil {
 				t.Error(err)
 			} else {
-				chs = append(chs, cmd.Local.doneCh)
+				chs = append(chs, cmd.doneCh)
 			}
 			repl.mu.Unlock()
 		}
@@ -6404,9 +6404,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	var seenCmds []int
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *EvalResult) error {
-		if v := cmd.Local.ctx.Value(magicKey{}); v != nil {
-			seenCmds = append(seenCmds, int(cmd.MaxLeaseIndex))
+	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
+		if v := cmd.ctx.Value(magicKey{}); v != nil {
+			seenCmds = append(seenCmds, int(cmd.command.MaxLeaseIndex))
 		}
 		return defaultSubmitProposalLocked(tc.repl, cmd)
 	}
@@ -6437,15 +6437,15 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
 			tc.repl.insertProposalLocked(cmd, repDesc, status.lease)
-			chs = append(chs, cmd.Local.doneCh)
+			chs = append(chs, cmd.doneCh)
 			tc.repl.mu.Unlock()
 			tc.repl.raftMu.Unlock()
 		}
 
 		tc.repl.mu.Lock()
 		for _, p := range tc.repl.mu.proposals {
-			if v := p.Local.ctx.Value(magicKey{}); v != nil {
-				origIndexes = append(origIndexes, int(p.MaxLeaseIndex))
+			if v := p.ctx.Value(magicKey{}); v != nil {
+				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 			}
 		}
 		tc.repl.mu.Unlock()
@@ -6524,12 +6524,12 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 	var dropProposals struct {
 		syncutil.Mutex
-		m map[*EvalResult]struct{}
+		m map[*ProposalData]struct{}
 	}
-	dropProposals.m = make(map[*EvalResult]struct{})
+	dropProposals.m = make(map[*ProposalData]struct{})
 
 	r.mu.Lock()
-	r.mu.submitProposalFn = func(pd *EvalResult) error {
+	r.mu.submitProposalFn = func(pd *ProposalData) error {
 		dropProposals.Lock()
 		defer dropProposals.Unlock()
 		if _, ok := dropProposals.m[pd]; !ok {
@@ -6565,7 +6565,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// Build the map of expected reproposals at this stage.
 		m := map[storagebase.CmdIDKey]int{}
 		for id, p := range r.mu.proposals {
-			m[id] = p.Local.proposedAtTicks
+			m[id] = p.proposedAtTicks
 		}
 		r.mu.Unlock()
 
@@ -6578,11 +6578,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 
-		var reproposed []*EvalResult
+		var reproposed []*ProposalData
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
 		dropProposals.Lock()
 		for p := range dropProposals.m {
-			if p.Local.proposedAtTicks >= ticks {
+			if p.proposedAtTicks >= ticks {
 				reproposed = append(reproposed, p)
 			}
 		}
@@ -6689,7 +6689,7 @@ func TestAmbiguousResultErrorOnReproposal(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			// Install a proposal function which delays the proposal.
 			tc.repl.mu.Lock()
-			tc.repl.mu.submitProposalFn = func(p *EvalResult) error {
+			tc.repl.mu.submitProposalFn = func(p *ProposalData) error {
 				// Submit the proposal with a delay, waiting for proceed channel.
 				go func() {
 					// Manually refresh proposals.
