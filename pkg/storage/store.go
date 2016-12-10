@@ -2108,11 +2108,11 @@ func (s *Store) removeReplicaImpl(
 			ProposalRetry: proposalRangeNoLongerExists,
 		}
 		for _, p := range rep.mu.proposals {
-			p.Local.finish(resp)
+			p.finish(resp)
 		}
 	}
 	// Clear the map.
-	rep.mu.proposals = map[storagebase.CmdIDKey]*EvalResult{}
+	rep.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
