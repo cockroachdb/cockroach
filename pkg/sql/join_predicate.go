@@ -25,11 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-const (
-	leftSide = iota
-	rightSide
-)
-
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
 func makeCrossPredicate(
 	left, right *dataSourceInfo,
