@@ -31,6 +31,7 @@ import (
 
 var (
 	dontEscape = byte(255)
+	mustQuote  = byte(254)
 	// encodeMap specifies how to escape binary data with '\'.
 	encodeMap [256]byte
 	hexMap    [256][]byte
@@ -39,13 +40,30 @@ var (
 // encodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
 func encodeSQLString(buf *bytes.Buffer, in string) {
+	encodeSQLStringWithFlags(buf, in, FmtSimple)
+}
+
+// encodeSQLStringWithFlags writes a string literal to buf. All unicode and
+// non-printable characters are escaped. FmtFlags controls the output format:
+// if f.bareStrings is true, the output string will not be wrapped in quotes
+// if possible.
+func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
+	negateBareStrings := false
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
-		if r >= 0x20 && r < 0x7F && encodeMap[ch] == dontEscape {
-			continue
+		if r >= 0x20 && r < 0x7F {
+			encodedChar := encodeMap[ch]
+			switch encodedChar {
+			case dontEscape:
+				continue
+			case mustQuote:
+				// We have to quote this string - ignore bareStrings setting
+				negateBareStrings = true
+				continue
+			}
 		}
 
 		if start == 0 {
@@ -64,7 +82,7 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 			buf.Write(hexMap[in[i]])
 		} else if ln == 1 {
 			// For single-byte runes, do the same as encodeSQLBytes.
-			if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+			if encodedChar := encodeMap[ch]; encodedChar != dontEscape && encodedChar != mustQuote {
 				buf.WriteByte('\\')
 				buf.WriteByte(encodedChar)
 			} else {
@@ -78,11 +96,14 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 			fmt.Fprintf(buf, `\U%08X`, r)
 		}
 	}
-	if start == 0 {
+	quote := start == 0 && (!f.bareStrings || negateBareStrings)
+	if quote {
 		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
 	buf.WriteString(in[start:])
-	buf.WriteByte('\'')
+	if quote || start != 0 {
+		buf.WriteByte('\'')
+	}
 }
 
 func encodeSQLIdent(buf *bytes.Buffer, s string) {
@@ -125,7 +146,7 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 	// code points).
 	for i, n := 0, len(in); i < n; i++ {
 		ch := in[i]
-		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+		if encodedChar := encodeMap[ch]; encodedChar != dontEscape && encodedChar != mustQuote {
 			buf.WriteString(in[start:i])
 			buf.WriteByte('\\')
 			buf.WriteByte(encodedChar)
@@ -152,12 +173,22 @@ func init() {
 		'\'': '\'',
 	}
 
+	// These characters require that their containing string be quoted, even
+	// when FmtFlags.bareStrings is true.
+	mustQuoteRef := map[byte]bool{
+		',': true,
+		'{': true,
+		'}': true,
+	}
+
 	for i := range encodeMap {
 		encodeMap[i] = dontEscape
 	}
 	for i := range encodeMap {
 		if to, ok := encodeRef[byte(i)]; ok {
 			encodeMap[byte(i)] = to
+		} else if _, ok := mustQuoteRef[byte(i)]; ok {
+			encodeMap[byte(i)] = mustQuote
 		}
 	}
 
