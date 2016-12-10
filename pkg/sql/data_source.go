@@ -713,27 +713,31 @@ func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, col
 
 // findTableAlias returns the first table alias providing the column
 // index given as argument. The index must be valid.
-func (src *dataSourceInfo) findTableAlias(colIdx int) parser.TableName {
+func (src *dataSourceInfo) findTableAlias(colIdx int) (parser.TableName, bool) {
 	for _, alias := range src.sourceAliases {
 		for _, idx := range alias.columnRange {
 			if colIdx == idx {
-				return alias.name
+				return alias.name, true
 			}
 		}
 	}
-	panic(fmt.Sprintf("no alias for position %d in %v", colIdx, src.sourceAliases))
+	return anonymousTable, false
 }
 
 func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f parser.FmtFlags, colIdx int) {
 	if f == parser.FmtQualify {
-		tableAlias := src.findTableAlias(colIdx)
-		if tableAlias.TableName != "" {
-			if tableAlias.DatabaseName != "" {
-				parser.FormatNode(buf, f, tableAlias.DatabaseName)
+		tableAlias, found := src.findTableAlias(colIdx)
+		if found {
+			if tableAlias.TableName != "" {
+				if tableAlias.DatabaseName != "" {
+					parser.FormatNode(buf, f, tableAlias.DatabaseName)
+					buf.WriteByte('.')
+				}
+				parser.FormatNode(buf, f, tableAlias.TableName)
 				buf.WriteByte('.')
 			}
-			parser.FormatNode(buf, f, tableAlias.TableName)
-			buf.WriteByte('.')
+		} else {
+			buf.WriteString("_.")
 		}
 	}
 	buf.WriteString(src.sourceColumns[colIdx].Name)
