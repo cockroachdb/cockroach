@@ -21,6 +21,20 @@ NULL    42
   42  NULL
   42    42
 
+# Check that name resolution chokes on ambiguity when it needs to.
+query error column reference "x" is ambiguous
+SELECT x FROM onecolumn AS a, onecolumn AS b
+
+# Check that name resolution does not choke on ambiguity if an
+# unqualified column name is requested and there is an anonymous
+# source providing this name in addition to two or more named sources
+# that also provide it.
+query I colnames
+SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b LIMIT 1
+----
+x
+1
+
 query II colnames
 SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
@@ -126,6 +140,18 @@ NULL
 42
 43
 44
+
+# Check that the source columns can be selected separately from the
+# USING column (#12033).
+query III colnames
+SELECT x, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
+----
+   x      x      x
+NULL   NULL   NULL
+  16   NULL     16
+  42     42     42
+  43   NULL     43
+  44     44   NULL
 
 query I colnames
 SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
@@ -244,10 +270,6 @@ NULL  NULL
 NULL  42
 NULL  44
 
-
-
-
-
 query I colnames
 SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
@@ -267,7 +289,7 @@ x    y
 44   51
 42   53
 
-query IIII 
+query IIII
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
 ----
 45  45  44    51
@@ -283,42 +305,42 @@ x  x  y  b  d  e
 44 44 51 44 44 51
 
 # Check EXPLAIN.
-query ITT 
+query ITT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(x))
+0  join  INNER ON EQUALS((x),(x))
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT 
+query ITT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+0  join  INNER ON EQUALS((x),(y))
 1  scan  twocolumn@primary
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT 
+query ITT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-0  join  NESTED LOOP JOIN, INNER ON a.x = 44
+0  join  INNER ON a.x = 44
 1  scan  twocolumn@primary
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT 
+query ITT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+0  join  INNER ON EQUALS((x),(y))
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT 
+query ITT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
-0  join  HASH JOIN, INNER ON EQUALS((x),(y))
+0  join  INNER ON EQUALS((x),(y))
 1  scan  onecolumn@primary
 1  scan  twocolumn@primary
 
@@ -327,9 +349,9 @@ query ITT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit  count: 1
-1  join   NESTED LOOP JOIN, INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
-2  join   HASH JOIN, INNER ON EQUALS((x),(b))
-3  join   NESTED LOOP JOIN, CROSS
+1  join   INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
+2  join   INNER ON EQUALS((x),(b))
+3  join   CROSS
 4  scan   onecolumn@primary
 4  scan   twocolumn@primary
 3  scan   onecolumn@primary
@@ -388,8 +410,29 @@ SELECT * FROM (onecolumn JOIN onecolumn USING(x))
 query error cannot join columns from the same source name "onecolumn"
 SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
 
-query error cannot join columns from multiple anonymous sources
+# Check that star expansion works across anonymous sources.
+query II rowsort
 SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+----
+  42     42
+  42     44
+  42   NULL
+  44     42
+  44     44
+  44   NULL
+NULL     42
+NULL     44
+NULL   NULL
+
+# Check that anonymous sources are properly looked up without ambiguity.
+query I
+SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x);
+----
+42
+
+# Check that multiple anonymous sources cause proper ambiguity errors.
+query error column reference "x" is ambiguous
+SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 
 query error column reference "x" is ambiguous
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
@@ -410,7 +453,7 @@ EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 0  select                                                                          (x, y)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x, y)
-2  join           NESTED LOOP JOIN, CROSS                                          (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
+2  join           CROSS                                                            (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
 
@@ -418,18 +461,18 @@ EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 query ITTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-0  select                                                                  (y)
-1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.y, *"".b.rowid)  (y)
-2  join           HASH JOIN, INNER ON EQUALS((x),(x))                      (x[omitted], y[omitted], rowid[hidden,omitted], y, rowid[hidden,omitted])
-3  scan           twocolumn@primary                                        (x, y[omitted], rowid[hidden,omitted])
-3  scan           twocolumn@primary                                        (x, y, rowid[hidden,omitted])
+0  select                                                                                     (y)
+1  render/filter  from (""."".x, *"".a.x, "".a.y, *"".a.rowid, *"".b.x, "".b.y, *"".b.rowid)  (y)
+2  join           INNER ON EQUALS((x),(x))                                                    (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])
+3  scan           twocolumn@primary                                                           (x, y[omitted], rowid[hidden,omitted])
+3  scan           twocolumn@primary                                                           (x, y, rowid[hidden,omitted])
 
 query ITTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
 0  select                                                                          (y)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (y)
-2  join           HASH JOIN, INNER ON EQUALS((x),(x))                              (x, y[omitted], rowid[hidden,omitted], x, y, rowid[hidden,omitted])
+2  join           INNER ON EQUALS((x),(x))                                         (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y, rowid[hidden,omitted])
 
@@ -438,7 +481,7 @@ EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b
 ----
 0  select                                                                          (x)
 1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x)
-2  join           NESTED LOOP JOIN, INNER ON a.x < b.y                             (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
+2  join           INNER ON a.x < b.y                                               (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
 
@@ -447,14 +490,14 @@ query ITTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
 				INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-0   select                                                (k, u, w)            +u
-1   sort            +u                                    (k, u, w)            +u
-2   render/filter   from (""."".k, ""."".u, "".b.w)       (k, u, w)
-3   join            HASH JOIN, INNER ON EQUALS((k),(k))   (k, u, w)
-4   select                                                (u, k)               +k
-5   sort            +k                                    (u, k)               +k
-6   render/filter   from ("".a.u, "".a.k)                 (u, k)
-7   select                                                (column1, column2)
-8   values          2 columns, 2 rows                     (column1, column2)
-4   select                                                (column1, column2)
-5   values          2 columns, 2 rows                     (column1, column2)
+0   select                                                          (k, u, w)            +u
+1   sort            +u                                              (k, u, w)            +u
+2   render/filter   from (""."".k, _.u, *""."".k, *"".b.k, "".b.w)  (k, u, w)
+3   join            INNER ON EQUALS((k),(k))                        (k, u, k[hidden,omitted], k[hidden,omitted], w)
+4   select                                                          (u, k)               +k
+5   sort            +k                                              (u, k)               +k
+6   render/filter   from ("".a.u, "".a.k)                           (u, k)
+7   select                                                          (column1, column2)
+8   values          2 columns, 2 rows                               (column1, column2)
+4   select                                                          (column1, column2)
+5   values          2 columns, 2 rows                               (column1, column2)
