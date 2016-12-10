@@ -209,8 +209,12 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 		if col.hidden {
 			buf.WriteByte('*')
 		}
-		alias := s.source.info.findTableAlias(i)
-		parser.FormatNode(&buf, parser.FmtSimple, &alias)
+		alias, found := s.source.info.findTableAlias(i)
+		if found {
+			parser.FormatNode(&buf, parser.FmtSimple, &alias)
+		} else {
+			buf.WriteByte('_')
+		}
 		buf.WriteByte('.')
 		parser.FormatNode(&buf, parser.FmtSimple, parser.Name(col.Name))
 	}

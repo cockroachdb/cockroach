@@ -421,34 +421,66 @@ func makeEqualityPredicate(
 
 	// Compute the mappings from table aliases to column sets from
 	// both sides into a new alias-columnset mapping for the result
-	// rows. This is similar to what concatDataSources() does, but
-	// here we also shift the indices from both sides to accommodate
-	// the merged join columns generated at the beginning.
+	// rows. We need to be extra careful about the aliases
+	// for the anonymous table, which needs to be merged.
 	aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
-	for _, alias := range left.sourceAliases {
-		newRange := make([]int, len(alias.columnRange))
-		for i, colIdx := range alias.columnRange {
-			newRange[i] = colIdx + numMergedEqualityColumns
+
+	collectAliases := func(sourceAliases sourceAliases, offset int) {
+		for _, alias := range sourceAliases {
+			if alias.name == anonymousTable {
+				continue
+			}
+			newRange := make([]int, len(alias.columnRange))
+			for i, colIdx := range alias.columnRange {
+				newRange[i] = colIdx + offset
+			}
+			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 		}
-		aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
+	}
+	collectAliases(left.sourceAliases, numMergedEqualityColumns)
+	collectAliases(right.sourceAliases, numMergedEqualityColumns+len(left.sourceColumns))
+
+	anonymousAlias := sourceAlias{name: anonymousTable, columnRange: nil}
+	var hiddenLeftNames, hiddenRightNames []string
+
+	// All the merged columns at the beginning belong to the
+	// anonymous data source.
+	for i := 0; i < numMergedEqualityColumns; i++ {
+		anonymousAlias.columnRange = append(anonymousAlias.columnRange, i)
+		hiddenLeftNames = append(hiddenLeftNames, parser.ReNormalizeName(left.sourceColumns[i].Name))
+		hiddenRightNames = append(hiddenRightNames, parser.ReNormalizeName(right.sourceColumns[i].Name))
 	}
 
-	for _, alias := range right.sourceAliases {
-		newRange := make([]int, len(alias.columnRange))
-		for i, colIdx := range alias.columnRange {
-			newRange[i] = colIdx + numMergedEqualityColumns + len(left.sourceColumns)
+	// Now collect the other table-less columns into the anonymous data
+	// source, but hide (skip) those that are already merged.
+	collectAnonymousAliases := func(
+		sourceAliases sourceAliases, hiddenNames []string, cols ResultColumns, offset int,
+	) {
+		for _, alias := range sourceAliases {
+			if alias.name != anonymousTable {
+				continue
+			}
+			for _, colIdx := range alias.columnRange {
+				isHidden := false
+				for _, hiddenName := range hiddenNames {
+					if parser.ReNormalizeName(cols[colIdx].Name) == hiddenName {
+						isHidden = true
+						break
+					}
+				}
+				if !isHidden {
+					anonymousAlias.columnRange = append(anonymousAlias.columnRange, colIdx+offset)
+				}
+			}
 		}
-		aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
 	}
+	collectAnonymousAliases(left.sourceAliases, hiddenLeftNames, left.sourceColumns,
+		numMergedEqualityColumns)
+	collectAnonymousAliases(right.sourceAliases, hiddenRightNames, right.sourceColumns,
+		numMergedEqualityColumns+len(left.sourceColumns))
 
-	if numMergedEqualityColumns > 0 {
-		// All the merged columns at the beginning belong to an
-		// anonymous data source.
-		usingRange := make([]int, numMergedEqualityColumns)
-		for i := range usingRange {
-			usingRange[i] = i
-		}
-		aliases = append(aliases, sourceAlias{name: anonymousTable, columnRange: usingRange})
+	if anonymousAlias.columnRange != nil {
+		aliases = append(aliases, anonymousAlias)
 	}
 
 	info = &dataSourceInfo{

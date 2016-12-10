@@ -410,8 +410,29 @@ SELECT * FROM (onecolumn JOIN onecolumn USING(x))
 query error cannot join columns from the same source name "onecolumn"
 SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
 
-query error cannot join columns from multiple anonymous sources
+# Check that star expansion works across anonymous sources.
+query II rowsort
 SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+----
+  42     42
+  42     44
+  42   NULL
+  44     42
+  44     44
+  44   NULL
+NULL     42
+NULL     44
+NULL   NULL
+
+# Check that anonymous sources are properly looked up without ambiguity.
+query I
+SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x);
+----
+42
+
+# Check that multiple anonymous sources cause proper ambiguity errors.
+query error column reference "x" is ambiguous
+SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 
 query error column reference "x" is ambiguous
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
@@ -469,14 +490,14 @@ query ITTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
 				INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-0   select                                                              (k, u, w)            +u
-1   sort            +u                                                  (k, u, w)            +u
-2   render/filter   from (""."".k, ""."".u, *""."".k, *"".b.k, "".b.w)  (k, u, w)
-3   join            INNER ON EQUALS((k),(k))                            (k, u, k[hidden,omitted], k[hidden,omitted], w)
-4   select                                                              (u, k)               +k
-5   sort            +k                                                  (u, k)               +k
-6   render/filter   from ("".a.u, "".a.k)                               (u, k)
-7   select                                                              (column1, column2)
-8   values          2 columns, 2 rows                                   (column1, column2)
-4   select                                                              (column1, column2)
-5   values          2 columns, 2 rows                                   (column1, column2)
+0   select                                                          (k, u, w)            +u
+1   sort            +u                                              (k, u, w)            +u
+2   render/filter   from (""."".k, _.u, *""."".k, *"".b.k, "".b.w)  (k, u, w)
+3   join            INNER ON EQUALS((k),(k))                        (k, u, k[hidden,omitted], k[hidden,omitted], w)
+4   select                                                          (u, k)               +k
+5   sort            +k                                              (u, k)               +k
+6   render/filter   from ("".a.u, "".a.k)                           (u, k)
+7   select                                                          (column1, column2)
+8   values          2 columns, 2 rows                               (column1, column2)
+4   select                                                          (column1, column2)
+5   values          2 columns, 2 rows                               (column1, column2)

@@ -194,8 +194,11 @@ func (p *planner) makeJoin(
 		if _, ok := left.info.sourceAliases.srcIdx(alias.name); ok {
 			t := alias.name.Table()
 			if t == "" {
-				return planDataSource{}, errors.New(
-					"cannot join columns from multiple anonymous sources (missing AS clause)")
+				// Allow joins of sources that define columns with no
+				// associated table name. At worst, the USING/NATURAL
+				// detection code or expression analysis for ON will detect an
+				// ambiguity later.
+				continue
 			}
 			return planDataSource{}, fmt.Errorf(
 				"cannot join columns from the same source name %q (missing AS clause)", t)
