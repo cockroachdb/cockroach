@@ -25,26 +25,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+// joinPredicate implements the predicate logic for joins.
+type joinPredicate struct {
+	// numLeft/RightCols are the number of columns in the left and right
+	// operands.
+	numLeftCols, numRightCols int
+
+	// The comparison function to use for each column. We need
+	// different functions because each USING column may have a different
+	// type (and they may be heterogeneous between left and right).
+	cmpFunctions []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error)
+
+	// left/rightEqualityIndices give the position of USING columns
+	// on the left and right input row arrays, respectively.
+	leftEqualityIndices  []int
+	rightEqualityIndices []int
+
+	// The list of names for the columns listed in leftEqualityIndices.
+	// Used mainly for pretty-printing.
+	leftColNames parser.NameList
+	// The list of names for the columns listed in rightEqualityIndices.
+	// Used mainly for pretty-printing.
+	rightColNames parser.NameList
+
+	// numMergedEqualityColumns specifies how many of the equality
+	// columns must be merged at the beginning of each result row. This
+	// is the desired behavior for USING and NATURAL JOIN.
+	numMergedEqualityColumns int
+
+	// For ON predicates or joins with an added filter expression,
+	// we need an IndexedVarHelper, the dataSourceInfo, a row buffer
+	// and the expression itself.
+	iVarHelper parser.IndexedVarHelper
+	info       *dataSourceInfo
+	curRow     parser.DTuple
+	filter     parser.TypedExpr
+
+	// This struct must be allocated on the heap and its location stay
+	// stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	noCopy util.NoCopy
+}
+
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
-func makeCrossPredicate(
-	left, right *dataSourceInfo,
-) (*joinPredicate, *dataSourceInfo, error) {
+func makeCrossPredicate(left, right *dataSourceInfo) (*joinPredicate, *dataSourceInfo, error) {
 	return makeEqualityPredicate(left, right, nil, nil, 0, nil)
-}
-
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
-	return p.curRow[idx].Eval(ctx)
-}
-
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarResolvedType(idx int) parser.Type {
-	return p.info.sourceColumns[idx].Typ
-}
-
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	p.info.FormatVar(buf, f, idx)
 }
 
 // optimizeOnPredicate tries to turn the filter in an onPredicate into
@@ -132,171 +159,6 @@ func (p *planner) makeOnPredicate(
 	pred.filter = filter
 
 	return optimizeOnPredicate(pred, left, right, info)
-}
-
-// joinPredicate implements the predicate logic for joins with a USING clause.
-type joinPredicate struct {
-	// numLeft/RightCols are the number of columns in the left and right
-	// operands.
-	numLeftCols, numRightCols int
-
-	// The comparison function to use for each column. We need
-	// different functions because each USING column may have a different
-	// type (and they may be heterogeneous between left and right).
-	cmpFunctions []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error)
-
-	// left/rightEqualityIndices give the position of USING columns
-	// on the left and right input row arrays, respectively.
-	leftEqualityIndices  []int
-	rightEqualityIndices []int
-
-	// The list of names for the columns listed in leftEqualityIndices.
-	// Used mainly for pretty-printing.
-	leftColNames parser.NameList
-	// The list of names for the columns listed in rightEqualityIndices.
-	// Used mainly for pretty-printing.
-	rightColNames parser.NameList
-
-	// numMergedEqualityColumns specifies how many of the equality
-	// columns must be merged at the beginning of each result row. This
-	// is the desired behavior for USING and NATURAL JOIN.
-	numMergedEqualityColumns int
-
-	// For ON predicates or joins with an added filter expression,
-	// we need an IndexedVarHelper, the dataSourceInfo, a row buffer
-	// and the expression itself.
-	iVarHelper parser.IndexedVarHelper
-	info       *dataSourceInfo
-	curRow     parser.DTuple
-	filter     parser.TypedExpr
-
-	// This struct must be allocated on the heap and its location stay
-	// stable after construction because it implements
-	// IndexedVarContainer and the IndexedVar objects in sub-expressions
-	// will link to it by reference after checkRenderStar / analyzeExpr.
-	// Enforce this using NoCopy.
-	noCopy util.NoCopy
-}
-
-func (p *joinPredicate) format(buf *bytes.Buffer) {
-	if p.filter != nil || len(p.leftColNames) > 0 {
-		buf.WriteString(" ON ")
-	}
-	prefix := ""
-	if len(p.leftColNames) > 0 {
-		buf.WriteString("EQUALS((")
-		p.leftColNames.Format(buf, parser.FmtSimple)
-		buf.WriteString("),(")
-		p.rightColNames.Format(buf, parser.FmtSimple)
-		buf.WriteString("))")
-		prefix = " AND "
-	}
-	if p.filter != nil {
-		buf.WriteString(prefix)
-		p.filter.Format(buf, parser.FmtQualify)
-	}
-}
-
-// eval for equalityPredicate compares the columns that participate in
-// the equality, returning true if and only if all predicate columns
-// compare equal.
-func (p *joinPredicate) eval(
-	ctx *parser.EvalContext, result, leftRow, rightRow parser.DTuple,
-) (bool, error) {
-	for i := range p.leftEqualityIndices {
-		leftVal := leftRow[p.leftEqualityIndices[i]]
-		rightVal := rightRow[p.rightEqualityIndices[i]]
-		if leftVal == parser.DNull || rightVal == parser.DNull {
-			return false, nil
-		}
-		res, err := p.cmpFunctions[i](ctx, leftVal, rightVal)
-		if err != nil {
-			return false, err
-		}
-		if res != *parser.DBoolTrue {
-			return false, nil
-		}
-	}
-	if p.filter != nil {
-		p.curRow = result
-		copy(p.curRow[p.numMergedEqualityColumns:p.numMergedEqualityColumns+len(leftRow)], leftRow)
-		copy(p.curRow[p.numMergedEqualityColumns+len(leftRow):], rightRow)
-		return sqlbase.RunFilter(p.filter, ctx)
-	}
-	return true, nil
-}
-
-// getNeededColumns figures out the columns needed for the two sources.
-func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
-	// The columns that are part of the expression are always needed.
-	neededJoined = append([]bool(nil), neededJoined...)
-	for i := range neededJoined {
-		if p.iVarHelper.IndexedVarUsed(i) {
-			neededJoined[i] = true
-		}
-	}
-	leftNeeded := neededJoined[p.numMergedEqualityColumns : p.numMergedEqualityColumns+p.numLeftCols]
-	rightNeeded := neededJoined[p.numMergedEqualityColumns+p.numLeftCols:]
-
-	// The equality columns are always needed.
-	for i := range p.leftEqualityIndices {
-		leftNeeded[p.leftEqualityIndices[i]] = true
-		rightNeeded[p.rightEqualityIndices[i]] = true
-	}
-	return leftNeeded, rightNeeded
-}
-
-// prepareRow prepares the output row by combining values from the
-// input data sources.
-func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
-	var offset int
-	for offset = 0; offset < p.numMergedEqualityColumns; offset++ {
-		// The result for merged columns must be computed as per COALESCE().
-		leftIdx := p.leftEqualityIndices[offset]
-		if leftRow[leftIdx] != parser.DNull {
-			result[offset] = leftRow[leftIdx]
-		} else {
-			result[offset] = rightRow[p.rightEqualityIndices[offset]]
-		}
-	}
-	copy(result[offset:offset+len(leftRow)], leftRow)
-	copy(result[offset+len(leftRow):], rightRow)
-}
-
-// encode returns the encoding of a row from a given side (left or right),
-// according to the columns specified by the equality constraints.
-func (p *joinPredicate) encode(b []byte, row parser.DTuple, cols []int) ([]byte, bool, error) {
-	var err error
-	containsNull := false
-	for _, colIdx := range cols {
-		if row[colIdx] == parser.DNull {
-			containsNull = true
-		}
-		b, err = sqlbase.EncodeDatum(b, row[colIdx])
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	return b, containsNull, nil
-}
-
-// pickUsingColumn searches for a column whose name matches colName.
-// The column index and type are returned if found, otherwise an error
-// is reported.
-func pickUsingColumn(cols ResultColumns, colName string, context string) (int, parser.Type, error) {
-	idx := invalidColIdx
-	for j, col := range cols {
-		if col.hidden {
-			continue
-		}
-		if parser.ReNormalizeName(col.Name) == colName {
-			idx = j
-		}
-	}
-	if idx == invalidColIdx {
-		return idx, nil, fmt.Errorf("column \"%s\" specified in USING clause does not exist in %s table", colName, context)
-	}
-	return idx, cols[idx].Typ, nil
 }
 
 // makeUsingPredicate constructs a joinPredicate object for joins with
@@ -504,4 +366,140 @@ func makeEqualityPredicate(
 	// not get confused.
 	pred.iVarHelper = parser.MakeIndexedVarHelper(pred, len(columns))
 	return pred, info, nil
+}
+
+func (p *joinPredicate) format(buf *bytes.Buffer) {
+	if p.filter != nil || len(p.leftColNames) > 0 {
+		buf.WriteString(" ON ")
+	}
+	prefix := ""
+	if len(p.leftColNames) > 0 {
+		buf.WriteString("EQUALS((")
+		p.leftColNames.Format(buf, parser.FmtSimple)
+		buf.WriteString("),(")
+		p.rightColNames.Format(buf, parser.FmtSimple)
+		buf.WriteString("))")
+		prefix = " AND "
+	}
+	if p.filter != nil {
+		buf.WriteString(prefix)
+		p.filter.Format(buf, parser.FmtQualify)
+	}
+}
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	return p.curRow[idx].Eval(ctx)
+}
+
+// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarResolvedType(idx int) parser.Type {
+	return p.info.sourceColumns[idx].Typ
+}
+
+// IndexedVarFormat implements the parser.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	p.info.FormatVar(buf, f, idx)
+}
+
+// eval for equalityPredicate compares the columns that participate in
+// the equality, returning true if and only if all predicate columns
+// compare equal.
+func (p *joinPredicate) eval(
+	ctx *parser.EvalContext, result, leftRow, rightRow parser.DTuple,
+) (bool, error) {
+	for i := range p.leftEqualityIndices {
+		leftVal := leftRow[p.leftEqualityIndices[i]]
+		rightVal := rightRow[p.rightEqualityIndices[i]]
+		if leftVal == parser.DNull || rightVal == parser.DNull {
+			return false, nil
+		}
+		res, err := p.cmpFunctions[i](ctx, leftVal, rightVal)
+		if err != nil {
+			return false, err
+		}
+		if res != *parser.DBoolTrue {
+			return false, nil
+		}
+	}
+	if p.filter != nil {
+		p.curRow = result
+		copy(p.curRow[p.numMergedEqualityColumns:p.numMergedEqualityColumns+len(leftRow)], leftRow)
+		copy(p.curRow[p.numMergedEqualityColumns+len(leftRow):], rightRow)
+		return sqlbase.RunFilter(p.filter, ctx)
+	}
+	return true, nil
+}
+
+// getNeededColumns figures out the columns needed for the two sources.
+func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
+	// The columns that are part of the expression are always needed.
+	neededJoined = append([]bool(nil), neededJoined...)
+	for i := range neededJoined {
+		if p.iVarHelper.IndexedVarUsed(i) {
+			neededJoined[i] = true
+		}
+	}
+	leftNeeded := neededJoined[p.numMergedEqualityColumns : p.numMergedEqualityColumns+p.numLeftCols]
+	rightNeeded := neededJoined[p.numMergedEqualityColumns+p.numLeftCols:]
+
+	// The equality columns are always needed.
+	for i := range p.leftEqualityIndices {
+		leftNeeded[p.leftEqualityIndices[i]] = true
+		rightNeeded[p.rightEqualityIndices[i]] = true
+	}
+	return leftNeeded, rightNeeded
+}
+
+// prepareRow prepares the output row by combining values from the
+// input data sources.
+func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
+	var offset int
+	for offset = 0; offset < p.numMergedEqualityColumns; offset++ {
+		// The result for merged columns must be computed as per COALESCE().
+		leftIdx := p.leftEqualityIndices[offset]
+		if leftRow[leftIdx] != parser.DNull {
+			result[offset] = leftRow[leftIdx]
+		} else {
+			result[offset] = rightRow[p.rightEqualityIndices[offset]]
+		}
+	}
+	copy(result[offset:offset+len(leftRow)], leftRow)
+	copy(result[offset+len(leftRow):], rightRow)
+}
+
+// encode returns the encoding of a row from a given side (left or right),
+// according to the columns specified by the equality constraints.
+func (p *joinPredicate) encode(b []byte, row parser.DTuple, cols []int) ([]byte, bool, error) {
+	var err error
+	containsNull := false
+	for _, colIdx := range cols {
+		if row[colIdx] == parser.DNull {
+			containsNull = true
+		}
+		b, err = sqlbase.EncodeDatum(b, row[colIdx])
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return b, containsNull, nil
+}
+
+// pickUsingColumn searches for a column whose name matches colName.
+// The column index and type are returned if found, otherwise an error
+// is reported.
+func pickUsingColumn(cols ResultColumns, colName string, context string) (int, parser.Type, error) {
+	idx := invalidColIdx
+	for j, col := range cols {
+		if col.hidden {
+			continue
+		}
+		if parser.ReNormalizeName(col.Name) == colName {
+			idx = j
+		}
+	}
+	if idx == invalidColIdx {
+		return idx, nil, fmt.Errorf("column \"%s\" specified in USING clause does not exist in %s table", colName, context)
+	}
+	return idx, cols[idx].Typ, nil
 }
