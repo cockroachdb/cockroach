@@ -3242,7 +3242,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	r.mu.Lock()
-	cmd, cmdProposedLocally := r.mu.proposals[idKey]
+	proposal, proposedLocally := r.mu.proposals[idKey]
 
 	// Verify the lease matches the proposer's expectation. We rely on
 	// the proposer's determination of whether the existing lease is
@@ -3273,10 +3273,10 @@ func (r *Replica) processRaftCommand(
 	}
 
 	// TODO(tschottdorf): consider the Trace situation here.
-	if cmdProposedLocally {
+	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
-		ctx = cmd.ctx
-		cmd.ctx = nil // avoid confusion
+		ctx = proposal.ctx
+		proposal.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
@@ -3323,26 +3323,26 @@ func (r *Replica) processRaftCommand(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 		)
 
-		if cmdProposedLocally {
+		if proposedLocally {
 			log.VEventf(
 				ctx, 1,
 				"retry proposal %x: applied at lease index %d, required <= %d",
-				cmd.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
+				proposal.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
 			// Send to the client only at the end of this invocation. We can't
 			// use the context any more once we signal the client, so we make
 			// sure we signal it at the end of this method, when the context
 			// has been fully used.
-			copyCmd := *cmd
+			copyProposal := *proposal
 			// Clear the endCmds and doneCh so that ProposalData.finish()
 			// is a noop when invoked below.
-			cmd.endCmds = nil
-			cmd.doneCh = make(chan proposalResult, 1)
+			proposal.endCmds = nil
+			proposal.doneCh = make(chan proposalResult, 1)
 			defer func() {
 				// Assert against another defer trying to use the context after
 				// the client has been signaled.
 				ctx = nil
-				copyCmd.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
+				copyProposal.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}()
 		}
 	}
@@ -3394,8 +3394,8 @@ func (r *Replica) processRaftCommand(
 			// on it.
 			raftCmd.ReplicatedEvalResult = &innerResult.Replicated
 			writeBatch = innerResult.WriteBatch
-			if cmdProposedLocally {
-				cmd.Local = &innerResult.Local
+			if proposedLocally {
+				proposal.Local = &innerResult.Local
 			}
 			// Proposals which would failfast with proposer-evaluated KV now
 			// go this route, writing an empty entry and returning this error
@@ -3411,8 +3411,8 @@ func (r *Replica) processRaftCommand(
 				raftCmd.ReplicatedEvalResult = &storagebase.ReplicatedEvalResult{}
 			}
 			raftCmd.WriteBatch = nil
-			if cmdProposedLocally && cmd.Local == nil {
-				cmd.Local = &LocalEvalResult{}
+			if proposedLocally && proposal.Local == nil {
+				proposal.Local = &LocalEvalResult{}
 			}
 		}
 		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
@@ -3446,23 +3446,23 @@ func (r *Replica) processRaftCommand(
 		}
 
 		var lResult LocalEvalResult
-		if cmdProposedLocally {
+		if proposedLocally {
 			if pErr != nil {
 				// A forced error was set (i.e. we did not apply the proposal,
 				// for instance due to its log position) or the Replica is now
 				// corrupted.
 				response.Err = pErr
-			} else if cmd.Local.Err != nil {
+			} else if proposal.Local.Err != nil {
 				// Everything went as expected, but this proposal should return
 				// an error to the client.
-				response.Err = cmd.Local.Err
-			} else if cmd.Local.Reply != nil {
-				response.Reply = cmd.Local.Reply
+				response.Err = proposal.Local.Err
+			} else if proposal.Local.Reply != nil {
+				response.Reply = proposal.Local.Reply
 			} else {
-				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd)
+				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
 			}
-			response.Intents = cmd.Local.detachIntents()
-			lResult = *cmd.Local
+			response.Intents = proposal.Local.detachIntents()
+			lResult = *proposal.Local
 		}
 
 		// Handle the EvalResult, executing any side effects of the last
@@ -3473,8 +3473,8 @@ func (r *Replica) processRaftCommand(
 		r.handleEvalResult(ctx, raftCmd.OriginReplica, lResult, *raftCmd.ReplicatedEvalResult)
 	}
 
-	if cmdProposedLocally {
-		cmd.finish(response)
+	if proposedLocally {
+		proposal.finish(response)
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
 	}

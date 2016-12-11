@@ -1776,11 +1776,11 @@ func TestLeaseConcurrent(t *testing.T) {
 
 			var seen int32
 			tc.repl.mu.Lock()
-			tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-				ll, ok := cmd.Request.Requests[0].
+			tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
+				ll, ok := proposal.Request.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
 				if !ok || !active.Load().(bool) {
-					return defaultSubmitProposalLocked(tc.repl, cmd)
+					return defaultSubmitProposalLocked(tc.repl, proposal)
 				}
 				if c := atomic.AddInt32(&seen, 1); c > 1 {
 					// Morally speaking, this is an error, but reproposals can
@@ -1796,11 +1796,11 @@ func TestLeaseConcurrent(t *testing.T) {
 						// When we complete the command, we have to remove it from the map;
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
-						delete(tc.repl.mu.proposals, cmd.idKey)
-						cmd.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						delete(tc.repl.mu.proposals, proposal.idKey)
+						proposal.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
-					if err := defaultSubmitProposalLocked(tc.repl, cmd); err != nil {
+					if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
 						panic(err) // unlikely, so punt on proper handling
 					}
 				}()
@@ -6257,13 +6257,13 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-		if v := cmd.ctx.Value(magicKey{}); v != nil {
+	tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
+		if v := proposal.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				cmd.command.MaxLeaseIndex = wrongLeaseIndex
+				proposal.command.MaxLeaseIndex = wrongLeaseIndex
 			}
 		}
-		return defaultSubmitProposalLocked(tc.repl, cmd)
+		return defaultSubmitProposalLocked(tc.repl, proposal)
 	}
 	tc.repl.mu.Unlock()
 
@@ -6404,11 +6404,11 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	var seenCmds []int
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(cmd *ProposalData) error {
-		if v := cmd.ctx.Value(magicKey{}); v != nil {
-			seenCmds = append(seenCmds, int(cmd.command.MaxLeaseIndex))
+	tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
+		if v := proposal.ctx.Value(magicKey{}); v != nil {
+			seenCmds = append(seenCmds, int(proposal.command.MaxLeaseIndex))
 		}
-		return defaultSubmitProposalLocked(tc.repl, cmd)
+		return defaultSubmitProposalLocked(tc.repl, proposal)
 	}
 	tc.repl.mu.Unlock()
 
