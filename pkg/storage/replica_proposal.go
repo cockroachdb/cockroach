@@ -153,7 +153,7 @@ type LocalEvalResult struct {
 }
 
 func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
-	if lResult.intents == nil {
+	if lResult == nil || lResult.intents == nil {
 		return nil
 	}
 	intents := *lResult.intents
@@ -730,12 +730,17 @@ func (r *Replica) handleLocalEvalResult(
 func (r *Replica) handleEvalResult(
 	ctx context.Context,
 	originReplica roachpb.ReplicaDescriptor,
-	lResult LocalEvalResult,
-	rResult storagebase.ReplicatedEvalResult,
+	lResult *LocalEvalResult,
+	rResult *storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
-	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
-	shouldAssert = r.handleLocalEvalResult(ctx, originReplica, lResult) || shouldAssert
+	shouldAssert := false
+	if rResult != nil {
+		shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
+	}
+	if lResult != nil {
+		shouldAssert = r.handleLocalEvalResult(ctx, originReplica, *lResult) || shouldAssert
+	}
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the side effects.

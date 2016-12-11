@@ -2247,8 +2247,8 @@ func (r *Replica) propose(
 				"requestToProposal returned error %s without eval results", err)
 		}
 		intents := proposal.Local.detachIntents()
-		r.handleEvalResult(ctx, repDesc, *proposal.Local,
-			*proposal.command.ReplicatedEvalResult)
+		r.handleEvalResult(ctx, repDesc, proposal.Local,
+			proposal.command.ReplicatedEvalResult)
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
@@ -3403,15 +3403,8 @@ func (r *Replica) processRaftCommand(
 
 		if forcedErr != nil {
 			// Apply an empty entry.
-			if raftCmd.ReplicatedEvalResult != nil {
-				raftCmd.ReplicatedEvalResult.Strip()
-			} else {
-				raftCmd.ReplicatedEvalResult = &storagebase.ReplicatedEvalResult{}
-			}
+			raftCmd.ReplicatedEvalResult = &storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
-			if proposedLocally && proposal.Local == nil {
-				proposal.Local = &LocalEvalResult{}
-			}
 		}
 		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
 		raftCmd.ReplicatedEvalResult.State.LeaseAppliedIndex = leaseIndex
@@ -3443,7 +3436,7 @@ func (r *Replica) processRaftCommand(
 			pErr = forcedErr
 		}
 
-		var lResult LocalEvalResult
+		var lResult *LocalEvalResult
 		if proposedLocally {
 			if pErr != nil {
 				// A forced error was set (i.e. we did not apply the proposal,
@@ -3460,7 +3453,7 @@ func (r *Replica) processRaftCommand(
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
 			}
 			response.Intents = proposal.Local.detachIntents()
-			lResult = *proposal.Local
+			lResult = proposal.Local
 		}
 
 		// Handle the EvalResult, executing any side effects of the last
@@ -3468,7 +3461,7 @@ func (r *Replica) processRaftCommand(
 		//
 		// Note that this must happen after committing (the engine.Batch), but
 		// before notifying a potentially waiting client.
-		r.handleEvalResult(ctx, raftCmd.OriginReplica, lResult, *raftCmd.ReplicatedEvalResult)
+		r.handleEvalResult(ctx, raftCmd.OriginReplica, lResult, raftCmd.ReplicatedEvalResult)
 	}
 
 	if proposedLocally {
