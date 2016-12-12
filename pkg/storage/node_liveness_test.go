@@ -35,7 +35,7 @@ import (
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	testutils.SucceedsSoon(t, func() error {
-		for _, nl := range mtc.nodeLivenesses {
+		for i, nl := range mtc.nodeLivenesses {
 			for _, g := range mtc.gossips {
 				live, err := nl.IsLive(g.NodeID.Get())
 				if err != nil {
@@ -43,6 +43,10 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 				} else if !live {
 					return errors.Errorf("node %d not live", g.NodeID.Get())
 				}
+			}
+			if a, e := nl.Metrics().LiveNodes.Value(), int64(len(mtc.nodeLivenesses)); a != e {
+				return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
+					mtc.gossips[i].NodeID.Get(), e, a)
 			}
 		}
 		return nil
@@ -75,6 +79,13 @@ func TestNodeLiveness(t *testing.T) {
 		} else if live {
 			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
 		}
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := nl.Metrics().LiveNodes.Value(), int64(0); a != e {
+				return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
+					nodeID, e, a)
+			}
+			return nil
+		})
 	}
 	// Trigger a manual heartbeat and verify liveness is reestablished.
 	for _, nl := range mtc.nodeLivenesses {
