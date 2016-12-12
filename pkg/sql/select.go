@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pkg/errors"
 )
 
 // selectNode encapsulates the core logic of a select statement: retrieving filtered results from
@@ -542,7 +543,10 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 // expand the "*" into a list of columns. A ResultColumns and Expr
 // pair is returned for each column.
 func checkRenderStar(
-	target parser.SelectExpr, src *dataSourceInfo, ivarHelper parser.IndexedVarHelper,
+	target parser.SelectExpr,
+	src *dataSourceInfo,
+	ivarHelper parser.IndexedVarHelper,
+	allowStars bool,
 ) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	v, ok := target.Expr.(parser.VarName)
 	if !ok {
@@ -550,12 +554,15 @@ func checkRenderStar(
 	}
 	switch v.(type) {
 	case parser.UnqualifiedStar, *parser.AllColumnsSelector:
+		if !allowStars {
+			return false, nil, nil, errors.Errorf("\"%s\" is not allowed in this position", v)
+		}
 	default:
 		return false, nil, nil, nil
 	}
 
 	if target.As != "" {
-		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", v)
+		return false, nil, nil, errors.Errorf("\"%s\" cannot be aliased", v)
 	}
 
 	columns, exprs, err = src.expandStar(v, ivarHelper)
@@ -587,7 +594,8 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Type
 		return err
 	}
 
-	if isStar, cols, typedExprs, err := checkRenderStar(target, s.source.info, s.ivarHelper); err != nil {
+	if isStar, cols, typedExprs, err := checkRenderStar(
+		target, s.source.info, s.ivarHelper, true); err != nil {
 		return err
 	} else if isStar {
 		s.columns = append(s.columns, cols...)

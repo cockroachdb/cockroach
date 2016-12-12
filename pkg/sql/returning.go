@@ -78,7 +78,8 @@ func (p *planner) newReturningHelper(
 			return nil, err
 		}
 
-		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.source, ivarHelper); err != nil {
+		if isStar, cols, typedExprs, err := checkRenderStar(
+			target, rh.source, ivarHelper, true); err != nil {
 			return nil, err
 		} else if isStar {
 			rh.exprs = append(rh.exprs, typedExprs...)
