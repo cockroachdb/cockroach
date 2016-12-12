@@ -307,7 +307,11 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 		newLiveness.NodeID, newLiveness.Epoch)
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	nl.mu.nodes[newLiveness.NodeID] = newLiveness
+	if nodeID := nl.gossip.NodeID.Get(); nodeID == liveness.NodeID {
+		nl.mu.self = newLiveness
+	} else {
+		nl.mu.nodes[newLiveness.NodeID] = newLiveness
+	}
 	nl.metrics.EpochIncrements.Inc(1)
 	return nil
 }

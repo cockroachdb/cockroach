@@ -559,7 +559,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	// Initiate a transfer (async) and wait for it to be blocked.
 	transferResChan := make(chan error)
 	go func() {
-		err := tc.repl.AdminTransferLease(secondReplica.StoreID, tc.repl.GetLeaseStatus(clock.Now()))
+		err := tc.repl.AdminTransferLease(secondReplica.StoreID)
 		if !testutils.IsError(err, "injected") {
 			transferResChan <- err
 		} else {

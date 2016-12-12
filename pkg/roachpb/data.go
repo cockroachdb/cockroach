@@ -993,7 +993,9 @@ func (l Lease) Type() LeaseType {
 // based leases, the start time of the lease is sufficient to
 // avoid using an older lease with same epoch.
 func (l Lease) Equivalent(ol Lease) error {
+	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, ol.ProposedTS = nil, nil
+	l.DeprecatedStartStasis = ol.DeprecatedStartStasis
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
 	if l.Type() == LeaseEpoch && ol.Type() == LeaseEpoch && *l.Epoch == *ol.Epoch {

@@ -93,9 +93,7 @@ func (sq *splitQueue) shouldQueue(
 }
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(
-	ctx context.Context, _ *LeaseStatus, r *Replica, sysCfg config.SystemConfig,
-) error {
+func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.SystemConfig) error {
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
 	splitKeys := sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
