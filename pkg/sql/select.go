@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
 )
 
 // selectNode encapsulates the core logic of a select statement: retrieving filtered results from
@@ -537,38 +536,6 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	return nil
 }
 
-// checkRenderStar checks if the SelectExpr is either an
-// UnqualifiedStar or an AllColumnsSelector. If so, we match the
-// prefix of the name to one of the tables in the query and then
-// expand the "*" into a list of columns. A ResultColumns and Expr
-// pair is returned for each column.
-func checkRenderStar(
-	target parser.SelectExpr,
-	src *dataSourceInfo,
-	ivarHelper parser.IndexedVarHelper,
-	allowStars bool,
-) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
-	v, ok := target.Expr.(parser.VarName)
-	if !ok {
-		return false, nil, nil, nil
-	}
-	switch v.(type) {
-	case parser.UnqualifiedStar, *parser.AllColumnsSelector:
-		if !allowStars {
-			return false, nil, nil, errors.Errorf("\"%s\" is not allowed in this position", v)
-		}
-	default:
-		return false, nil, nil, nil
-	}
-
-	if target.As != "" {
-		return false, nil, nil, errors.Errorf("\"%s\" cannot be aliased", v)
-	}
-
-	columns, exprs, err = src.expandStar(v, ivarHelper)
-	return true, columns, exprs, err
-}
-
 // getRenderColName returns the output column name for a render expression.
 func getRenderColName(target parser.SelectExpr) string {
 	if target.As != "" {
@@ -586,37 +553,6 @@ func getRenderColName(target parser.SelectExpr) string {
 		}
 	}
 	return target.Expr.String()
-}
-
-func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Type) error {
-	// Pre-normalize any VarName so the work is not done twice below.
-	if err := target.NormalizeTopLevelVarName(); err != nil {
-		return err
-	}
-
-	if isStar, cols, typedExprs, err := checkRenderStar(
-		target, s.source.info, s.ivarHelper, true); err != nil {
-		return err
-	} else if isStar {
-		s.columns = append(s.columns, cols...)
-		s.render = append(s.render, typedExprs...)
-		s.isStar = true
-		return nil
-	}
-
-	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression.
-	outputName := getRenderColName(target)
-
-	normalized, err := s.planner.analyzeExpr(target.Expr, s.sourceInfo, s.ivarHelper, desiredType, false, "")
-	if err != nil {
-		return err
-	}
-
-	s.addRenderColumn(normalized, ResultColumn{Name: outputName, Typ: normalized.ResolvedType()})
-
-	return nil
 }
 
 // appendRenderColumn adds a new render expression at the end of the current list.
