@@ -94,19 +94,23 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// The logical data source for ORDER BY is the list of render
 		// expressions for a SELECT, as specified in the input SQL text
 		// (or an entire UNION or VALUES clause).  Alas, SQL has some
-		// historical baggage and there are some special cases:
+		// historical baggage from SQL92 and there are some special cases:
 		//
-		// 1) column ordinals. If a simple integer literal is used,
+		// SQL92 rules:
+		//
+		// 1) if the expression is the aliased (AS) name of a render
+		//    expression in a SELECT clause, then use that
+		//    render as sort key.
+		//    e.g. SELECT a AS b, b AS c ORDER BY b
+		//    this sorts on the first render.
+		//
+		// 2) column ordinals. If a simple integer literal is used,
 		//    optionally enclosed within parentheses but *not subject to
 		//    any arithmetic*, then this refers to one of the columns of
 		//    the data source. Then use the render expression at that
 		//    ordinal position as sort key.
 		//
-		// 2) if the expression is the aliased (AS) name of a render
-		//    expression in a SELECT clause, then use that
-		//    render as sort key.
-		//    e.g. SELECT a AS b, b AS c ORDER BY b
-		//    this sorts on the first render.
+		// SQL99 rules:
 		//
 		// 3) otherwise, if the expression is already in the render list,
 		//    then use that render as sort key.
@@ -121,17 +125,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		//    and use that as sort key.
 		//    e.g. SELECT a FROM t ORDER by b
 		//    e.g. SELECT a, b FROM t ORDER by a+b
-		//
-		// So first, deal with column ordinals.
-		col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
-		if err != nil {
-			return nil, err
-		}
-		if col != -1 {
-			index = col
-		}
 
-		// Now, deal with render aliases.
+		// First, deal with render aliases.
 		if vBase, ok := expr.(parser.VarName); index == -1 && ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
@@ -146,10 +141,31 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				target := c.ColumnName.Normalize()
 				for j, col := range columns {
 					if parser.ReNormalizeName(col.Name) == target {
+						if index != -1 {
+							// There is more than one render alias that matches the ORDER BY
+							// clause. Here, SQL92 is specific as to what should be done:
+							// if the underlying expression is known (we're on a selectNode)
+							// and it is equivalent, then just accept that and ignore the ambiguity.
+							// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
+							// reject with an ambituity error.
+							if s == nil || !s.equivalentRenders(j, index) {
+								return nil, errors.Errorf("ORDER BY \"%s\" is ambiguous", target)
+							}
+						}
 						index = j
-						break
 					}
 				}
+			}
+		}
+
+		// So Then, deal with column ordinals.
+		if index == -1 {
+			col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
+			if err != nil {
+				return nil, err
+			}
+			if col != -1 {
+				index = col
 			}
 		}
 
