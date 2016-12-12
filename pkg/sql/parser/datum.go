@@ -598,6 +598,7 @@ func (d *DName) Prev() (Datum, bool) { return nameify(d.DString.Prev()) }
 // Next implements the Datum interface.
 func (d *DName) Next() (Datum, bool) { return nameify(d.DString.Next()) }
 
+// Compare implements the Datum interface.
 func (d *DName) Compare(other Datum) int {
 	return d.DString.Compare(other)
 }
@@ -613,7 +614,7 @@ func (d *DName) IsMax() bool { return d.DString.IsMax() }
 // IsMin implements the Datum interface.
 func (d *DName) IsMin() bool { return d.DString.IsMin() }
 
-// IsMin implements the Datum interface.
+// Size implements the Datum interface.
 func (d *DName) Size() uintptr { return d.DString.Size() }
 
 // min implements the Datum interface.

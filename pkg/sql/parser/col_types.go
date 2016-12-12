@@ -242,6 +242,7 @@ func (node *StringColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// NameColType represents a a NAME type.
 type NameColType struct {
 	StringColType
 }
