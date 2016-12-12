@@ -127,9 +127,9 @@ message EvaluatorSpec {
 }
 
 message DistinctSpec {
-  // The ordering of the input stream can be optionally specified for
+  // The ordered columns in the input stream can be optionally specified for
   // possible optimizations.
-  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+  repeated bool ordered_columns = 1;
 }
 
 enum JoinType {

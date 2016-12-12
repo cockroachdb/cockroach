@@ -31,24 +31,19 @@ type distinct struct {
 	ctx          context.Context
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
-	orderedCols  map[uint32]struct{}
+	orderedCols  []bool
 	datumAlloc   sqlbase.DatumAlloc
 }
 
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, output RowReceiver,
 ) (*distinct, error) {
-	d := &distinct{
+	return &distinct{
 		input:       input,
 		output:      output,
 		ctx:         log.WithLogTag(flowCtx.Context, "Evaluator", nil),
-		orderedCols: make(map[uint32]struct{}),
-	}
-	for _, ord := range spec.Ordering.Columns {
-		d.orderedCols[ord.ColIdx] = struct{}{}
-	}
-
-	return d, nil
+		orderedCols: spec.OrderedColumns,
+	}, nil
 }
 
 // Run is part of the processor interface.
@@ -115,7 +110,10 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if d.lastGroupKey == nil {
 		return false, nil
 	}
-	for colIdx := range d.orderedCols {
+	for colIdx, ordered := range d.orderedCols {
+		if !ordered {
+			continue
+		}
 		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &row[colIdx])
 		if res != 0 || err != nil {
 			return false, err
@@ -134,7 +132,7 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		// time is the set of all rows with the same group key). This alleviates
 		// the need to use x in our encoding when computing the key into our
 		// set.
-		if _, ordered := d.orderedCols[uint32(i)]; ordered {
+		if d.orderedCols != nil && d.orderedCols[i] {
 			continue
 		}
 

@@ -59,13 +59,7 @@ func TestDistinct(t *testing.T) {
 			},
 		}, {
 			spec: DistinctSpec{
-				Ordering: Ordering{
-					[]Ordering_Column{
-						{
-							ColIdx: 0,
-						},
-					},
-				},
+				OrderedColumns: []bool{true, false},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[2], v[3]},
