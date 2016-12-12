@@ -913,6 +913,32 @@ func TestClusterAPI(t *testing.T) {
 	})
 }
 
+func TestHealthAPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	var resp serverpb.HealthResponse
+	if err := getAdminJSONProto(s, "health", &resp); err != nil {
+		t.Error(err)
+	}
+
+	// Expire this node's liveness record by pausing heartbeats and advancing the
+	// server's clock.
+	ts := s.(*TestServer)
+	ts.nodeLiveness.PauseHeartbeat(true)
+	self, err := ts.nodeLiveness.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Clock().Update(self.Expiration.Add(1, 0))
+
+	expected := "node is not live"
+	if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
+		t.Errorf("expected %q error, got %v", expected, err)
+	}
+}
+
 func TestClusterFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
