@@ -191,7 +191,7 @@ func (AnyType) matchLen(l int) bool {
 }
 
 func (AnyType) getAt(i int) Type {
-	panic("getAt called on AnyType")
+	return TypeAny
 }
 
 // Length implements the typeList interface.
@@ -421,6 +421,16 @@ func typeCheckOverloadedExprs(
 		return typedExprs, fn, err
 	}
 
+	// Further narrow the list by TypeFamily.
+	for _, expr := range resolvableExprs {
+		filterOverloads(func(o overloadImpl) bool {
+			return o.params().getAt(expr.i).FamilyEqual(typedExprs[expr.i].ResolvedType())
+		})
+	}
+	if ok, fn, err := checkReturn(); ok {
+		return typedExprs, fn, err
+	}
+
 	// The first heuristic is to prefer candidates that return the desired type.
 	if desired != TypeAny {
 		filterOverloads(func(o overloadImpl) bool {
@@ -537,6 +547,9 @@ func typeCheckOverloadedExprs(
 			}
 			preferred = c
 		}
+	}
+	if preferred == nil {
+		return nil, nil, fmt.Errorf("ambiguous typecheck result: %d matches: %s", len(overloads), overloads)
 	}
 	return typedExprs, preferred, nil
 }

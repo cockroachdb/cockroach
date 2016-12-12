@@ -904,20 +904,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
-			LeftType:  TypeName,
-			RightType: TypeString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DName).DString == *right.(*DString)), nil
-			},
-		},
-		CmpOp{
-			LeftType:  TypeString,
-			RightType: TypeName,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DString) == right.(*DName).DString), nil
-			},
-		},
-		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
 
@@ -1388,40 +1374,12 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 				return matchLike(ctx, left, right, false)
 			},
 		},
-		CmpOp{
-			LeftType:  TypeName,
-			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				return matchLike(ctx, left, right, false)
-			},
-		},
-		CmpOp{
-			LeftType:  TypeString,
-			RightType: TypeName,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				return matchLike(ctx, left, right, false)
-			},
-		},
 	},
 
 	ILike: {
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				return matchLike(ctx, left, right, true)
-			},
-		},
-		CmpOp{
-			LeftType:  TypeName,
-			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				return matchLike(ctx, left, right, true)
-			},
-		},
-		CmpOp{
-			LeftType:  TypeString,
-			RightType: TypeName,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
 				return matchLike(ctx, left, right, true)
 			},

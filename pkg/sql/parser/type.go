@@ -155,7 +155,7 @@ type tString struct{}
 
 func (tString) String() string { return "string" }
 func (tString) Equal(other Type) bool {
-	return other == TypeString || other == TypeAny
+	return other == TypeString || other == TypeAny || other == TypeName
 }
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
@@ -203,7 +203,7 @@ type tName struct{}
 
 func (tName) String() string { return "name" }
 func (tName) Equal(other Type) bool {
-	return other == TypeName || other == TypeAny
+	return other == TypeString || other == TypeAny || other == TypeName
 }
 func (tName) FamilyEqual(other Type) bool { return other == TypeName }
 func (tName) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }

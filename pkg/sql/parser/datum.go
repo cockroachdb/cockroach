@@ -615,7 +615,9 @@ func (d *DName) IsMax() bool { return d.DString.IsMax() }
 func (d *DName) IsMin() bool { return d.DString.IsMin() }
 
 // Size implements the Datum interface.
-func (d *DName) Size() uintptr { return d.DString.Size() }
+func (d *DName) Size() uintptr {
+	return unsafe.Sizeof(*d) + uintptr(len(d.DString))
+}
 
 // min implements the Datum interface.
 func (d *DName) min() (Datum, bool) { return nameify(d.DString.min()) }

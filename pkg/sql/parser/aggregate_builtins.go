@@ -72,6 +72,7 @@ type AggregateFunc interface {
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
+		// TODO(knz) Collapse these into a single aggregate.
 		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate),
 		makeAggBuiltin(TypeString, TypeStringArray, newStringArrayAggregate),
 		makeAggBuiltin(TypeName, TypeNameArray, newNameArrayAggregate),
