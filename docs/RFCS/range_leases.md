@@ -1,5 +1,5 @@
 - Feature Name: Node-level mechanism for refreshing range leases
-- Status: draft
+- Status: completed
 - Start Date: 2016-02-10
 - Authors: Ben Darnell, Spencer Kimball
 - RFC PR: [#4288](https://github.com/cockroachdb/cockroach/pull/4288)
@@ -55,10 +55,11 @@ IDs to an epoch counter, and an expiration timestamp.
 
 ## Node liveness proto
 
-Column|     Description
-NodeID|     node identifier
-Epoch|      monotonically increasing liveness epoch
-Expiration| timestamp at which the liveness record expires
+| Column     | Description |
+| ---------- | ----------- |
+| NodeID     | node identifier |
+| Epoch      | monotonically increasing liveness epoch |
+| Expiration | timestamp at which the liveness record expires |
 
 The node liveness system KV range stores supports a new type of range
 lease, referred to hereafter as an "epoch-based" range
