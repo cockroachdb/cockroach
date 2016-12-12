@@ -2203,7 +2203,11 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestStoreConfig(nil)
+	// Newly-started stores (including the "rogue" one) should not GC
+	// their replicas. We'll turn this back on when needed.
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2237,6 +2241,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// may be recreated by a stray raft message, so we run the GC scan inside the loop.
 	// TODO(bdarnell): if the call to RemoveReplica in replicaGCQueue.process can be
 	// moved under the lock, then the GC scan can be moved out of this loop.
+	mtc.stores[1].SetReplicaGCQueueActive(true)
 	testutils.SucceedsSoon(t, func() error {
 		mtc.expireLeases()
 		mtc.manualClock.Increment(int64(
@@ -2321,6 +2326,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// lease will cause GC to do a consistent range lookup, where it
 	// will see that the range has been moved and delete the old
 	// replica.
+	mtc.stores[2].SetReplicaGCQueueActive(true)
 	mtc.expireLeases()
 	mtc.manualClock.Increment(int64(
 		storage.ReplicaGCQueueInactivityThreshold) + 1)
