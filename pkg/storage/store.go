@@ -2635,7 +2635,7 @@ func (s *Store) reserveSnapshot(
 		case <-s.stopper.ShouldStop():
 			return nil, errors.Errorf("stopped")
 		default:
-			return nil, stream.Send(&SnapshotResponse{Status: SnapshotResponse_DECLINED})
+			return nil, nil
 		}
 	} else {
 		select {
@@ -2665,6 +2665,9 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	cleanup, err := s.reserveSnapshot(ctx, header, stream)
 	if err != nil {
 		return err
+	}
+	if cleanup == nil {
+		return stream.Send(&SnapshotResponse{Status: SnapshotResponse_DECLINED})
 	}
 	defer cleanup()
 
