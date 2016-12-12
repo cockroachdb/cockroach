@@ -2625,7 +2625,7 @@ func (s *Store) maybeUpdateTransaction(
 }
 
 func (s *Store) reserveSnapshot(
-	ctx context.Context, header *SnapshotRequest_Header, stream SnapshotResponseStream,
+	ctx context.Context, header *SnapshotRequest_Header,
 ) (func(), error) {
 	if header.CanDecline {
 		select {
@@ -2635,7 +2635,7 @@ func (s *Store) reserveSnapshot(
 		case <-s.stopper.ShouldStop():
 			return nil, errors.Errorf("stopped")
 		default:
-			return nil, stream.Send(&SnapshotResponse{Status: SnapshotResponse_DECLINED})
+			return nil, nil
 		}
 	} else {
 		select {
@@ -2662,9 +2662,12 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 	ctx := s.AnnotateCtx(stream.Context())
-	cleanup, err := s.reserveSnapshot(ctx, header, stream)
+	cleanup, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err
+	}
+	if cleanup == nil {
+		return stream.Send(&SnapshotResponse{Status: SnapshotResponse_DECLINED})
 	}
 	defer cleanup()
 
