@@ -44,10 +44,15 @@ var (
 	// errSkippedHeartbeat is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
 	errSkippedHeartbeat = errors.New("heartbeat failed on epoch increment")
+
+	// SelfLivenessCheckInterval controls how often the node's liveness metric is
+	// updated with the current state. Exported only for testing purposes.
+	SelfLivenessCheckInterval = 5 * time.Second
 )
 
 // Node liveness metrics counter names.
 var (
+	metaNodeIsAlive        = metric.Metadata{Name: "liveness.nodeisalive"}
 	metaHeartbeatSuccesses = metric.Metadata{Name: "liveness.heartbeatsuccesses"}
 	metaHeartbeatFailures  = metric.Metadata{Name: "liveness.heartbeatfailures"}
 	metaEpochIncrements    = metric.Metadata{Name: "liveness.epochincrements"}
@@ -60,6 +65,7 @@ func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 
 // LivenessMetrics holds metrics for use with node liveness activity.
 type LivenessMetrics struct {
+	NodeIsAlive        *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  *metric.Counter
 	EpochIncrements    *metric.Counter
@@ -107,6 +113,7 @@ func NewNodeLiveness(
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: heartbeatInterval,
 		metrics: LivenessMetrics{
+			NodeIsAlive:        metric.NewGauge(metaNodeIsAlive),
 			HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 			HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
 			EpochIncrements:    metric.NewCounter(metaEpochIncrements),
@@ -170,6 +177,28 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 				}
 				cancel()
 				sp.Finish()
+			}
+			select {
+			case <-ticker.C:
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(SelfLivenessCheckInterval)
+		defer ticker.Stop()
+		for {
+			live, err := nl.IsLive(nl.gossip.NodeID.Get())
+			if err != nil {
+				log.Warningf(nl.ambientCtx.AnnotateCtx(context.Background()),
+					"unable to check node liveness record for self: %s", err)
+			}
+			if live {
+				nl.metrics.NodeIsAlive.Update(1)
+			} else {
+				nl.metrics.NodeIsAlive.Update(0)
 			}
 			select {
 			case <-ticker.C:

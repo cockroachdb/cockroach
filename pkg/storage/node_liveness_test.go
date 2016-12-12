@@ -21,6 +21,7 @@ import (
 	"sort"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -35,7 +36,7 @@ import (
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	testutils.SucceedsSoon(t, func() error {
-		for _, nl := range mtc.nodeLivenesses {
+		for i, nl := range mtc.nodeLivenesses {
 			for _, g := range mtc.gossips {
 				live, err := nl.IsLive(g.NodeID.Get())
 				if err != nil {
@@ -43,6 +44,10 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 				} else if !live {
 					return errors.Errorf("node %d not live", g.NodeID.Get())
 				}
+			}
+			if a, e := nl.Metrics().NodeIsAlive.Value(), int64(1); a != e {
+				return errors.Errorf("expected node %d's NodeIsAlive metric to be %d; got %d",
+					mtc.gossips[i].NodeID.Get(), e, a)
 			}
 		}
 		return nil
@@ -57,6 +62,7 @@ func pauseNodeLivenessHeartbeats(mtc *multiTestContext, pause bool) {
 
 func TestNodeLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.SelfLivenessCheckInterval = time.Millisecond
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -75,6 +81,13 @@ func TestNodeLiveness(t *testing.T) {
 		} else if live {
 			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
 		}
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := nl.Metrics().NodeIsAlive.Value(), int64(0); a != e {
+				return errors.Errorf("expected node %d's NodeIsAlive metric to be %d; got %d",
+					nodeID, e, a)
+			}
+			return nil
+		})
 	}
 	// Trigger a manual heartbeat and verify liveness is reestablished.
 	for _, nl := range mtc.nodeLivenesses {
@@ -102,6 +115,7 @@ func TestNodeLiveness(t *testing.T) {
 // live.
 func TestNodeLivenessEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.SelfLivenessCheckInterval = time.Millisecond
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -166,6 +180,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 // restarted, the node liveness records are re-gossiped immediately.
 func TestNodeLivenessRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.SelfLivenessCheckInterval = time.Millisecond
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -222,6 +237,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 // might be received belatedly through gossip.
 func TestNodeLivenessSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.SelfLivenessCheckInterval = time.Millisecond
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
@@ -274,6 +290,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 
 func TestNodeLivenessGetLivenessMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.SelfLivenessCheckInterval = time.Millisecond
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
