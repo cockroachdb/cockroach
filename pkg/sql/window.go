@@ -176,29 +176,42 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
-			windowFn.partitionIdxs = append(windowFn.partitionIdxs, len(s.render)-origRenderLen)
-
-			err := s.addRender(parser.SelectExpr{Expr: partition}, parser.TypeAny)
+			// FIXME: does PARTITION BY allow star expansion?
+			cols, exprs, _, err := s.planner.computeRender(parser.SelectExpr{Expr: partition},
+				parser.TypeAny, s.source.info, s.ivarHelper, false)
 			if err != nil {
 				return err
+			}
+
+			// FIXME: why does this break if we merge the renders here?
+			colIdxs := s.addOrMergeRenders(cols, exprs, false)
+			for _, idx := range colIdxs {
+				windowFn.partitionIdxs = append(windowFn.partitionIdxs, idx-origRenderLen)
 			}
 		}
 
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
+			// FIXME: does ORDER BY allow star expansion?
+			cols, exprs, _, err := s.planner.computeRender(parser.SelectExpr{Expr: orderBy.Expr},
+				parser.TypeAny, s.source.info, s.ivarHelper, false)
+			if err != nil {
+				return err
+			}
+
 			direction := encoding.Ascending
 			if orderBy.Direction == parser.Descending {
 				direction = encoding.Descending
 			}
-			ordering := sqlbase.ColumnOrderInfo{
-				ColIdx:    len(s.render) - origRenderLen,
-				Direction: direction,
-			}
-			windowFn.columnOrdering = append(windowFn.columnOrdering, ordering)
 
-			err := s.addRender(parser.SelectExpr{Expr: orderBy.Expr}, parser.TypeAny)
-			if err != nil {
-				return err
+			// FIXME: why does this break if we merge the renders here?
+			colIdxs := s.addOrMergeRenders(cols, exprs, false)
+			for _, idx := range colIdxs {
+				ordering := sqlbase.ColumnOrderInfo{
+					ColIdx:    idx - origRenderLen,
+					Direction: direction,
+				}
+				windowFn.columnOrdering = append(windowFn.columnOrdering, ordering)
 			}
 		}
 
