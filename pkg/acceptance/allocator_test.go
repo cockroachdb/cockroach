@@ -187,6 +187,14 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.EndNodes))
 	at.f.Assert(ctx, t)
 
+	log.Infof(ctx, "starting load on cluster")
+	if err := at.f.StartLoad(ctx, "block_writer", *flagCLTWriters); err != nil {
+		t.Fatal(err)
+	}
+	if err := at.f.StartLoad(ctx, "photos", *flagCLTWriters); err != nil {
+		t.Fatal(err)
+	}
+
 	log.Info(ctx, "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(ctx, t); err != nil {
 		t.Fatal(err)
