@@ -625,7 +625,7 @@ func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 		return ba.CreateReply(), nil
 	}, nil))
 
-	txnClosure := func(txn *Txn, opt *TxnExecOptions) error {
+	txnClosure := func(txn *Txn, opt *TxnExecOptions, _ bool) error {
 		// Ensure the KV transaction is created.
 		return txn.Put("a", "b")
 	}
@@ -770,7 +770,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	}
 	refTimestamp := clock.Now()
 
-	txnClosure := func(txn *Txn, opt *TxnExecOptions) error {
+	txnClosure := func(txn *Txn, opt *TxnExecOptions, _ bool) error {
 		// Ensure the KV transaction is created.
 		return txn.Put("a", "b")
 	}
@@ -843,7 +843,7 @@ func TestWrongTxnRetry(t *testing.T) {
 		execOpt.AutoRetry = false
 		err := outerTxn.Exec(
 			execOpt,
-			func(innerTxn *Txn, opt *TxnExecOptions) error {
+			func(innerTxn *Txn, opt *TxnExecOptions, _ bool) error {
 				// Ensure the KV transaction is created.
 				if err := innerTxn.Put("x", "y"); err != nil {
 					t.Fatal(err)

@@ -111,7 +111,7 @@ func Backup(
 	{
 		// TODO(dan): Pick an appropriate end time and set it in the txn.
 		txn := client.NewTxn(ctx, db)
-		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions, _ bool) error {
 			var err error
 			SetTxnTimestamps(txn, endTime)
 
@@ -150,7 +150,7 @@ func Backup(
 		var kvs []client.KeyValue
 
 		txn := client.NewTxn(ctx, db)
-		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions, _ bool) error {
 			var err error
 			SetTxnTimestamps(txn, endTime)
 

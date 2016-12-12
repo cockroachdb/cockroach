@@ -38,6 +38,7 @@ func TestQueryCounts(t *testing.T) {
 		query            string
 		txnBeginCount    int64
 		selectCount      int64
+		distSQLCount     int64
 		updateCount      int64
 		insertCount      int64
 		deleteCount      int64
@@ -46,20 +47,20 @@ func TestQueryCounts(t *testing.T) {
 		txnCommitCount   int64
 		txnRollbackCount int64
 	}{
-		{"", 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{"BEGIN; END", 1, 0, 0, 0, 0, 0, 0, 1, 0},
-		{"SELECT 1", 1, 1, 0, 0, 0, 0, 0, 1, 0},
-		{"CREATE DATABASE mt", 1, 1, 0, 0, 0, 1, 0, 1, 0},
-		{"CREATE TABLE mt.n (num INTEGER)", 1, 1, 0, 0, 0, 2, 0, 1, 0},
-		{"INSERT INTO mt.n VALUES (3)", 1, 1, 0, 1, 0, 2, 0, 1, 0},
-		{"UPDATE mt.n SET num = num + 1", 1, 1, 1, 1, 0, 2, 0, 1, 0},
-		{"DELETE FROM mt.n", 1, 1, 1, 1, 1, 2, 0, 1, 0},
-		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 1, 1, 1, 1, 1, 3, 0, 1, 0},
-		{"EXPLAIN SELECT * FROM mt.n", 1, 1, 1, 1, 1, 3, 1, 1, 0},
-		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 2, 1, 2, 1, 1, 3, 1, 2, 0},
-		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 2, 4, 2, 1, 1, 3, 1, 2, 0},
-		{"DROP TABLE mt.n", 2, 4, 2, 1, 1, 4, 1, 2, 0},
-		{"SET database = system", 2, 4, 2, 1, 1, 4, 2, 2, 0},
+		{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		{"BEGIN; END", 1, 0, 0, 0, 0, 0, 0, 0, 1, 0},
+		{"SELECT 1", 1, 1, 0, 0, 0, 0, 0, 0, 1, 0},
+		{"CREATE DATABASE mt", 1, 1, 0, 0, 0, 0, 1, 0, 1, 0},
+		{"CREATE TABLE mt.n (num INTEGER)", 1, 1, 0, 0, 0, 0, 2, 0, 1, 0},
+		{"INSERT INTO mt.n VALUES (3)", 1, 1, 0, 0, 1, 0, 2, 0, 1, 0},
+		{"UPDATE mt.n SET num = num + 1", 1, 1, 0, 1, 1, 0, 2, 0, 1, 0},
+		{"DELETE FROM mt.n", 1, 1, 0, 1, 1, 1, 2, 0, 1, 0},
+		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 1, 1, 0, 1, 1, 1, 3, 0, 1, 0},
+		{"EXPLAIN SELECT * FROM mt.n", 1, 1, 0, 1, 1, 1, 3, 1, 1, 0},
+		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 2, 1, 0, 2, 1, 1, 3, 1, 2, 0},
+		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 2, 4, 0, 2, 1, 1, 3, 1, 2, 0},
+		{"DROP TABLE mt.n", 2, 4, 0, 2, 1, 1, 4, 1, 2, 0},
+		{"SET database = system", 2, 4, 0, 2, 1, 1, 4, 2, 2, 0},
 	}
 
 	for _, tc := range testcases {
@@ -76,6 +77,44 @@ func TestQueryCounts(t *testing.T) {
 
 		if err := checkCounterEQ(s, sql.MetaTxnBegin, tc.txnBeginCount); err != nil {
 			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaTxnBegin, tc.txnBeginCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaTxnCommit, tc.txnCommitCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaTxnRollback, tc.txnRollbackCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaTxnAbort, 0); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaSelect, tc.selectCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaDistSQLSelect, tc.distSQLCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaUpdate, tc.updateCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaInsert, tc.insertCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaDelete, tc.deleteCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaDdl, tc.ddlCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+		if err := checkCounterEQ(s, sql.MetaMisc, tc.miscCount); err != nil {
+			t.Errorf("%q: %s", tc.query, err)
+		}
+
+		// Everything after this query will also fail, so quit now to avoid deluge of errors.
+		if t.Failed() {
+			t.FailNow()
 		}
 		if err := checkCounterEQ(s, sql.MetaTxnRollback, tc.txnRollbackCount); err != nil {
 			t.Errorf("%q: %s", tc.query, err)
@@ -142,7 +181,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
+	query := "INSERT INTO db.t VALUES ('key', 'marker')"
+	_, err = txn.Exec(query)
 	if !testutils.IsError(err, "aborted") {
 		t.Fatal(err)
 	}
@@ -181,7 +221,8 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := txn.Query("SELECT * FROM i_do.not_exist"); err == nil {
+	query := "SELECT * FROM i_do.not_exist"
+	if _, err := txn.Query(query); err == nil {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
@@ -191,7 +232,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	if err := checkCounterEQ(s, sql.MetaTxnBegin, 1); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaSelect, 1); err != nil {
+	if err := checkCounterEQ(s, sql.MetaSelect, 0); err != nil {
 		t.Error(err)
 	}
 }

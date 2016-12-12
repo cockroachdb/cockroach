@@ -59,18 +59,19 @@ const sqlImplicitTxnName string = "sql txn implicit"
 
 // Fully-qualified names for metrics.
 var (
-	MetaLatency     = metric.Metadata{Name: "sql.latency"}
-	MetaTxnBegin    = metric.Metadata{Name: "sql.txn.begin.count"}
-	MetaTxnCommit   = metric.Metadata{Name: "sql.txn.commit.count"}
-	MetaTxnAbort    = metric.Metadata{Name: "sql.txn.abort.count"}
-	MetaTxnRollback = metric.Metadata{Name: "sql.txn.rollback.count"}
-	MetaSelect      = metric.Metadata{Name: "sql.select.count"}
-	MetaUpdate      = metric.Metadata{Name: "sql.update.count"}
-	MetaInsert      = metric.Metadata{Name: "sql.insert.count"}
-	MetaDelete      = metric.Metadata{Name: "sql.delete.count"}
-	MetaDdl         = metric.Metadata{Name: "sql.ddl.count"}
-	MetaMisc        = metric.Metadata{Name: "sql.misc.count"}
-	MetaQuery       = metric.Metadata{Name: "sql.query.count"}
+	MetaLatency       = metric.Metadata{Name: "sql.latency"}
+	MetaTxnBegin      = metric.Metadata{Name: "sql.txn.begin.count"}
+	MetaTxnCommit     = metric.Metadata{Name: "sql.txn.commit.count"}
+	MetaTxnAbort      = metric.Metadata{Name: "sql.txn.abort.count"}
+	MetaTxnRollback   = metric.Metadata{Name: "sql.txn.rollback.count"}
+	MetaSelect        = metric.Metadata{Name: "sql.select.count"}
+	MetaDistSQLSelect = metric.Metadata{Name: "sql.distsql.select.count"}
+	MetaUpdate        = metric.Metadata{Name: "sql.update.count"}
+	MetaInsert        = metric.Metadata{Name: "sql.insert.count"}
+	MetaDelete        = metric.Metadata{Name: "sql.delete.count"}
+	MetaDdl           = metric.Metadata{Name: "sql.ddl.count"}
+	MetaMisc          = metric.Metadata{Name: "sql.misc.count"}
+	MetaQuery         = metric.Metadata{Name: "sql.query.count"}
 )
 
 // distSQLExecMode controls if and when the Executor uses DistSQL.
@@ -194,9 +195,10 @@ type Executor struct {
 	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
-	Latency       *metric.Histogram
-	SelectCount   *metric.Counter
-	TxnBeginCount *metric.Counter
+	Latency            *metric.Histogram
+	SelectCount        *metric.Counter
+	DistSQLSelectCount *metric.Counter
+	TxnBeginCount      *metric.Counter
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
 	TxnCommitCount *metric.Counter
@@ -290,18 +292,19 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
 
-		Latency:          metric.NewLatency(MetaLatency, cfg.MetricsSampleInterval),
-		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
-		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
-		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
-		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
-		SelectCount:      metric.NewCounter(MetaSelect),
-		UpdateCount:      metric.NewCounter(MetaUpdate),
-		InsertCount:      metric.NewCounter(MetaInsert),
-		DeleteCount:      metric.NewCounter(MetaDelete),
-		DdlCount:         metric.NewCounter(MetaDdl),
-		MiscCount:        metric.NewCounter(MetaMisc),
-		QueryCount:       metric.NewCounter(MetaQuery),
+		Latency:            metric.NewLatency(MetaLatency, cfg.MetricsSampleInterval),
+		TxnBeginCount:      metric.NewCounter(MetaTxnBegin),
+		TxnCommitCount:     metric.NewCounter(MetaTxnCommit),
+		TxnAbortCount:      metric.NewCounter(MetaTxnAbort),
+		TxnRollbackCount:   metric.NewCounter(MetaTxnRollback),
+		SelectCount:        metric.NewCounter(MetaSelect),
+		DistSQLSelectCount: metric.NewCounter(MetaDistSQLSelect),
+		UpdateCount:        metric.NewCounter(MetaUpdate),
+		InsertCount:        metric.NewCounter(MetaInsert),
+		DeleteCount:        metric.NewCounter(MetaDelete),
+		DdlCount:           metric.NewCounter(MetaDdl),
+		MiscCount:          metric.NewCounter(MetaMisc),
+		QueryCount:         metric.NewCounter(MetaQuery),
 	}
 }
 
@@ -590,7 +593,10 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		var results []Result
 		origState := txnState.State
 
-		txnClosure := func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		txnClosure := func(txn *client.Txn,
+			opt *client.TxnExecOptions,
+			isRetry bool,
+		) error {
 			if txnState.State == Open && txnState.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
@@ -606,7 +612,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				// Some results were produced by a previous attempt. Discard them.
 				ResultList(results).Close()
 			}
-			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
+			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec, isRetry)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -742,6 +748,7 @@ func runTxnAttempt(
 	txnState *txnState,
 	opt *client.TxnExecOptions,
 	stmts parser.StatementList,
+	isRetry bool,
 ) ([]Result, parser.StatementList, error) {
 
 	// Ignore the state that might have been set by a previous try
@@ -752,7 +759,7 @@ func runTxnAttempt(
 	planMaker.setTxn(txnState.txn)
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
 		stmts, planMaker, txnState,
-		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */)
+		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */, isRetry)
 	if opt.AutoCommit {
 		if len(remainingStmts) > 0 {
 			panic("implicit txn failed to execute all stmts")
@@ -797,6 +804,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	txnState *txnState,
 	implicitTxn bool,
 	txnBeginning bool,
+	isRetry bool,
 ) ([]Result, parser.StatementList, error) {
 	var results []Result
 	if txnState.State == NoTxn {
@@ -833,7 +841,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			case Open:
 				res, err = e.execStmtInOpenTxn(
 					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-					txnState)
+					txnState, isRetry)
 			case Aborted, RestartWait:
 				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
 			case CommitWait:
@@ -936,7 +944,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 	if txnState.State != CommitWait {
 		panic("execStmtInCommitWaitTxn called outside of an aborted txn")
 	}
-	e.updateStmtCounts(stmt)
+	e.updateStmtCounts(stmt, false)
 	switch stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		// Reset the state to allow new transactions to start.
@@ -967,12 +975,19 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // firstInTxn: set for the first statement in a transaction. Used
 //  so that nested BEGIN statements are caught.
 // stmtTimestamp: Used as the statement_timestamp().
+// isRetry: A boolean that is set for retries so that we don't double count in
+// metrics.
 //
 // Returns:
 // - a Result
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
-	stmt parser.Statement, planMaker *planner, implicitTxn bool, firstInTxn bool, txnState *txnState,
+	stmt parser.Statement,
+	planMaker *planner,
+	implicitTxn bool,
+	firstInTxn bool,
+	txnState *txnState,
+	isRetry bool,
 ) (Result, error) {
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
@@ -987,8 +1002,7 @@ func (e *Executor) execStmtInOpenTxn(
 	session := planMaker.session
 	log.Eventf(session.context, "%s", stmt)
 
-	// TODO(cdo): Figure out how to not double count on retries.
-	e.updateStmtCounts(stmt)
+	e.updateStmtCounts(stmt, isRetry)
 	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
@@ -1306,8 +1320,16 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 	if useDistSQL {
+		switch stmt.(type) {
+		case *parser.Select:
+			e.DistSQLSelectCount.Inc(1)
+		}
 		err = e.execDistSQL(planMaker, plan, &result)
 	} else {
+		switch stmt.(type) {
+		case *parser.Select:
+			e.SelectCount.Inc(1)
+		}
 		err = e.execClassic(plan, &result)
 	}
 	return result, err
@@ -1315,13 +1337,19 @@ func (e *Executor) execStmt(
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
 // statements have been received by this node.
-func (e *Executor) updateStmtCounts(stmt parser.Statement) {
+func (e *Executor) updateStmtCounts(stmt parser.Statement, isRetry bool) {
+	// Do not double count retried transactions.
+	if isRetry {
+		return
+	}
 	e.QueryCount.Inc(1)
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		e.TxnBeginCount.Inc(1)
 	case *parser.Select:
-		e.SelectCount.Inc(1)
+		// Do nothing as SELECTs are counted separately, depending on whether
+		// DistSQL was used or not
+		return
 	case *parser.Update:
 		e.UpdateCount.Inc(1)
 	case *parser.Insert:

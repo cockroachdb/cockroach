@@ -478,7 +478,9 @@ func (e *AutoCommitError) Error() string {
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
-func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
+func (txn *Txn) Exec(
+	opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions, isRetry bool) error,
+) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var retryOptions retry.Options
@@ -504,6 +506,7 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
 
+	isRetry := false
 	for r := retry.Start(retryOptions); r.Next(); {
 		if txn != nil {
 			// If we're looking at a brand new transaction, then communicate
@@ -517,7 +520,8 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 			}
 		}
 
-		err = fn(txn, &opt)
+		err = fn(txn, &opt, isRetry)
+		isRetry = true
 
 		// TODO(andrei): Until 7881 is fixed.
 		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.ABORTED {

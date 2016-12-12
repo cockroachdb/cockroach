@@ -464,7 +464,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	txn := NewTxn(ctx, *db)
 	txn.SetDebugName("", 1)
 	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
-		func(txn *Txn, _ *TxnExecOptions) error {
+		func(txn *Txn, _ *TxnExecOptions, _ bool) error {
 			return retryable(txn)
 		})
 	if err != nil {
