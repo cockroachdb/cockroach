@@ -102,9 +102,7 @@ func optimizeOnPredicate(
 	}
 
 	if lhs.Idx > rhs.Idx {
-		tmp := lhs
-		lhs = rhs
-		rhs = tmp
+		lhs, rhs = rhs, lhs
 	}
 
 	// At this point we have an equality, so we can add it to the list
