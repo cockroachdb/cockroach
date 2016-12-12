@@ -72,37 +72,13 @@ func (p *planner) newReturningHelper(
 	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
 	rh.exprs = make([]parser.TypedExpr, 0, len(r))
 	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
-	for i, target := range r {
-		// Pre-normalize VarNames at the top level so that checkRenderStar can see stars.
-		if err := target.NormalizeTopLevelVarName(); err != nil {
-			return nil, err
-		}
-
-		if isStar, cols, typedExprs, err := checkRenderStar(
-			target, rh.source, ivarHelper, true); err != nil {
-			return nil, err
-		} else if isStar {
-			rh.exprs = append(rh.exprs, typedExprs...)
-			rh.columns = append(rh.columns, cols...)
-			continue
-		}
-
-		// When generating an output column name it should exactly match the original
-		// expression, so determine the output column name before we perform any
-		// manipulations to the expression.
-		outputName := getRenderColName(target)
-
-		desired := parser.TypeAny
-		if len(desiredTypes) > i {
-			desired = desiredTypes[i]
-		}
-
-		typedExpr, err := rh.p.analyzeExpr(target.Expr, multiSourceInfo{rh.source}, ivarHelper, desired, false, "")
+	for _, target := range r {
+		cols, typedExprs, _, err := p.computeRender(target, parser.TypeAny, rh.source, ivarHelper, true)
 		if err != nil {
 			return nil, err
 		}
-		rh.exprs = append(rh.exprs, typedExpr)
-		rh.columns = append(rh.columns, ResultColumn{Name: outputName, Typ: typedExpr.ResolvedType()})
+		rh.columns = append(rh.columns, cols...)
+		rh.exprs = append(rh.exprs, typedExprs...)
 	}
 	return rh, nil
 }

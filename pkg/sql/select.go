@@ -43,7 +43,7 @@ type selectNode struct {
 	// sourceInfo contains the reference to the dataSourceInfo in the
 	// source planDataSource that is needed for name resolution.
 	// We keep one instance of multiSourceInfo cached here so as to avoid
-	// re-creating it every time analyzeExpr() is called in addRender().
+	// re-creating it every time analyzeExpr() is called in computeRender().
 	sourceInfo multiSourceInfo
 
 	// Helper for indexed vars. This holds the actual instances of
@@ -52,7 +52,7 @@ type selectNode struct {
 	ivarHelper parser.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
-	// populated by addRender()
+	// populated by addOrMergeRenders()
 	// as invoked initially by initTargets() and initWhere().
 	// sortNode peeks into the render array defined by initTargets() as an optimization.
 	// sortNode adds extra selectNode renders for sort columns not requested as select targets.
@@ -499,9 +499,13 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
-		if err := s.addRender(target, desiredType); err != nil {
+		cols, exprs, hasStar, err := s.planner.computeRender(target, desiredType,
+			s.source.info, s.ivarHelper, true)
+		if err != nil {
 			return err
 		}
+		s.isStar = s.isStar || hasStar
+		_ = s.addOrMergeRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
 	// do not want to include in validation of e.g. `GROUP BY 2`. We record the
