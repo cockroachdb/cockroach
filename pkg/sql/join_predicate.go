@@ -226,9 +226,7 @@ func (p *planner) optimizeOnPredicate(
 	}
 
 	if lhs.Idx > rhs.Idx {
-		tmp := lhs
-		lhs = rhs
-		rhs = tmp
+		lhs, rhs = rhs, lhs
 	}
 
 	leftColNames := parser.NameList{parser.Name(left.sourceColumns[lhs.Idx].Name)}
