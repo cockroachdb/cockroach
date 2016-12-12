@@ -55,14 +55,14 @@ func TestStopper(t *testing.T) {
 	select {
 	case <-waiting:
 		t.Fatal("expected stopper to have blocked")
-	case <-time.After(1 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		// Expected.
 	}
 	close(running)
 	select {
 	case <-waiting:
 		// Success.
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("stopper should have finished waiting")
 	}
 	close(cleanup)
@@ -93,20 +93,20 @@ func TestStopperIsStopped(t *testing.T) {
 
 	select {
 	case <-s.ShouldStop():
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("stopper should have finished waiting")
 	}
 	select {
 	case <-s.IsStopped():
 		t.Fatal("expected blocked closer to prevent stop")
-	case <-time.After(1 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		// Expected.
 	}
 	bc.Unblock()
 	select {
 	case <-s.IsStopped():
 		// Expected
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("stopper should have finished stopping")
 	}
 }
@@ -141,7 +141,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 		select {
 		case <-s.ShouldStop():
 			t.Fatal("expected stopper to be quiesceing")
-		case <-time.After(1 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			// Expected.
 		}
 	}); err != nil {
@@ -150,7 +150,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	select {
 	case <-s.ShouldStop():
 		// Success.
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("stopper should be ready to stop")
 	}
 }
@@ -169,7 +169,7 @@ func TestStopperRunWorker(t *testing.T) {
 	select {
 	case <-closer:
 		// Success.
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("stopper should be ready to stop")
 	}
 }
