@@ -59,6 +59,19 @@ func (p *planner) computeRender(
 	}, []parser.TypedExpr{normalized}, false, nil
 }
 
+// equivalentRenders returns true if and only if the two render expressions
+// are equivalent.
+func (s *selectNode) equivalentRenders(i, j int) bool {
+	firstExprStr := parser.AsStringWithFlags(s.render[i], parser.FmtSymbolicVars)
+	return s.isRenderEquivalent(firstExprStr, j)
+}
+
+// isRenderEquivalent is a helper function for equivalentRenders() and
+// addOrMergeRenders(). Do not use directly.
+func (s *selectNode) isRenderEquivalent(exprStr string, j int) bool {
+	return parser.AsStringWithFlags(s.render[j], parser.FmtSymbolicVars) == exprStr
+}
+
 // addOrMergeRenders adds the given result columns to the select
 // render list and returns their column indices. If an expression is
 // already rendered, and the reuse flag is true, no new render is
@@ -77,8 +90,8 @@ func (s *selectNode) addOrMergeRenders(
 			// already so that comparison occurs after replacing column names
 			// to IndexedVars.
 			exprStr := parser.AsStringWithFlags(exprs[i], parser.FmtSymbolicVars)
-			for j, render := range s.render {
-				if parser.AsStringWithFlags(render, parser.FmtSymbolicVars) == exprStr {
+			for j := range s.render {
+				if s.isRenderEquivalent(exprStr, j) {
 					index = j
 					break
 				}

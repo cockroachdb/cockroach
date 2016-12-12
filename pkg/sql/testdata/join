@@ -72,6 +72,11 @@ NULL
   42
   44
 
+# Check that ORDER BY chokes on ambiguity if no table less columns
+# were introduced by USING. (#12239)
+query error ORDER BY "x" is ambiguous
+SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
+
 query I colnames
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 ----
@@ -144,9 +149,9 @@ NULL
 # Check that the source columns can be selected separately from the
 # USING column (#12033).
 query III colnames
-SELECT x, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
+SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
 ----
-   x      x      x
+   s      x      x
 NULL   NULL   NULL
   16   NULL     16
   42     42     42
@@ -385,9 +390,9 @@ x  y  y  y
 44 51 51 51
 
 query IIIIII colnames
-SELECT a.x, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x
+SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
 ----
- x   x   x   y   y   y
+ s   x   x   y   y   y
  42  42  42  53  53  53
  44  44  44  51  51  51
  45  45  45  45  45  45
