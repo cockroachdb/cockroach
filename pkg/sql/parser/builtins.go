@@ -204,6 +204,14 @@ func init() {
 	}
 }
 
+// TODO(dt/sean): Populate `Info` in all builtins.
+// Where there is a `Builtin` literal, we just fill the `Info` field.
+// Where we use a helper, eg `stringBuiltin1`, we'll need to plumb that though.
+
+// TODO(dt/sean): Name all function arguments, switching `ArgTypes{a, b, ...}`
+// to `NamedArgTypes{{"a", a}, {"b", b}, ...}`, again plumbing through where we
+// indirect though a helper.
+
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
 	// Keep the list of functions sorted.
@@ -212,30 +220,30 @@ var Builtins = map[string][]Builtin{
 	"length": {
 		stringBuiltin1(func(s string) (Datum, error) {
 			return NewDInt(DInt(utf8.RuneCountInString(s))), nil
-		}, TypeInt),
+		}, TypeInt, ""),
 		bytesBuiltin1(func(s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
-		}, TypeInt),
+		}, TypeInt, ""),
 	},
 
 	"octet_length": {
 		stringBuiltin1(func(s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
-		}, TypeInt),
+		}, TypeInt, ""),
 		bytesBuiltin1(func(s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
-		}, TypeInt),
+		}, TypeInt, ""),
 	},
 
 	// TODO(pmattis): What string functions should also support TypeBytes?
 
 	"lower": {stringBuiltin1(func(s string) (Datum, error) {
 		return NewDString(strings.ToLower(s)), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"upper": {stringBuiltin1(func(s string) (Datum, error) {
 		return NewDString(strings.ToUpper(s)), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"substr":    substringImpls,
 	"substring": substringImpls,
@@ -402,19 +410,19 @@ var Builtins = map[string][]Builtin{
 			return NewDInt(DInt(ch)), nil
 		}
 		return nil, errEmptyInputString
-	}, TypeInt)},
+	}, TypeInt, "")},
 
 	"md5": {stringBuiltin1(func(s string) (Datum, error) {
 		return NewDString(fmt.Sprintf("%x", md5.Sum([]byte(s)))), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"sha1": {stringBuiltin1(func(s string) (Datum, error) {
 		return NewDString(fmt.Sprintf("%x", sha1.Sum([]byte(s)))), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"sha256": {stringBuiltin1(func(s string) (Datum, error) {
 		return NewDString(fmt.Sprintf("%x", sha256.Sum256([]byte(s)))), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"to_hex": {
 		Builtin{
@@ -434,7 +442,7 @@ var Builtins = map[string][]Builtin{
 		}
 
 		return NewDInt(DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
-	}, TypeInt)},
+	}, TypeInt, "")},
 
 	"overlay": {
 		Builtin{
@@ -465,30 +473,30 @@ var Builtins = map[string][]Builtin{
 	"btrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return NewDString(strings.Trim(s, chars)), nil
-		}, TypeString),
+		}, TypeString, ""),
 		stringBuiltin1(func(s string) (Datum, error) {
 			return NewDString(strings.TrimSpace(s)), nil
-		}, TypeString),
+		}, TypeString, ""),
 	},
 
 	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return NewDString(strings.TrimLeft(s, chars)), nil
-		}, TypeString),
+		}, TypeString, ""),
 		stringBuiltin1(func(s string) (Datum, error) {
 			return NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
-		}, TypeString),
+		}, TypeString, ""),
 	},
 
 	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return NewDString(strings.TrimRight(s, chars)), nil
-		}, TypeString),
+		}, TypeString, ""),
 		stringBuiltin1(func(s string) (Datum, error) {
 			return NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
-		}, TypeString),
+		}, TypeString, ""),
 	},
 
 	"reverse": {stringBuiltin1(func(s string) (Datum, error) {
@@ -497,7 +505,7 @@ var Builtins = map[string][]Builtin{
 			runes[i], runes[j] = runes[j], runes[i]
 		}
 		return NewDString(string(runes)), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"replace": {stringBuiltin3(
 		"input", "from", "to",
@@ -574,7 +582,7 @@ var Builtins = map[string][]Builtin{
 
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
 		return NewDString(strings.Title(strings.ToLower(s))), nil
-	}, TypeString)},
+	}, TypeString, "")},
 
 	"left": {
 		Builtin{
@@ -953,12 +961,12 @@ var Builtins = map[string][]Builtin{
 	"abs": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Abs(x))), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			dd := &DDecimal{}
 			dd.Abs(x)
 			return dd, nil
-		}),
+		}, ""),
 		Builtin{
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeInt,
@@ -978,36 +986,36 @@ var Builtins = map[string][]Builtin{
 	"acos": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Acos(x))), nil
-		}),
+		}, ""),
 	},
 
 	"asin": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Asin(x))), nil
-		}),
+		}, ""),
 	},
 
 	"atan": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Atan(x))), nil
-		}),
+		}, ""),
 	},
 
 	"atan2": {
 		floatBuiltin2(func(x, y float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Atan2(x, y))), nil
-		}),
+		}, ""),
 	},
 
 	"cbrt": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Cbrt(x))), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			dd := &DDecimal{}
 			decimal.Cbrt(&dd.Dec, x, decimal.Precision)
 			return dd, nil
-		}),
+		}, ""),
 	},
 
 	"ceil":    ceilImpl,
@@ -1016,25 +1024,25 @@ var Builtins = map[string][]Builtin{
 	"cos": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Cos(x))), nil
-		}),
+		}, ""),
 	},
 
 	"cot": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(1 / math.Tan(x))), nil
-		}),
+		}, ""),
 	},
 
 	"degrees": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(180.0 * x / math.Pi)), nil
-		}),
+		}, ""),
 	},
 
 	"div": {
 		floatBuiltin2(func(x, y float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Trunc(x / y))), nil
-		}),
+		}, ""),
 		decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
 			if y.Sign() == 0 {
 				return nil, errDivByZero
@@ -1042,7 +1050,7 @@ var Builtins = map[string][]Builtin{
 			dd := &DDecimal{}
 			dd.QuoRound(x, y, 0, inf.RoundDown)
 			return dd, nil
-		}),
+		}, ""),
 		{
 			Types:      ArgTypes{TypeInt, TypeInt},
 			ReturnType: TypeInt,
@@ -1060,41 +1068,41 @@ var Builtins = map[string][]Builtin{
 	"exp": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Exp(x))), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			return expDecimal(x)
-		}),
+		}, ""),
 	},
 
 	"floor": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Floor(x))), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			dd := &DDecimal{}
 			dd.Round(x, 0, inf.RoundFloor)
 			return dd, nil
-		}),
+		}, ""),
 	},
 
 	"ln": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Log(x))), nil
-		}),
+		}, ""),
 		decimalLogFn(decimal.Log),
 	},
 
 	"log": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Log10(x))), nil
-		}),
+		}, ""),
 		decimalLogFn(decimal.Log10),
 	},
 
 	"mod": {
 		floatBuiltin2(func(x, y float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Mod(x, y))), nil
-		}),
+		}, ""),
 		decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
 			if y.Sign() == 0 {
 				return nil, errZeroModulus
@@ -1102,7 +1110,7 @@ var Builtins = map[string][]Builtin{
 			dd := &DDecimal{}
 			decimal.Mod(&dd.Dec, x, y)
 			return dd, nil
-		}),
+		}, ""),
 		Builtin{
 			Types:      ArgTypes{TypeInt, TypeInt},
 			ReturnType: TypeInt,
@@ -1133,16 +1141,16 @@ var Builtins = map[string][]Builtin{
 	"radians": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(x * math.Pi / 180.0)), nil
-		}),
+		}, ""),
 	},
 
 	"round": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return round(x, 0)
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			return roundDecimal(x, 0)
-		}),
+		}, ""),
 		Builtin{
 			Types:      ArgTypes{TypeFloat, TypeInt},
 			ReturnType: TypeFloat,
@@ -1163,7 +1171,7 @@ var Builtins = map[string][]Builtin{
 	"sin": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Sin(x))), nil
-		}),
+		}, ""),
 	},
 
 	"sign": {
@@ -1175,12 +1183,12 @@ var Builtins = map[string][]Builtin{
 				return NewDFloat(0), nil
 			}
 			return NewDFloat(1), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			d := &DDecimal{}
 			d.Dec.SetUnscaled(int64(x.Sign()))
 			return d, nil
-		}),
+		}, ""),
 		Builtin{
 			Types:      ArgTypes{TypeInt},
 			ReturnType: TypeInt,
@@ -1203,7 +1211,7 @@ var Builtins = map[string][]Builtin{
 				return nil, errSqrtOfNegNumber
 			}
 			return NewDFloat(DFloat(math.Sqrt(x))), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			if x.Sign() < 0 {
 				return nil, errSqrtOfNegNumber
@@ -1211,24 +1219,24 @@ var Builtins = map[string][]Builtin{
 			dd := &DDecimal{}
 			decimal.Sqrt(&dd.Dec, x, decimal.Precision)
 			return dd, nil
-		}),
+		}, ""),
 	},
 
 	"tan": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Tan(x))), nil
-		}),
+		}, ""),
 	},
 
 	"trunc": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Trunc(x))), nil
-		}),
+		}, ""),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 			dd := &DDecimal{}
 			dd.Round(x, 0, inf.RoundDown)
 			return dd, nil
-		}),
+		}, ""),
 	},
 
 	// Array functions.
@@ -1499,12 +1507,12 @@ var uuidV4Impl = Builtin{
 var ceilImpl = []Builtin{
 	floatBuiltin1(func(x float64) (Datum, error) {
 		return NewDFloat(DFloat(math.Ceil(x))), nil
-	}),
+	}, ""),
 	decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
 		dd := &DDecimal{}
 		dd.Round(x, 0, inf.RoundCeil)
 		return dd, nil
-	}),
+	}, ""),
 }
 
 var txnTSImpl = []Builtin{
@@ -1532,12 +1540,12 @@ var txnTSImpl = []Builtin{
 var powImpls = []Builtin{
 	floatBuiltin2(func(x, y float64) (Datum, error) {
 		return NewDFloat(DFloat(math.Pow(x, y))), nil
-	}),
+	}, ""),
 	decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
 		dd := &DDecimal{}
 		_, err := decimal.Pow(&dd.Dec, x, y, decimal.Precision)
 		return dd, err
-	}),
+	}, ""),
 	{
 		Types:      ArgTypes{TypeInt, TypeInt},
 		ReturnType: TypeInt,
@@ -1560,20 +1568,21 @@ func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error)) B
 		dd := &DDecimal{}
 		_, err := logFn(&dd.Dec, x, decimal.Precision)
 		return dd, err
-	})
+	}, "")
 }
 
-func floatBuiltin1(f func(float64) (Datum, error)) Builtin {
+func floatBuiltin1(f func(float64) (Datum, error), info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeFloat},
 		ReturnType: TypeFloat,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(float64(*args[0].(*DFloat)))
 		},
+		Info: info,
 	}
 }
 
-func floatBuiltin2(f func(float64, float64) (Datum, error)) Builtin {
+func floatBuiltin2(f func(float64, float64) (Datum, error), info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeFloat, TypeFloat},
 		ReturnType: TypeFloat,
@@ -1581,10 +1590,11 @@ func floatBuiltin2(f func(float64, float64) (Datum, error)) Builtin {
 			return f(float64(*args[0].(*DFloat)),
 				float64(*args[1].(*DFloat)))
 		},
+		Info: info,
 	}
 }
 
-func decimalBuiltin1(f func(*inf.Dec) (Datum, error)) Builtin {
+func decimalBuiltin1(f func(*inf.Dec) (Datum, error), info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeDecimal},
 		ReturnType: TypeDecimal,
@@ -1592,10 +1602,11 @@ func decimalBuiltin1(f func(*inf.Dec) (Datum, error)) Builtin {
 			dec := &args[0].(*DDecimal).Dec
 			return f(dec)
 		},
+		Info: info,
 	}
 }
 
-func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error)) Builtin {
+func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error), info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeDecimal, TypeDecimal},
 		ReturnType: TypeDecimal,
@@ -1604,20 +1615,22 @@ func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error)) Builtin {
 			dec2 := &args[1].(*DDecimal).Dec
 			return f(dec1, dec2)
 		},
+		Info: info,
 	}
 }
 
-func stringBuiltin1(f func(string) (Datum, error), returnType Type) Builtin {
+func stringBuiltin1(f func(string) (Datum, error), returnType Type, info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString},
 		ReturnType: returnType,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DString)))
 		},
+		Info: info,
 	}
 }
 
-func stringBuiltin2(f func(string, string) (Datum, error), returnType Type) Builtin {
+func stringBuiltin2(f func(string, string) (Datum, error), returnType Type, info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString, TypeString},
 		ReturnType: returnType,
@@ -1625,6 +1638,7 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Type) Buil
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DString)), string(*args[1].(*DString)))
 		},
+		Info: info,
 	}
 }
 
@@ -1641,13 +1655,14 @@ func stringBuiltin3(
 	}
 }
 
-func bytesBuiltin1(f func(string) (Datum, error), returnType Type) Builtin {
+func bytesBuiltin1(f func(string) (Datum, error), returnType Type, info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeBytes},
 		ReturnType: returnType,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DBytes)))
 		},
+		Info: info,
 	}
 }
 
