@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-# TODO(dt): do we want to submomdule update here?
+[[ ! $GIT_REFLOG_ACTION =~ rebase ]] && exit 0
+
+exec git submodule update --init
