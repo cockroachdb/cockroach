@@ -862,6 +862,13 @@ func (s *adminServer) Cluster(
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
+	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
+	if err != nil {
+		return nil, grpc.Errorf(codes.Internal, err.Error())
+	}
+	if !isLive {
+		return nil, grpc.Errorf(codes.Unavailable, "node is not live")
+	}
 	return &serverpb.HealthResponse{}, nil
 }
 
