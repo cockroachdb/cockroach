@@ -19,9 +19,11 @@
 package sqlbase
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"time"
+	"unicode"
 
 	"golang.org/x/net/context"
 
@@ -65,11 +67,11 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 // RandDatum generates a random Datum of the given type.
 // If null is true, the datum can be DNull.
-func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
+func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 	if null && rng.Intn(10) == 0 {
 		return parser.DNull
 	}
-	switch typ {
+	switch typ.Kind {
 	case ColumnType_BOOL:
 		return parser.MakeDBool(rng.Intn(2) == 1)
 	case ColumnType_INT:
@@ -103,25 +105,49 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 		return parser.NewDBytes(parser.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
 		return &parser.DTimestampTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+	case ColumnType_COLLATEDSTRING:
+		if typ.Locale == nil {
+			panic("locale is required for COLLATEDSTRING")
+		}
+		// Generate a random Unicode string.
+		var buf bytes.Buffer
+		for i := 0; i < rng.Intn(10); i++ {
+			var r rune
+			for {
+				r = rune(rng.Intn(unicode.MaxRune + 1))
+				if !unicode.Is(unicode.C, r) {
+					break
+				}
+			}
+			buf.WriteRune(r)
+		}
+		return parser.NewDCollatedString(buf.String(), *typ.Locale, &parser.CollationEnvironment{})
 	case ColumnType_INT_ARRAY:
 		// TODO(cuongdo): we don't support for persistence of arrays yet
 		return parser.DNull
 	default:
-		panic(fmt.Sprintf("invalid type %s", typ))
+		panic(fmt.Sprintf("invalid type %s", typ.String()))
 	}
 }
 
-var columnTypes []ColumnType_Kind
+var (
+	columnKinds      []ColumnType_Kind
+	collationLocales = [...]string{"da", "de", "en"}
+)
 
 func init() {
 	for k := range ColumnType_Kind_name {
-		columnTypes = append(columnTypes, ColumnType_Kind(k))
+		columnKinds = append(columnKinds, ColumnType_Kind(k))
 	}
 }
 
 // RandColumnType returns a random ColumnType_Kind value.
-func RandColumnType(rng *rand.Rand) ColumnType_Kind {
-	return columnTypes[rng.Intn(len(columnTypes))]
+func RandColumnType(rng *rand.Rand) ColumnType {
+	typ := ColumnType{Kind: columnKinds[rng.Intn(len(columnKinds))]}
+	if typ.Kind == ColumnType_COLLATEDSTRING {
+		typ.Locale = &collationLocales[rng.Intn(len(collationLocales))]
+	}
+	return typ
 }
 
 // RandDatumEncoding returns a random DatumEncoding value.

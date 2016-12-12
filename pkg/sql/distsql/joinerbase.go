@@ -44,8 +44,8 @@ func (jb *joinerBase) init(
 	output RowReceiver,
 	outputCols []uint32,
 	jType JoinType,
-	leftTypes []sqlbase.ColumnType_Kind,
-	rightTypes []sqlbase.ColumnType_Kind,
+	leftTypes []*sqlbase.ColumnType,
+	rightTypes []*sqlbase.ColumnType,
 	expr Expression,
 ) error {
 	jb.inputs = inputs

@@ -29,9 +29,11 @@ import (
 
 func TestSorter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 
 	asc := encoding.Ascending

@@ -357,13 +357,13 @@ func (rf *RowFetcher) processValueSingle(
 		if debugStrings {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 		}
-		kind := rf.cols[idx].Type.Kind
+		typ := rf.cols[idx].Type
 		// TODO(arjun): The value is a directly marshaled single value, so we
 		// unmarshal it eagerly here. This can potentially be optimized out,
 		// although that would require changing UnmarshalColumnValue to operate
 		// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 		// single values.
-		value, err := UnmarshalColumnValue(&rf.alloc, kind, kv.Value)
+		value, err := UnmarshalColumnValue(&rf.alloc, typ, kv.Value)
 		if err != nil {
 			return "", "", err
 		}
@@ -373,7 +373,7 @@ func (rf *RowFetcher) processValueSingle(
 		if !rf.row[idx].IsUnset() {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
-		rf.row[idx] = DatumToEncDatum(rf.cols[idx].Type.Kind, value)
+		rf.row[idx] = DatumToEncDatum(typ, value)
 		if log.V(3) {
 			log.Infof(context.TODO(), "Scan %s -> %v", kv.Key, value)
 		}
@@ -431,12 +431,9 @@ func (rf *RowFetcher) processValueTuple(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 		}
 
-		kind := rf.cols[idx].Type.Kind
-		if err != nil {
-			return "", "", err
-		}
 		var encValue EncDatum
-		encValue, tupleBytes, err = EncDatumFromBuffer(kind, DatumEncoding_VALUE, tupleBytes)
+		encValue, tupleBytes, err =
+			EncDatumFromBuffer(rf.cols[idx].Type, DatumEncoding_VALUE, tupleBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -543,7 +540,7 @@ func (rf *RowFetcher) finalizeRow() {
 				panic("Non-nullable column with no value!")
 			}
 			rf.row[i] = EncDatum{
-				Type:  col.Type.Kind,
+				Type:  col.Type,
 				Datum: parser.DNull,
 			}
 		}

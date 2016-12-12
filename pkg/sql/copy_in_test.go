@@ -177,7 +177,7 @@ func TestCopyRandom(t *testing.T) {
 		row[0] = strconv.Itoa(i)
 		row[1] = time.Duration(rng.Int63()).String()
 		for j, t := range types {
-			d := sqlbase.RandDatum(rng, t, false)
+			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: t}, false)
 			ds := d.String()
 			switch t {
 			case sqlbase.ColumnType_DECIMAL:

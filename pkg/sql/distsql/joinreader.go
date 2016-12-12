@@ -81,9 +81,9 @@ func (jr *joinReader) generateKey(
 	// TODO(radu): not strictly needed, perhaps enable only for tests.
 	for i, cid := range index.ColumnIDs {
 		colType := jr.desc.Columns[jr.colIdxMap[cid]].Type.Kind
-		if row[i].Type != colType {
+		if row[i].Type.Kind != colType {
 			return nil, errors.Errorf("joinReader input column %d has invalid type %s, expected %s",
-				i, row[i].Type, colType)
+				i, row[i].Type.Kind, colType)
 		}
 	}
 
