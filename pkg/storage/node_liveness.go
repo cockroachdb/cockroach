@@ -48,6 +48,7 @@ var (
 
 // Node liveness metrics counter names.
 var (
+	metaLiveNodes          = metric.Metadata{Name: "liveness.livenodes"}
 	metaHeartbeatSuccesses = metric.Metadata{Name: "liveness.heartbeatsuccesses"}
 	metaHeartbeatFailures  = metric.Metadata{Name: "liveness.heartbeatfailures"}
 	metaEpochIncrements    = metric.Metadata{Name: "liveness.epochincrements"}
@@ -60,6 +61,7 @@ func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 
 // LivenessMetrics holds metrics for use with node liveness activity.
 type LivenessMetrics struct {
+	LiveNodes          *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  *metric.Counter
 	EpochIncrements    *metric.Counter
@@ -106,11 +108,14 @@ func NewNodeLiveness(
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: heartbeatInterval,
-		metrics: LivenessMetrics{
-			HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
-			HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
-			EpochIncrements:    metric.NewCounter(metaEpochIncrements),
-		},
+	}
+	nl.metrics = LivenessMetrics{
+		LiveNodes: metric.NewFunctionalGauge(metaLiveNodes, func() int64 {
+			return nl.numLiveNodes()
+		}),
+		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
+		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
+		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
 	}
 	nl.pauseHeartbeat.Store(false)
 	nl.mu.nodes = map[roachpb.NodeID]Liveness{}
@@ -388,4 +393,27 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch {
 		nl.mu.nodes[liveness.NodeID] = liveness
 	}
+}
+
+// numLiveNodes is used to populate a metric that tracks the number of live
+// nodes in the cluster. Returns 0 unless this node happens to be the live node
+// in the cluster with the smallest node ID.
+func (nl *NodeLiveness) numLiveNodes() int64 {
+	selfID := nl.gossip.NodeID.Get()
+	livenessMap := nl.GetLivenessMap()
+
+	if !livenessMap[selfID] {
+		return 0
+	}
+
+	var liveNodes int64
+	for nodeID, alive := range livenessMap {
+		if alive {
+			if nodeID < selfID {
+				return 0
+			}
+			liveNodes++
+		}
+	}
+	return liveNodes
 }
