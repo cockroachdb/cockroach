@@ -177,8 +177,7 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.TODO())
-	status := repl.GetLeaseStatus(s.Clock().Now())
-	return q.process(ctx, &status, repl, cfg)
+	return q.process(ctx, repl, cfg)
 }
 
 // ManualGC processes the specified replica using the store's GC queue.
@@ -217,13 +216,6 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 // LeaseInfoRequest instead of using this internal method.
 func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
 	return r.getLease()
-}
-
-// LeaseStatus exposes Replica.leaseStatus for tests.
-func (r *Replica) LeaseStatus(lease *roachpb.Lease, timestamp hlc.Timestamp) LeaseStatus {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.leaseStatus(lease, timestamp, r.mu.minLeaseProposedTS)
 }
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.

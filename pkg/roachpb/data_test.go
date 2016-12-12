@@ -598,6 +598,9 @@ func TestLeaseEquivalence(t *testing.T) {
 	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2), ProposedTS: &ts1}
 	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: &ts2}
 
+	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts1}
+	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts2}
+
 	testCases := []struct {
 		l, ol      Lease
 		expSuccess bool
@@ -614,6 +617,7 @@ func TestLeaseEquivalence(t *testing.T) {
 		{proposed1, proposed1, true},  // exact leases with identical timestamps
 		{proposed1, proposed2, false}, // same proposed timestamps, but diff epochs
 		{proposed1, proposed3, true},  // different proposed timestamps, same lease
+		{stasis1, stasis2, true},      // same lease, different stasis timestamps
 	}
 
 	for i, tc := range testCases {
