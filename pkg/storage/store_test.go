@@ -2660,7 +2660,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	s := tc.store
 
 	ctx := context.Background()
-	cleanup1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{}, nil)
+	cleanup1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2679,7 +2679,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanup2, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{}, nil)
+	cleanup2, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
 	}
