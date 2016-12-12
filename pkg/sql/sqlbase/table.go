@@ -119,6 +119,11 @@ func MakeColumnDefDescs(
 	case *parser.BytesColType:
 		col.Type.Kind = ColumnType_BYTES
 		colDatumType = parser.TypeBytes
+	case *parser.CollatedStringColType:
+		col.Type.Kind = ColumnType_COLLATEDSTRING
+		col.Type.Width = int32(t.N)
+		col.Type.Locale = &t.Locale
+		colDatumType = &parser.TCollatedString{Locale: t.Locale}
 	case *parser.ArrayColType:
 		if _, ok := t.ParamType.(*parser.IntColType); ok {
 			col.Type.Kind = ColumnType_INT_ARRAY
@@ -480,6 +485,12 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			}
 		}
 		return b, nil
+	case *parser.DCollatedString:
+		// TODO(eisen): assume for now that strings collating equal are identical...
+		if dir == encoding.Ascending {
+			return encoding.EncodeStringAscending(b, t.Contents), nil
+		}
+		return encoding.EncodeStringDescending(b, t.Contents), nil
 	case *parser.DArray:
 		for _, datum := range t.Array {
 			var err error
@@ -520,6 +531,8 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *parser.DInterval:
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
+	case *parser.DCollatedString:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
 }
@@ -533,7 +546,7 @@ func MakeEncodedKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]EncDatum
 		if err != nil {
 			return nil, err
 		}
-		keyVals[i].Type = col.Type.Kind
+		keyVals[i].Type = col.Type
 	}
 	return keyVals, nil
 }
@@ -819,6 +832,7 @@ type DatumAlloc struct {
 	dtimestampAlloc   []parser.DTimestamp
 	dtimestampTzAlloc []parser.DTimestampTZ
 	dintervalAlloc    []parser.DInterval
+	env               parser.CollationEnvironment
 }
 
 // NewDInt allocates a DInt.
@@ -1028,6 +1042,17 @@ func DecodeTableKey(
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
 	default:
+		if typ, ok := valType.(parser.TCollatedString); ok {
+			// TODO(eisen): assume for now that strings collating equal are
+			// identical...
+			var r string
+			if dir == encoding.Ascending {
+				rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+			} else {
+				rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+			}
+			return parser.NewDCollatedString(r, typ.Locale, &a.env), rkey, err
+		}
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
 	}
 }
@@ -1087,6 +1112,11 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		b, d, err = encoding.DecodeDurationValue(b)
 		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
 	default:
+		if typ, ok := valType.(parser.TCollatedString); ok {
+			var data []byte
+			b, data, err = encoding.DecodeBytesValue(b)
+			return parser.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
+		}
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index value: %s", valType)
 	}
 }
@@ -1199,6 +1229,11 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 		set = parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		set = parser.TypeInterval
+	case ColumnType_COLLATEDSTRING:
+		if col.Type.Locale == nil {
+			panic("locale is required for COLLATEDSTRING")
+		}
+		set = parser.TCollatedString{Locale: *col.Type.Locale}
 	default:
 		return errors.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
@@ -1283,6 +1318,11 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			err := r.SetDuration(v.Duration)
 			return r, err
 		}
+	case ColumnType_COLLATEDSTRING:
+		if v, ok := val.(*parser.DCollatedString); ok {
+			r.SetString(v.Contents)
+			return r, nil
+		}
 	default:
 		return r, errors.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
@@ -1294,13 +1334,13 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
 func UnmarshalColumnValue(
-	a *DatumAlloc, kind ColumnType_Kind, value *roachpb.Value,
+	a *DatumAlloc, typ ColumnType, value *roachpb.Value,
 ) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}
 
-	switch kind {
+	switch typ.Kind {
 	case ColumnType_BOOL:
 		v, err := value.GetBool()
 		if err != nil {
@@ -1363,8 +1403,14 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), nil
+	case ColumnType_COLLATEDSTRING:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		return parser.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
 	default:
-		return nil, errors.Errorf("unsupported column type: %s", kind)
+		return nil, errors.Errorf("unsupported column type: %s", typ.Kind)
 	}
 }
 
@@ -1604,7 +1650,7 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 		colID := index.ColumnIDs[i]
 		for _, c := range desc.Columns {
 			if c.ID == colID {
-				if t := DatumTypeToColumnKind(datums[i].ResolvedType()); t != c.Type.Kind {
+				if t := DatumTypeToColumnType(datums[i].ResolvedType()).Kind; t != c.Type.Kind {
 					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.Kind, t)
 				}
 				break

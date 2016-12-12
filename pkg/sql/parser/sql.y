@@ -1712,7 +1712,10 @@ col_qualification:
   {
     $$.val = NamedColumnQualification{Qualification: $1.colQualElem()}
   }
-| COLLATE any_name { return unimplemented(sqllex) }
+| COLLATE any_name
+  {
+    $$.val = NamedColumnQualification{Qualification: ColumnCollation($2.unresolvedName().String())}
+  }
 | FAMILY name
   {
     $$.val = NamedColumnQualification{Qualification: &ColumnFamilyConstraint{Family: Name($2)}}

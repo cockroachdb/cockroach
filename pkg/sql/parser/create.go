@@ -26,6 +26,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/text/language"
+
 	"github.com/pkg/errors"
 )
 
@@ -216,6 +218,19 @@ func newColumnTableDef(
 	d.Nullable.Nullability = SilentNull
 	for _, c := range qualifications {
 		switch t := c.Qualification.(type) {
+		case ColumnCollation:
+			locale := string(t)
+			_, err := language.Parse(locale)
+			if err != nil {
+				return nil, errors.Wrapf(err, "invalid locale %s", locale)
+			}
+			if s, ok := d.Type.(*StringColType); ok {
+				d.Type = &CollatedStringColType{s.Name, s.N, locale}
+			} else if _, ok := d.Type.(*CollatedStringColType); ok {
+				return nil, errors.Errorf("multiple COLLATE declarations for column %q", name)
+			} else {
+				return nil, errors.Errorf("COLLATE declaration for non-string-typed column %q", name)
+			}
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
 				return nil, errors.Errorf("multiple default values specified for column %q", name)
@@ -356,6 +371,7 @@ type ColumnQualification interface {
 	columnQualification()
 }
 
+func (ColumnCollation) columnQualification()         {}
 func (*ColumnDefault) columnQualification()          {}
 func (NotNullConstraint) columnQualification()       {}
 func (NullConstraint) columnQualification()          {}
@@ -364,6 +380,9 @@ func (UniqueConstraint) columnQualification()        {}
 func (*ColumnCheckConstraint) columnQualification()  {}
 func (*ColumnFKConstraint) columnQualification()     {}
 func (*ColumnFamilyConstraint) columnQualification() {}
+
+// ColumnCollation represents a COLLATE clause for a column.
+type ColumnCollation string
 
 // ColumnDefault represents a DEFAULT clause for a column.
 type ColumnDefault struct {
