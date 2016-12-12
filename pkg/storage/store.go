@@ -2663,7 +2663,7 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 
 	ctx := s.AnnotateCtx(stream.Context())
 	cleanup, err := s.reserveSnapshot(ctx, header, stream)
-	if err != nil {
+	if cleanup == nil || err != nil {
 		return err
 	}
 	defer cleanup()
