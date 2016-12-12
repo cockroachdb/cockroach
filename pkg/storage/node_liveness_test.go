@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"math"
 	"reflect"
 	"sort"
 	"sync/atomic"
@@ -35,15 +36,28 @@ import (
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	testutils.SucceedsSoon(t, func() error {
-		for _, nl := range mtc.nodeLivenesses {
+		minNodeID := roachpb.NodeID(math.MaxInt32)
+		minNodeIdx := 0
+		for i, nl := range mtc.nodeLivenesses {
 			for _, g := range mtc.gossips {
-				live, err := nl.IsLive(g.NodeID.Get())
+				nodeID := g.NodeID.Get()
+				if nodeID < minNodeID {
+					minNodeID = nodeID
+					minNodeIdx = i
+				}
+				live, err := nl.IsLive(nodeID)
 				if err != nil {
 					return err
 				} else if !live {
-					return errors.Errorf("node %d not live", g.NodeID.Get())
+					return errors.Errorf("node %d not live", nodeID)
 				}
 			}
+		}
+		a := mtc.nodeLivenesses[minNodeIdx].Metrics().LiveNodes.Value()
+		e := int64(len(mtc.nodeLivenesses))
+		if a != e {
+			return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
+				minNodeID, e, a)
 		}
 		return nil
 	})
@@ -75,6 +89,13 @@ func TestNodeLiveness(t *testing.T) {
 		} else if live {
 			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
 		}
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := nl.Metrics().LiveNodes.Value(), int64(0); a != e {
+				return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
+					nodeID, e, a)
+			}
+			return nil
+		})
 	}
 	// Trigger a manual heartbeat and verify liveness is reestablished.
 	for _, nl := range mtc.nodeLivenesses {
