@@ -75,7 +75,7 @@ func makeCrossPredicate(left, right *dataSourceInfo) (*joinPredicate, *dataSourc
 }
 
 // optimizeOnPredicate tries to turn the filter in an onPredicate into
-// equality columns in the equalityPredicate, which enables faster
+// equality columns in the joinPredicate, which enables faster
 // joins.  The concatInfos argument, if provided, must be a
 // precomputed concatenation of the left and right dataSourceInfos.
 func optimizeOnPredicate(
@@ -124,7 +124,7 @@ func optimizeOnPredicate(
 
 	// To do this we must be a bit careful: the expression contains
 	// IndexedVars, and the column indices at this point will refer to
-	// the full column set of the equalityPredicate, including the
+	// the full column set of the joinPredicate, including the
 	// merged columns.
 	leftColIdx := lhs.Idx - pred.numMergedEqualityColumns
 	rightColIdx := rhs.Idx - len(left.sourceColumns) - pred.numMergedEqualityColumns
@@ -400,26 +400,12 @@ func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 	p.info.FormatVar(buf, f, idx)
 }
 
-// eval for equalityPredicate compares the columns that participate in
+// eval for joinPredicate compares the columns that participate in
 // the equality, returning true if and only if all predicate columns
 // compare equal.
 func (p *joinPredicate) eval(
 	ctx *parser.EvalContext, result, leftRow, rightRow parser.DTuple,
 ) (bool, error) {
-	for i := range p.leftEqualityIndices {
-		leftVal := leftRow[p.leftEqualityIndices[i]]
-		rightVal := rightRow[p.rightEqualityIndices[i]]
-		if leftVal == parser.DNull || rightVal == parser.DNull {
-			return false, nil
-		}
-		res, err := p.cmpFunctions[i](ctx, leftVal, rightVal)
-		if err != nil {
-			return false, err
-		}
-		if res != *parser.DBoolTrue {
-			return false, nil
-		}
-	}
 	if p.filter != nil {
 		p.curRow = result
 		copy(p.curRow[p.numMergedEqualityColumns:p.numMergedEqualityColumns+len(leftRow)], leftRow)
