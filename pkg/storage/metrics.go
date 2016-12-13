@@ -117,6 +117,7 @@ var (
 	metaRangeSnapshotsGenerated         = metric.Metadata{Name: "range.snapshots.generated"}
 	metaRangeSnapshotsNormalApplied     = metric.Metadata{Name: "range.snapshots.normal-applied"}
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{Name: "range.snapshots.preemptive-applied"}
+	metaRangeRaftLeaderTransfers        = metric.Metadata{Name: "range.raftleadertransfers"}
 
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
@@ -384,6 +385,7 @@ type StoreMetrics struct {
 	RangeSnapshotsGenerated         *metric.Counter
 	RangeSnapshotsNormalApplied     *metric.Counter
 	RangeSnapshotsPreemptiveApplied *metric.Counter
+	RangeRaftLeaderTransfers        *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                *metric.Counter
@@ -556,6 +558,7 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RangeSnapshotsGenerated:         metric.NewCounter(metaRangeSnapshotsGenerated),
 		RangeSnapshotsNormalApplied:     metric.NewCounter(metaRangeSnapshotsNormalApplied),
 		RangeSnapshotsPreemptiveApplied: metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
+		RangeRaftLeaderTransfers:        metric.NewCounter(metaRangeRaftLeaderTransfers),
 
 		// Raft processing metrics.
 		RaftTicks:                metric.NewCounter(metaRaftTicks),
