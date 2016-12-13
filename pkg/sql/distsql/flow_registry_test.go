@@ -38,6 +38,9 @@ func TestFlowRegistry(t *testing.T) {
 	id3 := FlowID{uuid.MakeV4()}
 	f3 := &Flow{}
 
+	id4 := FlowID{uuid.MakeV4()}
+	f4 := &Flow{}
+
 	// A basic duration; needs to be significantly larger than possible delays
 	// in scheduling goroutines.
 	jiffy := 10 * time.Millisecond
@@ -122,4 +125,16 @@ func TestFlowRegistry(t *testing.T) {
 	wg1.Wait()
 	reg.RegisterFlow(id3, f3, nil)
 	wg2.Wait()
+
+	// -- Lookup with huge timeout, register in the meantime. --
+
+	go func() {
+		time.Sleep(jiffy)
+		reg.RegisterFlow(id4, f4, nil)
+	}()
+
+	// This should return in a jiffy.
+	if f := reg.LookupFlow(id4, time.Hour); f != f4 {
+		t.Error("couldn't lookup registered flow (with wait)")
+	}
 }
