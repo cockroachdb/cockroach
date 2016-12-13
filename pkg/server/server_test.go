@@ -64,18 +64,6 @@ func TestSelfBootstrap(t *testing.T) {
 	defer s.Stopper().Stop()
 }
 
-// TestHealth verifies that health endpoint returns an empty JSON response.
-func TestHealth(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-
-	var data serverpb.HealthResponse
-	if err := getAdminJSONProto(s, "health", &data); err != nil {
-		t.Error(err)
-	}
-}
-
 // TestServerStartClock tests that a server's clock is not pushed out of thin
 // air. This used to happen - the simple act of starting was causing a server's
 // clock to be pushed because we were introducing bogus future timestamps into
@@ -129,10 +117,9 @@ func TestPlainHTTPServer(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var data serverpb.HealthResponse
-
-	if err := getAdminJSONProto(s, "health", &data); err != nil {
-		t.Error(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		return getAdminJSONProto(s, "health", &data)
+	})
 
 	ctx := s.RPCContext()
 	ctx.Insecure = false
