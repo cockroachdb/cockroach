@@ -7122,3 +7122,47 @@ func TestReplicaMetrics(t *testing.T) {
 		})
 	}
 }
+
+// TestCancelPendingCommands verifies that cancelPendingCommands sends
+// an error to each command awaiting execution.
+func TestCancelPendingCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	// Install a proposal function which drops all increment commands on the floor.
+	proposalDropped := make(chan struct{})
+	tc.repl.mu.Lock()
+	tc.repl.mu.submitProposalFn = func(p *ProposalData) error {
+		if _, ok := p.Request.GetArg(roachpb.Increment); ok {
+			if proposalDropped != nil {
+				// Notify the main thread the first time we drop a proposal.
+				close(proposalDropped)
+				proposalDropped = nil
+			}
+			return nil
+		}
+		return defaultSubmitProposalLocked(tc.repl, p)
+	}
+	tc.repl.mu.Unlock()
+
+	errChan := make(chan *roachpb.Error, 1)
+	go func() {
+		incArgs := incrementArgs(roachpb.Key("a"), 1)
+		_, pErr := client.SendWrapped(context.Background(), tc.Sender(), &incArgs)
+		errChan <- pErr
+	}()
+
+	<-proposalDropped
+	tc.repl.mu.Lock()
+	tc.repl.cancelPendingCommandsLocked()
+	tc.repl.mu.Unlock()
+
+	pErr := <-errChan
+	if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
+		t.Errorf("expected RangeNotFoundError, got %v", pErr)
+	}
+}

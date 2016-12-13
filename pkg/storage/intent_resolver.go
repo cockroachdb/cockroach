@@ -108,7 +108,10 @@ func (ir *intentResolver) processWriteIntentError(
 			log.Infof(ctx, "on %s: %s", method, pushErr)
 		}
 
-		if _, isExpected := pushErr.GetDetail().(*roachpb.TransactionPushError); !isExpected {
+		switch pushErr.GetDetail().(type) {
+		case *roachpb.TransactionPushError:
+		case *roachpb.AmbiguousResultError:
+		default:
 			// If an unexpected error occurred, make sure it bubbles up to the
 			// client. Examples are timeouts and logic errors.
 			return pushErr
@@ -267,6 +270,9 @@ func (ir *intentResolver) maybePushTransactions(
 // differently and would be better served by different entry points,
 // but combining them simplifies the plumbing necessary in Replica.
 func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithArg) {
+	if r.store.TestingKnobs().DisableAsyncIntentResolution {
+		return
+	}
 	now := r.store.Clock().Now()
 	ctx := context.TODO()
 	stopper := r.store.Stopper()
