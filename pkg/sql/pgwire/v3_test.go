@@ -26,6 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -99,4 +101,28 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	v3Conn := makeTestV3Conn(r)
 	defer v3Conn.finish(context.Background())
 	_ = v3Conn.serve(context.Background(), mon.BoundAccount{})
+}
+
+func TestContextCancellationClosesConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	go func() { cancelFunc() }()
+
+	// Cannot use net.Pipe because deadlines are not supported.
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	// c is closed by v3Conn.finish(...)
+	c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v3Conn := makeTestV3Conn(c)
+	defer v3Conn.finish(ctx)
+	if err := v3Conn.serve(ctx, mon.BoundAccount{}); !testutils.IsError(err, "session context cancelled") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

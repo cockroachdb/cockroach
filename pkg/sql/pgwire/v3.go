@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -321,7 +323,7 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 				return err
 			}
 		}
-		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		typ, n, err := c.readTypedMsg()
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
@@ -386,6 +388,47 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	}
 }
 
+const connReadTimeout = 150 * time.Millisecond
+
+// readTypedMsg is a wrapper around readBuffer.readTypedMsg that checks for
+// exit conditions every connReadTimeout.
+func (c *v3Conn) readTypedMsg() (clientMessageType, int, error) {
+	// Remove the read deadline when returning from this function to avoid
+	// unexpected behavior. See next call for why the error is logged rather
+	// than returned.
+	defer func() {
+		if err := c.conn.SetReadDeadline(time.Time{}); err != nil {
+			log.Warningf(c.session.Ctx(), "unable to remove read deadline: %v", err)
+		}
+	}()
+	for {
+		// The only error that is specific to setting a read deadline on a
+		// net.Conn is when the underlying implementation does not support
+		// deadlines. This is the case when using net.Pipe during tests.
+		// See https://github.com/golang/go/blob/master/src/net/pipe.go#L61
+		// All other expected errors are specific to the health of the
+		// connection and will be caught when performing a read.
+		if err := c.conn.SetReadDeadline(timeutil.Now().Add(connReadTimeout)); err != nil {
+			log.Warningf(c.session.Ctx(), "unable to set read deadline: %v", err)
+		}
+
+		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		if c.session != nil {
+			select {
+			case <-c.session.Ctx().Done():
+				return 0, 0, errors.New("session context cancelled")
+			default:
+			}
+		}
+
+		// Check for a successful read or an error not caused by the read
+		// timing out.
+		if netErr, ok := err.(net.Error); err == nil || !(ok && netErr.Timeout()) {
+			return typ, n, err
+		}
+	}
+}
+
 // sendAuthPasswordRequest requests a cleartext password from the client and
 // returns it.
 func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
@@ -398,7 +441,7 @@ func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
 		return "", err
 	}
 
-	typ, n, err := c.readBuf.readTypedMsg(c.rd)
+	typ, n, err := c.readTypedMsg()
 	c.metrics.BytesInCount.Inc(int64(n))
 	if err != nil {
 		return "", err
@@ -963,7 +1006,7 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 	}
 
 	for {
-		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		typ, n, err := c.readTypedMsg()
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
