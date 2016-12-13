@@ -167,14 +167,15 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", s.AdminURL()+"/_admin/v1/health", nil)
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
 	resp, err := httpClient.Do(req)
 	if err == nil {
+		body, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("Expected SSL error, got success")
+		t.Fatalf("Expected SSL error, got success: %s", body)
 	}
 
 	// New client. With certs this time.
@@ -186,7 +187,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", s.AdminURL()+"/_admin/v1/health", nil)
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -194,8 +195,9 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected OK, got: %d", resp.StatusCode)
+		body, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
 	}
 }
