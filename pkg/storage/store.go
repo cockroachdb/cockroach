@@ -3796,6 +3796,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				underreplicatedRangeCount++
 			}
 		}
+
+		// Try to correct leader-not-leaseholder condition, if encountered.
+		if metrics.leaseValid && !metrics.leaseholder && metrics.leader {
+			rep.mu.Lock()
+			target := rep.mu.state.Lease.Replica.ReplicaID
+			rep.mu.Unlock()
+			rep.maybeTransferRaftLeadership(ctx, target)
+		}
 		return true // more
 	})
 

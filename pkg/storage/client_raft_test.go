@@ -2902,19 +2902,19 @@ func TestTransferRaftLeadership(t *testing.T) {
 		}
 	}
 
-	repl := store0.LookupReplica(keys.MustAddr(key), nil)
-	if repl == nil {
+	repl0 := store0.LookupReplica(keys.MustAddr(key), nil)
+	if repl0 == nil {
 		t.Fatalf("no replica found for key '%s'", key)
 	}
-	mtc.replicateRange(repl.RangeID, 1, 2)
+	mtc.replicateRange(repl0.RangeID, 1, 2)
 
 	getArgs := getArgs([]byte("a"))
-	if _, pErr := client.SendWrappedWith(context.Background(), store0, roachpb.Header{RangeID: repl.RangeID}, getArgs); pErr != nil {
+	if _, pErr := client.SendWrappedWith(context.Background(), store0, roachpb.Header{RangeID: repl0.RangeID}, getArgs); pErr != nil {
 		t.Fatalf("expect get nil, actual get %v ", pErr)
 	}
 
-	status := repl.RaftStatus()
-	if status != nil && status.Lead != 1 {
+	status := repl0.RaftStatus()
+	if status == nil || status.Lead != 1 {
 		t.Fatalf("raft leader should be 1, but got status %+v", status)
 	}
 
@@ -2926,7 +2926,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 		if _, pErr := client.SendWrappedWith(
 			context.Background(),
 			store1,
-			roachpb.Header{RangeID: repl.RangeID},
+			roachpb.Header{RangeID: repl0.RangeID},
 			getArgs,
 		); pErr == nil {
 			break
@@ -2940,8 +2940,37 @@ func TestTransferRaftLeadership(t *testing.T) {
 	}
 	// Wait for raft leadership transferring to be finished.
 	testutils.SucceedsSoon(t, func() error {
-		status = repl.RaftStatus()
+		status := repl0.RaftStatus()
 		if status.Lead != 2 {
+			return errors.Errorf("expected raft leader be 2; got %d", status.Lead)
+		}
+		return nil
+	})
+
+	// Manually transfer raft leadership to node 0.
+	repl1 := store1.LookupReplica(keys.MustAddr(key), nil)
+	if repl1 == nil {
+		t.Fatalf("no replica found for key '%s'", key)
+	}
+	rd0, err := repl0.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		repl1.RaftTransferLeader(context.Background(), rd0.ReplicaID)
+		if a, e := repl1.RaftStatus().Lead, uint64(rd0.ReplicaID); a != e {
+			return errors.Errorf("expected raft leader be %d; got %d", e, a)
+		}
+		return nil
+	})
+
+	// Now, compute metrics repeatedly on the leaseholder and verify
+	// that Raft leadership reverts back to the leaseholder.
+	testutils.SucceedsSoon(t, func() error {
+		if err := store0.ComputeMetrics(context.Background(), 0); err != nil {
+			return err
+		}
+		if status := repl0.RaftStatus(); status.Lead != 2 {
 			return errors.Errorf("expected raft leader be 2; got %d", status.Lead)
 		}
 		return nil
