@@ -194,11 +194,9 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 		}
 	}
 
+	log.VEventf(ctx, 2, "sending request to %s", addr)
 	go func() {
 		gt.opts.metrics.SentCount.Inc(1)
-		if log.V(2) {
-			log.Infof(ctx, "sending request to %s: %+v", addr, client.args)
-		}
 		reply, err := batchFn(ctx, &client.args)
 		gt.setPending(client.args.Replica, false)
 		done <- BatchCall{Reply: reply, Err: err}
