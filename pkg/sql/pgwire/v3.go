@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -114,6 +116,51 @@ type preparedPortalMeta struct {
 	outFormats []formatCode
 }
 
+// readTimeoutConn overloads net.Conn.Read by periodically calling
+// checkExitConds() and aborting the read if an error is returned.
+type readTimeoutConn struct {
+	net.Conn
+	checkExitConds func() error
+}
+
+func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
+	// net.Pipe does not support setting deadlines. See
+	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
+	if c.LocalAddr().Network() == "pipe" {
+		return c
+	}
+	return &readTimeoutConn{
+		Conn:           c,
+		checkExitConds: checkExitConds,
+	}
+}
+
+func (c *readTimeoutConn) Read(b []byte) (int, error) {
+	// readTimeout is the amount of time ReadTimeoutConn should wait on a
+	// read before checking for exit conditions. The tradeoff is between the
+	// time it takes to react to session context cancellation and the overhead
+	// of waking up and checking for exit conditions.
+	const readTimeout = 150 * time.Millisecond
+
+	// Remove the read deadline when returning from this function to avoid
+	// unexpected behavior.
+	defer func() { _ = c.SetReadDeadline(time.Time{}) }()
+	for {
+		if err := c.checkExitConds(); err != nil {
+			return 0, err
+		}
+		if err := c.SetReadDeadline(timeutil.Now().Add(readTimeout)); err != nil {
+			return 0, err
+		}
+		n, err := c.Conn.Read(b)
+		// Continue if the error is due to timing out.
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			continue
+		}
+		return n, err
+	}
+}
+
 type v3Conn struct {
 	conn        net.Conn
 	rd          *bufio.Reader
@@ -136,11 +183,7 @@ type v3Conn struct {
 }
 
 func makeV3Conn(
-	ctx context.Context,
-	conn net.Conn,
-	metrics *ServerMetrics,
-	sqlMemoryPool *mon.MemoryMonitor,
-	executor *sql.Executor,
+	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.MemoryMonitor, executor *sql.Executor,
 ) v3Conn {
 	return v3Conn{
 		conn:          conn,
@@ -285,6 +328,11 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 		return err
 	}
 	defer c.closeSession(ctx)
+
+	// Once a session has been set up, the underlying net.Conn is switched to
+	// a conn that exits if the session's context is cancelled.
+	c.conn = newReadTimeoutConn(c.conn, c.session.Ctx().Err)
+	c.rd = bufio.NewReader(c.conn)
 
 	for {
 		if !c.doingExtendedQueryMessage {
