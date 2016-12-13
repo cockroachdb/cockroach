@@ -87,6 +87,15 @@ var _ operatorExpr = &ComparisonExpr{}
 var _ operatorExpr = &RangeCond{}
 var _ operatorExpr = &IsOfTypeExpr{}
 
+// operator is used to identify operators; used in sql.y.
+type operator interface {
+	operator()
+}
+
+var _ operator = UnaryOperator(0)
+var _ operator = BinaryOperator(0)
+var _ operator = ComparisonOperator(0)
+
 // exprFmtWithParen is a variant of Format() which adds a set of outer parens
 // if the expression involves an operator. It is used internally when the
 // expression is part of another expression and we know it is preceded or
@@ -129,8 +138,16 @@ type AndExpr struct {
 func (*AndExpr) operatorExpr() {}
 
 func binExprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e1 Expr, op string, e2 Expr) {
+	binExprFmtWithParenAndSubOp(buf, f, e1, "", op, e2)
+}
+
+func binExprFmtWithParenAndSubOp(buf *bytes.Buffer, f FmtFlags, e1 Expr, subOp, op string, e2 Expr) {
 	exprFmtWithParen(buf, f, e1)
 	buf.WriteByte(' ')
+	if subOp != "" {
+		buf.WriteString(subOp)
+		buf.WriteByte(' ')
+	}
 	buf.WriteString(op)
 	buf.WriteByte(' ')
 	exprFmtWithParen(buf, f, e2)
@@ -250,6 +267,8 @@ func StripParens(expr Expr) Expr {
 // ComparisonOperator represents a binary operator.
 type ComparisonOperator int
 
+func (ComparisonOperator) operator() {}
+
 // ComparisonExpr.Operator
 const (
 	EQ ComparisonOperator = iota
@@ -274,6 +293,23 @@ const (
 	IsNotDistinctFrom
 	Is
 	IsNot
+
+	// The following operators will always be used with an associated SubOperator.
+	// If Go had algebraic data types they would be defined in a self-contained
+	// manner like:
+	//
+	// Any(ComparisonOperator)
+	// Some(ComparisonOperator)
+	// ...
+	//
+	// where the internal ComparisonOperator qualifies the behavior of the primary
+	// operator. Instead, a secondary ComparisonOperator is optionally included in
+	// ComparisonExpr for the cases where these operators are the primary op.
+	//
+	// ComparisonOperator.hasSubOperator returns true for ops in this group.
+	Any
+	Some
+	All
 )
 
 var comparisonOpName = [...]string{
@@ -299,6 +335,9 @@ var comparisonOpName = [...]string{
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
 	Is:                "IS",
 	IsNot:             "IS NOT",
+	Any:               "ANY",
+	Some:              "SOME",
+	All:               "ALL",
 }
 
 func (i ComparisonOperator) String() string {
@@ -308,9 +347,22 @@ func (i ComparisonOperator) String() string {
 	return comparisonOpName[i]
 }
 
+// hasSubOperator returns if the ComparisonOperator is used with a sub-operator.
+func (i ComparisonOperator) hasSubOperator() bool {
+	switch i {
+	case Any:
+	case Some:
+	case All:
+	default:
+		return false
+	}
+	return true
+}
+
 // ComparisonExpr represents a two-value comparison expression.
 type ComparisonExpr struct {
 	Operator    ComparisonOperator
+	SubOperator ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
 	Left, Right Expr
 
 	typeAnnotation
@@ -321,7 +373,12 @@ func (*ComparisonExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
 func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, node.Operator.String(), node.Right)
+	opStr := node.Operator.String()
+	if node.Operator.hasSubOperator() {
+		binExprFmtWithParenAndSubOp(buf, f, node.Left, node.SubOperator.String(), opStr, node.Right)
+	} else {
+		binExprFmtWithParen(buf, f, node.Left, opStr, node.Right)
+	}
 }
 
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
@@ -333,12 +390,18 @@ func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *Compa
 }
 
 func (node *ComparisonExpr) memoizeFn() {
-	switch node.Operator {
-	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
-		return
-	}
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
+	switch node.Operator {
+	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+		// Is and related operators do not memoize a CmpOp.
+		return
+	case Any, Some, All:
+		// Array operators memoize the SubOperator's CmpOp.
+		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
+		rightRet = rightRet.(tArray).Typ
+	}
+
 	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
 	if !ok {
 		panic(fmt.Sprintf("lookup for ComparisonExpr %s's CmpOp failed",
@@ -362,28 +425,23 @@ func (node *ComparisonExpr) TypedRight() TypedExpr {
 func (node *ComparisonExpr) IsMixedTypeComparison() bool {
 	switch node.Operator {
 	case In, NotIn:
-		tuple := *node.Right.(*DTuple)
-		for _, expr := range tuple {
-			if !sameTypeOrNull(node.TypedLeft(), expr.(TypedExpr)) {
+		tuple := node.TypedRight().ResolvedType().(TTuple)
+		for _, typ := range tuple {
+			if !sameTypeOrNull(node.TypedLeft().ResolvedType(), typ) {
 				return true
 			}
 		}
 		return false
+	case Any, Some, All:
+		array := node.TypedRight().ResolvedType().(tArray)
+		return !sameTypeOrNull(node.TypedLeft().ResolvedType(), array.Typ)
 	default:
-		return !sameTypeOrNull(node.TypedLeft(), node.TypedRight())
+		return !sameTypeOrNull(node.TypedLeft().ResolvedType(), node.TypedRight().ResolvedType())
 	}
 }
 
-func sameTypeOrNull(left, right TypedExpr) bool {
-	leftType := left.ResolvedType()
-	if leftType == TypeNull {
-		return true
-	}
-	rightType := right.ResolvedType()
-	if rightType == TypeNull {
-		return true
-	}
-	return leftType.Equal(rightType)
+func sameTypeOrNull(left, right Type) bool {
+	return left == TypeNull || right == TypeNull || left.Equal(right)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -673,6 +731,8 @@ func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 // BinaryOperator represents a binary operator.
 type BinaryOperator int
 
+func (BinaryOperator) operator() {}
+
 // BinaryExpr.Operator
 const (
 	Bitand BinaryOperator = iota
@@ -769,6 +829,8 @@ func (node *BinaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // UnaryOperator represents a unary operator.
 type UnaryOperator int
 
+func (UnaryOperator) operator() {}
+
 // UnaryExpr.Operator
 const (
 	UnaryPlus UnaryOperator = iota
@@ -858,13 +920,13 @@ type funcType int
 // FuncExpr.Type
 const (
 	_ funcType = iota
-	Distinct
-	All
+	DistinctFuncType
+	AllFuncType
 )
 
 var funcTypeName = [...]string{
-	Distinct: "DISTINCT",
-	All:      "ALL",
+	DistinctFuncType: "DISTINCT",
+	AllFuncType:      "ALL",
 }
 
 // Format implements the NodeFormatter interface.

@@ -416,7 +416,8 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 		ILike, NotILike,
 		SimilarTo, NotSimilarTo,
 		RegMatch, NotRegMatch,
-		RegIMatch, NotRegIMatch:
+		RegIMatch, NotRegIMatch,
+		Any, Some, All:
 		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
 			return DNull
 		}

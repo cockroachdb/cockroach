@@ -315,10 +315,27 @@ func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 
 // TypeCheck implements the Expr interface.
 func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	leftTyped, rightTyped, fn, err := typeCheckComparisonOp(ctx, expr.Operator, expr.Left, expr.Right)
+	var leftTyped, rightTyped TypedExpr
+	var fn CmpOp
+	var err error
+	if expr.Operator.hasSubOperator() {
+		leftTyped, rightTyped, fn, err = typeCheckComparisonOpWithSubOperator(ctx,
+			expr.Operator,
+			expr.SubOperator,
+			expr.Left,
+			expr.Right,
+		)
+	} else {
+		leftTyped, rightTyped, fn, err = typeCheckComparisonOp(ctx,
+			expr.Operator,
+			expr.Left,
+			expr.Right,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn
 	expr.typ = TypeBool
@@ -768,9 +785,99 @@ func typeCheckAndRequire(ctx *SemaContext, expr Expr, required Type, op string) 
 }
 
 const (
-	unsupportedCompErrFmtWithTypes = "unsupported comparison operator: <%s> %s <%s>"
-	unsupportedCompErrFmtWithExprs = "unsupported comparison operator: %s %s %s: %v"
+	unsupportedCompErrFmtWithTypes         = "unsupported comparison operator: <%s> %s <%s>"
+	unsupportedCompErrFmtWithTypesAndSubOp = "unsupported comparison operator: <%s> %s %s <%s>"
+	unsupportedCompErrFmtWithExprs         = "unsupported comparison operator: %s %s %s: %v"
+	unsupportedCompErrFmtWithExprsAndSubOp = "unsupported comparison operator: %s %s %s %s: %v"
 )
+
+func typeCheckComparisonOpWithSubOperator(
+	ctx *SemaContext, op, subOp ComparisonOperator, left, right Expr,
+) (TypedExpr, TypedExpr, CmpOp, error) {
+	// Determine the set of comparisons are possible for the sub-operation,
+	// which will be memoized.
+	foldedOp, _, _, _, _ := foldComparisonExpr(subOp, nil, nil)
+	ops := CmpOps[foldedOp]
+
+	var cmpTypeLeft, cmpTypeRight Type
+	var leftTyped, rightTyped TypedExpr
+	if array, isConstructor := StripParens(right).(*Array); isConstructor {
+		// If the right expression is an (optionally nested) array constructor, we
+		// perform type inference on the array elements and the left expression.
+		sameTypeExprs := make([]Expr, len(array.Exprs)+1)
+		sameTypeExprs[0] = left
+		copy(sameTypeExprs[1:], array.Exprs)
+
+		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
+		if err != nil {
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprsAndSubOp,
+				left, op, subOp, right, err)
+		}
+
+		// Determine TypedExpr and comparison type for left operand.
+		leftTyped = typedSubExprs[0]
+		cmpTypeLeft = retType
+
+		// Determine TypedExpr and comparison type for right operand, making sure
+		// all ParenExprs on the right are properly type checked.
+		for i, typedExpr := range typedSubExprs[1:] {
+			array.Exprs[i] = typedExpr
+		}
+		array.typ = tArray{retType}
+
+		rightParen := right
+		for {
+			if p, ok := rightParen.(*ParenExpr); ok {
+				p.typ = array.typ
+				rightParen = p.Expr
+				continue
+			}
+			break
+		}
+		rightTyped = right.(TypedExpr)
+		cmpTypeRight = retType
+
+		// Return early without looking up a CmpOp if the comparison type is TypeNull.
+		if retType == TypeNull {
+			return leftTyped, rightTyped, CmpOp{}, nil
+		}
+	} else {
+		// If the right expression is not an array constructor, we type the left
+		// expression in isolation.
+		var err error
+		leftTyped, err = left.TypeCheck(ctx, TypeAny)
+		if err != nil {
+			return nil, nil, CmpOp{}, err
+		}
+		cmpTypeLeft = leftTyped.ResolvedType()
+
+		// We then type the right expression desiring an array of the left's type.
+		rightTyped, err = right.TypeCheck(ctx, tArray{cmpTypeLeft})
+		if err != nil {
+			return nil, nil, CmpOp{}, err
+		}
+
+		rightReturn := rightTyped.ResolvedType()
+		if cmpTypeLeft == TypeNull || rightReturn == TypeNull {
+			return leftTyped, rightTyped, CmpOp{}, nil
+		}
+
+		rightArr, ok := rightReturn.(tArray)
+		if !ok {
+			return nil, nil, CmpOp{},
+				errors.Errorf(unsupportedCompErrFmtWithExprsAndSubOp, left, subOp, op, right,
+					fmt.Sprintf("op %s array requires array on right side", op))
+		}
+		cmpTypeRight = rightArr.Typ
+	}
+
+	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
+	if !ok {
+		return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypesAndSubOp,
+			cmpTypeLeft, subOp, op, tArray{cmpTypeRight})
+	}
+	return leftTyped, rightTyped, fn, nil
+}
 
 func typeCheckComparisonOp(
 	ctx *SemaContext, op ComparisonOperator, left, right Expr,
@@ -782,9 +889,9 @@ func typeCheckComparisonOp(
 	rightTuple, rightIsTuple := foldedRight.(*Tuple)
 	switch {
 	case foldedOp == In && rightIsTuple:
-		sameTypeExprs := make([]Expr, 0, len(rightTuple.Exprs)+1)
-		sameTypeExprs = append(sameTypeExprs, foldedLeft)
-		sameTypeExprs = append(sameTypeExprs, rightTuple.Exprs...)
+		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
+		sameTypeExprs[0] = foldedLeft
+		copy(sameTypeExprs[1:], rightTuple.Exprs)
 
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
@@ -835,8 +942,8 @@ func typeCheckComparisonOp(
 	if switched {
 		leftExpr, rightExpr = rightExpr, leftExpr
 	}
-	leftReturn := leftExpr.(TypedExpr).ResolvedType()
-	rightReturn := rightExpr.(TypedExpr).ResolvedType()
+	leftReturn := leftExpr.ResolvedType()
+	rightReturn := rightExpr.ResolvedType()
 	if leftReturn == TypeNull || rightReturn == TypeNull {
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:

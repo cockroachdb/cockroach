@@ -1164,6 +1164,16 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 ----
 NULL
 
+query B
+SELECT 'test' = ANY (CURRENT_SCHEMAS(true))
+----
+true
+
+query B
+SELECT 'not test' = ANY (CURRENT_SCHEMAS(true))
+----
+false
+
 query I
 SELECT array_length(ARRAY['a', 'b'], 1);
 ----
