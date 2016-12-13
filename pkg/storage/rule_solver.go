@@ -27,15 +27,15 @@ import (
 
 // candidate store for allocation.
 type candidate struct {
-	store      roachpb.StoreDescriptor
-	valid      bool
-	constraint float64 // Score used to pick the top candidates.
-	capacity   float64 // Score used to choose between top candidates.
+	store           roachpb.StoreDescriptor
+	valid           bool
+	constraintScore float64
+	capacityScore   float64
 }
 
 func (c candidate) String() string {
 	return fmt.Sprintf("s%d, valid:%t, con:%.2f, bal:%.2f",
-		c.store.StoreID, c.valid, c.constraint, c.capacity)
+		c.store.StoreID, c.valid, c.constraintScore, c.capacityScore)
 }
 
 // less first compares valid, then constraint scores, then capacity
@@ -47,10 +47,10 @@ func (c candidate) less(o candidate) bool {
 	if !c.valid {
 		return true
 	}
-	if c.constraint != o.constraint {
-		return c.constraint < o.constraint
+	if c.constraintScore != o.constraintScore {
+		return c.constraintScore < o.constraintScore
 	}
-	return c.capacity < o.capacity
+	return c.capacityScore < o.capacityScore
 }
 
 type candidateList []candidate
@@ -84,8 +84,8 @@ var _ sort.Interface = byScoreAndID(nil)
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].constraint == c[j].constraint &&
-		c[i].capacity == c[j].capacity &&
+	if c[i].constraintScore == c[j].constraintScore &&
+		c[i].capacityScore == c[j].capacityScore &&
 		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
@@ -112,7 +112,7 @@ func (cl candidateList) best() candidateList {
 		return cl
 	}
 	for i := 1; i < len(cl); i++ {
-		if cl[i].constraint < cl[0].constraint {
+		if cl[i].constraintScore < cl[0].constraintScore {
 			return cl[:i]
 		}
 	}
@@ -135,7 +135,7 @@ func (cl candidateList) worst() candidateList {
 	}
 	// Find the worst constraint values.
 	for i := len(cl) - 2; i >= 0; i-- {
-		if cl[i].constraint > cl[len(cl)-1].constraint {
+		if cl[i].constraintScore > cl[len(cl)-1].constraintScore {
 			return cl[i+1:]
 		}
 	}
@@ -222,10 +222,10 @@ func allocateCandidates(
 
 		constraintScore := diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
 		candidates = append(candidates, candidate{
-			store:      s,
-			valid:      true,
-			constraint: constraintScore,
-			capacity:   capacityScore(s),
+			store:           s,
+			valid:           true,
+			constraintScore: constraintScore,
+			capacityScore:   capacityScore(s),
 		})
 	}
 	if deterministic {
@@ -267,10 +267,10 @@ func removeCandidates(
 		}
 
 		candidates = append(candidates, candidate{
-			store:      s,
-			valid:      true,
-			constraint: constraintScore,
-			capacity:   capacityScore(s),
+			store:           s,
+			valid:           true,
+			constraintScore: constraintScore,
+			capacityScore:   capacityScore(s),
 		})
 	}
 	if deterministic {
@@ -322,10 +322,10 @@ func rebalanceCandidates(
 				constraintScore++
 			}
 			existingCandidates = append(existingCandidates, candidate{
-				store:      s,
-				valid:      true,
-				constraint: constraintScore,
-				capacity:   capacityScore(s),
+				store:           s,
+				valid:           true,
+				constraintScore: constraintScore,
+				capacityScore:   capacityScore(s),
 			})
 		} else {
 			if !constraintsOk || !maxCapacityOK || !rebalanceToConvergesOnMean(sl, s) {
@@ -340,10 +340,10 @@ func rebalanceCandidates(
 			// score.
 			constraintScore := 1.0 + diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
 			candidates = append(candidates, candidate{
-				store:      s,
-				valid:      true,
-				constraint: constraintScore,
-				capacity:   capacityScore(s),
+				store:           s,
+				valid:           true,
+				constraintScore: constraintScore,
+				capacityScore:   capacityScore(s),
 			})
 		}
 	}
