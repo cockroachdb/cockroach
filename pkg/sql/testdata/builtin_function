@@ -1149,12 +1149,12 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT CURRENT_SCHEMAS(true)
 ----
-{'pg_catalog','test'}
+{pg_catalog,test}
 
 query T
 SELECT CURRENT_SCHEMAS(false)
 ----
-{'test'}
+{test}
 
 query error pq: unknown signature: current_schemas()
 SELECT CURRENT_SCHEMAS()
