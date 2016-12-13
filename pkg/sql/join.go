@@ -205,9 +205,6 @@ func (p *planner) makeJoin(
 		}
 	}
 
-	// TODO(irfansharif): How do we choose which algorithm to use? Right
-	// now we simply default to hash joins if using NATURAL JOIN or
-	// USING, nested loop joins for ON predicates.
 	var (
 		info *dataSourceInfo
 		pred *joinPredicate
@@ -535,7 +532,6 @@ func (n *joinNode) Next() (res bool, err error) {
 			}
 
 			if !passesFilter {
-				scratch = encoding[:0]
 				continue
 			}
 
@@ -547,6 +543,7 @@ func (n *joinNode) Next() (res bool, err error) {
 		if n.buffer.Next() {
 			return true, nil
 		}
+		scratch = encoding[:0]
 	}
 
 	// no more lrows, we go through the unmatched rows in the internal hashmap.
