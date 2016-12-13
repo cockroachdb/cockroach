@@ -484,6 +484,12 @@ func (d *DDecimal) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
 }
 
+// DStringBacked is an interface implemented by types that are comparable by a
+// backing DString.
+type DStringBacked interface {
+	BackingDString() *DString
+}
+
 // DString is the string Datum.
 type DString string
 
@@ -505,14 +511,14 @@ func (d *DString) Compare(other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DString)
+	v, ok := other.(DStringBacked)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if *d.BackingDString() < *v.BackingDString() {
 		return -1
 	}
-	if *d > *v {
+	if *d.BackingDString() > *v.BackingDString() {
 		return 1
 	}
 	return 0
@@ -558,6 +564,70 @@ func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 // Size implements the Datum interface.
 func (d *DString) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+// BackingDString implements the DStringBacked interface.
+func (d *DString) BackingDString() *DString {
+	return d
+}
+
+// DName is the Datum for column name literals.
+type DName struct {
+	DString DString
+}
+
+// NewDName is a helper routine to create a *DName initialized from its
+// argument.
+func NewDName(d string) *DName {
+	r := DName{DString: DString(d)}
+	return &r
+}
+
+// nameify is a convenience method to turn the result of (*DString, Bool)
+// methods into (*DName, bool).
+func nameify(d Datum, b bool) (Datum, bool) {
+	return &DName{DString: *d.(*DString)}, b
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DName) ResolvedType() Type { return TypeName }
+
+// Prev implements the Datum interface.
+func (d *DName) Prev() (Datum, bool) { return nameify(d.DString.Prev()) }
+
+// Next implements the Datum interface.
+func (d *DName) Next() (Datum, bool) { return nameify(d.DString.Next()) }
+
+// Compare implements the Datum interface.
+func (d *DName) Compare(other Datum) int {
+	return d.DString.Compare(other)
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DName) Format(buf *bytes.Buffer, f FmtFlags) {
+	d.DString.Format(buf, f)
+}
+
+// IsMax implements the Datum interface.
+func (d *DName) IsMax() bool { return d.DString.IsMax() }
+
+// IsMin implements the Datum interface.
+func (d *DName) IsMin() bool { return d.DString.IsMin() }
+
+// Size implements the Datum interface.
+func (d *DName) Size() uintptr {
+	return unsafe.Sizeof(*d) + uintptr(len(d.DString))
+}
+
+// min implements the Datum interface.
+func (d *DName) min() (Datum, bool) { return nameify(d.DString.min()) }
+
+// max implements the Datum interface.
+func (d *DName) max() (Datum, bool) { return nameify(d.DString.max()) }
+
+// BackingDString implements the DStringBacked interface.
+func (d *DName) BackingDString() *DString {
+	return &d.DString
 }
 
 // DCollatedString is the Datum for strings with a locale. The struct members

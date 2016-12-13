@@ -69,7 +69,7 @@ SHOW CREATE TABLE pg_catalog.pg_namespace
 Table                  CreateTable
 pg_catalog.pg_namespace  CREATE TABLE "pg_catalog.pg_namespace" (
                            oid INT NULL,
-                           nspname STRING NOT NULL DEFAULT '',
+                           nspname NAME NOT NULL,
                            nspowner INT NULL,
                            aclitem STRING NULL
                        )
@@ -79,7 +79,7 @@ SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
 Field     Type    Null  Default
 oid       INT     true   NULL
-nspname   STRING  false  ''
+nspname   NAME    false  NULL
 nspowner  INT     true   NULL
 aclitem   STRING  true   NULL
 
@@ -624,12 +624,14 @@ ORDER BY oid
 oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 16    bool         1782195457    NULL      1       true      b
 17    bytes        1782195457    NULL      -1      false     b
+19    name         1782195457    NULL      -1      false     b
 20    int          1782195457    NULL      8       true      b
 21    int          1782195457    NULL      8       true      b
 23    int          1782195457    NULL      8       true      b
 25    string       1782195457    NULL      -1      false     b
 700   float        1782195457    NULL      8       true      b
 701   float        1782195457    NULL      8       true      b
+1003  name[]       1782195457    NULL      -1      false     b
 1005  int[]        1782195457    NULL      -1      false     b
 1007  int[]        1782195457    NULL      -1      false     b
 1009  string[]     1782195457    NULL      -1      false     b
@@ -650,12 +652,14 @@ ORDER BY oid
 oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
 16    bool         B            false           true          ,         0         0        0
 17    bytes        U            false           true          ,         0         0        0
+19    name         S            false           true          ,         0         0        0
 20    int          N            false           true          ,         0         0        0
 21    int          N            false           true          ,         0         0        0
 23    int          N            false           true          ,         0         0        0
 25    string       S            false           true          ,         0         0        0
 700   float        N            false           true          ,         0         0        0
 701   float        N            false           true          ,         0         0        0
+1003  name[]       A            false           true          ,         0         0        0
 1005  int[]        A            false           true          ,         0         0        0
 1007  int[]        A            false           true          ,         0         0        0
 1009  string[]     A            false           true          ,         0         0        0
@@ -676,12 +680,14 @@ ORDER BY oid
 oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout  typanalyze
 16    bool         0         0          0           0        0         0          0
 17    bytes        0         0          0           0        0         0          0
+19    name         0         0          0           0        0         0          0
 20    int          0         0          0           0        0         0          0
 21    int          0         0          0           0        0         0          0
 23    int          0         0          0           0        0         0          0
 25    string       0         0          0           0        0         0          0
 700   float        0         0          0           0        0         0          0
 701   float        0         0          0           0        0         0          0
+1003  name[]       0         0          0           0        0         0          0
 1005  int[]        0         0          0           0        0         0          0
 1007  int[]        0         0          0           0        0         0          0
 1009  string[]     0         0          0           0        0         0          0
@@ -702,12 +708,14 @@ ORDER BY oid
 oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 16    bool         NULL      NULL        false       0            -1
 17    bytes        NULL      NULL        false       0            -1
+19    name         NULL      NULL        false       0            -1
 20    int          NULL      NULL        false       0            -1
 21    int          NULL      NULL        false       0            -1
 23    int          NULL      NULL        false       0            -1
 25    string       NULL      NULL        false       0            -1
 700   float        NULL      NULL        false       0            -1
 701   float        NULL      NULL        false       0            -1
+1003  name[]       NULL      NULL        false       0            -1
 1005  int[]        NULL      NULL        false       0            -1
 1007  int[]        NULL      NULL        false       0            -1
 1009  string[]     NULL      NULL        false       0            -1
@@ -728,12 +736,14 @@ ORDER BY oid
 oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 16    bool         0         0             NULL           NULL        NULL
 17    bytes        0         0             NULL           NULL        NULL
+19    name         0         0             NULL           NULL        NULL
 20    int          0         0             NULL           NULL        NULL
 21    int          0         0             NULL           NULL        NULL
 23    int          0         0             NULL           NULL        NULL
 25    string       0         0             NULL           NULL        NULL
 700   float        0         0             NULL           NULL        NULL
 701   float        0         0             NULL           NULL        NULL
+1003  name[]       0         0             NULL           NULL        NULL
 1005  int[]        0         0             NULL           NULL        NULL
 1007  int[]        0         0             NULL           NULL        NULL
 1009  string[]     0         0             NULL           NULL        NULL

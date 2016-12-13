@@ -72,6 +72,13 @@ func dStringOrNull(s string) parser.Datum {
 	return parser.NewDString(s)
 }
 
+func dNameOrNull(s string) parser.Datum {
+	if s == "" {
+		return parser.DNull
+	}
+	return parser.NewDName(s)
+}
+
 func dStringPtrOrNull(s *string) parser.Datum {
 	if s == nil {
 		return parser.DNull

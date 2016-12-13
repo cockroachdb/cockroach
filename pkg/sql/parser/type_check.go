@@ -664,6 +664,8 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 		expr.typ = TypeIntArray
 	case TypeString:
 		expr.typ = TypeStringArray
+	case TypeName:
+		expr.typ = TypeNameArray
 	default:
 		return nil, errors.Errorf("unhandled parameterized array type %T", subqueryType)
 	}
@@ -711,6 +713,10 @@ func (d *DDecimal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DString) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DName) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.

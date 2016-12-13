@@ -1414,12 +1414,14 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeDecimal:
 	case parser.TypeBytes:
 	case parser.TypeString:
+	case parser.TypeName:
 	case parser.TypeDate:
 	case parser.TypeTimestamp:
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeStringArray:
 	case parser.TypeIntArray:
+	case parser.TypeNameArray:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual

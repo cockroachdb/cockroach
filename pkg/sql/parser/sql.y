@@ -3136,6 +3136,10 @@ simple_typename:
   {
     $$.val = stringColTypeText
   }
+| NAME
+  {
+    $$.val = nameColTypeName
+  }
 | SERIAL
   {
     $$.val = intColTypeSerial

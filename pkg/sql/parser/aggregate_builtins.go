@@ -72,8 +72,10 @@ type AggregateFunc interface {
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
+		// TODO(knz) Collapse these into a single aggregate.
 		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate),
 		makeAggBuiltin(TypeString, TypeStringArray, newStringArrayAggregate),
+		makeAggBuiltin(TypeName, TypeNameArray, newNameArrayAggregate),
 	},
 
 	"avg": {
@@ -204,6 +206,10 @@ func newIntArrayAggregate() AggregateFunc {
 
 func newStringArrayAggregate() AggregateFunc {
 	return &arrayAggregate{arr: NewDArray(TypeString)}
+}
+
+func newNameArrayAggregate() AggregateFunc {
+	return &arrayAggregate{arr: NewDArray(TypeName)}
 }
 
 // Add accumulates the passed datum into the array.

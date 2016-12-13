@@ -70,6 +70,8 @@ var (
 	// TypeCollatedString is the type family of a DString. CANNOT be compared with
 	// ==.
 	TypeCollatedString Type = TCollatedString{}
+	// TypeName is the type of a DName.
+	TypeName Type = tName{}
 	// TypeBytes is the type of a DBytes. Can be compared with ==.
 	TypeBytes Type = tBytes{}
 	// TypeDate is the type of a DDate. Can be compared with ==.
@@ -97,6 +99,9 @@ var (
 	// TypeIntArray is the type family of a DArray containing ints. Can be
 	// compared with ==.
 	TypeIntArray Type = tArray{TypeInt}
+	// TypeNameArray is the type family of a DArray containing names. Can be
+	// compared with ==.
+	TypeNameArray Type = tArray{TypeName}
 	// TypeAnyArray is the type of a DArray with a wildcard parameterized type.
 	// Can be compared with ==.
 	TypeAnyArray Type = tArray{TypeAny}
@@ -148,8 +153,10 @@ func (tDecimal) IsAmbiguous() bool           { return false }
 
 type tString struct{}
 
-func (tString) String() string              { return "string" }
-func (tString) Equal(other Type) bool       { return other == TypeString || other == TypeAny }
+func (tString) String() string { return "string" }
+func (tString) Equal(other Type) bool {
+	return other == TypeString || other == TypeAny || other == TypeName
+}
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
 func (tString) IsAmbiguous() bool           { return false }
@@ -191,6 +198,16 @@ func (TCollatedString) Size() (uintptr, bool) {
 func (t TCollatedString) IsAmbiguous() bool {
 	return t.Locale == ""
 }
+
+type tName struct{}
+
+func (tName) String() string { return "name" }
+func (tName) Equal(other Type) bool {
+	return other == TypeString || other == TypeAny || other == TypeName
+}
+func (tName) FamilyEqual(other Type) bool { return other == TypeName }
+func (tName) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }
+func (tName) IsAmbiguous() bool           { return false }
 
 type tBytes struct{}
 
