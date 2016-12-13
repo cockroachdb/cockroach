@@ -282,3 +282,49 @@ func TestDFloatCompare(t *testing.T) {
 		}
 	}
 }
+
+// TestParseDIntervalWithField tests that the additional features available
+// to ParseDIntervalWithField beyond those in ParseDInterval behave as expected.
+func TestParseDIntervalWithField(t *testing.T) {
+	testData := []struct {
+		str      string
+		field    DurationField
+		expected string
+	}{
+		// Test cases for raw numbers with fields
+		{"5", Second, "5s"},
+		{"5.8", Second, "5.8s"},
+		{"5", Minute, "5m"},
+		{"5.8", Minute, "5m"},
+		{"5", Hour, "5h"},
+		{"5.8", Hour, "5h"},
+		{"5", Day, "5 day"},
+		{"5.8", Day, "5 day"},
+		{"5", Month, "5 month"},
+		{"5.8", Month, "5 month"},
+		{"5", Year, "5 year"},
+		{"5.8", Year, "5 year"},
+		// Test cases for truncation based on fields
+		{"1-2-3 4:56:07", Second, "1-2-3 4:56:07"},
+		{"1-2-3 4:56:07", Minute, "1-2-3 4:56:00"},
+		{"1-2-3 4:56:07", Hour, "1-2-3 4:00:00"},
+		{"1-2-3 4:56:07", Day, "1-2-3"},
+		{"1-2-3 4:56:07", Month, "1-2-0"},
+		{"1-2-3 4:56:07", Year, "1 year"},
+	}
+	for _, td := range testData {
+		actual, err := ParseDIntervalWithField(td.str, td.field)
+		if err != nil {
+			t.Errorf("unexpected error while parsing INTERVAL %s %s: %s", td.str, td.field, err)
+			continue
+		}
+		expected, err := ParseDInterval(td.expected)
+		if err != nil {
+			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
+			continue
+		}
+		if expected.Compare(actual) != 0 {
+			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
+		}
+	}
+}

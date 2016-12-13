@@ -1103,9 +1103,70 @@ type DInterval struct {
 	duration.Duration
 }
 
+// DurationField is the type of a postgres duration field.
+// https://www.postgresql.org/docs/9.6/static/datatype-datetime.html
+type DurationField int
+
+const (
+	_ DurationField = iota
+	Year
+	Month
+	Day
+	Hour
+	Minute
+	Second
+)
+
+var suffixes = map[DurationField]string{
+	Hour:   "h",
+	Minute: "m",
+	Second: "s",
+}
+
+func DurationSuffix(d DurationField) (string, error) {
+	if s, ok := suffixes[d]; ok {
+		return s, nil
+	}
+	return "", fmt.Errorf("DurationField %s has no suffix", d)
+}
+
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
 func ParseDInterval(s string) (*DInterval, error) {
+	return parseDInterval(s, Second)
+}
+
+func truncateDInterval(d *DInterval, field DurationField) {
+	switch field {
+	case Year:
+		d.Duration.Months = d.Duration.Months - d.Duration.Months%12
+		d.Duration.Days = 0
+		d.Duration.Nanos = 0
+	case Month:
+		d.Duration.Days = 0
+		d.Duration.Nanos = 0
+	case Day:
+		d.Duration.Nanos = 0
+	case Hour:
+		d.Duration.Nanos = d.Duration.Nanos - d.Duration.Nanos%int64(time.Hour)
+	case Minute:
+		d.Duration.Nanos = d.Duration.Nanos - d.Duration.Nanos%int64(time.Minute)
+	case Second:
+		// Postgres doesn't truncate to whole seconds.
+	}
+}
+
+// ParseDIntervalWithField XXX(jordan)
+func ParseDIntervalWithField(s string, field DurationField) (*DInterval, error) {
+	d, err := parseDInterval(s, field)
+	if err != nil {
+		return nil, err
+	}
+	truncateDInterval(d, field)
+	return d, nil
+}
+
+func parseDInterval(s string, field DurationField) (*DInterval, error) {
 	// At this time the only supported interval formats are:
 	// - SQL standard.
 	// - Postgres compatible.
@@ -1182,16 +1243,38 @@ func ParseDInterval(s string) (*DInterval, error) {
 		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 	}
 
-	// An interval that's just a number is seconds.
-	if _, err := strconv.ParseFloat(s, 64); err == nil {
-		s += "s"
+	// An interval that's just a number uses the field as its unit.
+	// All numbers are rounded down unless the precision is SECOND.
+	ret := &DInterval{Duration: duration.Duration{}}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		switch field {
+		case Year:
+			ret.Months = int64(f) * 12
+			return ret, nil
+		case Month:
+			ret.Months = int64(f)
+			return ret, nil
+		case Day:
+			ret.Days = int64(f)
+			return ret, nil
+		case Minute:
+			s = strconv.Itoa(int(f))
+		case Hour:
+			s = strconv.Itoa(int(f))
+		}
+		suffix, err := DurationSuffix(field)
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval, err)
+		}
+		s = s + suffix
 	}
-	// Fallback to golang durations.
-	dur, err := time.ParseDuration(s)
+
+	d, err := time.ParseDuration(s)
 	if err != nil {
 		return nil, makeParseError(s, TypeInterval, err)
 	}
-	return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
+	ret.Nanos = d.Nanoseconds()
+	return ret, nil
 }
 
 // ResolvedType implements the TypedExpr interface.
