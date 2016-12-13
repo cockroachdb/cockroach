@@ -308,6 +308,12 @@ func (u *sqlSymUnion) windowDef() *WindowDef {
 func (u *sqlSymUnion) window() Window {
     return u.val.(Window)
 }
+func (u *sqlSymUnion) op() operator {
+    return u.val.(operator)
+}
+func (u *sqlSymUnion) cmpOp() ComparisonOperator {
+    return u.val.(ComparisonOperator)
+}
 
 %}
 
@@ -385,7 +391,7 @@ func (u *sqlSymUnion) window() Window {
 %type <str>   name opt_name opt_name_parens opt_to_savepoint
 %type <str>   savepoint_name
 
-// %type <empty> subquery_op
+%type <operator> subquery_op
 %type <FunctionReference> func_name
 %type <empty> opt_collate
 
@@ -396,7 +402,7 @@ func (u *sqlSymUnion) window() Window {
 %type <*TableNameWithIndex> table_name_with_index
 %type <TableNameWithIndexList> table_name_with_index_list
 
-// %type <empty> math_op
+%type <operator> math_op
 
 %type <IsolationLevel> iso_level
 %type <UserPriority> user_priority
@@ -484,7 +490,7 @@ func (u *sqlSymUnion) window() Window {
 %type <Expr>  case_expr case_arg case_default
 %type <*When>  when_clause
 %type <[]*When> when_clause_list
-// %type <empty> sub_type
+%type <ComparisonOperator> sub_type
 %type <Expr> ctext_expr
 %type <Expr> numeric_only
 %type <AliasClause> alias_clause opt_alias_clause
@@ -3703,8 +3709,21 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: NotIn, Left: $1.expr(), Right: $4.expr()}
   }
-// | a_expr subquery_op sub_type select_with_parens %prec CONCAT { return unimplemented(sqllex) }
-// | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { return unimplemented(sqllex) }
+| a_expr subquery_op sub_type d_expr %prec CONCAT
+  {
+    op := $3.cmpOp()
+    subOp, ok := $2.op().(ComparisonOperator)
+    if !ok {
+      sqllex.Error(fmt.Sprintf("op %s array requires operator to yield boolean", op))
+      return 1
+    }
+    $$.val = &ComparisonExpr{
+      Operator: op, 
+      SubOperator: subOp,
+      Left: $1.expr(), 
+      Right: $4.expr(),
+    }
+  }
 // | UNIQUE select_with_parens { return unimplemented(sqllex) }
 
 // Restricted expressions
@@ -3919,11 +3938,11 @@ func_application:
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex) }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Type: All, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Type: AllFuncType, Exprs: $4.exprs()}
   }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Type: Distinct, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Type: DistinctFuncType, Exprs: $4.exprs()}
   }
 | func_name '(' '*' ')'
   {
@@ -4199,35 +4218,44 @@ implicit_row:
     $$.val = &Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
 
-// sub_type:
-//   ANY { return unimplemented(sqllex) }
-// | SOME { return unimplemented(sqllex) }
-// | ALL { return unimplemented(sqllex) }
+sub_type:
+  ANY
+  {
+    $$.val = Any
+  }
+| SOME
+  {
+    $$.val = Some
+  }
+| ALL
+  {
+    $$.val = All
+  }
 
-// math_op:
-//   '+' { return unimplemented(sqllex) }
-// | '-' { return unimplemented(sqllex) }
-// | '*' { return unimplemented(sqllex) }
-// | '/' { return unimplemented(sqllex) }
-// | '%' { return unimplemented(sqllex) }
-// | '&' { return unimplemented(sqllex) }
-// | '|' { return unimplemented(sqllex) }
-// | '^' { return unimplemented(sqllex) }
-// | '#' { return unimplemented(sqllex) }
-// | '<' { return unimplemented(sqllex) }
-// | '>' { return unimplemented(sqllex) }
-// | '=' { return unimplemented(sqllex) }
-// | CONCAT { return unimplemented(sqllex) }
-// | LESS_EQUALS { return unimplemented(sqllex) }
-// | GREATER_EQUALS { return unimplemented(sqllex) }
-// | NOT_EQUALS { return unimplemented(sqllex) }
+math_op:
+  '+' { $$.val = Plus  }
+| '-' { $$.val = Minus }
+| '*' { $$.val = Mult  }
+| '/' { $$.val = Div   }
+| FLOORDIV { $$.val = FloorDiv }
+| '%' { $$.val = Mod    }
+| '&' { $$.val = Bitand }
+| '|' { $$.val = Bitor  }
+| '^' { $$.val = Bitxor }
+| '#' { $$.val = Bitxor }
+| '<' { $$.val = LT }
+| '>' { $$.val = GT }
+| '=' { $$.val = EQ }
+| LESS_EQUALS    { $$.val = LE }
+| GREATER_EQUALS { $$.val = GE }
+| NOT_EQUALS     { $$.val = NE }
 
-// subquery_op:
-//   math_op { return unimplemented(sqllex) }
-// | LIKE { return unimplemented(sqllex) }
-// | NOT_LA LIKE { return unimplemented(sqllex) }
-// | ILIKE { return unimplemented(sqllex) }
-// | NOT_LA ILIKE { return unimplemented(sqllex) }
+subquery_op:
+  math_op
+| LIKE         { $$.val = Like     }
+| NOT_LA LIKE  { $$.val = NotLike  }
+| ILIKE        { $$.val = ILike    }
+| NOT_LA ILIKE { $$.val = NotILike }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.

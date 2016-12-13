@@ -418,6 +418,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a IN (b, c)`},
 		{`SELECT a FROM t WHERE a IN (SELECT a FROM t)`},
 		{`SELECT a FROM t WHERE a NOT IN (b, c)`},
+		{`SELECT a FROM t WHERE a = ANY ARRAY[b, c]`},
+		{`SELECT a FROM t WHERE a != SOME ARRAY[b, c]`},
+		{`SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]`},
 		{`SELECT a FROM t WHERE a LIKE b`},
 		{`SELECT a FROM t WHERE a NOT LIKE b`},
 		{`SELECT a FROM t WHERE a ILIKE b`},
@@ -1164,6 +1167,13 @@ SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
 			`syntax error at or near "["
 SELECT EXISTS(SELECT 1)[1]
                        ^
+`,
+		},
+		{
+			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
+			`op ANY array requires operator to yield boolean at or near "]"
+SELECT 1 + ANY ARRAY[1, 2, 3]
+                            ^
 `,
 		},
 	}
