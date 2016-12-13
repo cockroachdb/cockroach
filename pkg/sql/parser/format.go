@@ -36,6 +36,8 @@ type fmtFlags struct {
 	// starDatumFormat is an optional interceptor for StarDatum.Format calls,
 	// can be used to customize the formatting of StarDatums.
 	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
+	// If true, strings will be rendered without wrapping quotes if possible.
+	bareStrings bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -58,6 +60,10 @@ var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 // print indexedVars using symbolic notation, to
 // disambiguate columns.
 var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true}
+
+// FmtBareStrings instructs the pretty-printer to print strings without
+// wrapping quotes, if possible.
+var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.

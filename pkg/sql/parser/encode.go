@@ -33,23 +33,47 @@ var (
 	dontEscape = byte(255)
 	// encodeMap specifies how to escape binary data with '\'.
 	encodeMap [256]byte
-	hexMap    [256][]byte
+	// mustQuoteMap contains characters that require that their enclosing
+	// string be quoted, even when FmtFlags.bareStrings is true.
+	mustQuoteMap = map[byte]bool{
+		',': true,
+		'{': true,
+		'}': true,
+	}
+	hexMap [256][]byte
 )
 
 // encodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
 func encodeSQLString(buf *bytes.Buffer, in string) {
+	encodeSQLStringWithFlags(buf, in, FmtSimple)
+}
+
+// encodeSQLStringWithFlags writes a string literal to buf. All unicode and
+// non-printable characters are escaped. FmtFlags controls the output format:
+// if f.bareStrings is true, the output string will not be wrapped in quotes
+// if possible.
+func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
+	escapedString := false
+	bareStrings := f.bareStrings
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
-		if r >= 0x20 && r < 0x7F && encodeMap[ch] == dontEscape {
-			continue
+		if r >= 0x20 && r < 0x7F {
+			if mustQuoteMap[ch] {
+				// We have to quote this string - ignore bareStrings setting
+				bareStrings = false
+			}
+			if encodeMap[ch] == dontEscape {
+				continue
+			}
 		}
 
-		if start == 0 {
+		if !escapedString {
 			buf.WriteString("e'") // begin e'xxx' string
+			escapedString = true
 		}
 		buf.WriteString(in[start:i])
 		ln := utf8.RuneLen(r)
@@ -78,11 +102,15 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 			fmt.Fprintf(buf, `\U%08X`, r)
 		}
 	}
-	if start == 0 {
+
+	quote := !escapedString && !bareStrings
+	if quote {
 		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
 	buf.WriteString(in[start:])
-	buf.WriteByte('\'')
+	if escapedString || quote {
+		buf.WriteByte('\'')
+	}
 }
 
 func encodeSQLIdent(buf *bytes.Buffer, s string) {
