@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -136,11 +138,7 @@ type v3Conn struct {
 }
 
 func makeV3Conn(
-	ctx context.Context,
-	conn net.Conn,
-	metrics *ServerMetrics,
-	sqlMemoryPool *mon.MemoryMonitor,
-	executor *sql.Executor,
+	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.MemoryMonitor, executor *sql.Executor,
 ) v3Conn {
 	return v3Conn{
 		conn:          conn,
@@ -321,7 +319,7 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 				return err
 			}
 		}
-		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		typ, n, err := c.readTypedMsg()
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
@@ -386,6 +384,65 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	}
 }
 
+// readTypedMsg reads a message from v3Conn.rd, returning the message type,
+// number of bytes read, and an error if there was one. Exit conditions are
+// checked every connReadTimeout.
+func (c *v3Conn) readTypedMsg() (clientMessageType, int, error) {
+	// connReadTimeout is the amount of time the v3Conn waits on a read before
+	// checking for exit conditions. The tradeoff is between the time it takes
+	// to react to session context cancellation and the overhead of waking up
+	// and checking for exit conditions.
+	const connReadTimeout = 150 * time.Millisecond
+
+	readBufTypedMsg := func() (clientMessageType, int, error) {
+		typ, err := c.rd.ReadByte()
+		if err != nil {
+			return 0, 0, err
+		}
+		n, err := c.readBuf.readUntypedMsg(c.rd)
+		return clientMessageType(typ), n, err
+	}
+
+	// net.Pipe does not support setting deadlines. See
+	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
+	setDeadline := true
+	if c.conn.LocalAddr().Network() == "pipe" {
+		setDeadline = false
+	}
+
+	// Remove the read deadline when returning from this function to avoid
+	// unexpected behavior.
+	if setDeadline {
+		defer func() { _ = c.conn.SetReadDeadline(time.Time{}) }()
+	}
+	for {
+		if setDeadline {
+			if err := c.conn.SetReadDeadline(timeutil.Now().Add(connReadTimeout)); err != nil {
+				return 0, 0, err
+			}
+		}
+
+		typ, n, err := readBufTypedMsg()
+		// If we got an error and it was not due to timing out, don't bother
+		// checking exit conditions.
+		if err, ok := err.(net.Error); err != nil && !(ok && err.Timeout()) {
+			return 0, 0, err
+		}
+
+		// Check for context cancellation.
+		if s := c.session; s != nil {
+			if err := s.Ctx().Err(); err != nil {
+				return 0, 0, err
+			}
+		}
+
+		if err != nil {
+			continue
+		}
+		return typ, n, err
+	}
+}
+
 // sendAuthPasswordRequest requests a cleartext password from the client and
 // returns it.
 func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
@@ -398,7 +455,7 @@ func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
 		return "", err
 	}
 
-	typ, n, err := c.readBuf.readTypedMsg(c.rd)
+	typ, n, err := c.readTypedMsg()
 	c.metrics.BytesInCount.Inc(int64(n))
 	if err != nil {
 		return "", err
@@ -963,7 +1020,7 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 	}
 
 	for {
-		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		typ, n, err := c.readTypedMsg()
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err

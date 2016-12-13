@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -42,7 +43,7 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 		},
 		nil, /* stopper */
 	)
-	return makeV3Conn(context.Background(), c, &metrics, &mon, exec)
+	return makeV3Conn(c, &metrics, &mon, exec)
 }
 
 // TestMaliciousInputs verifies that known malicious inputs sent to
@@ -99,4 +100,68 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	v3Conn := makeTestV3Conn(r)
 	defer v3Conn.finish(context.Background())
 	_ = v3Conn.serve(context.Background(), mon.BoundAccount{})
+}
+
+func TestContextCancellationClosesConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cannot use net.Pipe because deadlines are not supported.
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := ln.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Start a pgwire client that checks that a v3Conn is blocked on the read
+	// loop and then cancels the v3Conn's session context. This should result
+	// in v3Conn.serve(...) returning an error specifying that the associated
+	// session's context was canceled.
+	go func() {
+		c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		response := make([]byte, 1, 1)
+		// Skip over initialization messages sent by v3Conn.
+		for serverMessageType(response[0]) != serverMsgReady {
+			if _, err := c.Read(response); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Skip over the rest of the serverMsgReady message.
+		_, _ = c.Read(make([]byte, 5, 5))
+
+		// clientMsgSync is used here because it is a simple, parameterless
+		// message that expects a serverReadyMsg as response. It is usually sent
+		// for error recovery during a series of extended-query messages.
+		if _, err := c.Write([]byte{byte(clientMsgSync), 0x00, 0x00, 0x00, 0x04}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Read(response); err != nil {
+			t.Fatal(err)
+		}
+		if serverMessageType(response[0]) != serverMsgReady {
+			t.Fatalf("unexpected response to sync request: %s", serverMessageType(response[0]))
+		}
+		cancel()
+	}()
+
+	// c is closed by v3Conn.finish(...)
+	c, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v3Conn := makeTestV3Conn(c)
+	defer v3Conn.finish(ctx)
+	if err := v3Conn.serve(ctx, mon.BoundAccount{}); err != context.Canceled {
+		t.Fatalf("unexpected error: %s", err)
+	}
 }
