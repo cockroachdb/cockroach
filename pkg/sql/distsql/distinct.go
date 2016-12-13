@@ -44,8 +44,8 @@ func newDistinct(
 		ctx:         log.WithLogTag(flowCtx.Context, "Evaluator", nil),
 		orderedCols: make(map[uint32]struct{}),
 	}
-	for _, ord := range spec.Ordering.Columns {
-		d.orderedCols[ord.ColIdx] = struct{}{}
+	for _, col := range spec.OrderedColumns {
+		d.orderedCols[col] = struct{}{}
 	}
 
 	return d, nil
