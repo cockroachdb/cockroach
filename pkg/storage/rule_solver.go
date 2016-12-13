@@ -17,108 +17,360 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-const (
-	ruleDiversityWeight = 0.1
-	ruleCapacityWeight  = 0.01
-)
-
 // candidate store for allocation.
 type candidate struct {
-	store roachpb.StoreDescriptor
-	score float64
+	store      roachpb.StoreDescriptor
+	valid      bool
+	constraint float64 // Score used to pick the top candidates.
+	capacity   float64 // Score used to choose between top candidates.
 }
 
-// solveState is used to pass solution state information into a rule.
-type solveState struct {
-	constraints            config.Constraints
-	store                  roachpb.StoreDescriptor
-	sl                     StoreList
-	existing               []roachpb.ReplicaDescriptor
-	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality
+func (c candidate) String() string {
+	return fmt.Sprintf("s%d, valid:%t, con:%.2f, bal:%.2f",
+		c.store.StoreID, c.valid, c.constraint, c.capacity)
 }
 
-// rule is a function that given a solveState will score and possibly
-// disqualify a store. The store in solveState can be disqualified by
-// returning false. Unless disqualified, the higher the returned score, the
-// more likely the store will be picked as a candidate.
-type rule func(state solveState) (float64, bool)
-
-// ruleSolver is used to test a collection of rules against stores.
-type ruleSolver []rule
-
-// allocateRuleSolver is the set of rules used for adding new replicas.
-var allocateRuleSolver = ruleSolver{
-	ruleReplicasUniqueNodes,
-	ruleConstraints,
-	ruleCapacity,
-	ruleDiversity,
+// less first compares valid, then constraint scores, then capacity
+// scores.
+func (c candidate) less(o candidate) bool {
+	if !o.valid {
+		return false
+	}
+	if !c.valid {
+		return true
+	}
+	if c.constraint != o.constraint {
+		return c.constraint < o.constraint
+	}
+	return c.capacity < o.capacity
 }
 
-// removeRuleSolver is the set of rules used for removing existing replicas.
-var removeRuleSolver = ruleSolver{
-	ruleConstraints,
-	ruleCapacity,
-	ruleDiversity,
+type candidateList []candidate
+
+func (cl candidateList) String() string {
+	var buffer bytes.Buffer
+	buffer.WriteRune('[')
+	for i, c := range cl {
+		if i != 0 {
+			buffer.WriteString("; ")
+		}
+		buffer.WriteString(c.String())
+	}
+	buffer.WriteRune(']')
+	return buffer.String()
 }
 
-// Solve runs the rules against the stores in the store list and returns all
-// passing stores and their scores ordered from best to worst score.
-func (rs ruleSolver) Solve(
+// byScore implements sort.Interface to sort by scores.
+type byScore candidateList
+
+var _ sort.Interface = byScore(nil)
+
+func (c byScore) Len() int           { return len(c) }
+func (c byScore) Less(i, j int) bool { return c[i].less(c[j]) }
+func (c byScore) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+
+// byScoreAndID implements sort.Interface to sort by scores and ids.
+type byScoreAndID candidateList
+
+var _ sort.Interface = byScoreAndID(nil)
+
+func (c byScoreAndID) Len() int { return len(c) }
+func (c byScoreAndID) Less(i, j int) bool {
+	if c[i].constraint == c[j].constraint &&
+		c[i].capacity == c[j].capacity &&
+		c[i].valid == c[j].valid {
+		return c[i].store.StoreID < c[j].store.StoreID
+	}
+	return c[i].less(c[j])
+}
+func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
+
+// onlyValid returns all the elements in a sorted (by score reversed) candidate
+// list that are valid.
+func (cl candidateList) onlyValid() candidateList {
+	for i := len(cl) - 1; i >= 0; i-- {
+		if cl[i].valid {
+			return cl[:i+1]
+		}
+	}
+	return candidateList{}
+}
+
+// best returns all the elements in a sorted (by score reversed) candidate list
+// that share the highest constraint score and are valid.
+func (cl candidateList) best() candidateList {
+	cl = cl.onlyValid()
+	if len(cl) <= 1 {
+		return cl
+	}
+	for i := 1; i < len(cl); i++ {
+		if cl[i].constraint < cl[0].constraint {
+			return cl[:i]
+		}
+	}
+	return cl
+}
+
+// worst returns all the elements in a sorted (by score reversed) candidate
+// list that share the lowest constraint score.
+func (cl candidateList) worst() candidateList {
+	if len(cl) <= 1 {
+		return cl
+	}
+	// Are there invalid candidates? If so, pick those.
+	if !cl[len(cl)-1].valid {
+		for i := len(cl) - 2; i >= 0; i-- {
+			if cl[i].valid {
+				return cl[i+1:]
+			}
+		}
+	}
+	// Find the worst constraint values.
+	for i := len(cl) - 2; i >= 0; i-- {
+		if cl[i].constraint > cl[len(cl)-1].constraint {
+			return cl[i+1:]
+		}
+	}
+	return cl
+}
+
+// betterThan returns all elements from a sorted (by score reversed) candidate
+// list that have a higher score than the candidate
+func (cl candidateList) betterThan(c candidate) candidateList {
+	for i := 0; i < len(cl); i++ {
+		if !c.less(cl[i]) {
+			return cl[:i]
+		}
+	}
+	return cl
+}
+
+// selectGood randomly chooses a good candidate store from a sorted (by score
+// reserved) candidate list using the provided random generator.
+func (cl candidateList) selectGood(randGen allocatorRand) *roachpb.StoreDescriptor {
+	if len(cl) == 0 {
+		return nil
+	}
+	cl = cl.best()
+	if len(cl) == 1 {
+		return &cl[0].store
+	}
+	randGen.Lock()
+	order := randGen.Perm(len(cl))
+	randGen.Unlock()
+	best := &cl[order[0]]
+	for i := 1; i < allocatorRandomCount; i++ {
+		if best.less(cl[order[i]]) {
+			best = &cl[order[i]]
+		}
+	}
+	return &best.store
+}
+
+// selectBad randomly chooses a bad candidate store from a sorted (by score
+// reversed) candidate list using the provided random generator.
+func (cl candidateList) selectBad(randGen allocatorRand) *roachpb.StoreDescriptor {
+	if len(cl) == 0 {
+		return nil
+	}
+	cl = cl.worst()
+	if len(cl) == 1 {
+		return &cl[0].store
+	}
+	randGen.Lock()
+	order := randGen.Perm(len(cl))
+	randGen.Unlock()
+	worst := &cl[order[0]]
+	for i := 1; i < allocatorRandomCount; i++ {
+		if cl[order[i]].less(*worst) {
+			worst = &cl[order[i]]
+		}
+	}
+	return &worst.store
+}
+
+// allocateCandidates creates a candidate list of all stores that can used for
+// allocating a new replica ordered from the best to the worst. Only stores
+// that meet the criteria are included in the list.
+func allocateCandidates(
 	sl StoreList,
-	c config.Constraints,
+	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
-) ([]candidate, error) {
-	candidates := make([]candidate, 0, len(sl.stores))
-	state := solveState{
-		constraints:            c,
-		sl:                     sl,
-		existing:               existing,
-		existingNodeLocalities: existingNodeLocalities,
-	}
-
-	for _, store := range sl.stores {
-		state.store = store
-		if cand, ok := rs.computeCandidate(state); ok {
-			candidates = append(candidates, cand)
+	deterministic bool,
+) candidateList {
+	var candidates candidateList
+	for _, s := range sl.stores {
+		if !preexistingReplicaCheck(s.Node.NodeID, existing) {
+			continue
 		}
+		constraintsOk, preferredMatched := constraintCheck(s, constraints)
+		if !constraintsOk {
+			continue
+		}
+		if !maxCapacityCheck(s) {
+			continue
+		}
+
+		constraintScore := diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
+		candidates = append(candidates, candidate{
+			store:      s,
+			valid:      true,
+			constraint: constraintScore,
+			capacity:   capacityScore(s),
+		})
 	}
-	sort.Sort(sort.Reverse(byScore(candidates)))
-	return candidates, nil
+	if deterministic {
+		sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+	} else {
+		sort.Sort(sort.Reverse(byScore(candidates)))
+	}
+	return candidates
 }
 
-// computeCandidate runs the rules against a candidate store using the provided
-// state and returns each candidate's score and if the candidate is valid.
-func (rs ruleSolver) computeCandidate(state solveState) (candidate, bool) {
-	var totalScore float64
-	for _, rule := range rs {
-		score, valid := rule(state)
-		if !valid {
-			return candidate{}, false
+// removeCandidates creates a candidate list of all existing replicas' stores
+// ordered from least qualified for removal to most qualified. Stores that are
+// marked as not valid, are in violation of a required criteria.
+func removeCandidates(
+	sl StoreList,
+	constraints config.Constraints,
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	deterministic bool,
+) candidateList {
+	var candidates candidateList
+	for _, s := range sl.stores {
+		constraintsOk, preferredMatched := constraintCheck(s, constraints)
+		if !constraintsOk {
+			candidates = append(candidates, candidate{store: s, valid: false})
+			continue
 		}
-		totalScore += score
+		if !maxCapacityCheck(s) {
+			candidates = append(candidates, candidate{store: s, valid: false})
+			continue
+		}
+		constraintScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities) + float64(preferredMatched)
+		if !rebalanceFromConvergesOnMean(sl, s) {
+			// If removing this candidate replica does not converge the range
+			// counts to the mean, we make it less attractive for removal by
+			// adding 1 to the constraint score. Note that when selecting a
+			// candidate for removal the candidates with the lowest scores are
+			// more likely to be removed.
+			constraintScore++
+		}
+
+		candidates = append(candidates, candidate{
+			store:      s,
+			valid:      true,
+			constraint: constraintScore,
+			capacity:   capacityScore(s),
+		})
 	}
-	return candidate{store: state.store, score: totalScore}, true
+	if deterministic {
+		sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+	} else {
+		sort.Sort(sort.Reverse(byScore(candidates)))
+	}
+	return candidates
 }
 
-// ruleReplicasUniqueNodes returns true iff no existing replica is present on
+// rebalanceCandidates creates two candidate list. The first contains all
+// existing replica's stores, order from least qualified for rebalancing to
+// most qualified. The second list is of all potential stores that could be
+// used as rebalancing receivers, ordered from best to worst.
+func rebalanceCandidates(
+	sl StoreList,
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	deterministic bool,
+) (candidateList, candidateList) {
+	// Load the exiting storesIDs into a map so to eliminate having to loop
+	// through the existing descriptors more than once.
+	existingStoreIDs := make(map[roachpb.StoreID]struct{})
+	for _, repl := range existing {
+		existingStoreIDs[repl.StoreID] = struct{}{}
+	}
+
+	var existingCandidates candidateList
+	var candidates candidateList
+	for _, s := range sl.stores {
+		constraintsOk, preferredMatched := constraintCheck(s, constraints)
+		maxCapacityOK := maxCapacityCheck(s)
+		if _, ok := existingStoreIDs[s.StoreID]; ok {
+			if !constraintsOk {
+				existingCandidates = append(existingCandidates, candidate{store: s, valid: false})
+				continue
+			}
+			if !maxCapacityOK {
+				existingCandidates = append(existingCandidates, candidate{store: s, valid: false})
+				continue
+			}
+			constraintScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities) + float64(preferredMatched)
+			if !rebalanceFromConvergesOnMean(sl, s) {
+				// Similarly to in removeCandidates, any replica whose removal
+				// would not converge the range counts to the mean is given a
+				// constraint score boost of 1 to make it less attractive for
+				// removal.
+				constraintScore++
+			}
+			existingCandidates = append(existingCandidates, candidate{
+				store:      s,
+				valid:      true,
+				constraint: constraintScore,
+				capacity:   capacityScore(s),
+			})
+		} else {
+			if !constraintsOk || !maxCapacityOK || !rebalanceToConvergesOnMean(sl, s) {
+				continue
+			}
+			// The 1.0 here represents that adding this candidate does indeed
+			// converge the range counts to the mean, which matches its
+			// counterpart of !rebalanceFromConvergesOnMean from the existing
+			// candidates. This ensures that when comparing the best candidate
+			// against the worst existing candidate, any existing candidate
+			// that does rebalanceFromConvergesOnMean will always have a lower
+			// score.
+			constraintScore := 1.0 + diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
+			candidates = append(candidates, candidate{
+				store:      s,
+				valid:      true,
+				constraint: constraintScore,
+				capacity:   capacityScore(s),
+			})
+		}
+	}
+
+	if deterministic {
+		sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
+		sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+	} else {
+		sort.Sort(sort.Reverse(byScore(existingCandidates)))
+		sort.Sort(sort.Reverse(byScore(candidates)))
+	}
+
+	return existingCandidates, candidates
+}
+
+// preexistingReplicaCheck returns true if no existing replica is present on
 // the candidate's node.
-func ruleReplicasUniqueNodes(state solveState) (float64, bool) {
-	for _, r := range state.existing {
-		if r.NodeID == state.store.Node.NodeID {
-			return 0, false
+func preexistingReplicaCheck(nodeID roachpb.NodeID, existing []roachpb.ReplicaDescriptor) bool {
+	for _, r := range existing {
+		if r.NodeID == nodeID {
+			return false
 		}
 	}
-	return 0, true
+	return true
 }
 
-// storeHasConstraint returns whether a store descriptor attributes or locality
+// storeHasConstraint returns whether a store's attributes or node's locality
 // matches the key value pair in the constraint.
 func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool {
 	if c.Key == "" {
@@ -139,59 +391,73 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool
 	return false
 }
 
-// ruleConstraints returns true iff all required and prohibited constraints are
+// constraintCheck returns true iff all required and prohibited constraints are
 // satisfied. Stores with attributes or localities that match the most positive
 // constraints return higher scores.
-func ruleConstraints(state solveState) (float64, bool) {
-	if len(state.constraints.Constraints) == 0 {
-		return 0, true
+func constraintCheck(store roachpb.StoreDescriptor, constraints config.Constraints) (bool, int) {
+	if len(constraints.Constraints) == 0 {
+		return true, 0
 	}
-	matched := 0
-	for _, c := range state.constraints.Constraints {
-		hasConstraint := storeHasConstraint(state.store, c)
+	positive := 0
+	for _, constraint := range constraints.Constraints {
+		hasConstraint := storeHasConstraint(store, constraint)
 		switch {
-		case c.Type == config.Constraint_POSITIVE && hasConstraint:
-			matched++
-		case c.Type == config.Constraint_REQUIRED && !hasConstraint:
-			return 0, false
-		case c.Type == config.Constraint_PROHIBITED && hasConstraint:
-			return 0, false
+		case constraint.Type == config.Constraint_REQUIRED && !hasConstraint:
+			return false, 0
+		case constraint.Type == config.Constraint_PROHIBITED && hasConstraint:
+			return false, 0
+		case (constraint.Type == config.Constraint_POSITIVE && hasConstraint):
+			positive++
 		}
 	}
-
-	return float64(matched) / float64(len(state.constraints.Constraints)), true
+	return true, positive
 }
 
-// ruleDiversity returns higher scores for stores with the fewest locality tiers
-// in common with already existing replicas. It always returns true.
-func ruleDiversity(state solveState) (float64, bool) {
+// diversityScore returns a score between 1 and 0 where higher scores are stores
+// with the fewest locality tiers in common with already existing replicas.
+func diversityScore(
+	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) float64 {
 	minScore := 1.0
-	for _, locality := range state.existingNodeLocalities {
-		if newScore := state.store.Node.Locality.DiversityScore(locality); newScore < minScore {
+	for _, locality := range existingNodeLocalities {
+		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
 			minScore = newScore
 		}
 	}
-	return minScore * ruleDiversityWeight, true
+	return minScore
 }
 
-// ruleCapacity returns true iff a new replica won't overfill the store. The
-// score returned is inversely proportional to the number of ranges on the
-// candidate store, with the most empty nodes having the highest scores.
-// TODO(bram): consider splitting this into two rules.
-func ruleCapacity(state solveState) (float64, bool) {
-	// Don't overfill stores.
-	if state.store.Capacity.FractionUsed() > maxFractionUsedThreshold {
-		return 0, false
+// diversityRemovalScore is similar to diversityScore but instead of calculating
+// the score if a new node is added, it calculates the remaining diversity if a
+// node is removed.
+func diversityRemovalScore(
+	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) float64 {
+	var maxScore float64
+	for nodeIDx, localityX := range existingNodeLocalities {
+		if nodeIDx == nodeID {
+			continue
+		}
+		for nodeIDy, localityY := range existingNodeLocalities {
+			if nodeIDy == nodeID || nodeIDx >= nodeIDy {
+				continue
+			}
+			if newScore := localityX.DiversityScore(localityY); newScore > maxScore {
+				maxScore = newScore
+			}
+		}
 	}
-
-	return ruleCapacityWeight / float64(state.store.Capacity.RangeCount+1), true
+	return maxScore
 }
 
-// byScore implements sort.Interface to sort by scores.
-type byScore []candidate
+// capacityScore returns a score between 0 and 1 that is inversely proportional
+// to the number of ranges on the store such that the most empty store will have
+// the highest scores.
+func capacityScore(store roachpb.StoreDescriptor) float64 {
+	return 1.0 / float64(store.Capacity.RangeCount+1)
+}
 
-var _ sort.Interface = byScore(nil)
-
-func (c byScore) Len() int           { return len(c) }
-func (c byScore) Less(i, j int) bool { return c[i].score < c[j].score }
-func (c byScore) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+// maxCapacityCheck returns true if the store has room for a new replica.
+func maxCapacityCheck(store roachpb.StoreDescriptor) bool {
+	return store.Capacity.FractionUsed() < maxFractionUsedThreshold
+}
