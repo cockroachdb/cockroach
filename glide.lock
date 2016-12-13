@@ -1,9 +1,11 @@
-hash: f1146668d1b64c6bb73e2a2f888975bf6e026ac486e26bcc47aecac5cc5b180c
-updated: 2016-12-08T04:22:04.906667276Z
+hash: 1e0821f7c814849f40cf53d5e518335aad23fc69f58b3bc97b730d2a658b7ae2
+updated: 2016-12-13T11:56:12.606527563-05:00
 imports:
 - name: cloud.google.com/go
-  version: 2b8eb373216db8c887f4934051ab8338581e3656
+  version: 9d965e63e8cceb1b5d7977a202f0fcb8866d6525
   subpackages:
+  - compute/metadata
+  - internal
   - internal/optional
   - storage
 - name: github.com/abourget/teamcity
@@ -54,7 +56,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: b713113094826715b431bab47ba2b8e1991cc056
+  version: cc37beff3526794df3819654faf6a43d35f2531d
   subpackages:
   - raft
   - raft/raftpb
@@ -63,7 +65,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 844b92879f179f16a26ce441631880aa3079b7f4
+  version: 923c7763b0e49cbb9f34da368108e8dde34e009d
   subpackages:
   - digest
   - reference
@@ -161,9 +163,9 @@ imports:
   - protoc-gen-go/plugin
   - ptypes/timestamp
 - name: github.com/google/btree
-  version: 925471ac9e2131377a91e1595defec898166fe49
+  version: 0c3044bc8bada22db67b93f5760fe3f05d6a5c25
 - name: github.com/google/go-github
-  version: 43e7458cf61b30944e822345dc028a649d7f87b4
+  version: 939928b912496ed4fbeb6e4beb2467b4fa540af7
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -213,7 +215,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: 3699758ec6e003d09bb521274c0cc01a798e45d7
+  version: 0d48cd619841b1e1a3cdd20cd6ac97774c0002ce
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -246,7 +248,7 @@ imports:
 - name: github.com/olekukonko/tablewriter
   version: bdcc175572fd7abece6c831e643891b9331bc9e7
 - name: github.com/opencontainers/runc
-  version: 34f23cb99c30040e2ca82442eeb22d15a757f78d
+  version: 083933fb9092a3d65d682ba34a08676104c95462
   subpackages:
   - libcontainer/user
 - name: github.com/opentracing/basictracer-go
@@ -293,7 +295,7 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: 55eb11d21d2a31a3cc93838241d04800f52e823d
+  version: 881bee4e20a5d11a6a88a5667c6f292072ac1963
 - name: github.com/spf13/cobra
   version: 9495bc009a56819bdb0ddbc1a373e29c140bc674
   subpackages:
@@ -317,7 +319,7 @@ imports:
   - blowfish
   - ssh/terminal
 - name: golang.org/x/net
-  version: 97edce0b2e423f6a8debb459af47f4a3cb4ff954
+  version: cfae461cedfdcab6e261a26eb77db53695623303
   subpackages:
   - context
   - context/ctxhttp
@@ -329,7 +331,7 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: 045497edb6234273d67dbc25da3f2ddbc4c4cacf
+  version: 96382aa079b72d8c014eb0c50f6c223d1e6a2de0
   subpackages:
   - google
   - internal
@@ -341,7 +343,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 5c6cf4f9a2357d38515014cea8c488ed22bdab90
+  version: 47a200a05c8b3fd1b698571caecbb68beb2611ec
   subpackages:
   - collate
   - internal/colltab
@@ -351,7 +353,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 3d92dd60033c312e3ae7cac319c792271cf67e37
+  version: 0a14ca4e16cec5dfac9208167b18539631488a10
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -364,18 +366,19 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 3ef9447cad8d725923ca024dab57786299cf745a
+  version: 6ae94d3fbc17a6600999dc24c28bd01735a87b76
   subpackages:
   - gensupport
   - googleapi
   - googleapi/internal/uritemplates
+  - googleapi/transport
   - internal
   - iterator
   - option
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
+  version: ca59ef35f409df61fa4a5f8290ff289b37eccfb8
   subpackages:
   - internal
   - internal/app_identity
@@ -388,11 +391,6 @@ imports:
   - internal/urlfetch
   - socket
   - urlfetch
-- name: google.golang.org/cloud
-  version: 975617b05ea8a58727e6c1a06b6161ff4185a9f2
-  subpackages:
-  - compute/metadata
-  - internal
 - name: google.golang.org/grpc
   version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
   subpackages:
@@ -418,7 +416,7 @@ imports:
 - name: honnef.co/go/ssa
   version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
-  version: 866016499c1224a2f7f52e783b44ca72a51fa46c
+  version: 9f575d2374dfeb3f8da0dd1d8311567cba368fa1
   subpackages:
   - pure
   - vrp
