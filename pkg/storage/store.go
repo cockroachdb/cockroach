@@ -741,6 +741,10 @@ type StoreTestingKnobs struct {
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
+	// DisableAsyncIntentResolution disables the async intent resolution
+	// path (but leaves synchronous resolution). This can avoid some
+	// edge cases in tests that start and stop servers.
+	DisableAsyncIntentResolution bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -2100,19 +2104,7 @@ func (s *Store) removeReplicaImpl(
 
 	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
-	// Clear the pending command queue.
-	if len(rep.mu.proposals) > 0 {
-		resp := proposalResult{
-			Reply:         &roachpb.BatchResponse{},
-			Err:           roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
-			ProposalRetry: proposalRangeNoLongerExists,
-		}
-		for _, p := range rep.mu.proposals {
-			p.finish(resp)
-		}
-	}
-	// Clear the map.
-	rep.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
@@ -3109,6 +3101,9 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				}
 				return nil
 			}
+			repl.mu.Lock()
+			repl.cancelPendingCommandsLocked()
+			repl.mu.Unlock()
 			ctx = repl.AnnotateCtx(ctx)
 			added, err := s.replicaGCQueue.Add(
 				repl, replicaGCPriorityRemoved,
