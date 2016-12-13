@@ -2141,7 +2141,7 @@ func (r *Replica) evaluateProposal(
 			leaseMetricsResult: result.Local.leaseMetricsResult,
 		}
 		if result.WriteBatch == nil {
-			result.Replicated.Strip()
+			result.Replicated.Reset()
 		}
 	}
 
