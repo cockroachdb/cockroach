@@ -164,17 +164,9 @@ func (f *Farmer) CollectLogs() {
 		return
 	}
 	const src = "logs"
-	for i, node := range f.nodes {
-		var dest string
-		if i < f.NumNodes() {
-			dest = "node." + dest
-		} else {
-			i -= f.NumNodes()
-			dest = "writer." + dest
-		}
-		dest += strconv.Itoa(i)
+	for i, node := range f.initNodes() {
 		if err := f.scp(node.hostname, f.defaultKeyFile(), src,
-			filepath.Join(f.AbsLogDir(), dest)); err != nil {
+			filepath.Join(f.AbsLogDir(), "node."+strconv.Itoa(i))); err != nil {
 			f.logf("error collecting %s from host %s: %s\n", src, node.hostname, err)
 		}
 	}
