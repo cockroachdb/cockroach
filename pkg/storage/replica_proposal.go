@@ -415,13 +415,9 @@ func (r *Replica) leasePostApply(
 		// when leases and raft leadership are collocated because that facilitates
 		// quick command application (requests generally need to make it to both the
 		// lease holder and the raft leader before being applied by other replicas).
-		//
-		// TODO(andrei): We want to do this attempt when a lease changes hands, and
-		// then periodically check that the collocation is fine. So we keep checking
-		// it here on lease extensions, which happen periodically, but that's pretty
-		// arbitrary. There might be a more natural place elsewhere where this
-		// periodic check should happen.
-		r.maybeTransferRaftLeadership(ctx, replicaID, newLease.Replica.ReplicaID)
+		// Note that this condition is also checked periodically when computing
+		// replica metrics.
+		r.maybeTransferRaftLeadership(ctx, newLease.Replica.ReplicaID)
 	}
 
 	// Notify the store that a lease change occurred and it may need to
@@ -432,19 +428,19 @@ func (r *Replica) leasePostApply(
 	}
 }
 
-// maybeTransferRaftLeadership attempts to transfer the leadership away from
-// this node to target, if this node is the current raft leader.
-// The transfer might silently fail, particularly (only?) if the transferee is
-// behind on applying the log.
-func (r *Replica) maybeTransferRaftLeadership(
-	ctx context.Context, replicaID roachpb.ReplicaID, target roachpb.ReplicaID,
-) {
+// maybeTransferRaftLeadership attempts to transfer the leadership
+// away from this node to target, if this node is the current raft
+// leader. We don't attempt to transfer leadership if the transferee
+// is behind on applying the log.
+func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachpb.ReplicaID) {
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-		if raftGroup.Status().RaftState == raft.StateLeader {
-			// Only the raft leader can attempt a leadership transfer.
-			log.Infof(ctx, "range %s: transferring raft leadership to replica ID %v",
-				r, target)
-			raftGroup.TransferLeader(uint64(target))
+		// Only the raft leader can attempt a leadership transfer.
+		if status := raftGroup.Status(); status.RaftState == raft.StateLeader {
+			// Only attempt this if the leaseholder has all the log entries.
+			if pr, ok := status.Progress[uint64(target)]; ok && pr.Match == r.mu.lastIndex {
+				log.Infof(ctx, "transferring raft leadership to replica ID %v", target)
+				raftGroup.TransferLeader(uint64(target))
+			}
 		}
 		return true, nil
 	})
