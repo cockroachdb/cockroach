@@ -143,7 +143,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// the replaced node's leases to time out, but has still shown itself to be
 	// long enough to avoid flakes.
 	serverArgs := base.TestServerArgs{
-		RaftTickInterval:         10 * time.Millisecond,
+		RaftTickInterval:         50 * time.Millisecond,
 		RaftElectionTimeoutTicks: 10,
 		RetryOptions: retry.Options{
 			InitialBackoff: 10 * time.Millisecond,
