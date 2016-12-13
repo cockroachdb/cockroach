@@ -65,11 +65,11 @@ func (b *readBuffer) reset(size int) {
 }
 
 // readUntypedMsg reads a length-prefixed message. It is only used directly
-// during the authentication phase of the protocol; readTypedMsg is
-// used at all other times. This returns the number of bytes read and an error,
-// if there was one. The number of bytes returned can be non-zero even with an
-// error (e.g. if data was read but didn't validate) so that we can more
-// accurately measure network traffic.
+// during the authentication phase of the protocol; readTypedMsg is used at all
+// other times. This returns the number of bytes read and an error, if there
+// was one. The number of bytes returned can be non-zero even with an error
+// (e.g. if data was read but didn't validate) so that we can more accurately
+// measure network traffic.
 func (b *readBuffer) readUntypedMsg(rd io.Reader) (int, error) {
 	nread, err := io.ReadFull(rd, b.tmp[:])
 	if err != nil {
