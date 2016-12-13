@@ -254,8 +254,11 @@ message EventsResponse {
     // depending on the vent.
     string info = 5;
 
+    // Tag 6 was used by unique_id when it was a byte field. See #5887.
+    reserved 6;
+
     // unique_id is a unique identifier for this event.
-    bytes unique_id = 6 [(gogoproto.customname) = "UniqueID"];
+    int64 unique_id = 7 [(gogoproto.customname) = "UniqueID"];
   }
 
   repeated Event events = 1 [(gogoproto.nullable) = false];

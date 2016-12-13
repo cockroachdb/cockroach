@@ -130,7 +130,9 @@ func createAndStartTestNode(
 	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
+	if err := WaitForInitialSplits(
+		node.storeCfg.DB, ExpectedInitialRangeCountWithoutMigrations(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper

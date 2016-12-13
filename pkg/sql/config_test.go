@@ -88,6 +88,7 @@ func waitForConfigChange(t *testing.T, s *server.TestServer) config.SystemConfig
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	params.SkipSystemMigrations = true
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop()
 	s := srv.(*server.TestServer)

@@ -69,6 +69,11 @@ const (
 	EventLogNodeRestart EventLogType = "node_restart"
 )
 
+var (
+	// EventLoggingEnabled controls whether event logs are written out.
+	EventLoggingEnabled = true
+)
+
 // An EventLogger exposes methods used to record events to the event table.
 type EventLogger struct {
 	InternalExecutor
@@ -87,6 +92,10 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 func (ev EventLogger) InsertEventRecord(
 	txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{},
 ) error {
+	if !EventLoggingEnabled {
+		return nil
+	}
+
 	// Record event record insertion in local log output.
 	txn.AddCommitTrigger(func() {
 		log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",

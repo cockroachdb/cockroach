@@ -77,6 +77,9 @@ type TestServerArgs struct {
 
 	// If set, the recording of events to the event log tables is disabled.
 	DisableEventLog bool
+
+	// If set, system migrations are not run when the server is started up.
+	SkipSystemMigrations bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

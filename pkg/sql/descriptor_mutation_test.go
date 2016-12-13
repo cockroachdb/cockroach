@@ -889,6 +889,7 @@ func TestTableMutationQueue(t *testing.T) {
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
+	params.SkipSystemMigrations = true
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
 

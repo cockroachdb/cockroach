@@ -130,6 +130,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.DisableEventLog {
 		cfg.EventLogEnabled = false
 	}
+	cfg.SkipSystemMigrations = params.SkipSystemMigrations
 	cfg.JoinList = []string{params.JoinAddr}
 	if cfg.Insecure {
 		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr
@@ -296,10 +297,17 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
-// be on the server after initial (asynchronous) splits have been completed,
-// assuming no additional information is added outside of the normal bootstrap
-// process.
+// be on the server after initial (asynchronous) splits have been completed and
+// system migrations have been run, assuming no additional information is added
+// outside of the normal bootstrap process.
 func ExpectedInitialRangeCount() int {
+	// 1 has to be added for the eventlog table that gets created by a migration.
+	return ExpectedInitialRangeCountWithoutMigrations() + 1
+}
+
+// ExpectedInitialRangeCountWithoutMigrations returns the expected number of
+// ranges that should be on a server that has skipped running migrations.
+func ExpectedInitialRangeCountWithoutMigrations() int {
 	bootstrap := GetBootstrapSchema()
 	return bootstrap.SystemDescriptorCount() - bootstrap.SystemConfigDescriptorCount() + 1
 }
@@ -308,14 +316,16 @@ func ExpectedInitialRangeCount() int {
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
 func (ts *TestServer) WaitForInitialSplits() error {
-	return WaitForInitialSplits(ts.DB())
+	if ts.Cfg.SkipSystemMigrations {
+		return WaitForInitialSplits(ts.DB(), ExpectedInitialRangeCountWithoutMigrations())
+	}
+	return WaitForInitialSplits(ts.DB(), ExpectedInitialRangeCount())
 }
 
 // WaitForInitialSplits waits for the expected number of initial ranges to be
 // populated in the meta2 table. If the expected range count is not reached
 // within a configured timeout, an error is returned.
-func WaitForInitialSplits(db *client.DB) error {
-	expectedRanges := ExpectedInitialRangeCount()
+func WaitForInitialSplits(db *client.DB, expectedRanges int) error {
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)

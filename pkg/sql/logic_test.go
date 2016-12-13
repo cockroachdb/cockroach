@@ -449,6 +449,7 @@ func (t *logicTest) setup() {
 				CheckStmtStringChange: true,
 			},
 		},
+		SkipSystemMigrations: true,
 	}
 	t.srv, _, _ = serverutils.StartServer(t.t, params)
 
