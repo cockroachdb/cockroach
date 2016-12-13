@@ -314,6 +314,9 @@ func (u *sqlSymUnion) op() operator {
 func (u *sqlSymUnion) cmpOp() ComparisonOperator {
     return u.val.(ComparisonOperator)
 }
+func (u *sqlSymUnion) durationField() DurationField {
+    return u.val.(DurationField)
+}
 
 %}
 
@@ -449,7 +452,7 @@ func (u *sqlSymUnion) cmpOp() ComparisonOperator {
 %type <Exprs> substr_list
 %type <Exprs> trim_list
 %type <Exprs> execute_param_clause
-%type <empty> opt_interval interval_second
+%type <DurationField> opt_interval interval_second
 %type <Expr> overlay_placing
 
 %type <bool> opt_unique opt_column
@@ -1456,7 +1459,13 @@ zone_value:
   }
 | const_interval SCONST opt_interval
   {
-    d, err := ParseDInterval($2)
+    var err error
+    var d Datum
+    if $3.val == nil {
+      d, err = ParseDInterval($2)
+    } else {
+      d, err = ParseDIntervalWithField($2, $3.durationField())
+    }
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -3435,23 +3444,67 @@ const_interval:
   }
 
 opt_interval:
-  YEAR { return unimplemented(sqllex) }
-| MONTH { return unimplemented(sqllex) }
-| DAY { return unimplemented(sqllex) }
-| HOUR { return unimplemented(sqllex) }
-| MINUTE { return unimplemented(sqllex) }
-| interval_second { return unimplemented(sqllex) }
-| YEAR TO MONTH { return unimplemented(sqllex) }
-| DAY TO HOUR { return unimplemented(sqllex) }
-| DAY TO MINUTE { return unimplemented(sqllex) }
-| DAY TO interval_second { return unimplemented(sqllex) }
-| HOUR TO MINUTE { return unimplemented(sqllex) }
-| HOUR TO interval_second { return unimplemented(sqllex) }
-| MINUTE TO interval_second { return unimplemented(sqllex) }
+  YEAR
+  {
+    $$.val = Year
+  }
+| MONTH
+  {
+    $$.val = Month
+  }
+| DAY
+  {
+    $$.val = Day
+  }
+| HOUR
+  {
+    $$.val = Hour
+  }
+| MINUTE
+  {
+    $$.val = Minute
+  }
+| interval_second
+  {
+    $$.val = $1
+  }
+// Like Postgres, we ignore the left duration field. See explanation:
+// https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net
+| YEAR TO MONTH
+  {
+    $$.val = Month
+  }
+| DAY TO HOUR
+  {
+    $$.val = Hour
+  }
+| DAY TO MINUTE
+  {
+    $$.val = Minute
+  }
+| DAY TO interval_second
+  {
+    $$.val = $3
+  }
+| HOUR TO MINUTE
+  {
+    $$.val = Minute
+  }
+| HOUR TO interval_second
+  {
+    $$.val = $3
+  }
+| MINUTE TO interval_second
+  {
+    $$.val = $3
+  }
 | /* EMPTY */ {}
 
 interval_second:
-  SECOND { return unimplemented(sqllex) }
+  SECOND
+  {
+    $$.val = Second
+  }
 | SECOND '(' ICONST ')' { return unimplemented(sqllex) }
 
 // General expressions. This is the heart of the expression syntax.
