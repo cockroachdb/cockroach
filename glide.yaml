@@ -1,21 +1,21 @@
 package: github.com/cockroachdb/cockroach
 import:
-- package: github.com/cockroachdb/c-jemalloc
-  version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
-- package: github.com/cockroachdb/c-protobuf
-  subpackages:
-  - cmd/protoc
-- package: github.com/cockroachdb/c-rocksdb
-  version: 894d369c4ea259b65f75563feeb06bea322a8450
-- package: github.com/docker/docker
-  version: 7248742ae7127347a52ab9d215451c213b7b59da
+# TODO(tamird): remove when we upgrade.
 - package: github.com/gogo/protobuf
   version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
-- package: golang.org/x/net
-  version: 97edce0b2e423f6a8debb459af47f4a3cb4ff954
 - package: google.golang.org/grpc
   version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
-- package: google.golang.org/api
-  version: 3ef9447cad8d725923ca024dab57786299cf745a
+# TODO(tamird): remove when we upgrade to 4.3.1 or beyond.
+- package: github.com/cockroachdb/c-jemalloc
+  version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
+# https://github.com/docker/docker/issues/29362
+- package: github.com/docker/docker
+  version: 7248742ae7127347a52ab9d215451c213b7b59da
+# etcd pins this via glide, so we must pin harder.
+- package: golang.org/x/net
+  version: cfae461cedfdcab6e261a26eb77db53695623303
+# used by a long-lived branch. TODO(dt): remove when merged.
 - package: cloud.google.com/go
-  version: 2b8eb373216db8c887f4934051ab8338581e3656
+  version: 9d965e63e8cceb1b5d7977a202f0fcb8866d6525
+- package: google.golang.org/api
+  version: 6ae94d3fbc17a6600999dc24c28bd01735a87b76

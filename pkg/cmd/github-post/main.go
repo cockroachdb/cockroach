@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 
 	"github.com/google/go-github/github"
@@ -53,7 +54,7 @@ func main() {
 		log.Fatalf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
 	}
 
-	client := github.NewClient(oauth2.NewClient(oauth2.NoContext, oauth2.StaticTokenSource(
+	client := github.NewClient(oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)))
 
