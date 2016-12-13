@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // Default constants for timeouts.
@@ -1092,7 +1093,9 @@ func fillSkippedResponses(ba roachpb.BatchRequest, br *roachpb.BatchResponse, ne
 	}
 }
 
-var errMayHaveSucceededAtFailingReplica = roachpb.NewAmbiguousResultError("may have succeeded at failing replica")
+var errMayHaveSucceededAtFailingReplica = roachpb.NewAmbiguousResultError(
+	"may have succeeded at failing replica",
+)
 
 // sendToReplicas sends one or more RPCs to clients specified by the
 // slice of replicas. On success, Send returns the first successful
@@ -1187,7 +1190,9 @@ func (ds *DistSender) sendToReplicas(
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
 					if haveCommit && (pending > 0 || ambiguousResult) {
-						return nil, errMayHaveSucceededAtFailingReplica
+						return nil, errors.Wrap(
+							call.Reply.Error.GoError(), errMayHaveSucceededAtFailingReplica.Error(),
+						)
 					}
 					return call.Reply, nil
 				}

@@ -362,7 +362,7 @@ func (nl *NodeLiveness) updateLiveness(
 		})
 		return txn.Run(b)
 	}); err != nil {
-		if cErr, ok := err.(*roachpb.ConditionFailedError); ok && handleCondFailed != nil {
+		if cErr, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok && handleCondFailed != nil {
 			if cErr.ActualValue == nil {
 				return handleCondFailed(Liveness{})
 			}
