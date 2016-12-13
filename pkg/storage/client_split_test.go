@@ -918,7 +918,13 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 func runSetupSplitSnapshotRace(
 	t *testing.T, testFn func(*multiTestContext, roachpb.Key, roachpb.Key),
 ) {
-	mtc := &multiTestContext{}
+	sc := storage.TestStoreConfig(nil)
+	// We'll control replication by hand.
+	sc.TestingKnobs.DisableReplicateQueue = true
+	// Async intent resolution can sometimes lead to hangs when we stop
+	// most of the stores at the end of this function.
+	sc.TestingKnobs.DisableAsyncIntentResolution = true
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 6)
 
