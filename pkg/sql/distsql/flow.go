@@ -335,6 +335,9 @@ func (f *Flow) Start(doneFn func()) {
 	)
 	f.status = FlowRunning
 	f.flowRegistry.RegisterFlow(f.id, f, f.inboundStreams)
+	if log.V(1) {
+		log.Infof(f.Context, "registered flow %s", f.id.Short())
+	}
 	f.waitGroup.Add(len(f.inboundStreams))
 	f.waitGroup.Add(len(f.outboxes))
 	f.waitGroup.Add(len(f.processors))
