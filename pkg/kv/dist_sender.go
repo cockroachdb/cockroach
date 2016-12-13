@@ -166,10 +166,6 @@ type DistSender struct {
 
 var _ client.Sender = &DistSender{}
 
-// rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(SendOptions, ReplicaSlice,
-	roachpb.BatchRequest, *rpc.Context) (*roachpb.BatchResponse, error)
-
 // DistSenderConfig holds configuration and auxiliary objects that can be passed
 // to NewDistSender.
 type DistSenderConfig struct {
@@ -225,7 +221,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = newRangeDescriptorCache(ds.AnnotateCtx(context.TODO()), rdb, int(rcSize))
+	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
 	lcSize := cfg.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
@@ -270,7 +266,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas)
 					}
 				}
-				err := ds.rangeCache.EvictCachedRangeDescriptor(roachpb.RKeyMin, nil, false)
+				err := ds.rangeCache.EvictCachedRangeDescriptor(ctx, roachpb.RKeyMin, nil, false)
 				if err != nil {
 					log.Warningf(ctx, "failed to evict first range descriptor: %s", err)
 				}
@@ -399,7 +395,6 @@ func (ds *DistSender) sendRPC(
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
-		ctx:              ctx,
 		SendNextTimeout:  ds.sendNextTimeout,
 		transportFactory: ds.transportFactory,
 		metrics:          &ds.metrics,
@@ -407,7 +402,7 @@ func (ds *DistSender) sendRPC(
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := ds.sendToReplicas(rpcOpts, rangeID, replicas, ba, ds.rpcContext)
+	reply, err := ds.sendToReplicas(ctx, rpcOpts, rangeID, replicas, ba, ds.rpcContext)
 	if err != nil {
 		return nil, err
 	}
@@ -1100,6 +1095,7 @@ var errMayHaveSucceededAtFailingReplica = roachpb.NewAmbiguousResultError("may h
 // replica, it's returned immediately. Otherwise, when all replicas
 // have been tried and failed, returns a send error.
 func (ds *DistSender) sendToReplicas(
+	ctx context.Context,
 	opts SendOptions,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
@@ -1138,8 +1134,8 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
-	log.VEventf(opts.ctx, 2, "sending RPC for batch: %s", args.Summary())
-	transport.SendNext(done)
+	log.VEventf(ctx, 2, "sending RPC for batch: %s", args.Summary())
+	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
@@ -1155,14 +1151,14 @@ func (ds *DistSender) sendToReplicas(
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
 				ds.metrics.SendNextTimeoutCount.Inc(1)
-				log.VEventf(opts.ctx, 2, "timeout, trying next peer")
+				log.VEventf(ctx, 2, "timeout, trying next peer")
 				pending++
-				transport.SendNext(done)
+				transport.SendNext(ctx, done)
 			}
 
 		case <-slowTimer:
 			slowTimer = nil
-			log.Warningf(opts.ctx, "have been waiting %s sending RPC for batch: %s",
+			log.Warningf(ctx, "have been waiting %s sending RPC for batch: %s",
 				base.SlowRequestThreshold, args.Summary())
 			ds.metrics.SlowRequestsCount.Inc(1)
 			defer ds.metrics.SlowRequestsCount.Dec(1)
@@ -1172,14 +1168,14 @@ func (ds *DistSender) sendToReplicas(
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof(opts.ctx, "RPC reply: %s", call.Reply)
+					log.Infof(ctx, "RPC reply: %s", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
-					log.Infof(opts.ctx, "application error: %s", call.Reply.Error)
+					log.Infof(ctx, "application error: %s", call.Reply.Error)
 				}
 
 				if call.Reply.Error == nil {
 					return call.Reply, nil
-				} else if !ds.handlePerReplicaError(opts.ctx, transport, rangeID, call.Reply.Error) {
+				} else if !ds.handlePerReplicaError(ctx, transport, rangeID, call.Reply.Error) {
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
 					// if we're trying to commit a transaction and there are
@@ -1202,7 +1198,7 @@ func (ds *DistSender) sendToReplicas(
 				err = call.Reply.Error.GoError()
 			} else {
 				if log.V(1) {
-					log.Warningf(opts.ctx, "RPC error: %s", err)
+					log.Warningf(ctx, "RPC error: %s", err)
 				}
 				// All connection errors except for an unavailable node (this
 				// is GRPC's fail-fast error), may mean that the request
@@ -1233,9 +1229,9 @@ func (ds *DistSender) sendToReplicas(
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
 				ds.metrics.NextReplicaErrCount.Inc(1)
-				log.VEventf(opts.ctx, 2, "error, trying next peer: %s", err)
+				log.VEventf(ctx, 2, "error, trying next peer: %s", err)
 				pending++
-				transport.SendNext(done)
+				transport.SendNext(ctx, done)
 			}
 			if pending == 0 {
 				if ambiguousResult {
@@ -1246,7 +1242,7 @@ func (ds *DistSender) sendToReplicas(
 					)
 				}
 				if log.V(2) {
-					log.ErrEvent(opts.ctx, err.Error())
+					log.ErrEvent(ctx, err.Error())
 				}
 				return nil, err
 			}

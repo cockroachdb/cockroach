@@ -41,8 +41,6 @@ var enableLocalCalls = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOCAL_CALLS", 
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
-	ctx context.Context
-
 	// SendNextTimeout is the duration after which RPCs are sent to
 	// other replicas in a set.
 	SendNextTimeout time.Duration
@@ -96,7 +94,7 @@ type Transport interface {
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
-	SendNext(chan<- BatchCall)
+	SendNext(context.Context, chan<- BatchCall)
 
 	// MoveToFront locates the specified replica and moves it to the
 	// front of the ordering of replicas to try. If the replica has
@@ -160,14 +158,14 @@ func (gt *grpcTransport) IsExhausted() bool {
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
+func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
 	gt.setPending(client.args.Replica, true)
 
 	addr := client.remoteAddr
 	if log.V(2) {
-		log.Infof(gt.opts.ctx, "sending request to %s: %+v", addr, client.args)
+		log.Infof(ctx, "sending request to %s: %+v", addr, client.args)
 	}
 	gt.opts.metrics.SentCount.Inc(1)
 
@@ -186,7 +184,7 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 		}
 
 		go func() {
-			reply, err := localServer.Batch(gt.opts.ctx, &client.args)
+			reply, err := localServer.Batch(ctx, &client.args)
 			gt.setPending(client.args.Replica, false)
 			done <- BatchCall{Reply: reply, Err: err}
 		}()
@@ -194,11 +192,11 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	}
 
 	go func() {
-		reply, err := client.client.Batch(gt.opts.ctx, &client.args)
+		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(gt.opts.ctx, err)
+					log.Error(ctx, err)
 				}
 			}
 		}
@@ -297,14 +295,14 @@ func (s *senderTransport) IsExhausted() bool {
 	return s.called
 }
 
-func (s *senderTransport) SendNext(done chan<- BatchCall) {
+func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	if s.called {
 		panic("called an exhausted transport")
 	}
 	s.called = true
 	sp := s.tracer.StartSpan("node")
 	defer sp.Finish()
-	ctx := opentracing.ContextWithSpan(context.TODO(), sp)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 	log.Event(ctx, s.args.String())
 	br, pErr := s.sender.Send(ctx, s.args)
 	if br == nil {

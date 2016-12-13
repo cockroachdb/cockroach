@@ -19,6 +19,8 @@ package kv
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -39,11 +41,11 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(done chan<- BatchCall) {
+func (l *localTestClusterTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
-	l.Transport.SendNext(done)
+	l.Transport.SendNext(ctx, done)
 }
 
 // InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used

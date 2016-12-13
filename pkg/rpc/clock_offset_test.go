@@ -38,7 +38,7 @@ func TestUpdateOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
-	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour)
 
 	const key = "addr"
 
@@ -48,7 +48,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(key, offset1)
+	monitor.UpdateOffset(context.TODO(), key, offset1)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -63,7 +63,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(key, offset2)
+	monitor.UpdateOffset(context.TODO(), key, offset2)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -78,7 +78,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 10,
 		MeasuredAt:  offset2.MeasuredAt + 1,
 	}
-	monitor.UpdateOffset(key, offset3)
+	monitor.UpdateOffset(context.TODO(), key, offset3)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -88,7 +88,7 @@ func TestUpdateOffset(t *testing.T) {
 	monitor.mu.Unlock()
 
 	// Larger error and offset3 is not stale, so no update.
-	monitor.UpdateOffset(key, offset2)
+	monitor.UpdateOffset(context.TODO(), key, offset2)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %s to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -102,7 +102,7 @@ func TestVerifyClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 50*time.Nanosecond)
-	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour)
 
 	for idx, tc := range []struct {
 		offsets       []RemoteOffset
@@ -121,11 +121,11 @@ func TestVerifyClockOffset(t *testing.T) {
 		}
 
 		if tc.expectedError {
-			if err := monitor.VerifyClockOffset(); !testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
+			if err := monitor.VerifyClockOffset(context.TODO()); !testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
 				t.Errorf("%d: unexpected error %v", idx, err)
 			}
 		} else {
-			if err := monitor.VerifyClockOffset(); err != nil {
+			if err := monitor.VerifyClockOffset(context.TODO()); err != nil {
 				t.Errorf("%d: unexpected error %s", idx, err)
 			}
 		}
@@ -167,7 +167,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 	defer stopper.Stop()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 20*time.Nanosecond)
-	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": {
 			Offset:      13,
@@ -176,7 +176,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 		},
 	}
 
-	if err := monitor.VerifyClockOffset(); err != nil {
+	if err := monitor.VerifyClockOffset(context.TODO()); err != nil {
 		t.Fatal(err)
 	}
 
