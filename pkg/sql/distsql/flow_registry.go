@@ -28,7 +28,7 @@ import (
 
 // flowStreamTimeout is the amount of time incoming streams wait for a flow to
 // be set up before erroring out.
-const flowStreamTimeout time.Duration = 4000 * time.Millisecond
+const flowStreamTimeout time.Duration = 10 * time.Second
 
 // inboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a
@@ -192,15 +192,17 @@ func (fr *flowRegistry) waitForFlowLocked(id FlowID, timeout time.Duration) *flo
 	// Set up a channel that gets closed when the flow shows up, or when the
 	// timeout elapses. The channel might have been created already if there are
 	// other waiters for the same id.
-	if entry.waitCh != nil {
-		entry.waitCh = make(chan struct{})
+	waitCh := entry.waitCh
+	if waitCh == nil {
+		waitCh = make(chan struct{})
+		entry.waitCh = waitCh
 	}
 	entry.refCount++
 	fr.Unlock()
 
 	// Wait until waitCh gets closed or the timeout elapses.
 	select {
-	case <-entry.waitCh:
+	case <-waitCh:
 	case <-time.After(timeout):
 	}
 
