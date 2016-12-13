@@ -108,8 +108,10 @@ func (s *selectNode) addOrMergeRenders(
 	return colIdxs
 }
 
-// checkRenderStar checks if the SelectExpr is either an
-// UnqualifiedStar or an AllColumnsSelector. If so, we match the
+// checkRenderStar handles the case where the target specification
+// contains a SQL star (UnqualifiedStar or AllColumnsSelector).  In
+// the case where the context disallows stars (allowStars false), an
+// error is reported. If star expansion is allowed, we match the
 // prefix of the name to one of the tables in the query and then
 // expand the "*" into a list of columns. A ResultColumns and Expr
 // pair is returned for each column.
