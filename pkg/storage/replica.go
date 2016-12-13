@@ -3464,6 +3464,15 @@ func (r *Replica) processRaftCommand(
 		// Note that this must happen after committing (the engine.Batch), but
 		// before notifying a potentially waiting client.
 		r.handleEvalResult(ctx, raftCmd.OriginReplica, lResult, raftCmd.ReplicatedEvalResult)
+
+		// If this replica is the raft leader but it is not the new lease holder,
+		// then try to transfer the raft leadership to match the lease. We like it
+		// when leases and raft leadership are collocated because that facilitates
+		// quick command application (requests generally need to make it to both the
+		// lease holder and the raft leader before being applied by other replicas).
+		if raftCmd.BatchRequest != nil {
+			r.maybeTransferRaftLeadership(ctx)
+		}
 	}
 
 	if proposedLocally {

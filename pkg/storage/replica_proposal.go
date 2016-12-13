@@ -409,21 +409,6 @@ func (r *Replica) leasePostApply(
 		r.mu.Unlock()
 	}
 
-	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
-		// If this replica is the raft leader but it is not the new lease holder,
-		// then try to transfer the raft leadership to match the lease. We like it
-		// when leases and raft leadership are collocated because that facilitates
-		// quick command application (requests generally need to make it to both the
-		// lease holder and the raft leader before being applied by other replicas).
-		//
-		// TODO(andrei): We want to do this attempt when a lease changes hands, and
-		// then periodically check that the collocation is fine. So we keep checking
-		// it here on lease extensions, which happen periodically, but that's pretty
-		// arbitrary. There might be a more natural place elsewhere where this
-		// periodic check should happen.
-		r.maybeTransferRaftLeadership(ctx, replicaID, newLease.Replica.ReplicaID)
-	}
-
 	// Notify the store that a lease change occurred and it may need to
 	// gossip the updated store descriptor (with updated capacity).
 	if leaseChangingHands && (prevLease.OwnedBy(r.store.StoreID()) ||
@@ -433,18 +418,18 @@ func (r *Replica) leasePostApply(
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership away from
-// this node to target, if this node is the current raft leader.
+// this node to the current leaseholder, if this node is the current raft leader.
 // The transfer might silently fail, particularly (only?) if the transferee is
 // behind on applying the log.
-func (r *Replica) maybeTransferRaftLeadership(
-	ctx context.Context, replicaID roachpb.ReplicaID, target roachpb.ReplicaID,
-) {
+func (r *Replica) maybeTransferRaftLeadership(ctx context.Context) {
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// Only the raft leader can attempt a leadership transfer.
 		if raftGroup.Status().RaftState == raft.StateLeader {
-			// Only the raft leader can attempt a leadership transfer.
-			log.Infof(ctx, "range %s: transferring raft leadership to replica ID %v",
-				r, target)
-			raftGroup.TransferLeader(uint64(target))
+			if l := r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
+				r.isLeaseValidLocked(l, r.store.Clock().Now()) {
+				log.Infof(ctx, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
+				raftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+			}
 		}
 		return true, nil
 	})

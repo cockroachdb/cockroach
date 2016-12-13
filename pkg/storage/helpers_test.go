@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/coreos/etcd/raft"
+	"github.com/pkg/errors"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -253,6 +255,22 @@ func (r *Replica) IsQuiescent() bool {
 // specified queue, or the zero timestamp if not available.
 func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
 	return r.getQueueLastProcessed(ctx, queue)
+}
+
+// RaftTransferLeader manually transfers the Raft leadership to the
+// target node. The replica must be the current Raft leader. This
+// command will silently fail if the target is not an up-to-date
+// replica.
+func (r *Replica) RaftTransferLeader(target roachpb.ReplicaID) error {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		if status := raftGroup.Status(); status.RaftState == raft.StateLeader {
+			// Only the raft leader can attempt a leadership transfer.
+			raftGroup.TransferLeader(uint64(target))
+		} else {
+			return true, errors.Errorf("%s is not Raft leader (%+v)", r, status)
+		}
+		return true, nil
+	})
 }
 
 func GetGCQueueTxnCleanupThreshold() time.Duration {
