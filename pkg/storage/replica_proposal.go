@@ -22,7 +22,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,22 +43,77 @@ const (
 	leaseTransferError
 )
 
-// LocalEvalResult is data belonging to a proposal that is only relevant
-// on the node on which the command was proposed.
+// ProposalData is data about a command which allows it to be
+// evaluated, proposed to raft, and for the result of the command to
+// be returned to the caller.
+type ProposalData struct {
+	// The caller's context, used for logging proposals and reproposals.
+	ctx context.Context
+
+	// idKey uniquely identifies this proposal.
+	// TODO(andreimatei): idKey is legacy at this point: We could easily key
+	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
+	// the-world migration. However, various test facilities depend on the
+	// command ID for e.g. replay protection.
+	idKey storagebase.CmdIDKey
+
+	// proposedAtTicks is the (logical) time at which this command was
+	// last (re-)proposed.
+	proposedAtTicks int
+
+	// command is serialized and proposed to raft. In the event of
+	// reproposals its MaxLeaseIndex field is mutated.
+	command storagebase.RaftCommand
+
+	// endCmds.finish is called after command execution to update the timestamp cache &
+	// command queue.
+	endCmds *endCmds
+
+	// doneCh is used to signal the waiting RPC handler (the contents of
+	// proposalResult come from LocalEvalResult)
+	doneCh chan proposalResult
+
+	// Local contains the results of evaluating the request in
+	// propEvalKV, tying the upstream evaluation of the request to the
+	// downstream application of the command. If propEvalKV is false,
+	// Local is nil.
+	Local *LocalEvalResult
+
+	// Request is the client's original BatchRequest.
+	// TODO(tschottdorf): tests which use TestingCommandFilter use this.
+	// Decide how that will work in the future, presumably the
+	// CommandFilter would run at proposal time or we allow an opaque
+	// struct to be attached to a proposal which is then available as it
+	// applies. Other than tests, we only need a few bits of the request
+	// here; this could be replaced with isLease and isChangeReplicas
+	// booleans.
+	Request *roachpb.BatchRequest
+}
+
+// finish first invokes the endCmds function and then sends the
+// specified proposalResult on the proposal's done channel. endCmds is
+// invoked here in order to allow the original client to be cancelled
+// and possibly no longer listening to this done channel, and so can't
+// be counted on to invoke endCmds itself.
+func (proposal *ProposalData) finish(pr proposalResult) {
+	if proposal.endCmds != nil {
+		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
+		proposal.endCmds = nil
+	}
+	proposal.doneCh <- pr
+	close(proposal.doneCh)
+}
+
+// LocalEvalResult is data belonging to an evaluated command that is
+// only used on the node on which the command was proposed. Note that
+// the proposing node may die before the local results are processed,
+// so any side effects here are only best-effort.
 //
 // TODO(tschottdorf): once the WriteBatch is available in the replicated
 // proposal data (i.e. once we really do proposer-evaluted KV), experiment with
 // holding on to the proposer's constructed engine.Batch in this struct, which
 // could give a performance gain.
 type LocalEvalResult struct {
-	// TODO(andreimatei): idKey is legacy at this point: We could easily key
-	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
-	// the-world migration. However, various test facilities depend on the
-	// command ID for e.g. replay protection.
-	idKey           storagebase.CmdIDKey
-	proposedAtTicks int
-	ctx             context.Context
-
 	// The error resulting from the proposal. Most failing proposals will
 	// fail-fast, i.e. will return an error to the client above Raft. However,
 	// some proposals need to commit data even on error, and in that case we
@@ -68,12 +122,6 @@ type LocalEvalResult struct {
 	// the common case, this field is nil.
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
-	// Called after command execution to update the timestamp cache &
-	// command queue.
-	endCmds *endCmds
-	doneCh  chan proposalResult // Used to signal waiting RPC handler
-
-	Batch engine.Batch
 
 	// intents stores any intents encountered but not conflicted with. They
 	// should be handed off to asynchronous intent processing on the proposer,
@@ -104,22 +152,8 @@ type LocalEvalResult struct {
 	maybeGossipNodeLiveness *roachpb.Span
 }
 
-// finish first invokes the endCmds function and then sends the
-// specified proposalResult on the lResult's done channel. endCmds is
-// invoked here in order to allow the original client to be cancelled
-// and possibly no longer listening to this done channel, and so can't
-// be counted on to invoke endCmds itself.
-func (lResult *LocalEvalResult) finish(pr proposalResult) {
-	if lResult.endCmds != nil {
-		lResult.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
-		lResult.endCmds = nil
-	}
-	lResult.doneCh <- pr
-	close(lResult.doneCh)
-}
-
 func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
-	if lResult.intents == nil {
+	if lResult == nil || lResult.intents == nil {
 		return nil
 	}
 	intents := *lResult.intents
@@ -137,13 +171,9 @@ func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
 // c) data which isn't sent to the followers but the proposer needs for tasks
 //    it must run when the command has applied (such as resolving intents).
 type EvalResult struct {
-	Local         LocalEvalResult
-	MaxLeaseIndex uint64
-	OriginReplica roachpb.ReplicaDescriptor
-	OriginLease   *roachpb.Lease
-	Request       *roachpb.BatchRequest
-	Replicated    storagebase.ReplicatedEvalResult
-	WriteBatch    *storagebase.WriteBatch
+	Local      LocalEvalResult
+	Replicated storagebase.ReplicatedEvalResult
+	WriteBatch *storagebase.WriteBatch
 }
 
 // coalesceBool ORs rhs into lhs and then zeroes rhs.
@@ -623,13 +653,7 @@ func (r *Replica) handleLocalEvalResult(
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
-		lResult.idKey = storagebase.CmdIDKey("")
-		lResult.Batch = nil
-		lResult.endCmds = nil
-		lResult.doneCh = nil
-		lResult.ctx = nil
 		lResult.Err = nil
-		lResult.proposedAtTicks = 0
 		lResult.Reply = nil
 	}
 
@@ -706,12 +730,17 @@ func (r *Replica) handleLocalEvalResult(
 func (r *Replica) handleEvalResult(
 	ctx context.Context,
 	originReplica roachpb.ReplicaDescriptor,
-	lResult LocalEvalResult,
-	rResult storagebase.ReplicatedEvalResult,
+	lResult *LocalEvalResult,
+	rResult *storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
-	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
-	shouldAssert = r.handleLocalEvalResult(ctx, originReplica, lResult) || shouldAssert
+	shouldAssert := false
+	if rResult != nil {
+		shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
+	}
+	if lResult != nil {
+		shouldAssert = r.handleLocalEvalResult(ctx, originReplica, *lResult) || shouldAssert
+	}
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the side effects.
