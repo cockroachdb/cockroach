@@ -65,7 +65,7 @@ func (b *readBuffer) reset(size int) {
 }
 
 // readUntypedMsg reads a length-prefixed message. It is only used directly
-// during the authentication phase of the protocol; readTypedMsg is
+// during the authentication phase of the protocol; v3Conn's readTypedMsg is
 // used at all other times. This returns the number of bytes read and an error,
 // if there was one. The number of bytes returned can be non-zero even with an
 // error (e.g. if data was read but didn't validate) so that we can more
@@ -86,17 +86,6 @@ func (b *readBuffer) readUntypedMsg(rd io.Reader) (int, error) {
 	b.reset(size)
 	n, err := io.ReadFull(rd, b.msg)
 	return nread + n, err
-}
-
-// readTypedMsg reads a message from the provided reader, returning its type code and body.
-// It returns the message type, number of bytes read, and an error if there was one.
-func (b *readBuffer) readTypedMsg(rd bufferedReader) (clientMessageType, int, error) {
-	typ, err := rd.ReadByte()
-	if err != nil {
-		return 0, 0, err
-	}
-	n, err := b.readUntypedMsg(rd)
-	return clientMessageType(typ), n, err
 }
 
 // getString reads a null-terminated string.

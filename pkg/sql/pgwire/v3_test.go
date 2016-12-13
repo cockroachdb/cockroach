@@ -26,6 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -42,7 +44,7 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 		},
 		nil, /* stopper */
 	)
-	return makeV3Conn(context.Background(), c, &metrics, &mon, exec)
+	return makeV3Conn(c, &metrics, &mon, exec)
 }
 
 // TestMaliciousInputs verifies that known malicious inputs sent to
@@ -99,4 +101,63 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	v3Conn := makeTestV3Conn(r)
 	defer v3Conn.finish(context.Background())
 	_ = v3Conn.serve(context.Background(), mon.BoundAccount{})
+}
+
+func TestContextCancellationClosesConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	// Cannot use net.Pipe because deadlines are not supported.
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := ln.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Start a client that checks that the v3Conn is on the read loop.
+	go func() {
+		c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		response := make([]byte, 1, 1)
+		// Skip over initialization messages sent by v3Conn.
+		for serverMessageType(response[0]) != serverMsgReady {
+			if _, err := c.Read(response); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Skip over the rest of the serverMsgReady message.
+		_, _ = c.Read(make([]byte, 5, 5))
+
+		if _, err := c.Write([]byte{byte(clientMsgSync), 0x00, 0x00, 0x00, 0x04}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Read(response); err != nil {
+			t.Fatal(err)
+		}
+		if serverMessageType(response[0]) != serverMsgReady {
+			t.Fatalf("unexpected response to sync request: %s", serverMessageType(response[0]))
+		}
+		cancelFunc()
+	}()
+
+	// c is closed by v3Conn.finish(...)
+	c, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v3Conn := makeTestV3Conn(c)
+	defer v3Conn.finish(ctx)
+	// Make sure that v3Conn.serve(...) exits with an expected error.
+	if err := v3Conn.serve(ctx, mon.BoundAccount{}); !testutils.IsError(err, context.Canceled.Error()) {
+		t.Fatalf("unexpected error: %s", err)
+	}
 }
