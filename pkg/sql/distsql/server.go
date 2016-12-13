@@ -153,7 +153,7 @@ func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*Simp
 	return &SimpleResponse{}, nil
 }
 
-func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
+func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStreamServer) error {
 	// Receive the first message.
 	msg, err := stream.Recv()
 	if err != nil {
@@ -166,9 +166,16 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 		return errors.Errorf("no header in first message")
 	}
 	flowID := msg.Header.FlowID
-	f, streamInfo, err := ds.flowRegistry.ConnectInboundStream(flowID, msg.Header.StreamID)
+	streamID := msg.Header.StreamID
+	if log.V(1) {
+		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
+	}
+	f, streamInfo, err := ds.flowRegistry.ConnectInboundStream(flowID, streamID)
 	if err != nil {
 		return err
+	}
+	if log.V(1) {
+		log.Infof(ctx, "connected inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	defer ds.flowRegistry.FinishInboundStream(streamInfo)
 	return ProcessInboundStream(&f.FlowCtx, stream, msg, streamInfo.receiver)
@@ -177,7 +184,7 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 // FlowStream is part of the DistSQLServer interface.
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	ctx := ds.AnnotateCtx(stream.Context())
-	err := ds.flowStreamInt(stream)
+	err := ds.flowStreamInt(ctx, stream)
 	if err != nil {
 		log.Error(ctx, err)
 	}
