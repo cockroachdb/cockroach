@@ -74,6 +74,15 @@ func TestTypeCheck(t *testing.T) {
 		`ARRAY['a', 'b', 'c']`,
 		`ARRAY[1.5, 2.5, 3.5]`,
 		`ARRAY[NULL]`,
+		`1 = ANY ARRAY[1.5, 2.5, 3.5]`,
+		`true = SOME (ARRAY[true, false])`,
+		`1.3 = ALL ARRAY[1, 2, 3]`,
+		`1.3 = ALL ((ARRAY[]))`,
+		`NULL = ALL ARRAY[1.5, 2.5, 3.5]`,
+		`NULL = ALL ARRAY[NULL, NULL]`,
+		`1 = ALL NULL`,
+		`'a' = ALL CURRENT_SCHEMAS(true)`,
+		`NULL = ALL CURRENT_SCHEMAS(true)`,
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d)
@@ -115,6 +124,9 @@ func TestTypeCheckError(t *testing.T) {
 		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not the same type: expected 2 to be of type string, found type int`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): expected 1 to be of type string, found type int`},
 		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): expected 1 to be of type string, found type int`},
+		{`1 = ANY 2`, `unsupported comparison operator: 1 = ANY 2: op ANY array requires array on right side`},
+		{`1 = ANY ARRAY[2, '3']`, `unsupported comparison operator: 1 ANY = ARRAY[2, '3']: expected 1 to be of type string, found type int`},
+		{`1 = ALL CURRENT_SCHEMAS(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
 		{`1.0 BETWEEN 2 AND '5'`, `expected 1.0 to be of type string, found type decimal`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
 		{`IF(true, 2, '5')`, `incompatible IF expressions: expected 2 to be of type string, found type int`},

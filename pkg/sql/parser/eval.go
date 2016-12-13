@@ -1455,6 +1455,67 @@ func makeEvalTupleIn(typ Type) CmpOp {
 	}
 }
 
+// evalArrayCmp evaluates the array comparison using the provided sub-operator type
+// and its CmpOp with the left Datum and the right array of Datums.
+//
+// For example, given 1 < ANY (ARRAY[1, 2, 3]), evalArrayCmp would be called with:
+//   evalArrayCmp(ctx, LT, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray).
+func evalArrayCmp(
+	ctx *EvalContext, subOp ComparisonOperator, fn CmpOp, left Datum, right *DArray, all bool,
+) (Datum, error) {
+	allTrue := true
+	anyTrue := false
+	sawNull := false
+	for _, elem := range right.Array {
+		if elem == DNull {
+			sawNull = true
+			continue
+		}
+
+		_, newLeft, newRight, _, not := foldComparisonExpr(subOp, left, elem)
+		d, err := fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
+		if err != nil {
+			if err == errCmpNull {
+				sawNull = true
+				continue
+			}
+			return nil, err
+		}
+
+		res := d != DBool(not)
+		if res {
+			anyTrue = true
+		} else {
+			allTrue = false
+		}
+	}
+
+	if all {
+		if !allTrue {
+			return DBoolFalse, nil
+		}
+		if sawNull {
+			// If the right-hand array contains any null elements and no false
+			// comparison result is obtained, the result of ALL will be null.
+			return DNull, nil
+		}
+		// allTrue && !sawNull
+		return DBoolTrue, nil
+	}
+
+	// !all
+	if anyTrue {
+		return DBoolTrue, nil
+	}
+	if sawNull {
+		// If the right-hand array contains any null elements and no true
+		// comparison result is obtained, the result of ANY will be null.
+		return DNull, nil
+	}
+	// !anyTrue && !sawNull
+	return DBoolFalse, nil
+}
+
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (DBool, error) {
 	pattern := string(*right.(*DString))
 	like := optimizedLikeFunc(pattern, caseInsensitive)
@@ -2110,15 +2171,20 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 	}
 
-	_, newLeft, newRight, _, not := foldComparisonExpr(expr.Operator, left, right)
+	op := expr.Operator
+	if op.hasSubOperator() {
+		return evalArrayCmp(ctx, expr.SubOperator, expr.fn, left, right.(*DArray), op == All)
+	}
+
+	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
 	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
-	if err == errCmpNull {
-		return DNull, nil
+	if err != nil {
+		if err == errCmpNull {
+			return DNull, nil
+		}
+		return nil, err
 	}
-	if err == nil && not {
-		return MakeDBool(!d), nil
-	}
-	return MakeDBool(d), err
+	return MakeDBool(d != DBool(not)), nil
 }
 
 // Eval implements the TypedExpr interface.
