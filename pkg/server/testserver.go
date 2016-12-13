@@ -416,8 +416,7 @@ func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.distSender
 }
 
-// GetFirstStoreID is a utility function returning the StoreID of the first
-// store on this node.
+// GetFirstStoreID is part of TestServerInterface.
 func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
 	err := ts.Stores().VisitStores(func(s *storage.Store) error {
