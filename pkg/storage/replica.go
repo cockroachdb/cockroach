@@ -4465,8 +4465,13 @@ func (r *Replica) metrics(
 	desc := r.mu.state.Desc
 	r.mu.Unlock()
 
-	return calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
+	m := calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
 		raftStatus, status, r.store.StoreID(), quiescent)
+	// Try to correct leader-not-leaseholder condition, if encountered.
+	if m.leaseValid && !m.leaseholder && m.leader {
+		r.maybeTransferRaftLeadership(ctx, status.lease.Replica.ReplicaID)
+	}
+	return m
 }
 
 func isRaftLeader(raftStatus *raft.Status) bool {

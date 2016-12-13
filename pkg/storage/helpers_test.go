@@ -255,6 +255,14 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
+// RaftTransferLeader manually transfers the Raft leadership to the
+// target node. The replica must be the current Raft leader. This
+// command will silently fail if the target is not an up-to-date
+// replica.
+func (r *Replica) RaftTransferLeader(ctx context.Context, target roachpb.ReplicaID) error {
+	return r.maybeTransferRaftLeadership(ctx, target)
+}
+
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
 }
