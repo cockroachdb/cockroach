@@ -519,34 +519,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}))
 	})
 
-	if len(s.cfg.SocketFile) != 0 {
-		// Unix socket enabled: postgres protocol only.
-		unixLn, err := net.Listen("unix", s.cfg.SocketFile)
-		if err != nil {
-			return err
-		}
-
-		s.stopper.RunWorker(func() {
-			<-s.stopper.ShouldQuiesce()
-			if err := unixLn.Close(); err != nil {
-				log.Fatal(workersCtx, err)
-			}
-		})
-
-		s.stopper.RunWorker(func() {
-			pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
-				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
-					// Report the error on this connection's context, so that we
-					// know which remote client caused the error when looking at
-					// the logs.
-					log.Error(connCtx, err)
-				}
-			}))
-		})
-	}
-
 	// Enable the debug endpoints first to provide an earlier window
 	// into what's going on with the node in advance of exporting node
 	// functionality.
@@ -642,13 +614,39 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
-	if len(s.cfg.SocketFile) != 0 {
-		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
-	}
-
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(m.Serve())
 	})
+
+	if len(s.cfg.SocketFile) != 0 {
+		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
+
+		// Unix socket enabled: postgres protocol only.
+		unixLn, err := net.Listen("unix", s.cfg.SocketFile)
+		if err != nil {
+			return err
+		}
+
+		s.stopper.RunWorker(func() {
+			<-s.stopper.ShouldQuiesce()
+			if err := unixLn.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		})
+
+		s.stopper.RunWorker(func() {
+			pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
+				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+					// Report the error on this connection's context, so that we
+					// know which remote client caused the error when looking at
+					// the logs.
+					log.Error(connCtx, err)
+				}
+			}))
+		})
+	}
 
 	log.Event(ctx, "accepting connections")
 
