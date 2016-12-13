@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -92,6 +93,10 @@ type TestServerInterface interface {
 	// WriteSummaries records summaries of time-series data, which is required for
 	// any tests that query server stats.
 	WriteSummaries() error
+
+	// GetFirstStoreID is a utility function returning the StoreID of the first
+	// store on this node.
+	GetFirstStoreID() roachpb.StoreID
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

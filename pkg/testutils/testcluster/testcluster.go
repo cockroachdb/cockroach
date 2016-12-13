@@ -236,7 +236,7 @@ func (tc *TestCluster) WaitForStores(t testing.TB, g *gossip.Gossip) {
 	}
 }
 
-// LookupRange returns the descriptor of the range containing key.
+// LookupRange is part of TestClusterInterface.
 func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	return tc.Servers[0].LookupRange(key)
 }
@@ -254,23 +254,17 @@ func (tc *TestCluster) SplitRange(
 	return tc.Servers[0].SplitRange(splitKey)
 }
 
-// ReplicationTarget identifies a node/store pair.
-type ReplicationTarget struct {
-	NodeID  roachpb.NodeID
-	StoreID roachpb.StoreID
-}
-
 // Target returns a ReplicationTarget for the specified server.
-func (tc *TestCluster) Target(serverIdx int) ReplicationTarget {
+func (tc *TestCluster) Target(serverIdx int) base.ReplicationTarget {
 	s := tc.Servers[serverIdx]
-	return ReplicationTarget{
+	return base.ReplicationTarget{
 		NodeID:  s.GetNode().Descriptor.NodeID,
 		StoreID: s.GetFirstStoreID(),
 	}
 }
 
 func (tc *TestCluster) changeReplicas(
-	action roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...ReplicationTarget,
+	action roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...base.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	var rangeDesc roachpb.RangeDescriptor
 
@@ -317,13 +311,9 @@ func (tc *TestCluster) changeReplicas(
 	return rangeDesc, nil
 }
 
-// AddReplicas adds replicas for a range on a set of stores.
-// It's illegal to have multiple replicas of the same range on stores of a single
-// node.
-// The method blocks until a snapshot of the range has been copied to all the
-// new replicas and the new replicas become part of the Raft group.
+// AddReplicas is part of TestClusterInterface.
 func (tc *TestCluster) AddReplicas(
-	startKey roachpb.Key, targets ...ReplicationTarget,
+	startKey roachpb.Key, targets ...base.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 	rangeDesc, err := tc.changeReplicas(
@@ -354,23 +344,16 @@ func (tc *TestCluster) AddReplicas(
 	return rangeDesc, nil
 }
 
-// RemoveReplicas removes one or more replicas from a range.
+// RemoveReplicas is part of the TestServerInterface.
 func (tc *TestCluster) RemoveReplicas(
-	startKey roachpb.Key, targets ...ReplicationTarget,
+	startKey roachpb.Key, targets ...base.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
 }
 
-// TransferRangeLease transfers the lease for a range from whoever has it to
-// a particular store. That store must already have a replica of the range. If
-// that replica already has the (active) lease, this method is a no-op.
-//
-// When this method returns, it's guaranteed that the old lease holder has
-// applied the new lease, but that's about it. It's not guaranteed that the new
-// lease holder has applied it (so it might not know immediately that it is the
-// new lease holder).
+// TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
-	rangeDesc roachpb.RangeDescriptor, dest ReplicationTarget,
+	rangeDesc roachpb.RangeDescriptor, dest base.ReplicationTarget,
 ) error {
 	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
 		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
@@ -384,7 +367,7 @@ func (tc *TestCluster) TransferRangeLease(
 // without verifying if the lease is still active. Instead, it returns a time-
 // stamp taken off the queried node's clock.
 func (tc *TestCluster) FindRangeLease(
-	rangeDesc roachpb.RangeDescriptor, hint *ReplicationTarget,
+	rangeDesc roachpb.RangeDescriptor, hint *base.ReplicationTarget,
 ) (_ *roachpb.Lease, now hlc.Timestamp, _ error) {
 	if hint != nil {
 		var ok bool
@@ -393,7 +376,7 @@ func (tc *TestCluster) FindRangeLease(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
-		hint = &ReplicationTarget{
+		hint = &base.ReplicationTarget{
 			NodeID:  rangeDesc.Replicas[0].NodeID,
 			StoreID: rangeDesc.Replicas[0].StoreID}
 	}
@@ -431,39 +414,31 @@ func (tc *TestCluster) FindRangeLease(
 	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, hintServer.Clock().Now(), nil
 }
 
-// FindRangeLeaseHolder returns the current lease holder for the given range.
-// In particular, it returns one particular node's (the hint, if specified) view
-// of the current lease.
-// An error is returned if there's no active lease.
-//
-// Note that not all nodes have necessarily applied the latest lease,
-// particularly immediately after a TransferRangeLease() call. So specifying
-// different hints can yield different results. The one server that's guaranteed
-// to have applied the transfer is the previous lease holder.
+// FindRangeLeaseHolder is part of TestClusterInterface.
 func (tc *TestCluster) FindRangeLeaseHolder(
-	rangeDesc roachpb.RangeDescriptor, hint *ReplicationTarget,
-) (ReplicationTarget, error) {
+	rangeDesc roachpb.RangeDescriptor, hint *base.ReplicationTarget,
+) (base.ReplicationTarget, error) {
 	lease, now, err := tc.FindRangeLease(rangeDesc, hint)
 	if err != nil {
-		return ReplicationTarget{}, err
+		return base.ReplicationTarget{}, err
 	}
 	if lease == nil {
-		return ReplicationTarget{}, errors.New("no active lease")
+		return base.ReplicationTarget{}, errors.New("no active lease")
 	}
 	// Find lease replica in order to examine the lease state.
 	store, err := tc.findMemberStore(lease.Replica.StoreID)
 	if err != nil {
-		return ReplicationTarget{}, err
+		return base.ReplicationTarget{}, err
 	}
 	replica, err := store.GetReplica(rangeDesc.RangeID)
 	if err != nil {
-		return ReplicationTarget{}, err
+		return base.ReplicationTarget{}, err
 	}
 	if !replica.IsLeaseValid(lease, now) {
-		return ReplicationTarget{}, errors.New("no valid lease")
+		return base.ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica
-	return ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
+	return base.ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
 }
 
 // WaitForSplitAndReplication waits for a range which starts with
