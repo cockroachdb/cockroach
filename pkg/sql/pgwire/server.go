@@ -270,7 +270,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		// We make a connection before anything. If there is an error
 		// parsing the connection arguments, the connection will only be
 		// used to send a report of that error.
-		v3conn := makeV3Conn(ctx, conn, &s.metrics, &s.sqlMemoryPool, s.executor)
+		v3conn := makeV3Conn(conn, &s.metrics, &s.sqlMemoryPool, s.executor)
 		defer v3conn.finish(ctx)
 
 		if v3conn.sessionArgs, err = parseOptions(buf.msg); err != nil {
