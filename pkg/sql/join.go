@@ -525,6 +525,7 @@ func (n *joinNode) Next() (res bool, err error) {
 
 		// We iterate through all the rows in the bucket attempting to match the
 		// filter, if the filter passes we add it to the buffer.
+		foundMatch := false
 		for _, rrow := range b.Rows() {
 			passesFilter, err := n.pred.eval(&n.planner.evalCtx, n.output, lrow, rrow)
 			if err != nil {
@@ -534,8 +535,17 @@ func (n *joinNode) Next() (res bool, err error) {
 			if !passesFilter {
 				continue
 			}
+			foundMatch = true
 
 			n.pred.prepareRow(n.output, lrow, rrow)
+			if _, err := n.buffer.AddRow(n.output); err != nil {
+				return false, err
+			}
+		}
+		if !foundMatch && n.joinType != joinTypeInner {
+			// If none of the rows matched the filter and we are computed an outer
+			// join, we need to add an row with an empty right side.
+			n.pred.prepareRow(n.output, lrow, n.emptyRight)
 			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
 			}
