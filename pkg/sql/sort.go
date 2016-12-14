@@ -94,19 +94,23 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// The logical data source for ORDER BY is the list of render
 		// expressions for a SELECT, as specified in the input SQL text
 		// (or an entire UNION or VALUES clause).  Alas, SQL has some
-		// historical baggage and there are some special cases:
+		// historical baggage from SQL92 and there are some special cases:
 		//
-		// 1) column ordinals. If a simple integer literal is used,
+		// SQL92 rules:
+		//
+		// 1) if the expression is the aliased (AS) name of a render
+		//    expression in a SELECT clause, then use that
+		//    render as sort key.
+		//    e.g. SELECT a AS b, b AS c ORDER BY b
+		//    this sorts on the first render.
+		//
+		// 2) column ordinals. If a simple integer literal is used,
 		//    optionally enclosed within parentheses but *not subject to
 		//    any arithmetic*, then this refers to one of the columns of
 		//    the data source. Then use the render expression at that
 		//    ordinal position as sort key.
 		//
-		// 2) if the expression is the aliased (AS) name of a render
-		//    expression in a SELECT clause, then use that
-		//    render as sort key.
-		//    e.g. SELECT a AS b, b AS c ORDER BY b
-		//    this sorts on the first render.
+		// SQL99 rules:
 		//
 		// 3) otherwise, if the expression is already in the render list,
 		//    then use that render as sort key.
@@ -121,17 +125,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		//    and use that as sort key.
 		//    e.g. SELECT a FROM t ORDER by b
 		//    e.g. SELECT a, b FROM t ORDER by a+b
-		//
-		// So first, deal with column ordinals.
-		col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
-		if err != nil {
-			return nil, err
-		}
-		if col != -1 {
-			index = col
-		}
 
-		// Now, deal with render aliases.
+		// First, deal with render aliases.
 		if vBase, ok := expr.(parser.VarName); index == -1 && ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
@@ -146,10 +141,31 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				target := c.ColumnName.Normalize()
 				for j, col := range columns {
 					if parser.ReNormalizeName(col.Name) == target {
+						if index != -1 {
+							// There is more than one render alias that matches the ORDER BY
+							// clause. Here, SQL92 is specific as to what should be done:
+							// if the underlying expression is known (we're on a selectNode)
+							// and it is equivalent, then just accept that and ignore the ambiguity.
+							// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
+							// reject with an ambituity error.
+							if s == nil || !s.equivalentRenders(j, index) {
+								return nil, errors.Errorf("ORDER BY \"%s\" is ambiguous", target)
+							}
+						}
 						index = j
-						break
 					}
 				}
+			}
+		}
+
+		// So Then, deal with column ordinals.
+		if index == -1 {
+			col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
+			if err != nil {
+				return nil, err
+			}
+			if col != -1 {
+				index = col
 			}
 		}
 
@@ -164,28 +180,13 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// alias, resolveNames below would be incorrect.
 				sortExpr = s.render[index]
 			}
-			resolved, hasRowDependentValues, err := p.resolveNames(sortExpr, s.sourceInfo, s.ivarHelper)
+			_, hasRowDependentValues, err := p.resolveNames(sortExpr, s.sourceInfo, s.ivarHelper)
 			if err != nil {
 				return nil, err
 			}
 			if !hasRowDependentValues {
 				// No sorting needed!
 				continue
-			}
-
-			// Now, try to find an equivalent render. We use the syntax
-			// representation as approximation of equivalence.
-			// We also use the expression after name resolution so
-			// that comparison occurs after replacing ordinal references
-			// to IndexedVars.
-			if index == -1 {
-				exprStr := parser.AsStringWithFlags(resolved, parser.FmtSymbolicVars)
-				for j, render := range s.render {
-					if parser.AsStringWithFlags(render, parser.FmtSymbolicVars) == exprStr {
-						index = j
-						break
-					}
-				}
 			}
 		}
 
@@ -195,34 +196,26 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// If we are dealing with a UNION or something else we would need
 		// to fabricate an intermediate selectNode to add the new render.
 		if index == -1 && s != nil {
-			// We need to add a new render, but let's be careful: if there's
-			// a star in there, we're really adding multiple columns. These
-			// all become sort columns! And if no columns are expanded, then
-			// no columns become sort keys.
-			nextRenderIdx := len(s.render)
-
-			// TODO(knz) the optimizations above which reuse existing
-			// renders and skip ordering for constant expressions are not
-			// applied by addRender(). In other words, "ORDER BY foo.*" will
-			// not be optimized as well as "ORDER BY foo.x, foo.y".  We
-			// could do this either here or as a separate later
-			// optimization.
-			err := s.addRender(parser.SelectExpr{Expr: expr}, parser.TypeAny)
+			cols, exprs, hasStar, err := p.computeRender(parser.SelectExpr{Expr: expr}, parser.TypeAny,
+				s.source.info, s.ivarHelper, true)
 			if err != nil {
 				return nil, err
 			}
+			s.isStar = s.isStar || hasStar
 
-			for extraIdx := nextRenderIdx; extraIdx < len(s.render)-1; extraIdx++ {
+			if len(cols) == 0 {
+				// Nothing was expanded! No order here.
+				continue
+			}
+
+			colIdxs := s.addOrMergeRenders(cols, exprs, true)
+			for i := 0; i < len(colIdxs)-1; i++ {
 				// If more than 1 column were expanded, turn them into sort columns too.
 				// Except the last one, which will be added below.
 				ordering = append(ordering,
-					sqlbase.ColumnOrderInfo{ColIdx: extraIdx, Direction: direction})
+					sqlbase.ColumnOrderInfo{ColIdx: colIdxs[i], Direction: direction})
 			}
-			if len(s.render) == nextRenderIdx {
-				// Nothing was expanded! So there is no order here.
-				continue
-			}
-			index = len(s.render) - 1
+			index = colIdxs[len(colIdxs)-1]
 		}
 
 		if index == -1 {

@@ -51,10 +51,11 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// Invalid: `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
 	// - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
 	//
-	// In the construction of the outer selectNode, when renders are added (via
-	// addRender()), the expressions are normalized. In order to compare these
-	// normalized render expressions to GROUP BY expressions, we need to
-	// normalize the GROUP BY expressions as well.
+	// In the construction of the outer selectNode, when renders are
+	// processed (via computeRender()), the expressions are
+	// normalized. In order to compare these normalized render
+	// expressions to GROUP BY expressions, we need to normalize the
+	// GROUP BY expressions as well.
 	// This is done before determining if aggregation is being performed, because
 	// that determination is made during validation, which will require matching
 	// expressions.
@@ -74,7 +75,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			expr = n.Exprs[col].Expr
 		} else {
 			// We do not need to fully analyze the GROUP BY expression here
-			// (as per analyzeExpr) because this is taken care of by addRender
+			// (as per analyzeExpr) because this is taken care of by computeRender
 			// below.
 			resolvedExpr, _, err := p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 			if err != nil {
@@ -191,9 +192,18 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 
 	// Add the group-by expressions so they are available for bucketing.
 	for _, g := range groupByExprs {
-		if err := s.addRender(parser.SelectExpr{Expr: g}, parser.TypeAny); err != nil {
+		cols, exprs, hasStar, err := s.planner.computeRender(parser.SelectExpr{Expr: g}, parser.TypeAny,
+			s.source.info, s.ivarHelper, true)
+		if err != nil {
 			return nil, err
 		}
+		s.isStar = s.isStar || hasStar
+		// Note that it may appear unwise to request the grouping
+		// expressions to be merged in the render list. However this
+		// should be safe here because it's not correct to group by an
+		// aggregate function so the merge loop cannot encounter an
+		// equivalent expression in the aggregation list.
+		_ = s.addOrMergeRenders(cols, exprs, false)
 	}
 
 	group.desiredOrdering = desiredAggregateOrdering(group.funcs)

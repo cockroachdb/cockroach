@@ -253,6 +253,12 @@ statement error views do not currently support \* expressions
 create view s1 AS SELECT t.* FROM t
 
 statement error views do not currently support \* expressions
+create view s1 AS SELECT a FROM t ORDER BY t.*
+
+statement error views do not currently support \* expressions
+create view s1 AS SELECT COUNT(1) FROM t GROUP BY t.*
+
+statement error views do not currently support \* expressions
 create view s1 AS SELECT alias.* FROM t AS alias
 
 statement error views do not currently support \* expressions

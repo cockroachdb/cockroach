@@ -43,7 +43,7 @@ type selectNode struct {
 	// sourceInfo contains the reference to the dataSourceInfo in the
 	// source planDataSource that is needed for name resolution.
 	// We keep one instance of multiSourceInfo cached here so as to avoid
-	// re-creating it every time analyzeExpr() is called in addRender().
+	// re-creating it every time analyzeExpr() is called in computeRender().
 	sourceInfo multiSourceInfo
 
 	// Helper for indexed vars. This holds the actual instances of
@@ -52,7 +52,7 @@ type selectNode struct {
 	ivarHelper parser.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
-	// populated by addRender()
+	// populated by addOrMergeRenders()
 	// as invoked initially by initTargets() and initWhere().
 	// sortNode peeks into the render array defined by initTargets() as an optimization.
 	// sortNode adds extra selectNode renders for sort columns not requested as select targets.
@@ -499,9 +499,13 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
-		if err := s.addRender(target, desiredType); err != nil {
+		cols, exprs, hasStar, err := s.planner.computeRender(target, desiredType,
+			s.source.info, s.ivarHelper, true)
+		if err != nil {
 			return err
 		}
+		s.isStar = s.isStar || hasStar
+		_ = s.addOrMergeRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
 	// do not want to include in validation of e.g. `GROUP BY 2`. We record the
@@ -536,32 +540,6 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	return nil
 }
 
-// checkRenderStar checks if the SelectExpr is either an
-// UnqualifiedStar or an AllColumnsSelector. If so, we match the
-// prefix of the name to one of the tables in the query and then
-// expand the "*" into a list of columns. A ResultColumns and Expr
-// pair is returned for each column.
-func checkRenderStar(
-	target parser.SelectExpr, src *dataSourceInfo, ivarHelper parser.IndexedVarHelper,
-) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
-	v, ok := target.Expr.(parser.VarName)
-	if !ok {
-		return false, nil, nil, nil
-	}
-	switch v.(type) {
-	case parser.UnqualifiedStar, *parser.AllColumnsSelector:
-	default:
-		return false, nil, nil, nil
-	}
-
-	if target.As != "" {
-		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", v)
-	}
-
-	columns, exprs, err = src.expandStar(v, ivarHelper)
-	return true, columns, exprs, err
-}
-
 // getRenderColName returns the output column name for a render expression.
 func getRenderColName(target parser.SelectExpr) string {
 	if target.As != "" {
@@ -579,36 +557,6 @@ func getRenderColName(target parser.SelectExpr) string {
 		}
 	}
 	return target.Expr.String()
-}
-
-func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Type) error {
-	// Pre-normalize any VarName so the work is not done twice below.
-	if err := target.NormalizeTopLevelVarName(); err != nil {
-		return err
-	}
-
-	if isStar, cols, typedExprs, err := checkRenderStar(target, s.source.info, s.ivarHelper); err != nil {
-		return err
-	} else if isStar {
-		s.columns = append(s.columns, cols...)
-		s.render = append(s.render, typedExprs...)
-		s.isStar = true
-		return nil
-	}
-
-	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression.
-	outputName := getRenderColName(target)
-
-	normalized, err := s.planner.analyzeExpr(target.Expr, s.sourceInfo, s.ivarHelper, desiredType, false, "")
-	if err != nil {
-		return err
-	}
-
-	s.addRenderColumn(normalized, ResultColumn{Name: outputName, Typ: normalized.ResolvedType()})
-
-	return nil
 }
 
 // appendRenderColumn adds a new render expression at the end of the current list.
