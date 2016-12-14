@@ -166,6 +166,17 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 
 func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
+	str := strings.Join(names, ".")
+	switch str {
+	case ".default":
+		return path, nil
+	case ".meta":
+		return []sqlbase.ID{keys.MetaSystemID}, nil
+	case ".identifier":
+		return []sqlbase.ID{keys.IdentifierSystemID}, nil
+	case ".system":
+		return []sqlbase.ID{keys.NormalSystemID}, nil
+	}
 	for _, name := range names {
 		id, err := queryNamespace(conn, path[len(path)-1], name)
 		if err != nil {
@@ -177,9 +188,11 @@ func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) 
 }
 
 func parseZoneName(s string) ([]string, error) {
-	if strings.ToLower(s) == ".default" {
-		return nil, nil
+	switch t := strings.ToLower(s); s {
+	case ".default", ".meta", ".identifier", ".system":
+		return []string{t}, nil
 	}
+
 	// TODO(knz): we are passing a name that might not be escaped correctly.
 	// See #8389.
 	tn, err := parser.ParseTableNameTraditional(s)
@@ -243,9 +256,16 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if id == 0 {
+	switch id {
+	case keys.RootNamespaceID:
 		fmt.Println(".default")
-	} else {
+	case keys.MetaSystemID:
+		fmt.Println(".meta")
+	case keys.IdentifierSystemID:
+		fmt.Println(".identifier")
+	case keys.NormalSystemID:
+		fmt.Println(".system")
+	default:
 		for i := range path {
 			if path[i] == id {
 				fmt.Println(strings.Join(names[:i], "."))
@@ -326,8 +346,16 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 
 	sort.Strings(output)
 	// Ensure the default zone is always printed first.
-	if _, ok := zones[0]; ok {
-		fmt.Println(".default")
+	zoneNames := map[sqlbase.ID]string{
+		keys.RootNamespaceID:    ".default",
+		keys.MetaSystemID:       ".meta",
+		keys.IdentifierSystemID: ".identifier",
+		keys.NormalSystemID:     ".system",
+	}
+	for id, name := range zoneNames {
+		if _, ok := zones[id]; ok {
+			fmt.Printf("%s\n", name)
+		}
 	}
 	for _, o := range output {
 		fmt.Println(o)
@@ -374,7 +402,8 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	id := path[len(path)-1]
-	if id == keys.RootNamespaceID {
+	switch id {
+	case keys.RootNamespaceID, keys.MetaSystemID, keys.IdentifierSystemID, keys.NormalSystemID:
 		return fmt.Errorf("unable to remove %s", args[0])
 	}
 
