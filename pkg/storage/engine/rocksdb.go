@@ -890,6 +890,7 @@ func (r *rocksDBBatch) Close() {
 	}
 	if r.batch != nil {
 		C.DBClose(r.batch)
+		r.batch = nil
 	}
 }
 
@@ -998,7 +999,7 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 }
 
 func (r *rocksDBBatch) Commit() error {
-	if r.batch == nil {
+	if r.closed() {
 		panic("this batch was already committed")
 	}
 
@@ -1010,9 +1011,10 @@ func (r *rocksDBBatch) Commit() error {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
 		// any remaining mutations as well and then commit the batch.
 		r.flushMutations()
-		if err := statusToError(C.DBCommitBatch(r.batch)); err != nil {
+		if err := statusToError(C.DBCommitAndCloseBatch(r.batch)); err != nil {
 			return err
 		}
+		r.batch = nil
 		count, size = r.flushedCount, r.flushedSize
 	} else if r.builder.count > 0 {
 		count, size = r.builder.count, len(r.builder.repr)
@@ -1022,6 +1024,8 @@ func (r *rocksDBBatch) Commit() error {
 		if err := r.parent.ApplyBatchRepr(r.builder.Finish()); err != nil {
 			return err
 		}
+		C.DBClose(r.batch)
+		r.batch = nil
 	}
 
 	const batchCommitWarnThreshold = 500 * time.Millisecond
@@ -1029,9 +1033,6 @@ func (r *rocksDBBatch) Commit() error {
 		log.Warningf(context.TODO(), "batch [%d/%d/%d] commit took %s (>%s):\n%s",
 			count, size, r.flushes, elapsed, batchCommitWarnThreshold, debug.Stack())
 	}
-
-	C.DBClose(r.batch)
-	r.batch = nil
 
 	return nil
 }
