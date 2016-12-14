@@ -254,6 +254,7 @@ func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) err
 		return errUnavailable
 	}
 
+	ctx = s.WithCancel(ctx)
 	ctx, span := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
 
 	// Call f.
