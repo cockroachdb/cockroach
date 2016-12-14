@@ -171,6 +171,18 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 		}
 		return dsp.CheckSupport(n.source.plan)
 
+	case *joinNode:
+		if n.joinType != joinTypeInner {
+			return errors.Errorf("only inner join supported")
+		}
+		if err := checkExpr(n.pred.filter); err != nil {
+			return err
+		}
+		if err := dsp.CheckSupport(n.left.plan); err != nil {
+			return err
+		}
+		return dsp.CheckSupport(n.right.plan)
+
 	case *scanNode:
 		return checkExpr(n.filter)
 
@@ -208,7 +220,14 @@ type processorIdx int
 
 type stream struct {
 	sourceProcessor processorIdx
-	destProcessor   processorIdx
+
+	// sourceRouterSlot identifies the position of this stream among the streams
+	// that originate from the same router. This is important for things like
+	// routing by hash where the order of the streams in the OutputRouterSpec
+	// matters.
+	sourceRouterSlot int
+
+	destProcessor processorIdx
 
 	// destInput identifies the input (some processor have multiple inputs).
 	destInput int
@@ -257,12 +276,49 @@ type physicalPlan struct {
 	ordering distsql.Ordering
 }
 
+// makePlanToStreamColMap initializes a new physicalPlan.planToStreamColMap. The
+// columns that are present in the result stream(s) should be set in the map.
+func makePlanToStreamColMap(numCols int) []int {
+	m := make([]int, numCols)
+	for i := 0; i < numCols; i++ {
+		m[i] = -1
+	}
+	return m
+}
+
 // addProcessor adds a processor to a physicalPlan and returns the index that
 // can be used to refer to that processor.
 func (p *physicalPlan) addProcessor(proc processor) processorIdx {
 	idx := processorIdx(len(p.processors))
 	p.processors = append(p.processors, proc)
 	return idx
+}
+
+// mergePlans merges the processors and streams of two plan into a new plan.
+// The result routers for each side are also returned (they point at processors
+// in the merged plan).
+func mergePlans(
+	left, right *physicalPlan,
+) (mergedPlan physicalPlan, leftRouters []processorIdx, rightRouters []processorIdx) {
+	mergedPlan.processors = append(left.processors, right.processors...)
+	rightProcStart := processorIdx(len(left.processors))
+
+	mergedPlan.streams = append(left.streams, right.streams...)
+
+	// Update the processor indices in the right streams.
+	for i := len(left.streams); i < len(mergedPlan.streams); i++ {
+		mergedPlan.streams[i].sourceProcessor += rightProcStart
+		mergedPlan.streams[i].destProcessor += rightProcStart
+	}
+
+	leftRouters = left.resultRouters
+	rightRouters = append([]processorIdx(nil), right.resultRouters...)
+	// Update the processor indices in the right routers.
+	for i := range rightRouters {
+		rightRouters[i] += rightProcStart
+	}
+
+	return mergedPlan, leftRouters, rightRouters
 }
 
 // The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
@@ -476,10 +532,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 	} else {
 		spec.OutputColumns = getOutputColumnsFromScanNode(n)
 	}
-	planToStreamColMap := make([]int, len(n.resultColumns))
-	for i := range planToStreamColMap {
-		planToStreamColMap[i] = -1
-	}
+	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
 	for i, col := range spec.OutputColumns {
 		planToStreamColMap[col] = i
 	}
@@ -546,9 +599,10 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.Proc
 		pIdx := p.addProcessor(proc)
 
 		p.streams = append(p.streams, stream{
-			sourceProcessor: resultProc,
-			destProcessor:   pIdx,
-			destInput:       0,
+			sourceProcessor:  resultProc,
+			destProcessor:    pIdx,
+			sourceRouterSlot: 0,
+			destInput:        0,
 		})
 
 		p.resultRouters[i] = pIdx
@@ -574,10 +628,7 @@ func (dsp *distSQLPlanner) selectRenders(
 		// We don't need an evaluator stage. However, we do need to update
 		// p.planToStreamColMap to make the plan correspond to the selectNode
 		// (rather than n.source).
-		planToStreamColMap := make([]int, len(n.render))
-		for i := range planToStreamColMap {
-			planToStreamColMap[i] = -1
-		}
+		planToStreamColMap := makePlanToStreamColMap(len(n.render))
 		for i, e := range n.render {
 			idx := e.(*parser.IndexedVar).Idx
 			streamCol := p.planToStreamColMap[idx]
@@ -663,7 +714,7 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 	pIdx := p.addProcessor(proc)
 
 	// Connect the result routers to the no-op processor.
-	dsp.mergeResultStreams(p, p.resultRouters, p.ordering, pIdx, 0)
+	dsp.mergeResultStreams(p, p.resultRouters, 0, p.ordering, pIdx, 0)
 
 	// We now have a single result stream.
 	p.resultRouters = p.resultRouters[:1]
@@ -717,6 +768,211 @@ ColLoop:
 	return plan, nil
 }
 
+// getTypesForPlanResult returns the types of the elements in the result streams
+// of a plan that corresponds to a given planNode.
+func (dsp *distSQLPlanner) getTypesForPlanResult(
+	planToStreamColMap []int, node planNode,
+) []sqlbase.ColumnType_Kind {
+	numCols := 0
+	for _, streamCol := range planToStreamColMap {
+		if numCols <= streamCol {
+			numCols = streamCol + 1
+		}
+	}
+	nodeColumns := node.Columns()
+	types := make([]sqlbase.ColumnType_Kind, numCols)
+	for nodeCol, streamCol := range planToStreamColMap {
+		if streamCol != -1 {
+			types[streamCol] = sqlbase.DatumTypeToColumnKind(nodeColumns[nodeCol].Typ)
+		}
+	}
+	return types
+}
+
+func (dsp *distSQLPlanner) createPlanForJoin(
+	planCtx *planningCtx, n *joinNode,
+) (physicalPlan, error) {
+
+	// Outline of the planning process for joins:
+	//
+	//  - We create physicalPlans for the left and right side. Each plan has a set
+	//    of output routers with result that will serve as input for the join.
+	//
+	//  - We merge the list of processors and streams into a single plan. We keep
+	//    track of the output routers for the left and right results.
+	//
+	//  - We add a set of joiner processors (say K of them).
+	//
+	//  - We configure the left and right output routers to send results to
+	//    these joiners, distributing rows by hash (on the join equality columns).
+	//    We are thus breaking up all input rows into K buckets such that rows
+	//    that match on the equality columns end up in the same bucket. If there
+	//    are no equality columns, we cannot distribute rows so we use a single
+	//    joiner.
+	//
+	//  - The routers of the joiner processors are the result routers of the plan.
+
+	leftPlan, err := dsp.createPlanForNode(planCtx, n.left.plan)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	rightPlan, err := dsp.createPlanForNode(planCtx, n.right.plan)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	p, leftRouters, rightRouters := mergePlans(&leftPlan, &rightPlan)
+
+	joinToStreamColMap := makePlanToStreamColMap(len(n.columns))
+
+	// Nodes where we will run the join processors.
+	var nodes []roachpb.NodeID
+	var joinerSpec distsql.HashJoinerSpec
+
+	if n.joinType != joinTypeInner {
+		panic("only inner join supported for now")
+	}
+	joinerSpec.Type = distsql.JoinType_INNER
+
+	// Figure out the left and right types.
+	joinerSpec.LeftTypes = dsp.getTypesForPlanResult(leftPlan.planToStreamColMap, n.left.plan)
+	joinerSpec.RightTypes = dsp.getTypesForPlanResult(rightPlan.planToStreamColMap, n.right.plan)
+
+	// Set up the output columns.
+
+	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
+		// TODO(radu): for now we run a join processor on every node that produces
+		// data for either source. In the future we should be smarter here.
+		seen := make(map[roachpb.NodeID]struct{})
+		for _, pIdx := range leftRouters {
+			n := p.processors[pIdx].node
+			if _, ok := seen[n]; !ok {
+				seen[n] = struct{}{}
+				nodes = append(nodes, n)
+			}
+		}
+		for _, pIdx := range rightRouters {
+			n := p.processors[pIdx].node
+			if _, ok := seen[n]; !ok {
+				seen[n] = struct{}{}
+				nodes = append(nodes, n)
+			}
+		}
+
+		// Set up the equality columns.
+		joinerSpec.LeftEqColumns = make([]uint32, numEq)
+		for i, leftPlanCol := range n.pred.leftEqualityIndices {
+			joinerSpec.LeftEqColumns[i] = uint32(leftPlan.planToStreamColMap[leftPlanCol])
+		}
+		joinerSpec.RightEqColumns = make([]uint32, numEq)
+		for i, rightPlanCol := range n.pred.rightEqualityIndices {
+			joinerSpec.RightEqColumns[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
+		}
+	} else {
+		// Without column equality, we cannot distribute the join. Run a
+		// single processor on this node.
+		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
+
+		joinerSpec.Expr = distSQLExpression(n.pred.filter, nil)
+	}
+
+	// addOutCol appends to joinerSpec.OutputColumns and returns the index
+	// in the slice of the added column.
+	addOutCol := func(col uint32) int {
+		idx := len(joinerSpec.OutputColumns)
+		joinerSpec.OutputColumns = append(joinerSpec.OutputColumns, col)
+		return idx
+	}
+
+	// The join columns are in three groups:
+	//  - numMergedEqualityColumns "merged" columns (corresponding to the equality columns)
+	//  - the columns on the left side (numLeftCols)
+	//  - the columns on the right side (numRightCols)
+	joinCol := 0
+	for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
+		if !n.columns[joinCol].omitted {
+			// TODO(radu): for full outer joins, this will be more tricky: we would
+			// need an output column that outputs either the left or the right
+			// equality column, whichever is not NULL.
+			joinToStreamColMap[joinCol] = addOutCol(joinerSpec.LeftEqColumns[i])
+		}
+		joinCol++
+	}
+	for i := 0; i < n.pred.numLeftCols; i++ {
+		if !n.columns[joinCol].omitted {
+			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
+		}
+		joinCol++
+	}
+	for i := 0; i < n.pred.numRightCols; i++ {
+		if !n.columns[joinCol].omitted {
+			joinToStreamColMap[joinCol] = addOutCol(
+				uint32(rightPlan.planToStreamColMap[i] + len(joinerSpec.LeftTypes)),
+			)
+		}
+		joinCol++
+	}
+
+	pIdxStart := processorIdx(len(p.processors))
+
+	if len(nodes) == 1 {
+		procSpec := distsql.ProcessorSpec{
+			Input:  make([]distsql.InputSyncSpec, 2),
+			Core:   distsql.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+			Output: []distsql.OutputRouterSpec{{Type: distsql.OutputRouterSpec_PASS_THROUGH}},
+		}
+
+		p.processors = append(p.processors, processor{node: nodes[0], spec: procSpec})
+	} else {
+		// Parallel hash join: we distribute rows (by hash of equality columns) to
+		// len(nodes) join processors.
+
+		// Each node has a join processor.
+		for _, n := range nodes {
+			procSpec := distsql.ProcessorSpec{
+				Input:  make([]distsql.InputSyncSpec, 2),
+				Core:   distsql.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+				Output: []distsql.OutputRouterSpec{{Type: distsql.OutputRouterSpec_PASS_THROUGH}},
+			}
+			p.processors = append(p.processors, processor{node: n, spec: procSpec})
+		}
+
+		// Set up the left routers.
+		for _, resultProc := range leftRouters {
+			p.processors[resultProc].spec.Output[0] = distsql.OutputRouterSpec{
+				Type:        distsql.OutputRouterSpec_BY_HASH,
+				HashColumns: joinerSpec.LeftEqColumns,
+			}
+		}
+		// Set up the right routers.
+		for _, resultProc := range rightRouters {
+			p.processors[resultProc].spec.Output[0] = distsql.OutputRouterSpec{
+				Type:        distsql.OutputRouterSpec_BY_HASH,
+				HashColumns: joinerSpec.RightEqColumns,
+			}
+		}
+	}
+	p.resultRouters = p.resultRouters[:0]
+
+	// Connect the left and right routers to the output joiners. Each joiner
+	// corresponds to a hash bucket.
+	for bucket := 0; bucket < len(nodes); bucket++ {
+		pIdx := pIdxStart + processorIdx(bucket)
+
+		// Connect left routers to the processor's first input. Currently the join
+		// node doesn't care about the orderings of the left and right results.
+		dsp.mergeResultStreams(&p, leftRouters, bucket, distsql.Ordering{}, pIdx, 0)
+		// Connect right routers to the processor's second input.
+		dsp.mergeResultStreams(&p, rightRouters, bucket, distsql.Ordering{}, pIdx, 1)
+
+		p.resultRouters = append(p.resultRouters, pIdx)
+	}
+
+	p.planToStreamColMap = joinToStreamColMap
+	p.ordering = dsp.convertOrdering(n.Ordering().ordering, joinToStreamColMap)
+	return p, nil
+}
+
 func (dsp *distSQLPlanner) createPlanForNode(
 	planCtx *planningCtx, node planNode,
 ) (physicalPlan, error) {
@@ -726,6 +982,9 @@ func (dsp *distSQLPlanner) createPlanForNode(
 
 	case *indexJoinNode:
 		return dsp.createPlanForIndexJoin(planCtx, n)
+
+	case *joinNode:
+		return dsp.createPlanForJoin(planCtx, n)
 
 	case *selectNode:
 		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
@@ -757,6 +1016,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 func (dsp *distSQLPlanner) mergeResultStreams(
 	p *physicalPlan,
 	resultRouters []processorIdx,
+	sourceRouterSlot int,
 	ordering distsql.Ordering,
 	destProcessor processorIdx,
 	destInput int,
@@ -771,9 +1031,10 @@ func (dsp *distSQLPlanner) mergeResultStreams(
 
 	for _, resultProc := range resultRouters {
 		p.streams = append(p.streams, stream{
-			sourceProcessor: resultProc,
-			destProcessor:   destProcessor,
-			destInput:       destInput,
+			sourceProcessor:  resultProc,
+			sourceRouterSlot: sourceRouterSlot,
+			destProcessor:    destProcessor,
+			destInput:        destInput,
 		})
 	}
 }
@@ -796,7 +1057,18 @@ func (dsp *distSQLPlanner) populateEndpoints(planCtx *planningCtx, p *physicalPl
 		if endpoint.Type == distsql.StreamEndpointSpec_REMOTE {
 			endpoint.TargetAddr = planCtx.nodeAddresses[p2.node]
 		}
-		p1.spec.Output[0].Streams = append(p1.spec.Output[0].Streams, endpoint)
+
+		router := &p1.spec.Output[0]
+		// We are about to put this stream on the len(router.Streams) position in
+		// the router; verify this matches the sourceRouterSlot. We expect it to
+		// because the streams should be in order; if that assumption changes we can
+		// reorder them here according to sourceRouterSlot.
+		if len(router.Streams) != s.sourceRouterSlot {
+			panic(fmt.Sprintf(
+				"sourceRouterSlot mismatch: %d, expected %d", len(router.Streams), s.sourceRouterSlot,
+			))
+		}
+		router.Streams = append(router.Streams, endpoint)
 	}
 }
 
