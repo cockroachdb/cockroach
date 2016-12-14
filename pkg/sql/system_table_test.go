@@ -34,7 +34,7 @@ func TestInitialKeys(t *testing.T) {
 
 	const nonSystemDesc = 4
 	const keysPerDesc = 2
-	const nonDescKeys = 2
+	const nonDescKeys = 5
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
