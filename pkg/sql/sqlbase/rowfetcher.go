@@ -404,7 +404,6 @@ func (rf *RowFetcher) processValueTuple(
 	}
 
 	var colIDDiff uint32
-	var value parser.Datum
 	var lastColID ColumnID
 	for len(tupleBytes) > 0 {
 		_, _, colIDDiff, _, err = encoding.DecodeValueTag(tupleBytes)
@@ -445,15 +444,14 @@ func (rf *RowFetcher) processValueTuple(
 			if err != nil {
 				return "", "", err
 			}
-			value = encValue.Datum
-			fmt.Fprintf(&rf.prettyValueBuf, "/%v", value)
+			fmt.Fprintf(&rf.prettyValueBuf, "/%v", encValue.Datum)
 		}
 		if !rf.row[idx].IsUnset() {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
 		rf.row[idx] = encValue
 		if log.V(3) {
-			log.Infof(context.TODO(), "Scan %d -> %v", idx, value)
+			log.Infof(context.TODO(), "Scan %d -> %v", idx, encValue)
 		}
 	}
 
