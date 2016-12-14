@@ -230,7 +230,8 @@ func (p PrivilegeDescriptor) Show() []UserPrivilegeString {
 func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bool {
 	userPriv, ok := p.findUser(user)
 	if !ok {
-		return false
+		// User "node" has all privileges.
+		return user == security.NodeUser
 	}
 	// ALL is always good.
 	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {

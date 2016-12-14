@@ -21,7 +21,6 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -670,18 +669,6 @@ var Builtins = map[string][]Builtin{
 			needsRepeatedEvaluation: true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDFloat(DFloat(rand.Float64())), nil
-			},
-		},
-	},
-
-	"experimental_unique_bytes": {
-		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeBytes,
-			category:   categoryIDGeneration,
-			impure:     true,
-			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				return NewDBytes(generateUniqueBytes(ctx.NodeID)), nil
 			},
 		},
 	},
@@ -1979,38 +1966,6 @@ func intPow(x, y int64) int64 {
 		y >>= 1
 	}
 	return ret
-}
-
-var uniqueBytesState struct {
-	syncutil.Mutex
-	nanos uint64
-}
-
-func generateUniqueBytes(nodeID roachpb.NodeID) DBytes {
-	// Unique bytes are composed of the current time in nanoseconds and the
-	// node-id. If the nanosecond value is the same on two consecutive calls to
-	// timeutil.Now() the nanoseconds value is incremented. The node-id is varint
-	// encoded. Since node-ids are allocated consecutively starting at 1, the
-	// node-id field will consume 1 or 2 bytes for any reasonably sized cluster.
-	//
-	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
-	// periodically to avoid the clock ever going backwards (e.g. due to NTP
-	// adjustment)?
-	nanos := uint64(timeutil.Now().UnixNano())
-	uniqueBytesState.Lock()
-	if nanos <= uniqueBytesState.nanos {
-		nanos = uniqueBytesState.nanos + 1
-	}
-	uniqueBytesState.nanos = nanos
-	uniqueBytesState.Unlock()
-
-	b := make([]byte, 0, 8+binary.MaxVarintLen32)
-	b = encoding.EncodeUint64Ascending(b, nanos)
-	// We use binary.PutUvarint instead of encoding.EncodeUvarint because the
-	// former uses less space for values < 128 which is a common occurrence for
-	// node IDs.
-	n := binary.PutUvarint(b[len(b):len(b)+binary.MaxVarintLen32], uint64(nodeID))
-	return DBytes(b[:len(b)+n])
 }
 
 var uniqueIntState struct {
