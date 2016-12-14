@@ -28,84 +28,95 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+type queryCounter struct {
+	query              string
+	txnBeginCount      int64
+	selectCount        int64
+	distSQLSelectCount int64
+	updateCount        int64
+	insertCount        int64
+	deleteCount        int64
+	ddlCount           int64
+	miscCount          int64
+	txnCommitCount     int64
+	txnRollbackCount   int64
+}
+
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	var testcases = []struct {
-		query            string
-		txnBeginCount    int64
-		selectCount      int64
-		updateCount      int64
-		insertCount      int64
-		deleteCount      int64
-		ddlCount         int64
-		miscCount        int64
-		txnCommitCount   int64
-		txnRollbackCount int64
-	}{
-		{"", 0, 0, 0, 0, 0, 1, 0, 0, 0},
-		{"BEGIN; END", 1, 0, 0, 0, 0, 1, 0, 1, 0},
-		{"SELECT 1", 1, 1, 0, 0, 0, 1, 0, 1, 0},
-		{"CREATE DATABASE mt", 1, 1, 0, 0, 0, 2, 0, 1, 0},
-		{"CREATE TABLE mt.n (num INTEGER)", 1, 1, 0, 0, 0, 3, 0, 1, 0},
-		{"INSERT INTO mt.n VALUES (3)", 1, 1, 0, 1, 0, 3, 0, 1, 0},
-		{"UPDATE mt.n SET num = num + 1", 1, 1, 1, 1, 0, 3, 0, 1, 0},
-		{"DELETE FROM mt.n", 1, 1, 1, 1, 1, 3, 0, 1, 0},
-		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 1, 1, 1, 1, 1, 4, 0, 1, 0},
-		{"EXPLAIN SELECT * FROM mt.n", 1, 1, 1, 1, 1, 4, 1, 1, 0},
-		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 2, 1, 2, 1, 1, 4, 1, 2, 0},
-		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 2, 4, 2, 1, 1, 4, 1, 2, 0},
-		{"DROP TABLE mt.n", 2, 4, 2, 1, 1, 5, 1, 2, 0},
-		{"SET database = system", 2, 4, 2, 1, 1, 5, 2, 2, 0},
+	var testcases = []queryCounter{
+		// The counts are increments for each query.
+		{"", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"BEGIN; END", 1, 0, 0, 0, 0, 0, 0, 0, 1, 0},
+		{"SELECT 1", 0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
+		{"CREATE DATABASE mt", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"CREATE TABLE mt.n (num INTEGER)", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"INSERT INTO mt.n VALUES (3)", 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
+		{"UPDATE mt.n SET num = num + 1", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0},
+		{"DELETE FROM mt.n", 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"EXPLAIN SELECT * FROM mt.n", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 1, 0, 0, 1, 0, 0, 0, 0, 1, 0},
+		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 0, 3, 0, 0, 0, 0, 0, 0, 0, 0},
+		{"SET DIST_SQL = 'on'", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+		{"SELECT * FROM mt.n", 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+		{"SET DIST_SQL = 'off'", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+		{"DROP TABLE mt.n", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"SET database = system", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
 	}
 
+	accum := testcases[0]
 	for _, tc := range testcases {
-		if tc.query != "" {
+		if tc.query == "" {
+			continue
+		}
+
+		t.Run(tc.query, func(t *testing.T) {
 			if _, err := sqlDB.Exec(tc.query); err != nil {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
 			}
-		}
 
-		// Force metric snapshot refresh.
-		if err := s.WriteSummaries(); err != nil {
-			t.Fatal(err)
-		}
+			// Force metric snapshot refresh.
+			if err := s.WriteSummaries(); err != nil {
+				t.Fatal(err)
+			}
 
-		if err := checkCounterEQ(s, sql.MetaTxnBegin, tc.txnBeginCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaTxnRollback, tc.txnRollbackCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaTxnAbort, 0); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaSelect, tc.selectCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaUpdate, tc.updateCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaInsert, tc.insertCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaDelete, tc.deleteCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaDdl, tc.ddlCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-		if err := checkCounterEQ(s, sql.MetaMisc, tc.miscCount); err != nil {
-			t.Errorf("%q: %s", tc.query, err)
-		}
-	}
-
-	// Everything after this query will also fail, so quit now to avoid deluge of errors.
-	if t.Failed() {
-		t.FailNow()
+			var err error
+			if accum.txnBeginCount, err = checkCounterDelta(s, sql.MetaTxnBegin, accum.txnBeginCount, tc.txnBeginCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.distSQLSelectCount, err = checkCounterDelta(s, sql.MetaDistSQLSelect, accum.distSQLSelectCount, tc.distSQLSelectCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollback, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if err := checkCounterEQ(s, sql.MetaTxnAbort, 0); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelect, accum.selectCount, tc.selectCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.updateCount, err = checkCounterDelta(s, sql.MetaUpdate, accum.updateCount, tc.updateCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.insertCount, err = checkCounterDelta(s, sql.MetaInsert, accum.insertCount, tc.insertCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.deleteCount, err = checkCounterDelta(s, sql.MetaDelete, accum.deleteCount, tc.deleteCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.ddlCount, err = checkCounterDelta(s, sql.MetaDdl, accum.ddlCount, tc.ddlCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMisc, accum.miscCount, tc.miscCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+		})
 	}
 }
 
