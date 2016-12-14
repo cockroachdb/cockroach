@@ -988,12 +988,14 @@ func (p *planner) getViewDescForCascade(
 			viewName, err = p.getQualifiedTableName(viewDesc)
 			if err != nil {
 				log.Warningf(p.ctx(), "unable to retrieve qualified name of view %d: %v", viewID, err)
-				return nil, sqlbase.NewDependentObjectError(
-					"cannot drop %s %q because a view depends on it", typeName, objName)
+				msg := fmt.Sprintf("cannot drop %s %q because a view depends on it", typeName, objName)
+				return nil, sqlbase.NewDependentObjectError(msg, "")
 			}
 		}
-		return nil, sqlbase.NewDependentObjectError("cannot drop %s %q because view %q depends on it",
+		msg := fmt.Sprintf("cannot drop %s %q because view %q depends on it",
 			typeName, objName, viewName)
+		hint := fmt.Sprintf("you can drop %s instead.", viewName)
+		return nil, sqlbase.NewDependentObjectError(msg, hint)
 	}
 	return viewDesc, nil
 }
