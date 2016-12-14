@@ -3083,19 +3083,11 @@ func (s *Store) processRaftRequest(
 		return roachpb.NewError(err)
 	}
 
-	if (inSnap.SnapUUID == uuid.UUID{}) {
-		// TODO(peter) investigate calling handleRaftReadyRaftMuLocked directly.
-		s.enqueueRaftUpdateCheck(req.RangeID)
-		removePlaceholder = false
-	} else {
-		// Force the replica to deal with this snapshot right now.
-		if _, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
-			// mimic the behavior in processRaft.
-			panic(err)
-		}
-		removePlaceholder = false
+	if _, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
+		// mimic the behavior in processRaft.
+		panic(err)
 	}
-
+	removePlaceholder = false
 	return nil
 }
 
