@@ -158,7 +158,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
-		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
+		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
 			log.Fatal(ctx, err)
 		}
 	}

@@ -407,8 +407,6 @@ func (m *multiTestContext) initGossipNetwork() {
 
 type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
-	ctx      context.Context
-	cancel   func()
 	idx      int
 	replicas kv.ReplicaSlice
 	args     roachpb.BatchRequest
@@ -421,11 +419,8 @@ type multiTestContextKVTransport struct {
 func (m *multiTestContext) kvTransportFactory(
 	_ kv.SendOptions, _ *rpc.Context, replicas kv.ReplicaSlice, args roachpb.BatchRequest,
 ) (kv.Transport, error) {
-	ctx, cancel := context.WithCancel(context.Background())
 	t := &multiTestContextKVTransport{
 		mtc:      m,
-		ctx:      ctx,
-		cancel:   cancel,
 		replicas: replicas,
 		args:     args,
 	}
@@ -437,7 +432,7 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
 
-func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
+func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
 	rep := t.replicas[t.idx]
 	t.idx++
 	t.setPending(rep.ReplicaID, true)
@@ -447,7 +442,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	// and senders by subtracting 1 from the node ID.
 	nodeIndex := int(rep.NodeID) - 1
 	if log.V(1) {
-		log.Infof(context.TODO(), "SendNext nodeIndex=%d", nodeIndex)
+		log.Infof(ctx, "SendNext nodeIndex=%d", nodeIndex)
 	}
 
 	// This method crosses store boundaries: it is possible that the
@@ -457,7 +452,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	t.mtc.mu.RLock()
 	s := t.mtc.stoppers[nodeIndex]
 	t.mtc.mu.RUnlock()
-	if s == nil || s.RunAsyncTask(t.ctx, func(ctx context.Context) {
+	if s == nil || s.RunAsyncTask(ctx, func(ctx context.Context) {
 		t.mtc.mu.RLock()
 		sender := t.mtc.senders[nodeIndex]
 		t.mtc.mu.RUnlock()
@@ -532,9 +527,7 @@ func (t *multiTestContextKVTransport) setPending(repID roachpb.ReplicaID, pendin
 	}
 }
 
-func (t *multiTestContextKVTransport) Close() {
-	t.cancel()
-}
+func (*multiTestContextKVTransport) Close() {}
 
 // rangeDescByAge implements sort.Interface for RangeDescriptor, sorting by the
 // age of the RangeDescriptor. This is intended to find the most recent version

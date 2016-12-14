@@ -73,7 +73,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
+	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset)
 	return &PingResponse{
 		Pong:       args.Ping,
 		ServerTime: hs.clock.PhysicalNow(),
