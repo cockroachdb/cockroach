@@ -283,11 +283,6 @@ type Replica struct {
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu syncutil.TimedMutex
 
-	// requiresExpiringLease indicates whether this range uses an
-	// expiration-based lease; false if epoch-based. Ranges located
-	// before or at the node liveness table must use expiration leases.
-	requiresExpiringLease bool
-
 	cmdQMu struct {
 		// Protects all fields in the cmdQMu struct.
 		//
@@ -657,10 +652,6 @@ func (r *Replica) initLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.requiresExpiringLease = r.store.cfg.NodeLiveness == nil ||
-		!r.store.cfg.EnableEpochRangeLeases ||
-		desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
-
 	r.cmdQMu.Lock()
 	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
 	r.cmdQMu.local = NewCommandQueue(false /* !optimizeOverlap */)
@@ -954,7 +945,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// leases, the lease is in need of renewal, and there's not
 				// already an extension pending.
 				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
-				if !requestPending && r.requiresExpiringLease {
+				if !requestPending && r.requiresExpiringLease() {
 					renewal := status.lease.Expiration.Add(-int64(r.store.cfg.RangeLeaseRenewalDuration), 0)
 					if !timestamp.Less(renewal) {
 						if log.V(2) {
