@@ -93,11 +93,6 @@ func (f *Farmer) initNodes() []node {
 	return f.nodes
 }
 
-// FirstInstance returns the address of the first instance.
-func (f *Farmer) FirstInstance() string {
-	return f.Hostname(0)
-}
-
 // Hostname implements the Cluster interface.
 func (f *Farmer) Hostname(i int) string {
 	return f.initNodes()[i].hostname
@@ -258,7 +253,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 	}
 	var err error
 	for r := retry.Start(rOpts); r.Next(); {
-		instance := f.FirstInstance()
+		instance := f.Hostname(0)
 		if err != nil || instance == "" {
 			err = fmt.Errorf("no nodes found: %v", err)
 			continue
