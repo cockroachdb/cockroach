@@ -323,11 +323,20 @@ func (c *Counter) ToPrometheusMetric() *prometheusgo.Metric {
 type Gauge struct {
 	Metadata
 	value *int64
+	fn    func() int64
 }
 
 // NewGauge creates a Gauge.
 func NewGauge(metadata Metadata) *Gauge {
-	return &Gauge{metadata, new(int64)}
+	return &Gauge{metadata, new(int64), nil}
+}
+
+// NewFunctionalGauge creates a Gauge metric whose value is determined when
+// asked for by calling the provided function.
+// Note that Update, Inc, and Dec should NOT be called on a Gauge returned
+// from NewFunctionalGauge.
+func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
+	return &Gauge{metadata, nil, f}
 }
 
 // Snapshot returns a read-only copy of the gauge.
@@ -342,6 +351,9 @@ func (g *Gauge) Update(v int64) {
 
 // Value returns the gauge's current value.
 func (g *Gauge) Value() int64 {
+	if g.fn != nil {
+		return g.fn()
+	}
 	return atomic.LoadInt64(g.value)
 }
 
