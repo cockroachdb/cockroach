@@ -79,9 +79,12 @@ type distSQLExecMode int
 const (
 	// distSQLOff means that we never use distSQL.
 	distSQLOff distSQLExecMode = iota
+	// distSQLAuto means that we automatically decide on a case-by-case basis if
+	// we use distSQL.
+	distSQLAuto
 	// distSQLOn means that we use distSQL for queries that are supported.
 	distSQLOn
-	// distSQLOnly means that we only use distSQL; unsupported queries fail.
+	// distSQLAlways means that we only use distSQL; unsupported queries fail.
 	distSQLAlways
 )
 
@@ -89,6 +92,8 @@ func distSQLExecModeFromString(val string) distSQLExecMode {
 	switch strings.ToUpper(val) {
 	case "OFF":
 		return distSQLOff
+	case "AUTO":
+		return distSQLAuto
 	case "ON":
 		return distSQLOn
 	case "ALWAYS":
@@ -1262,16 +1267,23 @@ func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, erro
 		return false, nil
 	}
 
-	if err := e.distSQLPlanner.CheckSupport(plan); err != nil {
+	shouldDistribute, err := e.distSQLPlanner.CheckSupport(plan)
+	if err != nil {
 		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
 		if distSQLMode == distSQLAlways {
 			return false, err
 		}
 		// Don't use distSQL for this request.
-		log.Infof(session.Ctx(), "query not supported for distSQL: %s", err)
+		log.VEventf(session.Ctx(), 1, "query not supported for distSQL: %s", err)
 		return false, nil
 	}
 
+	if distSQLMode == distSQLAuto && !shouldDistribute {
+		log.VEventf(session.Ctx(), 1, "not distributing query")
+		return false, nil
+	}
+
+	// In ON or ALWAYS mode, all supported queries are distributed.
 	return true, nil
 }
 

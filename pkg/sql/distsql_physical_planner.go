@@ -133,22 +133,24 @@ func checkExpr(expr parser.Expr) error {
 	return v.err
 }
 
-// CheckSupport looks at a planNode tree and decides if DistSQL is equipped to
-// handle the query.
-func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
+// CheckSupport looks at a planNode tree and decides:
+//  - whether DistSQL is equipped to handle the query (if not, an error is
+//    returned).
+//  - whether it is recommended that the query be run with DistSQL.
+func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notSuppErr error) {
 	switch n := tree.(type) {
 	case *selectTopNode:
 		if n.group != nil {
-			return errors.Errorf("grouping not supported yet")
+			return false, errors.Errorf("grouping not supported yet")
 		}
 		if n.window != nil {
-			return errors.Errorf("windows not supported yet")
+			return false, errors.Errorf("windows not supported yet")
 		}
 		if n.distinct != nil {
-			return errors.Errorf("distinct not supported yet")
+			return false, errors.Errorf("distinct not supported yet")
 		}
 		if n.limit != nil {
-			return errors.Errorf("limit not supported yet")
+			return false, errors.Errorf("limit not supported yet")
 		}
 		return dsp.CheckSupport(n.source)
 
@@ -157,43 +159,72 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) error {
 			// The Evaluator processors we use for select don't support filters yet.
 			// This is easily fixed, but it will only matter when we support joins
 			// (normally, all filters are pushed down to scanNodes).
-			return errors.Errorf("filter not supported at select level yet")
+			return false, errors.Errorf("filter not supported at select level yet")
 		}
 		for i, e := range n.render {
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
 				typ.FamilyEqual(parser.TypeIntArray) {
-				return errors.Errorf("unsupported render type %s", typ)
+				return false, errors.Errorf("unsupported render type %s", typ)
 			}
 			if err := checkExpr(e); err != nil {
-				return err
+				return false, err
 			}
 		}
-		return dsp.CheckSupport(n.source.plan)
+		shouldDistribute, err := dsp.CheckSupport(n.source.plan)
+		if err != nil {
+			return false, err
+		}
+		// If we have to sort, distribute the query.
+		shouldDistribute = shouldDistribute || (n.top.sort != nil && n.top.sort.needSort)
+		return shouldDistribute, nil
 
 	case *joinNode:
 		if n.joinType != joinTypeInner {
-			return errors.Errorf("only inner join supported")
+			return false, errors.Errorf("only inner join supported")
 		}
 		if err := checkExpr(n.pred.filter); err != nil {
-			return err
+			return false, err
 		}
-		if err := dsp.CheckSupport(n.left.plan); err != nil {
-			return err
+		shouldRunDistLeft, err := dsp.CheckSupport(n.left.plan)
+		if err != nil {
+			return false, err
 		}
-		return dsp.CheckSupport(n.right.plan)
+		shouldRunDistRight, err := dsp.CheckSupport(n.right.plan)
+		if err != nil {
+			return false, err
+		}
+		// If either the left or the right side can benefit from distribution, we
+		// should distribute.
+		shouldDistribute := shouldRunDistLeft || shouldRunDistRight
+		// If we can do a hash join, we should distribute.
+		shouldDistribute = shouldDistribute || len(n.pred.leftEqualityIndices) > 0
+		return shouldDistribute, nil
 
 	case *scanNode:
-		return checkExpr(n.filter)
+		// We recommend running scans distributed only if we have a filtering
+		// expression.
+		if n.filter != nil {
+			if err := checkExpr(n.filter); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		return false, nil
 
 	case *indexJoinNode:
-		if err := dsp.CheckSupport(n.index); err != nil {
-			return err
+		shouldRunDistIndex, err := dsp.CheckSupport(n.index)
+		if err != nil {
+			return false, err
 		}
-		return dsp.CheckSupport(n.table)
+		shouldRunDistTable, err := dsp.CheckSupport(n.table)
+		if err != nil {
+			return false, err
+		}
+		return (shouldRunDistIndex || shouldRunDistTable), nil
 
 	default:
-		return errors.Errorf("unsupported node %T", tree)
+		return false, errors.Errorf("unsupported node %T", tree)
 	}
 }
 
@@ -1091,6 +1122,8 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	thisNodeID := dsp.nodeDesc.NodeID
 	planCtx.nodeAddresses[thisNodeID] = dsp.nodeDesc.Address.String()
 
+	log.VEvent(ctx, 1, "creating DistSQL plan")
+
 	plan, err := dsp.createPlanForNode(&planCtx, tree)
 	if err != nil {
 		return err
@@ -1141,6 +1174,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	}
 
 	if logPlanDiagram {
+		log.VEvent(ctx, 1, "creating plan diagram")
 		nodeNames := make([]string, len(nodeIDs))
 		for i, n := range nodeIDs {
 			nodeNames[i] = n.String()
@@ -1153,6 +1187,8 @@ func (dsp *distSQLPlanner) PlanAndRun(
 			log.Infof(ctx, "Plan diagram JSON:\n%s", buf.String())
 		}
 	}
+
+	log.VEvent(ctx, 1, "running DistSQL plan")
 
 	// Start the flows on all other nodes.
 	for i, nodeID := range nodeIDs {
