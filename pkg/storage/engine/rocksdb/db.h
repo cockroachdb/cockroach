@@ -112,9 +112,11 @@ DBStatus DBGet(DBEngine* db, DBKey key, DBString* value);
 DBStatus DBDelete(DBEngine* db, DBKey key);
 
 // Applies a batch of operations (puts, merges and deletes) to the
-// database atomically. It is only valid to call this function on an
-// engine created by DBNewBatch.
-DBStatus DBCommitBatch(DBEngine* db);
+// database atomically and closes the batch. It is only valid to call
+// this function on an engine created by DBNewBatch. If an error is
+// returned, the batch is not closed and it is the caller's
+// responsibility to call DBClose.
+DBStatus DBCommitAndCloseBatch(DBEngine* db);
 
 // ApplyBatchRepr applies a batch of mutations encoded using that
 // batch representation returned by DBBatchRepr(). It is only valid to
