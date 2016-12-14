@@ -166,6 +166,19 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 
 func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
+	str := strings.Join(names, ".")
+	switch str {
+	case ".default":
+		return path, nil
+	case ".meta":
+		return []sqlbase.ID{keys.MetaSystemID}, nil
+	case ".identifier":
+		return []sqlbase.ID{keys.IdentifierSystemID}, nil
+	case ".system":
+		return []sqlbase.ID{keys.NormalSystemID}, nil
+	default:
+
+	}
 	for _, name := range names {
 		id, err := queryNamespace(conn, path[len(path)-1], name)
 		if err != nil {
@@ -177,9 +190,10 @@ func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) 
 }
 
 func parseZoneName(s string) ([]string, error) {
-	if strings.ToLower(s) == ".default" {
-		return nil, nil
+	if strings.ToLower(s) == ".default" || strings.ToLower(s) == ".meta" || strings.ToLower(s) == ".identifier" || strings.ToLower(s) == ".system" {
+		return []string{strings.ToLower(s)}, nil
 	}
+
 	// TODO(knz): we are passing a name that might not be escaped correctly.
 	// See #8389.
 	tn, err := parser.ParseTableNameTraditional(s)
@@ -244,9 +258,16 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if id == 0 {
+	switch id {
+	case 0:
 		fmt.Println(".default")
-	} else {
+	case 7:
+		fmt.Println(".meta")
+	case 8:
+		fmt.Println(".identifier")
+	case 9:
+		fmt.Println(".system")
+	default:
 		for i := range path {
 			if path[i] == id {
 				fmt.Println(strings.Join(names[:i], "."))
@@ -331,6 +352,15 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 	if _, ok := zones[0]; ok {
 		fmt.Println(".default")
 	}
+	if _, ok := zones[7]; ok {
+		fmt.Println(".meta")
+	}
+	if _, ok := zones[8]; ok {
+		fmt.Println(".identifier")
+	}
+	if _, ok := zones[9]; ok {
+		fmt.Println(".system")
+	}
 	for _, o := range output {
 		fmt.Println(o)
 	}
@@ -377,7 +407,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	id := path[len(path)-1]
-	if id == keys.RootNamespaceID {
+	if id == keys.RootNamespaceID || id == keys.MetaSystemID || id == keys.IdentifierSystemID || id == keys.NormalSystemID {
 		return fmt.Errorf("unable to remove %s", args[0])
 	}
 

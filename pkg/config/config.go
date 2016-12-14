@@ -54,6 +54,39 @@ var (
 		},
 	}
 
+	// metaZoneConfig is meta1/meta2 zone configuration used when no custom
+	// config has been specified.
+	metaZoneConfig = ZoneConfig{
+		NumReplicas:   15,
+		RangeMinBytes: 1 << 20,  // 1 MB
+		RangeMaxBytes: 64 << 20, // 64 MB
+		GC: GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
+	}
+
+	// identifierZoneConfig is default zone configuration for system key which has
+	// prefix 'NodeLivenessPrefix', 'DescIDGenerator', 'NodeIDGenerator', '',
+	// 'RangeIDGenerator', 'StoreIDGenerator' etc.
+	identifierZoneConfig = ZoneConfig{
+		NumReplicas:   5,
+		RangeMinBytes: 1 << 20,  // 1 MB
+		RangeMaxBytes: 64 << 20, // 64 MB
+		GC: GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
+	}
+
+	// systemZoneConfig is default zone configuration for other system keys
+	systemZoneConfig = ZoneConfig{
+		NumReplicas:   3,
+		RangeMinBytes: 1 << 20,  // 1 MB
+		RangeMaxBytes: 64 << 20, // 64 MB
+		GC: GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
+	}
+
 	// ZoneConfigHook is a function used to lookup a zone config given a table
 	// or database ID.
 	// This is also used by testing to simplify fake configs.
@@ -139,6 +172,27 @@ func DefaultZoneConfig() ZoneConfig {
 	return defaultZoneConfig
 }
 
+// MetaZoneConfig is the default meta1/meta2 zone configuration.
+func MetaZoneConfig() ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return metaZoneConfig
+}
+
+// IdetifierZoneConfig is a plumb function for idetifierZoneConfig.
+func IdetifierZoneConfig() ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return identifierZoneConfig
+}
+
+// SystemZoneConfig is a plumb function for systemZoneConfig.
+func SystemZoneConfig() ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return systemZoneConfig
+}
+
 // TestingSetDefaultZoneConfig is a testing-only function that changes the
 // default zone config and returns a function that reverts the change.
 func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
@@ -179,6 +233,15 @@ func (z ZoneConfig) Validate() error {
 func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 	if key.Equal(roachpb.RKeyMax) {
 		return 0, false
+	}
+	if bytes.HasPrefix(key, keys.Meta1Prefix) || bytes.HasPrefix(key, keys.Meta2Prefix) {
+		return keys.MetaSystemID, true
+	}
+	if bytes.HasPrefix(key, keys.SystemPrefix) {
+		if bytes.HasPrefix(key, keys.TimeseriesPrefix) || bytes.HasPrefix(key, keys.StatusPrefix) || bytes.HasPrefix(key, keys.UpdateCheckPrefix) {
+			return keys.NormalSystemID, true
+		}
+		return keys.IdentifierSystemID, true
 	}
 	if encoding.PeekType(key) != encoding.Int {
 		// TODO(marc): this should eventually return SystemDatabaseID.
