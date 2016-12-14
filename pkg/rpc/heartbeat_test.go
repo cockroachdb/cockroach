@@ -47,7 +47,7 @@ func TestHeartbeatReply(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 	}
 
 	request := &PingRequest{
@@ -73,12 +73,12 @@ func TestManualHeartbeat(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 		ready:              make(chan struct{}, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 	}
 
 	request := &PingRequest{
@@ -120,7 +120,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
 	hs := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 	}
 
 	request := &PingRequest{

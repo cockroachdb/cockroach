@@ -43,7 +43,6 @@ var (
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
-	ctx       context.Context
 	clock     *hlc.Clock
 	offsetTTL time.Duration
 
@@ -56,11 +55,8 @@ type RemoteClockMonitor struct {
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
-func newRemoteClockMonitor(
-	ctx context.Context, clock *hlc.Clock, offsetTTL time.Duration,
-) *RemoteClockMonitor {
+func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
-		ctx:       ctx,
 		clock:     clock,
 		offsetTTL: offsetTTL,
 	}
@@ -85,7 +81,7 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 // 2. The old offset for addr was measured long enough ago to be considered
 // stale.
 // 3. The new offset's error is smaller than the old offset's error.
-func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
+func (r *RemoteClockMonitor) UpdateOffset(ctx context.Context, addr string, offset RemoteOffset) {
 	emptyOffset := offset == RemoteOffset{}
 
 	r.mu.Lock()
@@ -114,7 +110,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	}
 
 	if log.V(2) {
-		log.Infof(r.ctx, "update offset: %s %v", addr, r.mu.offsets[addr])
+		log.Infof(ctx, "update offset: %s %v", addr, r.mu.offsets[addr])
 	}
 }
 
@@ -123,7 +119,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 // than half the known offsets are healthy, and an error otherwise. A non-nil
 // return indicates that this node's clock is unreliable, and that the node
 // should terminate.
-func (r *RemoteClockMonitor) VerifyClockOffset() error {
+func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	// By the contract of the hlc, if the value is 0, then safety checking
 	// of the max offset is disabled. However we may still want to
 	// propagate the information to a status node.
@@ -142,7 +138,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 			}
 			offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))
 			offsets = append(offsets, float64(offset.Offset-offset.Uncertainty))
-			if offset.isHealthy(r.ctx, maxOffset) {
+			if offset.isHealthy(ctx, maxOffset) {
 				healthyOffsetCount++
 			}
 		}
@@ -165,7 +161,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 			return errors.Errorf("fewer than half the known nodes are within the maximum offset of %s (%d of %d)", maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Infof(r.ctx, "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Infof(ctx, "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
 		}
 	}
 
