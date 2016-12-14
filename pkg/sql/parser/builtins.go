@@ -1381,6 +1381,32 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
+	// statement.
+	"pg_catalog.pg_get_indexdef": {
+		Builtin{
+			Types: NamedArgTypes{
+				{"index_oid", TypeInt},
+			},
+			ReturnType: TypeString,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				oid := args[0]
+				r, err := ctx.Planner.QueryRow("SELECT indexdef FROM pg_catalog.pg_indexes WHERE oid=$1", oid)
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return nil, fmt.Errorf("unknown OID %s", args[0])
+				}
+				return r[0], nil
+			},
+			category: categoryCompatibility,
+		},
+		// The other overload for this function, pg_get_indexdef(index_oid,
+		// column_no, pretty_bool), is unimplemented, because it isn't used by
+		// supported ORMs.
+	},
+
 	"pg_catalog.pg_typeof": {
 		// TODO(knz): This is a proof-of-concept until TypeAny works
 		// properly.
