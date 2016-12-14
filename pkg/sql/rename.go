@@ -90,12 +90,13 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 				if err != nil {
 					log.Warningf(p.ctx(), "Unable to retrieve fully-qualified name of view %d: %v",
 						viewDesc.ID, err)
-					return nil, sqlbase.NewDependentObjectError(
-						"cannot rename database because a view depends on table %q", tbDesc.Name)
+					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
+					return nil, sqlbase.NewDependentObjectError(msg, "")
 				}
 			}
-			return nil, sqlbase.NewDependentObjectError(
-				"cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
+			msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
+			hint := fmt.Sprintf("You can drop %s instead.", viewName)
+			return nil, sqlbase.NewDependentObjectError(msg, hint)
 		}
 	}
 
@@ -452,10 +453,13 @@ func (p *planner) dependentViewRenameError(
 		viewName, err = p.getQualifiedTableName(viewDesc)
 		if err != nil {
 			log.Warningf(p.ctx(), "unable to retrieve name of view %d: %v", viewID, err)
-			return sqlbase.NewDependentObjectError("cannot rename %s %q because a view depends on it",
+			msg := fmt.Sprintf("cannot rename %s %q because a view depends on it",
 				typeName, objName)
+			return sqlbase.NewDependentObjectError(msg, "")
 		}
 	}
-	return sqlbase.NewDependentObjectError("cannot rename %s %q because view %q depends on it",
+	msg := fmt.Sprintf("cannot rename %s %q because view %q depends on it",
 		typeName, objName, viewName)
+	hint := fmt.Sprintf("You can drop %s instead.", viewName)
+	return sqlbase.NewDependentObjectError(msg, hint)
 }
