@@ -98,6 +98,17 @@ SELECT a AS foo, b FROM t ORDER BY foo DESC
 2 8
 1 9
 
+# Check that ambiguous references to renders are properly reported.
+query error ORDER BY "foo" is ambiguous
+SELECT a AS foo, b AS foo FROM t ORDER BY foo
+
+# Check that no ambiguity is reported if the ORDER BY name refers
+# to two or more equivalent renders (special case in SQL92).
+query II
+SELECT a AS foo, (a) AS foo FROM t ORDER BY foo LIMIT 1
+----
+1 1
+
 query II
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
