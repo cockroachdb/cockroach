@@ -302,6 +302,34 @@ SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
 45  45  42    53
 45  45  45    45
 
+# Inner join with filter predicate
+query II
+SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+42   53
+
+# Outer joins with filter predicate
+query II
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+44   NULL
+NULL NULL
+42   53
+
+query II
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x=44)
+----
+44   51
+NULL NULL
+42   NULL
+
+query II
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x=44)
+----
+44   51
+NULL NULL
+42   NULL
+
 # Check column orders and names.
 query IIIIII colnames
 SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
