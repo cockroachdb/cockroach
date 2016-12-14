@@ -1369,3 +1369,17 @@ query T
 SELECT pg_catalog.pg_get_userbyid(20)
 ----
 unknown (OID=20)
+
+query error unknown index \(OID=0\)
+SELECT pg_catalog.pg_get_indexdef(0)
+
+statement ok
+CREATE TABLE test.pg_indexdef_test (a INT, INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC));
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
+----
+CREATE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
+
+query error pq: unknown signature: pg_catalog.pg_get_indexdef\(int, int, bool\)
+SELECT pg_catalog.pg_get_indexdef(0, 0, true)
