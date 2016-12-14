@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,11 +45,18 @@ type FlowID struct {
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
-	Context context.Context
-	id      FlowID
-	evalCtx *parser.EvalContext
-	rpcCtx  *rpc.Context
-	txn     *client.Txn
+	Context  context.Context
+	id       FlowID
+	evalCtx  *parser.EvalContext
+	rpcCtx   *rpc.Context
+	txnProto *roachpb.Transaction
+	clientDB *client.DB
+}
+
+func (flowCtx *FlowCtx) setupTxn(ctx context.Context) *client.Txn {
+	txn := client.NewTxn(ctx, *flowCtx.clientDB)
+	txn.Proto = *flowCtx.txnProto
+	return txn
 }
 
 type flowStatus int

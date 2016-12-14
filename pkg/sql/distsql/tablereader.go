@@ -102,13 +102,15 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	ctx, span := tracing.ChildSpan(tr.ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
+	txn := tr.flowCtx.setupTxn(ctx)
+
 	log.VEventf(ctx, 1, "starting (filter: %s)", &tr.filter)
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}
 
 	if err := tr.fetcher.StartScan(
-		tr.flowCtx.txn, tr.spans, true /* limit batches */, tr.getLimitHint(),
+		txn, tr.spans, true /* limit batches */, tr.getLimitHint(),
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.output.Close(err)
