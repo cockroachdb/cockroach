@@ -22,6 +22,7 @@ package storage
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -117,7 +118,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &now,
 	}
 
-	if repl.requiresExpiringLease {
+	if repl.requiresExpiringLease() {
 		reqLease.Expiration = status.timestamp.Add(int64(repl.store.cfg.RangeLeaseActiveDuration), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
@@ -364,6 +365,16 @@ func (r *Replica) leaseStatus(
 		status.state = leaseExpired
 	}
 	return status
+}
+
+// requiresExpiringLease returns whether this range uses an
+// expiration-based lease; false if epoch-based. Ranges located before
+// or including the node liveness table must use expiration leases to
+// avoid circular dependencies on the node liveness table. The replica
+// mutex must be held.
+func (r *Replica) requiresExpiringLease() bool {
+	return r.store.cfg.NodeLiveness == nil || !r.store.cfg.EnableEpochRangeLeases ||
+		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
