@@ -73,7 +73,7 @@ type continuousLoadTest struct {
 func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 	var client http.Client
 	var resp status.NodeStatus
-	host := f.FirstInstance()
+	host := f.Hostname(0)
 	if err := httputil.GetJSON(client, "http://"+host+":8080/_status/nodes/local", &resp); err != nil {
 		return 0, err
 	}

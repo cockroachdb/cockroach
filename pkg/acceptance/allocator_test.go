@@ -208,7 +208,7 @@ func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
 }
 
 func (at *allocatorTest) stdDev() (float64, error) {
-	host := at.f.FirstInstance()
+	host := at.f.Hostname(0)
 	var client http.Client
 	var nodesResp serverpb.NodesResponse
 	url := fmt.Sprintf("http://%s:%s/_status/nodes", host, adminPort)
@@ -365,7 +365,7 @@ func (at *allocatorTest) WaitForRebalance(ctx context.Context, t *testing.T) err
 
 			log.Info(ctx, stats)
 			if StableInterval <= stats.ElapsedSinceLastEvent {
-				host := at.f.FirstInstance()
+				host := at.f.Hostname(0)
 				log.Infof(context.Background(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
 				if stats.ReplicaCountStdDev > *flagATMaxStdDev {
 					_ = at.printRebalanceStats(db, host)
