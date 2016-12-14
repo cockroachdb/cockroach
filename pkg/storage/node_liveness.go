@@ -508,7 +508,7 @@ func (nl *NodeLiveness) updateLiveness(
 		return handleCondFailed(*l)
 	}
 
-	if err := nl.db.Txn(ctx, func(txn *client.Txn) error {
+	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		key := keys.NodeLivenessKey(newLiveness.NodeID)
 		// The batch interface requires interface{}(nil), not *Liveness(nil).
@@ -528,7 +528,7 @@ func (nl *NodeLiveness) updateLiveness(
 				},
 			},
 		})
-		return txn.Run(b)
+		return txn.Run(ctx, b)
 	}); err != nil {
 		if cErr, ok := err.(*roachpb.ConditionFailedError); ok && handleCondFailed != nil {
 			if cErr.ActualValue == nil {

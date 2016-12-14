@@ -110,7 +110,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 	ctx, span := tracing.ChildSpan(ctx, "join reader")
 	defer tracing.FinishSpan(span)
 
-	txn := jr.flowCtx.setupTxn(ctx)
+	txn := jr.flowCtx.setupTxn()
 
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
@@ -144,7 +144,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(txn, spans, false /* no batch limits */, 0)
+		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0)
 		if err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return err
@@ -154,7 +154,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
 		for {
-			fetcherRow, err := jr.fetcher.NextRow()
+			fetcherRow, err := jr.fetcher.NextRow(ctx)
 			if err != nil {
 				return err
 			}

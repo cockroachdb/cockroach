@@ -157,9 +157,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	var leases []*LeaseState
-	err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 3; i++ {
-			lease, err := leaseManager.acquireFreshestFromStore(txn.Context, txn, tableDesc.ID)
+			lease, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -368,9 +368,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Populate the name cache.
 	var lease *LeaseState
-	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		lease, err = leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
+		lease, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -399,9 +399,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	for i := 0; i < 50; i++ {
 		var leaseByName *LeaseState
-		if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			lease, err := leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
+			lease, err := leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -416,7 +416,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			// Start the race: signal the other guy to release, and we do another
 			// acquire at the same time.
 			leaseChan <- lease
-			leaseByName, err = leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
+			leaseByName, err = leaseManager.AcquireByName(ctx, txn, tableDesc.ParentID, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -482,8 +482,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
-				lease, err := leaseManager.acquireFreshestFromStore(txn.Context, txn, tableDesc.ID)
+			err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+				lease, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
 				if err != nil {
 					return err
 				}

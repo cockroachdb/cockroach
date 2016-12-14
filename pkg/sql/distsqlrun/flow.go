@@ -62,8 +62,8 @@ type FlowCtx struct {
 	testingKnobs TestingKnobs
 }
 
-func (flowCtx *FlowCtx) setupTxn(ctx context.Context) *client.Txn {
-	txn := client.NewTxn(ctx, *flowCtx.clientDB)
+func (flowCtx *FlowCtx) setupTxn() *client.Txn {
+	txn := client.NewTxn(flowCtx.clientDB)
 	txn.Proto = *flowCtx.txnProto
 	return txn
 }

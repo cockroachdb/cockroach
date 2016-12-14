@@ -287,11 +287,11 @@ func TestTxn_Commit(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -331,7 +331,7 @@ func TestDebugName(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		const expected = "unnamed"
 		if txn.DebugName() != expected {
 			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())

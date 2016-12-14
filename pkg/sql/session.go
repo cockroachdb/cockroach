@@ -164,7 +164,8 @@ func (s *Session) Finish(e *Executor) {
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State.kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(
-			errors.Errorf("session closing"), e)
+			s.context, errors.Errorf("session closing"), e,
+		)
 	}
 	if s.TxnState.State != NoTxn {
 		s.TxnState.finishSQLTxn(s.context)
@@ -333,7 +334,7 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
+	ts.txn = client.NewTxn(e.cfg.DB)
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.State = Open
 
@@ -387,7 +388,7 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 // received. If it's a retriable error and we're going to retry the txn,
 // then the state moves to RestartWait. Otherwise, the state moves to Aborted
 // and the KV txn is cleaned up.
-func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
+func (ts *txnState) updateStateAndCleanupOnErr(ctx context.Context, err error, e *Executor) {
 	if err == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
 	}
@@ -396,7 +397,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 		e.TxnAbortCount.Inc(1)
 		// This call rolls back a PENDING transaction and cleans up all its
 		// intents.
-		ts.txn.CleanupOnError(err)
+		ts.txn.CleanupOnError(ctx, err)
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.
@@ -413,16 +414,8 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 func (ts *txnState) hijackCtx(ctx context.Context) func() {
 	origCtx := ts.Ctx
 	ts.Ctx = ctx
-	if ts.txn != nil {
-		// TODO(andrei): We shouldn't need to hijack the txn's Context like this
-		// because the txn shouldn't have a member Context to begin with.
-		ts.txn.Context = ctx
-	}
 	return func() {
 		ts.Ctx = origCtx
-		if ts.txn != nil {
-			ts.txn.Context = origCtx
-		}
 	}
 }
 

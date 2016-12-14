@@ -154,11 +154,11 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			store.testSender(), store.cfg.Clock,
 			false, stopper, kv.MakeTxnMetrics(time.Second))
 		db := client.NewDB(tcs)
-		txn := client.NewTxn(context.TODO(), *db)
-		if err := txn.Run(b); err != nil {
+		txn := client.NewTxn(db)
+		if err := txn.Run(context.TODO(), b); err != nil {
 			t.Fatal(err)
 		}
-		if err := txn.Commit(); err != nil {
+		if err := txn.Commit(context.TODO()); err != nil {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.

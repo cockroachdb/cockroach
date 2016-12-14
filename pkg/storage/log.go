@@ -21,13 +21,13 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // TODO(mrtracy): All of this logic should probably be moved into the SQL
@@ -68,7 +68,7 @@ func (s *Store) insertRangeLogEvent(
 		info = *event.info
 	}
 	if log.V(1) {
-		log.Infof(txn.Context, "Range Event: %q, range: %d, info: %s",
+		log.Infof(ctx, "Range Event: %q, range: %d, info: %s",
 			event.eventType,
 			event.rangeID,
 			info)

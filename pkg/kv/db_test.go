@@ -221,25 +221,25 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
-		if err := txn.Put(key, value); err != nil {
+		if err := txn.Put(ctx, key, value); err != nil {
 			t.Fatal(err)
 		}
 
 		// Attempt to read outside of txn.
-		if gr, err := db.Get(context.TODO(), key); err != nil {
+		if gr, err := db.Get(ctx, key); err != nil {
 			t.Fatal(err)
 		} else if gr.Exists() {
 			t.Errorf("expected nil value; got %+v", gr.Value)
 		}
 
 		// Read within the transaction.
-		if gr, err := txn.Get(key); err != nil {
+		if gr, err := txn.Get(ctx, key); err != nil {
 			t.Fatal(err)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 			t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
@@ -327,7 +327,7 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 
 		atomic.StoreInt64(&intentResolutionCount, 0)
 		limit := totalNumKeys / 2
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			var b client.Batch
 			// Fully deleted.
 			b.DelRange("a", "b", false)
@@ -336,7 +336,7 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 			// Not deleted.
 			b.DelRange("c", "d", false)
 			b.Header.MaxSpanRequestKeys = limit
-			if err := txn.Run(&b); err != nil {
+			if err := txn.Run(ctx, &b); err != nil {
 				return err
 			}
 			if abortTxn {

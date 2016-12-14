@@ -410,7 +410,9 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error), b *Batch,
+	ctx context.Context,
+	send func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
+	b *Batch,
 ) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
@@ -420,7 +422,7 @@ func sendAndFill(
 	var ba roachpb.BatchRequest
 	ba.Requests = b.reqs
 	ba.Header = b.Header
-	b.response, b.pErr = send(ba)
+	b.response, b.pErr = send(ctx, ba)
 	if b.pErr != nil {
 		// Discard errors from fillResults.
 		_ = b.fillResults()
@@ -448,10 +450,7 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	sendFn := func(br roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return db.send(ctx, br)
-	}
-	return sendAndFill(sendFn, b)
+	return sendAndFill(ctx, db.send, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -461,19 +460,25 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 // cause problems in the event it must be run more than once.
 //
 // If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
+func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
-	// TODO(dan): This context should, at longest, live for the lifetime of this
-	// method. Add a defered cancel.
-	txn := NewTxn(ctx, *db)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	txn := NewTxn(db)
 	txn.SetDebugName("unnamed")
-	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
-		func(txn *Txn, _ *TxnExecOptions) error {
-			return retryable(txn)
-		})
+	err := txn.Exec(
+		ctx,
+		TxnExecOptions{
+			AutoRetry:  true,
+			AutoCommit: true,
+		}, func(ctx context.Context, txn *Txn, _ *TxnExecOptions) error {
+			return retryable(ctx, txn)
+		},
+	)
 	if err != nil {
-		txn.CleanupOnError(err)
+		txn.CleanupOnError(ctx, err)
 	}
 	// Terminate RetryableTxnError here, so it doesn't cause a higher-level txn to
 	// be retried. We don't do this in any of the other functions in DB; I guess

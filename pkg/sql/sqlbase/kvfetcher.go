@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -211,7 +212,7 @@ func makeKVFetcher(
 }
 
 // fetch retrieves spans from the kv
-func (f *kvFetcher) fetch() error {
+func (f *kvFetcher) fetch(ctx context.Context) error {
 	batchSize := f.getBatchSize()
 
 	b := &f.batch
@@ -229,7 +230,7 @@ func (f *kvFetcher) fetch() error {
 	// Reset spans and add resume-spans later.
 	f.spans = f.spans[:0]
 
-	if err := f.txn.Run(b); err != nil {
+	if err := f.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
@@ -283,12 +284,12 @@ func (f *kvFetcher) fetch() error {
 
 // nextKV returns the next key/value (initiating fetches as necessary). When there are no more keys,
 // returns false and an empty key/value.
-func (f *kvFetcher) nextKV() (bool, client.KeyValue, error) {
+func (f *kvFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
 	if f.kvIndex == len(f.kvs) {
 		if f.fetchEnd {
 			return false, client.KeyValue{}, nil
 		}
-		err := f.fetch()
+		err := f.fetch(ctx)
 		if err != nil {
 			return false, client.KeyValue{}, err
 		}

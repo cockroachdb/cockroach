@@ -154,7 +154,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx, span := tracing.ChildSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
-	txn := tr.flowCtx.setupTxn(ctx)
+	txn := tr.flowCtx.setupTxn()
 
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
@@ -162,7 +162,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	if err := tr.fetcher.StartScan(
-		txn, tr.spans, true /* limit batches */, tr.limitHint,
+		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.out.close(err)
@@ -170,7 +170,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	for {
-		fetcherRow, err := tr.fetcher.NextRow()
+		fetcherRow, err := tr.fetcher.NextRow(ctx)
 		if err != nil || fetcherRow == nil {
 			tr.out.close(err)
 			return

@@ -991,7 +991,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 	dbCtx.UserPriority = ba.UserPriority
 	tmpDB := client.NewDBWithContext(tc, dbCtx)
 	var br *roachpb.BatchResponse
-	err := tmpDB.Txn(ctx, func(txn *client.Txn) error {
+	err := tmpDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
 		b.Header = ba.Header
@@ -999,7 +999,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 			req := arg.GetInner()
 			b.AddRawRequest(req)
 		}
-		err := txn.CommitInBatch(b)
+		err := txn.CommitInBatch(ctx, b)
 		br = b.RawResponse()
 		return err
 	})

@@ -109,7 +109,7 @@ necessary. An example of using transactions with parallel writes:
 		// Note that the Txn client is flushed automatically when this function
 		// returns success (i.e. nil). Calling CommitInBatch explicitly can
 		// sometimes reduce the number of RPCs.
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	})
 	if err != nil {
 		log.Fatal(err)

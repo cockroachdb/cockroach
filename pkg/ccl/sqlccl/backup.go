@@ -90,10 +90,10 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	return endTime, err
 }
 
-func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
+func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
-	rows, err := txn.Scan(startKey, endKey, 0)
+	rows, err := txn.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -169,15 +169,15 @@ func Backup(
 	}
 	defer exportStore.Close()
 
-	db := *p.ExecCfg().DB
+	db := p.ExecCfg().DB
 
 	{
-		txn := client.NewTxn(ctx, db)
+		txn := client.NewTxn(db)
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
-		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
 			sql.SetTxnTimestamps(txn, endTime)
-			sqlDescs, err = allSQLDescriptors(txn)
+			sqlDescs, err = allSQLDescriptors(ctx, txn)
 			return err
 		})
 		if err != nil {
@@ -324,6 +324,7 @@ func Import(
 }
 
 func reassignParentIDs(
+	ctx context.Context,
 	txn *client.Txn,
 	p sql.PlanHookState,
 	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
@@ -345,7 +346,7 @@ func reassignParentIDs(
 			}
 
 			// Make sure the target DB exists.
-			existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, targetDB))
+			existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
 			if err != nil {
 				return err
 			}
@@ -363,7 +364,7 @@ func reassignParentIDs(
 		// This would fail the CPut later anyway, but this yields a prettier error.
 		{
 			nameKey := table.GetNameMetadataKey()
-			res, err := txn.Get(nameKey)
+			res, err := txn.Get(ctx, nameKey)
 			if err != nil {
 				return err
 			}
@@ -374,7 +375,7 @@ func reassignParentIDs(
 
 		// Check and set privileges.
 		{
-			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
+			parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
 			if err != nil {
 				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
 			}
@@ -400,18 +401,17 @@ func newTableIDs(
 	tables []*sqlbase.TableDescriptor,
 ) (map[sqlbase.ID]sqlbase.ID, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
-	newTableIDsFunc := func(txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
 		for _, table := range tables {
-			newTableID, err := sql.GenerateUniqueDescID(txn)
+			newTableID, err := sql.GenerateUniqueDescID(ctx, txn)
 			if err != nil {
 				return err
 			}
 			newTableIDs[table.ID] = newTableID
 		}
 		return nil
-	}
-	if err := db.Txn(ctx, newTableIDsFunc); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	return newTableIDs, nil
@@ -656,8 +656,7 @@ func restoreTableDescs(
 	defer tracing.FinishSpan(span)
 
 	newTables := make([]sqlbase.TableDescriptor, len(tables))
-	restoreTableDescsFunc := func(txn *client.Txn) error {
-
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := range tables {
 			newTables[i] = *tables[i]
 			newTableID, ok := newTableIDs[newTables[i].ID]
@@ -698,13 +697,12 @@ func restoreTableDescs(
 			}
 		}
 		for _, newTable := range newTables {
-			if err := newTable.Validate(txn); err != nil {
+			if err := newTable.Validate(ctx, txn); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
-	if err := db.Txn(ctx, restoreTableDescsFunc); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	return newTables, nil
@@ -718,7 +716,7 @@ func restoreTableDesc(ctx context.Context, txn *client.Txn, table sqlbase.TableD
 	b := txn.NewBatch()
 	b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(&table), nil)
 	b.CPut(table.GetNameMetadataKey(), table.ID, nil)
-	return txn.Run(b)
+	return txn.Run(ctx, b)
 }
 
 // Restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -782,8 +780,8 @@ func Restore(
 
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
-	if err := db.Txn(ctx, func(txn *client.Txn) error {
-		return reassignParentIDs(txn, p, databasesByID, tables, opt)
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return reassignParentIDs(ctx, txn, p, databasesByID, tables, opt)
 	}); err != nil {
 		return nil, err
 	}

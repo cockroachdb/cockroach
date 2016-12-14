@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -48,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -356,7 +356,7 @@ func (e *Executor) Start(
 
 	ctx = log.WithLogTag(ctx, "startup", nil)
 	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
-	if err := e.virtualSchemas.init(&startupSession.planner); err != nil {
+	if err := e.virtualSchemas.init(ctx, &startupSession.planner); err != nil {
 		log.Fatal(ctx, err)
 	}
 	startupSession.Finish(e)
@@ -440,7 +440,7 @@ func (e *Executor) Prepare(
 	// TODO(andrei): is this OK? If we're preparing as part of a SQL txn, how do
 	// we check that they're reading descriptors consistent with the txn in which
 	// they'll be used?
-	txn := client.NewTxn(session.Ctx(), *e.cfg.DB)
+	txn := client.NewTxn(e.cfg.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -545,8 +545,10 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	var stmts parser.StatementList
 	var err error
 
+	ctx := session.Ctx()
+
 	if log.V(2) {
-		log.Infof(session.Ctx(), "execRequest: %s", sql)
+		log.Infof(ctx, "execRequest: %s", sql)
 	}
 
 	if session.planner.copyFrom != nil {
@@ -558,13 +560,13 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	}
 	if err != nil {
 		if log.V(2) {
-			log.Infof(session.Ctx(), "execRequest: error: %v", err)
+			log.Infof(ctx, "execRequest: error: %v", err)
 		}
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
 		if txnState.txn != nil {
 			// Rollback the txn.
-			txnState.updateStateAndCleanupOnErr(err, e)
+			txnState.updateStateAndCleanupOnErr(ctx, err, e)
 		}
 		res.ResultList = append(res.ResultList, Result{Err: err})
 		return res
@@ -635,7 +637,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 		// Track if we are retrying this query, so that we do not double count.
 		isAutomaticRetry := false
-		txnClosure := func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			defer func() { isAutomaticRetry = true }()
 			if txnState.State == Open && txnState.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
@@ -664,7 +666,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 					}
 				}
 				if doWarn {
-					log.Errorf(session.Ctx(),
+					log.Errorf(ctx,
 						"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
 							"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
 						remainingStmts, txnState)
@@ -675,7 +677,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
-		err := txn.Exec(execOpt, txnClosure)
+		err := txn.Exec(ctx, execOpt, txnClosure)
 		if err != nil && len(results) > 0 {
 			// Set or override the error in the last result, if any.
 			// The error might have come from auto-commit, in which case it wasn't
@@ -686,7 +688,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		}
 
 		if err != nil && log.V(2) {
-			log.Infof(session.Ctx(), "execRequest: error: %v", err)
+			log.Infof(ctx, "execRequest: error: %v", err)
 		}
 
 		// Update the Err field of the last result if the error was coming from
@@ -696,26 +698,26 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// TODO(andrei): Until #7881 fixed.
 				{
-					log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
+					log.Eventf(ctx, "executor got AutoCommitError: %s\n"+
 						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
 						aErr, txnState.txn.Proto, execOpt.AutoRetry, execOpt.AutoCommit, stmts,
 						remainingStmts)
 					if txnState.txn == nil {
-						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
+						log.Errorf(ctx, "7881: AutoCommitError on nil txn: %s, "+
 							"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
 							aErr, txnState, execOpt, stmts, remainingStmts)
 						txnState.sp.SetBaggageItem(keyFor7881Sample, "sample me please")
 					}
 				}
 				e.TxnAbortCount.Inc(1)
-				txn.CleanupOnError(err)
+				txn.CleanupOnError(ctx, err)
 			}
 		}
 
 		// Sanity check about not leaving KV txns open on errors.
 		if err != nil && txnState.txn != nil && !txnState.txn.IsFinalized() {
 			if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
-				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
+				log.Fatalf(ctx, "got a non-retryable error but the KV "+
 					"transaction is not finalized. TxnState: %s, err: %s\n"+
 					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto)
 			}
@@ -729,7 +731,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			// After we return a result for COMMIT (with the COMMIT pgwire tag), the
 			// user can't send any more commands.
 			e.TxnAbortCount.Inc(1)
-			txn.CleanupOnError(err)
+			txn.CleanupOnError(ctx, err)
 			txnState.resetStateAndTxn(NoTxn)
 		}
 
@@ -872,8 +874,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		if log.V(2) || log.HasSpanOrEvent(planMaker.session.Ctx()) {
-			log.VEventf(planMaker.session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		ctx := planMaker.session.Ctx()
+		if log.V(2) || log.HasSpanOrEvent(ctx) {
+			log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -898,10 +901,16 @@ func (e *Executor) execStmtsInCurrentTxn(
 			switch txnState.State {
 			case Open:
 				res, err = e.execStmtInOpenTxn(
-					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-					txnState, isAutomaticRetry)
+					ctx,
+					stmt,
+					planMaker,
+					implicitTxn,
+					txnBeginning && (i == 0), /* firstInTxn */
+					txnState,
+					isAutomaticRetry,
+				)
 			case Aborted, RestartWait:
-				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
+				res, err = e.execStmtInAbortedTxn(ctx, stmt, txnState, planMaker)
 			case CommitWait:
 				res, err = e.execStmtInCommitWaitTxn(stmt, txnState)
 			default:
@@ -941,7 +950,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
 func (e *Executor) execStmtInAbortedTxn(
-	stmt parser.Statement, txnState *txnState, planMaker *planner,
+	ctx context.Context, stmt parser.Statement, txnState *txnState, planMaker *planner,
 ) (Result, error) {
 
 	if txnState.State != Aborted && txnState.State != RestartWait {
@@ -951,7 +960,7 @@ func (e *Executor) execStmtInAbortedTxn(
 	switch s := stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State == RestartWait {
-			return rollbackSQLTransaction(txnState, planMaker), nil
+			return rollbackSQLTransaction(ctx, txnState, planMaker), nil
 		}
 		// Reset the state to allow new transactions to start.
 		// The KV txn has already been rolled back when we entered the Aborted state.
@@ -1039,6 +1048,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // - a Result
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
+	ctx context.Context,
 	stmt parser.Statement,
 	planMaker *planner,
 	implicitTxn bool,
@@ -1067,47 +1077,47 @@ func (e *Executor) execStmtInOpenTxn(
 	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
-			txnState.updateStateAndCleanupOnErr(errTransactionInProgress, e)
+			txnState.updateStateAndCleanupOnErr(ctx, errTransactionInProgress, e)
 			return Result{}, errTransactionInProgress
 		}
 	case *parser.CommitTransaction:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return e.noTransactionHelper(ctx, txnState)
 		}
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
-		res, err := commitSQLTransaction(txnState, planMaker, commit, e)
+		res, err := commitSQLTransaction(ctx, txnState, planMaker, commit, e)
 		return res, err
 	case *parser.ReleaseSavepoint:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return e.noTransactionHelper(ctx, txnState)
 		}
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
-			txnState.updateStateAndCleanupOnErr(err, e)
+			txnState.updateStateAndCleanupOnErr(ctx, err, e)
 			return Result{}, err
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
-		res, err := commitSQLTransaction(txnState, planMaker, release, e)
+		res, err := commitSQLTransaction(ctx, txnState, planMaker, release, e)
 		return res, err
 	case *parser.RollbackTransaction:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return e.noTransactionHelper(ctx, txnState)
 		}
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
 		// Notice that we don't return any errors on rollback.
-		return rollbackSQLTransaction(txnState, planMaker), nil
+		return rollbackSQLTransaction(ctx, txnState, planMaker), nil
 	case *parser.SetTransaction:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return e.noTransactionHelper(ctx, txnState)
 		}
 	case *parser.Savepoint:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return e.noTransactionHelper(ctx, txnState)
 		}
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
-			txnState.updateStateAndCleanupOnErr(err, e)
+			txnState.updateStateAndCleanupOnErr(ctx, err, e)
 			return Result{}, err
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
@@ -1124,7 +1134,7 @@ func (e *Executor) execStmtInOpenTxn(
 		if txnState.txn.Proto.IsInitialized() && !txnState.retrying {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a transaction",
 				parser.RestartSavepointName)
-			txnState.updateStateAndCleanupOnErr(err, e)
+			txnState.updateStateAndCleanupOnErr(ctx, err, e)
 			return Result{}, err
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
@@ -1138,17 +1148,17 @@ func (e *Executor) execStmtInOpenTxn(
 			// txn in a different state.
 			err = errNotRetriable
 		}
-		txnState.updateStateAndCleanupOnErr(err, e)
+		txnState.updateStateAndCleanupOnErr(ctx, err, e)
 		return Result{}, err
 	case *parser.Prepare:
 		err := util.UnimplementedWithIssueErrorf(7568,
 			"Prepared statements are supported only via the Postgres wire protocol")
-		txnState.updateStateAndCleanupOnErr(err, e)
+		txnState.updateStateAndCleanupOnErr(ctx, err, e)
 		return Result{}, err
 	case *parser.Execute:
 		err := util.UnimplementedWithIssueErrorf(7568,
 			"Executing prepared statements is supported only via the Postgres wire protocol")
-		txnState.updateStateAndCleanupOnErr(err, e)
+		txnState.updateStateAndCleanupOnErr(ctx, err, e)
 		return Result{}, err
 	case *parser.Deallocate:
 		if s.Name == "" {
@@ -1158,7 +1168,7 @@ func (e *Executor) execStmtInOpenTxn(
 				session.Ctx(), string(s.Name),
 			); !found {
 				err := fmt.Errorf("prepared statement %s does not exist", s.Name)
-				txnState.updateStateAndCleanupOnErr(err, e)
+				txnState.updateStateAndCleanupOnErr(ctx, err, e)
 				return Result{}, err
 			}
 		}
@@ -1173,10 +1183,10 @@ func (e *Executor) execStmtInOpenTxn(
 			result.Rows = nil
 		}
 		if traceSQL {
-			log.ErrEventf(txnState.txn.Context, "ERROR: %v", err)
+			log.ErrEventf(ctx, "ERROR: %v", err)
 		}
 		log.ErrEventf(session.context, "ERROR: %v", err)
-		txnState.updateStateAndCleanupOnErr(err, e)
+		txnState.updateStateAndCleanupOnErr(ctx, err, e)
 		return Result{}, err
 	}
 
@@ -1188,7 +1198,7 @@ func (e *Executor) execStmtInOpenTxn(
 		tResult.count = result.Rows.Len()
 	}
 	if traceSQL {
-		log.Eventf(txnState.txn.Context, "%s done", tResult)
+		log.Eventf(ctx, "%s done", tResult)
 	}
 	log.Eventf(session.context, "%s done", tResult)
 	return result, nil
@@ -1196,14 +1206,14 @@ func (e *Executor) execStmtInOpenTxn(
 
 // Clean up after trying to execute a transactional statement while not in a SQL
 // transaction.
-func (e *Executor) noTransactionHelper(txnState *txnState) (Result, error) {
+func (e *Executor) noTransactionHelper(ctx context.Context, txnState *txnState) (Result, error) {
 	// Clean up the KV txn and set the SQL state to Aborted.
-	txnState.updateStateAndCleanupOnErr(errNoTransactionInProgress, e)
+	txnState.updateStateAndCleanupOnErr(ctx, errNoTransactionInProgress, e)
 	return Result{}, errNoTransactionInProgress
 }
 
 // rollbackSQLTransaction rolls back a transaction. All errors are swallowed.
-func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
+func rollbackSQLTransaction(ctx context.Context, txnState *txnState, p *planner) Result {
 	if p.txn != txnState.txn {
 		panic("rollbackSQLTransaction called on a different txn than the planner's")
 	}
@@ -1211,10 +1221,10 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State, txnState.txn.Proto))
 	}
-	err := p.txn.Rollback()
+	err := p.txn.Rollback(ctx)
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(ctx, "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
@@ -1233,7 +1243,7 @@ const (
 
 // commitSqlTransaction commits a transaction.
 func commitSQLTransaction(
-	txnState *txnState, p *planner, commitType commitType, e *Executor,
+	ctx context.Context, txnState *txnState, p *planner, commitType commitType, e *Executor,
 ) (Result, error) {
 
 	if p.txn != txnState.txn {
@@ -1245,7 +1255,7 @@ func commitSQLTransaction(
 	if commitType == commit {
 		txnState.commitSeen = true
 	}
-	err := txnState.txn.Commit()
+	err := txnState.txn.Commit(ctx)
 	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
 	if err != nil {
 		// Errors on COMMIT need special handling, as COMMIT needs to finalize the
@@ -1253,7 +1263,7 @@ func commitSQLTransaction(
 		// an auto-retry txn, in which case we do want to leave it in RestartWait
 		// here. We ignore all of this here and do regular cleanup. A higher layer
 		// handles closing the txn if the auto-retry doesn't get rid of the error.
-		txnState.updateStateAndCleanupOnErr(err, e)
+		txnState.updateStateAndCleanupOnErr(ctx, err, e)
 	} else {
 		switch commitType {
 		case release:

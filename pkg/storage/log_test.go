@@ -158,8 +158,8 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
-			return store.LogReplicaChangeTest(txn.Context, txn, changeType, desc.Replicas[0], *desc)
+		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc)
 		}); err != nil {
 			t.Fatal(err)
 		}

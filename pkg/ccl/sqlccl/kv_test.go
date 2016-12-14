@@ -91,12 +91,12 @@ func (kv *kvWriteBatch) prep(rows int, initData bool) error {
 	if !initData {
 		return nil
 	}
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kv.db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Put(fmt.Sprintf("%s%08d", kv.prefix, i), i)
 		}
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	})
 	return err
 }

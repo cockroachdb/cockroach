@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -32,7 +34,7 @@ import (
 // Set sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
-func (p *planner) Set(n *parser.Set) (planNode, error) {
+func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 	if n.Name == nil {
 		// A client has sent the reserved internal syntax SET ROW ...
 		// Reject it.
@@ -58,7 +60,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
-			if _, err := p.mustGetDatabaseDesc(dbName); err != nil {
+			if _, err := p.mustGetDatabaseDesc(ctx, dbName); err != nil {
 				return nil, err
 			}
 		}

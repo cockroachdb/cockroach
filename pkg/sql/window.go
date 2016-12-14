@@ -22,12 +22,12 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
 )
 
 // window constructs a windowNode according to window function applications. This may

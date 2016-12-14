@@ -53,7 +53,7 @@ CREATE TABLE crdb_internal.tables (
 );
 `,
 	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		descs, err := p.getAllDescriptors()
+		descs, err := p.getAllDescriptors(ctx)
 		if err != nil {
 			return err
 		}
@@ -122,8 +122,8 @@ CREATE TABLE crdb_internal.schema_changes (
   DIRECTION     STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		descs, err := p.getAllDescriptors()
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		descs, err := p.getAllDescriptors(ctx)
 		if err != nil {
 			return err
 		}

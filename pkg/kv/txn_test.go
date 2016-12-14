@@ -52,26 +52,26 @@ func TestTxnDBBasics(t *testing.T) {
 	for _, commit := range []bool{true, false} {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
-		err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			// Use snapshot isolation so non-transactional read can always push.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 
 			// Put transactional value.
-			if err := txn.Put(key, value); err != nil {
+			if err := txn.Put(ctx, key, value); err != nil {
 				return err
 			}
 
 			// Attempt to read outside of txn.
-			if gr, err := s.DB.Get(context.TODO(), key); err != nil {
+			if gr, err := s.DB.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Exists() {
 				return errors.Errorf("expected nil value; got %v", gr.Value)
 			}
 
 			// Read within the transaction.
-			if gr, err := txn.Get(key); err != nil {
+			if gr, err := txn.Get(ctx, key); err != nil {
 				return err
 			} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 				return errors.Errorf("expected value %q; got %q", value, gr.Value)
@@ -115,10 +115,10 @@ func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
 	key := roachpb.Key("key")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if tErr := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if tErr := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			b := txn.NewBatch()
 			b.Put(key, fmt.Sprintf("value-%d", i))
-			return txn.CommitInBatch(b)
+			return txn.CommitInBatch(ctx, b)
 		}); tErr != nil {
 			b.Fatal(tErr)
 		}
@@ -149,24 +149,24 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 
 	go func() {
 		<-start
-		done <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-			if _, err := txn.Inc(key, 1); err != nil {
+		done <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			if _, err := txn.Inc(ctx, key, 1); err != nil {
 				return err
 			}
-			if _, err := txn.Get(key2); err != nil {
+			if _, err := txn.Get(ctx, key2); err != nil {
 				return err
 			}
 			return nil
 		})
 	}()
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
 
 		// Issue a read to get initial value.
-		if _, err := txn.Get(key); err != nil {
+		if _, err := txn.Get(ctx, key); err != nil {
 			t.Fatal(err)
 		}
 
@@ -181,7 +181,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		}
 
 		// Start by writing key2, which will move our txn timestamp forward.
-		if err := txn.Put(key2, "foo"); err != nil {
+		if err := txn.Put(ctx, key2, "foo"); err != nil {
 			t.Fatal(err)
 		}
 		// Now, increment with txn.Timestamp equal to key2's timestamp
@@ -193,7 +193,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		if txn.Proto.Epoch == 0 && !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
 			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto)
 		}
-		ir, err := txn.Inc(key, 1)
+		ir, err := txn.Inc(ctx, key, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -227,18 +227,18 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	start := make(chan struct{})
 	go func() {
 		<-start
-		done <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-			return txn.Put(key, "hi")
+		done <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			return txn.Put(ctx, key, "hi")
 		})
 	}()
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
 
 		// Issue a read to get initial value.
-		gr, err := txn.Get(key)
+		gr, err := txn.Get(ctx, key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -253,11 +253,11 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 		}
 
 		if gr.Exists() && bytes.Equal(gr.ValueBytes(), []byte("hi")) {
-			if err := txn.Put(key, "correct"); err != nil {
+			if err := txn.Put(ctx, key, "correct"); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			if err := txn.Put(key, "oops!"); err != nil {
+			if err := txn.Put(ctx, key, "oops!"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -292,22 +292,22 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer s.Stop()
 
 	pushByReading := func(key roachpb.Key) {
-		if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				t.Fatal(err)
 			}
-			_, err := txn.Get(key)
+			_, err := txn.Get(ctx, key)
 			return err
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	abortByWriting := func(key roachpb.Key) {
-		if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				t.Fatal(err)
 			}
-			return txn.Put(key, "foo")
+			return txn.Put(ctx, key, "foo")
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -317,7 +317,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	for _, read := range []bool{true, false} {
 		for _, iso := range []enginepb.IsolationType{enginepb.SNAPSHOT, enginepb.SERIALIZABLE} {
 			var iteration int
-			if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 				defer func() { iteration++ }()
 				key := roachpb.Key(fmt.Sprintf("read=%t, iso=%s", read, iso))
 
@@ -327,7 +327,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 
 				// Write to lay down an intent (this will send the begin
 				// transaction which gets the updated priority).
-				if err := txn.Put(key, "bar"); err != nil {
+				if err := txn.Put(ctx, key, "bar"); err != nil {
 					return err
 				}
 
@@ -347,13 +347,13 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 				var err error
 				if read {
 					pushByReading(key)
-					_, err = txn.Get(key)
+					_, err = txn.Get(ctx, key)
 					if err != nil {
 						t.Fatalf("%s: expected no error; got %s", key, err)
 					}
 				} else {
 					abortByWriting(key)
-					_, err = txn.Get(key)
+					_, err = txn.Get(ctx, key)
 					assertTransactionAbortedError(t, err)
 				}
 
@@ -404,17 +404,17 @@ func TestUncertaintyRestart(t *testing.T) {
 	start := make(chan struct{})
 	go func() {
 		<-start
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-			return txn.Put(key, "hi")
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			return txn.Put(ctx, key, "hi")
 		})
 	}()
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		if txn.Proto.Epoch > 2 {
 			t.Fatal("expected only one restart")
 		}
 		// Issue a read to pick a timestamp.
-		if _, err := txn.Get(key.Next()); err != nil {
+		if _, err := txn.Get(ctx, key.Next()); err != nil {
 			t.Fatal(err)
 		}
 		if txn.Proto.Epoch == 0 {
@@ -424,7 +424,7 @@ func TestUncertaintyRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := txn.Get(key.Next()); err != nil {
+		if _, err := txn.Get(ctx, key.Next()); err != nil {
 			if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("unexpected error: %T: %s", err, err)
 			}
@@ -475,11 +475,11 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	}
 
 	i := 0
-	if tErr := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if tErr := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
-		if _, err := txn.Scan("t", roachpb.Key("t").Next(), 0); err != nil {
+		if _, err := txn.Scan(ctx, "t", roachpb.Key("t").Next(), 0); err != nil {
 			t.Fatal(err)
 		}
 		// This is a bit of a hack for the sake of this test: By visiting the
@@ -496,7 +496,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		// node clock (which is ahead of keyFast as well). If the last part does
 		// not happen, the read of keyFast should fail (i.e. read nothing).
 		// There will be exactly one restart here.
-		if gr, err := txn.Get(keySlow); err != nil {
+		if gr, err := txn.Get(ctx, keySlow); err != nil {
 			if i != 1 {
 				t.Fatalf("unexpected transaction error: %s", err)
 			}
@@ -507,7 +507,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 
 		// The node should already be certain, so we expect no restart here
 		// and to read the correct key.
-		if gr, err := txn.Get(keyFast); err != nil {
+		if gr, err := txn.Get(ctx, keyFast); err != nil {
 			t.Fatalf("second Get failed with %s", err)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
 			t.Fatalf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
@@ -529,13 +529,13 @@ func TestTxnTimestampRegression(t *testing.T) {
 
 	keyA := "a"
 	keyB := "b"
-	err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 		// Put transactional value.
-		if err := txn.Put(keyA, "value1"); err != nil {
+		if err := txn.Put(ctx, keyA, "value1"); err != nil {
 			return err
 		}
 
@@ -550,7 +550,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 		}
 
 		// Write now to keyB, which will get a higher timestamp than keyB was written at.
-		if err := txn.Put(keyB, "value2"); err != nil {
+		if err := txn.Put(ctx, keyB, "value2"); err != nil {
 			return err
 		}
 		return nil
@@ -574,13 +574,13 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 			// Put transactional value.
-			if err := txn.Put(keyA, "value1"); err != nil {
+			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
 			}
 			// Notify txnB do 1st get(b).
@@ -588,7 +588,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			// Wait for txnB notify us to put(b).
 			<-ch
 			// Write now to keyB.
-			return txn.Put(keyB, "value2")
+			return txn.Put(ctx, keyB, "value2")
 		})
 	}()
 
@@ -596,14 +596,14 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Increment((storage.MinTSCacheWindow + time.Second).Nanoseconds())
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
 		// Attempt to get first keyB.
-		gr1, err := txn.Get(keyB)
+		gr1, err := txn.Get(ctx, keyB)
 		if err != nil {
 			return err
 		}
@@ -614,7 +614,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			t.Fatal(err)
 		}
 		// get(b) again.
-		gr2, err := txn.Get(keyB)
+		gr2, err := txn.Get(ctx, keyB)
 		if err != nil {
 			return err
 		}
@@ -644,13 +644,13 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 			// Put transactional value.
-			if err := txn.Put(keyA, "value1"); err != nil {
+			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
 			}
 			// Notify txnB do 1st get(c).
@@ -658,21 +658,21 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			// Wait for txnB notify us to put(c).
 			<-ch
 			// Write now to keyC, which will keep timestamp.
-			return txn.Put(keyC, "value2")
+			return txn.Put(ctx, keyC, "value2")
 		})
 	}()
 
 	// Wait till txnA finish put(a).
 	<-ch
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
 		// First get keyC, value will be nil.
-		gr1, err := txn.Get(keyC)
+		gr1, err := txn.Get(ctx, keyC)
 		if err != nil {
 			return err
 		}
@@ -701,7 +701,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Get(c) again.
-		gr2, err := txn.Get(keyC)
+		gr2, err := txn.Get(ctx, keyC)
 		if err != nil {
 			return err
 		}
@@ -729,7 +729,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	errChan := make(chan error)
 	var count int
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			count++
 			// Use a low priority for the transaction so that it can be pushed.
 			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
@@ -737,7 +737,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 			}
 
 			// Put transactional value.
-			if err := txn.Put(keyA, "value1"); err != nil {
+			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
 			}
 			if count <= 2 {
@@ -747,7 +747,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 				<-ch
 			}
 			// Do a write to keyB, which will forward txn timestamp.
-			return txn.Put(keyB, "value2")
+			return txn.Put(ctx, keyB, "value2")
 		})
 	}()
 

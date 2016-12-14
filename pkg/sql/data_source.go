@@ -450,7 +450,7 @@ func (p *planner) getTableScanByRef(
 
 	tableID := sqlbase.ID(tref.TableID)
 	if p.avoidCachedDescriptors {
-		desc, err = sqlbase.GetTableDescFromID(p.txn, tableID)
+		desc, err = sqlbase.GetTableDescFromID(ctx, p.txn, tableID)
 	} else {
 		desc, err = p.getTableLeaseByID(ctx, tableID)
 	}

@@ -112,7 +112,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"
-		schema, err := CreateTestTableDescriptor(1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
+		schema, err := CreateTestTableDescriptor(context.TODO(), 1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -222,7 +222,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
-		schema, err := CreateTestTableDescriptor(1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
+		schema, err := CreateTestTableDescriptor(context.TODO(), 1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -239,7 +239,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
-	desc, err := CreateTestTableDescriptor(1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
+	desc, err := CreateTestTableDescriptor(context.TODO(), 1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	mc := hlc.NewManualClock(123)
 	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano, time.Nanosecond)}}
 	p.leases = make([]*LeaseState, 0)
-	txn := client.Txn{Context: context.Background()}
+	var txn client.Txn
 	p.setTxn(&txn)
 
 	if p.removeLeaseIfExpiring(context.TODO(), nil) {

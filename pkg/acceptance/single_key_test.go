@@ -77,16 +77,16 @@ func testSingleKeyInner(
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				err := db.Txn(ctx, func(txn *client.Txn) error {
+				err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 					minExp := atomic.LoadInt64(&expected)
-					r, err := txn.Get(key)
+					r, err := txn.Get(ctx, key)
 					if err != nil {
 						return err
 					}
 					b := txn.NewBatch()
 					v := r.ValueInt()
 					b.Put(key, v+1)
-					err = txn.CommitInBatch(b)
+					err = txn.CommitInBatch(ctx, b)
 					// Atomic updates after the fact mean that we should read
 					// exp or larger (since concurrent writers might have
 					// committed but not yet performed their atomic update).

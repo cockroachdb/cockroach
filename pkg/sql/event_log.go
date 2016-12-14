@@ -21,12 +21,12 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // EventLogType represents an event type that can be recorded in the event log.
@@ -95,10 +95,12 @@ func (ev EventLogger) InsertEventRecord(
 ) error {
 	// Record event record insertion in local log output.
 	txn.AddCommitTrigger(func() {
-		log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",
+		log.Infof(
+			ctx, "Event: %q, target: %d, info: %+v",
 			eventType,
 			targetID,
-			info)
+			info,
+		)
 	})
 
 	const insertEventTableStmt = `

@@ -105,7 +105,7 @@ transactions that process a fraction of the table at a time:
       }
       lastKey = getLastKeyOfFullRowInScan(scan)
       b := makeIndexKeysBatch(scan)
-      return txn.CommitInBatch(b)
+      return txn.CommitInBatch(ctx, b)
     })
     if err != nil {
       // Abort!

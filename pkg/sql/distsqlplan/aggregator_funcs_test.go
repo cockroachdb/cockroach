@@ -43,7 +43,7 @@ func runTestFlow(
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
 	req := distsqlrun.SetupFlowRequest{
-		Txn: client.NewTxn(context.TODO(), *kvDB).Proto,
+		Txn: client.NewTxn(kvDB).Proto,
 		Flow: distsqlrun.FlowSpec{
 			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
