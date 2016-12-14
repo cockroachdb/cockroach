@@ -22,7 +22,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -70,13 +69,6 @@ func (ds *ServerImpl) Start() {
 	ds.flowScheduler.Start()
 }
 
-func (ds *ServerImpl) setupTxn(ctx context.Context, txnProto *roachpb.Transaction) *client.Txn {
-	txn := client.NewTxn(ctx, *ds.DB)
-	// TODO(radu): we should sanity check some of these fields
-	txn.Proto = *txnProto
-	return txn
-}
-
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
 ) (*Flow, error) {
@@ -86,13 +78,15 @@ func (ds *ServerImpl) setupFlow(
 	}
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
-	txn := ds.setupTxn(ctx, &req.Txn)
+	// TODO(radu): we should sanity check some of these fields (especially
+	// txnProto).
 	flowCtx := FlowCtx{
-		Context: ctx,
-		id:      req.Flow.FlowID,
-		evalCtx: &ds.evalCtx,
-		rpcCtx:  ds.RPCContext,
-		txn:     txn,
+		Context:  ctx,
+		id:       req.Flow.FlowID,
+		evalCtx:  &ds.evalCtx,
+		rpcCtx:   ds.RPCContext,
+		txnProto: &req.Txn,
+		clientDB: ds.DB,
 	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)

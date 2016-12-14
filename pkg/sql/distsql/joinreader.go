@@ -101,6 +101,8 @@ func (jr *joinReader) mainLoop() error {
 	ctx, span := tracing.ChildSpan(jr.ctx, "join reader")
 	defer tracing.FinishSpan(span)
 
+	txn := jr.flowCtx.setupTxn(ctx)
+
 	log.VEventf(ctx, 1, "starting (filter: %s)", &jr.filter)
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
@@ -132,7 +134,7 @@ func (jr *joinReader) mainLoop() error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(jr.flowCtx.txn, spans, false /* no batch limits */, 0)
+		err := jr.fetcher.StartScan(txn, spans, false /* no batch limits */, 0)
 		if err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return err
