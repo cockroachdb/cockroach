@@ -4,6 +4,7 @@
 # $ prometheus -config.file=prometheus.yml
 global:
   scrape_interval: 10s
+  evaluation_interval: 10s
 
 rule_files:
 - "rules/alerts.rules"
@@ -24,4 +25,4 @@ scrape_configs:
     static_configs:
     - targets: ['localhost:8080']
       labels:
-        cluster: 'cockroach-test'
+        cluster: 'my-cockroachdb-cluster'
