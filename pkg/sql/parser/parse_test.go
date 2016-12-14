@@ -1410,28 +1410,43 @@ func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string), forceUTF8 b
 			if forceUTF8 && !utf8.Valid(bytepair) {
 				continue
 			}
-			s := string(bytepair)
-			var buf bytes.Buffer
-			encode(&buf, s)
-			sql := fmt.Sprintf("SELECT %s", buf.String())
-			for n := 0; n < len(sql); n++ {
-				ch := sql[n]
-				if ch < 0x20 || ch >= 0x7F {
-					t.Fatalf("unprintable character: %v (%v, %v): %s %v", ch, i, j, sql, []byte(sql))
-				}
-			}
-			stmts, err := parseTraditional(sql)
-			if err != nil {
-				t.Fatalf("%s: expected success, but found %s", sql, err)
-			}
-			stmt := stmts.String()
+			stmt := testEncodeString(t, bytepair, encode)
 			if e, ok := seen[stmt]; ok {
 				t.Fatalf("duplicate entry: %s, from %v, currently at %v, %v", stmt, e, i, j)
 			}
 			seen[stmt] = entry{i, j}
-			if sql != stmt {
-				t.Fatalf("expected %s, but found %s", sql, stmt)
-			}
 		}
 	}
+}
+
+func TestEncodeSQLStringSpecial(t *testing.T) {
+	tests := [][]byte{
+		// UTF8 replacement character
+		{0xEF, 0xBF, 0xBD},
+	}
+	for _, tc := range tests {
+		testEncodeString(t, tc, encodeSQLString)
+	}
+}
+
+func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, string)) string {
+	s := string(input)
+	var buf bytes.Buffer
+	encode(&buf, s)
+	sql := fmt.Sprintf("SELECT %s", buf.String())
+	for n := 0; n < len(sql); n++ {
+		ch := sql[n]
+		if ch < 0x20 || ch >= 0x7F {
+			t.Fatalf("unprintable character: %v (%v): %s %v", ch, input, sql, []byte(sql))
+		}
+	}
+	stmts, err := parseTraditional(sql)
+	if err != nil {
+		t.Fatalf("%s: expected success, but found %s", sql, err)
+	}
+	stmt := stmts.String()
+	if sql != stmt {
+		t.Fatalf("expected %s, but found %s", sql, stmt)
+	}
+	return stmt
 }
