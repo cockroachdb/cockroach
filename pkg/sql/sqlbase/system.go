@@ -76,7 +76,7 @@ CREATE TABLE system.lease (
   PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
-	// EventLogTableSchema describes the schema of the event log table.
+	// EventLogTableSchema describes the schema of the eventlog table.
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
   timestamp    TIMESTAMP  NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE system.eventlog (
   targetID     INT        NOT NULL,
   reportingID  INT        NOT NULL,
   info         STRING,
-  uniqueID     BYTES      DEFAULT experimental_unique_bytes(),
+  uniqueID     BYTES      DEFAULT uuid_v4(),
   PRIMARY KEY (timestamp, uniqueID)
 );`
 
@@ -298,7 +298,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	experimentalUniqueBytesString = "experimental_unique_bytes()"
+	uuidV4String = "uuid_v4()"
 
 	// EventLogTable is the descriptor for the event log table.
 	EventLogTable = TableDescriptor{
@@ -312,7 +312,7 @@ var (
 			{Name: "targetID", ID: 3, Type: colTypeInt},
 			{Name: "reportingID", ID: 4, Type: colTypeInt},
 			{Name: "info", ID: 5, Type: colTypeString, Nullable: true},
-			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &experimentalUniqueBytesString},
+			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &uuidV4String},
 		},
 		NextColumnID: 7,
 		Families: []ColumnFamilyDescriptor{

@@ -64,6 +64,7 @@ query II
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'alter_table'
 ----
+12 1
 
 statement ok
 ALTER TABLE test.a ADD val INT
@@ -72,6 +73,7 @@ query II
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'alter_table'
 ----
+12 1
 51 1
 
 query II
@@ -109,6 +111,7 @@ query II
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'alter_table'
 ----
+12 1
 51 1
 51 1
 
