@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -506,7 +507,17 @@ func (s *Server) Start(ctx context.Context) error {
 		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
+	// Running the SQL migrations safely requires that we aren't serving SQL
+	// requests at the same time -- to ensure that, block the serving of SQL
+	// traffic until the migrations are done, as indicated by this channel.
+	serveSQL := make(chan bool)
+
 	s.stopper.RunWorker(func() {
+		select {
+		case <-serveSQL:
+		case <-s.stopper.ShouldQuiesce():
+			return
+		}
 		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
@@ -584,8 +595,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	log.Event(ctx, "started node")
 
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper)
-
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
 
@@ -635,6 +644,11 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 
 		s.stopper.RunWorker(func() {
+			select {
+			case <-serveSQL:
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
 			pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
 				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
@@ -649,6 +663,21 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	log.Event(ctx, "accepting connections")
+
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper)
+
+	// Before serving SQL requests, we have to make sure the database is
+	// in an acceptable form for this version of the software.
+	// We have to do this after actually starting up the server to be able to
+	// seamlessly use the kv client against other nodes in the cluster.
+	migMgr := migrations.NewManager(
+		s.stopper, s.db, s.sqlExecutor, s.clock, s.NodeID().String())
+	if err := migMgr.EnsureMigrations(ctx); err != nil {
+		log.Fatal(ctx, err)
+	}
+	log.Infof(ctx, "done ensuring all necessary migrations have run")
+	close(serveSQL)
+	log.Info(ctx, "serving sql connections")
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &protoutil.JSONPb{
