@@ -116,14 +116,14 @@ func TestPlainHTTPServer(t *testing.T) {
 	})
 	defer s.Stopper().Stop()
 
-	var data serverpb.HealthResponse
+	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
-		return getAdminJSONProto(s, "health", &data)
+		return getStatusJSONProto(s, "metrics/local", &data)
 	})
 
 	ctx := s.RPCContext()
 	ctx.Insecure = false
-	if err := getAdminJSONProto(s, "health", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+	if err := getStatusJSONProto(s, "metrics/local", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
@@ -171,9 +171,9 @@ func TestSecureHTTPRedirect(t *testing.T) {
 	}
 }
 
-// TestAcceptEncoding hits the health endpoint while explicitly
-// disabling decompression on a custom client's Transport and setting
-// it conditionally via the request's Accept-Encoding headers.
+// TestAcceptEncoding hits the server while explicitly disabling
+// decompression on a custom client's Transport and setting it
+// conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -203,7 +203,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", s.AdminURL()+adminPrefix+"health", nil)
+		req, err := http.NewRequest("GET", s.AdminURL()+statusPrefix+"metrics/local", nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}
@@ -219,7 +219,7 @@ func TestAcceptEncoding(t *testing.T) {
 			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
 		}
 		r := d.newReader(resp.Body)
-		var data serverpb.HealthResponse
+		var data serverpb.JSONResponse
 		if err := jsonpb.Unmarshal(r, &data); err != nil {
 			t.Error(err)
 		}
