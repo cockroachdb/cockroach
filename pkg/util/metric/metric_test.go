@@ -56,6 +56,18 @@ func TestGauge(t *testing.T) {
 	testMarshal(t, g, "10")
 }
 
+func TestFunctionalGauge(t *testing.T) {
+	valToReturn := int64(10)
+	g := NewFunctionalGauge(emptyMetadata, func() int64 { return valToReturn })
+	if v := g.Value(); v != 10 {
+		t.Fatalf("unexpected value: %d", v)
+	}
+	valToReturn = 15
+	if v := g.Value(); v != 15 {
+		t.Fatalf("unexpected value: %d", v)
+	}
+}
+
 func TestGaugeFloat64(t *testing.T) {
 	g := NewGaugeFloat64(emptyMetadata)
 	g.Update(10.4)
