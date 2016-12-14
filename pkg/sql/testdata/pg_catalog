@@ -384,33 +384,33 @@ oid         relname  adrelid     adnum  adbin  adsrc
 
 ## pg_catalog.pg_indexes
 
-query TTTT colnames
-SELECT schemaname, tablename, indexname, tablespace
+query ITTTT colnames
+SELECT crdb_oid, schemaname, tablename, indexname, tablespace
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
-schemaname  tablename  indexname     tablespace
-public      t1         primary       NULL
-public      t1         t1_a_key      NULL
-public      t1         index_key     NULL
-public      t2         primary       NULL
-public      t2         t2_t1_ID_idx  NULL
-public      t3         primary       NULL
-public      t3         t3_a_b_idx    NULL
+crdb_oid    schemaname  tablename  indexname     tablespace
+335779562   public      t1         primary       NULL
+335779561   public      t1         t1_a_key      NULL
+335779560   public      t1         index_key     NULL
+4235777034  public      t2         primary       NULL
+4235777033  public      t2         t2_t1_ID_idx  NULL
+624432002   public      t3         primary       NULL
+624432001   public      t3         t3_a_b_idx    NULL
 
-query TTT colnames
-SELECT tablename, indexname, indexdef
+query ITTT colnames
+SELECT crdb_oid, tablename, indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
-tablename  indexname     indexdef
-t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t1 (p ASC)
-t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.t1 (a ASC)
-t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.t1 (b ASC, c ASC)
-t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t2 (rowid ASC)
-t2         t2_t1_ID_idx  CREATE INDEX t2_t1_ID_idx ON constraint_db.t2 (t1_ID ASC)
-t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t3 (rowid ASC)
-t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.t3 (a ASC, b DESC) STORING (c)
+crdb_oid    tablename  indexname     indexdef
+335779562   t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t1 (p ASC)
+335779561   t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.t1 (a ASC)
+335779560   t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.t1 (b ASC, c ASC)
+4235777034  t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t2 (rowid ASC)
+4235777033  t2         t2_t1_ID_idx  CREATE INDEX t2_t1_ID_idx ON constraint_db.t2 (t1_ID ASC)
+624432002   t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t3 (rowid ASC)
+624432001   t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.t3 (a ASC, b DESC) STORING (c)
 
 ## pg_catalog.pg_index
 
