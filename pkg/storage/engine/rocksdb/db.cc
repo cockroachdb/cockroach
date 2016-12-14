@@ -1798,8 +1798,12 @@ DBStatus DBSnapshot::CommitBatch() {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBCommitBatch(DBEngine* db) {
-  return db->CommitBatch();
+DBStatus DBCommitAndCloseBatch(DBEngine* db) {
+  DBStatus status = db->CommitBatch();
+  if (status.data == NULL) {
+    DBClose(db);
+  }
+  return status;
 }
 
 DBStatus DBImpl::ApplyBatchRepr(DBSlice repr) {
