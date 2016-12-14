@@ -765,6 +765,7 @@ CREATE TABLE pg_catalog.pg_index (
 var pgCatalogIndexesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_indexes (
+	oid INT,
 	schemaname STRING,
 	tablename STRING,
 	indexname STRING,
@@ -773,6 +774,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
@@ -781,6 +783,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
+						h.IndexOid(db, table, index),  // oid
 						pgNamespaceForDB(db).NameStr,  // schemaname
 						parser.NewDString(table.Name), // tablename
 						parser.NewDString(index.Name), // indexname
