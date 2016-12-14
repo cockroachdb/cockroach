@@ -269,6 +269,10 @@ const (
 	UsersTableID      = 4
 	ZonesTableID      = 5
 
+	MetaSystemID       = 15
+	IdentifierSystemID = 16
+	NormalSystemID     = 17
+
 	// Reserved IDs for other system tables. If you're adding a new system table,
 	// it probably belongs here.
 	// NOTE: IDs must be <= MaxReservedDescID.
