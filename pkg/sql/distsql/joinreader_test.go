@@ -22,7 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -98,11 +98,11 @@ func TestJoinReader(t *testing.T) {
 		js := c.spec
 		js.Table = *td
 
-		txn := client.NewTxn(context.Background(), *kvDB)
 		flowCtx := FlowCtx{
-			Context: context.Background(),
-			evalCtx: &parser.EvalContext{},
-			txn:     txn,
+			Context:  context.Background(),
+			evalCtx:  &parser.EvalContext{},
+			txnProto: &roachpb.Transaction{},
+			clientDB: kvDB,
 		}
 
 		in := &RowBuffer{}
