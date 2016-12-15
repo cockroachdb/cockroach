@@ -86,7 +86,7 @@ System.config({
     "lodash": "npm:lodash@4.17.2",
     "long": "npm:long@3.2.0",
     "moment": "npm:moment@2.16.0",
-    "nvd3": "npm:nvd3@1.8.4",
+    "nvd3": "npm:nvd3@1.8.5",
     "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
     "react": "npm:react@15.4.1",
@@ -655,8 +655,9 @@ System.config({
       "boolbase": "npm:boolbase@1.0.0",
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
-    "npm:nvd3@1.8.4": {
-      "d3": "npm:d3@3.5.17"
+    "npm:nvd3@1.8.5": {
+      "d3": "npm:d3@3.5.17",
+      "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:object-is@1.0.1": {
       "systemjs-json": "github:systemjs/plugin-json@0.1.2"

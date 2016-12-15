@@ -1,21 +1,12 @@
 import * as React from "react";
 import * as nvd3 from "nvd3";
-import * as d3 from "d3";
 import { createSelector } from "reselect";
-import _ from "lodash";
 
 import { findChildrenOfType } from "../util/find";
-import { NanoToMilli } from "../util/convert";
 import {
-  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ProcessDataPoints, seriesPalette,
+  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ConfigureLineChart, InitLineChart,
 } from "./graphs";
 import Visualization from "./visualization";
-
-// Chart margins to match design.
-const CHART_MARGINS: nvd3.Margin = {top: 20, right: 60, bottom: 20, left: 60};
-
-// Maximum number of series we will show in the legend. If there are more we hide the legend.
-const MAX_LEGEND_SERIES: number = 4;
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -65,27 +56,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
 
     this.chart = nvd3.models.lineChart();
-    this.chart
-      .x((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
-      .y((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
-      .useInteractiveGuideline(true)
-      .showLegend(true)
-      .showYAxis(true)
-      .showXAxis(this.props.xAxis || true)
-      .xScale(d3.time.scale())
-      .color(seriesPalette)
-      .margin(CHART_MARGINS);
-
-    this.chart.xAxis
-      .tickFormat((t) => typeof t === "string" ? t : d3.time.format("%H:%M:%S")(t))
-      .showMaxMin(false);
-    this.chart.yAxis
-      .axisLabel(axis.props.label)
-      .showMaxMin(false);
-
-    if (axis.props.format) {
-      this.chart.yAxis.tickFormat(axis.props.format);
-    }
+    InitLineChart(this.chart);
 
     if (axis.props.range) {
       this.chart.forceY(axis.props.range);
@@ -109,30 +80,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
-      this.chart.showLegend(_.isBoolean(this.props.legend) ? this.props.legend :
-        metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
-      let formattedData: any[] = [];
-
-      if (this.props.data) {
-        let processed = ProcessDataPoints(metrics, axis, this.props.data);
-        formattedData = processed.formattedData;
-        let {yAxisDomain, xAxisDomain } = processed;
-
-        this.chart.yDomain(yAxisDomain.domain());
-
-        // always set the tick values to the lowest axis value, the highest axis
-        // value, and one value in between
-        this.chart.yAxis.tickValues(yAxisDomain.ticks());
-        this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
-      }
-      try {
-        d3.select(this.svgEl)
-          .datum(formattedData)
-          .transition().duration(500)
-          .call(this.chart);
-      } catch (e) {
-        console.log("Error rendering graph: ", e);
-      }
+      ConfigureLineChart(this.chart, this.svgEl, metrics, axis, this.props.data, this.props.timeInfo, false);
     }
   }
 
@@ -163,4 +111,4 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 }
 
-export { Axis, Metric } from "./graphs";
+export { Axis, Metric, AxisUnits } from "./graphs";

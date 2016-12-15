@@ -27,12 +27,7 @@
  *        - Queries Per Second?
  *      - Events?
  *    - Graphs
- *      - Intelligent Tick Selection
- *      - Always label Y-axis units
- *      - Appearance
- *        - New Colors
  *      - Tooltip when hover over title
- *      - Show full domain for time span (#10362)
  *    - Code block syntax highlighting
  *      - Choose keywords correctly
  *      - Fix bug on direct page load
