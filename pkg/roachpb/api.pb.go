@@ -1481,7 +1481,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion3
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for Internal service
 
@@ -1544,7 +1544,7 @@ var _Internal_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: fileDescriptorApi,
+	Metadata: "cockroach/pkg/roachpb/api.proto",
 }
 
 // Client API for External service
@@ -1608,7 +1608,7 @@ var _External_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: fileDescriptorApi,
+	Metadata: "cockroach/pkg/roachpb/api.proto",
 }
 
 func (m *RangeInfo) Marshal() (dAtA []byte, err error) {

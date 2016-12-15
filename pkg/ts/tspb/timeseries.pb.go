@@ -305,7 +305,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion3
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for TimeSeries service
 
@@ -370,7 +370,7 @@ var _TimeSeries_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: fileDescriptorTimeseries,
+	Metadata: "cockroach/pkg/ts/tspb/timeseries.proto",
 }
 
 func (m *TimeSeriesDatapoint) Marshal() (dAtA []byte, err error) {
