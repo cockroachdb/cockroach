@@ -158,8 +158,6 @@ func createTestStoreWithEngine(
 	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
-	// Disable consistency queue because it uses NodeLiveness which we aren't initializing.
-	store.SetConsistencyQueueActive(false)
 	if bootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
