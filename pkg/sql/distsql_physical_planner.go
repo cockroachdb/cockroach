@@ -202,26 +202,27 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		return shouldDistribute, nil
 
 	case *scanNode:
-		// We recommend running scans distributed only if we have a filtering
-		// expression.
+		// We recommend running scans distributed if we have a filtering
+		// expression or if we have a full table scan.
 		if n.filter != nil {
 			if err := checkExpr(n.filter); err != nil {
 				return false, err
 			}
 			return true, nil
 		}
+		if len(n.spans) == 0 {
+			// No spans means we are doing a full table scan.
+			return true, nil
+		}
 		return false, nil
 
 	case *indexJoinNode:
-		shouldRunDistIndex, err := dsp.CheckSupport(n.index)
-		if err != nil {
+		// n.table doesn't have meaningful spans, but we need to check support (e.g.
+		// for any filtering expression).
+		if _, err := dsp.CheckSupport(n.table); err != nil {
 			return false, err
 		}
-		shouldRunDistTable, err := dsp.CheckSupport(n.table)
-		if err != nil {
-			return false, err
-		}
-		return (shouldRunDistIndex || shouldRunDistTable), nil
+		return dsp.CheckSupport(n.index)
 
 	default:
 		return false, errors.Errorf("unsupported node %T", tree)
