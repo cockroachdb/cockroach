@@ -330,7 +330,7 @@ SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x
 NULL NULL
 42   NULL
 
-# Simple test cases for inner, left, right, and outer joins
+## Simple test cases for inner, left, right, and outer joins
 
 statement ok
 CREATE TABLE a (i int); INSERT INTO a VALUES (1), (2), (3)
@@ -364,6 +364,16 @@ SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i
 1    NULL NULL
 2    2    true
 3    3    true
+NULL 4    false
+
+# Full outer join with filter predicate
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2);
+----
+1    NULL NULL
+2    NULL NULL
+3    3    true
+NULL 2    true
 NULL 4    false
 
 
