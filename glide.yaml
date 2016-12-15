@@ -1,10 +1,5 @@
 package: github.com/cockroachdb/cockroach
 import:
-# TODO(tamird): remove when we upgrade.
-- package: github.com/gogo/protobuf
-  version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
-- package: google.golang.org/grpc
-  version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
 # TODO(tamird): remove when we upgrade to 4.3.1 or beyond.
 - package: github.com/cockroachdb/c-jemalloc
   version: 42e6a32cd7a4dff9c70d80323681d46d046181ef

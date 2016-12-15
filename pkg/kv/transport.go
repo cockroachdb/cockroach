@@ -163,14 +163,24 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	gt.clientIndex++
 	gt.setPending(client.args.Replica, true)
 
-	addr := client.remoteAddr
-	if log.V(2) {
-		log.Infof(ctx, "sending request to %s: %+v", addr, client.args)
+	batchFn := func(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		reply, err := client.client.Batch(ctx, args)
+		if reply != nil {
+			for i := range reply.Responses {
+				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
+					log.Error(ctx, err)
+				}
+			}
+		}
+		return reply, err
 	}
-	gt.opts.metrics.SentCount.Inc(1)
 
+	addr := client.remoteAddr
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
-		gt.opts.metrics.LocalSentCount.Inc(1)
+		batchFn = func(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+			gt.opts.metrics.LocalSentCount.Inc(1)
+			return localServer.Batch(ctx, args)
+		}
 		// Clone the request. At the time of writing, Replica may mutate it
 		// during command execution which can lead to data races.
 		//
@@ -182,24 +192,14 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 			clonedTxn := origTxn.Clone()
 			client.args.Txn = &clonedTxn
 		}
-
-		go func() {
-			reply, err := localServer.Batch(ctx, &client.args)
-			gt.setPending(client.args.Replica, false)
-			done <- BatchCall{Reply: reply, Err: err}
-		}()
-		return
 	}
 
 	go func() {
-		reply, err := client.client.Batch(ctx, &client.args)
-		if reply != nil {
-			for i := range reply.Responses {
-				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(ctx, err)
-				}
-			}
+		gt.opts.metrics.SentCount.Inc(1)
+		if log.V(2) {
+			log.Infof(ctx, "sending request to %s: %+v", addr, client.args)
 		}
+		reply, err := batchFn(ctx, &client.args)
 		gt.setPending(client.args.Replica, false)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()

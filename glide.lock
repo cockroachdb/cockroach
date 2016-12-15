@@ -1,5 +1,5 @@
-hash: 1e0821f7c814849f40cf53d5e518335aad23fc69f58b3bc97b730d2a658b7ae2
-updated: 2016-12-13T11:56:12.606527563-05:00
+hash: c7659df3c8e53d7ca9210b38bfea490c45476d6cd028c876d6e20b257fcf139c
+updated: 2016-12-13T13:32:44.183863499-05:00
 imports:
 - name: cloud.google.com/go
   version: 9d965e63e8cceb1b5d7977a202f0fcb8866d6525
@@ -118,7 +118,7 @@ imports:
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
-  version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
+  version: 06ec6c31ff1bac6ed4e205a547a3d72934813ef3
   subpackages:
   - gogoproto
   - jsonpb
@@ -165,7 +165,7 @@ imports:
 - name: github.com/google/btree
   version: 0c3044bc8bada22db67b93f5760fe3f05d6a5c25
 - name: github.com/google/go-github
-  version: 939928b912496ed4fbeb6e4beb2467b4fa540af7
+  version: 466070b0580728e63bd1a415e0019639e55d7148
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -392,7 +392,7 @@ imports:
   - socket
   - urlfetch
 - name: google.golang.org/grpc
-  version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
+  version: 777daa17ff9b5daef1cfdf915088a2ada3332bf0
   subpackages:
   - codes
   - credentials
