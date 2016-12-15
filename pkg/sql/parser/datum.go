@@ -1016,6 +1016,12 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 	return &DTimestampTZ{Time: t.Round(precision)}
 }
 
+// MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
+func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
+	year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
+	return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, loc), time.Microsecond)
+}
+
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
 // the provided string in the provided location, or an error if parsing is unsuccessful.
 func ParseDTimestampTZ(
