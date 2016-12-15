@@ -17,6 +17,7 @@
 package pgwire
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"net"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
@@ -102,42 +104,51 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	_ = v3Conn.serve(context.Background(), mon.BoundAccount{})
 }
 
-// TestContextCancellationClosesConn starts a pgwire client that checks that a
-// v3Conn is blocked on the read loop and then cancels the v3Conn's session's
-// context. This should result in v3Conn.serve(...) returning an error
-// specifying that the associated session's context was canceled.
-func TestContextCancellationClosesConn(t *testing.T) {
+// TestReadTimeoutConn asserts that a readTimeoutConn performs reads normally
+// and exits with an appropriate error when exit conditions are satisfied.
+func TestReadTimeoutConnExits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// Cannot use net.Pipe because deadlines are not supported.
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		if err := ln.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	expectedRead := []byte("expectedRead")
+
+	// Start a server that performs reads using a readTimeoutConn.
 	errChan := make(chan error)
 	go func() {
 		defer close(errChan)
-		// c is closed by v3Conn.finish(...)
-		c, err := ln.Accept()
-		if err != nil {
-			// If Accept fails, the test cannot keep on going. To avoid the main
-			// goroutine blocking on interactions with the connection, we close
-			// the listener which forces the main goroutine to fail on Dial and
-			// Read calls.
-			_ = ln.Close()
-			return
-		}
+		errChan <- func() error {
+			defer func() {
+				_ = ln.Close()
+			}()
+			c, err := ln.Accept()
+			if err != nil {
+				return err
+			}
+			defer c.Close()
 
-		v3Conn := makeTestV3Conn(c)
-		defer v3Conn.finish(ctx)
-		errChan <- v3Conn.serve(ctx, mon.BoundAccount{})
+			readTimeoutConn := makeReadTimeoutConn(c, func() error {
+				return ctx.Err()
+			})
+
+			// Assert that reads are performed normally.
+			readBytes := make([]byte, len(expectedRead))
+			if _, err := readTimeoutConn.Read(readBytes); err != nil {
+				return err
+			}
+			if !bytes.Equal(readBytes, expectedRead) {
+				return errors.Errorf("expected %v got %v", expectedRead, readBytes)
+			}
+
+			// The main goroutine will cancel the context, which should abort
+			// this read with an appropriate error.
+			_, err = readTimeoutConn.Read(nil)
+			return err
+		}()
 	}()
 
 	c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
@@ -145,31 +156,11 @@ func TestContextCancellationClosesConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	response := make([]byte, 1, 1)
-	// Skip over initialization messages sent by v3Conn.
-	for serverMessageType(response[0]) != serverMsgReady {
-		if _, err := c.Read(response); err != nil {
-			t.Fatal(err)
-		}
-	}
 
-	// Skip over the rest of the serverMsgReady message.
-	if _, err = c.Read(make([]byte, 5, 5)); err != nil {
+	if _, err := c.Write(expectedRead); err != nil {
 		t.Fatal(err)
 	}
 
-	// clientMsgSync is used here because it is a simple, parameterless
-	// message that expects a serverReadyMsg as response. It is usually sent
-	// for error recovery during a series of extended-query messages.
-	if _, err := c.Write([]byte{byte(clientMsgSync), 0x00, 0x00, 0x00, 0x04}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Read(response); err != nil {
-		t.Fatal(err)
-	}
-	if serverMessageType(response[0]) != serverMsgReady {
-		t.Fatalf("unexpected response to sync request: %s", serverMessageType(response[0]))
-	}
 	select {
 	case err := <-errChan:
 		t.Fatalf("server unexpectedly returned: %v", err)

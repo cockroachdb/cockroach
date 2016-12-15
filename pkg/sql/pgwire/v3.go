@@ -116,6 +116,57 @@ type preparedPortalMeta struct {
 	outFormats []formatCode
 }
 
+// readTimeoutConn overloads net.Conn.Read by periodically calling
+// checkExitConds() and aborting the read if an error is returned.
+type readTimeoutConn struct {
+	net.Conn
+	checkExitConds func() error
+}
+
+func makeReadTimeoutConn(c net.Conn, checkExitConds func() error) *readTimeoutConn {
+	return &readTimeoutConn{
+		Conn:           c,
+		checkExitConds: checkExitConds,
+	}
+}
+
+func (c *readTimeoutConn) Read(b []byte) (int, error) {
+	// readTimeout is the amount of time ReadTimeoutConn should wait on a
+	// read before checking for exit conditions. The tradeoff is between the
+	// time it takes to react to session context cancellation and the overhead
+	// of waking up and checking for exit conditions.
+	const readTimeout = 150 * time.Millisecond
+
+	// net.Pipe does not support setting deadlines. See
+	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
+	setDeadline := true
+	if c.LocalAddr().Network() == "pipe" {
+		setDeadline = false
+	}
+
+	// Remove the read deadline when returning from this function to avoid
+	// unexpected behavior.
+	if setDeadline {
+		defer func() { _ = c.SetReadDeadline(time.Time{}) }()
+	}
+	for {
+		if setDeadline {
+			if err := c.SetReadDeadline(timeutil.Now().Add(readTimeout)); err != nil {
+				return 0, err
+			}
+		}
+		n, err := c.Conn.Read(b)
+		if err := c.checkExitConds(); err != nil {
+			return 0, err
+		}
+		// Continue if the error is due to timing out.
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			continue
+		}
+		return n, err
+	}
+}
+
 type v3Conn struct {
 	conn        net.Conn
 	rd          *bufio.Reader
@@ -284,6 +335,13 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	}
 	defer c.closeSession(ctx)
 
+	// Once a session has been set up, the underlying net.Conn is switched to
+	// a conn that exits if the session's context is cancelled.
+	c.conn = makeReadTimeoutConn(c.conn, func() error {
+		return c.session.Ctx().Err()
+	})
+	c.rd = bufio.NewReader(c.conn)
+
 	for {
 		if !c.doingExtendedQueryMessage {
 			c.writeBuf.initMsg(serverMsgReady)
@@ -319,7 +377,7 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 				return err
 			}
 		}
-		typ, n, err := c.readTypedMsg()
+		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
@@ -384,59 +442,6 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	}
 }
 
-// readTypedMsg reads a message from v3Conn.rd, returning the message type,
-// number of bytes read, and an error if there was one. Exit conditions are
-// checked every connReadTimeout.
-func (c *v3Conn) readTypedMsg() (clientMessageType, int, error) {
-	// connReadTimeout is the amount of time the v3Conn waits on a read before
-	// checking for exit conditions. The tradeoff is between the time it takes
-	// to react to session context cancellation and the overhead of waking up
-	// and checking for exit conditions.
-	const connReadTimeout = 150 * time.Millisecond
-
-	readBufTypedMsg := func() (clientMessageType, int, error) {
-		typ, err := c.rd.ReadByte()
-		if err != nil {
-			return 0, 0, err
-		}
-		n, err := c.readBuf.readUntypedMsg(c.rd)
-		return clientMessageType(typ), n, err
-	}
-
-	// net.Pipe does not support setting deadlines. See
-	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
-	setDeadline := true
-	if c.conn.LocalAddr().Network() == "pipe" {
-		setDeadline = false
-	}
-
-	// Remove the read deadline when returning from this function to avoid
-	// unexpected behavior.
-	if setDeadline {
-		defer func() { _ = c.conn.SetReadDeadline(time.Time{}) }()
-	}
-	for {
-		// Check for context cancellation.
-		if s := c.session; s != nil {
-			if err := s.Ctx().Err(); err != nil {
-				return 0, 0, err
-			}
-		}
-
-		if setDeadline {
-			if err := c.conn.SetReadDeadline(timeutil.Now().Add(connReadTimeout)); err != nil {
-				return 0, 0, err
-			}
-		}
-		typ, n, err := readBufTypedMsg()
-		// Continue if the error is due to timing out.
-		if err, ok := err.(net.Error); ok && err.Timeout() {
-			continue
-		}
-		return typ, n, err
-	}
-}
-
 // sendAuthPasswordRequest requests a cleartext password from the client and
 // returns it.
 func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
@@ -449,7 +454,7 @@ func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
 		return "", err
 	}
 
-	typ, n, err := c.readTypedMsg()
+	typ, n, err := c.readBuf.readTypedMsg(c.rd)
 	c.metrics.BytesInCount.Inc(int64(n))
 	if err != nil {
 		return "", err
@@ -1014,7 +1019,7 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 	}
 
 	for {
-		typ, n, err := c.readTypedMsg()
+		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
