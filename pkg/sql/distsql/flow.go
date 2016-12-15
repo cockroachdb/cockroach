@@ -342,13 +342,15 @@ func (f *Flow) Start(doneFn func()) {
 		f.Context, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
 	)
 	f.status = FlowRunning
+
+	// Once we call RegisterFlow, the inbound streams become accessible; we must
+	// set up the WaitGroup counter before.
+	f.waitGroup.Add(len(f.inboundStreams) + len(f.outboxes) + len(f.processors))
+
 	f.flowRegistry.RegisterFlow(f.id, f, f.inboundStreams)
 	if log.V(1) {
 		log.Infof(f.Context, "registered flow %s", f.id.Short())
 	}
-	f.waitGroup.Add(len(f.inboundStreams))
-	f.waitGroup.Add(len(f.outboxes))
-	f.waitGroup.Add(len(f.processors))
 	for _, o := range f.outboxes {
 		o.start(&f.waitGroup)
 	}
