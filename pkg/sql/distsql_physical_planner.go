@@ -772,7 +772,7 @@ ColLoop:
 // of a plan that corresponds to a given planNode.
 func (dsp *distSQLPlanner) getTypesForPlanResult(
 	planToStreamColMap []int, node planNode,
-) []sqlbase.ColumnType_Kind {
+) []*sqlbase.ColumnType {
 	numCols := 0
 	for _, streamCol := range planToStreamColMap {
 		if numCols <= streamCol {
@@ -780,10 +780,11 @@ func (dsp *distSQLPlanner) getTypesForPlanResult(
 		}
 	}
 	nodeColumns := node.Columns()
-	types := make([]sqlbase.ColumnType_Kind, numCols)
+	types := make([]*sqlbase.ColumnType, numCols)
 	for nodeCol, streamCol := range planToStreamColMap {
 		if streamCol != -1 {
-			types[streamCol] = sqlbase.DatumTypeToColumnKind(nodeColumns[nodeCol].Typ)
+			typ := sqlbase.DatumTypeToColumnType(nodeColumns[nodeCol].Typ)
+			types[streamCol] = &typ
 		}
 	}
 	return types

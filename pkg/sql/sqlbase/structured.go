@@ -1075,7 +1075,7 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 		typ = encoding.Float
 	case ColumnType_INTERVAL:
 		typ = encoding.Duration
-	case ColumnType_STRING, ColumnType_BYTES:
+	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING:
 		// STRINGs are counted as runes, so this isn't totally correct, but this
 		// seems better than always assuming the maximum rune width.
 		typ, size = encoding.Bytes, int(col.Type.Width)
@@ -1558,6 +1558,14 @@ func (c *ColumnType) SQLString() string {
 		}
 	case ColumnType_TIMESTAMPTZ:
 		return "TIMESTAMP WITH TIME ZONE"
+	case ColumnType_COLLATEDSTRING:
+		if c.Locale == nil {
+			panic("locale is required for COLLATEDSTRING")
+		}
+		if c.Width > 0 {
+			return fmt.Sprintf("%s(%d) COLLATE %s", c.Kind.String(), c.Width, *c.Locale)
+		}
+		return fmt.Sprintf("%s COLLATE %s", c.Kind.String(), *c.Locale)
 	case ColumnType_INT_ARRAY:
 		return "INT[]"
 	}
@@ -1569,7 +1577,7 @@ func (c *ColumnType) SQLString() string {
 // type is not a character or bit string, or if the string's length is not bounded.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.Kind {
-	case ColumnType_INT, ColumnType_STRING:
+	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		if c.Width > 0 {
 			return c.Width, true
 		}
@@ -1582,7 +1590,7 @@ func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 // is not a character string, or if the string's length is not bounded.
 func (c *ColumnType) MaxOctetLength() (int32, bool) {
 	switch c.Kind {
-	case ColumnType_STRING:
+	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		if c.Width > 0 {
 			return c.Width * utf8.UTFMax, true
 		}
@@ -1625,38 +1633,44 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
-// DatumTypeToColumnKind converts a parser Type to a ColumnType_Kind.
-func DatumTypeToColumnKind(typ parser.Type) ColumnType_Kind {
-	switch typ {
+// DatumTypeToColumnType converts a parser Type to a ColumnType.
+func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
+	var ctyp ColumnType
+	switch ptyp {
 	case parser.TypeBool:
-		return ColumnType_BOOL
+		ctyp.Kind = ColumnType_BOOL
 	case parser.TypeInt:
-		return ColumnType_INT
+		ctyp.Kind = ColumnType_INT
 	case parser.TypeFloat:
-		return ColumnType_FLOAT
+		ctyp.Kind = ColumnType_FLOAT
 	case parser.TypeDecimal:
-		return ColumnType_DECIMAL
+		ctyp.Kind = ColumnType_DECIMAL
 	case parser.TypeBytes:
-		return ColumnType_BYTES
+		ctyp.Kind = ColumnType_BYTES
 	case parser.TypeString:
-		return ColumnType_STRING
+		ctyp.Kind = ColumnType_STRING
 	case parser.TypeDate:
-		return ColumnType_DATE
+		ctyp.Kind = ColumnType_DATE
 	case parser.TypeTimestamp:
-		return ColumnType_TIMESTAMP
+		ctyp.Kind = ColumnType_TIMESTAMP
 	case parser.TypeTimestampTZ:
-		return ColumnType_TIMESTAMPTZ
+		ctyp.Kind = ColumnType_TIMESTAMPTZ
 	case parser.TypeInterval:
-		return ColumnType_INTERVAL
+		ctyp.Kind = ColumnType_INTERVAL
 	default:
-		panic(fmt.Sprintf("unsupported result type: %s", typ))
+		if t, ok := ptyp.(parser.TCollatedString); ok {
+			ctyp.Kind = ColumnType_COLLATEDSTRING
+			ctyp.Locale = &t.Locale
+		}
+		panic(fmt.Sprintf("unsupported result type: %s", ptyp))
 	}
+	return ctyp
 }
 
-// ToDatumType converts the ColumnType_Kind to the correct type, or nil if there
-// is no correspondence.
-func (k ColumnType_Kind) ToDatumType() parser.Type {
-	switch k {
+// ToDatumType converts the ColumnType to the correct type, or nil if there is
+// no correspondence.
+func (c *ColumnType) ToDatumType() parser.Type {
+	switch c.Kind {
 	case ColumnType_BOOL:
 		return parser.TypeBool
 	case ColumnType_INT:
@@ -1677,16 +1691,15 @@ func (k ColumnType_Kind) ToDatumType() parser.Type {
 		return parser.TypeTimestampTZ
 	case ColumnType_INTERVAL:
 		return parser.TypeInterval
+	case ColumnType_COLLATEDSTRING:
+		if c.Locale == nil {
+			panic("locale is required for COLLATEDSTRING")
+		}
+		return parser.TCollatedString{Locale: *c.Locale}
 	case ColumnType_INT_ARRAY:
 		return parser.TypeIntArray
 	}
 	return nil
-}
-
-// ToDatumType converts the ColumnType to the correct type, or nil if there is
-// no correspondence.
-func (c *ColumnType) ToDatumType() parser.Type {
-	return c.Kind.ToDatumType()
 }
 
 // SetID implements the DescriptorProto interface.

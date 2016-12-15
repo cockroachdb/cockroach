@@ -30,7 +30,7 @@ import (
 // reencoding. TODO(radu): It will also allow comparing encoded datums directly
 // (for certain encodings).
 type EncDatum struct {
-	Type ColumnType_Kind
+	Type ColumnType
 
 	// Encoding type. Valid only if encoded is not nil.
 	encoding DatumEncoding
@@ -63,7 +63,7 @@ func (ed *EncDatum) String() string {
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
 // SetEncoded wipes the underlying Datum.
-func EncDatumFromEncoded(typ ColumnType_Kind, enc DatumEncoding, encoded []byte) EncDatum {
+func EncDatumFromEncoded(typ ColumnType, enc DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
 		panic("empty encoded value")
 	}
@@ -79,9 +79,7 @@ func EncDatumFromEncoded(typ ColumnType_Kind, enc DatumEncoding, encoded []byte)
 // possibly followed by other data. Similar to EncDatumFromEncoded,
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
-func EncDatumFromBuffer(
-	typ ColumnType_Kind, enc DatumEncoding, buf []byte,
-) (EncDatum, []byte, error) {
+func EncDatumFromBuffer(typ ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
 		encLen, err := encoding.PeekLength(buf)
@@ -103,16 +101,16 @@ func EncDatumFromBuffer(
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
-func DatumToEncDatum(typ ColumnType_Kind, d parser.Datum) EncDatum {
+func DatumToEncDatum(ctyp ColumnType, d parser.Datum) EncDatum {
 	if d == nil {
 		panic("Cannot convert nil datum to EncDatum")
 	}
-	if d != parser.DNull && !typ.ToDatumType().Equal(d.ResolvedType()) {
+	if ptyp := ctyp.ToDatumType(); d != parser.DNull && !ptyp.Equal(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
-			d.ResolvedType(), typ.ToDatumType()))
+			d.ResolvedType(), ptyp))
 	}
 	return EncDatum{
-		Type:  typ,
+		Type:  ctyp,
 		Datum: d,
 	}
 }
@@ -264,13 +262,13 @@ func (r EncDatumRow) String() string {
 }
 
 // DTupleToEncDatumRow converts a parser.DTuple to an EncDatumRow.
-func DTupleToEncDatumRow(row EncDatumRow, types []ColumnType_Kind, tuple parser.DTuple) {
+func DTupleToEncDatumRow(row EncDatumRow, types []*ColumnType, tuple parser.DTuple) {
 	if len(row) != len(tuple) || len(tuple) != len(types) {
 		panic(fmt.Sprintf("Length mismatch (%d, %d and %d) between row, types and tuple",
 			len(row), len(types), len(tuple)))
 	}
 	for i, datum := range tuple {
-		row[i] = DatumToEncDatum(types[i], datum)
+		row[i] = DatumToEncDatum(*types[i], datum)
 	}
 }
 

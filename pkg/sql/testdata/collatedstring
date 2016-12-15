@@ -170,3 +170,58 @@ query B
 SELECT 'ü' COLLATE de < 'x' COLLATE de;
 ----
 true
+
+
+statement error invalid locale e: language: tag is not well-formed at or near "\)"
+----
+CREATE TABLE e1 (
+  a STRING COLLATE e
+);
+
+statement error multiple COLLATE declarations for column "a" at or near "\)"
+----
+CREATE TABLE e2 (
+  a STRING COLLATE en COLLATE de
+);
+
+statement error COLLATE declaration for non-string-typed column "a" at or near "\)"
+----
+CREATE TABLE e3 (
+  a INT COLLATE en
+);
+
+statement ok
+----
+CREATE TABLE t (
+  a STRING COLLATE en
+);
+
+statement ok
+----
+INSERT INTO t VALUES
+  ('A' COLLATE en),
+  ('B' COLLATE en),
+  ('a' COLLATE en),
+  ('b' COLLATE en),
+  ('x' COLLATE en),
+  ('ü' COLLATE en);
+
+query T
+SELECT a FROM t ORDER BY t.a;
+----
+a
+A
+b
+B
+ü
+x
+
+query T
+SELECT a FROM t ORDER BY t.a COLLATE da;
+----
+a
+A
+b
+B
+x
+ü
