@@ -36,22 +36,22 @@ const (
 
 // bucket here is the set of rows for a given group key (comprised of
 // columns specified by the join constraints), 'seen' is used to determine if
-// there was a matching group (with the same group key) in the opposite stream.
+// there was a matching row in the opposite stream.
 type bucket struct {
 	rows []parser.DTuple
-	seen bool
+	seen []bool
 }
 
-func (b *bucket) Seen() bool {
-	return b.seen
+func (b *bucket) Seen(i int) bool {
+	return b.seen[i]
 }
 
 func (b *bucket) Rows() []parser.DTuple {
 	return b.rows
 }
 
-func (b *bucket) MarkSeen() {
-	b.seen = true
+func (b *bucket) MarkSeen(i int) {
+	b.seen[i] = true
 }
 
 func (b *bucket) AddRow(row parser.DTuple) {
@@ -86,6 +86,14 @@ func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.D
 		b.buckets[string(encoding)] = bk
 	}
 	return nil
+}
+
+// InitSeen must be run before the buckets are used to initialize the rows'
+// seen arrays.
+func (b *buckets) InitSeen() {
+	for _, bucket := range b.buckets {
+		bucket.seen = make([]bool, len(bucket.rows))
+	}
 }
 
 func (b *buckets) Close() {
@@ -371,7 +379,7 @@ func (n *joinNode) hashJoinStart() error {
 			return err
 		}
 		if !hasRow {
-			return nil
+			break
 		}
 		row := n.right.plan.Values()
 		encoding, _, err := n.pred.encode(scratch, row, n.pred.rightEqualityIndices)
@@ -385,6 +393,8 @@ func (n *joinNode) hashJoinStart() error {
 
 		scratch = encoding[:0]
 	}
+	n.buckets.InitSeen()
+	return nil
 }
 
 func (n *joinNode) debugNext() (bool, error) {
@@ -512,12 +522,11 @@ func (n *joinNode) Next() (res bool, err error) {
 			}
 			return n.buffer.Next(), nil
 		}
-		b.MarkSeen()
 
 		// We iterate through all the rows in the bucket attempting to match the
 		// filter, if the filter passes we add it to the buffer.
 		foundMatch := false
-		for _, rrow := range b.Rows() {
+		for idx, rrow := range b.Rows() {
 			passesFilter, err := n.pred.eval(&n.planner.evalCtx, n.output, lrow, rrow)
 			if err != nil {
 				return false, err
@@ -529,6 +538,10 @@ func (n *joinNode) Next() (res bool, err error) {
 			foundMatch = true
 
 			n.pred.prepareRow(n.output, lrow, rrow)
+			// TODO(jordan) MarkSeen is not required unless the join is RIGHT
+			// or FULL. In these cases, we can skip allocating the seen arrays
+			// for every bucket.
+			b.MarkSeen(idx)
 			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
 			}
@@ -554,14 +567,14 @@ func (n *joinNode) Next() (res bool, err error) {
 	}
 
 	for _, b := range n.buckets.Buckets() {
-		if !b.Seen() {
-			for _, rrow := range b.Rows() {
+		for idx, rrow := range b.Rows() {
+			if !b.Seen(idx) {
 				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
 				if _, err := n.buffer.AddRow(n.output); err != nil {
 					return false, err
 				}
+				b.MarkSeen(idx)
 			}
-			b.MarkSeen()
 		}
 	}
 
