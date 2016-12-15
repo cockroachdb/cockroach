@@ -353,6 +353,26 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return &DInterval{Duration: left.(*DInterval).Duration.Add(right.(*DInterval).Duration)}, nil
 			},
 		},
+		BinOp{
+			LeftType:   TypeDate,
+			RightType:  TypeInterval,
+			ReturnType: TypeTimestampTZ,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				t := duration.Add(leftTZ.Time, right.(*DInterval).Duration)
+				return MakeDTimestampTZ(t, time.Microsecond), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeInterval,
+			RightType:  TypeDate,
+			ReturnType: TypeTimestampTZ,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				t := duration.Add(rightTZ.Time, left.(*DInterval).Duration)
+				return MakeDTimestampTZ(t, time.Microsecond), nil
+			},
+		},
 	},
 
 	Minus: {
@@ -476,6 +496,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: TypeTimestampTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
+				return MakeDTimestampTZ(t, time.Microsecond), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeDate,
+			RightType:  TypeInterval,
+			ReturnType: TypeTimestampTZ,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				t := duration.Add(leftTZ.Time, right.(*DInterval).Duration.Mul(-1))
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
 		},
@@ -2008,8 +2038,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DCollatedString:
 			return ParseDTimestampTZ(d.Contents, ctx.GetLocation(), time.Microsecond)
 		case *DDate:
-			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
-			return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation()), time.Microsecond), nil
+			return MakeDTimestampTZFromDate(ctx.GetLocation(), d), nil
 		case *DTimestamp:
 			return MakeDTimestampTZ(d.Time, time.Microsecond), nil
 		case *DInt:
