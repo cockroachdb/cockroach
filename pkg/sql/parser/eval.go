@@ -1057,6 +1057,40 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
+			LeftType:  TypeDate,
+			RightType: TypeTimestampTZ,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				rightTZ := right.(*DTimestampTZ)
+				return DBool(leftTZ.Equal(rightTZ.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeDate,
+			RightType: TypeTimestamp,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				rightTS := right.(*DTimestamp)
+				return DBool(leftTZ.Equal(rightTS.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestampTZ,
+			RightType: TypeDate,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				return DBool(left.(*DTimestampTZ).Equal(rightTZ.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestamp,
+			RightType: TypeDate,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				return DBool(left.(*DTimestamp).Equal(rightTZ.Time)), nil
+			},
+		},
+		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
@@ -1211,6 +1245,40 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
+			LeftType:  TypeDate,
+			RightType: TypeTimestampTZ,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				rightTZ := right.(*DTimestampTZ)
+				return DBool(leftTZ.Before(rightTZ.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeDate,
+			RightType: TypeTimestamp,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				rightTS := right.(*DTimestamp)
+				return DBool(leftTZ.Before(rightTS.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestampTZ,
+			RightType: TypeDate,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				return DBool(left.(*DTimestampTZ).Before(rightTZ.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestamp,
+			RightType: TypeDate,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				return DBool(left.(*DTimestamp).Before(rightTZ.Time)), nil
+			},
+		},
+		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
@@ -1362,6 +1430,38 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			RightType: TypeTimestampTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestamp).Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeDate,
+			RightType: TypeTimestampTZ,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				return !DBool(right.(*DTimestampTZ).Before(leftTZ.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeDate,
+			RightType: TypeTimestamp,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				return !DBool(right.(*DTimestamp).Before(leftTZ.Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestampTZ,
+			RightType: TypeDate,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				return !DBool(rightTZ.Before(left.(*DTimestampTZ).Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestamp,
+			RightType: TypeDate,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				return !DBool(rightTZ.Before(left.(*DTimestamp).Time)), nil
 			},
 		},
 		CmpOp{

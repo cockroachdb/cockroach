@@ -705,6 +705,66 @@ SELECT INTERVAL '4 minutes' + DATE '1999-01-01'
 1999-01-01 00:04:00 +0000 +0000
 
 query T
-select DATE '1999-01-01' - interval '4 minutes';
+SELECT DATE '1999-01-01' - INTERVAL '4 minutes';
 ----
 1998-12-31 23:56:00 +0000 +0000
+
+query B
+SELECT DATE '1999-01-02' < TIMESTAMPTZ '1999-01-01';
+----
+false
+
+query B
+SELECT DATE '1999-01-02' < TIMESTAMP '1999-01-01';
+----
+false
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-01';
+----
+false
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-01';
+----
+false
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-02';
+----
+true
+
+query B
+SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-02';
+----
+true
+
+query B
+SELECT DATE '1999-01-02' > TIMESTAMPTZ '1999-01-01';
+----
+true
+
+query B
+SELECT DATE '1999-01-02' > TIMESTAMP '1999-01-01';
+----
+true
+
+query B
+SELECT DATE '1999-01-02' >= TIMESTAMPTZ '1999-01-01';
+----
+true
+
+query B
+SELECT DATE '1999-01-02' >= TIMESTAMP '1999-01-01';
+----
+true
+
+query B
+SELECT DATE '1999-01-02' = TIMESTAMPTZ '1999-01-01';
+----
+false
+
+query B
+SELECT DATE '1999-01-01' = TIMESTAMP '1999-01-01';
+----
+true
