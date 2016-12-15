@@ -693,3 +693,13 @@ query T
 SHOW TIME ZONE
 ----
 0
+
+query T
+SELECT DATE '1999-01-01' + INTERVAL '4 minutes'
+----
+1999-01-01 00:04:00 +0000 +0000
+
+query T
+SELECT INTERVAL '4 minutes' + DATE '1999-01-01'
+----
+1999-01-01 00:04:00 +0000 +0000
