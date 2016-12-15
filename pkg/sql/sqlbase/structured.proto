@@ -38,6 +38,7 @@ message ColumnType {
     STRING = 7;     // STRING(width)
     BYTES = 8;
     TIMESTAMPTZ = 9;
+    COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
 
     // Array types.
     //
@@ -57,6 +58,8 @@ message ColumnType {
   // The length of each dimension in the array. A dimension of -1 means that
   // no bound was specified for that dimension.
   repeated int32 array_dimensions = 4;
+  // Collated STRING, CHAR, and VARCHAR
+  optional string locale = 5;
 }
 
 enum ConstraintValidity {

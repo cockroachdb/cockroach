@@ -72,9 +72,9 @@ func (rb *readerBase) init(
 	}
 
 	if filter.Expr != "" {
-		types := make([]sqlbase.ColumnType_Kind, numCols)
+		types := make([]*sqlbase.ColumnType, numCols)
 		for i := range types {
-			types[i] = rb.desc.Columns[i].Type.Kind
+			types[i] = &rb.desc.Columns[i].Type
 		}
 		if err := rb.filter.init(filter, types, flowCtx.evalCtx); err != nil {
 			return err

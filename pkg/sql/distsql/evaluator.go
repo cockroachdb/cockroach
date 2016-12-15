@@ -33,7 +33,7 @@ type evaluator struct {
 
 	specExprs []Expression
 	exprs     []exprHelper
-	exprTypes []sqlbase.ColumnType_Kind
+	exprTypes []sqlbase.ColumnType
 
 	rowAlloc sqlbase.EncDatumRowAlloc
 }
@@ -48,7 +48,7 @@ func newEvaluator(
 		specExprs: spec.Exprs,
 		ctx:       log.WithLogTag(flowCtx.Context, "Evaluator", nil),
 		exprs:     make([]exprHelper, len(spec.Exprs)),
-		exprTypes: make([]sqlbase.ColumnType_Kind, len(spec.Exprs)),
+		exprTypes: make([]sqlbase.ColumnType, len(spec.Exprs)),
 	}
 
 	return ev, nil
@@ -79,9 +79,9 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 		if first {
 			first = false
 
-			types := make([]sqlbase.ColumnType_Kind, len(row))
+			types := make([]*sqlbase.ColumnType, len(row))
 			for i := range types {
-				types[i] = row[i].Type
+				types[i] = &row[i].Type
 			}
 			for i, expr := range ev.specExprs {
 				err := ev.exprs[i].init(expr, types, ev.flowCtx.evalCtx)
@@ -89,7 +89,7 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 					ev.output.Close(err)
 					return
 				}
-				ev.exprTypes[i] = sqlbase.DatumTypeToColumnKind(ev.exprs[i].expr.ResolvedType())
+				ev.exprTypes[i] = sqlbase.DatumTypeToColumnType(ev.exprs[i].expr.ResolvedType())
 			}
 		}
 
