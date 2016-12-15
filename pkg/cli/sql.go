@@ -414,6 +414,13 @@ func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt stri
 		username := ""
 		if parsedURL.User != nil {
 			username = parsedURL.User.Username()
+		} else {
+			u, err := user.Current()
+			if err == nil {
+				username = u.Username
+			} else {
+				username, _ = envutil.EnvString("COCKROACH_USER", 2)
+			}
 		}
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.
