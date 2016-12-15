@@ -30,6 +30,7 @@ type joinType int
 const (
 	joinTypeInner joinType = iota
 	joinTypeLeftOuter
+	joinTypeRightOuter
 	joinTypeFullOuter
 )
 
@@ -105,9 +106,8 @@ type joinNode struct {
 	joinType joinType
 
 	// The data sources.
-	left    planDataSource
-	right   planDataSource
-	swapped bool
+	left  planDataSource
+	right planDataSource
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -170,9 +170,6 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 func (p *planner) makeJoin(
 	astJoinType string, left planDataSource, right planDataSource, cond parser.JoinCond,
 ) (planDataSource, error) {
-	leftInfo, rightInfo := left.info, right.info
-
-	swapped := false
 	var typ joinType
 	switch astJoinType {
 	case "JOIN", "INNER JOIN", "CROSS JOIN":
@@ -180,18 +177,18 @@ func (p *planner) makeJoin(
 	case "LEFT JOIN":
 		typ = joinTypeLeftOuter
 	case "RIGHT JOIN":
-		left, right = right, left // swap
-		typ = joinTypeLeftOuter
-		swapped = true
+		typ = joinTypeRightOuter
 	case "FULL JOIN":
 		typ = joinTypeFullOuter
 	default:
 		return planDataSource{}, errors.Errorf("unsupported JOIN type %T", astJoinType)
 	}
 
+	leftInfo, rightInfo := left.info, right.info
+
 	// Check that the same table name is not used on both sides.
-	for _, alias := range right.info.sourceAliases {
-		if _, ok := left.info.sourceAliases.srcIdx(alias.name); ok {
+	for _, alias := range rightInfo.sourceAliases {
+		if _, ok := leftInfo.sourceAliases.srcIdx(alias.name); ok {
 			t := alias.name.Table()
 			if t == "" {
 				// Allow joins of sources that define columns with no
@@ -235,7 +232,6 @@ func (p *planner) makeJoin(
 		joinType: typ,
 		pred:     pred,
 		columns:  info.sourceColumns,
-		swapped:  swapped,
 	}
 
 	n.buffer = &RowBuffer{
@@ -296,11 +292,9 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 		}
 		buf.WriteString(jType)
 	case joinTypeLeftOuter:
-		if !n.swapped {
-			buf.WriteString("LEFT OUTER")
-		} else {
-			buf.WriteString("RIGHT OUTER")
-		}
+		buf.WriteString("LEFT OUTER")
+	case joinTypeRightOuter:
+		buf.WriteString("RIGHT OUTER")
 	case joinTypeFullOuter:
 		buf.WriteString("FULL OUTER")
 	}
@@ -308,9 +302,6 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 	n.pred.format(&buf)
 
 	subplans := []planNode{n.left.plan, n.right.plan}
-	if n.swapped {
-		subplans[0], subplans[1] = subplans[1], subplans[0]
-	}
 	subplans = n.planner.collectSubqueryPlans(n.pred.filter, subplans)
 
 	return "join", buf.String(), subplans
@@ -356,7 +347,7 @@ func (n *joinNode) Start() error {
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
-	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
+	if n.joinType != joinTypeInner {
 		n.emptyRight = make(parser.DTuple, len(n.right.plan.Columns()))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
@@ -491,7 +482,7 @@ func (n *joinNode) Next() (res bool, err error) {
 		//    | NULL |  52  |
 		//    | NULL |  52  |
 		if containsNull {
-			if n.joinType == joinTypeInner {
+			if n.joinType == joinTypeInner || n.joinType == joinTypeRightOuter {
 				scratch = encoding[:0]
 				// Failed to match -- no matching row, nothing to do.
 				continue
@@ -507,11 +498,11 @@ func (n *joinNode) Next() (res bool, err error) {
 
 		b, ok := n.buckets.Fetch(encoding)
 		if !ok {
-			if n.joinType == joinTypeInner {
+			if n.joinType == joinTypeInner || n.joinType == joinTypeRightOuter {
 				scratch = encoding[:0]
 				continue
 			}
-			// Outer join: unmatched rows are padded with NULLs.
+			// Left or full outer join: unmatched rows are padded with NULLs.
 			// Given that we did not find a matching right row we append an
 			// empty right row to the left row, adding the result to our buffer
 			// for the subsequent call to Next().
@@ -542,9 +533,10 @@ func (n *joinNode) Next() (res bool, err error) {
 				return false, err
 			}
 		}
-		if !foundMatch && n.joinType != joinTypeInner {
-			// If none of the rows matched the filter and we are computed an outer
-			// join, we need to add an row with an empty right side.
+		if !foundMatch && n.joinType != joinTypeInner && n.joinType != joinTypeRightOuter {
+			// If none of the rows matched the filter and we are computing a
+			// left or full outer join, we need to add a row with an empty
+			// right side.
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
 			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
@@ -557,7 +549,7 @@ func (n *joinNode) Next() (res bool, err error) {
 	}
 
 	// no more lrows, we go through the unmatched rows in the internal hashmap.
-	if n.joinType != joinTypeFullOuter {
+	if n.joinType == joinTypeInner || n.joinType == joinTypeLeftOuter {
 		return false, nil
 	}
 
