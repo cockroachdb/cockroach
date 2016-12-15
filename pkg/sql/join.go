@@ -149,6 +149,10 @@ type joinNode struct {
 	// doneReadingRight is used by debugNext() and DebugValues() when
 	// explain == explainDebug.
 	doneReadingRight bool
+
+	// finishedOutput indicates that we've finished writing all of the rows for
+	// this join and that we can quit as soon as our buffer is empty.
+	finishedOutput bool
 }
 
 // commonColumns returns the names of columns common on the
@@ -422,6 +426,17 @@ func (n *joinNode) Next() (res bool, err error) {
 		return n.debugNext()
 	}
 
+	// If results available from from previously computed results, we just
+	// return true.
+	if n.buffer.Next() {
+		return true, nil
+	}
+
+	// If the buffer is empty and we've finished outputting, we're done.
+	if n.finishedOutput {
+		return false, nil
+	}
+
 	wantUnmatchedLeft := n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter
 	wantUnmatchedRight := n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter
 
@@ -430,12 +445,6 @@ func (n *joinNode) Next() (res bool, err error) {
 			// No rows on right; don't even try.
 			return false, nil
 		}
-	}
-
-	// If results available from from previously computed results, we just
-	// return true.
-	if n.buffer.Next() {
-		return true, nil
 	}
 
 	// Compute next batch of matching rows.
@@ -585,6 +594,7 @@ func (n *joinNode) Next() (res bool, err error) {
 			}
 		}
 	}
+	n.finishedOutput = true
 
 	return n.buffer.Next(), nil
 }
