@@ -549,7 +549,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(12).Results(15),
 			baseTest.SetArgs(-12).Results(-9),
 		},
-		"SELECT DATE '2001-01-02' + ($1 + $1)": {
+		"SELECT DATE '2001-01-02' + ($1 + $1:::int)": {
 			baseTest.SetArgs(12).Results("2001-01-26T00:00:00Z"),
 		},
 		"SELECT TO_HEX(~(~$1))": {
