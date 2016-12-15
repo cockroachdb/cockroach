@@ -3984,9 +3984,6 @@ func (s *Store) setSplitQueueActive(active bool) {
 func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
 	s.tsMaintenanceQueue.SetDisabled(!active)
 }
-func (s *Store) setConsistencyQueueActive(active bool) {
-	s.consistencyQueue.SetDisabled(!active)
-}
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
 }
