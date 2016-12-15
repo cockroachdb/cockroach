@@ -103,9 +103,9 @@ System.config({
     "reselect": "npm:reselect@2.5.4",
     "sinon": "npm:sinon@1.17.6",
     "systemjs-hot-reloader": "github:capaj/systemjs-hot-reloader@0.6.0",
-    "ts": "github:frankwallis/plugin-typescript@5.3.0",
+    "ts": "github:frankwallis/plugin-typescript@5.3.1",
     "ts-runtime": "npm:babel-runtime@6.18.0",
-    "typescript": "npm:typescript@1.8.10",
+    "typescript": "npm:typescript@2.1.4",
     "whatwg-fetch": "npm:whatwg-fetch@2.0.1",
     "github:capaj/systemjs-hot-reloader@0.6.0": {
       "debug": "npm:debug@2.3.2",
@@ -115,8 +115,8 @@ System.config({
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
-    "github:frankwallis/plugin-typescript@5.3.0": {
-      "typescript": "npm:typescript@2.1.1"
+    "github:frankwallis/plugin-typescript@5.3.1": {
+      "typescript": "npm:typescript@2.1.4"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
       "assert": "npm:assert@1.4.1"
@@ -903,10 +903,7 @@ System.config({
     "npm:timers-browserify@1.4.2": {
       "process": "npm:process@0.11.9"
     },
-    "npm:typescript@1.8.10": {
-      "os": "github:jspm/nodelibs-os@0.1.0"
-    },
-    "npm:typescript@2.1.1": {
+    "npm:typescript@2.1.4": {
       "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "net": "github:jspm/nodelibs-net@0.1.2",
       "os": "github:jspm/nodelibs-os@0.1.0",

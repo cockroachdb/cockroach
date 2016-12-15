@@ -110,6 +110,9 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
       "timescale-selector": true,
       "show": this.state.controlsVisible,
     });
+    let test = { ...{ a: 1 } };
+    console.log(test);
+
     return <div className="timescale-selector-container">
       <button
         className="timescale"
