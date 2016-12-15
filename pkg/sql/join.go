@@ -355,11 +355,13 @@ func (n *joinNode) Start() error {
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
-	if n.joinType != joinTypeInner {
+	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
 		n.emptyRight = make(parser.DTuple, len(n.right.plan.Columns()))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
 		}
+	}
+	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
 		n.emptyLeft = make(parser.DTuple, len(n.left.plan.Columns()))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
