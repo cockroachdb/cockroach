@@ -72,13 +72,15 @@ func (q *consistencyQueue) shouldQueue(
 			return false, 0
 		}
 	}
-	// Check if all replicas are live.
-	for _, rep := range repl.Desc().Replicas {
-		if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
-			log.ErrEventf(ctx, "node %d liveness failed: %s", rep.NodeID, err)
-			return false, 0
-		} else if !live {
-			return false, 0
+	// Check if all replicas are live. Some tests run without a NodeLiveness configured.
+	if repl.store.cfg.NodeLiveness != nil {
+		for _, rep := range repl.Desc().Replicas {
+			if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
+				log.ErrEventf(ctx, "node %d liveness failed: %s", rep.NodeID, err)
+				return false, 0
+			} else if !live {
+				return false, 0
+			}
 		}
 	}
 	return true, priority
