@@ -967,17 +967,25 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.stopStore(0)
 			mtc.restartStore(0)
 
+			// Disable node liveness heartbeats which can reacquire leases when we're
+			// trying to expire them. We pause liveness heartbeats here after node 0
+			// was restarted (which creates a new NodeLiveness).
+			pauseNodeLivenessHeartbeats(mtc, true)
+
 			// Expire existing leases (i.e. move the clock forward, but don't
 			// increment epochs). This allows node 2 to grab the lease later
 			// in the test.
-			mtc.expireLeasesWithoutIncrementingEpochs()
-			// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
-			// leases.
-			for i := 0; i < 2; i++ {
-				if err := mtc.stores[i].DrainLeases(true); err != nil {
-					t.Fatalf("store %d: %v", i, err)
+			testutils.SucceedsSoon(t, func() error {
+				mtc.expireLeasesWithoutIncrementingEpochs()
+				// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
+				// leases.
+				for i := 0; i < 2; i++ {
+					if err := mtc.stores[i].DrainLeases(true); err != nil {
+						return errors.Wrapf(err, "store %d", i)
+					}
 				}
-			}
+				return nil
+			})
 
 			// Restart node 2 and wait for the snapshot to be applied. Note that
 			// waitForValues reads directly from the engine and thus isn't executing
