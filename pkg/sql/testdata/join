@@ -368,12 +368,33 @@ NULL 4    false
 
 # Full outer join with filter predicate
 query IIB
-SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2);
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i;
 ----
+NULL 2    true
+NULL 4    false
 1    NULL NULL
 2    NULL NULL
 3    3    true
-NULL 2    true
+
+# Duplicate right matches for a single left row
+statement ok
+INSERT INTO b VALUES (3, false)
+
+query IIB
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
+----
+2    2 true
+3    3 false
+3    3 true
+NULL 4 false
+
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
+----
+1    NULL NULL
+2    2    true
+3    3    false
+3    3    true
 NULL 4    false
 
 
