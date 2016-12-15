@@ -926,6 +926,10 @@ func TestRefreshPendingCommands(t *testing.T) {
 			defer mtc.Stop()
 			mtc.Start(t, 3)
 
+			// Disable node liveness heartbeats which can reacquire leases when we're
+			// trying to expire them.
+			pauseNodeLivenessHeartbeats(mtc, true)
+
 			const rangeID = roachpb.RangeID(1)
 			mtc.replicateRange(rangeID, 1, 2)
 
