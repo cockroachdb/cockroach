@@ -25,6 +25,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"runtime/debug"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -885,6 +886,7 @@ func newNotLeaseHolderError(
 			err.Lease = l
 		}
 	}
+	log.Infof(context.TODO(), "newNotLeaseHolderError: %s\n%s", err, debug.Stack())
 	return err
 }
 
