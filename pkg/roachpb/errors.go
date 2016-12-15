@@ -568,6 +568,13 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
 
+// NewReplicaTooOldError initializes a new ReplicaTooOldError.
+func NewReplicaTooOldError(replicaID ReplicaID) *ReplicaTooOldError {
+	return &ReplicaTooOldError{
+		ReplicaID: replicaID,
+	}
+}
+
 func (e *ReplicaTooOldError) Error() string {
 	return e.message(nil)
 }
