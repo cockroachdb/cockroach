@@ -1216,3 +1216,9 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		}
 	}
 }
+
+func TestStartTestServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+}
