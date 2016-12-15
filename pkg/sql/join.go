@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 )
@@ -88,12 +90,19 @@ func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.D
 	return nil
 }
 
+const sizeOfBoolSlice = unsafe.Sizeof([]bool{})
+const sizeOfBool = unsafe.Sizeof(true)
+
 // InitSeen initializes the seen array for each of the buckets. It must be run
 // before the buckets' seen state is used.
-func (b *buckets) InitSeen() {
+func (b *buckets) InitSeen(acc WrappedMemoryAccount) error {
 	for _, bucket := range b.buckets {
+		if err := acc.Grow(int64(sizeOfBoolSlice + uintptr(len(bucket.rows))*sizeOfBool)); err != nil {
+			return err
+		}
 		bucket.seen = make([]bool, len(bucket.rows))
 	}
+	return nil
 }
 
 func (b *buckets) Close() {
@@ -400,7 +409,7 @@ func (n *joinNode) hashJoinStart() error {
 		scratch = encoding[:0]
 	}
 	if n.joinType == joinTypeFullOuter || n.joinType == joinTypeRightOuter {
-		n.buckets.InitSeen()
+		return n.buckets.InitSeen(acc)
 	}
 	return nil
 }
@@ -590,7 +599,6 @@ func (n *joinNode) Next() (res bool, err error) {
 				if _, err := n.buffer.AddRow(n.output); err != nil {
 					return false, err
 				}
-				b.MarkSeen(idx)
 			}
 		}
 	}
