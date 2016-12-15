@@ -418,8 +418,11 @@ func (n *joinNode) Next() (res bool, err error) {
 		return n.debugNext()
 	}
 
+	wantUnmatchedLeft := n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter
+	wantUnmatchedRight := n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter
+
 	if len(n.buckets.Buckets()) == 0 {
-		if n.joinType != joinTypeLeftOuter && n.joinType != joinTypeFullOuter {
+		if !wantUnmatchedLeft {
 			// No rows on right; don't even try.
 			return false, nil
 		}
@@ -492,7 +495,7 @@ func (n *joinNode) Next() (res bool, err error) {
 		//    | NULL |  52  |
 		//    | NULL |  52  |
 		if containsNull {
-			if n.joinType == joinTypeInner || n.joinType == joinTypeRightOuter {
+			if !wantUnmatchedLeft {
 				scratch = encoding[:0]
 				// Failed to match -- no matching row, nothing to do.
 				continue
@@ -508,7 +511,7 @@ func (n *joinNode) Next() (res bool, err error) {
 
 		b, ok := n.buckets.Fetch(encoding)
 		if !ok {
-			if n.joinType == joinTypeInner || n.joinType == joinTypeRightOuter {
+			if !wantUnmatchedLeft {
 				scratch = encoding[:0]
 				continue
 			}
@@ -546,7 +549,7 @@ func (n *joinNode) Next() (res bool, err error) {
 				return false, err
 			}
 		}
-		if !foundMatch && n.joinType != joinTypeInner && n.joinType != joinTypeRightOuter {
+		if !foundMatch && wantUnmatchedLeft {
 			// If none of the rows matched the filter and we are computing a
 			// left or full outer join, we need to add a row with an empty
 			// right side.
@@ -562,7 +565,7 @@ func (n *joinNode) Next() (res bool, err error) {
 	}
 
 	// no more lrows, we go through the unmatched rows in the internal hashmap.
-	if n.joinType == joinTypeInner || n.joinType == joinTypeLeftOuter {
+	if !wantUnmatchedRight {
 		return false, nil
 	}
 
