@@ -29,16 +29,18 @@ import (
 func TestEvaluator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeBool := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_BOOL}
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 
 	b := [2]sqlbase.EncDatum{}
-	b[0] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_BOOL, parser.DBoolTrue)
-	b[1] = sqlbase.DatumToEncDatum(sqlbase.ColumnType_BOOL, parser.DBoolFalse)
+	b[0] = sqlbase.DatumToEncDatum(*columnTypeBool, parser.DBoolTrue)
+	b[1] = sqlbase.DatumToEncDatum(*columnTypeBool, parser.DBoolFalse)
 
-	nullInt := sqlbase.DatumToEncDatum(sqlbase.ColumnType_INT, parser.DNull)
+	nullInt := sqlbase.DatumToEncDatum(*columnTypeInt, parser.DNull)
 
 	testCases := []struct {
 		spec     EvaluatorSpec

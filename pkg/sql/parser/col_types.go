@@ -30,30 +30,32 @@ type ColumnType interface {
 	columnType()
 }
 
-func (*BoolColType) columnType()        {}
-func (*IntColType) columnType()         {}
-func (*FloatColType) columnType()       {}
-func (*DecimalColType) columnType()     {}
-func (*DateColType) columnType()        {}
-func (*TimestampColType) columnType()   {}
-func (*TimestampTZColType) columnType() {}
-func (*IntervalColType) columnType()    {}
-func (*StringColType) columnType()      {}
-func (*BytesColType) columnType()       {}
-func (*ArrayColType) columnType()       {}
+func (*BoolColType) columnType()           {}
+func (*IntColType) columnType()            {}
+func (*FloatColType) columnType()          {}
+func (*DecimalColType) columnType()        {}
+func (*DateColType) columnType()           {}
+func (*TimestampColType) columnType()      {}
+func (*TimestampTZColType) columnType()    {}
+func (*IntervalColType) columnType()       {}
+func (*StringColType) columnType()         {}
+func (*BytesColType) columnType()          {}
+func (*CollatedStringColType) columnType() {}
+func (*ArrayColType) columnType()          {}
 
 // All ColumnTypes also implement CastTargetType.
-func (*BoolColType) castTargetType()        {}
-func (*IntColType) castTargetType()         {}
-func (*FloatColType) castTargetType()       {}
-func (*DecimalColType) castTargetType()     {}
-func (*DateColType) castTargetType()        {}
-func (*TimestampColType) castTargetType()   {}
-func (*TimestampTZColType) castTargetType() {}
-func (*IntervalColType) castTargetType()    {}
-func (*StringColType) castTargetType()      {}
-func (*BytesColType) castTargetType()       {}
-func (*ArrayColType) castTargetType()       {}
+func (*BoolColType) castTargetType()           {}
+func (*IntColType) castTargetType()            {}
+func (*FloatColType) castTargetType()          {}
+func (*DecimalColType) castTargetType()        {}
+func (*DateColType) castTargetType()           {}
+func (*TimestampColType) castTargetType()      {}
+func (*TimestampTZColType) castTargetType()    {}
+func (*IntervalColType) castTargetType()       {}
+func (*StringColType) castTargetType()         {}
+func (*BytesColType) castTargetType()          {}
+func (*CollatedStringColType) castTargetType() {}
+func (*ArrayColType) castTargetType()          {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -257,6 +259,24 @@ func (node *BytesColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
+// CollatedStringColType represents a STRING, CHAR or VARCHAR type with a
+// collation locale.
+type CollatedStringColType struct {
+	Name   string
+	N      int
+	Locale string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CollatedStringColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(node.Name)
+	if node.N > 0 {
+		fmt.Fprintf(buf, "(%d)", node.N)
+	}
+	buf.WriteString(" COLLATE ")
+	buf.WriteString(node.Locale)
+}
+
 // ArrayColType represents an ARRAY column type.
 type ArrayColType struct {
 	Name string
@@ -281,17 +301,18 @@ func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	}
 }
 
-func (node *BoolColType) String() string        { return AsString(node) }
-func (node *IntColType) String() string         { return AsString(node) }
-func (node *FloatColType) String() string       { return AsString(node) }
-func (node *DecimalColType) String() string     { return AsString(node) }
-func (node *DateColType) String() string        { return AsString(node) }
-func (node *TimestampColType) String() string   { return AsString(node) }
-func (node *TimestampTZColType) String() string { return AsString(node) }
-func (node *IntervalColType) String() string    { return AsString(node) }
-func (node *StringColType) String() string      { return AsString(node) }
-func (node *BytesColType) String() string       { return AsString(node) }
-func (node *ArrayColType) String() string       { return AsString(node) }
+func (node *BoolColType) String() string           { return AsString(node) }
+func (node *IntColType) String() string            { return AsString(node) }
+func (node *FloatColType) String() string          { return AsString(node) }
+func (node *DecimalColType) String() string        { return AsString(node) }
+func (node *DateColType) String() string           { return AsString(node) }
+func (node *TimestampColType) String() string      { return AsString(node) }
+func (node *TimestampTZColType) String() string    { return AsString(node) }
+func (node *IntervalColType) String() string       { return AsString(node) }
+func (node *StringColType) String() string         { return AsString(node) }
+func (node *BytesColType) String() string          { return AsString(node) }
+func (node *CollatedStringColType) String() string { return AsString(node) }
+func (node *ArrayColType) String() string          { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
@@ -316,6 +337,10 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return stringColTypeString, nil
 	case TypeBytes:
 		return bytesColTypeBytes, nil
+	default:
+		if typ, ok := t.(TCollatedString); ok {
+			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
+		}
 	}
 	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
 }
@@ -344,6 +369,8 @@ func columnTypeToDatumType(t CastTargetType) Type {
 		return TypeTimestampTZ
 	case *IntervalColType:
 		return TypeInterval
+	case *CollatedStringColType:
+		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
 		return tArray{columnTypeToDatumType(ct.ParamType)}
 	case *PGOIDType:

@@ -58,6 +58,10 @@ func TestParseColumnType(t *testing.T) {
 		{"BLOB", &BytesColType{Name: "BLOB"}},
 		{"BYTES", &BytesColType{Name: "BYTES"}},
 		{"BYTEA", &BytesColType{Name: "BYTEA"}},
+		{"STRING COLLATE da", &CollatedStringColType{Name: "STRING", Locale: "da"}},
+		{"CHAR COLLATE de", &CollatedStringColType{Name: "CHAR", Locale: "de"}},
+		{"VARCHAR COLLATE en", &CollatedStringColType{Name: "VARCHAR", Locale: "en"}},
+		{"CHAR(11) COLLATE en", &CollatedStringColType{Name: "CHAR", N: 11, Locale: "en"}},
 	}
 	for i, d := range testData {
 		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)

@@ -47,7 +47,7 @@ type aggregator struct {
 	ctx         context.Context
 	rows        *RowBuffer
 	funcs       []*aggregateFuncHolder
-	outputTypes []sqlbase.ColumnType_Kind
+	outputTypes []*sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
 	rowAlloc    sqlbase.EncDatumRowAlloc
 
@@ -66,11 +66,11 @@ func newAggregator(
 		rows:        &RowBuffer{},
 		buckets:     make(map[string]struct{}),
 		inputCols:   make(columns, len(spec.Exprs)),
-		outputTypes: make([]sqlbase.ColumnType_Kind, len(spec.Exprs)),
+		outputTypes: make([]*sqlbase.ColumnType, len(spec.Exprs)),
 		groupCols:   make(columns, len(spec.GroupCols)),
 	}
 
-	inputTypes := make([]sqlbase.ColumnType_Kind, len(spec.Exprs))
+	inputTypes := make([]*sqlbase.ColumnType, len(spec.Exprs))
 	for i, expr := range spec.Exprs {
 		ag.inputCols[i] = expr.ColIdx
 		inputTypes[i] = spec.Types[expr.ColIdx]
@@ -96,7 +96,8 @@ func newAggregator(
 		if retType == nil {
 			ag.outputTypes[i] = inputTypes[i]
 		} else {
-			ag.outputTypes[i] = sqlbase.DatumTypeToColumnKind(retType)
+			typ := sqlbase.DatumTypeToColumnType(retType)
+			ag.outputTypes[i] = &typ
 		}
 	}
 

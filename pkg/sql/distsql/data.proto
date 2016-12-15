@@ -126,7 +126,7 @@ message OutputRouterSpec {
 
 message DatumInfo {
   optional sqlbase.DatumEncoding encoding = 1 [(gogoproto.nullable) = false];
-  optional sqlbase.ColumnType.Kind type = 2 [(gogoproto.nullable) = false];
+  optional sqlbase.ColumnType type = 2 [(gogoproto.nullable) = false];
 }
 
 // StreamHeader is a message that is sent once at the beginning of a stream.

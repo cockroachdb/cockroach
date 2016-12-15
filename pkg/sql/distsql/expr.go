@@ -88,7 +88,7 @@ type exprHelper struct {
 
 	evalCtx *parser.EvalContext
 
-	types      []sqlbase.ColumnType_Kind
+	types      []*sqlbase.ColumnType
 	row        sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
@@ -123,7 +123,7 @@ func (eh *exprHelper) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx
 }
 
 func (eh *exprHelper) init(
-	expr Expression, types []sqlbase.ColumnType_Kind, evalCtx *parser.EvalContext,
+	expr Expression, types []*sqlbase.ColumnType, evalCtx *parser.EvalContext,
 ) error {
 	if expr.Expr == "" {
 		return nil
