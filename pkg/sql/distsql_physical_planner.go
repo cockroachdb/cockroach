@@ -355,29 +355,19 @@ func mergePlans(
 
 // The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
 // refer to columns. We format the expression using an IndexedVar formatting
-// interceptor. A columnMap can optionally be used to remap the indices.
-func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsql.Expression {
+// interceptor. A remapping function can optionally be used to remap the indices.
+func distSQLExpression(expr parser.TypedExpr, remapFn func(int) int) distsql.Expression {
 	if expr == nil {
 		return distsql.Expression{}
 	}
-	var f parser.FmtFlags
-	if columnMap == nil {
-		f = parser.FmtIndexedVarFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				fmt.Fprintf(buf, "@%d", idx+1)
-			},
-		)
-	} else {
-		f = parser.FmtIndexedVarFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				remappedIdx := columnMap[idx]
-				if remappedIdx < 0 {
-					panic(fmt.Sprintf("unmapped index %d", idx))
-				}
-				fmt.Fprintf(buf, "@%d", remappedIdx+1)
-			},
-		)
+	if remapFn == nil {
+		remapFn = func(col int) int { return col }
 	}
+	f := parser.FmtIndexedVarFormat(
+		func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+			fmt.Fprintf(buf, "@%d", remapFn(idx)+1)
+		},
+	)
 	var buf bytes.Buffer
 	expr.Format(&buf, f)
 	return distsql.Expression{Expr: buf.String()}
@@ -678,7 +668,13 @@ func (dsp *distSQLPlanner) selectRenders(
 		Exprs: make([]distsql.Expression, len(n.render)),
 	}
 	for i := range n.render {
-		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
+		evalSpec.Exprs[i] = distSQLExpression(n.render[i], func(col int) int {
+			remappedIdx := p.planToStreamColMap[col]
+			if remappedIdx < 0 {
+				panic(fmt.Sprintf("unmapped column %d", col))
+			}
+			return remappedIdx
+		})
 	}
 
 	dsp.addNoGroupingStage(p, distsql.ProcessorCoreUnion{Evaluator: &evalSpec})
@@ -872,7 +868,6 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	joinerSpec.RightTypes = dsp.getTypesForPlanResult(rightPlan.planToStreamColMap, n.right.plan)
 
 	// Set up the output columns.
-
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
 		// TODO(radu): for now we run a join processor on every node that produces
 		// data for either source. In the future we should be smarter here.
@@ -905,8 +900,6 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// Without column equality, we cannot distribute the join. Run a
 		// single processor on this node.
 		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
-
-		joinerSpec.Expr = distSQLExpression(n.pred.filter, nil)
 	}
 
 	// addOutCol appends to joinerSpec.OutputColumns and returns the index
@@ -944,6 +937,25 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 			)
 		}
 		joinCol++
+	}
+
+	if n.pred.filter != nil {
+		// We have to remap ordinal references in the filter (which refer to the
+		// join columns as described above) to values that make sense in the joiner
+		// (0 to N-1 for the left input columns, N to N+M-1 for the right input
+		// columns).
+		joinerSpec.Expr = distSQLExpression(n.pred.filter, func(col int) int {
+			if col < n.pred.numMergedEqualityColumns {
+				// Merged column. See TODO above.
+				return int(joinerSpec.LeftEqColumns[col])
+			}
+			col -= n.pred.numMergedEqualityColumns
+			if col < n.pred.numLeftCols {
+				return leftPlan.planToStreamColMap[col]
+			}
+			col -= n.pred.numLeftCols
+			return rightPlan.planToStreamColMap[col] + len(joinerSpec.LeftTypes)
+		})
 	}
 
 	pIdxStart := processorIdx(len(p.processors))
