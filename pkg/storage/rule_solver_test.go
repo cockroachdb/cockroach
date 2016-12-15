@@ -86,9 +86,9 @@ func TestCandidateSelection(t *testing.T) {
 				store: roachpb.StoreDescriptor{
 					StoreID: roachpb.StoreID(i + idShift),
 				},
-				constraint: float64(score.constraint),
-				capacity:   float64(score.capacity),
-				valid:      true,
+				constraintScore: float64(score.constraint),
+				capacityScore:   float64(score.capacity),
+				valid:           true,
 			})
 		}
 		sort.Sort(sort.Reverse(byScore(cl)))
@@ -101,7 +101,7 @@ func TestCandidateSelection(t *testing.T) {
 			if i != 0 {
 				buffer.WriteRune(',')
 			}
-			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.constraint), int(c.capacity)))
+			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.constraintScore), int(c.capacityScore)))
 		}
 		return buffer.String()
 	}
@@ -199,7 +199,7 @@ func TestCandidateSelection(t *testing.T) {
 			if good == nil {
 				t.Fatalf("candidate for store %d not found in candidate list: %s", goodStore.StoreID, cl)
 			}
-			actual := scoreTuple{int(good.constraint), int(good.capacity)}
+			actual := scoreTuple{int(good.constraintScore), int(good.capacityScore)}
 			if actual != tc.good {
 				t.Errorf("expected:%v actual:%v", tc.good, actual)
 			}
@@ -213,7 +213,7 @@ func TestCandidateSelection(t *testing.T) {
 			if bad == nil {
 				t.Fatalf("candidate for store %d not found in candidate list: %s", badStore.StoreID, cl)
 			}
-			actual := scoreTuple{int(bad.constraint), int(bad.capacity)}
+			actual := scoreTuple{int(bad.constraintScore), int(bad.capacityScore)}
 			if actual != tc.bad {
 				t.Errorf("expected:%v actual:%v", tc.bad, actual)
 			}
@@ -226,59 +226,59 @@ func TestBetterThan(t *testing.T) {
 
 	testCandidateList := candidateList{
 		{
-			valid:      true,
-			constraint: 1,
-			capacity:   1,
+			valid:           true,
+			constraintScore: 1,
+			capacityScore:   1,
 		},
 		{
-			valid:      true,
-			constraint: 1,
-			capacity:   1,
+			valid:           true,
+			constraintScore: 1,
+			capacityScore:   1,
 		},
 		{
-			valid:      true,
-			constraint: 1,
-			capacity:   0,
+			valid:           true,
+			constraintScore: 1,
+			capacityScore:   0,
 		},
 		{
-			valid:      true,
-			constraint: 1,
-			capacity:   0,
+			valid:           true,
+			constraintScore: 1,
+			capacityScore:   0,
 		},
 		{
-			valid:      true,
-			constraint: 0,
-			capacity:   1,
+			valid:           true,
+			constraintScore: 0,
+			capacityScore:   1,
 		},
 		{
-			valid:      true,
-			constraint: 0,
-			capacity:   1,
+			valid:           true,
+			constraintScore: 0,
+			capacityScore:   1,
 		},
 		{
-			valid:      true,
-			constraint: 0,
-			capacity:   0,
+			valid:           true,
+			constraintScore: 0,
+			capacityScore:   0,
 		},
 		{
-			valid:      true,
-			constraint: 0,
-			capacity:   0,
+			valid:           true,
+			constraintScore: 0,
+			capacityScore:   0,
 		},
 		{
-			valid:      false,
-			constraint: 1,
-			capacity:   0.5,
+			valid:           false,
+			constraintScore: 1,
+			capacityScore:   0.5,
 		},
 		{
-			valid:      false,
-			constraint: 0,
-			capacity:   0.5,
+			valid:           false,
+			constraintScore: 0,
+			capacityScore:   0.5,
 		},
 		{
-			valid:      false,
-			constraint: 0,
-			capacity:   0,
+			valid:           false,
+			constraintScore: 0,
+			capacityScore:   0,
 		},
 	}
 
