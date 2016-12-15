@@ -101,7 +101,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         <GraphGroup groupId="node.queries" hide={dashboard !== "queries"}>
             <LineGraph title="Reads" sources={sources} tooltip={`The average number of SELECT statements per second ${specifier}.`}>
               <Axis format={ d3.format(".1f") }>
-                <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
+                <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
+                <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
               </Axis>
             </LineGraph>
 
