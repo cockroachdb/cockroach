@@ -27,7 +27,7 @@
       "lodash": "npm:lodash@^4.14.0",
       "long": "npm:long@^3.2.0",
       "moment": "npm:moment@^2.14.1",
-      "nvd3": "npm:nvd3@^1.8.4",
+      "nvd3": "npm:nvd3@^1.8.5",
       "protobufjs": "npm:protobufjs@^5.0.1",
       "react": "npm:react@^15.3.1",
       "react-dom": "npm:react-dom@^15.2.1",
