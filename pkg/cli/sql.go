@@ -406,7 +406,7 @@ func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) c
 
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
-func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt string) {
+func (c *cliState) preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt string) {
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
 	promptPrefix = dbURL
@@ -414,6 +414,15 @@ func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt stri
 		username := ""
 		if parsedURL.User != nil {
 			username = parsedURL.User.Username()
+		} else {
+			query := makeQuery(`SHOW CURRENT USER`)
+			rows, err := query(c.conn)
+			if err == nil && len(rows.Columns()) != 0 {
+				val := make([]driver.Value, len(rows.Columns()))
+				if err := rows.Next(val); err == nil {
+					username = formatVal(val[0], false, false)
+				}
+			}
 		}
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.
@@ -455,7 +464,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	c.partialLines = []string{}
 
 	if isInteractive {
-		c.promptPrefix, c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
+		c.promptPrefix, c.fullPrompt, c.continuePrompt = c.preparePrompts(c.conn.url)
 
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
