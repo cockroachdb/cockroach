@@ -90,8 +90,8 @@ SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
    x     y
   44    44
-NULL  NULL
   42    42
+NULL  NULL
 
 query I colnames
 SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
@@ -106,8 +106,8 @@ SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
 ----
    x
   44
-NULL
   42
+NULL
 
 statement ok
 CREATE TABLE onecolumn_w(w INT); INSERT INTO onecolumn_w(w) VALUES (42),(43)
@@ -329,6 +329,74 @@ SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x
 44   51
 NULL NULL
 42   NULL
+
+## Simple test cases for inner, left, right, and outer joins
+
+statement ok
+CREATE TABLE a (i int); INSERT INTO a VALUES (1), (2), (3)
+
+statement ok
+CREATE TABLE b (i int, b bool); INSERT INTO b VALUES (2, true), (3, true), (4, false)
+
+query IIB
+SELECT * FROM a INNER JOIN b ON a.i = b.i
+----
+2 2 true
+3 3 true
+
+query IIB
+SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
+----
+1 NULL NULL
+2 2    true
+3 3    true
+
+query IIB
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i
+----
+2    2    true
+3    3    true
+NULL 4    false
+
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i
+----
+1    NULL NULL
+2    2    true
+3    3    true
+NULL 4    false
+
+# Full outer join with filter predicate
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i;
+----
+NULL 2    true
+NULL 4    false
+1    NULL NULL
+2    NULL NULL
+3    3    true
+
+# Duplicate right matches for a single left row
+statement ok
+INSERT INTO b VALUES (3, false)
+
+query IIB
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
+----
+2    2 true
+3    3 false
+3    3 true
+NULL 4 false
+
+query IIB
+SELECT * FROM a FULL OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
+----
+1    NULL NULL
+2    2    true
+3    3    false
+3    3    true
+NULL 4    false
+
 
 # Check column orders and names.
 query IIIIII colnames
