@@ -86,21 +86,20 @@ func (f *Farmer) refresh() {
 	}
 }
 
-func (f *Farmer) initNodes() []node {
+// Hostname implements the Cluster interface.
+func (f *Farmer) Hostname(i int) string {
 	if len(f.nodes) == 0 {
 		f.refresh()
 	}
-	return f.nodes
-}
-
-// Hostname implements the Cluster interface.
-func (f *Farmer) Hostname(i int) string {
-	return f.initNodes()[i].hostname
+	return f.nodes[i].hostname
 }
 
 // NumNodes returns the number of nodes.
 func (f *Farmer) NumNodes() int {
-	return len(f.initNodes())
+	if len(f.nodes) == 0 {
+		f.refresh()
+	}
+	return len(f.nodes)
 }
 
 // Add provisions the given number of nodes.
@@ -159,10 +158,10 @@ func (f *Farmer) CollectLogs() {
 		return
 	}
 	const src = "logs"
-	for i, node := range f.initNodes() {
-		if err := f.scp(node.hostname, f.defaultKeyFile(), src,
+	for i := 0; i < f.NumNodes(); i++ {
+		if err := f.scp(f.nodes[i].hostname, f.defaultKeyFile(), src,
 			filepath.Join(f.AbsLogDir(), "node."+strconv.Itoa(i))); err != nil {
-			f.logf("error collecting %s from host %s: %s\n", src, node.hostname, err)
+			f.logf("error collecting %s from host %s: %s\n", src, f.nodes[i].hostname, err)
 		}
 	}
 }
