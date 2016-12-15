@@ -88,8 +88,8 @@ func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.D
 	return nil
 }
 
-// InitSeen must be run before the buckets are used to initialize the rows'
-// seen arrays.
+// InitSeen initializes the seen array for each of the buckets. It must be run
+// before the buckets' seen state is used.
 func (b *buckets) InitSeen() {
 	for _, bucket := range b.buckets {
 		bucket.seen = make([]bool, len(bucket.rows))
@@ -393,7 +393,9 @@ func (n *joinNode) hashJoinStart() error {
 
 		scratch = encoding[:0]
 	}
-	n.buckets.InitSeen()
+	if n.joinType == joinTypeFullOuter || n.joinType == joinTypeRightOuter {
+		n.buckets.InitSeen()
+	}
 	return nil
 }
 
@@ -538,10 +540,11 @@ func (n *joinNode) Next() (res bool, err error) {
 			foundMatch = true
 
 			n.pred.prepareRow(n.output, lrow, rrow)
-			// TODO(jordan) MarkSeen is not required unless the join is RIGHT
-			// or FULL. In these cases, we can skip allocating the seen arrays
-			// for every bucket.
-			b.MarkSeen(idx)
+			if wantLeftNulls {
+				// Mark the row as seen if we need to retrieve the rows
+				// without matches for right or full joins later.
+				b.MarkSeen(idx)
+			}
 			if _, err := n.buffer.AddRow(n.output); err != nil {
 				return false, err
 			}
