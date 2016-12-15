@@ -23,7 +23,7 @@ import (
 
 func testSmallTrace2(t *testing.T) {
 	s := GetSmallTrace(2)
-	if !strings.Contains(s, "TestGenerateSmallTrace") {
+	if !strings.Contains(s, "util.testSmallTrace:32,util.TestGenerateSmallTrace:36") {
 		t.Fatalf("trace not generated properly: %q", s)
 	}
 }

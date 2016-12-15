@@ -17,6 +17,7 @@
 package util
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 )
@@ -27,13 +28,17 @@ func GetSmallTrace(skip int) string {
 	pc := make([]uintptr, 5)
 	nCallers := runtime.Callers(skip, pc[:])
 	callers := make([]string, nCallers)
+	frames := runtime.CallersFrames(pc)
 
 	for i := range callers {
-		callers[i] = strings.TrimPrefix(
-			runtime.FuncForPC(pc[i]).Name(),
-			"github.com/cockroachdb/cockroach/pkg/",
-		)
+		f, more := frames.Next()
+		if !more {
+			break
+		}
+
+		callers[i] = fmt.Sprintf("%s:%d",
+			strings.TrimPrefix(f.Function, "github.com/cockroachdb/cockroach/pkg/"), f.Line)
 	}
 
-	return strings.Join(callers, ":")
+	return strings.Join(callers, ",")
 }
