@@ -762,9 +762,13 @@ CREATE TABLE pg_catalog.pg_index (
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-indexes.html.
+//
+// Note that crdb_oid is an extension of the schema to much more easily map
+// index OIDs to the corresponding index definition.
 var pgCatalogIndexesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_indexes (
+	crdb_oid INT,
 	schemaname STRING,
 	tablename STRING,
 	indexname STRING,
@@ -773,6 +777,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
@@ -781,6 +786,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
+						h.IndexOid(db, table, index),  // oid
 						pgNamespaceForDB(db).NameStr,  // schemaname
 						parser.NewDString(table.Name), // tablename
 						parser.NewDString(index.Name), // indexname
