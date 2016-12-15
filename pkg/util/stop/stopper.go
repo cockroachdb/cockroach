@@ -393,7 +393,9 @@ func (s *Stopper) Stop() {
 	defer s.Recover()
 	defer unregister(s)
 
-	log.Info(context.TODO(), "stop has been called, stopping or quiescing all running tasks")
+	file, line, _ := caller.Lookup(1)
+	log.Infof(context.TODO(),
+		"stop has been called from %s:%d, stopping or quiescing all running tasks", file, line)
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
 	// avoids stalls and helps some tests in `./cli` finish cleanly (where
