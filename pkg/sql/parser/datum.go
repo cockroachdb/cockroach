@@ -849,7 +849,13 @@ func (d *DDate) min() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -998,7 +1004,13 @@ func (d *DTimestamp) max() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -1090,7 +1102,13 @@ func (d *DTimestampTZ) max() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
