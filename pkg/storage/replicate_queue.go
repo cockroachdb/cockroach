@@ -402,7 +402,7 @@ func (rq *replicateQueue) transferLease(
 	); target != (roachpb.ReplicaDescriptor{}) {
 		rq.metrics.TransferLeaseCount.Inc(1)
 		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-		if err := repl.AdminTransferLease(target.StoreID); err != nil {
+		if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 		}
 		rq.lastLeaseTransfer.Store(timeutil.Now())
