@@ -3275,6 +3275,13 @@ func (r *Replica) processRaftCommand(
 			}
 			return errors.Errorf("lease %s not held", l)
 		}
+		if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() {
+			// For lease commands, no additional verification is needed if the origin
+			// lease isn't valid.
+			if !r.isLeaseValidLocked(raftCmd.OriginLease, ts) {
+				return nil
+			}
+		}
 		return raftCmd.OriginLease.Equivalent(*r.mu.state.Lease)
 	}
 
@@ -3301,6 +3308,12 @@ func (r *Replica) processRaftCommand(
 			"command %s proposed from replica %+v: %s",
 			raftCmd.BatchRequest, raftCmd.OriginReplica, err,
 		)
+		// TODO(spencer,andrei): This error is confusing if r.mu.state.Lease is
+		// held by raftCmd.OriginReplica.StoreID, but verifyLease failed because
+		// raftCmd.OriginLease was not equivalent. In that scenario you get an
+		// error which makes you question your sanity:
+		//
+		//   replica {3 3 3} not lease holder; current lease is repl={3 3 3} ...
 		forcedErr = roachpb.NewError(newNotLeaseHolderError(
 			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
 	} else if isLeaseRequest {
