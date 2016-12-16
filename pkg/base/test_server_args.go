@@ -62,6 +62,7 @@ type TestServerArgs struct {
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration
+	SkipSystemMigrations     bool
 	SSLCA                    string
 	SSLCert                  string
 	SSLCertKey               string

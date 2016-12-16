@@ -390,9 +390,9 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#12351")
-
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		SkipSystemMigrations: true, // a migration could cause system gossip
+	})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 	ctx := context.TODO()

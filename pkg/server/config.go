@@ -175,6 +175,10 @@ type Config struct {
 	// actions.
 	EventLogEnabled bool
 
+	// SkipSystemMigrations is used to tell the server not to run migrations
+	// during start-up.
+	SkipSystemMigrations bool
+
 	enginesCreated bool
 }
 

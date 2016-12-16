@@ -95,6 +95,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Insecure = params.Insecure
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
+	cfg.SkipSystemMigrations = params.SkipSystemMigrations
 	if params.MetricsSampleInterval != 0 {
 		cfg.MetricsSampleInterval = params.MetricsSampleInterval
 	}
