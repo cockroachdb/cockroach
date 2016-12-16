@@ -201,6 +201,9 @@ message ReplicaCorruptionError {
 // recipient of the raft message believes the sender of the raft
 // message to have been removed from the raft group
 message ReplicaTooOldError {
+  // replica_id is the ID of the replica that is too old.
+  optional int32 replica_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
 // A StoreNotFoundError indicates that a command was sent to a store

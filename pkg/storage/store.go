@@ -741,6 +741,10 @@ type StoreTestingKnobs struct {
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
+	// DisableAsyncIntentResolution disables the async intent resolution
+	// path (but leaves synchronous resolution). This can avoid some
+	// edge cases in tests that start and stop servers.
+	DisableAsyncIntentResolution bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -2100,19 +2104,7 @@ func (s *Store) removeReplicaImpl(
 
 	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
-	// Clear the pending command queue.
-	if len(rep.mu.proposals) > 0 {
-		resp := proposalResult{
-			Reply:         &roachpb.BatchResponse{},
-			Err:           roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
-			ProposalRetry: proposalRangeNoLongerExists,
-		}
-		for _, p := range rep.mu.proposals {
-			p.finish(resp)
-		}
-	}
-	// Clear the map.
-	rep.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
 	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
@@ -3099,7 +3091,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 	ctx = s.AnnotateCtx(ctx)
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
-		switch val.GetDetail().(type) {
+		switch tErr := val.GetDetail().(type) {
 		case *roachpb.ReplicaTooOldError:
 			repl, err := s.GetReplica(resp.RangeID)
 			if err != nil {
@@ -3109,6 +3101,17 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				}
 				return nil
 			}
+			repl.mu.Lock()
+			// If the replica ID in the error matches (which is the usual
+			// case; the exception is when a replica has been removed and
+			// re-added rapidly), we know the replica will be removed and we
+			// can cancel any pending commands. This is sometimes necessary
+			// to unblock PushTxn operations that are necessary for the
+			// replica GC to succeed.
+			if tErr.ReplicaID == repl.mu.replicaID {
+				repl.cancelPendingCommandsLocked()
+			}
+			repl.mu.Unlock()
 			ctx = repl.AnnotateCtx(ctx)
 			added, err := s.replicaGCQueue.Add(
 				repl, replicaGCPriorityRemoved,
@@ -3571,7 +3574,7 @@ func (s *Store) tryGetOrCreateReplica(
 			_, found := desc.GetReplicaDescriptorByID(creatingReplica.ReplicaID)
 			// It's not a current member of the group. Is it from the past?
 			if !found && creatingReplica.ReplicaID < desc.NextReplicaID {
-				return nil, false, &roachpb.ReplicaTooOldError{}
+				return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 			}
 		}
 

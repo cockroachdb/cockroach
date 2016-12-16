@@ -744,6 +744,21 @@ func (r *Replica) destroyDataRaftMuLocked(
 	return batch.Commit()
 }
 
+func (r *Replica) cancelPendingCommandsLocked() {
+	r.mu.AssertHeld()
+	if len(r.mu.proposals) > 0 {
+		resp := proposalResult{
+			Reply:         &roachpb.BatchResponse{},
+			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+			ProposalRetry: proposalRangeNoLongerExists,
+		}
+		for _, p := range r.mu.proposals {
+			p.finish(resp)
+		}
+	}
+	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+}
+
 func (r *Replica) setTombstoneKey(
 	ctx context.Context, eng engine.ReadWriter, desc *roachpb.RangeDescriptor,
 ) error {
