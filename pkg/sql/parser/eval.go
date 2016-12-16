@@ -2063,10 +2063,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
 			s = DString(d.String())
 		case *DTimestamp, *DTimestampTZ, *DDate:
-			var buf bytes.Buffer
-			d.Format(&buf, FmtBareStrings)
-			fmt.Println(buf.String())
-			s = DString(buf.String())
+			s = DString(AsStringWithFlags(d, FmtBareStrings))
 		case *DInterval:
 			// When converting an interval to string, we need a string representation
 			// of the duration (e.g. "5s") and not of the interval itself (e.g.
