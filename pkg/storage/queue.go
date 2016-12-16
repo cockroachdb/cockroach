@@ -323,7 +323,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
-	if bq.mu.stopped && bq.mu.disabled {
+	if bq.mu.stopped || bq.mu.disabled {
 		return
 	}
 
