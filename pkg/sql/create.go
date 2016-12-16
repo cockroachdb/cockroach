@@ -364,10 +364,11 @@ func (n *createUserNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 type createViewNode struct {
-	p          *planner
-	n          *parser.CreateView
-	dbDesc     *sqlbase.DatabaseDescriptor
-	sourcePlan planNode
+	p           *planner
+	n           *parser.CreateView
+	dbDesc      *sqlbase.DatabaseDescriptor
+	sourcePlan  planNode
+	sourceQuery string
 }
 
 // CreateView creates a view.
@@ -408,7 +409,29 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 			numColumns, util.Pluralize(int64(numColumns))))
 	}
 
-	return &createViewNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
+	var queryBuf bytes.Buffer
+	var fmtErr error
+	n.AsSource.Format(&queryBuf, parser.FmtNormalizeTableNames(
+		func(t *parser.NormalizableTableName) *parser.TableName {
+			tn, err := p.QualifyWithDatabase(t)
+			if err != nil {
+				log.Warningf(p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
+				fmtErr = err
+				return nil
+			}
+			return tn
+		}))
+	if fmtErr != nil {
+		return nil, fmtErr
+	}
+
+	return &createViewNode{
+		p:           p,
+		n:           n,
+		dbDesc:      dbDesc,
+		sourcePlan:  sourcePlan,
+		sourceQuery: queryBuf.String(),
+	}, nil
 }
 
 func (n *createViewNode) Start() error {
@@ -1110,6 +1133,7 @@ func (n *createViewNode) makeViewTableDesc(
 		FormatVersion: sqlbase.FamilyFormatVersion,
 		Version:       1,
 		Privileges:    privileges,
+		ViewQuery:     n.sourceQuery,
 	}
 	viewName, err := p.Name.Normalize()
 	if err != nil {
@@ -1136,23 +1160,6 @@ func (n *createViewNode) makeViewTableDesc(
 	}
 
 	n.resolveViewDependencies(&desc, affected)
-
-	var buf bytes.Buffer
-	var fmtErr error
-	p.AsSource.Format(&buf, parser.FmtNormalizeTableNames(
-		func(t *parser.NormalizableTableName) *parser.TableName {
-			tn, err := n.p.QualifyWithDatabase(t)
-			if err != nil {
-				log.Warningf(n.p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
-				fmtErr = err
-				return nil
-			}
-			return tn
-		}))
-	if fmtErr != nil {
-		return desc, fmtErr
-	}
-	desc.ViewQuery = buf.String()
 
 	return desc, desc.AllocateIDs()
 }
