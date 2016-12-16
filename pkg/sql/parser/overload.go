@@ -538,5 +538,8 @@ func typeCheckOverloadedExprs(
 			preferred = c
 		}
 	}
+	if preferred == nil {
+		fmt.Printf("We shouldn't get here...: %v\n", overloads)
+	}
 	return typedExprs, preferred, nil
 }
