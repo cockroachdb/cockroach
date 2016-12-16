@@ -2369,7 +2369,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 
 	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if log.V(4) {
-			log.Infof(ctx, "proposing command %x", p.idKey)
+			log.Infof(ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
