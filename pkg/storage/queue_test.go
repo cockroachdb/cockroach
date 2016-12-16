@@ -799,3 +799,54 @@ func TestBaseQueueShouldQueueAgain(t *testing.T) {
 		}
 	}
 }
+
+// TestBaseQueueDisable verifies that disabling a queue prevents calls
+// to both shouldQueue and process.
+func TestBaseQueueDisable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	shouldQueueCalled := false
+	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}, 1),
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (bool, float64) {
+			shouldQueueCalled = true
+			return true, 1.0
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	mc := hlc.NewManualClock(123)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	bq.Start(clock, stopper)
+
+	bq.SetDisabled(true)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	if shouldQueueCalled {
+		t.Error("shouldQueue should not have been called")
+	}
+
+	// Add the range directly, bypassing shouldQueue.
+	if _, err := bq.Add(r, 1.0); err != errQueueDisabled {
+		t.Fatal(err)
+	}
+
+	// Wake the queue.
+	close(testQueue.blocker)
+
+	// Make sure the queue has actually run through a few times.
+	for i := 0; i < cap(bq.incoming)+1; i++ {
+		bq.incoming <- struct{}{}
+	}
+
+	if pc := testQueue.getProcessed(); pc > 0 {
+		t.Errorf("expected processed count of 0; got %d", pc)
+	}
+}
