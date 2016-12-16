@@ -48,9 +48,22 @@ var (
 
 // Node liveness metrics counter names.
 var (
-	metaHeartbeatSuccesses = metric.Metadata{Name: "liveness.heartbeatsuccesses"}
-	metaHeartbeatFailures  = metric.Metadata{Name: "liveness.heartbeatfailures"}
-	metaEpochIncrements    = metric.Metadata{Name: "liveness.epochincrements"}
+	metaLiveNodes = metric.Metadata{
+		Name: "liveness.livenodes",
+		Help: "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
+	}
+	metaHeartbeatSuccesses = metric.Metadata{
+		Name: "liveness.heartbeatsuccesses",
+		Help: "Number of successful node liveness heartbeats from this node",
+	}
+	metaHeartbeatFailures = metric.Metadata{
+		Name: "liveness.heartbeatfailures",
+		Help: "Number of failed node liveness heartbeats from this node",
+	}
+	metaEpochIncrements = metric.Metadata{
+		Name: "liveness.epochincrements",
+		Help: "Number of times this node has incremented its liveness epoch",
+	}
 )
 
 func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
@@ -60,6 +73,7 @@ func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 
 // LivenessMetrics holds metrics for use with node liveness activity.
 type LivenessMetrics struct {
+	LiveNodes          *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  *metric.Counter
 	EpochIncrements    *metric.Counter
@@ -106,11 +120,12 @@ func NewNodeLiveness(
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: livenessThreshold - renewalDuration,
-		metrics: LivenessMetrics{
-			HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
-			HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
-			EpochIncrements:    metric.NewCounter(metaEpochIncrements),
-		},
+	}
+	nl.metrics = LivenessMetrics{
+		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
+		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
+		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
+		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
 	}
 	nl.pauseHeartbeat.Store(false)
 	nl.mu.nodes = map[roachpb.NodeID]Liveness{}
@@ -395,4 +410,38 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch {
 		nl.mu.nodes[liveness.NodeID] = liveness
 	}
+}
+
+// numLiveNodes is used to populate a metric that tracks the number of live
+// nodes in the cluster. Returns 0 if this node is not itself live, to avoid
+// reporting potentially inaccurate data.
+// We export this metric from every live node rather than a single particular
+// live node because liveness information is gossiped and thus may be stale.
+// That staleness could result in no nodes reporting the metric or multiple
+// nodes reporting the metric, so it's simplest to just have all live nodes
+// report it.
+func (nl *NodeLiveness) numLiveNodes() int64 {
+	selfID := nl.gossip.NodeID.Get()
+	if selfID == 0 {
+		return 0
+	}
+
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+
+	// If this node isn't live, we don't want to report its view of node liveness
+	// because it's more likely to be inaccurate than the view of a live node.
+	now := nl.clock.Now()
+	maxOffset := nl.clock.MaxOffset()
+	if !nl.mu.self.isLive(now, maxOffset) {
+		return 0
+	}
+
+	var liveNodes int64
+	for _, l := range nl.mu.nodes {
+		if l.isLive(now, maxOffset) {
+			liveNodes++
+		}
+	}
+	return liveNodes
 }
