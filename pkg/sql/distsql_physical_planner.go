@@ -1009,7 +1009,6 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	joinerSpec.RightTypes = dsp.getTypesForPlanResult(rightPlan.planToStreamColMap, n.right.plan)
 
 	// Set up the output columns.
-
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
 		// TODO(radu): for now we run a join processor on every node that produces
 		// data for either source. In the future we should be smarter here.
@@ -1042,8 +1041,6 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// Without column equality, we cannot distribute the join. Run a
 		// single processor on this node.
 		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
-
-		joinerSpec.Expr = distSQLExpression(n.pred.filter, nil)
 	}
 
 	// addOutCol appends to joinerSpec.OutputColumns and returns the index
@@ -1081,6 +1078,25 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 			)
 		}
 		joinCol++
+	}
+
+	if n.pred.filter != nil {
+		// We have to remap ordinal references in the filter (which refer to the
+		// join columns as described above) to values that make sense in the joiner
+		// (0 to N-1 for the left input columns, N to N+M-1 for the right input
+		// columns).
+		joinColMap := make([]int, 0, len(n.columns))
+		for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
+			// Merged column. See TODO above.
+			joinColMap = append(joinColMap, int(joinerSpec.LeftEqColumns[i]))
+		}
+		for i := 0; i < n.pred.numLeftCols; i++ {
+			joinColMap = append(joinColMap, leftPlan.planToStreamColMap[i])
+		}
+		for i := 0; i < n.pred.numRightCols; i++ {
+			joinColMap = append(joinColMap, rightPlan.planToStreamColMap[i]+len(joinerSpec.LeftTypes))
+		}
+		joinerSpec.Expr = distSQLExpression(n.pred.filter, joinColMap)
 	}
 
 	pIdxStart := processorIdx(len(p.processors))
