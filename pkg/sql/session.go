@@ -483,6 +483,9 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				break
 			}
 			if err := sc.exec(); err != nil {
+				if err != errExistingSchemaChangeLease {
+					log.Warningf(ctx, "error executing schema change: %s", err)
+				}
 				if isSchemaChangeRetryError(err) {
 					// Try again
 					continue
@@ -498,7 +501,6 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{Err: err}
 				}
-				log.Warningf(ctx, "error executing schema change: %s", err)
 			}
 			break
 		}
