@@ -17,6 +17,7 @@
 package sql_test
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/rand"
@@ -178,7 +179,9 @@ func TestCopyRandom(t *testing.T) {
 		row[1] = time.Duration(rng.Int63()).String()
 		for j, t := range types {
 			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: t}, false)
-			ds := d.String()
+			var buf bytes.Buffer
+			d.Format(&buf, parser.FmtBareStrings)
+			ds := buf.String()
 			switch t {
 			case sqlbase.ColumnType_DECIMAL:
 				// Trailing 0s aren't represented below, so truncate here.
@@ -226,7 +229,9 @@ func TestCopyRandom(t *testing.T) {
 			case []byte:
 				ds = string(d)
 			case time.Time:
-				ds = parser.MakeDTimestamp(d, time.Microsecond).String()
+				var buf bytes.Buffer
+				parser.MakeDTimestamp(d, time.Microsecond).Format(&buf, parser.FmtBareStrings)
+				ds = buf.String()
 			}
 			if !reflect.DeepEqual(in[i], ds) {
 				t.Fatalf("row %v, col %v: got %#v (%T), expected %#v", row, i, ds, d, in[i])
