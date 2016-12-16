@@ -426,6 +426,11 @@ func (m *multiTestContext) kvTransportFactory(
 	return t, nil
 }
 
+func (t *multiTestContextKVTransport) String() string {
+	return fmt.Sprintf("multiTestContextKVTransport: replicas: %v. Next index: %d",
+		t.replicas, t.idx)
+}
+
 func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }

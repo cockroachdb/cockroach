@@ -43,6 +43,11 @@ message NotLeaseHolderError {
   optional Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // If set, the Error() method will return this instead of composing its
+  // regular spiel. Useful because we reuse this error when rejecting a command
+  // because the lease under which it applies is different than the lease under
+  // which it was proposed.
+  optional string custom_msg = 5 [(gogoproto.nullable) = false];
 }
 
 // A NodeUnavailableError indicates that the sending gateway can
