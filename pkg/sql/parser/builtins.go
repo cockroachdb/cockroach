@@ -207,6 +207,54 @@ func init() {
 	}
 }
 
+func extractStringFromTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (Datum, error) {
+	switch timeSpan {
+	case "year", "years":
+		return NewDInt(DInt(fromTime.Year())), nil
+
+	case "quarter":
+		return NewDInt(DInt(fromTime.Month()/4 + 1)), nil
+
+	case "month", "months":
+		return NewDInt(DInt(fromTime.Month())), nil
+
+	case "week", "weeks":
+		_, week := fromTime.ISOWeek()
+		return NewDInt(DInt(week)), nil
+
+	case "day", "days":
+		return NewDInt(DInt(fromTime.Day())), nil
+
+	case "dayofweek", "dow":
+		return NewDInt(DInt(fromTime.Weekday())), nil
+
+	case "dayofyear", "doy":
+		return NewDInt(DInt(fromTime.YearDay())), nil
+
+	case "hour", "hours":
+		return NewDInt(DInt(fromTime.Hour())), nil
+
+	case "minute", "minutes":
+		return NewDInt(DInt(fromTime.Minute())), nil
+
+	case "second", "seconds":
+		return NewDInt(DInt(fromTime.Second())), nil
+
+	case "millisecond", "milliseconds":
+		// This a PG extension not supported in MySQL.
+		return NewDInt(DInt(fromTime.Nanosecond() / int(time.Millisecond))), nil
+
+	case "microsecond", "microseconds":
+		return NewDInt(DInt(fromTime.Nanosecond() / int(time.Microsecond))), nil
+
+	case "epoch":
+		return NewDInt(DInt(fromTime.Unix())), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported timespan: %s", timeSpan)
+	}
+}
+
 // TODO(dt/sean): Populate `Info` in all builtins.
 // Where there is a `Builtin` literal, we just fill the `Info` field.
 // Where we use a helper, eg `stringBuiltin1`, we'll need to plumb that though.
@@ -864,58 +912,26 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeString, TypeTimestamp},
 			ReturnType: TypeInt,
 			category:   categoryDateAndTime,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
-				fromTime := *args[1].(*DTimestamp)
+				fromTS := args[1].(*DTimestamp)
 				timeSpan := strings.ToLower(string(*args[0].(*DString)))
-				switch timeSpan {
-				case "year", "years":
-					return NewDInt(DInt(fromTime.Year())), nil
-
-				case "quarter":
-					return NewDInt(DInt(fromTime.Month()/4 + 1)), nil
-
-				case "month", "months":
-					return NewDInt(DInt(fromTime.Month())), nil
-
-				case "week", "weeks":
-					_, week := fromTime.ISOWeek()
-					return NewDInt(DInt(week)), nil
-
-				case "day", "days":
-					return NewDInt(DInt(fromTime.Day())), nil
-
-				case "dayofweek", "dow":
-					return NewDInt(DInt(fromTime.Weekday())), nil
-
-				case "dayofyear", "doy":
-					return NewDInt(DInt(fromTime.YearDay())), nil
-
-				case "hour", "hours":
-					return NewDInt(DInt(fromTime.Hour())), nil
-
-				case "minute", "minutes":
-					return NewDInt(DInt(fromTime.Minute())), nil
-
-				case "second", "seconds":
-					return NewDInt(DInt(fromTime.Second())), nil
-
-				case "millisecond", "milliseconds":
-					// This a PG extension not supported in MySQL.
-					return NewDInt(DInt(fromTime.Nanosecond() / int(time.Millisecond))), nil
-
-				case "microsecond", "microseconds":
-					return NewDInt(DInt(fromTime.Nanosecond() / int(time.Microsecond))), nil
-
-				case "epoch":
-					return NewDInt(DInt(fromTime.Unix())), nil
-
-				default:
-					return nil, fmt.Errorf("unsupported timespan: %s", timeSpan)
-				}
+				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeString, TypeDate},
+			ReturnType: TypeInt,
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				date := args[1].(*DDate)
+				fromTSTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 		},
 	},
+
 	"extract_duration": {
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeInterval},

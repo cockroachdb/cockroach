@@ -341,82 +341,82 @@ SELECT k FROM kv ORDER BY v
 6
 
 query I
-SELECT extract(year from '2001-04-10 12:04:59')
+SELECT extract(year from '2001-04-10 12:04:59'::timestamp)
 ----
 2001
 
 query I
-SELECT extract(quarter from '2001-04-10 12:04:59')
+SELECT extract(quarter from '2001-04-10 12:04:59'::timestamp)
 ----
 2
 
 query I
-SELECT extract(month from '2001-04-10 12:04:59')
+SELECT extract(month from '2001-04-10 12:04:59'::timestamp)
 ----
 4
 
 query I
-SELECT extract(week from '2001-04-10 12:04:59')
+SELECT extract(week from '2001-04-10 12:04:59'::timestamp)
 ----
 15
 
 query I
-SELECT extract(day from '2001-04-10 12:04:59')
+SELECT extract(day from '2001-04-10 12:04:59'::timestamp)
 ----
 10
 
 query I
-SELECT extract(dayofweek from '2001-04-10 12:04:59')
+SELECT extract(dayofweek from '2001-04-10 12:04:59'::timestamp)
 ----
 2
 
 query I
-SELECT extract(dow from '2001-04-12 12:04:59')
+SELECT extract(dow from '2001-04-12 12:04:59'::timestamp)
 ----
 4
 
 query I
-SELECT extract(dayofyear from '2001-04-10 12:04:59')
+SELECT extract(dayofyear from '2001-04-10 12:04:59'::timestamp)
 ----
 100
 
 query I
-SELECT extract(doy from '2001-04-12 12:04:59')
+SELECT extract(doy from '2001-04-12 12:04:59'::timestamp)
 ----
 102
 
 query I
-SELECT extract(epoch from '2001-04-10 12:04:59')
+SELECT extract(epoch from '2001-04-10 12:04:59'::timestamp)
 ----
 986904299
 
 query I
-SELECT extract(hour from '2001-04-10 12:04:59')
+SELECT extract(hour from '2001-04-10 12:04:59'::timestamp)
 ----
 12
 
 query I
-SELECT extract(minute from '2001-04-10 12:04:59')
+SELECT extract(minute from '2001-04-10 12:04:59'::timestamp)
 ----
 4
 
 query I
-SELECT extract(second from '2001-04-10 12:04:59.234')
+SELECT extract(second from '2001-04-10 12:04:59.234'::timestamp)
 ----
 59
 
 query I
-SELECT extract(millisecond from '2001-04-10 12:04:59.234567')
+SELECT extract(millisecond from '2001-04-10 12:04:59.234567'::timestamp)
 ----
 234
 
 query I
-SELECT extract(microsecond from '2001-04-10 12:04:59.34565423')
+SELECT extract(microsecond from '2001-04-10 12:04:59.34565423'::timestamp)
 ----
 345654
 
 query error extract\(\): unsupported timespan: nansecond
-SELECT extract(nansecond from '2001-04-10 12:04:59.34565423')
+SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
 
 # Test SET TIME ZONE
 
