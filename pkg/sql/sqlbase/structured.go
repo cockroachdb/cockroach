@@ -1661,8 +1661,9 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		if t, ok := ptyp.(parser.TCollatedString); ok {
 			ctyp.Kind = ColumnType_COLLATEDSTRING
 			ctyp.Locale = &t.Locale
+		} else {
+			panic(fmt.Sprintf("unsupported result type: %s", ptyp))
 		}
-		panic(fmt.Sprintf("unsupported result type: %s", ptyp))
 	}
 	return ctyp
 }
