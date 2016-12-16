@@ -30,16 +30,19 @@ type candidate struct {
 	store           roachpb.StoreDescriptor
 	valid           bool
 	constraintScore float64
-	capacityScore   float64
+	capacityScore   int
 }
 
 func (c candidate) String() string {
-	return fmt.Sprintf("s%d, valid:%t, con:%.2f, bal:%.2f",
+	return fmt.Sprintf("s%d, valid:%t, con:%.2f, cap:%d",
 		c.store.StoreID, c.valid, c.constraintScore, c.capacityScore)
 }
 
-// less first compares valid, then constraint scores, then capacity
+// less first compares valid, then constraint scores, then capacity scores.
+// - A valid candidate is always greater than a non-valid.
+// - A higher constraint score is always greater, regardless of capacity
 // scores.
+// - A lower capacity score is greater.
 func (c candidate) less(o candidate) bool {
 	if !o.valid {
 		return false
@@ -50,7 +53,7 @@ func (c candidate) less(o candidate) bool {
 	if c.constraintScore != o.constraintScore {
 		return c.constraintScore < o.constraintScore
 	}
-	return c.capacityScore < o.capacityScore
+	return c.capacityScore > o.capacityScore
 }
 
 type candidateList []candidate
@@ -225,7 +228,7 @@ func allocateCandidates(
 			store:           s,
 			valid:           true,
 			constraintScore: constraintScore,
-			capacityScore:   capacityScore(s),
+			capacityScore:   int(s.Capacity.RangeCount),
 		})
 	}
 	if deterministic {
@@ -270,7 +273,7 @@ func removeCandidates(
 			store:           s,
 			valid:           true,
 			constraintScore: constraintScore,
-			capacityScore:   capacityScore(s),
+			capacityScore:   int(s.Capacity.RangeCount),
 		})
 	}
 	if deterministic {
@@ -325,7 +328,7 @@ func rebalanceCandidates(
 				store:           s,
 				valid:           true,
 				constraintScore: constraintScore,
-				capacityScore:   capacityScore(s),
+				capacityScore:   int(s.Capacity.RangeCount),
 			})
 		} else {
 			if !constraintsOk || !maxCapacityOK || !rebalanceToConvergesOnMean(sl, s) {
@@ -343,7 +346,7 @@ func rebalanceCandidates(
 				store:           s,
 				valid:           true,
 				constraintScore: constraintScore,
-				capacityScore:   capacityScore(s),
+				capacityScore:   int(s.Capacity.RangeCount),
 			})
 		}
 	}
@@ -448,13 +451,6 @@ func diversityRemovalScore(
 		}
 	}
 	return maxScore
-}
-
-// capacityScore returns a score between 0 and 1 that is inversely proportional
-// to the number of ranges on the store such that the most empty store will have
-// the highest scores.
-func capacityScore(store roachpb.StoreDescriptor) float64 {
-	return 1.0 / float64(store.Capacity.RangeCount+1)
 }
 
 // maxCapacityCheck returns true if the store has room for a new replica.

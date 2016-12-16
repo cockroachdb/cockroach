@@ -87,7 +87,7 @@ func TestCandidateSelection(t *testing.T) {
 					StoreID: roachpb.StoreID(i + idShift),
 				},
 				constraintScore: float64(score.constraint),
-				capacityScore:   float64(score.capacity),
+				capacityScore:   score.capacity,
 				valid:           true,
 			})
 		}
@@ -121,18 +121,18 @@ func TestCandidateSelection(t *testing.T) {
 			bad:        scoreTuple{0, 0},
 		},
 		{
-			candidates: []scoreTuple{{0, 1}, {0, 0}},
-			best:       []scoreTuple{{0, 1}, {0, 0}},
-			worst:      []scoreTuple{{0, 1}, {0, 0}},
-			good:       scoreTuple{0, 1},
-			bad:        scoreTuple{0, 0},
+			candidates: []scoreTuple{{0, 0}, {0, 1}},
+			best:       []scoreTuple{{0, 0}, {0, 1}},
+			worst:      []scoreTuple{{0, 0}, {0, 1}},
+			good:       scoreTuple{0, 0},
+			bad:        scoreTuple{0, 1},
 		},
 		{
-			candidates: []scoreTuple{{0, 2}, {0, 1}, {0, 0}},
-			best:       []scoreTuple{{0, 2}, {0, 1}, {0, 0}},
-			worst:      []scoreTuple{{0, 2}, {0, 1}, {0, 0}},
+			candidates: []scoreTuple{{0, 0}, {0, 1}, {0, 2}},
+			best:       []scoreTuple{{0, 0}, {0, 1}, {0, 2}},
+			worst:      []scoreTuple{{0, 0}, {0, 1}, {0, 2}},
 			good:       scoreTuple{0, 1},
-			bad:        scoreTuple{0, 0},
+			bad:        scoreTuple{0, 2},
 		},
 		{
 			candidates: []scoreTuple{{1, 0}, {0, 1}},
@@ -142,25 +142,25 @@ func TestCandidateSelection(t *testing.T) {
 			bad:        scoreTuple{0, 1},
 		},
 		{
-			candidates: []scoreTuple{{1, 0}, {0, 2}, {0, 1}},
+			candidates: []scoreTuple{{1, 0}, {0, 1}, {0, 2}},
 			best:       []scoreTuple{{1, 0}},
-			worst:      []scoreTuple{{0, 2}, {0, 1}},
+			worst:      []scoreTuple{{0, 1}, {0, 2}},
 			good:       scoreTuple{1, 0},
-			bad:        scoreTuple{0, 1},
+			bad:        scoreTuple{0, 2},
 		},
 		{
-			candidates: []scoreTuple{{1, 1}, {1, 0}, {0, 2}},
-			best:       []scoreTuple{{1, 1}, {1, 0}},
+			candidates: []scoreTuple{{1, 0}, {1, 1}, {0, 2}},
+			best:       []scoreTuple{{1, 0}, {1, 1}},
 			worst:      []scoreTuple{{0, 2}},
-			good:       scoreTuple{1, 1},
+			good:       scoreTuple{1, 0},
 			bad:        scoreTuple{0, 2},
 		},
 		{
-			candidates: []scoreTuple{{1, 1}, {1, 0}, {0, 3}, {0, 2}},
-			best:       []scoreTuple{{1, 1}, {1, 0}},
-			worst:      []scoreTuple{{0, 3}, {0, 2}},
-			good:       scoreTuple{1, 1},
-			bad:        scoreTuple{0, 2},
+			candidates: []scoreTuple{{1, 0}, {1, 1}, {0, 2}, {0, 3}},
+			best:       []scoreTuple{{1, 0}, {1, 1}},
+			worst:      []scoreTuple{{0, 2}, {0, 3}},
+			good:       scoreTuple{1, 0},
+			bad:        scoreTuple{0, 3},
 		},
 	}
 
@@ -228,16 +228,6 @@ func TestBetterThan(t *testing.T) {
 		{
 			valid:           true,
 			constraintScore: 1,
-			capacityScore:   1,
-		},
-		{
-			valid:           true,
-			constraintScore: 1,
-			capacityScore:   1,
-		},
-		{
-			valid:           true,
-			constraintScore: 1,
 			capacityScore:   0,
 		},
 		{
@@ -247,12 +237,12 @@ func TestBetterThan(t *testing.T) {
 		},
 		{
 			valid:           true,
-			constraintScore: 0,
+			constraintScore: 1,
 			capacityScore:   1,
 		},
 		{
 			valid:           true,
-			constraintScore: 0,
+			constraintScore: 1,
 			capacityScore:   1,
 		},
 		{
@@ -264,21 +254,31 @@ func TestBetterThan(t *testing.T) {
 			valid:           true,
 			constraintScore: 0,
 			capacityScore:   0,
+		},
+		{
+			valid:           true,
+			constraintScore: 0,
+			capacityScore:   1,
+		},
+		{
+			valid:           true,
+			constraintScore: 0,
+			capacityScore:   1,
 		},
 		{
 			valid:           false,
 			constraintScore: 1,
-			capacityScore:   0.5,
-		},
-		{
-			valid:           false,
-			constraintScore: 0,
-			capacityScore:   0.5,
+			capacityScore:   0,
 		},
 		{
 			valid:           false,
 			constraintScore: 0,
 			capacityScore:   0,
+		},
+		{
+			valid:           false,
+			constraintScore: 0,
+			capacityScore:   1,
 		},
 	}
 
@@ -631,8 +631,7 @@ func TestDiversityRemovalScore(t *testing.T) {
 	}
 }
 
-// TestCapacityScore tests both capacityScore and maxCapacityCheck.
-func TestCapacityScore(t *testing.T) {
+func TestMaxCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	expectedCheck := map[roachpb.StoreID]bool{
@@ -641,17 +640,8 @@ func TestCapacityScore(t *testing.T) {
 		testStoreUSb:    true,
 		testStoreEurope: true,
 	}
-	expectedScore := map[roachpb.StoreID]float64{
-		testStoreUSa15:  1.0 / 100.0,
-		testStoreUSa1:   1.0,
-		testStoreUSb:    1.0 / 51.0,
-		testStoreEurope: 1.0 / 41.0,
-	}
 
 	for _, s := range testStores {
-		if e, a := expectedScore[s.StoreID], capacityScore(s); e != a {
-			t.Errorf("store %d expected capacity score: %.2f, actual %.2f", s.StoreID, e, a)
-		}
 		if e, a := expectedCheck[s.StoreID], maxCapacityCheck(s); e != a {
 			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
