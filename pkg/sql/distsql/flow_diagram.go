@@ -62,6 +62,10 @@ func (*NoopCoreSpec) summary() (string, []string) {
 	return "No-op", []string{}
 }
 
+func (*AggregatorSpec) summary() (string, []string) {
+	return "Aggregator", []string{}
+}
+
 func (tr *TableReaderSpec) summary() (string, []string) {
 	index := "primary"
 	if tr.IndexIdx > 0 {
