@@ -964,7 +964,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						}
 						// We had an active lease to begin with, but we want to trigger
 						// a lease extension.
-						llChan := r.requestLeaseLocked(status)
+						llChan := r.requestLeaseLocked(ctx, status)
 						// If the lease is in stasis, we can't serve requests until we've
 						// renewed the lease, so we return the channel to block on renewal.
 						// Otherwise, we don't need to wait for the extension and simply
@@ -978,7 +978,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			case leaseExpired:
 				// No active lease: Request renewal if a renewal is not already pending.
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-				return r.requestLeaseLocked(status), nil
+				return r.requestLeaseLocked(ctx, status), nil
 
 			case leaseProscribed:
 				// Lease proposed timestamp is earlier than the min proposed
@@ -986,7 +986,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// owns the lease, re-request. Otherwise, redirect.
 				if status.lease.OwnedBy(r.store.StoreID()) {
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-					return r.requestLeaseLocked(status), nil
+					return r.requestLeaseLocked(ctx, status), nil
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
@@ -1011,10 +1011,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				select {
 				case pErr = <-llChan:
 					if pErr != nil {
-						// Getting a LeaseRejectedError back means someone else got there
-						// first, or the lease request was somehow invalid due to a
-						// concurrent change. Convert the error to a NotLeaseHolderError.
-						if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
+						switch tErr := pErr.GetDetail().(type) {
+						case *roachpb.LeaseRejectedError:
+							// Getting a LeaseRejectedError back means someone else got there
+							// first, or the lease request was somehow invalid due to a
+							// concurrent change. Convert the error to a NotLeaseHolderError.
 							lease, _ := r.getLease()
 							var err error
 							if !r.IsLeaseValid(lease, r.store.Clock().Now()) {
@@ -1023,6 +1024,17 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 								err = newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
 							}
 							pErr = roachpb.NewError(err)
+						case *roachpb.StaleProposalError:
+							lease := tErr.CurrentLease
+							if lease.OwnedBy(r.store.StoreID()) {
+								// The RequestLease command we sent was rejected because another
+								// lease was applied in the meantime, but we own that other
+								// lease. So, loop until the current node becomes aware that
+								// it's the leaseholder.
+								// This can happen if the RequestLease command we sent has been
+								// replayed - the second application will fail this way.
+								return nil
+							}
 						}
 						return pErr
 					}
@@ -1753,7 +1765,7 @@ func (r *Replica) addAdminCmd(
 		reply, pErr = r.AdminMerge(ctx, *tArgs)
 		resp = &reply
 	case *roachpb.AdminTransferLeaseRequest:
-		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
+		pErr = roachpb.NewError(r.AdminTransferLease(ctx, tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
@@ -3338,8 +3350,8 @@ func (r *Replica) processRaftCommand(
 			"command %s proposed from replica %+v: %s",
 			raftCmd.BatchRequest, raftCmd.OriginReplica, err,
 		)
-		forcedErr = roachpb.NewError(newNotLeaseHolderError(
-			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
+		forcedErr = roachpb.NewError(roachpb.NewStaleProposalError(
+			r.mu.state.Lease, raftCmd.OriginLease))
 	} else if isLeaseRequest {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by

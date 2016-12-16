@@ -1276,6 +1276,14 @@ func (ds *DistSender) handlePerReplicaError(
 			transport.MoveToFront(leaseHolder)
 		}
 		return true
+	case *roachpb.StaleProposalError:
+		// StaleProposalError means that a request we sent was evaluated under a
+		// lease but attempted to be applied under a different lease. We'll send the
+		// request again.
+		leaseHolder := tErr.CurrentLease.Replica
+		ds.updateLeaseHolderCache(ctx, rangeID, leaseHolder)
+		transport.MoveToFront(leaseHolder)
+		return true
 	}
 	return false
 }

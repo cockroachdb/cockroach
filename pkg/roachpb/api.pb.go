@@ -94,6 +94,7 @@
 		Lease
 		AbortCacheEntry
 		NotLeaseHolderError
+		StaleProposalError
 		NodeUnavailableError
 		RangeNotFoundError
 		RangeKeyMismatchError

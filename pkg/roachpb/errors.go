@@ -268,6 +268,26 @@ func (e *NotLeaseHolderError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &NotLeaseHolderError{}
 
+func (e *StaleProposalError) Error() string {
+	return e.message(nil)
+}
+
+func (e *StaleProposalError) message(_ *Error) string {
+	return fmt.Sprintf("cannot process command because the current lease is different "+
+		"than the lease under which it was proposed. OriginLease: %s. current lease: %s",
+		e.OriginLease, e.CurrentLease)
+}
+
+// NewStaleProposalError creates a StaleProposalError.
+func NewStaleProposalError(curLease *Lease, originLease *Lease) *StaleProposalError {
+	return &StaleProposalError{
+		CurrentLease: curLease,
+		OriginLease:  originLease,
+	}
+}
+
+var _ ErrorDetailInterface = &StaleProposalError{}
+
 func (e *LeaseRejectedError) Error() string {
 	return e.message(nil)
 }

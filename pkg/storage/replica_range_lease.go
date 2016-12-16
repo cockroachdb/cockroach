@@ -86,6 +86,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 // of replica.store.Stopper().ShouldQuiesce(), care will be needed for cancelling
 // the Raft command, similar to replica.addWriteCmd.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
+	ctx context.Context,
 	repl *Replica,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status LeaseStatus,
@@ -384,7 +385,7 @@ func (r *Replica) requiresExpiringLease() bool {
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(status LeaseStatus) <-chan *roachpb.Error {
+func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) <-chan *roachpb.Error {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
 		r.store.TestingKnobs().LeaseRequestEvent(status.timestamp)
 	}
@@ -408,7 +409,7 @@ func (r *Replica) requestLeaseLocked(status LeaseStatus) <-chan *roachpb.Error {
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		r, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		ctx, r, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. A
@@ -428,7 +429,7 @@ func (r *Replica) requestLeaseLocked(status LeaseStatus) <-chan *roachpb.Error {
 // blocks until the transfer is done. If a transfer is already in progress,
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaseHolderError is returned.
-func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
+func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -471,7 +472,7 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		// Stop using the current lease.
 		r.mu.minLeaseProposedTS = status.timestamp
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			r, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
+			ctx, r, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
 		return nil, transfer, nil
 	}

@@ -45,6 +45,16 @@ message NotLeaseHolderError {
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
 
+// A StaleProposalError indicated that a Raft command cannot be applied because
+// the lease under which it was proposed is different than the current lease at
+// command application time. See comments on RaftCommand.origin_lease.
+// These errors are generally retried at the DistSender level; it's OK to
+// evaluate and propose this command again under a new lease.
+message StaleProposalError {
+  optional Lease current_lease = 1;
+  optional Lease origin_lease = 2;
+}
+
 // A NodeUnavailableError indicates that the sending gateway can
 // not process requests at the time, and that the client should
 // retry the request with another peer.
@@ -236,6 +246,7 @@ message ErrorDetail {
   optional RangeFrozenError range_frozen = 25;
   optional AmbiguousResultError ambiguous_result = 26;
   optional StoreNotFoundError store_not_found = 27;
+  optional StaleProposalError stale_proposal_error = 28;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
