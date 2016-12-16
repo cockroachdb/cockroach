@@ -591,8 +591,19 @@ func TestEval(t *testing.T) {
 		{`ANNOTATE_TYPE(NULL, int)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, string)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, timestamp)`, `NULL`},
-		// Extract on timestamps and intervals.
-		{`extract(year from '2010-09-28 12:13:14.1+00:00')`, `2010`},
+		// Extract from dates.
+		// TODO(nvanbenschoten): these casts can be removed once we improve
+		// strConst's type inference.
+		{`extract(year from '2010-09-28'::date)`, `2010`},
+		{`extract(year from '2010-09-28'::date)`, `2010`},
+		{`extract(month from '2010-09-28'::date)`, `9`},
+		{`extract(day from '2010-09-28'::date)`, `28`},
+		{`extract(dayofyear from '2010-09-28'::date)`, `271`},
+		{`extract(week from '2010-01-14'::date)`, `2`},
+		{`extract(dayofweek from '2010-09-28'::date)`, `2`},
+		{`extract(quarter from '2010-09-28'::date)`, `3`},
+		// Extract from timestamps.
+		{`extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)`, `2010`},
 		{`extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)`, `2010`},
 		{`extract(month from '2010-09-28 12:13:14.1+00:00'::timestamp)`, `9`},
 		{`extract(day from '2010-09-28 12:13:14.1+00:00'::timestamp)`, `28`},
@@ -606,6 +617,7 @@ func TestEval(t *testing.T) {
 		{`extract(millisecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)`, `123`},
 		{`extract(microsecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)`, `123456`},
 		{`extract(epoch from '2010-01-10 12:13:14.1+00:00'::timestamp)`, `1263125594`},
+		// Extract from intervals.
 		{`extract_duration(hour from '123m')`, `2`},
 		{`extract_duration(hour from '123m'::interval)`, `2`},
 		{`extract_duration(minute from '123m10s'::interval)`, `123`},
