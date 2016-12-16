@@ -253,7 +253,7 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					default:
 						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], coltypes[cols[si]]))
 					}
-					ivals[si] = fmt.Sprintf("'%s'", d)
+					ivals[si] = fmt.Sprintf("%s", d)
 				default:
 					panic(errors.Errorf("unknown field type: %T (%s)", t, cols[si]))
 				}

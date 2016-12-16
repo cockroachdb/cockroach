@@ -327,3 +327,16 @@ CREATE VIEW foo AS SELECT catalog_name, schema_name, sql_path FROM information_s
 
 statement error pq: relation "foo" already exists
 CREATE VIEW foo AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
+
+# Ensure views work with dates/timestamps (#12420)
+statement ok
+CREATE TABLE t (d DATE, t TIMESTAMP)
+
+statement ok
+CREATE VIEW dt AS SELECT d, t FROM t WHERE d > DATE '1988-11-12' AND t < TIMESTAMP '2017-01-01'
+
+statement ok
+SELECT * FROM dt
+
+statement ok
+DROP TABLE t CASCADE
