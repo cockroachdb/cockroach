@@ -524,9 +524,7 @@ func (r *Replica) withRaftGroupLocked(
 			shouldCampaign = r.isSoloReplicaLocked()
 		}
 		if shouldCampaign {
-			if log.V(3) {
-				log.Infof(ctx, "campaigning")
-			}
+			log.VEventf(ctx, 3, "campaigning")
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
@@ -1277,6 +1275,26 @@ func (r *Replica) assertStateLocked(reader engine.Reader) {
 	}
 }
 
+// maybeInitializeRaftGroup check whether the internal Raft group has
+// not yet been initialized. If not, it is created and set to campaign
+// if possible.
+func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.internalRaftGroup == nil {
+		// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
+		r.mu.Unlock()
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		r.mu.Lock()
+		if err := r.withRaftGroupLocked(true /* shouldCampaign */, func(raftGroup *raft.RawNode) (bool, error) {
+			return true, nil
+		}); err != nil {
+			log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
+		}
+	}
+}
+
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's lease is confirmed. The command is then dispatched
@@ -1297,6 +1315,9 @@ func (r *Replica) Send(
 	ctx = r.AnnotateCtx(ctx)
 	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer)
 	defer cleanup()
+
+	// If the internal Raft group is not initialized, create it and wake the leader.
+	r.maybeInitializeRaftGroup(ctx)
 
 	// Differentiate between admin, read-only and write.
 	var pErr *roachpb.Error
