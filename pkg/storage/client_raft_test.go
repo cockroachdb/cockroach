@@ -3109,3 +3109,50 @@ func TestRangeQuiescence(t *testing.T) {
 		t.Fatalf("%s should be the leader: %s", rep, state)
 	}
 }
+
+// TestInitRaftGroupOnRequest verifies that an uninitialized Raft group
+// is initialized if a request is received, even if the current range
+// lease points to a different replica.
+func TestInitRaftGroupOnRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	// Split so we can rely on RHS range being quiescent after a restart.
+	// We use UserTableDataMin to avoid having the range activated to
+	// gossip system table data.
+	splitKey := keys.MakeRowSentinelKey(keys.UserTableDataMin)
+	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	if repl == nil {
+		t.Fatal("replica should not be nil for RHS range")
+	}
+	mtc.replicateRange(repl.RangeID, 1)
+
+	// Find the leaseholder and then restart the test context.
+	lease, _ := repl.GetLease()
+	mtc.restart()
+
+	// Get replica from the store which isn't the leaseholder.
+	storeIdx := int(lease.Replica.StoreID) % len(mtc.stores)
+	if repl = mtc.stores[storeIdx].LookupReplica(roachpb.RKey(splitKey), nil); repl == nil {
+		t.Fatal("replica should not be nil for RHS range")
+	}
+
+	// Send an increment and verify that initializes the Raft group.
+	incArgs := incrementArgs(splitKey, 1)
+	_, pErr := client.SendWrappedWith(
+		context.Background(), mtc.stores[storeIdx], roachpb.Header{RangeID: repl.RangeID}, incArgs,
+	)
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+		t.Fatalf("expected NotLeaseHolderError; got %s", pErr)
+	}
+	if !repl.IsRaftGroupInitialized() {
+		t.Fatal("expected raft group to be initialized")
+	}
+}

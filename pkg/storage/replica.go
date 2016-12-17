@@ -524,9 +524,7 @@ func (r *Replica) withRaftGroupLocked(
 			shouldCampaign = r.isSoloReplicaLocked()
 		}
 		if shouldCampaign {
-			if log.V(3) {
-				log.Infof(ctx, "campaigning")
-			}
+			log.VEventf(ctx, 3, "campaigning")
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
@@ -925,6 +923,20 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 		llChan, pErr := func() (<-chan *roachpb.Error, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
+
+			// If the internal Raft group is not initialized, create it and wake the leader.
+			if r.mu.internalRaftGroup == nil {
+				// Careful to unwind locks and keep them in correct order: raftMu then mu.
+				r.mu.Unlock()
+				r.raftMu.Lock()
+				r.mu.Lock()
+				if err := r.withRaftGroupLocked(true /* shouldCampaign */, func(raftGroup *raft.RawNode) (bool, error) {
+					return true, nil
+				}); err != nil {
+					log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
+				}
+				r.raftMu.Unlock()
+			}
 
 			status = r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 			switch status.state {
