@@ -17,6 +17,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -128,6 +129,22 @@ func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
 	e.err = nil
 	e.explain(plan)
 	return e.err
+}
+
+// planToString uses explain() to build a string representation of the planNode.
+func planToString(plan planNode) string {
+	var buf bytes.Buffer
+	e := explainer{
+		verbose: true,
+		makeRow: func(level int, name, description string, plan planNode) {
+			fmt.Fprintf(&buf, "%d %s %s %s %s\n", level, name, description,
+				formatColumns(plan.Columns(), false),
+				plan.Ordering().AsString(plan.Columns()),
+			)
+		},
+	}
+	e.explain(plan)
+	return buf.String()
 }
 
 // explain extract information from planNodes and produces the EXPLAIN

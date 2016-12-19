@@ -18,6 +18,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -231,6 +232,9 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	}
 	if err := plan.expandPlan(); err != nil {
 		return nil, err
+	}
+	if log.V(3) {
+		log.Infof(p.ctx(), "statement %s compiled to:\n%s", stmt, planToString(plan))
 	}
 	return plan, nil
 }
