@@ -1,8 +1,8 @@
 query TTTT colnames
 HELP replace
 ----
-Function  Signature                                            Category         Details
-replace   (input: string, from: string, to: string) -> string  String and Byte  Replace all occurrences of 'from' with 'to' in 'input'
+Function  Signature                                            		Category         Details
+replace   (input: string, find: string, replace: string) -> string  String and Byte  Replace all occurrences of `find` with `replace` in `input`
 
 query TTTT colnames
 HELP missing
@@ -13,4 +13,4 @@ query TTTT colnames
 HELP LEAST
 ----
 Function    Signature                           Category            Details
-least       (anyelement...) -> anyelement       Comparison
+least       (anyelement...) -> anyelement       Comparison			Return the element with the lowest value.
