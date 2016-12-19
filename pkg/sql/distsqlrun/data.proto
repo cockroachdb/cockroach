@@ -19,8 +19,8 @@
 // All the concepts here are "physical plan" concepts.
 
 syntax = "proto2";
-package cockroach.sql.distsql;
-option go_package = "distsql";
+package cockroach.sql.distsqlrun;
+option go_package = "distsqlrun";
 
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/errors.proto";

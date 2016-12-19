@@ -17,13 +17,13 @@
 // APIs for distributed SQL; see docs/RFCS/distributed_sql.md
 
 syntax = "proto2";
-package cockroach.sql.distsql;
-option go_package = "distsql";
+package cockroach.sql.distsqlrun;
+option go_package = "distsqlrun";
 
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/errors.proto";
-import "cockroach/pkg/sql/distsql/data.proto";
-import "cockroach/pkg/sql/distsql/processors.proto";
+import "cockroach/pkg/sql/distsqlrun/data.proto";
+import "cockroach/pkg/sql/distsqlrun/processors.proto";
 import "cockroach/pkg/util/tracing/span_context_carrier.proto";
 import "gogoproto/gogo.proto";
 
