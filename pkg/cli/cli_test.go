@@ -709,7 +709,7 @@ func Example_sql() {
 	// sql -e explain select 3
 	// 1 row
 	// Level	Type	Description
-	// 0	empty	-
+	// 0	nullrow
 	// sql -e select 1; select 2
 	// 1 row
 	// 1

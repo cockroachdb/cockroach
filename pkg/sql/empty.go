@@ -38,8 +38,12 @@ func (*emptyNode) MarkDebug(_ explainMode)             {}
 func (*emptyNode) expandPlan() error                   { return nil }
 func (*emptyNode) Close()                              {}
 
-func (*emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	return "empty", "-", nil
+func (e *emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
+	name = "empty"
+	if e.results {
+		name = "nullrow"
+	}
+	return name, "", nil
 }
 
 func (e *emptyNode) DebugValues() debugValues {
