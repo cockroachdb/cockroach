@@ -8,7 +8,7 @@ import:
   version: 7248742ae7127347a52ab9d215451c213b7b59da
 # etcd pins this via glide, so we must pin harder.
 - package: golang.org/x/net
-  version: cfae461cedfdcab6e261a26eb77db53695623303
+  version: 45e771701b814666a7eb299e6c7a57d0b1799e91
 # used by a long-lived branch. TODO(dt): remove when merged.
 - package: cloud.google.com/go
   version: 9d965e63e8cceb1b5d7977a202f0fcb8866d6525
