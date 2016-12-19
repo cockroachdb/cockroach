@@ -22,9 +22,6 @@
  *      - Help us
  *    - Right-side Summary Section
  *      - Link to Nodes page
- *      - Stats
- *        - Unavailable Ranges
- *        - Queries Per Second?
  *      - Events?
  *    - Graphs
  *      - Intelligent Tick Selection

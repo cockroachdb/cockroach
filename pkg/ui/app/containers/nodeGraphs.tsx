@@ -4,26 +4,46 @@ import * as d3 from "d3";
 import { IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
+import moment from "moment";
+import Long from "long";
 
 import {
   nodeIDAttr, dashboardNameAttr,
 } from "../util/constants";
 
 import { AdminUIState } from "../redux/state";
-import { refreshNodes } from "../redux/apiReducers";
+import { refreshNodes, refreshMetrics } from "../redux/apiReducers";
 import GraphGroup from "../components/graphGroup";
 import { SummaryBar, SummaryLabel, SummaryStat } from "../components/summaryBar";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
 import { StackedAreaGraph } from "../components/stackedgraph";
 import { Bytes } from "../util/format";
-import { NanoToMilli } from "../util/convert";
+import { NanoToMilli, MilliToNano } from "../util/convert";
 import { MetricConstants } from "../util/proto";
+import * as protos from "../js/protos";
+
+import { queryFromProps } from "./metricsDataProvider";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
+  refreshMetrics: typeof refreshMetrics;
+  nodesQueryValid: boolean;
+  metricsQueryValid: boolean;
   nodeCount: number;
   capacityAvailable: number;
   capacityTotal: number;
+  unavailableRanges: number;
+  queriesPerSecond: number;
+  p50Latency: number;
+  p99Latency: number;
+}
+
+// Indexes so that the query positions are preserved when we create the
+// query and retrieve the query result.
+enum metricsQueryIndexes {
+  QUERIES_PER_SECOND_QUERY_INDEX,
+  P50_LATENCY_QUERY_INDEX,
+  P99_LATENCY_QUERY_INDEX,
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & IInjectedProps;
@@ -33,9 +53,64 @@ type NodeGraphsProps = NodeGraphsOwnProps & IInjectedProps;
  */
 class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   static displayTimeScale = true;
-  render() {
+
+  sources: string[] = [];
+
+  refresh(props = this.props) {
+    if (!props.nodesQueryValid) {
+      props.refreshNodes();
+    }
+
+    // Build a metrics query for rates/latencies in the summary box.
+    if (!props.metricsQueryValid) {
+      let queries = [];
+      queries[metricsQueryIndexes.QUERIES_PER_SECOND_QUERY_INDEX] = queryFromProps(
+        {
+          sources: this.sources,
+          name: "cr.node.sql.query.count",
+          nonNegativeRate: true,
+        }
+      );
+      queries[metricsQueryIndexes.P50_LATENCY_QUERY_INDEX] = queryFromProps(
+        {
+          sources: this.sources,
+          name: "cr.node.exec.latency-p50",
+          aggregateMax: true,
+          downsampleMax: true,
+        }
+      );
+      queries[metricsQueryIndexes.P99_LATENCY_QUERY_INDEX] = queryFromProps(
+        {
+          sources: this.sources,
+          name: "cr.node.exec.latency-p99",
+          aggregateMax: true,
+          downsampleMax: true,
+        }
+      );
+
+      let summaryBoxQuery = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+        start_nanos: Long.fromNumber(MilliToNano(moment().subtract(30, "s").valueOf())),
+        end_nanos: Long.fromNumber(MilliToNano(moment().valueOf())),
+        sample_nanos: Long.fromNumber(MilliToNano(moment.duration(10, "s").asMilliseconds())),
+        queries,
+      });
+
+      props.refreshMetrics(summaryBoxQuery);
+    }
+  }
+
+  componentWillMount() {
     let nodeID = this.props.params[nodeIDAttr];
-    let sources: string[] =  (_.isString(nodeID) && nodeID !== "") ? [nodeID] : null;
+    this.sources =  (_.isString(nodeID) && nodeID !== "") ? [nodeID] : null;
+    this.refresh();
+  }
+
+  componentWillReceiveProps(props: NodeGraphsProps) {
+    this.refresh(props);
+  }
+
+  render() {
+    let sources = this.sources;
     let dashboard = this.props.params[dashboardNameAttr];
     let specifier = (sources && sources.length === 1) ? `on node ${sources[0]}` : "across all nodes";
 
@@ -446,8 +521,12 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           <SummaryStat title="Total Nodes" value={this.props.nodeCount} />
           <SummaryStat title="Capacity Used" value={capacityPercent}
                        format={(v) => `${d3.format(".2f")(v)}%`}
-                       tooltip={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)} 
+                       tooltip={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)}
                        storage capacity across all nodes.`} />
+          <SummaryStat title="Unavailable ranges" value={this.props.unavailableRanges} />
+          <SummaryStat title="Queries per second" value={this.props.queriesPerSecond} />
+          <SummaryStat title="P50 latency" value={this.props.p50Latency} format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} />
+          <SummaryStat title="P99 latency" value={this.props.p99Latency} format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} />
         </SummaryBar>
       </div>
     </div>;
@@ -455,6 +534,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 }
 
 let nodeStatuses = (state: AdminUIState) => state.cachedData.nodes.data;
+let metricsResult = (state: AdminUIState, index: number) =>
+  state.cachedData.metrics.data &&
+  state.cachedData.metrics.data.results &&
+  state.cachedData.metrics.data.results[index] &&
+  state.cachedData.metrics.data.results[index].datapoints &&
+  state.cachedData.metrics.data.results[index].datapoints[0] &&
+  _.last(state.cachedData.metrics.data.results[index].datapoints).value;
 
 let nodeSums = createSelector(
   nodeStatuses,
@@ -463,12 +549,14 @@ let nodeSums = createSelector(
       nodeCount: 0,
       capacityAvailable: 0,
       capacityTotal: 0,
+      unavailableRanges: 0,
     };
     if (_.isArray(ns)) {
       ns.forEach((n) => {
         result.nodeCount += 1;
         result.capacityAvailable += n.metrics.get(MetricConstants.availableCapacity);
         result.capacityTotal += n.metrics.get(MetricConstants.capacity);
+        result.unavailableRanges += n.metrics.get(MetricConstants.unavailableRanges);
       });
     }
     return result;
@@ -482,9 +570,16 @@ export default connect(
       nodeCount: sums.nodeCount,
       capacityAvailable: sums.capacityAvailable,
       capacityTotal: sums.capacityTotal,
+      unavailableRanges: sums.unavailableRanges,
+      nodesQueryValid: state.cachedData.nodes.valid,
+      metricsQueryValid: state.cachedData.metrics.valid,
+      queriesPerSecond: metricsResult(state, metricsQueryIndexes.QUERIES_PER_SECOND_QUERY_INDEX),
+      p50Latency: metricsResult(state, metricsQueryIndexes.P50_LATENCY_QUERY_INDEX),
+      p99Latency: metricsResult(state, metricsQueryIndexes.P99_LATENCY_QUERY_INDEX),
     };
   },
   {
     refreshNodes,
+    refreshMetrics,
   }
 )(NodeGraphs);

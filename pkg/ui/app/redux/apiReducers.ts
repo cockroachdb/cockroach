@@ -59,6 +59,9 @@ export const refreshTableStats = tableStatsReducerObj.refresh;
 const logsReducerObj = new CachedDataReducer(api.getLogs, "logs", moment.duration(10, "s"));
 export const refreshLogs = logsReducerObj.refresh;
 
+const metricsReducerObj = new CachedDataReducer(api.queryTimeSeries, "metrics", moment.duration(10, "s"));
+export const refreshMetrics = metricsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -71,6 +74,7 @@ export interface APIReducersState {
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
+  metrics: CachedDataReducerState<api.TimeSeriesQueryResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -85,6 +89,7 @@ export default combineReducers<APIReducersState>({
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
+  [metricsReducerObj.actionNamespace]: metricsReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};

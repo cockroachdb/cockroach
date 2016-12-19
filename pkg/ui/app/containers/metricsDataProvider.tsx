@@ -18,8 +18,8 @@ type TSQueryMessage = Proto2TypeScript.cockroach.ts.tspb.QueryMessage;
  * queryFromProps is a helper method which generates a TimeSeries Query data
  * structure based on a MetricProps object.
  */
-function queryFromProps(metricProps: MetricProps,
-                        graphProps: MetricsDataComponentProps): TSQueryMessage {
+export function queryFromProps(metricProps: MetricProps,
+                               graphProps: MetricsDataComponentProps = {}): TSQueryMessage {
     let derivative = TimeSeriesQueryDerivative.NONE;
     let sourceAggregator = TimeSeriesQueryAggregator.SUM;
     let downsampler = TimeSeriesQueryAggregator.AVG;
