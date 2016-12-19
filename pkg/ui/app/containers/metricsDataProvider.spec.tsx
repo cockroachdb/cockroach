@@ -6,7 +6,8 @@ import Long from "long";
 import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";
-import { TextGraph, Axis, Metric } from "../components/graphs";
+import { TextGraph, Axis } from "../components/graphs";
+import { Metric } from "../components/metric";
 import {
   MetricsDataProviderUnconnected as MetricsDataProvider,
   QueryTimeInfo,
