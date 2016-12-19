@@ -311,3 +311,69 @@ func TestNodeLivenessGetLivenessMap(t *testing.T) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
 	}
 }
+
+// TestNodeLivenessConcurrentHeartbeats verifies that concurrent attempts
+// to heartbeat all succeed.
+func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	const concurrency = 10
+
+	// Advance clock past the liveness threshold & concurrently heartbeat node.
+	nl := mtc.nodeLivenesses[0]
+	mtc.manualClock.Increment(nl.GetLivenessThreshold().Nanoseconds() + 1)
+	l, err := nl.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errCh := make(chan error, concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			errCh <- nl.Heartbeat(context.Background(), l)
+		}()
+	}
+	for i := 0; i < concurrency; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("concurrent heartbeat %d failed: %s", i, err)
+		}
+	}
+}
+
+// TestNodeLivenessConcurrentIncrementEpochs verifies concurrent
+// attempts to increment liveness of another node all succeed.
+func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	const concurrency = 10
+
+	// Advance the clock and this time increment epoch concurrently for node 1.
+	nl := mtc.nodeLivenesses[0]
+	mtc.manualClock.Increment(nl.GetLivenessThreshold().Nanoseconds() + 1)
+	l, err := nl.GetLiveness(mtc.gossips[1].NodeID.Get())
+	if err != nil {
+		t.Fatal(err)
+	}
+	errCh := make(chan error, concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			errCh <- nl.IncrementEpoch(context.Background(), l)
+		}()
+	}
+	for i := 0; i < concurrency; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("concurrent increment epoch %d failed: %s", i, err)
+		}
+	}
+}

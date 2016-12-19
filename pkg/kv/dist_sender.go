@@ -1087,8 +1087,6 @@ func fillSkippedResponses(ba roachpb.BatchRequest, br *roachpb.BatchResponse, ne
 	}
 }
 
-var errMayHaveSucceededAtFailingReplica = roachpb.NewAmbiguousResultError("may have succeeded at failing replica")
-
 // sendToReplicas sends one or more RPCs to clients specified by the
 // slice of replicas. On success, Send returns the first successful
 // reply. If an error occurs which is not specific to a single
@@ -1134,7 +1132,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
-	log.VEventf(ctx, 2, "sending RPC for batch: %s", args.Summary())
+	log.VEventf(ctx, 2, "sending batch %s to range %d", args.Summary(), rangeID)
 	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail
@@ -1169,8 +1167,6 @@ func (ds *DistSender) sendToReplicas(
 			if err == nil {
 				if log.V(2) {
 					log.Infof(ctx, "RPC reply: %s", call.Reply)
-				} else if log.V(1) && call.Reply.Error != nil {
-					log.Infof(ctx, "application error: %s", call.Reply.Error)
 				}
 
 				if call.Reply.Error == nil {
@@ -1182,8 +1178,11 @@ func (ds *DistSender) sendToReplicas(
 					// still other RPCs outstanding or an ambiguous RPC error
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
+					log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 					if haveCommit && (pending > 0 || ambiguousResult) {
-						return nil, errMayHaveSucceededAtFailingReplica
+						log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
+						return nil, roachpb.NewAmbiguousResultError(
+							fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
 					}
 					return call.Reply, nil
 				}
@@ -1195,11 +1194,9 @@ func (ds *DistSender) sendToReplicas(
 				// one to return; we may want to remember the "best" error
 				// we've seen (for example, a NotLeaseHolderError conveys more
 				// information than a RangeNotFound).
+				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
 				err = call.Reply.Error.GoError()
 			} else {
-				if log.V(1) {
-					log.Warningf(ctx, "RPC error: %s", err)
-				}
 				// All connection errors except for an unavailable node (this
 				// is GRPC's fail-fast error), may mean that the request
 				// succeeded on the remote server, but we were unable to
@@ -1222,28 +1219,31 @@ func (ds *DistSender) sendToReplicas(
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
 				if haveCommit && grpc.Code(err) != codes.Unavailable {
+					log.ErrEventf(ctx, "txn may have committed despite RPC error: %s", err)
 					ambiguousResult = true
+				} else {
+					log.ErrEventf(ctx, "RPC error: %s", err)
 				}
 			}
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
 				ds.metrics.NextReplicaErrCount.Inc(1)
-				log.VEventf(ctx, 2, "error, trying next peer: %s", err)
+				log.VEventf(ctx, 2, "error, trying next peer")
 				pending++
 				transport.SendNext(ctx, done)
 			}
 			if pending == 0 {
 				if ambiguousResult {
-					err = errMayHaveSucceededAtFailingReplica
+					err = roachpb.NewAmbiguousResultError(
+						fmt.Sprintf("sending to all %d replicas failed; last error: %v, "+
+							"but RPC failure may have masked txn commit", len(replicas), err))
 				} else {
 					err = roachpb.NewSendError(
 						fmt.Sprintf("sending to all %d replicas failed; last error: %v", len(replicas), err),
 					)
 				}
-				if log.V(2) {
-					log.ErrEvent(ctx, err.Error())
-				}
+				log.ErrEvent(ctx, err.Error())
 				return nil, err
 			}
 		}
