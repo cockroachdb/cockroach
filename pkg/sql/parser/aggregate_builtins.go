@@ -80,61 +80,85 @@ type AggregateFunc interface {
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
-		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate),
-		makeAggBuiltin(TypeString, TypeStringArray, newStringArrayAggregate),
+		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate,
+			"Aggregate the selected values into an array."),
+		makeAggBuiltin(
+			TypeString, TypeStringArray, newStringArrayAggregate,
+			"Aggregate the selected values into an array."),
 	},
 
 	"avg": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalAvgAggregate),
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate,
+			"Calculate the average of the selected values."),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate,
+			"Calculate the average of the selected values."),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalAvgAggregate,
+			"Calculate the average of the selected values."),
 	},
 
 	"bool_and": {
-		makeAggBuiltin(TypeBool, TypeBool, newBoolAndAggregate),
+		makeAggBuiltin(TypeBool, TypeBool, newBoolAndAggregate,
+			"Calculate the boolean value of `AND`ing all selected values."),
 	},
 
 	"bool_or": {
-		makeAggBuiltin(TypeBool, TypeBool, newBoolOrAggregate),
+		makeAggBuiltin(TypeBool, TypeBool, newBoolOrAggregate,
+			"Calculate the boolean value of `OR`ing all selected values."),
 	},
 
 	"concat_agg": {
 		// TODO(knz) When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
 		// should be substituted to STRING_AGG(X, '') and executed as
 		// such (no need for a separate implementation).
-		makeAggBuiltin(TypeString, TypeString, newStringConcatAggregate),
-		makeAggBuiltin(TypeBytes, TypeBytes, newBytesConcatAggregate),
+		makeAggBuiltin(TypeString, TypeString, newStringConcatAggregate,
+			"Concatenate all selected values."),
+		makeAggBuiltin(TypeBytes, TypeBytes, newBytesConcatAggregate,
+			"Concatenate all selected values."),
 	},
 
 	"count": countImpls(),
 
-	"max": makeAggBuiltins(newMaxAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
-	"min": makeAggBuiltins(newMinAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
+	"max": makeAggBuiltins(newMaxAggregate, "Identify the maximum selected value.",
+		TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
+		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
+	"min": makeAggBuiltins(newMinAggregate, "Identify the minimum selected value.",
+		TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
+		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
 
 	"sum_int": {
-		makeAggBuiltin(TypeInt, TypeInt, newSmallIntSumAggregate),
+		makeAggBuiltin(TypeInt, TypeInt, newSmallIntSumAggregate,
+			"Calculate the sum of the selected values."),
 	},
 
 	"sum": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntSumAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatSumAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalSumAggregate),
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntSumAggregate,
+			"Calculate the sum of the selected values."),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatSumAggregate,
+			"Calculate the sum of the selected values."),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalSumAggregate,
+			"Calculate the sum of the selected values."),
 	},
 
 	"variance": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntVarianceAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalVarianceAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatVarianceAggregate),
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntVarianceAggregate,
+			"Calculate the variance of the selected values."),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalVarianceAggregate,
+			"Calculate the variance of the selected values."),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatVarianceAggregate,
+			"Calculate the variance of the selected values."),
 	},
 
 	"stddev": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntStdDevAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStdDevAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStdDevAggregate),
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntStdDevAggregate,
+			"Calculate the standard deviation of the selected values."),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStdDevAggregate,
+			"Calculate the standard deviation of the selected values."),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStdDevAggregate,
+			"Calculate the standard deviation of the selected values."),
 	},
 }
 
-func makeAggBuiltin(in, ret Type, f func() AggregateFunc) Builtin {
+func makeAggBuiltin(in, ret Type, f func() AggregateFunc, info string) Builtin {
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
@@ -146,22 +170,25 @@ func makeAggBuiltin(in, ret Type, f func() AggregateFunc) Builtin {
 		WindowFunc: func() WindowFunc {
 			return newAggregateWindow(f())
 		},
+		Info: info,
 	}
 }
 
-func makeAggBuiltins(f func() AggregateFunc, types ...Type) []Builtin {
+func makeAggBuiltins(f func() AggregateFunc, info string, types ...Type) []Builtin {
 	ret := make([]Builtin, len(types))
 	for i := range types {
-		ret[i] = makeAggBuiltin(types[i], types[i], f)
+		ret[i] = makeAggBuiltin(types[i], types[i], f, info)
 	}
 	return ret
 }
 
 func countImpls() []Builtin {
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
+	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
+		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
 	r := make([]Builtin, len(types))
 	for i := range types {
-		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate)
+		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate,
+			"Calculate the number of selected elements.")
 	}
 	return r
 }
