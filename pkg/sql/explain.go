@@ -129,9 +129,10 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		}
 
 		node := &explainPlanNode{
-			verbose: verbose,
-			plan:    plan,
-			results: p.newContainerValuesNode(columns, 0),
+			verbose:  verbose,
+			expanded: expanded,
+			plan:     plan,
+			results:  p.newContainerValuesNode(columns, 0),
 		}
 		return node, nil
 
