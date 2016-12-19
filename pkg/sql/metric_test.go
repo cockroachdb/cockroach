@@ -50,35 +50,32 @@ func TestQueryCounts(t *testing.T) {
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
-		{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{"BEGIN; END", 1, 0, 0, 0, 0, 0, 0, 0, 1, 0},
-		{"SELECT 1", 0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
-		{"CREATE DATABASE mt", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
-		{"CREATE TABLE mt.n (num INTEGER)", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
-		{"INSERT INTO mt.n VALUES (3)", 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
-		{"UPDATE mt.n SET num = num + 1", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0},
-		{"DELETE FROM mt.n", 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
-		{"ALTER TABLE mt.n ADD COLUMN num2 INTEGER", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
-		{"EXPLAIN SELECT * FROM mt.n", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
-		{"BEGIN; UPDATE mt.n SET num = num + 1; END", 1, 0, 0, 1, 0, 0, 0, 0, 1, 0},
-		{"SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", 0, 3, 0, 0, 0, 0, 0, 0, 0, 0},
-		{"SET DIST_SQL = 'on'", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
-		{"SELECT * FROM mt.n", 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-		{"SET DIST_SQL = 'off'", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
-		{"DROP TABLE mt.n", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
-		{"SET database = system", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
+		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
+		{query: "CREATE DATABASE mt", ddlCount: 1},
+		{query: "CREATE TABLE mt.n (num INTEGER)", ddlCount: 1},
+		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1},
+		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
+		{query: "DELETE FROM mt.n", deleteCount: 1},
+		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1},
+		{query: "EXPLAIN SELECT * FROM mt.n", miscCount: 1},
+		{
+			query:         "BEGIN; UPDATE mt.n SET num = num + 1; END",
+			txnBeginCount: 1, updateCount: 1, txnCommitCount: 1,
+		},
+		{query: "SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", selectCount: 3},
+		{query: "SET DIST_SQL = 'on'", miscCount: 1},
+		{query: "SELECT * FROM mt.n", selectCount: 1, distSQLSelectCount: 1},
+		{query: "SET DIST_SQL = 'off'", miscCount: 1},
+		{query: "DROP TABLE mt.n", ddlCount: 1},
+		{query: "SET database = system", miscCount: 1},
 	}
 
 	// Initialize accum while accounting for system migrations that may have run
 	// DDL statements.
-	accum := testcases[0]
-	accum.ddlCount = s.MustGetSQLCounter(sql.MetaDdl.Name)
+	accum := queryCounter{ddlCount: s.MustGetSQLCounter(sql.MetaDdl.Name)}
 
 	for _, tc := range testcases {
-		if tc.query == "" {
-			continue
-		}
-
 		t.Run(tc.query, func(t *testing.T) {
 			if _, err := sqlDB.Exec(tc.query); err != nil {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
