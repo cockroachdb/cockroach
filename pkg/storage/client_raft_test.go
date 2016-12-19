@@ -3145,7 +3145,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	}
 
 	// TODO(spencer): Raft messages seem to turn up
-	// occassionally on restart, which initialize the replica, so
+	// occasionally on restart, which initialize the replica, so
 	// this is not a test failure. Not sure how to work around this
 	// problem.
 	// Verify the raft group isn't initialized yet.
