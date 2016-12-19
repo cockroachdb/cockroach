@@ -19,6 +19,7 @@ package server
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -413,33 +414,7 @@ func TestSystemConfigGossip(t *testing.T) {
 		t.Fatal("did not receive gossip message")
 	}
 
-	// Try a plain KV write first.
-	if err := kvDB.Put(ctx, key, valAt(0)); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now do it as part of a transaction, but without the trigger set.
-	if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
-		return txn.Put(key, valAt(1))
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Gossip channel should be dormant.
-	// TODO(tschottdorf): This test is likely flaky. Why can't some other
-	// process trigger gossip? It seems that a new range lease being
-	// acquired will gossip a new system config since the hash changed and fail
-	// the test (seen in practice during some buggy WIP).
-	var systemConfig config.SystemConfig
-	select {
-	case <-resultChan:
-		systemConfig, _ = ts.gossip.GetSystemConfig()
-		t.Fatalf("unexpected message received on gossip channel: %v", systemConfig)
-
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	// This time mark the transaction as having a Gossip trigger.
+	// Write a system key with the transaction marked as having a Gossip trigger.
 	if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
@@ -447,35 +422,42 @@ func TestSystemConfigGossip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// New system config received.
-	select {
-	case <-resultChan:
-		systemConfig, _ = ts.gossip.GetSystemConfig()
+	// This has to be wrapped in a SucceedSoon because system migrations on the
+	// testserver's startup can trigger system config updates without the key we
+	// wrote.
+	testutils.SucceedsSoon(t, func() error {
+		// New system config received.
+		var systemConfig config.SystemConfig
+		select {
+		case <-resultChan:
+			systemConfig, _ = ts.gossip.GetSystemConfig()
 
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("did not receive gossip message")
-	}
-
-	// Now check the new config.
-	var val *roachpb.Value
-	for _, kv := range systemConfig.Values {
-		if bytes.Equal(key, kv.Key) {
-			val = &kv.Value
-			break
+		case <-time.After(500 * time.Millisecond):
+			return fmt.Errorf("did not receive gossip message")
 		}
-	}
-	if val == nil {
-		t.Fatal("key not found in gossiped info")
-	}
 
-	// Make sure the returned value is valAt(2).
-	got := new(sqlbase.DatabaseDescriptor)
-	if err := val.GetProto(got); err != nil {
-		t.Fatal(err)
-	}
-	if expected := valAt(2); !reflect.DeepEqual(got, expected) {
-		t.Fatalf("mismatch: expected %+v, got %+v", *expected, *got)
-	}
+		// Now check the new config.
+		var val *roachpb.Value
+		for _, kv := range systemConfig.Values {
+			if bytes.Equal(key, kv.Key) {
+				val = &kv.Value
+				break
+			}
+		}
+		if val == nil {
+			return fmt.Errorf("key not found in gossiped info")
+		}
+
+		// Make sure the returned value is valAt(2).
+		got := new(sqlbase.DatabaseDescriptor)
+		if err := val.GetProto(got); err != nil {
+			return err
+		}
+		if expected := valAt(2); !reflect.DeepEqual(got, expected) {
+			return fmt.Errorf("mismatch: expected %+v, got %+v", *expected, *got)
+		}
+		return nil
+	})
 }
 
 func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
