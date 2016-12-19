@@ -227,6 +227,12 @@ func (r *Replica) GetRaftLogSize() int64 {
 	return r.mu.raftLogSize
 }
 
+func (r *Replica) IsRaftGroupInitialized() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.internalRaftGroup != nil
+}
+
 // StorePoolNodeLivenessTrue is a NodeLivenessFunc which always returns true.
 func StorePoolNodeLivenessTrue(_ roachpb.NodeID, _ time.Time, _ time.Duration) bool {
 	return true
