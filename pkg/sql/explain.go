@@ -118,23 +118,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return node, nil
 
 	case explainPlan:
-		columns := ResultColumns{
-			{Name: "Level", Typ: parser.TypeInt},
-			{Name: "Type", Typ: parser.TypeString},
-			{Name: "Description", Typ: parser.TypeString},
-		}
-		if verbose {
-			columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
-			columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
-		}
-
-		node := &explainPlanNode{
-			verbose:  verbose,
-			expanded: expanded,
-			plan:     plan,
-			results:  p.newContainerValuesNode(columns, 0),
-		}
-		return node, nil
+		return p.makeExplainPlanNode(verbose, expanded, plan), nil
 
 	case explainTrace:
 		return p.makeTraceNode(plan, p.txn), nil
