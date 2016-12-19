@@ -96,14 +96,14 @@ query ITT
 EXPLAIN SELECT * FROM t ORDER BY c
 ----
 0 sort       +c
-1 scan       t@primary -
+1 scan       t@primary ALL
 
 query ITT
 EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5
 ----
 0 limit      count: 5
 1 index-join
-2 scan       t@c - (max 5 rows)
+2 scan       t@c ALL (max 5 rows)
 2 scan       t@primary
 
 query ITT
@@ -111,14 +111,14 @@ EXPLAIN SELECT * FROM t ORDER BY c OFFSET 5
 ----
 0 limit      offset: 5
 1 sort       +c
-2 scan       t@primary -
+2 scan       t@primary ALL
 
 query ITT
 EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
 ----
 0 limit      count: 5, offset: 5
 1 index-join
-2 scan       t@c - (max 10 rows)
+2 scan       t@c ALL (max 10 rows)
 2 scan       t@primary
 
 query ITT
@@ -126,4 +126,4 @@ EXPLAIN SELECT * FROM t ORDER BY c LIMIT 1000000
 ----
 0 limit      count: 1000000
 1 sort       +c (top 1000000)
-2 scan       t@primary -
+2 scan       t@primary ALL

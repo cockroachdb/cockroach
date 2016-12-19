@@ -475,7 +475,7 @@ query ITT
 EXPLAIN SELECT MIN(a) FROM abc
 ----
 0 group min(a)
-1 scan  abc@primary - (max 1 row)
+1 scan  abc@primary ALL (max 1 row)
 
 query TRBR
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
@@ -534,7 +534,7 @@ query ITT
 EXPLAIN SELECT MIN(x) FROM xyz
 ----
 0 group min(x)
-1 scan  xyz@xy - (max 1 row)
+1 scan  xyz@xy ALL (max 1 row)
 
 query I
 SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
@@ -556,7 +556,7 @@ query ITT
 EXPLAIN SELECT MAX(x) FROM xyz
 ----
 0 group    max(x)
-1 revscan  xyz@xy - (max 1 row)
+1 revscan  xyz@xy ALL (max 1 row)
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 1
@@ -770,7 +770,7 @@ query ITT
 EXPLAIN SELECT MIN(a) FROM abc
 ----
 0 group min(a)
-1 scan  abc@primary - (max 1 row)
+1 scan  abc@primary ALL (max 1 row)
 
 # Verify we only buffer one row.
 query ITTT
@@ -784,7 +784,7 @@ query ITT
 EXPLAIN SELECT MAX(a) FROM abc
 ----
 0 group   max(a)
-1 revscan abc@primary - (max 1 row)
+1 revscan abc@primary ALL (max 1 row)
 
 # Verify we only buffer one row.
 query ITTT

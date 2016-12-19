@@ -470,7 +470,7 @@ EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY
 ----
 0  sort    +"variance(d) OVER w",+k
 1  window  stddev(d) OVER w, variance(d) OVER w
-2  scan    kv@primary -
+2  scan    kv@primary ALL
 
 query ITTT
 EXPLAIN (DEBUG) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k

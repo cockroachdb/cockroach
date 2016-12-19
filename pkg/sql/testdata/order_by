@@ -42,7 +42,7 @@ query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 0 sort +b
-1 scan t@primary -
+1 scan t@primary ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC
@@ -55,7 +55,7 @@ query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 0 sort -b
-1 scan t@primary -
+1 scan t@primary ALL
 
 query I
 SELECT a FROM t ORDER BY 1 DESC
@@ -69,7 +69,7 @@ EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 0 limit count: 2
 1 sort  +b (top 2)
-2 scan  t@primary -
+2 scan  t@primary ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -83,7 +83,7 @@ EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
 0 limit    count: 2
 1 distinct
 2 sort     +b (iterative)
-3 scan     t@primary -
+3 scan     t@primary ALL
 
 query I
 SELECT DISTINCT a FROM t ORDER BY b DESC LIMIT 2
@@ -134,19 +134,19 @@ query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 0 nosort -a
-1 revscan t@primary -
+1 revscan t@primary ALL
 
 query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 0 nosort -a,+b
-1 revscan t@primary -
+1 revscan t@primary ALL
 
 query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 0 nosort -a,-b
-1 revscan t@primary -
+1 revscan t@primary ALL
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -250,7 +250,7 @@ EXPLAIN(VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 0   select                                              ("b + 2")   +"b + 2"
 1   sort            +"b + 2"                            ("b + 2")   +"b + 2"
 2   render/filter   from (test.t.a, test.t.b, test.t.c) ("b + 2")
-3   scan            t@primary -                         (a[omitted], b, c[omitted])   +a,unique
+3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
 
 # Check that the sort picks up a renamed render properly.
 query ITTTT
@@ -259,7 +259,7 @@ EXPLAIN(VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 0   select                                              (y)   +y
 1   sort            +y                                  (y)   +y
 2   render/filter   from (test.t.a, test.t.b, test.t.c) (y)
-3   scan            t@primary -                         (a[omitted], b, c[omitted])   +a,unique
+3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
 
 # Check that the sort reuses a render behind a rename properly.
 query ITTTT
@@ -268,7 +268,7 @@ EXPLAIN(VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 0   select                                              (y)   +y
 1   sort            +y                                  (y)   +y
 2   render/filter   from (test.t.a, test.t.b, test.t.c) (y)
-3   scan            t@primary -                         (a[omitted], b, c[omitted])   +a,unique
+3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
 
 statement ok
 CREATE TABLE abc (
@@ -303,7 +303,7 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 query ITT
 EXPLAIN SELECT * FROM abc ORDER BY a
 ----
-0 scan abc@primary -
+0 scan abc@primary ALL
 
 query ITTT
 EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
@@ -314,14 +314,14 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
-0 scan abc@ba -
+0 scan abc@ba ALL
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
 query ITT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-0 scan abc@ba -
+0 scan abc@ba ALL
 
 # We use the WHERE condition to force the use of index ba.
 query ITT
@@ -345,19 +345,19 @@ query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 0 nosort +b,+c
-1 scan   abc@bc -
+1 scan   abc@bc ALL
 
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 0 nosort +b,+c,+a
-1 scan   abc@bc -
+1 scan   abc@bc ALL
 
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 0 nosort +b,+c,-a
-1 scan   abc@bc -
+1 scan   abc@bc ALL
 
 query ITTT
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
@@ -382,7 +382,7 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 query ITT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-0 revscan abc@primary -
+0 revscan abc@primary ALL
 
 query I
 SELECT a FROM abc ORDER BY a DESC

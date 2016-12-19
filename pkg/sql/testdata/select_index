@@ -254,7 +254,7 @@ SELECT b FROM t WHERE c > 4.0 AND a < 4
 query ITT
 EXPLAIN SELECT a FROM t WHERE c > 1
 ----
-0 scan t@bc -
+0 scan t@bc ALL
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
@@ -264,12 +264,12 @@ EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 query ITT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
 ----
-0 scan t@bc -
+0 scan t@bc ALL
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c < 1.0
 ----
-0 scan t@bc -
+0 scan t@bc ALL
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5

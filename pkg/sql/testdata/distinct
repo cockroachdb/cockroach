@@ -51,7 +51,7 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 Level  Type     Description
 0      distinct y,z
-1      scan     xyz@foo -
+1      scan     xyz@foo ALL
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -68,7 +68,7 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 Level  Type     Description
 0      distinct y
 1      sort     +y
-2      scan     xyz@foo -
+2      scan     xyz@foo ALL
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -85,7 +85,7 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 Level  Type     Description
 0      distinct y,z
 1      sort     +y,+z
-2      scan     xyz@foo -
+2      scan     xyz@foo ALL
 
 query I
 SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
@@ -100,7 +100,7 @@ EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 Level  Type     Description
 0      distinct y + z
 1      sort     +"y + z"
-2      scan     xyz@foo -
+2      scan     xyz@foo ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by z
@@ -115,7 +115,7 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
 Level  Type     Description
 0      distinct
 1      nosort   +z
-2      scan     xyz@foo -
+2      scan     xyz@foo ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by y
@@ -130,7 +130,7 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 Level  Type     Description
 0      distinct w
 1      sort     +w
-2      scan     xyz@foo -
+2      scan     xyz@foo ALL
 
 # Insert NULL values for z.
 statement ok

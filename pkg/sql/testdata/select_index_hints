@@ -50,7 +50,7 @@ query ITT
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
 0 index-join
-1 scan       abcd@b       -
+1 scan       abcd@b       ALL
 1 scan       abcd@primary
 
 # Force index cd
@@ -65,7 +65,7 @@ query ITT
 EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 ----
 0 index-join
-1 scan       abcd@cd      -
+1 scan       abcd@cd      ALL
 1 scan       abcd@primary
 
 # Force index bcd
@@ -73,7 +73,7 @@ EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 ----
-0 scan       abcd@bcd     -
+0 scan       abcd@bcd     ALL
 
 query IIII
 SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
@@ -86,7 +86,7 @@ SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-0 scan       abcd@b       -
+0 scan       abcd@b       ALL
 
 # Force index b (non-covering due to WHERE clause)
 
@@ -94,7 +94,7 @@ query ITT
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
 0 index-join
-1 scan       abcd@b       -
+1 scan       abcd@b       ALL
 1 scan       abcd@primary
 
 # No hint, should be using index cd
@@ -121,7 +121,7 @@ SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 query ITT
 EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 ----
-0 scan       abcd@primary -
+0 scan       abcd@primary ALL
 
 # Force index b
 
@@ -135,7 +135,7 @@ query ITT
 EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ----
 0 index-join
-1 scan       abcd@b       -
+1 scan       abcd@b       ALL
 1 scan       abcd@primary
 
 query error index \"badidx\" not found
@@ -148,7 +148,7 @@ query ITT
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 ----
 0 index-join
-1 scan       abcd@b       -
+1 scan       abcd@b       ALL
 1 scan       abcd@primary
 
 query ITT
@@ -161,17 +161,17 @@ EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
-0 scan       abcd@bcd -
+0 scan       abcd@bcd ALL
 
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
 ----
-0 scan       abcd@bcd -
+0 scan       abcd@bcd ALL
 
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 10
 ----
-0 scan       abcd@primary -
+0 scan       abcd@primary ALL
 
 query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10

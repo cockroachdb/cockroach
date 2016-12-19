@@ -247,6 +247,9 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	fmt.Fprintf(&desc, "%s@%s", n.desc.Name, n.index.Name)
 	spans := sqlbase.PrettySpans(n.spans, 2)
 	if spans != "" {
+		if spans == "-" {
+			spans = "ALL"
+		}
 		fmt.Fprintf(&desc, " %s", spans)
 	}
 	if n.limitHint > 0 && !n.limitSoft {
