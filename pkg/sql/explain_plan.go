@@ -76,7 +76,9 @@ func (p *planner) makeExplainPlanNode(verbose, expanded bool, plan planNode) pla
 	}
 
 	node := &explainPlanNode{
-		verbose:  verbose,
+		explainer: explainer{
+			verbose: verbose,
+		},
 		expanded: expanded,
 		plan:     plan,
 		results:  p.newContainerValuesNode(columns, 0),
@@ -84,17 +86,28 @@ func (p *planner) makeExplainPlanNode(verbose, expanded bool, plan planNode) pla
 	return node
 }
 
+// explainer represents the run-time state of the EXPLAIN logic.
+type explainer struct {
+	// verbose indicates whether the output has separate columns for the
+	// schema signature and ordering information of the intermediate
+	// nodes.
+	verbose bool
+
+	// level is the current depth in the tree of planNodes.
+	level int
+}
+
 // populateExplain extracts the information from planNodes to produce
 // the EXPLAIN output into a valuesNode.
-func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) error {
-	name, description, children := plan.ExplainPlan(verbose)
+func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
+	name, description, children := plan.ExplainPlan(e.verbose)
 
 	row := parser.DTuple{
-		parser.NewDInt(parser.DInt(level)),
+		parser.NewDInt(parser.DInt(e.level)),
 		parser.NewDString(name),
 		parser.NewDString(description),
 	}
-	if verbose {
+	if e.verbose {
 		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
 		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
 	}
@@ -102,20 +115,23 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) erro
 		return err
 	}
 
+	e.level++
+	defer func() { e.level-- }()
 	for _, child := range children {
-		if err := populateExplain(verbose, v, child, level+1); err != nil {
+		if err := e.populateExplain(v, child); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 // explainPlanNode implements the logic for EXPLAIN.
 type explainPlanNode struct {
-	verbose  bool
-	expanded bool
-	plan     planNode
-	results  *valuesNode
+	explainer explainer
+	expanded  bool
+	plan      planNode
+	results   *valuesNode
 }
 
 func (e *explainPlanNode) ExplainTypes(fn func(string, string)) {}
@@ -145,7 +161,7 @@ func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
 }
 
 func (e *explainPlanNode) Start() error {
-	return populateExplain(e.verbose, e.results, e.plan, 0)
+	return e.explainer.populateExplain(e.results, e.plan)
 }
 
 func (e *explainPlanNode) Close() {
