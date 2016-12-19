@@ -168,18 +168,18 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				ctx, sp := ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
-				timeoutCtx, cancel := context.WithTimeout(ctx, nl.heartbeatInterval)
+				ctx, cancel := context.WithTimeout(ctx, nl.heartbeatInterval)
 				// Retry heartbeat in the event the conditional put fails.
-				for r := retry.StartWithCtx(timeoutCtx, retryOpts); r.Next(); {
+				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 					liveness, err := nl.Self()
 					if err != nil && err != ErrNoLivenessRecord {
 						log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 					}
-					if err := nl.Heartbeat(timeoutCtx, liveness); err != nil {
+					if err := nl.Heartbeat(ctx, liveness); err != nil {
 						if err == errSkippedHeartbeat {
 							continue
 						}
-						log.Errorf(timeoutCtx, "failed liveness heartbeat: %v", err)
+						log.Errorf(ctx, "failed liveness heartbeat: %v", err)
 					}
 					break
 				}
@@ -236,14 +236,14 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 
 	log.VEventf(ctx, 1, "heartbeat %+v", newLiveness.Expiration)
 	nl.mu.Lock()
-	defer nl.mu.Unlock()
 	nl.mu.self = newLiveness
+	nl.mu.Unlock()
 	if err != nil {
 		nl.metrics.HeartbeatFailures.Inc(1)
-		return err
+	} else {
+		nl.metrics.HeartbeatSuccesses.Inc(1)
 	}
-	nl.metrics.HeartbeatSuccesses.Inc(1)
-	return nil
+	return err
 }
 
 // Self returns the liveness record for this node. ErrNoLivenessRecord
@@ -286,11 +286,10 @@ func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (*Liveness, err
 		copySelf := nl.mu.self
 		return &copySelf, nil
 	}
-	l, ok := nl.mu.nodes[nodeID]
-	if !ok {
-		return nil, ErrNoLivenessRecord
+	if l, ok := nl.mu.nodes[nodeID]; ok {
+		return &l, nil
 	}
-	return &l, nil
+	return nil, ErrNoLivenessRecord
 }
 
 // IncrementEpoch is called to increment the current liveness epoch,
