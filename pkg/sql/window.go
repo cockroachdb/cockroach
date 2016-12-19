@@ -182,7 +182,9 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 				return err
 			}
 
-			// FIXME: why does this break if we merge the renders here?
+			// TODO(knz/nvanbenschoten): we can't merge this yet because the
+			// rest of the code assumes that the renders for window
+			// definitions are disjoint from the rest.
 			colIdxs := s.addOrMergeRenders(cols, exprs, false)
 			for _, idx := range colIdxs {
 				windowFn.partitionIdxs = append(windowFn.partitionIdxs, idx-origRenderLen)
@@ -202,7 +204,9 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 				direction = encoding.Descending
 			}
 
-			// FIXME: why does this break if we merge the renders here?
+			// TODO(knz/nvanbenschoten): we can't merge this yet because the
+			// rest of the code assumes that the renders for sorting columns
+			// are disjoint from the rest.
 			colIdxs := s.addOrMergeRenders(cols, exprs, false)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
@@ -252,14 +256,14 @@ func constructWindowDef(
 	}
 
 	// referencedSpec.Partitions is always used.
-	if def.Partitions != nil {
+	if len(def.Partitions) > 0 {
 		return def, errors.Errorf("cannot override PARTITION BY clause of window %q", refName)
 	}
 	def.Partitions = referencedSpec.Partitions
 
 	// referencedSpec.OrderBy is used if set.
-	if referencedSpec.OrderBy != nil {
-		if def.OrderBy != nil {
+	if len(referencedSpec.OrderBy) > 0 {
+		if len(def.OrderBy) > 0 {
 			return def, errors.Errorf("cannot override ORDER BY clause of window %q", refName)
 		}
 		def.OrderBy = referencedSpec.OrderBy
