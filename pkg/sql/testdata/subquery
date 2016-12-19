@@ -44,7 +44,7 @@ query ITT
 EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
 ----
 0 split (SELECT 42)
-1 empty -
+1 nullrow
 
 statement ok
 ALTER TABLE abc SPLIT AT ((SELECT 1))

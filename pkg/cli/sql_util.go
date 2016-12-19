@@ -366,7 +366,7 @@ func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string
 			// Then print the results themselves.
 			fmt.Fprintln(w, strings.Join(cols, "\t"))
 			for _, row := range allRows {
-				fmt.Fprintln(w, strings.Join(row, "\t"))
+				fmt.Fprintln(w, strings.TrimRight(strings.Join(row, "\t"), "\t "))
 			}
 		}
 	}

@@ -133,7 +133,7 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
 query ITT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-0 empty -
+0 empty
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
@@ -220,7 +220,7 @@ EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
 query ITT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-0 empty -
+0 empty
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.

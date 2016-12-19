@@ -22,7 +22,7 @@ EXPLAIN (TYPES) SELECT 42;
 0  select        result    ("42" int)
 1  render/filter result    ("42" int)
 1  render/filter render 0  (42)[int]
-2  empty         result    ()
+2  nullrow       result    ()
 
 query ITTT
 EXPLAIN (TYPES) SELECT * FROM t
@@ -240,7 +240,7 @@ EXPLAIN (TYPES) SELECT $1 + 2 AS a
 0      select          result     (a int)
 1      render/filter   result     (a int)
 1      render/filter   render 0   (($1)[int] + (2)[int])[int]
-2      empty           result     ()
+2      nullrow         result     ()
 
 query ITTT
 EXPLAIN (TYPES) SELECT ABS(2-3) AS a
@@ -248,7 +248,7 @@ EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 0      select          result     (a int)
 1      render/filter   result     (a int)
 1      render/filter   render 0   (abs((-1)[int]))[int]
-2      empty           result     ()
+2      nullrow         result     ()
 
 query ITTT
 EXPLAIN (TYPES, NORMALIZE) SELECT ABS(2-3) AS a
@@ -256,4 +256,4 @@ EXPLAIN (TYPES, NORMALIZE) SELECT ABS(2-3) AS a
 0      select          result     (a int)
 1      render/filter   result     (a int)
 1      render/filter   render 0   (1)[int]
-2      empty           result     ()
+2      nullrow         result     ()
