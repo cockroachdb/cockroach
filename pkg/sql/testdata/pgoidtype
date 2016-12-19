@@ -11,7 +11,7 @@ SELECT 'pg_constraint'::REGCLASS
 query II
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
-3427452076  3427452076
+1736923753  1736923753
 
 query error more than one function named 'max'
 SELECT 'max'::REGPROC
