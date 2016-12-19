@@ -80,7 +80,7 @@ true
 true
 
 # Show that the primary key is used under ordinalityNode.
-query ITTTT
+query ITTTTT
 EXPLAIN (verbose) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY;
 ----
 0  select                                           (x, ordinality)  +x,unique
@@ -92,7 +92,7 @@ EXPLAIN (verbose) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALIT
 
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
-query ITTTT
+query ITTTTT
 EXPLAIN (verbose) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a';
 ----
 0  select                                              (x, ordinality)  +ordinality,unique

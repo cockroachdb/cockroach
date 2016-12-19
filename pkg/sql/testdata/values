@@ -26,7 +26,7 @@ VALUES ((SELECT 1)), ((SELECT 2))
 2
 
 # the subquery's plan must be visible in EXPLAIN
-query ITT
+query ITTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
 0 values 1 column, 2 rows

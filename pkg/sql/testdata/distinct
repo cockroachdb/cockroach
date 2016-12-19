@@ -30,12 +30,11 @@ SELECT DISTINCT y, z FROM xyz
 2 9
 
 # TODO(vivek): Use the secondary index. Use distinct in index selection.
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
-Level  Type     Description
 0      distinct
-1      scan     xyz@primary
+1      scan           xyz@primary
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY z
@@ -46,10 +45,9 @@ SELECT DISTINCT y, z FROM xyz ORDER BY z
 5 6
 2 9
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
-Level  Type     Description
 0      distinct y,z
 1      scan     xyz@foo ALL
 
@@ -62,10 +60,9 @@ SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 3 5
 5 6
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
-Level  Type     Description
 0      distinct y
 1      sort     +y
 2      scan     xyz@foo ALL
@@ -79,10 +76,9 @@ SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 3 5
 5 6
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
-Level  Type     Description
 0      distinct y,z
 1      sort     +y,+z
 2      scan     xyz@foo ALL
@@ -94,10 +90,9 @@ SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
 8
 11
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
-Level  Type     Description
 0      distinct y + z
 1      sort     +"y + z"
 2      scan     xyz@foo ALL
@@ -109,10 +104,9 @@ SELECT DISTINCT y AS w FROM xyz ORDER by z
 3
 5
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
 ----
-Level  Type     Description
 0      distinct
 1      nosort   +z
 2      scan     xyz@foo ALL
@@ -124,10 +118,9 @@ SELECT DISTINCT y AS w FROM xyz ORDER by y
 3
 5
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
-Level  Type     Description
 0      distinct w
 1      sort     +w
 2      scan     xyz@foo ALL
