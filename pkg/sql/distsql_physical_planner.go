@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -64,10 +65,10 @@ type distSQLPlanner struct {
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
 	distSQLSrv   *distsqlrun.ServerImpl
-	spanResolver *distsqlrun.SpanResolver
+	spanResolver *distsqlplan.SpanResolver
 }
 
-const resolverPolicy = distsqlrun.BinPackingLeaseHolderChoice
+const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 
 // If true, the plan diagram (in JSON) is logged for each plan (used for
 // debugging).
@@ -84,7 +85,7 @@ func newDistSQLPlanner(
 		nodeDesc:     nodeDesc,
 		rpcContext:   rpcCtx,
 		distSQLSrv:   distSQLSrv,
-		spanResolver: distsqlrun.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
 	}
 }
 
@@ -249,7 +250,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 // a single query.
 type planningCtx struct {
 	ctx      context.Context
-	spanIter *distsqlrun.SpanResolverIterator
+	spanIter *distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
 	nodeAddresses map[roachpb.NodeID]string
