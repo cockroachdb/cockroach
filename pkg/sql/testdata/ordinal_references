@@ -45,7 +45,7 @@ c 1
 a 3
 
 # Check that sort by ordinal picks up the existing render.
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
 0  select                                                         (b, a)                 +a
@@ -74,7 +74,7 @@ SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
 16
 
 # Check that GROUP BY picks up column ordinals.
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
 ----
 0  select                                                         (m)
@@ -82,7 +82,7 @@ EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
 2  render/filter  from (test.foo.a, test.foo.b, *test.foo.rowid)  (a, a)
 3  scan           foo@primary ALL                                 (a, b[omitted], rowid[hidden,omitted])  +rowid,unique
 
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2;
 ----
 0  select                                                         (m)

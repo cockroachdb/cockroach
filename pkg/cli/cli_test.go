@@ -708,7 +708,7 @@ func Example_sql() {
 	// t
 	// sql -e explain select 3
 	// 1 row
-	// Level	Type	Description
+	// Level	Type	Field	Description
 	// 0	nullrow
 	// sql -e select 1; select 2
 	// 1 row

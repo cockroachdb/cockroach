@@ -27,7 +27,7 @@ INSERT INTO t VALUES
   (8, 3, 2, '32'),
   (9, 3, 3, '33')
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 ----
 0 index-join
@@ -46,7 +46,7 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 0 /t/primary/5/s '22' ROW
 2 /t/bc/2/3/6    NULL FILTERED
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM t WHERE b = 2 AND c != b
 ----
 0 index-join

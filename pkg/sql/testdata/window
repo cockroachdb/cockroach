@@ -465,7 +465,7 @@ SELECT k, max(stddev) OVER (ORDER BY d DESC) FROM (SELECT k, d, stddev(d) OVER (
 7  3.5355339059327376
 8  3.5355339059327376
 
-query ITT
+query ITTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
 0  sort    +"variance(d) OVER w",+k

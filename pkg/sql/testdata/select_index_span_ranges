@@ -52,7 +52,7 @@ ALTER INDEX t@c SPLIT AT (90)
 statement ok
 ALTER INDEX c SPLIT AT (10)
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
 ----
 0  index-join
