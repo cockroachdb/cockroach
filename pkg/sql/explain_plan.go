@@ -22,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
+// formatColumns converts a column signature for a data source /
+// planNode to a string. The column types are printed iff the 2nd
+// argument specifies so.
 func formatColumns(cols ResultColumns, printTypes bool) string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
@@ -60,6 +63,29 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 	return buf.String()
 }
 
+// newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
+func (p *planner) makeExplainPlanNode(verbose, expanded bool, plan planNode) planNode {
+	columns := ResultColumns{
+		{Name: "Level", Typ: parser.TypeInt},
+		{Name: "Type", Typ: parser.TypeString},
+		{Name: "Description", Typ: parser.TypeString},
+	}
+	if verbose {
+		columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
+		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
+	}
+
+	node := &explainPlanNode{
+		verbose:  verbose,
+		expanded: expanded,
+		plan:     plan,
+		results:  p.newContainerValuesNode(columns, 0),
+	}
+	return node
+}
+
+// populateExplain extracts the information from planNodes to produce
+// the EXPLAIN output into a valuesNode.
 func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) error {
 	name, description, children := plan.ExplainPlan(verbose)
 
@@ -84,6 +110,7 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) erro
 	return nil
 }
 
+// explainPlanNode implements the logic for EXPLAIN.
 type explainPlanNode struct {
 	verbose  bool
 	expanded bool
