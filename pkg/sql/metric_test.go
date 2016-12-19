@@ -50,7 +50,7 @@ func TestQueryCounts(t *testing.T) {
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
-		{"", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+		{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		{"BEGIN; END", 1, 0, 0, 0, 0, 0, 0, 0, 1, 0},
 		{"SELECT 1", 0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
 		{"CREATE DATABASE mt", 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
@@ -69,7 +69,11 @@ func TestQueryCounts(t *testing.T) {
 		{"SET database = system", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
 	}
 
+	// Initialize accum while accounting for system migrations that may have run
+	// DDL statements.
 	accum := testcases[0]
+	accum.ddlCount = s.MustGetSQLCounter(sql.MetaDdl.Name)
+
 	for _, tc := range testcases {
 		if tc.query == "" {
 			continue
