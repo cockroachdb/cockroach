@@ -1,24 +1,24 @@
-query ITT colnames
+query ITTT colnames
 EXPLAIN (PLAN) SELECT 1
 ----
-Level  Type    Description
+Level  Type    Field Description
 0      nullrow
 
-query ITTTT colnames
+query ITTTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1
 ----
-Level  Type           Description    Columns Ordering
-0      select                        ("1")
-1      render/filter  from ()        ("1")
-2      nullrow                       ()
+Level  Type           Field Description    Columns Ordering
+0      select                              ("1")
+1      render/filter        from ()        ("1")
+2      nullrow                             ()
 
-query ITTTT colnames
+query ITTTTT colnames
 EXPLAIN (VERBOSE, PLAN) SELECT 1
 ----
-Level  Type           Description Columns Ordering
-0      select                     ("1")
-1      render/filter  from ()     ("1")
-2      nullrow                    ()
+Level  Type          Field  Description Columns Ordering
+0      select                           ("1")
+1      render/filter        from ()     ("1")
+2      nullrow                          ()
 
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT 1
@@ -61,10 +61,9 @@ statement error unsupported EXPLAIN option
 EXPLAIN (TRACE, UNKNOWN) SELECT 1
 
 # Ensure that tracing results are sorted after gathering
-query ITTTT colnames
+query ITTTTT
 EXPLAIN(VERBOSE) EXPLAIN(TRACE) SELECT 1
 ----
-Level  Type                  Description             Columns                                                                                                  Ordering
 0      select                                        ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
 1      sort                  +Timestamp,+"Span Pos"  ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
 2      explain               trace                   ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition, Timestamp)
@@ -73,12 +72,12 @@ Level  Type                  Description             Columns                    
 5      nullrow                                       ()
 
 # Ensure that all relevant statement types can be explained
-query ITT
+query ITTT
 EXPLAIN CREATE DATABASE foo
 ----
 0 create database
 
-query ITT
+query ITTT
 EXPLAIN CREATE TABLE foo (x INT)
 ----
 0 create table
@@ -86,7 +85,7 @@ EXPLAIN CREATE TABLE foo (x INT)
 statement ok
 CREATE TABLE foo (x INT)
 
-query ITT
+query ITTT
 EXPLAIN CREATE INDEX a ON foo(x)
 ----
 0 create index
@@ -94,7 +93,7 @@ EXPLAIN CREATE INDEX a ON foo(x)
 statement ok
 CREATE DATABASE foo
 
-query ITT
+query ITTT
 EXPLAIN DROP DATABASE foo
 ----
 0 drop database
@@ -102,102 +101,102 @@ EXPLAIN DROP DATABASE foo
 statement ok
 CREATE INDEX a ON foo(x)
 
-query ITT
+query ITTT
 EXPLAIN DROP INDEX foo@a
 ----
 0 drop index
 
-query ITT
+query ITTT
 EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
 0 alter table
 
-query ITT
+query ITTT
 EXPLAIN ALTER TABLE foo SPLIT AT (42)
 ----
 0 split 42
 
-query ITT
+query ITTT
 EXPLAIN DROP TABLE foo
 ----
 0 drop table
 
-query ITT
+query ITTT
 EXPLAIN SHOW DATABASES
 ----
 0  sort           +Database
 1  virtual table  information_schema.schemata
 2  values         4 columns, 5 rows
 
-query ITT
+query ITTT
 EXPLAIN SHOW TABLES
 ----
 0  virtual table  SHOW TABLES FROM test
 1  values         1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW DATABASE
 ----
 0 virtual table SHOW DATABASE
 1 values 1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW TIME ZONE
 ----
 0 virtual table SHOW TIME ZONE
 1 values 1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW SYNTAX
 ----
 0 virtual table SHOW SYNTAX
 1 values 1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 0 virtual table SHOW DEFAULT_TRANSACTION_ISOLATION
 1 values 1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 ----
 0 virtual table SHOW TRANSACTION ISOLATION LEVEL
 1 values 1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW TRANSACTION PRIORITY
 ----
 0 virtual table SHOW TRANSACTION PRIORITY
 1 values 1 column, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
 0  virtual table  SHOW COLUMNS FROM foo
 1  values         4 columns, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 0  virtual table  SHOW GRANTS
 1  sort           +"Table",+"User",+Privileges
 2  values         3 columns, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW INDEX FROM foo
 ----
 0 virtual table SHOW INDEX FROM foo
 1 values 7 columns, 2 rows
 
-query ITT
+query ITTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
 0 virtual table SHOW CONSTRAINTS FROM foo
 1 sort          +"Table",+Name
 2 values        5 columns, 1 row
 
-query ITT
+query ITTT
 EXPLAIN SHOW USERS
 ----
 0 scan users@primary

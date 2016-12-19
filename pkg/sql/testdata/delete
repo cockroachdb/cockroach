@@ -131,12 +131,12 @@ k v
 7 8
 
 # Check that EXPLAIN does not destroy data (#6613)
-query ITT colnames
+query ITTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-Level Type   Description
+Level Type   Field Description
 0     delete
-1     scan   unindexed@primary
+1     scan         unindexed@primary
 
 query II colnames
 SELECT k, v FROM unindexed

@@ -406,7 +406,7 @@ x  x  y  b  d  e
 44 44 51 44 44 51
 
 # Check EXPLAIN.
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 0  join  INNER ON EQUALS((x),(x))
@@ -414,7 +414,7 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 0  join  INNER ON EQUALS((x),(y))
@@ -422,7 +422,7 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 0  join  INNER ON a.x = 44
@@ -430,7 +430,7 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 0  join  INNER ON EQUALS((x),(y))
@@ -438,7 +438,7 @@ EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 1  scan  twocolumn@primary
 
 # Check EXPLAIN.
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 0  join  INNER ON EQUALS((x),(y))
@@ -446,7 +446,7 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 1  scan  twocolumn@primary
 
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit  count: 1
@@ -549,7 +549,7 @@ query error memory budget exceeded
 SELECT COUNT(*) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k;
 
 # THe following queries verify that only the necessary columns are scanned.
-query ITTTT
+query ITTTTT
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 0  select                                                                          (x, y)
@@ -559,7 +559,7 @@ EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
 
 
-query ITTTT
+query ITTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
 0  select                                                                                     (y)
@@ -568,7 +568,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 3  scan           twocolumn@primary                                                           (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                           (x, y, rowid[hidden,omitted])
 
-query ITTTT
+query ITTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
 0  select                                                                          (y)
@@ -577,7 +577,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b
 3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
 3  scan           twocolumn@primary                                                (x, y, rowid[hidden,omitted])
 
-query ITTTT
+query ITTTTT
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
 0  select                                                                          (x)
@@ -587,7 +587,7 @@ EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b
 3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
-query ITTTT
+query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
 				INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----

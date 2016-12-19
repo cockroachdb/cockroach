@@ -38,7 +38,7 @@ SELECT a, b FROM t ORDER BY b
 2 8
 1 9
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 0 sort +b
@@ -51,7 +51,7 @@ SELECT a, b FROM t ORDER BY b DESC
 2 8
 3 7
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 0 sort -b
@@ -64,7 +64,7 @@ SELECT a FROM t ORDER BY 1 DESC
 2
 1
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 0 limit count: 2
@@ -77,7 +77,7 @@ SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 1 9
 2 8
 
-query ITT
+query ITTT
 EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
 ----
 0 limit    count: 2
@@ -130,19 +130,19 @@ SELECT b FROM t ORDER BY a DESC
 8
 9
 
-query ITT
+query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 0 nosort -a
 1 revscan t@primary ALL
 
-query ITT
+query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 0 nosort -a,+b
 1 revscan t@primary ALL
 
-query ITT
+query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 0 nosort -a,-b
@@ -233,18 +233,18 @@ query error source name "a" not found in FROM clause
 SELECT a FROM t ORDER BY a.b
 
 # Check that sort is skipped if the ORDER BY clause is constant.
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
 0 scan t@primary
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
 0 scan t@primary
 
 # Check that the sort key reuses the existing render.
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 ----
 0   select                                              ("b + 2")   +"b + 2"
@@ -253,7 +253,7 @@ EXPLAIN(VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
 
 # Check that the sort picks up a renamed render properly.
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
 0   select                                              (y)   +y
@@ -262,7 +262,7 @@ EXPLAIN(VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
 
 # Check that the sort reuses a render behind a rename properly.
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 0   select                                              (y)   +y
@@ -300,7 +300,7 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 1 /abc/primary/4/5/6   NULL  PARTIAL
 1 /abc/primary/4/5/6/d 'Two' ROW
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM abc ORDER BY a
 ----
 0 scan abc@primary ALL
@@ -311,20 +311,20 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 0 /abc/ba/2/1/3 NULL ROW
 1 /abc/ba/5/4/6 NULL ROW
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
 0 scan abc@ba ALL
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
 0 scan abc@ba ALL
 
 # We use the WHERE condition to force the use of index ba.
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
 0 sort       +b,+a,+d
@@ -334,26 +334,26 @@ EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
 0 index-join
 1 scan       abc@ba /11-
 1 scan       abc@primary
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 0 nosort +b,+c
 1 scan   abc@bc ALL
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 0 nosort +b,+c,+a
 1 scan   abc@bc ALL
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 0 nosort +b,+c,-a
@@ -379,7 +379,7 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 1 /abc/primary/1/2/3/d 'one' PARTIAL
 1 /abc/primary/1/2/3   NULL  ROW
 
-query ITT
+query ITTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
 0 revscan abc@primary ALL
@@ -400,12 +400,12 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 1
 
-query ITT
+query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 0 scan abc@bc /2-/3
 
-query ITT
+query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 0 revscan abc@bc /2-/3
@@ -435,22 +435,22 @@ statement ok
 INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
 
 # The following tests verify we recognize that sorting is not necessary
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
 0 scan abcd@abc /1/4-/1/5
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 0 scan abcd@abc /1/4-/1/5
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 0 scan abcd@abc /1/4-/1/5
 
-query ITT
+query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 0 scan abcd@abc /1/4-/1/5
@@ -469,7 +469,7 @@ NaN
 -1
 1
 
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x);
 ----
 0  select                           (x)        +x
@@ -480,20 +480,20 @@ EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(
 5  select                           (column1)
 6  values         1 column, 3 rows  (column1)
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC;
 ----
 0 ordinality
 1 values 1 column, 3 rows
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC;
 ----
 0 sort -ordinality
 1 ordinality
 2 values 1 column, 3 rows
 
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY;
 ----
 0  select                                           (x, ordinality)  +ordinality,unique
@@ -504,7 +504,7 @@ EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(
 5  select                                           (column1)
 6  values         1 column, 3 rows                  (column1)
 
-query ITTTT
+query ITTTTT
 EXPLAIN(VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY;
 ----
 0  select                                           (x, ordinality)  +x

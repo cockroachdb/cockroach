@@ -69,6 +69,7 @@ func (p *planner) makeExplainPlanNode(verbose, expanded bool, plan planNode) pla
 	columns := ResultColumns{
 		{Name: "Level", Typ: parser.TypeInt},
 		{Name: "Type", Typ: parser.TypeString},
+		{Name: "Field", Typ: parser.TypeString},
 		{Name: "Description", Typ: parser.TypeString},
 	}
 	if verbose {
@@ -98,7 +99,7 @@ type explainer struct {
 	level int
 
 	// makeRow produces one row of EXPLAIN output.
-	makeRow func(level int, typ, desc string, plan planNode)
+	makeRow func(level int, typ, field, desc string, plan planNode)
 
 	// err remembers whether any error was encountered by makeRow.
 	err error
@@ -107,7 +108,7 @@ type explainer struct {
 // populateExplain invokes explain() with a makeRow method
 // which populates a valuesNode.
 func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
-	e.makeRow = func(level int, name, description string, plan planNode) {
+	e.makeRow = func(level int, name, field, description string, plan planNode) {
 		if e.err != nil {
 			return
 		}
@@ -115,6 +116,7 @@ func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
 		row := parser.DTuple{
 			parser.NewDInt(parser.DInt(level)),
 			parser.NewDString(name),
+			parser.NewDString(field),
 			parser.NewDString(description),
 		}
 		if e.verbose {
@@ -136,8 +138,11 @@ func planToString(plan planNode) string {
 	var buf bytes.Buffer
 	e := explainer{
 		verbose: true,
-		makeRow: func(level int, name, description string, plan planNode) {
-			fmt.Fprintf(&buf, "%d %s %s %s %s\n", level, name, description,
+		makeRow: func(level int, name, field, description string, plan planNode) {
+			if field != "" {
+				field = "." + field
+			}
+			fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
 				formatColumns(plan.Columns(), false),
 				plan.Ordering().AsString(plan.Columns()),
 			)
@@ -155,7 +160,7 @@ func (e *explainer) explain(plan planNode) {
 	}
 
 	name, description, children := plan.ExplainPlan(e.verbose)
-	e.makeRow(e.level, name, description, plan)
+	e.makeRow(e.level, name, "", description, plan)
 
 	e.level++
 	defer func() { e.level-- }()
