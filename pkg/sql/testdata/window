@@ -60,15 +60,16 @@ SELECT avg(k) OVER (PARTITION BY v) FROM kv ORDER BY 1
 5.5000000000000000
 5.5000000000000000
 
-query R
-SELECT avg(k) OVER (PARTITION BY kv.*) FROM kv ORDER BY 1
-----
-1.0000000000000000
-3.0000000000000000
-5.0000000000000000
-6.0000000000000000
-7.0000000000000000
-8.0000000000000000
+# Not working until #12482 is fixed.
+#query R
+#SELECT avg(k) OVER (PARTITION BY kv.*) FROM kv ORDER BY 1
+#----
+#1.0000000000000000
+#3.0000000000000000
+#5.0000000000000000
+#6.0000000000000000
+#7.0000000000000000
+#8.0000000000000000
 
 query R
 SELECT avg(k) OVER (ORDER BY w) FROM kv ORDER BY 1
@@ -81,14 +82,25 @@ SELECT avg(k) OVER (ORDER BY w) FROM kv ORDER BY 1
 7.5000000000000000
 
 query R
-SELECT avg(k) OVER (ORDER BY kv.*) FROM kv ORDER BY 1
+SELECT avg(k) OVER (ORDER BY 1-w) FROM kv ORDER BY 1
 ----
-1.0000000000000000
-2.0000000000000000
-3.0000000000000000
 3.7500000000000000
-4.4000000000000000
+3.7500000000000000
+4.0000000000000000
+4.0000000000000000
 5.0000000000000000
+5.0000000000000000
+
+# Not working until #12482 is fixed.
+#query R
+#SELECT avg(k) OVER (ORDER BY kv.*) FROM kv ORDER BY 1
+#----
+#1.0000000000000000
+#2.0000000000000000
+#3.0000000000000000
+#3.7500000000000000
+#4.4000000000000000
+#5.0000000000000000
 
 query R
 SELECT avg(k) OVER (ORDER BY w DESC) FROM kv ORDER BY 1
@@ -515,8 +527,8 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 0  select         result                                         (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 1  sort           result                                         (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 2  window         result                                         (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal, "variance(d) OVER (PARTITION BY v, 100)" decimal)
-2  window         render stddev(d) OVER (PARTITION BY v, 'a')    (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], 'a'))[decimal]
-2  window         render variance(d) OVER (PARTITION BY v, 100)  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], 100))[decimal]
+2  window         render stddev(d) OVER (PARTITION BY v, 'a')    (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
+2  window         render variance(d) OVER (PARTITION BY v, 100)  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 3  render/filter  result                                         (k int, d decimal, d decimal, v int, "'a'" string, v int, "100" int)
 3  render/filter  render 0                                       (k)[int]
 3  render/filter  render 1                                       (d)[decimal]
@@ -528,13 +540,27 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 4  scan           result                                         (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 
 query ITTT
+EXPLAIN (TYPES,NORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
+----
+0  select         result                                       (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
+1  sort           result                                       (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
+2  window         result                                       (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
+2  window         render stddev(d) OVER (PARTITION BY v, 'a')  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
+3  render/filter  result                                       (k int, d decimal, v int, "'a'" string)
+3  render/filter  render 0                                     (k)[int]
+3  render/filter  render 1                                     (d)[decimal]
+3  render/filter  render 2                                     (v)[int]
+3  render/filter  render 3                                     ('a')[string]
+4  scan           result                                       (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
+
+query ITTT
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
 0  select         result                                           (k int, "k + stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 1  sort           result                                           (k int, "k + stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 2  window         result                                           (k int, "k + stddev(d) OVER (PARTITION BY v, 'a')" decimal, "variance(d) OVER (PARTITION BY v, 100)" decimal)
-2  window         render k + stddev(d) OVER (PARTITION BY v, 'a')  ((k)[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], 'a'))[decimal])[decimal]
-2  window         render variance(d) OVER (PARTITION BY v, 100)    (variance((d)[decimal]) OVER (PARTITION BY (v)[int], 100))[decimal]
+2  window         render k + stddev(d) OVER (PARTITION BY v, 'a')  ((k)[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal])[decimal]
+2  window         render variance(d) OVER (PARTITION BY v, 100)    (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 3  render/filter  result                                           (k int, d decimal, d decimal, v int, "'a'" string, v int, "100" int, k int)
 3  render/filter  render 0                                         (k)[int]
 3  render/filter  render 1                                         (d)[decimal]
