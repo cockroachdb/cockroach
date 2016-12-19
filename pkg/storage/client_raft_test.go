@@ -2894,6 +2894,11 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and cause leadership to change hands in ways this test doesn't
 	// expect.
 	sc.RaftElectionTimeoutTicks = 100000
+	// This test can rapidly advance the clock via expireLeases(),
+	// which could lead the replication queue to consider a store dead
+	// and remove a replica in the middle of the test. Disable the
+	// replication queue; we'll control replication manually.
+	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, numStores)
