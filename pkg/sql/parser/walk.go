@@ -198,6 +198,13 @@ func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy.Exprs = append(Exprs(nil), exprCopy.Exprs...)
 	if windowDef := exprCopy.WindowDef; windowDef != nil {
 		windowDef.Partitions = append(Exprs(nil), windowDef.Partitions...)
+		if len(windowDef.OrderBy) > 0 {
+			newOrderBy := make(OrderBy, len(windowDef.OrderBy))
+			for i, o := range windowDef.OrderBy {
+				newOrderBy[i] = &Order{Expr: o.Expr, Direction: o.Direction}
+			}
+			windowDef.OrderBy = newOrderBy
+		}
 	}
 	return &exprCopy
 }
@@ -222,6 +229,15 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 					ret = expr.CopyNode()
 				}
 				ret.WindowDef.Partitions[i] = e
+			}
+		}
+		for i := range expr.WindowDef.OrderBy {
+			e, changed := WalkExpr(v, expr.WindowDef.OrderBy[i].Expr)
+			if changed {
+				if ret == expr {
+					ret = expr.CopyNode()
+				}
+				ret.WindowDef.OrderBy[i].Expr = e
 			}
 		}
 	}

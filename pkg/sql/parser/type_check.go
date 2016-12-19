@@ -384,6 +384,23 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			expr.Func, strings.Join(typeNames, ", "), desStr)
 	}
 
+	if expr.WindowDef != nil {
+		for i, partition := range expr.WindowDef.Partitions {
+			typedPartition, err := partition.TypeCheck(ctx, TypeAny)
+			if err != nil {
+				return nil, err
+			}
+			expr.WindowDef.Partitions[i] = typedPartition
+		}
+		for i, orderBy := range expr.WindowDef.OrderBy {
+			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, TypeAny)
+			if err != nil {
+				return nil, err
+			}
+			expr.WindowDef.OrderBy[i].Expr = typedOrderBy
+		}
+	}
+
 	builtin := fn.(Builtin)
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
