@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package distsql_test
+package distsqlrun_test
 
 import (
 	"os"

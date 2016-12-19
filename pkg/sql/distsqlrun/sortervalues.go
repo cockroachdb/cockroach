@@ -14,7 +14,7 @@
 //
 // Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
-package distsql
+package distsqlrun
 
 import (
 	"container/heap"

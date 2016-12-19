@@ -18,7 +18,7 @@
 // Routers are used by processors to direct outgoing rows to (potentially)
 // multiple streams; see docs/RFCS/distributed_sql.md
 
-package distsql
+package distsqlrun
 
 import (
 	"hash/crc32"

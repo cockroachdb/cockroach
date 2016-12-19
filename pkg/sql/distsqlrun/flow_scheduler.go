@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package distsql
+package distsqlrun
 
 import (
 	"container/list"

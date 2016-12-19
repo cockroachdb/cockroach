@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-	Package distsql is a generated protocol buffer package.
+	package distsqlrun is a generated protocol buffer package.
 
 	It is generated from these files:
 		cockroach/pkg/sql/distsql/api.proto
@@ -37,7 +37,7 @@
 		ProcessorSpec
 		FlowSpec
 */
-package distsql
+package distsqlrun
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
@@ -129,7 +129,9 @@ func NewDistSQLClient(cc *grpc.ClientConn) DistSQLClient {
 	return &distSQLClient{cc}
 }
 
-func (c *distSQLClient) RunSyncFlow(ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption) (DistSQL_RunSyncFlowClient, error) {
+func (c *distSQLClient) RunSyncFlow(
+	ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption,
+) (DistSQL_RunSyncFlowClient, error) {
 	stream, err := grpc.NewClientStream(ctx, &_DistSQL_serviceDesc.Streams[0], c.cc, "/cockroach.sql.distsql.DistSQL/RunSyncFlow", opts...)
 	if err != nil {
 		return nil, err
@@ -161,7 +163,9 @@ func (x *distSQLRunSyncFlowClient) Recv() (*StreamMessage, error) {
 	return m, nil
 }
 
-func (c *distSQLClient) SetupFlow(ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption) (*SimpleResponse, error) {
+func (c *distSQLClient) SetupFlow(
+	ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption,
+) (*SimpleResponse, error) {
 	out := new(SimpleResponse)
 	err := grpc.Invoke(ctx, "/cockroach.sql.distsql.DistSQL/SetupFlow", in, out, c.cc, opts...)
 	if err != nil {
@@ -170,7 +174,9 @@ func (c *distSQLClient) SetupFlow(ctx context.Context, in *SetupFlowRequest, opt
 	return out, nil
 }
 
-func (c *distSQLClient) FlowStream(ctx context.Context, opts ...grpc.CallOption) (DistSQL_FlowStreamClient, error) {
+func (c *distSQLClient) FlowStream(
+	ctx context.Context, opts ...grpc.CallOption,
+) (DistSQL_FlowStreamClient, error) {
 	stream, err := grpc.NewClientStream(ctx, &_DistSQL_serviceDesc.Streams[1], c.cc, "/cockroach.sql.distsql.DistSQL/FlowStream", opts...)
 	if err != nil {
 		return nil, err
@@ -245,7 +251,12 @@ func (x *distSQLRunSyncFlowServer) Send(m *StreamMessage) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _DistSQL_SetupFlow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DistSQL_SetupFlow_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(SetupFlowRequest)
 	if err := dec(in); err != nil {
 		return nil, err

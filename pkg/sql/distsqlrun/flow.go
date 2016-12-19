@@ -15,7 +15,7 @@
 // Author: Radu Berinde (radu@cockroachlabs.com)
 // Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
-package distsql
+package distsqlrun
 
 import (
 	"sync"

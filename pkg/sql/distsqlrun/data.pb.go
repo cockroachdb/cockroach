@@ -2,7 +2,7 @@
 // source: cockroach/pkg/sql/distsql/data.proto
 // DO NOT EDIT!
 
-package distsql
+package distsqlrun
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"

@@ -14,7 +14,7 @@
 //
 // Author: Andrei Matei (andreimatei1@gmail.com)
 
-package distsql_test
+package distsqlrun_test
 
 import (
 	gosql "database/sql"

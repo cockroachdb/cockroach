@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package distsql
+package distsqlrun
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"

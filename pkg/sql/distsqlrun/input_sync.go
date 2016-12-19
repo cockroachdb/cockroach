@@ -17,7 +17,7 @@
 // Input synchronizers are used by processors to merge incoming rows from
 // (potentially) multiple streams; see docs/RFCS/distributed_sql.md
 
-package distsql
+package distsqlrun
 
 import (
 	"container/heap"
