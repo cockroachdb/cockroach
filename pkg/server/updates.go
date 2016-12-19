@@ -292,10 +292,13 @@ func (s *Server) reportUsage(ctx context.Context) {
 	reportingURL.RawQuery = q.Encode()
 
 	res, err := http.Post(reportingURL.String(), "application/json", b)
-	if err != nil && log.V(2) {
-		// This is probably going to be relatively common in production
-		// environments where network access is usually curtailed.
-		log.Warning(ctx, "Failed to report node usage metrics: ", err)
+
+	if err != nil {
+		if log.V(2) {
+			// This is probably going to be relatively common in production
+			// environments where network access is usually curtailed.
+			log.Warning(ctx, "Failed to report node usage metrics: ", err)
+		}
 		return
 	}
 
