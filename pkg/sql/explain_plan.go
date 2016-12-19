@@ -85,9 +85,10 @@ func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) erro
 }
 
 type explainPlanNode struct {
-	verbose bool
-	plan    planNode
-	results *valuesNode
+	verbose  bool
+	expanded bool
+	plan     planNode
+	results  *valuesNode
 }
 
 func (e *explainPlanNode) ExplainTypes(fn func(string, string)) {}
@@ -100,14 +101,16 @@ func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetL
 func (e *explainPlanNode) setNeededColumns(_ []bool)            {}
 func (e *explainPlanNode) MarkDebug(mode explainMode)           {}
 func (e *explainPlanNode) expandPlan() error {
-	if err := e.plan.expandPlan(); err != nil {
-		return err
+	if e.expanded {
+		if err := e.plan.expandPlan(); err != nil {
+			return err
+		}
+		// Trigger limit hint propagation, which would otherwise only occur
+		// during the plan's Start() phase. This may trigger additional
+		// optimizations (eg. in sortNode) which the user of EXPLAIN will be
+		// interested in.
+		e.plan.SetLimitHint(math.MaxInt64, true)
 	}
-	// Trigger limit hint propagation, which would otherwise only occur
-	// during the plan's Start() phase. This may trigger additional
-	// optimizations (eg. in sortNode) which the user of EXPLAIN will be
-	// interested in.
-	e.plan.SetLimitHint(math.MaxInt64, true)
 	return nil
 }
 func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
