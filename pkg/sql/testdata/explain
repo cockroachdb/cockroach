@@ -1,8 +1,8 @@
 query ITT colnames
 EXPLAIN (PLAN) SELECT 1
 ----
-Level  Type  Description
-0      empty -
+Level  Type    Description
+0      nullrow
 
 query ITTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1
@@ -10,7 +10,7 @@ EXPLAIN (PLAN, VERBOSE) SELECT 1
 Level  Type           Description    Columns Ordering
 0      select                        ("1")
 1      render/filter  from ()        ("1")
-2      empty          -              ()
+2      nullrow                       ()
 
 query ITTTT colnames
 EXPLAIN (VERBOSE, PLAN) SELECT 1
@@ -18,7 +18,7 @@ EXPLAIN (VERBOSE, PLAN) SELECT 1
 Level  Type           Description Columns Ordering
 0      select                     ("1")
 1      render/filter  from ()     ("1")
-2      empty          -           ()
+2      nullrow                    ()
 
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT 1
@@ -46,7 +46,7 @@ Level Type          Element  Description
 0     select        result   ("1" int)
 1     render/filter result   ("1" int)
 1     render/filter render 0 (1)[int]
-2     empty         result   ()
+2     nullrow       result   ()
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (TRACE, TRACE) SELECT 1
@@ -70,7 +70,7 @@ Level  Type                  Description             Columns                    
 2      explain               trace                   ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition, Timestamp)
 3      select                                        ("1")
 4      render/filter(debug)  from ()                 ("1")
-5      empty                 -                       ()
+5      nullrow                                       ()
 
 # Ensure that all relevant statement types can be explained
 query ITT
