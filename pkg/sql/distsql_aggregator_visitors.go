@@ -23,12 +23,12 @@ package sql
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 type aggExprVisitor struct {
-	exprs []distsql.AggregatorSpec_Expr
+	exprs []distsqlrun.AggregatorSpec_Expr
 }
 
 var _ parser.Visitor = &aggExprVisitor{}
@@ -45,16 +45,16 @@ func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 
 	f, ok := fholder.expr.(*parser.FuncExpr)
 	if !ok {
-		aggexpr := distsql.AggregatorSpec_Expr{
-			Func: distsql.AggregatorSpec_IDENT,
+		aggexpr := distsqlrun.AggregatorSpec_Expr{
+			Func: distsqlrun.AggregatorSpec_IDENT,
 		}
 		v.exprs = append(v.exprs, aggexpr)
 		return false, expr
 	}
 
-	aggexpr := distsql.AggregatorSpec_Expr{
-		Func: distsql.AggregatorSpec_Func(
-			distsql.AggregatorSpec_Func_value[strings.ToUpper(
+	aggexpr := distsqlrun.AggregatorSpec_Expr{
+		Func: distsqlrun.AggregatorSpec_Func(
+			distsqlrun.AggregatorSpec_Func_value[strings.ToUpper(
 				f.Func.FunctionReference.String(),
 			)],
 		),
@@ -68,7 +68,7 @@ func (v *aggExprVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	return expr
 }
 
-func (v aggExprVisitor) extract(typedExpr parser.TypedExpr) []distsql.AggregatorSpec_Expr {
+func (v aggExprVisitor) extract(typedExpr parser.TypedExpr) []distsqlrun.AggregatorSpec_Expr {
 	parser.WalkExprConst(&v, typedExpr)
 	return v.exprs
 }
@@ -100,7 +100,7 @@ func (v aggExprVisitor) extract(typedExpr parser.TypedExpr) []distsql.Aggregator
 //   postAggExprVisitor.
 func (dsp *distSQLPlanner) extractAggExprs(
 	render []parser.TypedExpr,
-) (aggExprs []distsql.AggregatorSpec_Expr) {
+) (aggExprs []distsqlrun.AggregatorSpec_Expr) {
 	v := aggExprVisitor{}
 	for _, expr := range render {
 		aggExprs = append(aggExprs, v.extract(expr)...)
