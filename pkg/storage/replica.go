@@ -2441,10 +2441,8 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 			log.Infof(ctx, "unquiescing: waking leader")
 		}
 		r.mu.quiescent = false
-		// Send an empty proposal which will wake the leader. Empty proposals also
-		// trigger reproposal of pending commands, but this is expected to be a
-		// very rare situation.
-		_ = r.mu.internalRaftGroup.Propose(nil)
+		// Propose an empty command which will wake the leader.
+		_ = r.mu.internalRaftGroup.Propose(encodeRaftCommand(makeIDKey(), nil))
 	}
 }
 
@@ -2642,7 +2640,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			} else {
 				var encodedCommand []byte
 				commandID, encodedCommand = DecodeRaftCommand(e.Data)
-				if err := command.Unmarshal(encodedCommand); err != nil {
+				// An empty command is used to unquiesce a range and wake the
+				// leader. Set commandID to nil here so it's ignored for processing.
+				if len(encodedCommand) == 0 {
+					commandID = ""
+				} else if err := command.Unmarshal(encodedCommand); err != nil {
 					return stats, err
 				}
 			}
