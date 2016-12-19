@@ -14,7 +14,7 @@
 //
 // Author: Andrei Matei (andreimatei1@gmail.com)
 
-package distsqlrun_test
+package distsqlplan_test
 
 import (
 	gosql "database/sql"
@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -92,9 +92,9 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// Create a SpanResolver using the 4th node, with empty caches.
 	s3 := tc.Servers[3]
 
-	lr := distsqlrun.NewSpanResolver(
+	lr := distsqlplan.NewSpanResolver(
 		s3.DistSender(), s3.Gossip(), s3.GetNode().Descriptor,
-		distsqlrun.BinPackingLeaseHolderChoice)
+		distsqlplan.BinPackingLeaseHolderChoice)
 
 	var spans []spanWithDir
 	for i := 0; i < 3; i++ {
@@ -199,10 +199,10 @@ func TestSpanResolver(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
-	lr := distsqlrun.NewSpanResolver(
+	lr := distsqlplan.NewSpanResolver(
 		s.DistSender(), s.Gossip(),
 		s.(*server.TestServer).GetNode().Descriptor,
-		distsqlrun.BinPackingLeaseHolderChoice)
+		distsqlplan.BinPackingLeaseHolderChoice)
 
 	ctx := context.Background()
 	it := lr.NewSpanResolverIterator()
@@ -292,10 +292,10 @@ func TestMixedDirections(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
-	lr := distsqlrun.NewSpanResolver(
+	lr := distsqlplan.NewSpanResolver(
 		s.DistSender(), s.Gossip(),
 		s.(*server.TestServer).GetNode().Descriptor,
-		distsqlrun.BinPackingLeaseHolderChoice)
+		distsqlplan.BinPackingLeaseHolderChoice)
 
 	ctx := context.Background()
 	it := lr.NewSpanResolverIterator()
@@ -388,7 +388,7 @@ type rngInfo struct {
 }
 
 func resolveSpans(
-	ctx context.Context, it *distsqlrun.SpanResolverIterator, spans ...spanWithDir,
+	ctx context.Context, it *distsqlplan.SpanResolverIterator, spans ...spanWithDir,
 ) ([][]rngInfo, error) {
 	res := make([][]rngInfo, 0)
 	for _, span := range spans {

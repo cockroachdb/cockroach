@@ -14,7 +14,7 @@
 //
 // Author: Andrei Matei (andreimatei1@gmail.com)
 
-package distsqlrun
+package distsqlplan
 
 import (
 	"math"
