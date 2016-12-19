@@ -2956,31 +2956,27 @@ const (
 // number of ticks of an election timeout (affect only proposals that have had
 // ample time to apply but didn't).
 func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftReason) {
-	// Note that we can't use the commit index here (which is typically a
-	// little ahead), because a pending command is removed only as it applies.
-	// Thus we'd risk reproposing a command that has been committed but not yet
-	// applied.
-	maxMustRetryCommandIndex := r.mu.state.LeaseAppliedIndex // indexes <= are given up on
-	refreshAtTicks := r.mu.ticks - refreshAtDelta
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex > maxMustRetryCommandIndex {
-			if p.proposedAtTicks > refreshAtTicks {
-				// The command was proposed too recently, don't bother reproprosing
-				// it yet. Note that if refreshAtDelta is 0, refreshAtTicks will be
-				// r.mu.ticks making the above condition impossible.
-				continue
-			}
+		if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
+			// The command's designated lease index range was filled up, so send it
+			// back to the proposer for a retry.
+			//
+			// Note that we can't use the commit index here (which is typically a
+			// little ahead), because a pending command is removed only as it
+			// applies. Thus we'd risk reproposing a command that has been committed
+			// but not yet applied.
+			delete(r.mu.proposals, idKey)
+			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
+			p.finish(proposalResult{ProposalRetry: proposalReproposed})
+			numShouldRetry++
+		} else if p.proposedAtTicks > r.mu.ticks-refreshAtDelta {
+			// The command was proposed too recently, don't bother reproprosing it
+			// yet.
+		} else {
 			reproposals = append(reproposals, p)
-			continue
 		}
-		delete(r.mu.proposals, idKey)
-		// The command's designated lease index range was filled up, so send it
-		// back to the proposer for a retry.
-		log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-		p.finish(proposalResult{ProposalRetry: proposalReproposed})
-		numShouldRetry++
 	}
 	if log.V(1) && (numShouldRetry > 0 || len(reproposals) > 0) {
 		ctx := r.AnnotateCtx(context.TODO())
