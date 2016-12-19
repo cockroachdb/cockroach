@@ -39,10 +39,6 @@ func (c candidate) String() string {
 }
 
 // less first compares valid, then constraint scores, then range counts.
-// - A valid candidate is always greater than a non-valid.
-// - A higher constraint score is always greater than a lower constraint score,
-//   regardless of range counts.
-// - A lower range count is always greater than a higher one.
 func (c candidate) less(o candidate) bool {
 	if !o.valid {
 		return false
