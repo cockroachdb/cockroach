@@ -95,35 +95,56 @@ type explainer struct {
 
 	// level is the current depth in the tree of planNodes.
 	level int
+
+	// makeRow produces one row of EXPLAIN output.
+	makeRow func(level int, typ, desc string, plan planNode)
+
+	// err remembers whether any error was encountered by makeRow.
+	err error
 }
 
-// populateExplain extracts the information from planNodes to produce
-// the EXPLAIN output into a valuesNode.
+// populateExplain invokes explain() with a makeRow method
+// which populates a valuesNode.
 func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
-	name, description, children := plan.ExplainPlan(e.verbose)
+	e.makeRow = func(level int, name, description string, plan planNode) {
+		if e.err != nil {
+			return
+		}
 
-	row := parser.DTuple{
-		parser.NewDInt(parser.DInt(e.level)),
-		parser.NewDString(name),
-		parser.NewDString(description),
+		row := parser.DTuple{
+			parser.NewDInt(parser.DInt(level)),
+			parser.NewDString(name),
+			parser.NewDString(description),
+		}
+		if e.verbose {
+			row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
+			row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
+		}
+		if _, err := v.rows.AddRow(row); err != nil {
+			e.err = err
+		}
 	}
-	if e.verbose {
-		row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
-		row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
+
+	e.err = nil
+	e.explain(plan)
+	return e.err
+}
+
+// explain extract information from planNodes and produces the EXPLAIN
+// output via the makeRow callback in the explainer.
+func (e *explainer) explain(plan planNode) {
+	if e.err != nil {
+		return
 	}
-	if _, err := v.rows.AddRow(row); err != nil {
-		return err
-	}
+
+	name, description, children := plan.ExplainPlan(e.verbose)
+	e.makeRow(e.level, name, description, plan)
 
 	e.level++
 	defer func() { e.level-- }()
 	for _, child := range children {
-		if err := e.populateExplain(v, child); err != nil {
-			return err
-		}
+		e.explain(child)
 	}
-
-	return nil
 }
 
 // explainPlanNode implements the logic for EXPLAIN.
