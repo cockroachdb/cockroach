@@ -1332,3 +1332,115 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
+
+func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+	k INT PRIMARY KEY
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some data.
+	const maxValue = 10
+	inserts := make([]string, maxValue+1)
+	for i := 0; i < maxValue+1; i++ {
+		inserts[i] = fmt.Sprintf(`(%d)`, i)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ",")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Downgrade table to a time when there were no column families.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc.Families = nil
+	tableDesc.NextFamilyID = 0
+	tableDesc.FormatVersion = sqlbase.BaseFormatVersion
+	if err := kvDB.Put(
+		context.TODO(),
+		sqlbase.MakeDescMetadataKey(tableDesc.ID),
+		sqlbase.WrapDescriptor(tableDesc),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Convert table data to sentinel values
+	kvs, err := kvDB.Scan(
+		context.TODO(),
+		roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID))),
+		roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID+1))),
+		maxValue+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range kvs {
+		value := roachpb.MakeValueFromBytes(nil)
+		if err := kvDB.Put(context.TODO(), kv.Key, &value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Add column
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN v INT`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if tableDesc.Families[0].DefaultColumnID != 2 {
+		t.Fatalf("default column id not set properly: %s", tableDesc)
+	}
+
+	// update one of the rows.
+	const setKey = 5
+	const setVal = maxValue - setKey
+	if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, setVal, setKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// The table contains the one updated value and remaining NULL values.
+	rows, err := sqlDB.Query(`SELECT v from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const eCount = maxValue + 1
+	var val interface{}
+	val = new(interface{})
+	count := 0
+	for ; rows.Next(); count++ {
+		if err := rows.Scan(val); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if count == setKey {
+			if v := *val.(*interface{}); v != nil {
+				switch value := v.(type) {
+				case int64:
+					if setVal != value {
+						t.Errorf("value = %d, expected %d", value, setVal)
+					}
+
+				default:
+					t.Errorf("error input of type %T", value)
+				}
+			} else {
+				t.Error("received nil value for column 'v'")
+			}
+		} else {
+			if v := *val.(*interface{}); v != nil {
+				t.Error("received non NULL value for column 'v'")
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+}

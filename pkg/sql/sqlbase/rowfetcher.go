@@ -341,14 +341,13 @@ func (rf *RowFetcher) processValueSingle(
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
+	// If this is the sentinel family, a value is not expected, so we're done.
+	if family.ID == keys.SentinelFamilyID {
+		return "", "", nil
+	}
+
 	colID := family.DefaultColumnID
 	if colID == 0 {
-		// If this is the sentinel family, a value is not expected, so we're done.
-		// Otherwise, this means something went wrong in the TableDescriptor
-		// bookkeeping.
-		if family.ID == keys.SentinelFamilyID {
-			return "", "", nil
-		}
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
