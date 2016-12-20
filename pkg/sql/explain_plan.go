@@ -108,6 +108,15 @@ type explainer struct {
 	// level is the current depth in the tree of planNodes.
 	level int
 
+	// prefix is the whitespace inserted in front of the description to
+	// clarify the hierarchical structure of the plans when doIndent is
+	// true.
+	prefix string
+
+	// doIndent indicates whether the output should be clarified
+	// with leading white spaces.
+	doIndent bool
+
 	// makeRow produces one row of EXPLAIN output.
 	makeRow func(level int, typ, field, desc string, plan planNode)
 
@@ -185,22 +194,43 @@ func (e *explainer) explain(plan planNode) {
 		return
 	}
 
-	e.makeRow(e.level, name, "", description, plan)
+	e.node(name, description, plan)
 
 	if e.showExprs {
 		plan.ExplainTypes(func(elt, desc string) {
 			if e.err != nil {
 				return
 			}
-			e.makeRow(e.level, name, elt, desc, nil)
+			e.attr(name, elt, desc)
 		})
 	}
 
-	e.level++
-	defer func() { e.level-- }()
 	for _, child := range children {
-		e.explain(child)
+		e.subnode(child)
 	}
+}
+
+func (e *explainer) node(name, desc string, plan planNode) {
+	if e.doIndent {
+		desc = fmt.Sprintf("%s-> %s %s", e.prefix, name, desc)
+		e.prefix += "   "
+	}
+	e.makeRow(e.level, name, "", desc, plan)
+}
+
+func (e *explainer) attr(name, t, v string) {
+	if e.doIndent {
+		v = fmt.Sprintf("%s%s", e.prefix, v)
+	}
+	e.makeRow(e.level, name, t, v, nil)
+}
+
+func (e *explainer) subnode(plan planNode) {
+	curPrefix := e.prefix
+	e.level++
+	e.explain(plan)
+	e.level--
+	e.prefix = curPrefix
 }
 
 // explainPlanNode implements the logic for EXPLAIN.
