@@ -51,6 +51,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		showSelectTop: false,
 		showExprs:     false,
 		showTypes:     false,
+		doIndent:      false,
 	}
 
 	for _, opt := range n.Options {
@@ -68,6 +69,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			// TYPES implies VERBOSE.
 			explainer.showSelectTop = true
 			explainer.showMetadata = true
+		} else if strings.EqualFold(opt, "INDENT") {
+			explainer.doIndent = true
 		} else if strings.EqualFold(opt, "VERBOSE") {
 			explainer.showSelectTop = true
 			explainer.showMetadata = true
