@@ -320,7 +320,7 @@ true
 
 # check that residual filters are not expanded twice
 query ITTTTT
-EXPLAIN(VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
+EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 ----
 0  select                                                    (x)                          +x,unique
 1  render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z)  (x)                          +x,unique

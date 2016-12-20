@@ -5,7 +5,7 @@ Level  Type    Field Description
 0      nullrow
 
 query ITTTTT colnames
-EXPLAIN (PLAN, VERBOSE) SELECT 1
+EXPLAIN (PLAN, METADATA) SELECT 1
 ----
 Level  Type           Field Description    Columns Ordering
 0      select                              ("1")
@@ -13,7 +13,7 @@ Level  Type           Field Description    Columns Ordering
 2      nullrow                             ()
 
 query ITTTTT colnames
-EXPLAIN (VERBOSE, PLAN) SELECT 1
+EXPLAIN (METADATA, PLAN) SELECT 1
 ----
 Level  Type          Field  Description Columns Ordering
 0      select                           ("1")
@@ -27,7 +27,7 @@ RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
 
 query ITTT colnames
-EXPLAIN (DEBUG, VERBOSE) SELECT 1
+EXPLAIN (DEBUG, METADATA) SELECT 1
 ----
 RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
@@ -62,7 +62,7 @@ EXPLAIN (TRACE, UNKNOWN) SELECT 1
 
 # Ensure that tracing results are sorted after gathering
 query ITTTTT
-EXPLAIN(VERBOSE) EXPLAIN(TRACE) SELECT 1
+EXPLAIN(METADATA) EXPLAIN(TRACE) SELECT 1
 ----
 0      select                                        ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
 1      sort                  +Timestamp,+"Span Pos"  ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
