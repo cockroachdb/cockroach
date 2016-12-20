@@ -39,14 +39,14 @@ Cumulative Time  Duration  Span Pos   Operation         Event        RowIdx  Key
 0.000ms                           1                                       0  NULL  NULL   t
 0.000ms                           0  coordinator  tracing completed       0  NULL         NULL
 
-query ITTT colnames
+query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
 ----
-Level Type          Element  Description
-0     select        result   ("1" int)
-1     render/filter result   ("1" int)
-1     render/filter render 0 (1)[int]
-2     nullrow       result   ()
+Level  Type           Field     Description  Columns    Ordering
+0      select                                ("1" int)
+1      render/filter            from ()      ("1" int)
+1      render/filter  render 0  (1)[int]
+2      nullrow                               ()
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (TRACE, TRACE) SELECT 1
