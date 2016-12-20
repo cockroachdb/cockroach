@@ -2650,6 +2650,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// Discard errors from processRaftCommand. The error has been sent
 			// to the client that originated it, where it will be handled.
 			_ = r.processRaftCommand(ctx, commandID, e.Index, command)
+			r.store.metrics.RaftCommandsApplied.Inc(1)
 			stats.processed++
 
 		case raftpb.EntryConfChange:
