@@ -854,12 +854,15 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	}
 
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
-		// We expect splits at each of the user tables, but not at the system
-		// tables boundaries.
+		// We expect splits at each of the user tables and at a few fixed system
+		// range boundaries, but not at system table boundaries.
+		expKeys := []roachpb.Key{
+			testutils.MakeKey(keys.Meta2Prefix, keys.SystemPrefix),
+			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix),
+			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix.PrefixEnd()),
+			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin),
+		}
 		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
-		var expKeys []roachpb.Key
-		expKeys = append(expKeys,
-			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin))
 		for i := 1; i <= int(numReservedTables); i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix,

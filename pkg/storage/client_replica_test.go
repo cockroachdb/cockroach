@@ -180,7 +180,7 @@ func TestRejectFutureCommand(t *testing.T) {
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const key = "key"
+	const key = "\x00key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
 
