@@ -1,8 +1,8 @@
-hash: e0fffc4acc1b902edd5ea6df36166d89f3daf9151dcf841385b3057416fabca8
-updated: 2016-12-19T07:30:11.856809103-05:00
+hash: ea0819df5ca9b41129f8364ffe7d66b59cc3d5f8d2a403b8929191ef34de707e
+updated: 2016-12-20T11:52:55.211241248-05:00
 imports:
 - name: cloud.google.com/go
-  version: 9d965e63e8cceb1b5d7977a202f0fcb8866d6525
+  version: 3c4c8cc11d151d76587802cb55dd7b80beca832b
   subpackages:
   - compute/metadata
   - internal
@@ -165,7 +165,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 466070b0580728e63bd1a415e0019639e55d7148
+  version: 7edde482875504b49769ad097eab7c572547ff21
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -211,7 +211,7 @@ imports:
 - name: github.com/leekchan/timeutil
   version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
-  version: 4a82388ebc5138c8289fe9bc602cb0b3e32cd617
+  version: 5bf161122cd640c2a5a2c1d7fa49ea9befff31dd
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
@@ -271,7 +271,7 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 195bde7883f7c39ea62b0d92ab7359b5327065cb
+  version: ad540c5ab198ab0c5172f5c6b602a49ab911b5ef
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -331,7 +331,7 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: 96382aa079b72d8c014eb0c50f6c223d1e6a2de0
+  version: 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
   subpackages:
   - google
   - internal
@@ -366,7 +366,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 6ae94d3fbc17a6600999dc24c28bd01735a87b76
+  version: 55146ba61254fdb1c26d65ff3c04bc1611ad73fb
   subpackages:
   - gensupport
   - googleapi
@@ -408,7 +408,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
 - name: honnef.co/go/lint
-  version: f0b0056a162cdb787050cef0670f175b85625697
+  version: 3cb61f0284a50a4f716a0ecd7274e7bc02b40428
   subpackages:
   - lintutil
 - name: honnef.co/go/simple
@@ -416,12 +416,12 @@ imports:
 - name: honnef.co/go/ssa
   version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
-  version: a1dced908a8310dad6912e6be1c47222097d525c
+  version: ddba5f9afa5fd21ac1a8e858ab790ad4ff4c413d
   subpackages:
   - pure
   - vrp
 - name: honnef.co/go/unused
-  version: 87353912d70354d751e22c0142883412b5eeb55f
+  version: b39d4e986c431b606f79b534e687ff12db6e0a1c
 testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
