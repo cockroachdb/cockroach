@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
@@ -38,11 +37,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+const (
+	defaultZoneName    = ".default"
+	metaZoneName       = ".meta"
+	systemZoneName     = ".system"
+	timeseriesZoneName = ".timeseries"
+)
+
 var specialZonesByID = map[sqlbase.ID]string{
-	keys.RootNamespaceID:    ".default",
-	keys.MetaSystemID:       ".meta",
-	keys.IdentifierSystemID: ".identifier",
-	keys.NormalSystemID:     ".system",
+	keys.RootNamespaceID:    defaultZoneName,
+	keys.MetaRangesID:       metaZoneName,
+	keys.SystemRangesID:     systemZoneName,
+	keys.TimeseriesRangesID: timeseriesZoneName,
 }
 
 func unmarshalProto(val driver.Value, msg proto.Message) error {
@@ -175,14 +181,14 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
 	switch strings.Join(names, ".") {
-	case ".default":
+	case defaultZoneName:
 		return path, nil
-	case ".meta":
-		return []sqlbase.ID{keys.MetaSystemID}, nil
-	case ".identifier":
-		return []sqlbase.ID{keys.IdentifierSystemID}, nil
-	case ".system":
-		return []sqlbase.ID{keys.NormalSystemID}, nil
+	case metaZoneName:
+		return []sqlbase.ID{keys.MetaRangesID}, nil
+	case systemZoneName:
+		return []sqlbase.ID{keys.SystemRangesID}, nil
+	case timeseriesZoneName:
+		return []sqlbase.ID{keys.TimeseriesRangesID}, nil
 	}
 	for _, name := range names {
 		id, err := queryNamespace(conn, path[len(path)-1], name)
@@ -196,7 +202,7 @@ func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) 
 
 func parseZoneName(s string) ([]string, error) {
 	switch t := strings.ToLower(s); s {
-	case ".default", ".meta", ".identifier", ".system":
+	case defaultZoneName, metaZoneName, timeseriesZoneName, systemZoneName:
 		return []string{t}, nil
 	}
 
@@ -344,18 +350,8 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 		output = append(output, name)
 	}
 
-	specialZoneIDs := []sqlbase.ID{
-		keys.RootNamespaceID,
-		keys.MetaSystemID,
-		keys.IdentifierSystemID,
-		keys.NormalSystemID,
-	}
-	for _, id := range specialZoneIDs {
+	for id, zoneName := range specialZonesByID {
 		if _, ok := zones[id]; ok {
-			zoneName, ok := specialZonesByID[id]
-			if !ok {
-				return errors.Errorf("missing name for hard-coded zone config with ID %d", id)
-			}
 			output = append(output, zoneName)
 		}
 	}
@@ -407,8 +403,8 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	id := path[len(path)-1]
-	if _, ok := specialZonesByID[id]; ok {
-		return fmt.Errorf("unable to remove %s", args[0])
+	if id == keys.RootNamespaceID {
+		return fmt.Errorf("unable to remove special zone %s", args[0])
 	}
 
 	if err := runQueryAndFormatResults(conn, os.Stdout,

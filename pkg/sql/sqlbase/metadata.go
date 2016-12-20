@@ -184,6 +184,10 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 // needed. See server.ExpectedInitialRangeCount() for a count that includes
 // migrations.
 func (ms MetadataSchema) InitialRangeCount() int {
-	const fixedRanges = 2 /* first-range + system-config-range */
+	// The number of fixed ranges is determined by the pre-defined split points
+	// in SystemConfig.ComputeSplitKey. The early keyspace is split up in order
+	// to support separate zone configs for different parts of the system ranges.
+	// There are 4 pre-defined split points, so 5 fixed ranges.
+	const fixedRanges = 5
 	return len(ms.descs) - ms.configs + fixedRanges
 }
