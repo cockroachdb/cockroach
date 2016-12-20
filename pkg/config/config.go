@@ -64,11 +64,10 @@ var (
 		},
 	}
 
-	// identifierZoneConfig is the default zone configuration for system key which has
-	// prefix 'NodeLivenessPrefix', 'DescIDGenerator', 'NodeIDGenerator', '',
-	// 'RangeIDGenerator', 'StoreIDGenerator' etc.
-	identifierZoneConfig = ZoneConfig{
-		NumReplicas:   5,
+	// systemZoneConfig is the default zone configuration for most system ranges,
+	// such as node liveness keys, ID generators, and status/usage report records.
+	systemZoneConfig = ZoneConfig{
+		NumReplicas:   3,
 		RangeMinBytes: 1 << 20,  // 1 MB
 		RangeMaxBytes: 64 << 20, // 64 MB
 		GC: GCPolicy{
@@ -76,8 +75,9 @@ var (
 		},
 	}
 
-	// systemZoneConfig is the default zone configuration for other system keys.
-	systemZoneConfig = ZoneConfig{
+	// timeseriesZoneConfig is the default zone configuration for the system
+	// ranges used to store the cluster's timeseries data.
+	timeseriesZoneConfig = ZoneConfig{
 		NumReplicas:   3,
 		RangeMinBytes: 1 << 20,  // 1 MB
 		RangeMaxBytes: 64 << 20, // 64 MB
@@ -178,18 +178,18 @@ func MetaZoneConfig() ZoneConfig {
 	return metaZoneConfig
 }
 
-// IdetifierZoneConfig is a plumb function for idetifierZoneConfig.
-func IdetifierZoneConfig() ZoneConfig {
-	testingLock.Lock()
-	defer testingLock.Unlock()
-	return identifierZoneConfig
-}
-
 // SystemZoneConfig is a plumb function for systemZoneConfig.
 func SystemZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	return systemZoneConfig
+}
+
+// TimeseriesZoneConfig is a plumb function for timeseriesZoneConfig.
+func TimeseriesZoneConfig() ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return timeseriesZoneConfig
 }
 
 // TestingSetDefaultZoneConfig is a testing-only function that changes the
@@ -408,16 +408,16 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) 
 		// For now, only user databases and tables get custom zone configs.
 		objectID = keys.RootNamespaceID
 	}
+
+	// Special-case known system ranges to their special zone configs.
 	if bytes.HasPrefix(key, keys.Meta1Prefix) || bytes.HasPrefix(key, keys.Meta2Prefix) {
-		objectID = keys.MetaSystemID
+		objectID = keys.MetaRangesID
+	} else if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
+		objectID = keys.TimeseriesRangesID
+	} else if bytes.HasPrefix(key, keys.SystemPrefix) {
+		objectID = keys.SystemRangesID
 	}
-	if bytes.HasPrefix(key, keys.SystemPrefix) {
-		if bytes.HasPrefix(key, keys.TimeseriesPrefix) || bytes.HasPrefix(key, keys.StatusPrefix) ||
-			bytes.HasPrefix(key, keys.ReportUsagePrefix) {
-			objectID = keys.NormalSystemID
-		}
-		objectID = keys.IdentifierSystemID
-	}
+
 	return s.getZoneConfigForID(objectID)
 }
 
@@ -436,23 +436,56 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (ZoneConfig, error) {
 // ComputeSplitKey takes a start and end key and returns the first key at which
 // to split the span [start, end). Returns nil if no splits are required.
 //
-// Splits are required between user tables (i.e. /table/<id>) and at the start
-// of the system-config range (i.e. /table/0). The system-config range is
-// somewhat special in that it contains multiple SQL tables
-// (/table/0-/table/<max-system-config-desc>) which must be contained in a
-// single range.
+// Splits are required between user tables (i.e. /table/<id>), at the start
+// of the system-config tables (i.e. /table/0), and at certain points within the
+// system ranges that come before the system tables. The system-config range is
+// somewhat special in that it can contain multiple SQL tables
+// (/table/0-/table/<max-system-config-desc>) within a single range.
 func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
-	systemConfigStart := roachpb.RKey(keys.TableDataMin)
-	if !systemConfigStart.Less(endKey) {
-		// endKey <= systemConfigStart: no required splits.
-		return nil
+	// Before dealing with splits necessitated by SQL tables, handle all of the
+	// static splits earlier in the keyspace. Note that this list must be kept in
+	// the proper order (ascending in the keyspace) for the logic below to work.
+	staticSplits := []struct {
+		splitPoint roachpb.RKey
+		splitKey   roachpb.RKey
+	}{
+		// End of meta records / start of system ranges
+		{
+			splitPoint: roachpb.RKey(keys.SystemPrefix),
+			splitKey:   roachpb.RKey(keys.SystemPrefix),
+		},
+		// Start of timeseries ranges (within system ranges)
+		{
+			splitPoint: roachpb.RKey(keys.TimeseriesPrefix),
+			splitKey:   roachpb.RKey(keys.TimeseriesPrefix),
+		},
+		// End of timeseries ranges (continuation of system ranges)
+		{
+			splitPoint: roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()),
+			splitKey:   roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()),
+		},
+		// System config tables (end of system ranges)
+		{
+			splitPoint: roachpb.RKey(keys.TableDataMin),
+			splitKey:   keys.SystemConfigSplitKey,
+		},
 	}
-	if startKey.Less(systemConfigStart) {
-		// startKey < systemConfigStart: split the range at the start of the system
-		// config span.
-		return keys.SystemConfigSplitKey
+	for _, split := range staticSplits {
+		if startKey.Less(split.splitPoint) {
+			if split.splitPoint.Less(endKey) {
+				// The split point is contained within [startKey, endKey), so we need to
+				// create the split.
+				return split.splitKey
+			}
+			// [startKey, endKey) is contained between the previous split point and
+			// this split point.
+			return nil
+		}
+		// [startKey, endKey) is somewhere greater than this split point. Continue.
 	}
 
+	// If the above iteration over the static split points didn't decide anything,
+	// the key range must be somewhere in the SQL table part of the keyspace.
 	startID, ok := ObjectIDForKey(startKey)
 	if !ok || startID <= keys.MaxSystemConfigDescID {
 		// The start key is either:
@@ -478,7 +511,7 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
 			key := roachpb.RKey(keys.MakeRowSentinelKey(keys.MakeTablePrefix(id)))
-			// Skip if this ID matches the startKey passed to ComputeSplitKeys.
+			// Skip if this ID matches the provided startKey.
 			if !startKey.Less(key) {
 				continue
 			}

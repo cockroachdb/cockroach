@@ -362,10 +362,11 @@ func createSettingsTable(ctx context.Context, r runner) error {
 }
 
 func systemZoneConfigs(ctx context.Context, r runner) error {
-	var kvs []roachpb.KeyValue
-	kvs = append(kvs, sqlbase.CreateMetaZoneConfig()...)
-	kvs = append(kvs, sqlbase.CreateIdentifierZoneConfig()...)
-	kvs = append(kvs, sqlbase.CreateSystemZoneConfig()...)
+	kvs := []roachpb.KeyValue{
+		sqlbase.CreateMetaZoneConfig(),
+		sqlbase.CreateSystemZoneConfig(),
+		sqlbase.CreateTimeseriesZoneConfig(),
+	}
 
 	for _, kv := range kvs {
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {

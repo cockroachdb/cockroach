@@ -433,24 +433,24 @@ func TestSystemZoneConfigs(t *testing.T) {
 	}{
 		{},
 		{
-			[]sqlbase.ID{keys.MetaSystemID},
+			[]sqlbase.ID{keys.MetaRangesID},
 			[]config.ZoneConfig{config.MetaZoneConfig()},
 		},
 		{
-			[]sqlbase.ID{keys.IdentifierSystemID},
-			[]config.ZoneConfig{config.IdentifierZoneConfig()},
-		},
-		{
-			[]sqlbase.ID{keys.NormalSystemID},
+			[]sqlbase.ID{keys.SystemRangesID},
 			[]config.ZoneConfig{config.SystemZoneConfig()},
 		},
 		{
-			[]sqlbase.ID{keys.MetaSystemID, keys.NormalSystemID},
+			[]sqlbase.ID{keys.TimeseriesRangesID},
+			[]config.ZoneConfig{config.TimeseriesZoneConfig()},
+		},
+		{
+			[]sqlbase.ID{keys.MetaRangesID, keys.SystemRangesID},
 			[]config.ZoneConfig{config.MetaZoneConfig(), config.SystemZoneConfig()},
 		},
 		{
-			[]sqlbase.ID{keys.MetaSystemID, keys.IdentifierSystemID, keys.NormalSystemID},
-			[]config.ZoneConfig{config.MetaZoneConfig(), config.IdentifierZoneConfig(), config.SystemZoneConfig()},
+			[]sqlbase.ID{keys.MetaRangesID, keys.SystemRangesID, keys.TimeseriesRangesID},
+			[]config.ZoneConfig{config.MetaZoneConfig(), config.SystemZoneConfig(), config.TimeseriesZoneConfig()},
 		},
 	}
 
@@ -486,9 +486,9 @@ func TestSystemZoneConfigs(t *testing.T) {
 				id  sqlbase.ID
 				val config.ZoneConfig
 			}{
-				{keys.MetaSystemID, config.MetaZoneConfig()},
-				{keys.IdentifierSystemID, config.IdentifierZoneConfig()},
-				{keys.NormalSystemID, config.SystemZoneConfig()},
+				{keys.MetaRangesID, config.MetaZoneConfig()},
+				{keys.SystemRangesID, config.SystemZoneConfig()},
+				{keys.TimeseriesRangesID, config.TimeseriesZoneConfig()},
 			}
 			for _, expected := range expectedKVs {
 				key := sqlbase.MakeZoneKey(expected.id)
