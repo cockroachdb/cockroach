@@ -214,7 +214,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Use the range lease expiration and renewal durations as the node
 	// liveness expiration and heartbeat interval.
-	active, renewal := storage.RangeLeaseDurations(
+	active, renewal := storage.NodeLivenessDurations(
 		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(
 		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
