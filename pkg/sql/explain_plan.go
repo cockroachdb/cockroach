@@ -65,35 +65,45 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 }
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
-func (p *planner) makeExplainPlanNode(verbose, expanded bool, plan planNode) planNode {
+func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan planNode) planNode {
 	columns := ResultColumns{
 		{Name: "Level", Typ: parser.TypeInt},
 		{Name: "Type", Typ: parser.TypeString},
 		{Name: "Field", Typ: parser.TypeString},
 		{Name: "Description", Typ: parser.TypeString},
 	}
-	if verbose {
+	if explainer.showMetadata {
 		columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
 		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
 	}
 
 	node := &explainPlanNode{
-		explainer: explainer{
-			verbose: verbose,
-		},
-		expanded: expanded,
-		plan:     plan,
-		results:  p.newContainerValuesNode(columns, 0),
+		explainer: explainer,
+		expanded:  expanded,
+		plan:      plan,
+		results:   p.newContainerValuesNode(columns, 0),
 	}
 	return node
 }
 
 // explainer represents the run-time state of the EXPLAIN logic.
 type explainer struct {
-	// verbose indicates whether the output has separate columns for the
+	// showMetadata indicates whether the output has separate columns for the
 	// schema signature and ordering information of the intermediate
 	// nodes.
-	verbose bool
+	showMetadata bool
+
+	// showExprs indicates whether the plan prints expressions
+	// embedded inside the node.
+	showExprs bool
+
+	// showTypes indicates whether to print the type of embedded
+	// expressions and result columns.
+	showTypes bool
+
+	// showSelectTop indicates whether intermediate selectTopNodes
+	// are rendered.
+	showSelectTop bool
 
 	// level is the current depth in the tree of planNodes.
 	level int
@@ -104,6 +114,8 @@ type explainer struct {
 	// err remembers whether any error was encountered by makeRow.
 	err error
 }
+
+var emptyString = parser.NewDString("")
 
 // populateExplain invokes explain() with a makeRow method
 // which populates a valuesNode.
@@ -119,9 +131,13 @@ func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
 			parser.NewDString(field),
 			parser.NewDString(description),
 		}
-		if e.verbose {
-			row = append(row, parser.NewDString(formatColumns(plan.Columns(), false)))
-			row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
+		if e.showMetadata {
+			if plan != nil {
+				row = append(row, parser.NewDString(formatColumns(plan.Columns(), e.showTypes)))
+				row = append(row, parser.NewDString(plan.Ordering().AsString(plan.Columns())))
+			} else {
+				row = append(row, emptyString, emptyString)
+			}
 		}
 		if _, err := v.rows.AddRow(row); err != nil {
 			e.err = err
@@ -137,13 +153,16 @@ func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
 func planToString(plan planNode) string {
 	var buf bytes.Buffer
 	e := explainer{
-		verbose: true,
+		showMetadata:  true,
+		showTypes:     true,
+		showExprs:     true,
+		showSelectTop: true,
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field
 			}
 			fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
-				formatColumns(plan.Columns(), false),
+				formatColumns(plan.Columns(), true),
 				plan.Ordering().AsString(plan.Columns()),
 			)
 		},
@@ -159,8 +178,23 @@ func (e *explainer) explain(plan planNode) {
 		return
 	}
 
-	name, description, children := plan.ExplainPlan(e.verbose)
+	name, description, children := plan.ExplainPlan(e.showMetadata)
+
+	if name == "select" && !e.showSelectTop {
+		e.explain(children[len(children)-1])
+		return
+	}
+
 	e.makeRow(e.level, name, "", description, plan)
+
+	if e.showExprs {
+		plan.ExplainTypes(func(elt, desc string) {
+			if e.err != nil {
+				return
+			}
+			e.makeRow(e.level, name, elt, desc, nil)
+		})
+	}
 
 	e.level++
 	defer func() { e.level-- }()

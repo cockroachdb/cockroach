@@ -18,7 +18,6 @@ package sql
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -45,9 +44,16 @@ var explainStrings = []string{"", "debug", "plan", "trace", "types"}
 // Privileges: the same privileges as the statement being explained.
 func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) {
 	mode := explainNone
-	verbose := false
+
 	expanded := true
-	normalizedExplainTypes := false
+	normalizeExprs := true
+	explainer := explainer{
+		showMetadata:  false,
+		showSelectTop: false,
+		showExprs:     false,
+		showTypes:     false,
+	}
+
 	for _, opt := range n.Options {
 		newMode := explainNone
 		if strings.EqualFold(opt, "DEBUG") {
@@ -57,13 +63,19 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		} else if strings.EqualFold(opt, "PLAN") {
 			newMode = explainPlan
 		} else if strings.EqualFold(opt, "TYPES") {
-			newMode = explainTypes
+			newMode = explainPlan
+			explainer.showExprs = true
+			explainer.showTypes = true
+			// TYPES implies VERBOSE.
+			explainer.showSelectTop = true
+			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "VERBOSE") {
-			verbose = true
+			explainer.showSelectTop = true
+			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "NOEXPAND") {
 			expanded = false
-		} else if strings.EqualFold(opt, "NORMALIZE") {
-			normalizedExplainTypes = true
+		} else if strings.EqualFold(opt, "NONORMALIZE") {
+			normalizeExprs = false
 		} else {
 			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
@@ -88,9 +100,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
 	}
 
-	if mode == explainTypes {
-		p.evalCtx.SkipNormalize = !normalizedExplainTypes
-	}
+	p.evalCtx.SkipNormalize = !normalizeExprs
 
 	plan, err := p.newPlan(n.Statement, nil, autoCommit)
 	if err != nil {
@@ -100,25 +110,11 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	case explainDebug:
 		return &explainDebugNode{plan}, nil
 
-	case explainTypes:
-		columns := ResultColumns{
-			{Name: "Level", Typ: parser.TypeInt},
-			{Name: "Type", Typ: parser.TypeString},
-			{Name: "Element", Typ: parser.TypeString},
-			{Name: "Description", Typ: parser.TypeString},
-		}
-		node := &explainTypesNode{
-			plan:     plan,
-			expanded: expanded,
-			results:  p.newContainerValuesNode(columns, 0),
-		}
-		// We want to show placeholder types, so ensure no values
+	case explainPlan:
+		// We may want to show placeholder types, so ensure no values
 		// are missing.
 		p.semaCtx.Placeholders.FillUnassigned()
-		return node, nil
-
-	case explainPlan:
-		return p.makeExplainPlanNode(verbose, expanded, plan), nil
+		return p.makeExplainPlanNode(explainer, expanded, plan), nil
 
 	case explainTrace:
 		return p.makeTraceNode(plan, p.txn), nil
@@ -126,93 +122,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
 	}
-}
-
-type explainTypesNode struct {
-	plan     planNode
-	expanded bool
-	results  *valuesNode
-}
-
-func (e *explainTypesNode) ExplainTypes(fn func(string, string)) {}
-func (e *explainTypesNode) Next() (bool, error)                  { return e.results.Next() }
-func (e *explainTypesNode) Columns() ResultColumns               { return e.results.Columns() }
-func (e *explainTypesNode) Ordering() orderingInfo               { return e.results.Ordering() }
-func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
-func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
-func (e *explainTypesNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
-func (e *explainTypesNode) setNeededColumns(_ []bool)            {}
-func (e *explainTypesNode) MarkDebug(mode explainMode)           {}
-func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "explain", "types", []planNode{e.plan}
-}
-
-func (e *explainTypesNode) expandPlan() error {
-	if e.expanded {
-		if err := e.plan.expandPlan(); err != nil {
-			return err
-		}
-		// Trigger limit hint propagation, which would otherwise only
-		// occur during the plan's Start() phase. This may trigger
-		// additional optimizations (eg. in sortNode) which the user of
-		// EXPLAIN will be interested in.
-		e.plan.SetLimitHint(math.MaxInt64, true)
-	}
-	return nil
-}
-
-func (e *explainTypesNode) Start() error {
-	return populateTypes(e.results, e.plan, 0)
-}
-
-func (e *explainTypesNode) Close() {
-	e.plan.Close()
-	e.results.Close()
-}
-
-func populateTypes(v *valuesNode, plan planNode, level int) error {
-	name, _, children := plan.ExplainPlan(true)
-
-	// Format the result column types.
-	row := parser.DTuple{
-		parser.NewDInt(parser.DInt(level)),
-		parser.NewDString(name),
-		parser.NewDString("result"),
-		parser.NewDString(formatColumns(plan.Columns(), true)),
-	}
-	if _, err := v.rows.AddRow(row); err != nil {
-		return err
-	}
-
-	// Format the node's typing details.
-	var err error
-	regType := func(elt string, desc string) {
-		if err != nil {
-			return
-		}
-
-		row := parser.DTuple{
-			parser.NewDInt(parser.DInt(level)),
-			parser.NewDString(name),
-			parser.NewDString(elt),
-			parser.NewDString(desc),
-		}
-		_, err = v.rows.AddRow(row)
-	}
-	plan.ExplainTypes(regType)
-
-	if err != nil {
-		return err
-	}
-
-	// Recurse into sub-nodes.
-	for _, child := range children {
-		if err := populateTypes(v, child, level+1); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 type debugValueType int
