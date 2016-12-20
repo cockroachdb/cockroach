@@ -386,8 +386,10 @@ func (r *Replica) leasePostApply(
 		// requests, this is kosher). This means that we don't use the old
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
-		log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
-			newLease, prevLease, r.store.Clock().PhysicalTime())
+		if log.V(1) {
+			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
+				newLease, prevLease, r.store.Clock().PhysicalTime())
+		}
 		r.mu.Lock()
 		r.mu.tsCache.SetLowWater(newLease.Start)
 		r.mu.Unlock()
