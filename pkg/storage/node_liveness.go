@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -211,6 +212,13 @@ var errNodeAlreadyLive = errors.New("node already live")
 // method does a conditional put on the node liveness record, and if
 // successful, stores the updated liveness record in the nodes map.
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error {
+	start := timeutil.Now()
+	defer func() {
+		if dur := timeutil.Now().Sub(start); dur > time.Second {
+			log.Warningf(ctx, "slow heartbeat took %v", dur)
+		}
+	}()
+
 	// Allow only one heartbeat at a time.
 	select {
 	case nl.heartbeatSem <- struct{}{}:
