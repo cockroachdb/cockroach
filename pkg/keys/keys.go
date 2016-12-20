@@ -627,7 +627,7 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		// then we bail. Note that we don't consider this an error because
 		// EnsureSafeSplitKey can be called on keys that look like table
 		// keys but which do not have a column ID length suffix (e.g
-		// SystemConfig.ComputeSplitKeys).
+		// by SystemConfig.ComputeSplitKey).
 		return nil, errors.Errorf("%s: malformed table key", key)
 	}
 	return key[:len(key)-int(colIDLen)-1], nil
