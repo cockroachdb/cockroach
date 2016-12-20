@@ -745,6 +745,7 @@ func Example_sql_escape() {
 	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--pretty", "-e", "show columns from t.u"})
 	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select '  hai' as x"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -836,6 +837,13 @@ func Example_sql_escape() {
 	// +------+------+------------+-------+-----+
 	// |    0 |    0 |          0 |     0 |   0 |
 	// +------+------+------------+-------+-----+
+	// (1 row)
+	// sql --pretty -e select '  hai' as x
+	// +-------+
+	// |   x   |
+	// +-------+
+	// | ‌  hai |
+	// +-------+
 	// (1 row)
 }
 
