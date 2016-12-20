@@ -119,10 +119,6 @@ func (n *selectTopNode) expandPlan() error {
 }
 
 func (n *selectTopNode) ExplainPlan(v bool) (name, description string, subplans []planNode) {
-	if !v {
-		return n.plan.ExplainPlan(v)
-	}
-
 	if n.plan != nil {
 		subplans = []planNode{n.plan}
 	} else {
