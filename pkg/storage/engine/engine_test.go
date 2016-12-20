@@ -25,6 +25,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 func ensureRangeEqual(
@@ -78,28 +79,30 @@ func TestEngineBatchCommit(t *testing.T) {
 	runWithAllEngines(func(e Engine, t *testing.T) {
 		// Start a concurrent read operation in a busy loop.
 		readsBegun := make(chan struct{})
-		readsDone := make(chan struct{})
+		readsDone := make(chan error)
 		writesDone := make(chan struct{})
 		go func() {
-			for i := 0; ; i++ {
-				select {
-				case <-writesDone:
-					close(readsDone)
-					return
-				default:
-					val, err := e.Get(key)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if val != nil && !bytes.Equal(val, finalVal) {
-						close(readsDone)
-						t.Fatalf("key value should be empty or %q; got %q", string(finalVal), string(val))
-					}
-					if i == 0 {
-						close(readsBegun)
+			readsDone <- func() error {
+				readsBegunAlias := readsBegun
+				for {
+					select {
+					case <-writesDone:
+						return nil
+					default:
+						val, err := e.Get(key)
+						if err != nil {
+							return err
+						}
+						if val != nil && !bytes.Equal(val, finalVal) {
+							return errors.Errorf("key value should be empty or %q; got %q", string(finalVal), string(val))
+						}
+						if readsBegunAlias != nil {
+							close(readsBegunAlias)
+							readsBegunAlias = nil
+						}
 					}
 				}
-			}
+			}()
 		}()
 		// Wait until we've succeeded with first read.
 		<-readsBegun
@@ -116,7 +119,9 @@ func TestEngineBatchCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 		close(writesDone)
-		<-readsDone
+		if err := <-readsDone; err != nil {
+			t.Fatal(err)
+		}
 	}, t)
 }
 
