@@ -111,7 +111,7 @@ func TestJoinReader(t *testing.T) {
 			for i, d := range row {
 				encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, d)
 			}
-			in.rows = append(in.rows, encRow)
+			in.Rows = append(in.Rows, encRow)
 		}
 
 		out := &RowBuffer{}
@@ -122,16 +122,16 @@ func TestJoinReader(t *testing.T) {
 
 		jr.Run(nil)
 
-		if out.err != nil {
-			t.Fatal(out.err)
+		if out.Err != nil {
+			t.Fatal(out.Err)
 		}
-		if !in.done {
+		if !in.Done {
 			t.Fatal("joinReader stopped accepting rows")
 		}
-		if !out.closed {
+		if !out.Closed {
 			t.Fatalf("output RowReceiver not closed")
 		}
-		if result := out.rows.String(); result != c.expected {
+		if result := out.Rows.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
 	}

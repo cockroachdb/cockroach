@@ -84,14 +84,14 @@ func TestHashRouter(t *testing.T) {
 		}
 		hr.Close(nil)
 		for bIdx, b := range bufs {
-			if !b.closed {
+			if !b.Closed {
 				t.Errorf("bucket not closed")
 			}
-			if b.err != nil {
-				t.Error(b.err)
+			if b.Err != nil {
+				t.Error(b.Err)
 			}
 
-			for _, row := range b.rows {
+			for _, row := range b.Rows {
 				// Verify there are no rows that
 				//  - have the same values with this row on all the hashColumns, and
 				//  - ended up in a different bucket
@@ -99,7 +99,7 @@ func TestHashRouter(t *testing.T) {
 					if b2Idx == bIdx {
 						continue
 					}
-					for _, row2 := range b2.rows {
+					for _, row2 := range b2.Rows {
 						equal := true
 						for _, c := range tc.hashColumns {
 							cmp, err := row[c].Compare(alloc, &row2[c])
@@ -157,22 +157,22 @@ func TestMirrorRouter(t *testing.T) {
 
 		// Verify each row is sent to each of the output streams.
 		for bIdx, b := range bufs {
-			if len(b.rows) != len(bufs[0].rows) {
+			if len(b.Rows) != len(bufs[0].Rows) {
 				t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
 			}
-			if !b.closed {
+			if !b.Closed {
 				t.Errorf("bucket not closed")
 			}
-			if b.err != nil {
-				t.Error(b.err)
+			if b.Err != nil {
+				t.Error(b.Err)
 			}
 			if bIdx == 0 {
 				continue
 			}
 
 			// Verify that the i-th row is the same across all buffers.
-			for i, row := range b.rows {
-				row2 := bufs[0].rows[i]
+			for i, row := range b.Rows {
+				row2 := bufs[0].Rows[i]
 
 				equal := true
 				for j, c := range row {

@@ -118,13 +118,13 @@ func TestTableReader(t *testing.T) {
 			t.Fatal(err)
 		}
 		tr.Run(nil)
-		if out.err != nil {
-			t.Fatal(out.err)
+		if out.Err != nil {
+			t.Fatal(out.Err)
 		}
-		if !out.closed {
+		if !out.Closed {
 			t.Fatalf("output RowReceiver not closed")
 		}
-		if result := out.rows.String(); result != c.expected {
+		if result := out.Rows.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
 	}

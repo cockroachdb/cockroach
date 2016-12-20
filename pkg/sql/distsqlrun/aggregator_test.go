@@ -281,7 +281,7 @@ func TestAggregator(t *testing.T) {
 	for _, c := range testCases {
 		ags := c.spec
 
-		in := &RowBuffer{rows: c.input}
+		in := &RowBuffer{Rows: c.input}
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{
