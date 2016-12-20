@@ -60,6 +60,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptors: 1,
 		newRanges:      0, // it lives in gossip range.
 	},
+	{
+		name:   "add zone configs for system ranges",
+		workFn: systemZoneConfigs,
+		// TODO: Need newDescriptors/newRanges?
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -354,4 +359,28 @@ func createSettingsTable(ctx context.Context, r runner) error {
 		}
 		return txn.Run(ctx, b)
 	})
+}
+
+func systemZoneConfigs(ctx context.Context, r runner) error {
+	var kvs []roachpb.KeyValue
+	kvs = append(kvs, sqlbase.CreateMetaZoneConfig()...)
+	kvs = append(kvs, sqlbase.CreateIdentifierZoneConfig()...)
+	kvs = append(kvs, sqlbase.CreateSystemZoneConfig()...)
+
+	for _, kv := range kvs {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if res, err := txn.Get(ctx, kv.Key); err != nil {
+				return errors.Wrapf(err, "failed to get key %q", kv.Key)
+			} else if res.Exists() {
+				return nil
+			}
+			if err := txn.Put(ctx, kv.Key, &kv.Value); err != nil {
+				return errors.Wrapf(err, "failed to put key %q", kv.Key)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

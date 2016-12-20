@@ -23,13 +23,18 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -415,5 +420,85 @@ func TestLeaseExpiration(t *testing.T) {
 	backwardCompatibleMigrations = []migrationDescriptor{waitForExitMigration}
 	if err := mgr.EnsureMigrations(context.Background()); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestSystemZoneConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	testCases := []struct {
+		preexistingKeys []sqlbase.ID
+		preexistingVals []config.ZoneConfig
+	}{
+		{},
+		{
+			[]sqlbase.ID{keys.MetaSystemID},
+			[]config.ZoneConfig{config.MetaZoneConfig()},
+		},
+		{
+			[]sqlbase.ID{keys.IdentifierSystemID},
+			[]config.ZoneConfig{config.IdentifierZoneConfig()},
+		},
+		{
+			[]sqlbase.ID{keys.NormalSystemID},
+			[]config.ZoneConfig{config.SystemZoneConfig()},
+		},
+		{
+			[]sqlbase.ID{keys.MetaSystemID, keys.NormalSystemID},
+			[]config.ZoneConfig{config.MetaZoneConfig(), config.SystemZoneConfig()},
+		},
+		{
+			[]sqlbase.ID{keys.MetaSystemID, keys.IdentifierSystemID, keys.NormalSystemID},
+			[]config.ZoneConfig{config.MetaZoneConfig(), config.IdentifierZoneConfig(), config.SystemZoneConfig()},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			// Start up a test server without running any migrations.
+			backwardCompatibleMigrations = nil
+			s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop()
+
+			// Put the test case's initial keys into the DB
+			for i := range tc.preexistingKeys {
+				key := sqlbase.MakeZoneKey(tc.preexistingKeys[i])
+				var val roachpb.Value
+				if err := val.SetProto(&tc.preexistingVals[i]); err != nil {
+					t.Fatal(err)
+				}
+				if err := kvDB.Put(ctx, key, &val); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Then try running just the migration.
+			mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), nil, "clientID")
+			backwardCompatibleMigrations = []migrationDescriptor{
+				{name: "add zone configs for system ranges", workFn: systemZoneConfigs},
+			}
+			if err := mgr.EnsureMigrations(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			expectedKVs := []struct {
+				id  sqlbase.ID
+				val config.ZoneConfig
+			}{
+				{keys.MetaSystemID, config.MetaZoneConfig()},
+				{keys.IdentifierSystemID, config.IdentifierZoneConfig()},
+				{keys.NormalSystemID, config.SystemZoneConfig()},
+			}
+			for _, expected := range expectedKVs {
+				key := sqlbase.MakeZoneKey(expected.id)
+				var zoneCfg config.ZoneConfig
+				if err := kvDB.GetProto(ctx, key, &zoneCfg); err != nil {
+					t.Errorf("key %q (id %d) not persisted: %s", key, expected.id, err)
+				} else if !proto.Equal(&expected.val, &zoneCfg) {
+					t.Errorf("expected %v for id %d, got %v", expected.val, expected.id, zoneCfg)
+				}
+			}
+		})
 	}
 }
