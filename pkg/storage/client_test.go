@@ -479,14 +479,14 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 				t.mtc.mu.RUnlock()
 				if leaseHolderStore == nil {
 					// The lease holder is known but down, so expire its lease.
-					t.mtc.expireLeases()
+					t.mtc.expireLeases(ctx)
 				}
 			} else {
 				// stores has the range, is *not* the lease holder, but the
 				// lease holder is not known; this can happen if the lease
 				// holder is removed from the group. Move the manual clock
 				// forward in an attempt to expire the lease.
-				t.mtc.expireLeases()
+				t.mtc.expireLeases(ctx)
 			}
 		}
 		t.setPending(rep.ReplicaID, false)
@@ -1081,7 +1081,7 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 // nodes are heartbeat so they are able to reacquire leases.
 //
 // Useful for tests which modify replica sets.
-func (m *multiTestContext) expireLeases() {
+func (m *multiTestContext) expireLeases(ctx context.Context) {
 	// Allow only one expiration in progress at a time.
 	if !atomic.CompareAndSwapInt32(&m.expireLeasesActive, 0, 1) {
 		return
@@ -1094,7 +1094,6 @@ func (m *multiTestContext) expireLeases() {
 	nls := append([]*storage.NodeLiveness(nil), m.nodeLivenesses...)
 	m.mu.RUnlock()
 
-	ctx := context.Background()
 	for idx, nl := range nls {
 		l, err := nl.Self()
 		if err != nil {
