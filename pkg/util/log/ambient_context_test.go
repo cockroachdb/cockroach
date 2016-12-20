@@ -38,7 +38,7 @@ func TestAnnotateCtxTags(t *testing.T) {
 	ctx = WithLogTag(ctx, "aa", nil)
 	ctx = ac.AnnotateCtx(ctx)
 
-	if exp, val := "[a10,aa,b2] test", makeMessage(ctx, "test", nil); val != exp {
+	if exp, val := "[aa,a1,b2] test", makeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
 }
