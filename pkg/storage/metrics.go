@@ -124,11 +124,17 @@ var (
 		Name: "raft.ticks",
 		Help: "Number of Raft ticks queued",
 	}
-	metaRaftWorkingDurationNanos = metric.Metadata{Name: "raft.process.workingnanos",
+	metaRaftWorkingDurationNanos = metric.Metadata{
+		Name: "raft.process.workingnanos",
 		Help: "Nanoseconds spent in store.processRaft() working",
 	}
-	metaRaftTickingDurationNanos = metric.Metadata{Name: "raft.process.tickingnanos",
+	metaRaftTickingDurationNanos = metric.Metadata{
+		Name: "raft.process.tickingnanos",
 		Help: "Nanoseconds spent in store.processRaft() processing replica.Tick()",
+	}
+	metaRaftCommandsApplied = metric.Metadata{
+		Name: "raft.commandsapplied",
+		Help: "Count of Raft commands applied",
 	}
 
 	// Raft message metrics.
@@ -391,6 +397,7 @@ type StoreMetrics struct {
 	RaftTicks                *metric.Counter
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
+	RaftCommandsApplied      *metric.Counter
 
 	// Raft message metrics.
 	RaftRcvdMsgProp           *metric.Counter
@@ -564,6 +571,7 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RaftTicks:                metric.NewCounter(metaRaftTicks),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
+		RaftCommandsApplied:      metric.NewCounter(metaRaftCommandsApplied),
 
 		// Raft message metrics.
 		RaftRcvdMsgProp:           metric.NewCounter(metaRaftRcvdProp),
