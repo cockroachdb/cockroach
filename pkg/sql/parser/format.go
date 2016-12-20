@@ -23,7 +23,7 @@ import (
 
 type fmtFlags struct {
 	showTypes        bool
-	showTableAliases bool
+	ShowTableAliases bool
 	symbolicVars     bool
 	// tableNameNormalizer will be called on all NormalizableTableNames if it is
 	// non-nil. Its results will be used if they are non-nil, or ignored if they
@@ -50,7 +50,7 @@ var FmtSimple FmtFlags = &fmtFlags{showTypes: false}
 
 // FmtQualify instructs the pretty-printer to qualify names with the
 // table name.
-var FmtQualify FmtFlags = &fmtFlags{showTableAliases: true}
+var FmtQualify FmtFlags = &fmtFlags{ShowTableAliases: true}
 
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
