@@ -51,6 +51,10 @@ func asyncSchemaChangerDisabled() error {
 	return errors.New("async schema changer disabled")
 }
 
+func asyncExecSchemaChangeQuickly() time.Duration {
+	return 20 * time.Millisecond
+}
+
 func TestSchemaChangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
@@ -334,9 +338,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 			// Speed up evaluation of async schema changes.
-			AsyncExecDelay: func() time.Duration {
-				return 20 * time.Millisecond
-			},
+			AsyncExecDelay: asyncExecSchemaChangeQuickly,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1139,6 +1141,60 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 }
 
+// Test schema changes are retried after a delay.
+func TestSchemaChangeRetryDelay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	longDelay := false
+	asyncExecDelay := func() time.Duration {
+		if longDelay {
+			return 30 * time.Minute
+		}
+		return asyncExecSchemaChangeQuickly()
+	}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			// Speed up evaluation of async schema changes.
+			AsyncExecDelay: asyncExecDelay,
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if longDelay {
+					t.Error("backfill triggered after long delay")
+				}
+				longDelay = true
+				// Always fail.
+				return context.DeadlineExceeded
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 50
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
+		t.Fatal(err)
+	}
+
+}
+
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1171,9 +1227,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			},
 			// Speed up evaluation of async schema changes so that it
 			// processes a purged schema change quickly.
-			AsyncExecDelay: func() time.Duration {
-				return 20 * time.Millisecond
-			},
+			AsyncExecDelay:    asyncExecSchemaChangeQuickly,
 			BackfillChunkSize: chunkSize,
 		},
 	}
@@ -1290,9 +1344,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 				return nil
 			},
 			// Speed up evaluation of async schema changes.
-			AsyncExecDelay: func() time.Duration {
-				return 20 * time.Millisecond
-			},
+			AsyncExecDelay:    asyncExecSchemaChangeQuickly,
 			BackfillChunkSize: chunkSize,
 		},
 	}
