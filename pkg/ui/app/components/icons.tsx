@@ -218,3 +218,31 @@ export var cockroachIcon: string = `
         </g>
     </g>
 </svg>`;
+
+export var leftArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
+    <title>Path 2</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Symbols" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="View-button" transform="translate(-18.000000, -15.000000)" stroke-width="2" stroke="#51BBFD">
+            <g id="Path-2">
+                <polyline points="24 16 20 20 24 24"></polyline>
+            </g>
+        </g>
+    </g>
+</svg>`;
+
+export var rightArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
+    <title>Path 2 Copy</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Symbols" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="View-button" transform="translate(-241.000000, -15.000000)" stroke-width="2" stroke="#51BBFD">
+            <g id="Path-2-Copy">
+                <polyline transform="translate(244.000000, 20.000000) scale(-1, 1) translate(-244.000000, -20.000000) " points="246 16 242 20 246 24"></polyline>
+            </g>
+        </g>
+    </g>
+</svg>`;
