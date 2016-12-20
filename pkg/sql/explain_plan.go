@@ -23,80 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
-// formatColumns converts a column signature for a data source /
-// planNode to a string. The column types are printed iff the 2nd
-// argument specifies so.
-func formatColumns(cols ResultColumns, printTypes bool) string {
-	var buf bytes.Buffer
-	buf.WriteByte('(')
-	for i, rCol := range cols {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		parser.Name(rCol.Name).Format(&buf, parser.FmtSimple)
-		// Output extra properties like [hidden,omitted].
-		hasProps := false
-		outputProp := func(prop string) {
-			if hasProps {
-				buf.WriteByte(',')
-			} else {
-				buf.WriteByte('[')
-			}
-			hasProps = true
-			buf.WriteString(prop)
-		}
-		if rCol.hidden {
-			outputProp("hidden")
-		}
-		if rCol.omitted {
-			outputProp("omitted")
-		}
-		if hasProps {
-			buf.WriteByte(']')
-		}
-
-		if printTypes {
-			buf.WriteByte(' ')
-			buf.WriteString(rCol.Typ.String())
-		}
-	}
-	buf.WriteByte(')')
-	return buf.String()
-}
-
-// newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
-func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan planNode) planNode {
-	columns := ResultColumns{
-		// Level is the depth of the node in the tree.
-		{Name: "Level", Typ: parser.TypeInt},
-		// Type is the node type.
-		{Name: "Type", Typ: parser.TypeString},
-		// Field is the part of the node that a row of output pertains to.
-		// For example a select node may have separate "render" and
-		// "filter" fields.
-		{Name: "Field", Typ: parser.TypeString},
-		// Description contains details about the field.
-		{Name: "Description", Typ: parser.TypeString},
-	}
-	if explainer.showMetadata {
-		// Columns is the type signature of the data source.
-		columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
-		// Ordering indicates the known ordering of the data from this source.
-		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
-	}
-
-	explainer.fmtFlags = parser.FmtExpr(
-		explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames)
-
-	node := &explainPlanNode{
-		explainer: explainer,
-		expanded:  expanded,
-		plan:      plan,
-		results:   p.newContainerValuesNode(columns, 0),
-	}
-	return node
-}
-
 // explainer represents the run-time state of the EXPLAIN logic.
 type explainer struct {
 	// showMetadata indicates whether the output has separate columns for the
@@ -144,6 +70,39 @@ type explainer struct {
 
 	// err remembers whether any error was encountered by makeRow.
 	err error
+}
+
+// newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
+func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan planNode) planNode {
+	columns := ResultColumns{
+		// Level is the depth of the node in the tree.
+		{Name: "Level", Typ: parser.TypeInt},
+		// Type is the node type.
+		{Name: "Type", Typ: parser.TypeString},
+		// Field is the part of the node that a row of output pertains to.
+		// For example a select node may have separate "render" and
+		// "filter" fields.
+		{Name: "Field", Typ: parser.TypeString},
+		// Description contains details about the field.
+		{Name: "Description", Typ: parser.TypeString},
+	}
+	if explainer.showMetadata {
+		// Columns is the type signature of the data source.
+		columns = append(columns, ResultColumn{Name: "Columns", Typ: parser.TypeString})
+		// Ordering indicates the known ordering of the data from this source.
+		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
+	}
+
+	explainer.fmtFlags = parser.FmtExpr(
+		explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames)
+
+	node := &explainPlanNode{
+		explainer: explainer,
+		expanded:  expanded,
+		plan:      plan,
+		results:   p.newContainerValuesNode(columns, 0),
+	}
+	return node
 }
 
 var emptyString = parser.NewDString("")
@@ -257,7 +216,48 @@ func (e *explainer) subnode(plan planNode) {
 	e.prefix = curPrefix
 }
 
-// explainPlanNode implements the logic for EXPLAIN.
+// formatColumns converts a column signature for a data source /
+// planNode to a string. The column types are printed iff the 2nd
+// argument specifies so.
+func formatColumns(cols ResultColumns, printTypes bool) string {
+	var buf bytes.Buffer
+	buf.WriteByte('(')
+	for i, rCol := range cols {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		parser.Name(rCol.Name).Format(&buf, parser.FmtSimple)
+		// Output extra properties like [hidden,omitted].
+		hasProps := false
+		outputProp := func(prop string) {
+			if hasProps {
+				buf.WriteByte(',')
+			} else {
+				buf.WriteByte('[')
+			}
+			hasProps = true
+			buf.WriteString(prop)
+		}
+		if rCol.hidden {
+			outputProp("hidden")
+		}
+		if rCol.omitted {
+			outputProp("omitted")
+		}
+		if hasProps {
+			buf.WriteByte(']')
+		}
+
+		if printTypes {
+			buf.WriteByte(' ')
+			buf.WriteString(rCol.Typ.String())
+		}
+	}
+	buf.WriteByte(')')
+	return buf.String()
+}
+
+// explainPlanNode wraps the logic for EXPLAIN as a planNode.
 type explainPlanNode struct {
 	explainer explainer
 	expanded  bool
