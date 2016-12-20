@@ -956,14 +956,14 @@ func runSetupSplitSnapshotRace(
 	// Replicate the left range onto nodes 1-3 and remove it from node 0.
 	mtc.replicateRange(leftRangeID, 1, 2, 3)
 	mtc.unreplicateRange(leftRangeID, 0)
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 
 	mtc.waitForValues(leftKey, []int64{0, 1, 1, 1, 0, 0})
 	mtc.waitForValues(rightKey, []int64{0, 2, 2, 2, 0, 0})
 
 	// Stop node 3 so it doesn't hear about the split.
 	mtc.stopStore(3)
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(keys.SystemMax, roachpb.Key("m"))
