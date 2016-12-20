@@ -34,6 +34,24 @@ EXPLAIN (TYPES) SELECT * FROM t
 2  scan                     t@primary                  (k int, v int)  +k,unique
 
 query ITTTTT
+EXPLAIN (TYPES, SYMVARS) SELECT * FROM t
+----
+0  select                                              (k int, v int)  +k,unique
+1  render/filter            from (test.t.k, test.t.v)  (k int, v int)  +k,unique
+1  render/filter  render 0  (@1)[int]
+1  render/filter  render 1  (@2)[int]
+2  scan                     t@primary                  (k int, v int)  +k,unique
+
+query ITTTTT
+EXPLAIN (TYPES, QUALIFY) SELECT * FROM t
+----
+0  select                                              (k int, v int)  +k,unique
+1  render/filter            from (test.t.k, test.t.v)  (k int, v int)  +k,unique
+1  render/filter  render 0  (test.t.k)[int]
+1  render/filter  render 1  (test.t.v)[int]
+2  scan                     t@primary                  (k int, v int)  +k,unique
+
+query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM t WHERE v > 123
 ----
 0  select                                                  (k int, v int)
