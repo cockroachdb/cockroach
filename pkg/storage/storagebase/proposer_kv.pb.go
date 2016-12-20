@@ -150,6 +150,16 @@ type RaftCommand struct {
 	// If the command was proposed prior to the introduction of epoch leases,
 	// origin_lease will be nil, but the combination of origin_replica and
 	// the request timestamp are used to verify an expiration-based lease.
+	//
+	// To see why lease verification downstream of Raft is required, consider the
+	// following example:
+	// - replica 1 receives a client request for a write
+	// - replica 1 checks the lease; the write is permitted
+	// - replica 1 proposes the command
+	// - time passes, replica 2 commits a new lease
+	// - the command applies on replica 1
+	// - replica 2 serves anomalous reads which don't see the write
+	// - the command applies on replica 2
 	OriginLease *cockroach_roachpb1.Lease `protobuf:"bytes,5,opt,name=origin_lease,json=originLease" json:"origin_lease,omitempty"`
 	// When the command is applied, its result is an error if the lease log
 	// counter has already reached (or exceeded) max_lease_index.

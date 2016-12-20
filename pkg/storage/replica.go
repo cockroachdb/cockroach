@@ -3292,6 +3292,8 @@ func (r *Replica) processRaftCommand(
 	// held, and can be used, or is expired, and can be replaced.
 	// Verify checks that the lease has not been modified since proposal
 	// due to Raft delays / reorderings.
+	// To understand why this lease verification is necessary, see comments on the
+	// origin_lease field in the proto.
 	//
 	// TODO(spencer): remove the special-casing for the pre-epoch range
 	// leases.
