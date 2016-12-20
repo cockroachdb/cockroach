@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
@@ -36,6 +37,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
+
+var specialZonesByID = map[sqlbase.ID]string{
+	keys.RootNamespaceID:    ".default",
+	keys.MetaSystemID:       ".meta",
+	keys.IdentifierSystemID: ".identifier",
+	keys.NormalSystemID:     ".system",
+}
 
 func unmarshalProto(val driver.Value, msg proto.Message) error {
 	raw, ok := val.([]byte)
@@ -166,8 +174,7 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 
 func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
-	str := strings.Join(names, ".")
-	switch str {
+	switch strings.Join(names, ".") {
 	case ".default":
 		return path, nil
 	case ".meta":
@@ -256,16 +263,9 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	switch id {
-	case keys.RootNamespaceID:
-		fmt.Println(".default")
-	case keys.MetaSystemID:
-		fmt.Println(".meta")
-	case keys.IdentifierSystemID:
-		fmt.Println(".identifier")
-	case keys.NormalSystemID:
-		fmt.Println(".system")
-	default:
+	if zoneName, ok := specialZonesByID[id]; ok {
+		fmt.Println(zoneName)
+	} else {
 		for i := range path {
 			if path[i] == id {
 				fmt.Println(strings.Join(names[:i], "."))
@@ -344,19 +344,24 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 		output = append(output, name)
 	}
 
-	sort.Strings(output)
-	// Ensure the default zone is always printed first.
-	zoneNames := map[sqlbase.ID]string{
-		keys.RootNamespaceID:    ".default",
-		keys.MetaSystemID:       ".meta",
-		keys.IdentifierSystemID: ".identifier",
-		keys.NormalSystemID:     ".system",
+	specialZoneIDs := []sqlbase.ID{
+		keys.RootNamespaceID,
+		keys.MetaSystemID,
+		keys.IdentifierSystemID,
+		keys.NormalSystemID,
 	}
-	for id, name := range zoneNames {
+	for _, id := range specialZoneIDs {
 		if _, ok := zones[id]; ok {
-			fmt.Printf("%s\n", name)
+			zoneName, ok := specialZonesByID[id]
+			if !ok {
+				return errors.Errorf("missing name for hard-coded zone config with ID %d", id)
+			}
+			output = append(output, zoneName)
 		}
 	}
+
+	// Ensure the system zones are always printed first.
+	sort.Strings(output)
 	for _, o := range output {
 		fmt.Println(o)
 	}
@@ -402,8 +407,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	id := path[len(path)-1]
-	switch id {
-	case keys.RootNamespaceID, keys.MetaSystemID, keys.IdentifierSystemID, keys.NormalSystemID:
+	if _, ok := specialZonesByID[id]; ok {
 		return fmt.Errorf("unable to remove %s", args[0])
 	}
 
