@@ -71,6 +71,16 @@ func FmtNormalizeTableNames(fn func(*NormalizableTableName) *TableName) FmtFlags
 	return &fmtFlags{tableNameNormalizer: fn}
 }
 
+// FmtExpr returns FmtFlags that indicate how the pretty-printer
+// should format expressions.
+func FmtExpr(showTypes, symbolicVars, showTableAliases bool) FmtFlags {
+	return &fmtFlags{
+		showTypes:        showTypes,
+		symbolicVars:     symbolicVars,
+		ShowTableAliases: showTableAliases,
+	}
+}
+
 // FmtIndexedVarFormat returns FmtFlags that customizes the printing of
 // IndexedVars using the provided function.
 func FmtIndexedVarFormat(

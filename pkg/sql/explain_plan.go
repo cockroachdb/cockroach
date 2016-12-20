@@ -85,6 +85,9 @@ func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan p
 		columns = append(columns, ResultColumn{Name: "Ordering", Typ: parser.TypeString})
 	}
 
+	explainer.fmtFlags = parser.FmtExpr(
+		explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames)
+
 	node := &explainPlanNode{
 		explainer: explainer,
 		expanded:  expanded,
@@ -104,6 +107,17 @@ type explainer struct {
 	// showExprs indicates whether the plan prints expressions
 	// embedded inside the node.
 	showExprs bool
+
+	// qualifyNames determines whether column names in expressions
+	// should be fully qualified during pretty-printing.
+	qualifyNames bool
+
+	// symbolicVars determines whether ordinal column references
+	// should be printed numerically.
+	symbolicVars bool
+
+	// fmtFlags is the formatter to use for pretty-printing expressions.
+	fmtFlags parser.FmtFlags
 
 	// showTypes indicates whether to print the type of embedded
 	// expressions and result columns.
@@ -210,7 +224,7 @@ func (e *explainer) explain(plan planNode) {
 				return
 			}
 			if expr != nil {
-				e.attr(name, elt, parser.AsStringWithFlags(expr, parser.FmtShowTypes))
+				e.attr(name, elt, parser.AsStringWithFlags(expr, e.fmtFlags))
 			}
 		})
 	}
