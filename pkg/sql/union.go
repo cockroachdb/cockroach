@@ -162,7 +162,7 @@ func (n *unionNode) ExplainPlan(_ bool) (name, description string, children []pl
 	return "union", "-", []planNode{n.left, n.right}
 }
 
-func (n *unionNode) ExplainTypes(_ func(string, string)) {}
+func (n *unionNode) explainExprs(_ func(string, parser.Expr)) {}
 
 func (n *unionNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

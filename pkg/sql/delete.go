@@ -264,10 +264,10 @@ func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []p
 	return "delete", buf.String(), subplans
 }
 
-func (d *deleteNode) ExplainTypes(regTypes func(string, string)) {
+func (d *deleteNode) explainExprs(regTypes func(string, parser.Expr)) {
 	cols := d.rh.columns
 	for i, rexpr := range d.rh.exprs {
-		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), rexpr)
 	}
 }
 

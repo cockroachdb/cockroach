@@ -56,13 +56,13 @@ type hookFnNode struct {
 
 var _ planNode = &hookFnNode{}
 
-func (*hookFnNode) Ordering() orderingInfo              { return orderingInfo{} }
-func (*hookFnNode) ExplainTypes(_ func(string, string)) {}
-func (*hookFnNode) SetLimitHint(_ int64, _ bool)        {}
-func (*hookFnNode) MarkDebug(_ explainMode)             {}
-func (*hookFnNode) expandPlan() error                   { return nil }
-func (*hookFnNode) Close()                              {}
-func (*hookFnNode) setNeededColumns(_ []bool)           {}
+func (*hookFnNode) Ordering() orderingInfo                   { return orderingInfo{} }
+func (*hookFnNode) explainExprs(_ func(string, parser.Expr)) {}
+func (*hookFnNode) SetLimitHint(_ int64, _ bool)             {}
+func (*hookFnNode) MarkDebug(_ explainMode)                  {}
+func (*hookFnNode) expandPlan() error                        { return nil }
+func (*hookFnNode) Close()                                   {}
+func (*hookFnNode) setNeededColumns(_ []bool)                {}
 
 func (f *hookFnNode) Start() error {
 	var err error

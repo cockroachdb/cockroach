@@ -49,15 +49,15 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() ResultColumns            { return n.resultColumns }
-func (*copyNode) Ordering() orderingInfo              { return orderingInfo{} }
-func (*copyNode) Values() parser.DTuple               { return nil }
-func (*copyNode) ExplainTypes(_ func(string, string)) {}
-func (*copyNode) SetLimitHint(_ int64, _ bool)        {}
-func (*copyNode) setNeededColumns(_ []bool)           {}
-func (*copyNode) MarkDebug(_ explainMode)             {}
-func (*copyNode) expandPlan() error                   { return nil }
-func (*copyNode) Next() (bool, error)                 { return false, nil }
+func (n *copyNode) Columns() ResultColumns                 { return n.resultColumns }
+func (*copyNode) Ordering() orderingInfo                   { return orderingInfo{} }
+func (*copyNode) Values() parser.DTuple                    { return nil }
+func (*copyNode) explainExprs(_ func(string, parser.Expr)) {}
+func (*copyNode) SetLimitHint(_ int64, _ bool)             {}
+func (*copyNode) setNeededColumns(_ []bool)                {}
+func (*copyNode) MarkDebug(_ explainMode)                  {}
+func (*copyNode) expandPlan() error                        { return nil }
+func (*copyNode) Next() (bool, error)                      { return false, nil }
 
 func (n *copyNode) Close() {
 	n.rowsMemAcc.Wtxn(n.p.session).Close()

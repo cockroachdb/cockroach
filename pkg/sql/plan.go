@@ -70,11 +70,10 @@ var _ planMaker = &planner{}
 
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
-	// ExplainTypes reports the data types involved in the node, excluding
-	// the result column types.
+	// explainExprs reports the expressions involved in the node.
 	//
 	// Available after newPlan().
-	ExplainTypes(explainFn func(elem string, desc string))
+	explainExprs(explainFn func(elem string, desc parser.Expr))
 
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.

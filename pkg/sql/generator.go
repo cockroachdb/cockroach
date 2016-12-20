@@ -136,8 +136,8 @@ func (n *valueGenerator) DebugValues() debugValues {
 	}
 }
 
-func (n *valueGenerator) ExplainTypes(regTypes func(string, string)) {
-	regTypes("generator", parser.AsStringWithFlags(n.expr, parser.FmtShowTypes))
+func (n *valueGenerator) explainExprs(regTypes func(string, parser.Expr)) {
+	regTypes("generator", n.expr)
 }
 
 func (n *valueGenerator) Ordering() orderingInfo       { return orderingInfo{} }

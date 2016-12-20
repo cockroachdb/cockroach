@@ -448,13 +448,11 @@ func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []pl
 	return name, buf.String(), subplans
 }
 
-func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
-	if n.having != nil {
-		regTypes("having", parser.AsStringWithFlags(n.having, parser.FmtShowTypes))
-	}
+func (n *groupNode) explainExprs(regTypes func(string, parser.Expr)) {
+	regTypes("having", n.having)
 	cols := n.Columns()
 	for i, rexpr := range n.render {
-		regTypes(fmt.Sprintf("render %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("render %s", cols[i].Name), rexpr)
 	}
 }
 

@@ -229,7 +229,7 @@ func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, childr
 	return n.plan.ExplainPlan(v)
 }
 
-func (n *explainDebugNode) ExplainTypes(fn func(string, string)) {}
+func (n *explainDebugNode) explainExprs(fn func(string, parser.Expr)) {}
 
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()
