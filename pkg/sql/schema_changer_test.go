@@ -333,7 +333,10 @@ func TestAsyncSchemaChanger(t *testing.T) {
 			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
-			AsyncExecQuickly: true,
+			// Speed up evaluation of async schema changes.
+			AsyncExecDelay: func() time.Duration {
+				return 20 * time.Millisecond
+			},
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1168,7 +1171,9 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			},
 			// Speed up evaluation of async schema changes so that it
 			// processes a purged schema change quickly.
-			AsyncExecQuickly:  true,
+			AsyncExecDelay: func() time.Duration {
+				return 20 * time.Millisecond
+			},
 			BackfillChunkSize: chunkSize,
 		},
 	}
@@ -1284,7 +1289,10 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 				}
 				return nil
 			},
-			AsyncExecQuickly:  true,
+			// Speed up evaluation of async schema changes.
+			AsyncExecDelay: func() time.Duration {
+				return 20 * time.Millisecond
+			},
 			BackfillChunkSize: chunkSize,
 		},
 	}

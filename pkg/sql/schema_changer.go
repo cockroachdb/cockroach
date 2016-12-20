@@ -674,8 +674,9 @@ type SchemaChangerTestingKnobs struct {
 	// execution path from running.
 	AsyncExecNotification func() error
 
-	// AsyncExecQuickly executes queued schema changes as soon as possible.
-	AsyncExecQuickly bool
+	// AsyncExecDelay returns a duration that is used to delay queued schema
+	// changes.
+	AsyncExecDelay func() time.Duration
 
 	// WriteCheckpointInterval is the interval after which a checkpoint is
 	// written.
@@ -744,10 +745,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
 		delay := 360 * time.Second
-		if s.testingKnobs.AsyncExecQuickly {
-			delay = 20 * time.Millisecond
-		}
 		for {
+			if s.testingKnobs.AsyncExecDelay != nil {
+				delay = s.testingKnobs.AsyncExecDelay()
+			}
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := s.gossip.GetSystemConfig()
