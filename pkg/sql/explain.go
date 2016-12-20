@@ -66,16 +66,24 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			newMode = explainPlan
 			explainer.showExprs = true
 			explainer.showTypes = true
-			// TYPES implies VERBOSE.
+			// TYPES implies METADATA.
 			explainer.showSelectTop = true
 			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "INDENT") {
 			explainer.doIndent = true
 		} else if strings.EqualFold(opt, "SYMVARS") {
 			explainer.symbolicVars = true
+		} else if strings.EqualFold(opt, "METADATA") {
+			explainer.showSelectTop = true
+			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "QUALIFY") {
 			explainer.qualifyNames = true
 		} else if strings.EqualFold(opt, "VERBOSE") {
+			// VERBOSE shows expression fields.
+			explainer.showExprs = true
+			// VERBOSE implies QUALIFY.
+			explainer.qualifyNames = true
+			// VERBOSE implies METADATA.
 			explainer.showSelectTop = true
 			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "NOEXPAND") {
