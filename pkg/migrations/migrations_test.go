@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
@@ -138,6 +139,7 @@ func (f *fakeDB) Txn(context.Context, func(context.Context, *client.Txn) error) 
 }
 
 func TestEnsureMigrations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	db := &fakeDB{}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
@@ -293,6 +295,7 @@ func TestEnsureMigrations(t *testing.T) {
 }
 
 func TestDBErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	db := &fakeDB{}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
@@ -352,6 +355,7 @@ func TestDBErrors(t *testing.T) {
 // we don't test that here due to the added code that would be needed to change
 // its retry settings to allow for testing it in a reasonable amount of time.
 func TestLeaseErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	db := &fakeDB{kvs: make(map[string][]byte)}
 	mgr := Manager{
 		stopper: stop.NewStopper(),
@@ -380,6 +384,7 @@ func TestLeaseErrors(t *testing.T) {
 // The lease not having enough time left on it to finish migrations should
 // cause the process to exit via a call to log.Fatal.
 func TestLeaseExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	db := &fakeDB{kvs: make(map[string][]byte)}
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
