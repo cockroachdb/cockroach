@@ -497,23 +497,29 @@ func Example_ranges() {
 	// 4 result(s)
 	// debug range split ranges3
 	// debug range ls
-	// /Min-"ranges3" [1]
+	// /Min-/System/"" [1]
 	// 	0: node-id=1 store-id=1
-	// "ranges3"-/Table/0 [8]
+	// /System/""-/System/tsd [2]
 	// 	0: node-id=1 store-id=1
-	// /Table/0-/Table/11 [2]
+	// /System/tsd-/System/"tse" [3]
 	// 	0: node-id=1 store-id=1
-	// /Table/11-/Table/12 [3]
+	// /System/"tse"-"ranges3" [4]
 	// 	0: node-id=1 store-id=1
-	// /Table/12-/Table/13 [4]
+	// "ranges3"-/Table/0 [11]
 	// 	0: node-id=1 store-id=1
-	// /Table/13-/Table/14 [5]
+	// /Table/0-/Table/11 [5]
 	// 	0: node-id=1 store-id=1
-	// /Table/14-/Table/15 [6]
+	// /Table/11-/Table/12 [6]
 	// 	0: node-id=1 store-id=1
-	// /Table/15-/Max [7]
+	// /Table/12-/Table/13 [7]
 	// 	0: node-id=1 store-id=1
-	// 8 result(s)
+	// /Table/13-/Table/14 [8]
+	// 	0: node-id=1 store-id=1
+	// /Table/14-/Table/15 [9]
+	// 	0: node-id=1 store-id=1
+	// /Table/15-/Max [10]
+	// 	0: node-id=1 store-id=1
+	// 11 result(s)
 	// debug kv scan
 	// "ranges1"	"1"
 	// "ranges2"	"2"
@@ -609,7 +615,7 @@ func Example_max_results() {
 	c.Run("debug kv revscan --max-results=2")
 	c.Run("debug range split max_results3")
 	c.Run("debug range split max_results4")
-	c.Run("debug range ls --max-results=2")
+	c.Run("debug range ls --max-results=5")
 
 	// Output:
 	// debug kv put max_results1 1 max_results2 2 max_results3 3 max_results4 4
@@ -624,12 +630,18 @@ func Example_max_results() {
 	// 2 result(s)
 	// debug range split max_results3
 	// debug range split max_results4
-	// debug range ls --max-results=2
-	// /Min-"max_results3" [1]
+	// debug range ls --max-results=5
+	// /Min-/System/"" [1]
 	// 	0: node-id=1 store-id=1
-	// "max_results3"-"max_results4" [8]
+	// /System/""-/System/tsd [2]
 	// 	0: node-id=1 store-id=1
-	// 2 result(s)
+	// /System/tsd-/System/"tse" [3]
+	// 	0: node-id=1 store-id=1
+	// /System/"tse"-"max_results3" [4]
+	// 	0: node-id=1 store-id=1
+	// "max_results3"-"max_results4" [11]
+	// 	0: node-id=1 store-id=1
+	// 5 result(s)
 }
 
 func Example_zone() {
@@ -646,17 +658,27 @@ func Example_zone() {
 	c.Run("zone rm system")
 	c.Run("zone ls")
 	c.Run("zone rm .default")
+	c.Run("zone set .meta --file=./testdata/zone_range_max_bytes.yaml")
+	c.Run("zone set .system --file=./testdata/zone_range_max_bytes.yaml")
+	c.Run("zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml")
+	c.Run("zone get .system")
+	c.Run("zone ls")
 	c.Run("zone set .default --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 	c.Run("zone set .default --disable-replication")
 	c.Run("zone get system")
+	c.Run("zone rm .meta")
+	c.Run("zone rm .system")
+	c.Run("zone ls")
+	c.Run("zone rm .timeseries")
+	c.Run("zone ls")
+	c.Run("zone rm .meta")
+	c.Run("zone rm .system")
+	c.Run("zone rm .timeseries")
 
 	// Output:
 	// zone ls
 	// .default
-	// .identifier
-	// .meta
-	// .system
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -666,9 +688,6 @@ func Example_zone() {
 	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
-	// .identifier
-	// .meta
-	// .system
 	// system
 	// zone get system.nonexistent
 	// system.nonexistent not found
@@ -699,11 +718,42 @@ func Example_zone() {
 	// DELETE 1
 	// zone ls
 	// .default
-	// .identifier
+	// zone rm .default
+	// unable to remove special zone .default
+	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 0
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 0
+	// num_replicas: 3
+	// constraints: []
+	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 0
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 0
+	// num_replicas: 3
+	// constraints: []
+	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 0
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 0
+	// num_replicas: 3
+	// constraints: []
+	// zone get .system
+	// .system
+	// range_min_bytes: 0
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 0
+	// num_replicas: 3
+	// constraints: []
+	// zone ls
+	// .default
 	// .meta
 	// .system
-	// zone rm .default
-	// unable to remove .default
+	// .timeseries
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -734,6 +784,23 @@ func Example_zone() {
 	//   ttlseconds: 86400
 	// num_replicas: 1
 	// constraints: []
+	// zone rm .meta
+	// DELETE 1
+	// zone rm .system
+	// DELETE 1
+	// zone ls
+	// .default
+	// .timeseries
+	// zone rm .timeseries
+	// DELETE 1
+	// zone ls
+	// .default
+	// zone rm .meta
+	// DELETE 0
+	// zone rm .system
+	// DELETE 0
+	// zone rm .timeseries
+	// DELETE 0
 }
 
 func Example_sql() {
@@ -1669,6 +1736,9 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/5
   debug/nodes/1/ranges/6
   debug/nodes/1/ranges/7
+  debug/nodes/1/ranges/8
+  debug/nodes/1/ranges/9
+  debug/nodes/1/ranges/10
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog

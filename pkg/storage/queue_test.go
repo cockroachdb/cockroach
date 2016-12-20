@@ -413,7 +413,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer stopper.Stop()
 	s, _ := createTestStore(t, stopper)
 
-	dataMaxAddr, err := keys.Addr(keys.TableDataMin)
+	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minWillSplitAddr, err := keys.Addr(keys.TableDataMin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,13 +432,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := createReplica(s, 2, roachpb.RKeyMin, dataMaxAddr)
+	neverSplits := createReplica(s, 2, roachpb.RKeyMin, maxWontSplitAddr)
 	if err := s.AddReplica(neverSplits); err != nil {
 		t.Fatal(err)
 	}
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := createReplica(s, 3, dataMaxAddr, roachpb.RKeyMax)
+	willSplit := createReplica(s, 3, minWillSplitAddr, roachpb.RKeyMax)
 	if err := s.AddReplica(willSplit); err != nil {
 		t.Fatal(err)
 	}

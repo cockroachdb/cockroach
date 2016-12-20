@@ -326,6 +326,7 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	return err
 }
 
+// TODO(a-robinson): Write unit test for this.
 func createJobsTable(ctx context.Context, r runner) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
@@ -341,6 +342,7 @@ func createJobsTable(ctx context.Context, r runner) error {
 	})
 }
 
+// TODO(a-robinson): Write unit test for this.
 func createSettingsTable(ctx context.Context, r runner) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
