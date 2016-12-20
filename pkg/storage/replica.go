@@ -745,12 +745,12 @@ func (r *Replica) destroyDataRaftMuLocked(
 func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.AssertHeld()
 	if len(r.mu.proposals) > 0 {
-		resp := proposalResult{
-			Reply:         &roachpb.BatchResponse{},
-			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
-			ProposalRetry: proposalRangeNoLongerExists,
-		}
 		for _, p := range r.mu.proposals {
+			resp := proposalResult{
+				Reply:         &roachpb.BatchResponse{},
+				Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+				ProposalRetry: proposalRangeNoLongerExists,
+			}
 			p.finish(resp)
 		}
 	}
