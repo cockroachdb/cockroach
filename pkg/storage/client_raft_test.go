@@ -854,7 +854,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 
 	// Restart store 2.
 	mtc.restartStore(2)
@@ -1561,7 +1561,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	}))
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -1894,7 +1894,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Expire leases to ensure any remaining intent resolutions can complete.
 	// TODO(bdarnell): understand why some tests need this.
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an attempt to
@@ -2259,7 +2259,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	testutils.SucceedsSoon(t, func() error {
-		mtc.expireLeases()
+		mtc.expireLeases(context.TODO())
 		mtc.manualClock.Increment(int64(
 			storage.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -2343,7 +2343,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// will see that the range has been moved and delete the old
 	// replica.
 	mtc.stores[2].SetReplicaGCQueueActive(true)
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 	mtc.manualClock.Increment(int64(
 		storage.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].ForceReplicaGCScanAndProcess()
@@ -2391,7 +2391,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2, 3)
 	mtc.unreplicateRange(rangeID, 0)
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 
 	// Ensure that we have a stable lease and raft leader so we can tell if the
 	// removed node causes a disruption. This is a three-step process.
@@ -2729,8 +2729,11 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	// Stop and restart the store. The primary motiviation for this test
 	// is to ensure that the store does not panic on restart (as was
 	// previously the case).
+	log.Infof(context.Background(), "stopping 0")
 	mtc.stopStore(0)
+	log.Infof(context.Background(), "restarting 0")
 	mtc.restartStore(0)
+	log.Infof(context.Background(), "finished restart")
 
 	// Initially, the in-memory Replica object is recreated from the
 	// on-disk state.
@@ -2740,7 +2743,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	// Re-enable the GC queue to allow the replica to be destroyed
 	// (after the simulated passage of time).
-	mtc.expireLeases()
+	mtc.expireLeases(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[0].SetReplicaGCQueueActive(true)
 	mtc.stores[0].ForceReplicaGCScanAndProcess()
@@ -2931,7 +2934,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// the system could have requested another lease as well, so we
 	// expire-request in a loop until we get our foot in the door.
 	for {
-		mtc.expireLeases()
+		mtc.expireLeases(context.TODO())
 		if _, pErr := client.SendWrappedWith(
 			context.Background(),
 			store1,
