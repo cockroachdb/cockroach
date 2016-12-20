@@ -84,6 +84,10 @@ const (
 	// duration should be of the range lease active time.
 	rangeLeaseRenewalDivisor = 5
 
+	// livenessRenewalFraction specifies what fraction the node liveness renewal
+	// duration should be of the node liveness duration.
+	livenessRenewalFraction = 0.5
+
 	// replicaRequestQueueSize specifies the maximum number of requests to queue
 	// for a replica.
 	replicaRequestQueueSize = 100
@@ -129,6 +133,16 @@ func RangeLeaseDurations(
 ) (rangeLeaseActive time.Duration, rangeLeaseRenewal time.Duration) {
 	rangeLeaseActive = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
 	rangeLeaseRenewal = rangeLeaseActive / rangeLeaseRenewalDivisor
+	return
+}
+
+// NodeLivenessDurations computes durations for node liveness expiration
+// and renewal based on a default multiple of Raft election timeout.
+func NodeLivenessDurations(
+	raftElectionTimeout time.Duration,
+) (livenessActive time.Duration, livenessRenewal time.Duration) {
+	livenessActive, _ = RangeLeaseDurations(raftElectionTimeout)
+	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
 	return
 }
 
