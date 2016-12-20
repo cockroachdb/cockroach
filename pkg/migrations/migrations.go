@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -46,6 +47,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "default UniqueID to uuid_v4 in system.eventlog",
 		workFn: eventlogUniqueIDDefault,
+	},
+	{
+		name:   "add zone configs for system ranges",
+		workFn: systemZoneConfigs,
 	},
 }
 
@@ -79,6 +84,7 @@ type leaseManager interface {
 type db interface {
 	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]client.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
+	Txn(ctx context.Context, retryable func(txn *client.Txn) error) error
 }
 
 // Manager encapsulates the necessary functionality for handling migrations
@@ -265,4 +271,28 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", err)
 	}
 	return err
+}
+
+func systemZoneConfigs(ctx context.Context, r runner) error {
+	var kvs []roachpb.KeyValue
+	kvs = append(kvs, sqlbase.CreateMetaZoneConfig()...)
+	kvs = append(kvs, sqlbase.CreateIdentifierZoneConfig()...)
+	kvs = append(kvs, sqlbase.CreateSystemZoneConfig()...)
+
+	for _, kv := range kvs {
+		if err := r.db.Txn(ctx, func(txn *client.Txn) error {
+			if res, err := txn.Get(kv.Key); err != nil {
+				return err
+			} else if res.Exists() {
+				return nil
+			}
+			if err := txn.Put(kv.Key, &kv.Value); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to get/put key %q", kv.Key)
+		}
+	}
+	return nil
 }

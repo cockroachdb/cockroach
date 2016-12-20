@@ -419,7 +419,9 @@ func createDefaultZoneConfig() []roachpb.KeyValue {
 	return ret
 }
 
-func createMetaZoneConfig() []roachpb.KeyValue {
+// CreateMetaZoneConfig creates the key/value pairs for the default meta zone
+// config entry.
+func CreateMetaZoneConfig() []roachpb.KeyValue {
 	var ret []roachpb.KeyValue
 	value := roachpb.Value{}
 	desc := config.MetaZoneConfig()
@@ -433,7 +435,9 @@ func createMetaZoneConfig() []roachpb.KeyValue {
 	return ret
 }
 
-func createIdentifierZoneConfig() []roachpb.KeyValue {
+// CreateIdentifierZoneConfig creates the key/value pairs for the default
+// identifier zone config entry.
+func CreateIdentifierZoneConfig() []roachpb.KeyValue {
 	var ret []roachpb.KeyValue
 	value := roachpb.Value{}
 	desc := config.IdentifierZoneConfig()
@@ -447,7 +451,9 @@ func createIdentifierZoneConfig() []roachpb.KeyValue {
 	return ret
 }
 
-func createSystemZoneConfig() []roachpb.KeyValue {
+// CreateSystemZoneConfig creates the key/value pairs for the default system
+// zone config entry.
+func CreateSystemZoneConfig() []roachpb.KeyValue {
 	var ret []roachpb.KeyValue
 	value := roachpb.Value{}
 	desc := config.SystemZoneConfig()
@@ -482,9 +488,9 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
-	target.otherKV = append(target.otherKV, createMetaZoneConfig()...)
-	target.otherKV = append(target.otherKV, createIdentifierZoneConfig()...)
-	target.otherKV = append(target.otherKV, createSystemZoneConfig()...)
+	target.otherKV = append(target.otherKV, CreateMetaZoneConfig()...)
+	target.otherKV = append(target.otherKV, CreateIdentifierZoneConfig()...)
+	target.otherKV = append(target.otherKV, CreateSystemZoneConfig()...)
 }
 
 // IsSystemConfigID returns true if this ID is for a system config object.
