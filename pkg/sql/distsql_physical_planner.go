@@ -29,7 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -63,11 +64,11 @@ import (
 type distSQLPlanner struct {
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
-	distSQLSrv   *distsql.ServerImpl
-	spanResolver *distsql.SpanResolver
+	distSQLSrv   *distsqlrun.ServerImpl
+	spanResolver *distsqlplan.SpanResolver
 }
 
-const resolverPolicy = distsql.BinPackingLeaseHolderChoice
+const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 
 // If true, the plan diagram (in JSON) is logged for each plan (used for
 // debugging).
@@ -76,7 +77,7 @@ var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", fals
 func newDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
-	distSQLSrv *distsql.ServerImpl,
+	distSQLSrv *distsqlrun.ServerImpl,
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 ) *distSQLPlanner {
@@ -84,7 +85,7 @@ func newDistSQLPlanner(
 		nodeDesc:     nodeDesc,
 		rpcContext:   rpcCtx,
 		distSQLSrv:   distSQLSrv,
-		spanResolver: distsql.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
 	}
 }
 
@@ -249,7 +250,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 // a single query.
 type planningCtx struct {
 	ctx      context.Context
-	spanIter *distsql.SpanResolverIterator
+	spanIter *distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
 	nodeAddresses map[roachpb.NodeID]string
@@ -260,7 +261,7 @@ type processor struct {
 	// the spec for the processor; note that the StreamEndpointSpecs in the input
 	// synchronizers and output routers are not set until the end of the planning
 	// process.
-	spec distsql.ProcessorSpec
+	spec distsqlrun.ProcessorSpec
 }
 
 // processorIdx identifies a processor by its index in physicalPlan.processors.
@@ -321,7 +322,7 @@ type physicalPlan struct {
 	// TODO(radu): in general, guaranteeing an ordering is not free (requires
 	// ordered synchronizers when merging streams). We should determine if (and to
 	// what extent) the ordering of a planNode is actually used by its parent.
-	ordering distsql.Ordering
+	ordering distsqlrun.Ordering
 }
 
 // makePlanToStreamColMap initializes a new physicalPlan.planToStreamColMap. The
@@ -369,13 +370,13 @@ func mergePlans(
 	return mergedPlan, leftRouters, rightRouters
 }
 
-// The distsql Expression uses the placeholder syntax (@1, @2, @3..) to
+// The distsqlrun Expression uses the placeholder syntax (@1, @2, @3..) to
 // refer to columns. We format the expression using the IndexedVar and StarDatum
 // formatting interceptors. A columnMap can optionally be used to remap the
 // indices.
-func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsql.Expression {
+func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsqlrun.Expression {
 	if expr == nil {
-		return distsql.Expression{}
+		return distsqlrun.Expression{}
 	}
 
 	// TODO(irfansharif): currently there’s no nice way to “compose” FmtFlags
@@ -387,7 +388,7 @@ func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsql.Expressio
 	switch expr.(type) {
 	case *parser.StarDatum:
 		// By default parser.StarDatum is rendered as a DInt(0), but formatting
-		// this as 0 we can replicate this behavior in distsql.
+		// this as 0 we can replicate this behavior in distsqlrun.
 		f = parser.FmtStarDatumFormat(
 			func(buf *bytes.Buffer, _ parser.FmtFlags) {
 				fmt.Fprintf(buf, "0")
@@ -414,7 +415,7 @@ func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsql.Expressio
 	}
 	var buf bytes.Buffer
 	expr.Format(&buf, f)
-	return distsql.Expression{Expr: buf.String()}
+	return distsqlrun.Expression{Expr: buf.String()}
 }
 
 // spanPartition is the intersection between a set of spans for a certain
@@ -506,8 +507,8 @@ func (dsp *distSQLPlanner) partitionSpans(
 
 // initTableReaderSpec initializes a TableReaderSpec that corresponds to a
 // scanNode, except for the Spans and OutputColumns.
-func initTableReaderSpec(n *scanNode) (distsql.TableReaderSpec, error) {
-	s := distsql.TableReaderSpec{
+func initTableReaderSpec(n *scanNode) (distsqlrun.TableReaderSpec, error) {
+	s := distsqlrun.TableReaderSpec{
 		Table:   n.desc,
 		Reverse: n.reverse,
 	}
@@ -521,7 +522,7 @@ func initTableReaderSpec(n *scanNode) (distsql.TableReaderSpec, error) {
 		}
 		if s.IndexIdx == 0 {
 			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
-			return distsql.TableReaderSpec{}, err
+			return distsqlrun.TableReaderSpec{}, err
 		}
 	}
 	if n.limitSoft {
@@ -557,12 +558,12 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 
 func (dsp *distSQLPlanner) convertOrdering(
 	planOrdering sqlbase.ColumnOrdering, planToStreamColMap []int,
-) distsql.Ordering {
+) distsqlrun.Ordering {
 	if len(planOrdering) == 0 {
-		return distsql.Ordering{}
+		return distsqlrun.Ordering{}
 	}
-	ordering := distsql.Ordering{
-		Columns: make([]distsql.Ordering_Column, 0, len(planOrdering)),
+	ordering := distsqlrun.Ordering{
+		Columns: make([]distsqlrun.Ordering_Column, 0, len(planOrdering)),
 	}
 	for _, col := range planOrdering {
 		streamColIdx := planToStreamColMap[col.ColIdx]
@@ -571,12 +572,12 @@ func (dsp *distSQLPlanner) convertOrdering(
 			// irrelevant.
 			break
 		}
-		oc := distsql.Ordering_Column{
+		oc := distsqlrun.Ordering_Column{
 			ColIdx:    uint32(streamColIdx),
-			Direction: distsql.Ordering_Column_ASC,
+			Direction: distsqlrun.Ordering_Column_ASC,
 		}
 		if col.Direction == encoding.Descending {
-			oc.Direction = distsql.Ordering_Column_DESC
+			oc.Direction = distsqlrun.Ordering_Column_DESC
 		}
 		ordering.Columns = append(ordering.Columns, oc)
 	}
@@ -626,16 +627,16 @@ func (dsp *distSQLPlanner) createTableReaders(
 			node: sp.node,
 		}
 
-		tr := &distsql.TableReaderSpec{}
+		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
-		tr.Spans = make([]distsql.TableReaderSpan, len(sp.spans))
+		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
 		for i := range sp.spans {
 			tr.Spans[i].Span = sp.spans[i]
 		}
 
 		proc.spec.Core.SetValue(tr)
-		proc.spec.Output = make([]distsql.OutputRouterSpec, 1)
-		proc.spec.Output[0].Type = distsql.OutputRouterSpec_PASS_THROUGH
+		proc.spec.Output = make([]distsqlrun.OutputRouterSpec, 1)
+		proc.spec.Output[0].Type = distsqlrun.OutputRouterSpec_PASS_THROUGH
 
 		pIdx := p.addProcessor(proc)
 		p.resultRouters = append(p.resultRouters, pIdx)
@@ -647,19 +648,19 @@ func (dsp *distSQLPlanner) createTableReaders(
 // with the source of the stream; all processors have the same core. This is for
 // stages that correspond to logical blocks that don't require any grouping
 // (e.g. evaluator, sorting, etc).
-func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsql.ProcessorCoreUnion) {
+func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsqlrun.ProcessorCoreUnion) {
 	for i, resultProc := range p.resultRouters {
 		prevProc := &p.processors[resultProc]
 
 		proc := processor{
 			node: prevProc.node,
-			spec: distsql.ProcessorSpec{
-				Input: []distsql.InputSyncSpec{{
-					Type: distsql.InputSyncSpec_UNORDERED,
+			spec: distsqlrun.ProcessorSpec{
+				Input: []distsqlrun.InputSyncSpec{{
+					Type: distsqlrun.InputSyncSpec_UNORDERED,
 				}},
 				Core: core,
-				Output: []distsql.OutputRouterSpec{{
-					Type: distsql.OutputRouterSpec_PASS_THROUGH,
+				Output: []distsqlrun.OutputRouterSpec{{
+					Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 				}},
 			},
 		}
@@ -748,14 +749,14 @@ func (dsp *distSQLPlanner) selectRenders(
 		}
 	}
 	// Add a stage with Evaluator processors.
-	evalSpec := distsql.EvaluatorSpec{
-		Exprs: make([]distsql.Expression, len(n.render)),
+	evalSpec := distsqlrun.EvaluatorSpec{
+		Exprs: make([]distsqlrun.Expression, len(n.render)),
 	}
 	for i := range n.render {
 		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
 	}
 
-	dsp.addNoGroupingStage(p, distsql.ProcessorCoreUnion{Evaluator: &evalSpec})
+	dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Evaluator: &evalSpec})
 
 	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
@@ -771,7 +772,7 @@ func (dsp *distSQLPlanner) selectRenders(
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *sortNode) {
-	sorterSpec := distsql.SorterSpec{
+	sorterSpec := distsqlrun.SorterSpec{
 		OutputOrdering: dsp.convertOrdering(n.ordering, p.planToStreamColMap),
 		OrderingMatchLen: uint32(computeOrderingMatch(
 			n.ordering, n.plan.Ordering(), false, /* reverse */
@@ -783,7 +784,7 @@ func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *
 			n.ordering, sorterSpec.OutputOrdering.Columns,
 		))
 	}
-	dsp.addNoGroupingStage(p, distsql.ProcessorCoreUnion{Sorter: &sorterSpec})
+	dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec})
 
 	p.ordering = sorterSpec.OutputOrdering
 	// In cases like:
@@ -802,15 +803,15 @@ func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *
 // addSingleGroupStage adds a "single group" stage (one that cannot be
 // parallelized) which consists of a single processor on the specified node.
 func (dsp *distSQLPlanner) addSingleGroupStage(
-	p *physicalPlan, nodeID roachpb.NodeID, core distsql.ProcessorCoreUnion,
+	p *physicalPlan, nodeID roachpb.NodeID, core distsqlrun.ProcessorCoreUnion,
 ) {
 	proc := processor{
 		node: nodeID,
-		spec: distsql.ProcessorSpec{
-			Input: []distsql.InputSyncSpec{{}},
+		spec: distsqlrun.ProcessorSpec{
+			Input: []distsqlrun.InputSyncSpec{{}},
 			Core:  core,
-			Output: []distsql.OutputRouterSpec{{
-				Type: distsql.OutputRouterSpec_PASS_THROUGH,
+			Output: []distsqlrun.OutputRouterSpec{{
+				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 			}},
 		},
 	}
@@ -856,7 +857,7 @@ func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan,
 		groupCols = append(groupCols, uint32(i))
 	}
 
-	aggregatorSpec := distsql.AggregatorSpec{
+	aggregatorSpec := distsqlrun.AggregatorSpec{
 		Exprs:     aggExprs,
 		Types:     types,
 		GroupCols: groupCols,
@@ -866,14 +867,14 @@ func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan,
 	//    before the final aggregation.
 	//  - We could route by hash to multiple final aggregators.
 	dsp.addSingleGroupStage(
-		p, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{Aggregator: &aggregatorSpec},
+		p, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{Aggregator: &aggregatorSpec},
 	)
 
 	evalExprs, needEval := dsp.extractPostAggrExprs(n.render)
 	if needEval {
 		// Add a stage with Evaluator processors.
-		postevalSpec := distsql.EvaluatorSpec{
-			Exprs: make([]distsql.Expression, len(evalExprs)),
+		postevalSpec := distsqlrun.EvaluatorSpec{
+			Exprs: make([]distsqlrun.Expression, len(evalExprs)),
 		}
 
 		for i := range evalExprs {
@@ -881,7 +882,7 @@ func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan,
 		}
 
 		dsp.addSingleGroupStage(
-			p, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{Evaluator: &postevalSpec},
+			p, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{Evaluator: &postevalSpec},
 		)
 	}
 
@@ -911,7 +912,7 @@ ColLoop:
 		return physicalPlan{}, err
 	}
 
-	joinReaderSpec := distsql.JoinReaderSpec{
+	joinReaderSpec := distsqlrun.JoinReaderSpec{
 		Table:         n.index.desc,
 		IndexIdx:      0,
 		Filter:        distSQLExpression(n.table.filter, nil),
@@ -924,7 +925,7 @@ ColLoop:
 	// synchronizers down the road can maintain the order).
 
 	dsp.addSingleGroupStage(
-		&plan, dsp.nodeDesc.NodeID, distsql.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+		&plan, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 	)
 	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
 	// output stream.
@@ -997,12 +998,12 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
-	var joinerSpec distsql.HashJoinerSpec
+	var joinerSpec distsqlrun.HashJoinerSpec
 
 	if n.joinType != joinTypeInner {
 		panic("only inner join supported for now")
 	}
-	joinerSpec.Type = distsql.JoinType_INNER
+	joinerSpec.Type = distsqlrun.JoinType_INNER
 
 	// Figure out the left and right types.
 	joinerSpec.LeftTypes = dsp.getTypesForPlanResult(leftPlan.planToStreamColMap, n.left.plan)
@@ -1102,10 +1103,10 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	pIdxStart := processorIdx(len(p.processors))
 
 	if len(nodes) == 1 {
-		procSpec := distsql.ProcessorSpec{
-			Input:  make([]distsql.InputSyncSpec, 2),
-			Core:   distsql.ProcessorCoreUnion{HashJoiner: &joinerSpec},
-			Output: []distsql.OutputRouterSpec{{Type: distsql.OutputRouterSpec_PASS_THROUGH}},
+		procSpec := distsqlrun.ProcessorSpec{
+			Input:  make([]distsqlrun.InputSyncSpec, 2),
+			Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+			Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 		}
 
 		p.processors = append(p.processors, processor{node: nodes[0], spec: procSpec})
@@ -1115,25 +1116,25 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 		// Each node has a join processor.
 		for _, n := range nodes {
-			procSpec := distsql.ProcessorSpec{
-				Input:  make([]distsql.InputSyncSpec, 2),
-				Core:   distsql.ProcessorCoreUnion{HashJoiner: &joinerSpec},
-				Output: []distsql.OutputRouterSpec{{Type: distsql.OutputRouterSpec_PASS_THROUGH}},
+			procSpec := distsqlrun.ProcessorSpec{
+				Input:  make([]distsqlrun.InputSyncSpec, 2),
+				Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 			}
 			p.processors = append(p.processors, processor{node: n, spec: procSpec})
 		}
 
 		// Set up the left routers.
 		for _, resultProc := range leftRouters {
-			p.processors[resultProc].spec.Output[0] = distsql.OutputRouterSpec{
-				Type:        distsql.OutputRouterSpec_BY_HASH,
+			p.processors[resultProc].spec.Output[0] = distsqlrun.OutputRouterSpec{
+				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
 				HashColumns: joinerSpec.LeftEqColumns,
 			}
 		}
 		// Set up the right routers.
 		for _, resultProc := range rightRouters {
-			p.processors[resultProc].spec.Output[0] = distsql.OutputRouterSpec{
-				Type:        distsql.OutputRouterSpec_BY_HASH,
+			p.processors[resultProc].spec.Output[0] = distsqlrun.OutputRouterSpec{
+				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
 				HashColumns: joinerSpec.RightEqColumns,
 			}
 		}
@@ -1147,9 +1148,9 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 		// Connect left routers to the processor's first input. Currently the join
 		// node doesn't care about the orderings of the left and right results.
-		dsp.mergeResultStreams(&p, leftRouters, bucket, distsql.Ordering{}, pIdx, 0)
+		dsp.mergeResultStreams(&p, leftRouters, bucket, distsqlrun.Ordering{}, pIdx, 0)
 		// Connect right routers to the processor's second input.
-		dsp.mergeResultStreams(&p, rightRouters, bucket, distsql.Ordering{}, pIdx, 1)
+		dsp.mergeResultStreams(&p, rightRouters, bucket, distsqlrun.Ordering{}, pIdx, 1)
 
 		p.resultRouters = append(p.resultRouters, pIdx)
 	}
@@ -1208,15 +1209,15 @@ func (dsp *distSQLPlanner) mergeResultStreams(
 	p *physicalPlan,
 	resultRouters []processorIdx,
 	sourceRouterSlot int,
-	ordering distsql.Ordering,
+	ordering distsqlrun.Ordering,
 	destProcessor processorIdx,
 	destInput int,
 ) {
 	proc := &p.processors[destProcessor]
 	if len(ordering.Columns) == 0 || len(resultRouters) == 1 {
-		proc.spec.Input[destInput].Type = distsql.InputSyncSpec_UNORDERED
+		proc.spec.Input[destInput].Type = distsqlrun.InputSyncSpec_UNORDERED
 	} else {
-		proc.spec.Input[destInput].Type = distsql.InputSyncSpec_ORDERED
+		proc.spec.Input[destInput].Type = distsqlrun.InputSyncSpec_ORDERED
 		proc.spec.Input[destInput].Ordering = ordering
 	}
 
@@ -1238,14 +1239,14 @@ func (dsp *distSQLPlanner) populateEndpoints(planCtx *planningCtx, p *physicalPl
 	for sIdx, s := range p.streams {
 		p1 := &p.processors[s.sourceProcessor]
 		p2 := &p.processors[s.destProcessor]
-		endpoint := distsql.StreamEndpointSpec{StreamID: distsql.StreamID(sIdx)}
+		endpoint := distsqlrun.StreamEndpointSpec{StreamID: distsqlrun.StreamID(sIdx)}
 		if p1.node == p2.node {
-			endpoint.Type = distsql.StreamEndpointSpec_LOCAL
+			endpoint.Type = distsqlrun.StreamEndpointSpec_LOCAL
 		} else {
-			endpoint.Type = distsql.StreamEndpointSpec_REMOTE
+			endpoint.Type = distsqlrun.StreamEndpointSpec_REMOTE
 		}
 		p2.spec.Input[s.destInput].Streams = append(p2.spec.Input[s.destInput].Streams, endpoint)
-		if endpoint.Type == distsql.StreamEndpointSpec_REMOTE {
+		if endpoint.Type == distsqlrun.StreamEndpointSpec_REMOTE {
 			endpoint.TargetAddr = planCtx.nodeAddresses[p2.node]
 		}
 
@@ -1294,7 +1295,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if len(plan.resultRouters) != 1 ||
 		plan.processors[plan.resultRouters[0]].node != thisNodeID {
 		dsp.addSingleGroupStage(
-			&plan, thisNodeID, distsql.ProcessorCoreUnion{Noop: &distsql.NoopCoreSpec{}},
+			&plan, thisNodeID, distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
 		)
 		if len(plan.resultRouters) != 1 {
 			panic(fmt.Sprintf("%d results after single group stage", len(plan.resultRouters)))
@@ -1306,25 +1307,25 @@ func (dsp *distSQLPlanner) PlanAndRun(
 
 	// Set up the endpoint for the final result.
 	finalOut := &plan.processors[plan.resultRouters[0]].spec.Output[0]
-	finalOut.Streams = append(finalOut.Streams, distsql.StreamEndpointSpec{
-		Type: distsql.StreamEndpointSpec_SYNC_RESPONSE,
+	finalOut.Streams = append(finalOut.Streams, distsqlrun.StreamEndpointSpec{
+		Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE,
 	})
 
 	recv.resultToStreamColMap = plan.planToStreamColMap
 
 	// Split the processors by nodeID to create the FlowSpecs.
-	flowID := distsql.FlowID{UUID: uuid.MakeV4()}
+	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
 	nodeIDMap := make(map[roachpb.NodeID]int)
 	// nodeAddresses contains addresses for the nodes that were referenced during
 	// planning, so we're likely going to have this many nodes (and we have one
 	// flow per node).
 	nodeIDs := make([]roachpb.NodeID, 0, len(planCtx.nodeAddresses))
-	flows := make([]distsql.FlowSpec, 0, len(planCtx.nodeAddresses))
+	flows := make([]distsqlrun.FlowSpec, 0, len(planCtx.nodeAddresses))
 
 	for _, p := range plan.processors {
 		idx, ok := nodeIDMap[p.node]
 		if !ok {
-			flow := distsql.FlowSpec{FlowID: flowID}
+			flow := distsqlrun.FlowSpec{FlowID: flowID}
 			idx = len(flows)
 			flows = append(flows, flow)
 			nodeIDs = append(nodeIDs, p.node)
@@ -1341,7 +1342,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 		}
 
 		var buf bytes.Buffer
-		if err := distsql.GeneratePlanDiagram(flows, nodeNames, &buf); err != nil {
+		if err := distsqlrun.GeneratePlanDiagram(flows, nodeNames, &buf); err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
 			log.Infof(ctx, "Plan diagram JSON:\n%s", buf.String())
@@ -1356,18 +1357,18 @@ func (dsp *distSQLPlanner) PlanAndRun(
 			// Skip this node.
 			continue
 		}
-		req := distsql.SetupFlowRequest{
+		req := distsqlrun.SetupFlowRequest{
 			Txn:  txn.Proto,
 			Flow: flows[i],
 		}
-		if err := distsql.SetFlowRequestTrace(ctx, &req); err != nil {
+		if err := distsqlrun.SetFlowRequestTrace(ctx, &req); err != nil {
 			return err
 		}
 		conn, err := dsp.rpcContext.GRPCDial(planCtx.nodeAddresses[nodeID])
 		if err != nil {
 			return err
 		}
-		client := distsql.NewDistSQLClient(conn)
+		client := distsqlrun.NewDistSQLClient(conn)
 		// TODO(radu): we are not waiting for the flows to complete, but we are
 		// still waiting for a round trip; we should start the flows in parallel, at
 		// least if there are enough of them.
@@ -1377,11 +1378,11 @@ func (dsp *distSQLPlanner) PlanAndRun(
 			return resp.Error.GoError()
 		}
 	}
-	localReq := distsql.SetupFlowRequest{
+	localReq := distsqlrun.SetupFlowRequest{
 		Txn:  txn.Proto,
 		Flow: flows[nodeIDMap[thisNodeID]],
 	}
-	if err := distsql.SetFlowRequestTrace(ctx, &localReq); err != nil {
+	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
 		return err
 	}
 	flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
@@ -1400,7 +1401,7 @@ type distSQLReceiver struct {
 	// rows is the container where we store the results; if we only need the count
 	// of the rows, it is nil.
 	rows *RowContainer
-	// resultToStreamColMap maps result columns to columns in the distsql results
+	// resultToStreamColMap maps result columns to columns in the distsqlrun results
 	// stream.
 	resultToStreamColMap []int
 	// numRows counts the number of rows we received when rows is nil.
@@ -1411,7 +1412,7 @@ type distSQLReceiver struct {
 	closed  bool
 }
 
-var _ distsql.RowReceiver = &distSQLReceiver{}
+var _ distsqlrun.RowReceiver = &distSQLReceiver{}
 
 // PushRow is part of the RowReceiver interface.
 func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
