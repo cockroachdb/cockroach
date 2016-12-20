@@ -436,7 +436,7 @@ func createMetaZoneConfig() []roachpb.KeyValue {
 func createIdentifierZoneConfig() []roachpb.KeyValue {
 	var ret []roachpb.KeyValue
 	value := roachpb.Value{}
-	desc := config.IdetifierZoneConfig()
+	desc := config.IdentifierZoneConfig()
 	if err := value.SetProto(&desc); err != nil {
 		log.Fatalf(context.TODO(), "could not marshal %v", desc)
 	}

@@ -179,8 +179,8 @@ func MetaZoneConfig() ZoneConfig {
 	return metaZoneConfig
 }
 
-// IdetifierZoneConfig is a plumb function for idetifierZoneConfig.
-func IdetifierZoneConfig() ZoneConfig {
+// IdentifierZoneConfig is a plumb function for idetifierZoneConfig.
+func IdentifierZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	return identifierZoneConfig
