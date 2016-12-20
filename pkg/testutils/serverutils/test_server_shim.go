@@ -77,6 +77,9 @@ type TestServerInterface interface {
 	// DistSender returns the DistSender used by the TestServer.
 	DistSender() *kv.DistSender
 
+	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
+	DistSQLServer() interface{}
+
 	// AdminURL returns the URL for the admin UI.
 	AdminURL() string
 	// GetHTTPClient returns an http client connected to the server. It uses the

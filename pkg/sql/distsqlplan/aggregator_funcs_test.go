@@ -1,0 +1,262 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Radu Berinde (radu@cockroachlabs.com)
+
+package distsqlplan
+
+import (
+	"fmt"
+	"testing"
+
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
+
+// runTestFlow runs a flow with the given processors and returns the results.
+// Any errors stop the current test.
+func runTestFlow(
+	t *testing.T, srv serverutils.TestServerInterface, procs ...distsqlrun.ProcessorSpec,
+) sqlbase.EncDatumRows {
+	kvDB := srv.KVClient().(*client.DB)
+	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
+
+	req := distsqlrun.SetupFlowRequest{
+		Txn: client.NewTxn(context.TODO(), *kvDB).Proto,
+		Flow: distsqlrun.FlowSpec{
+			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
+			Processors: procs,
+		},
+	}
+
+	var rowBuf distsqlrun.RowBuffer
+
+	flow, err := distSQLSrv.SetupSyncFlow(context.TODO(), &req, &rowBuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flow.Start(func() {})
+	flow.Wait()
+	flow.Cleanup()
+
+	if rowBuf.Err != nil {
+		t.Fatal(rowBuf.Err)
+	}
+	if !rowBuf.Closed {
+		t.Errorf("output not closed")
+	}
+	return rowBuf.Rows
+}
+
+// testDistAggregationInfo tests that a flow with multiple local stages and a
+// final stage (in accordance with per DistAggregationInfo) gets the same result
+// with a naive aggregation flow that has a single non-distributed stage.
+//
+// Both types of flows are set up and ran against the first numRows of the given
+// table. We assume the table's first column is the primary key, with values
+// from 1 to numRows. A non-PK column that works with the function is chosen.
+func testDistAggregationInfo(
+	t *testing.T,
+	srv serverutils.TestServerInterface,
+	tableDesc *sqlbase.TableDescriptor,
+	colIdx int,
+	numRows int,
+	fn distsqlrun.AggregatorSpec_Func,
+	info DistAggregationInfo,
+) {
+	colType := tableDesc.Columns[colIdx].Type
+
+	makeTableReader := func(startPK, endPK int, streamID int) distsqlrun.ProcessorSpec {
+		tr := distsqlrun.TableReaderSpec{
+			Table:         *tableDesc,
+			OutputColumns: []uint32{uint32(colIdx)},
+			Spans:         make([]distsqlrun.TableReaderSpan, 1),
+		}
+
+		var err error
+		tr.Spans[0].Span.Key, err = sqlbase.MakePrimaryIndexKey(tableDesc, startPK)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr.Spans[0].Span.EndKey, err = sqlbase.MakePrimaryIndexKey(tableDesc, endPK)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return distsqlrun.ProcessorSpec{
+			Core: distsqlrun.ProcessorCoreUnion{TableReader: &tr},
+			Output: []distsqlrun.OutputRouterSpec{{
+				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+				Streams: []distsqlrun.StreamEndpointSpec{
+					{Type: distsqlrun.StreamEndpointSpec_LOCAL, StreamID: distsqlrun.StreamID(streamID)},
+				},
+			}},
+		}
+	}
+
+	// First run a flow that aggregates all the rows without any local stages.
+
+	rowsNonDist := runTestFlow(
+		t, srv,
+		makeTableReader(1, numRows+1, 0),
+		distsqlrun.ProcessorSpec{
+			Input: []distsqlrun.InputSyncSpec{{
+				Type: distsqlrun.InputSyncSpec_UNORDERED,
+				Streams: []distsqlrun.StreamEndpointSpec{
+					{Type: distsqlrun.StreamEndpointSpec_LOCAL, StreamID: 0},
+				},
+			}},
+			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
+				Types: []sqlbase.ColumnType{colType},
+				Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: fn, ColIdx: 0}},
+			}},
+			Output: []distsqlrun.OutputRouterSpec{{
+				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+				Streams: []distsqlrun.StreamEndpointSpec{
+					{Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE},
+				},
+			}},
+		},
+	)
+
+	// Now run a flow with 4 separate table readers, each with its own local
+	// stage, all feeding into a single final stage.
+
+	numParallel := 4
+	// The type outputted by the local stage can be different than the input type
+	// (e.g. DECIMAL instead of INT).
+	_, intermediaryType, err := distsqlrun.GetAggregateInfo(fn, colType)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if numParallel < numRows {
+		numParallel = numRows
+	}
+	finalProc := distsqlrun.ProcessorSpec{
+		Input: []distsqlrun.InputSyncSpec{{
+			Type: distsqlrun.InputSyncSpec_UNORDERED,
+		}},
+		Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
+			Types: []sqlbase.ColumnType{intermediaryType},
+			Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: info.FinalStage, ColIdx: 0}},
+		}},
+		Output: []distsqlrun.OutputRouterSpec{{
+			Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+			Streams: []distsqlrun.StreamEndpointSpec{
+				{Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE},
+			},
+		}},
+	}
+	var procs []distsqlrun.ProcessorSpec
+	for i := 0; i < numParallel; i++ {
+		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
+		agg := distsqlrun.ProcessorSpec{
+			Input: []distsqlrun.InputSyncSpec{{
+				Type: distsqlrun.InputSyncSpec_UNORDERED,
+				Streams: []distsqlrun.StreamEndpointSpec{
+					{Type: distsqlrun.StreamEndpointSpec_LOCAL, StreamID: distsqlrun.StreamID(2 * i)},
+				},
+			}},
+			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
+				Types: []sqlbase.ColumnType{colType},
+				Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: info.LocalStage, ColIdx: 0}},
+			}},
+			Output: []distsqlrun.OutputRouterSpec{{
+				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+				Streams: []distsqlrun.StreamEndpointSpec{
+					{Type: distsqlrun.StreamEndpointSpec_LOCAL, StreamID: distsqlrun.StreamID(2*i + 1)},
+				},
+			}},
+		}
+		procs = append(procs, tr, agg)
+		finalProc.Input[0].Streams = append(finalProc.Input[0].Streams, distsqlrun.StreamEndpointSpec{
+			Type:     distsqlrun.StreamEndpointSpec_LOCAL,
+			StreamID: distsqlrun.StreamID(2*i + 1),
+		})
+	}
+	procs = append(procs, finalProc)
+	rowsDist := runTestFlow(t, srv, procs...)
+
+	if rowsDist.String() != rowsNonDist.String() {
+		t.Errorf("different results\nw/o local stage:   %s\nwith local stage:  %s", rowsNonDist, rowsDist)
+	}
+}
+
+func TestDistAggregationTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numRows = 100
+
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop()
+
+	// Create a table with a few columns:
+	//  - random integer values from 0 to numRows
+	//  - random integer values (with some NULLs)
+	//  - random bool value (mostly false)
+	//  - random bool value (mostly true)
+	//  - random decimals
+	//  - random decimals (with some NULLs)
+	rng, _ := randutil.NewPseudoRand()
+	sqlutils.CreateTable(
+		t, tc.ServerConn(0), "t",
+		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL",
+		numRows,
+		func(row int) []parser.Datum {
+			return []parser.Datum{
+				parser.NewDInt(parser.DInt(row)),
+				parser.NewDInt(parser.DInt(rng.Intn(numRows))),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, true),
+				parser.MakeDBool(parser.DBool(rng.Intn(10) == 0)),
+				parser.MakeDBool(parser.DBool(rng.Intn(10) != 0)),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}, false),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}, true),
+			}
+		},
+	)
+
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	for fn, info := range DistAggregationTable {
+		foundCol := false
+		for colIdx := 1; colIdx < len(desc.Columns); colIdx++ {
+			// See if this column works with this function.
+			_, _, err := distsqlrun.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
+			if err != nil {
+				continue
+			}
+			foundCol = true
+			for _, numRows := range []int{5, numRows / 10, numRows / 2, numRows} {
+				name := fmt.Sprintf("%s/%s/%d", fn, desc.Columns[colIdx].Name, numRows)
+				t.Run(name, func(t *testing.T) {
+					testDistAggregationInfo(t, tc.Server(0), desc, colIdx, numRows, fn, info)
+				})
+			}
+		}
+		if !foundCol {
+			t.Errorf("no column suitable for %d", fn)
+		}
+	}
+}
