@@ -613,16 +613,16 @@ func (n *insertNode) ExplainPlan(v bool) (name, description string, children []p
 	return "insert", buf.String(), subplans
 }
 
-func (n *insertNode) ExplainTypes(regTypes func(string, string)) {
+func (n *insertNode) explainExprs(regTypes func(string, parser.Expr)) {
 	for i, dexpr := range n.defaultExprs {
-		regTypes(fmt.Sprintf("default %d", i), parser.AsStringWithFlags(dexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("default %d", i), dexpr)
 	}
 	for i, cexpr := range n.checkHelper.exprs {
-		regTypes(fmt.Sprintf("check %d", i), parser.AsStringWithFlags(cexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("check %d", i), cexpr)
 	}
 	cols := n.rh.columns
 	for i, rexpr := range n.rh.exprs {
-		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), rexpr)
 	}
 }
 

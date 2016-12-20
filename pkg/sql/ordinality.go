@@ -133,13 +133,13 @@ func (o *ordinalityNode) ExplainPlan(_ bool) (string, string, []planNode) {
 	return "ordinality", "", []planNode{o.source}
 }
 
-func (o *ordinalityNode) Ordering() orderingInfo                { return o.ordering }
-func (o *ordinalityNode) Values() parser.DTuple                 { return o.row }
-func (o *ordinalityNode) DebugValues() debugValues              { return o.source.DebugValues() }
-func (o *ordinalityNode) MarkDebug(mode explainMode)            { o.source.MarkDebug(mode) }
-func (o *ordinalityNode) Columns() ResultColumns                { return o.columns }
-func (o *ordinalityNode) Start() error                          { return o.source.Start() }
-func (o *ordinalityNode) Close()                                { o.source.Close() }
-func (o *ordinalityNode) ExplainTypes(_ func(string, string))   {}
-func (o *ordinalityNode) SetLimitHint(numRows int64, soft bool) { o.source.SetLimitHint(numRows, soft) }
-func (o *ordinalityNode) setNeededColumns(_ []bool)             {}
+func (o *ordinalityNode) Ordering() orderingInfo                   { return o.ordering }
+func (o *ordinalityNode) Values() parser.DTuple                    { return o.row }
+func (o *ordinalityNode) DebugValues() debugValues                 { return o.source.DebugValues() }
+func (o *ordinalityNode) MarkDebug(mode explainMode)               { o.source.MarkDebug(mode) }
+func (o *ordinalityNode) Columns() ResultColumns                   { return o.columns }
+func (o *ordinalityNode) Start() error                             { return o.source.Start() }
+func (o *ordinalityNode) Close()                                   { o.source.Close() }
+func (o *ordinalityNode) explainExprs(_ func(string, parser.Expr)) {}
+func (o *ordinalityNode) SetLimitHint(numRows int64, soft bool)    { o.source.SetLimitHint(numRows, soft) }
+func (o *ordinalityNode) setNeededColumns(_ []bool)                {}

@@ -271,11 +271,9 @@ func (p *planner) makeJoin(
 	}, nil
 }
 
-// ExplainTypes implements the planNode interface.
-func (n *joinNode) ExplainTypes(regTypes func(string, string)) {
-	if n.pred.filter != nil {
-		regTypes("filter", parser.AsStringWithFlags(n.pred.filter, parser.FmtShowTypes))
-	}
+// explainExprs implements the planNode interface.
+func (n *joinNode) explainExprs(regTypes func(string, parser.Expr)) {
+	regTypes("filter", n.pred.filter)
 }
 
 // SetLimitHint implements the planNode interface.

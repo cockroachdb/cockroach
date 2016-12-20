@@ -206,7 +206,7 @@ func (n *explainTraceNode) ExplainPlan(v bool) (name, description string, childr
 	return "explain", "trace", []planNode{n.plan}
 }
 
-func (n *explainTraceNode) ExplainTypes(fn func(string, string)) {}
+func (n *explainTraceNode) explainExprs(fn func(string, parser.Expr)) {}
 
 func (n *explainTraceNode) Values() parser.DTuple {
 	return n.rows[0]

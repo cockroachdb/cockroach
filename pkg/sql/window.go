@@ -776,12 +776,11 @@ func (n *windowNode) ExplainPlan(_ bool) (name, description string, children []p
 	return name, buf.String(), subplans
 }
 
-func (n *windowNode) ExplainTypes(regTypes func(string, string)) {
+func (n *windowNode) explainExprs(regTypes func(string, parser.Expr)) {
 	cols := n.Columns()
 	for i, rexpr := range n.windowRender {
 		if rexpr != nil {
-			regTypes(fmt.Sprintf("render %s", cols[i].Name),
-				parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+			regTypes(fmt.Sprintf("render %s", cols[i].Name), rexpr)
 		}
 	}
 }

@@ -183,13 +183,9 @@ func (n *limitNode) evalLimit() error {
 	return nil
 }
 
-func (n *limitNode) ExplainTypes(regTypes func(string, string)) {
-	if n.countExpr != nil {
-		regTypes("count", parser.AsStringWithFlags(n.countExpr, parser.FmtShowTypes))
-	}
-	if n.offsetExpr != nil {
-		regTypes("offset", parser.AsStringWithFlags(n.offsetExpr, parser.FmtShowTypes))
-	}
+func (n *limitNode) explainExprs(regTypes func(string, parser.Expr)) {
+	regTypes("count", n.countExpr)
+	regTypes("offset", n.offsetExpr)
 }
 
 // setTop connects the limitNode back to the selectTopNode that caused

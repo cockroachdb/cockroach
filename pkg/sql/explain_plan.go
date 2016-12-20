@@ -205,11 +205,13 @@ func (e *explainer) explain(plan planNode) {
 	e.node(name, description, plan)
 
 	if e.showExprs {
-		plan.ExplainTypes(func(elt, desc string) {
+		plan.explainExprs(func(elt string, expr parser.Expr) {
 			if e.err != nil {
 				return
 			}
-			e.attr(name, elt, desc)
+			if expr != nil {
+				e.attr(name, elt, parser.AsStringWithFlags(expr, parser.FmtShowTypes))
+			}
 		})
 	}
 
@@ -249,15 +251,15 @@ type explainPlanNode struct {
 	results   *valuesNode
 }
 
-func (e *explainPlanNode) ExplainTypes(fn func(string, string)) {}
-func (e *explainPlanNode) Next() (bool, error)                  { return e.results.Next() }
-func (e *explainPlanNode) Columns() ResultColumns               { return e.results.Columns() }
-func (e *explainPlanNode) Ordering() orderingInfo               { return e.results.Ordering() }
-func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
-func (e *explainPlanNode) DebugValues() debugValues             { return debugValues{} }
-func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
-func (e *explainPlanNode) setNeededColumns(_ []bool)            {}
-func (e *explainPlanNode) MarkDebug(mode explainMode)           {}
+func (e *explainPlanNode) explainExprs(fn func(string, parser.Expr)) {}
+func (e *explainPlanNode) Next() (bool, error)                       { return e.results.Next() }
+func (e *explainPlanNode) Columns() ResultColumns                    { return e.results.Columns() }
+func (e *explainPlanNode) Ordering() orderingInfo                    { return e.results.Ordering() }
+func (e *explainPlanNode) Values() parser.DTuple                     { return e.results.Values() }
+func (e *explainPlanNode) DebugValues() debugValues                  { return debugValues{} }
+func (e *explainPlanNode) SetLimitHint(n int64, s bool)              { e.results.SetLimitHint(n, s) }
+func (e *explainPlanNode) setNeededColumns(_ []bool)                 {}
+func (e *explainPlanNode) MarkDebug(mode explainMode)                {}
 func (e *explainPlanNode) expandPlan() error {
 	if e.expanded {
 		if err := e.plan.expandPlan(); err != nil {
