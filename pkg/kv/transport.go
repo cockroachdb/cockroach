@@ -163,41 +163,39 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	gt.clientIndex++
 	gt.setPending(client.args.Replica, true)
 
-	batchFn := func(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-		reply, err := client.client.Batch(ctx, args)
-		if reply != nil {
-			for i := range reply.Responses {
-				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(ctx, err)
-				}
-			}
-		}
-		return reply, err
-	}
-
-	addr := client.remoteAddr
-	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
-		batchFn = func(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-			gt.opts.metrics.LocalSentCount.Inc(1)
-			return localServer.Batch(ctx, args)
-		}
-		// Clone the request. At the time of writing, Replica may mutate it
-		// during command execution which can lead to data races.
-		//
-		// TODO(tamird): we should clone all of client.args.Header, but the
-		// assertions in protoutil.Clone fire and there seems to be no
-		// reasonable workaround.
-		origTxn := client.args.Txn
-		if origTxn != nil {
-			clonedTxn := origTxn.Clone()
-			client.args.Txn = &clonedTxn
-		}
-	}
-
-	log.VEventf(ctx, 2, "sending request to %s", addr)
 	go func() {
 		gt.opts.metrics.SentCount.Inc(1)
-		reply, err := batchFn(ctx, &client.args)
+		reply, err := func() (*roachpb.BatchResponse, error) {
+			if enableLocalCalls {
+				if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
+					// Clone the request. At the time of writing, Replica may mutate it
+					// during command execution which can lead to data races.
+					//
+					// TODO(tamird): we should clone all of client.args.Header, but the
+					// assertions in protoutil.Clone fire and there seems to be no
+					// reasonable workaround.
+					origTxn := client.args.Txn
+					if origTxn != nil {
+						clonedTxn := origTxn.Clone()
+						client.args.Txn = &clonedTxn
+					}
+					gt.opts.metrics.LocalSentCount.Inc(1)
+					log.VEvent(ctx, 2, "sending request to local server")
+					return localServer.Batch(ctx, &client.args)
+				}
+			}
+
+			log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
+			reply, err := client.client.Batch(ctx, &client.args)
+			if reply != nil {
+				for i := range reply.Responses {
+					if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
+						log.Error(ctx, err)
+					}
+				}
+			}
+			return reply, err
+		}()
 		gt.setPending(client.args.Replica, false)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
