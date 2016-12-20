@@ -59,7 +59,9 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 	}
 	oldVal := atomic.SwapInt32(&n.nodeID, int32(val))
 	if oldVal == 0 {
-		log.Infof(ctx, "NodeID set to %d", val)
+		if log.V(2) {
+			log.Infof(ctx, "NodeID set to %d", val)
+		}
 	} else if oldVal != int32(val) {
 		log.Fatalf(ctx, "different NodeIDs set: %d, then %d", oldVal, val)
 	}
