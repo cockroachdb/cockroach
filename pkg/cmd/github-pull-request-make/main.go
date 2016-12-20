@@ -28,6 +28,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"go/build"
 	"io"
@@ -40,9 +41,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/google/go-github/github"
 )
 
+const githubAPITokenEnv = "GITHUB_API_TOKEN"
 const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
 const makeTargetEnv = "TARGET"
 
@@ -111,14 +115,25 @@ func main() {
 		log.Fatalf("make target variable %s is not set", makeTargetEnv)
 	}
 
-	client := github.NewClient(nil)
+	const org = "cockroachdb"
+	const repo = "cockroach"
 
-	crdb, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
+	crdb, err := build.Import(fmt.Sprintf("github.com/%s/%s", org, repo), "", build.FindOnly)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	pulls, _, err := client.PullRequests.List("cockroachdb", "cockroach", nil)
+	var httpClient *http.Client
+	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
+		httpClient = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		))
+	} else {
+		log.Printf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
+	}
+	client := github.NewClient(httpClient)
+
+	pulls, _, err := client.PullRequests.List(org, repo, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -134,16 +149,17 @@ func main() {
 		return
 	}
 
-	resp, err := http.Get(*currentPull.DiffURL)
+	diff, _, err := client.PullRequests.GetRaw(
+		org,
+		repo,
+		*currentPull.Number,
+		github.RawOptions{Type: github.Patch},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("http.Get(%s).Status = %s", *currentPull.DiffURL, resp.Status)
-	}
 
-	pkgs, err := pkgsFromDiff(resp.Body)
+	pkgs, err := pkgsFromDiff(strings.NewReader(diff))
 	if err != nil {
 		log.Fatal(err)
 	}
