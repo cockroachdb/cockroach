@@ -2845,6 +2845,23 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		}
 		return false
 	}
+	// Only quiesce if this replica is the leaseholder as well;
+	// otherwise the replica which is the valid leaseholder may have
+	// pending commands which it's waiting on this leader to propose.
+	if l := r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
+		r.isLeaseValidLocked(l, r.store.Clock().Now()) {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: not leaseholder")
+		}
+		// Try to correct leader-not-leaseholder condition, if encountered,
+		// assuming the leaseholder is caught up to the commit index.
+		if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
+			log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
+			r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
+			r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+		}
+		return false
+	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
 	// equal in order to quiesce.
 	if status.Applied != status.Commit {
