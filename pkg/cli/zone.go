@@ -348,15 +348,18 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 
 	sort.Strings(output)
 	// Ensure the default zone is always printed first.
-	zoneNames := map[sqlbase.ID]string{
-		keys.RootNamespaceID:    ".default",
-		keys.MetaSystemID:       ".meta",
-		keys.IdentifierSystemID: ".identifier",
-		keys.NormalSystemID:     ".system",
+	zoneNames := []struct {
+		id   sqlbase.ID
+		name string
+	}{
+		{keys.RootNamespaceID, ".default"},
+		{keys.MetaSystemID, ".meta"},
+		{keys.IdentifierSystemID, ".identifier"},
+		{keys.NormalSystemID, ".system"},
 	}
-	for id, name := range zoneNames {
-		if _, ok := zones[id]; ok {
-			fmt.Printf("%s\n", name)
+	for _, idName := range zoneNames {
+		if _, ok := zones[idName.id]; ok {
+			fmt.Printf("%s\n", idName.name)
 		}
 	}
 	for _, o := range output {
