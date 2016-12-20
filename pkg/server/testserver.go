@@ -416,6 +416,11 @@ func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.distSender
 }
 
+// DistSQLServer is part of TestServerInterface.
+func (ts *TestServer) DistSQLServer() interface{} {
+	return ts.distSQLServer
+}
+
 // GetFirstStoreID is part of TestServerInterface.
 func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
