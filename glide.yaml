@@ -11,6 +11,4 @@ import:
   version: 45e771701b814666a7eb299e6c7a57d0b1799e91
 # used by a long-lived branch. TODO(dt): remove when merged.
 - package: cloud.google.com/go
-  version: 9d965e63e8cceb1b5d7977a202f0fcb8866d6525
 - package: google.golang.org/api
-  version: 6ae94d3fbc17a6600999dc24c28bd01735a87b76
