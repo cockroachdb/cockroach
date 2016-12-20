@@ -128,7 +128,7 @@ func TestEvaluator(t *testing.T) {
 	for _, c := range testCases {
 		es := c.spec
 
-		in := &RowBuffer{rows: c.input}
+		in := &RowBuffer{Rows: c.input}
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{
@@ -142,14 +142,14 @@ func TestEvaluator(t *testing.T) {
 		}
 
 		ev.Run(nil)
-		if out.err != nil {
-			t.Fatal(out.err)
+		if out.Err != nil {
+			t.Fatal(out.Err)
 		}
-		if !out.closed {
+		if !out.Closed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 
-		if result := out.rows.String(); result != c.expected.String() {
+		if result := out.Rows.String(); result != c.expected.String() {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
 		}
 	}

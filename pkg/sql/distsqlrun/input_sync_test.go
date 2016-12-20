@@ -109,7 +109,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := &RowBuffer{rows: srcRows}
+			rowBuf := &RowBuffer{Rows: srcRows}
 			sources = append(sources, rowBuf)
 		}
 		src, err := makeOrderedSync(c.ordering, sources)

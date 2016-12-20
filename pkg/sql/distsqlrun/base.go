@@ -230,16 +230,21 @@ func (mrc *MultiplexedRowChannel) NextRow() (sqlbase.EncDatumRow, error) {
 // results in memory, as well as an implementation of RowSource that returns
 // rows from a row buffer.
 type RowBuffer struct {
-	rows sqlbase.EncDatumRows
-	err  error
+	// Rows in this buffer. PushRow appends a row to the back, NextRow removes a
+	// row from the front.
+	Rows sqlbase.EncDatumRows
 
-	// closed is used when the RowBuffer is used as a RowReceiver; it is set to
+	// Err is used when the RowBuffer is used as a RowReceiver; it is the error
+	// passed via Close().
+	Err error
+
+	// Closed is used when the RowBuffer is used as a RowReceiver; it is set to
 	// true when the sender calls Close.
-	closed bool
+	Closed bool
 
-	// done is used when the RowBuffer is used as a RowSource; it is set to true
+	// Done is used when the RowBuffer is used as a RowSource; it is set to true
 	// when the receiver read all the rows.
-	done bool
+	Done bool
 }
 
 var _ RowReceiver = &RowBuffer{}
@@ -248,27 +253,27 @@ var _ RowSource = &RowBuffer{}
 // PushRow is part of the RowReceiver interface.
 func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
 	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
-	rb.rows = append(rb.rows, rowCopy)
+	rb.Rows = append(rb.Rows, rowCopy)
 	return true
 }
 
 // Close is part of the RowReceiver interface.
 func (rb *RowBuffer) Close(err error) {
-	rb.err = err
-	rb.closed = true
+	rb.Err = err
+	rb.Closed = true
 }
 
 // NextRow is part of the RowSource interface.
 func (rb *RowBuffer) NextRow() (sqlbase.EncDatumRow, error) {
-	if rb.err != nil {
-		return nil, rb.err
+	if rb.Err != nil {
+		return nil, rb.Err
 	}
-	if len(rb.rows) == 0 {
-		rb.done = true
+	if len(rb.Rows) == 0 {
+		rb.Done = true
 		return nil, nil
 	}
-	row := rb.rows[0]
-	rb.rows = rb.rows[1:]
+	row := rb.Rows[0]
+	rb.Rows = rb.Rows[1:]
 	return row, nil
 }
 

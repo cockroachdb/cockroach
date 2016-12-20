@@ -339,7 +339,7 @@ func TestMergeJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		ms := c.spec
-		inputs := []RowSource{&RowBuffer{rows: c.inputs[0]}, &RowBuffer{rows: c.inputs[1]}}
+		inputs := []RowSource{&RowBuffer{Rows: c.inputs[0]}, &RowBuffer{Rows: c.inputs[1]}}
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
@@ -350,10 +350,10 @@ func TestMergeJoiner(t *testing.T) {
 
 		m.Run(nil)
 
-		if out.err != nil {
-			t.Fatal(out.err)
+		if out.Err != nil {
+			t.Fatal(out.Err)
 		}
-		if !out.closed {
+		if !out.Closed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 
