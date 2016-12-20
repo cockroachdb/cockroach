@@ -27,11 +27,11 @@ import (
 // Log tags are associated with Contexts and appear in all log and trace
 // messages under that context.
 //
-// The logTag entries form a linked chain (newer to older), overlaid onto a
-// Context chain. A context has an association to the bottom-most logTag (via
-// context.Value) and from that we can traverse the entire chain. Different
-// contexts can share pieces of the same chain, so once a logTag is associated
-// to a context, it is immutable.
+// The logTag entries form a linked chain (newer (a.k.a bottom) to older),
+// overlaid onto a Context chain. A context has an association to the
+// bottom-most logTag (via context.Value) and from that we can traverse the
+// entire chain. Different contexts can share pieces of the same chain, so once
+// a logTag is associated to a context, it is immutable.
 type logTag struct {
 	otlog.Field
 
@@ -73,7 +73,8 @@ func contextLogTags(ctx context.Context, tags []*logTag) []*logTag {
 	return tags
 }
 
-// addLogTagChain adds a chain of log tags to a context.
+// addLogTagChain adds a chain of log tags to a context. The tags will be linked
+// to the existing chain referenced by the context, if any.
 func addLogTagChain(ctx context.Context, bottomTag *logTag) context.Context {
 	t := bottomTag
 	for t.parent != nil {
@@ -114,9 +115,13 @@ func WithLogTagStr(ctx context.Context, name string, value string) context.Conte
 	return addLogTagChain(ctx, &logTag{Field: otlog.String(name, value)})
 }
 
-// copyTagChain appends the tags in a given chain to the tags already in the
-// context, skipping any duplicates.
-func copyTagChain(ctx context.Context, bottomTag *logTag) context.Context {
+// augmentTagChain appends the tags in a given chain to the tags already in the
+// context, deduping elements. The order for duplicate elements will change.
+// The chain is copied, not modified in place.
+func augmentTagChain(ctx context.Context, bottomTag *logTag) context.Context {
+	if bottomTag == nil {
+		return ctx
+	}
 	existingChain := contextBottomTag(ctx)
 	if existingChain == nil {
 		// Special fast path: reuse the same log tag list directly.
@@ -128,46 +133,81 @@ func copyTagChain(ctx context.Context, bottomTag *logTag) context.Context {
 		return ctx
 	}
 
-	var chainTop, chainBottom *logTag
-
-	// Make a copy of the logTag chain, skipping tags that already exist in the
-	// context.
-TopLoop:
-	for t := bottomTag; t != nil; t = t.parent {
-		// Look for the same tag in the existing chain. We expect only a few tags so
-		// going through the chain every time should be faster than allocating a map.
-		tName := t.Key()
-		for e := existingChain; e != nil; e = e.parent {
-			if e.Key() == tName {
-				continue TopLoop
-			}
-		}
-		tCopy := *t
-		tCopy.parent = nil
-		if chainTop == nil {
-			chainBottom = &tCopy
-		} else {
-			chainTop.parent = &tCopy
-		}
-		chainTop = &tCopy
-	}
-
-	if chainBottom == nil {
-		return ctx
-	}
-
-	return addLogTagChain(ctx, chainBottom)
+	return context.WithValue(ctx, contextTagKeyType{}, mergeChains(existingChain, bottomTag))
 }
 
-// WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
-// added on.
-//
-// The result is equivalent to replicating the WithLogTag* calls that were
-// used to obtain fromCtx and applying them to ctx in the same order - but
-// skipping those for which ctx already has a tag with the same name.
-func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
-	if bottomTag := contextBottomTag(fromCtx); bottomTag != nil {
-		return copyTagChain(ctx, bottomTag)
+// mergeChains takes two chains and returns a chain formed by:
+// - removing the elements in c1 that are also present in c2
+// - copying c2
+// - linking c2's copy in front of what's left of c1
+func mergeChains(c1 *logTag, c2 *logTag) *logTag {
+	c1 = subtractChain(c1, c2)
+	head, tail := copyChain(c2)
+	tail.parent = c1
+	return head
+}
+
+// copyChain takes (the head of) a chain, copies all the nodes in the chain, and
+// returns the head and tail of the copy.
+func copyChain(chain *logTag) (*logTag, *logTag) {
+	if chain == nil {
+		return nil, nil
 	}
-	return ctx
+	var head, tail *logTag
+	for t := chain; t != nil; t = t.parent {
+		cpy := *t
+		cpy.parent = nil
+		if head == nil {
+			head = &cpy
+		} else {
+			tail.parent = &cpy
+		}
+		tail = &cpy
+	}
+	return head, tail
+}
+
+// subtractChain takes a chain (passed by its bottom tag) and another chain vals,
+// and returns a chain containing all the nodes from the first one except the
+// nodes that also exist in the second one (by key).
+// The chain is not modified in place; instead, all nodes whose links changed
+// are copied.
+func subtractChain(chain *logTag, vals *logTag) *logTag {
+	// nodes will contain the elements of the returned chain.
+	nodes := make([]*logTag, 0, 10)
+	lastCopyIdx := -1
+	for t := chain; t != nil; t = t.parent {
+		if !chainContains(vals, t.Key()) {
+			nodes = append(nodes, t)
+		} else {
+			lastCopyIdx = len(nodes) - 1
+		}
+	}
+	// Make a copy of the first lastCopyIdx nodes.
+	for i := 0; i <= lastCopyIdx; i++ {
+		cpy := *nodes[i]
+		nodes[i] = &cpy
+	}
+	// Now that we have the copies, make them into a chain.
+	// The last copied node will be linked to the first not-copied one.
+	for i := 0; i <= lastCopyIdx; i++ {
+		if i+1 < len(nodes) {
+			nodes[i].parent = nodes[i+1]
+		} else {
+			nodes[i].parent = nil
+		}
+	}
+	if len(nodes) == 0 {
+		return nil
+	}
+	return nodes[0]
+}
+
+func chainContains(vals *logTag, key string) bool {
+	for e := vals; e != nil; e = e.parent {
+		if e.Key() == key {
+			return true
+		}
+	}
+	return false
 }
