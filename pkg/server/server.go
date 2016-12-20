@@ -48,7 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -95,7 +95,7 @@ type Server struct {
 	db                 *client.DB
 	kvDB               *kv.DBServer
 	pgServer           *pgwire.Server
-	distSQLServer      *distsql.ServerImpl
+	distSQLServer      *distsqlrun.ServerImpl
 	node               *Node
 	registry           *metric.Registry
 	recorder           *status.MetricsRecorder
@@ -251,14 +251,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Set up the DistSQL server
-	distSQLCfg := distsql.ServerConfig{
+	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
 		DB:             s.db,
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 	}
-	s.distSQLServer = distsql.NewServer(distSQLCfg)
-	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
+	s.distSQLServer = distsqlrun.NewServer(distSQLCfg)
+	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up admin memory metrics for use by admin SQL executors.
 	s.adminMemMetrics = sql.MakeMemMetrics("admin")

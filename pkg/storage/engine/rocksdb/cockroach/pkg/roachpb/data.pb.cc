@@ -60,6 +60,7 @@ void protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2fdata_2eproto_impl() {
   ::google::protobuf::internal::GetEmptyString();
   Transaction_default_instance_.DefaultConstruct();
   ::google::protobuf::internal::GetEmptyString();
+  ::google::protobuf::internal::GetEmptyString();
   Intent_default_instance_.DefaultConstruct();
   ::google::protobuf::internal::GetEmptyString();
   Lease_default_instance_.DefaultConstruct();

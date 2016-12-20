@@ -98,7 +98,7 @@ github.com/cockroachdb/cockroach/pkg/testutils/gossiputil
 github.com/cockroachdb/cockroach/pkg/sql/sqlbase
 github.com/cockroachdb/cockroach/pkg/testutils/sqlutils
 github.com/cockroachdb/cockroach/pkg/testutils/serverutils
-github.com/cockroachdb/cockroach/pkg/sql/distsql
+github.com/cockroachdb/cockroach/pkg/sql/distsqlrun
 github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb
 github.com/cockroachdb/cockroach/pkg/storage/engine
 github.com/cockroachdb/cockroach/pkg/storage
@@ -204,7 +204,7 @@ github.com/cockroachdb/cockroach/pkg/server/serverpb
 github.com/cockroachdb/cockroach/pkg/sql/sqlbase
 github.com/cockroachdb/cockroach/pkg/testutils/sqlutils
 github.com/cockroachdb/cockroach/pkg/testutils/serverutils
-github.com/cockroachdb/cockroach/pkg/sql/distsql
+github.com/cockroachdb/cockroach/pkg/sql/distsqlrun
 github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb
 github.com/cockroachdb/cockroach/pkg/storage/engine
 github.com/cockroachdb/cockroach/pkg/storage
