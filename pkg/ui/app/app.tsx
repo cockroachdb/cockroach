@@ -6,13 +6,7 @@
  * - All Pages / Shared Components
  *    - "Last Updated"
  *    - Dropdowns
- *      - Automatic Width to fit current selection
- *      - Match menu styling to design
  *      - Fix 1px offset bug
- *    - Timespan Selector
- *      - Add Dropdown Styling
- *      - Add Left/Right Buttons
- *      - Add current time window display
  *    - Tables
  *      - CSS Match to design
  *      - Management of column widths

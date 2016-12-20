@@ -5,14 +5,14 @@ import { connect } from "react-redux";
 import { PageConfig, PageConfigItem } from "../components/pageconfig";
 
 import { refreshNodes } from "../redux/apiReducers";
-import Selector, { SelectorOption } from "../components/dropdown";
+import Dropdown, { DropdownOption } from "../components/dropdown";
 import { AdminUIState } from "../redux/state";
 
 import {
   nodeIDAttr, dashboardNameAttr,
 } from "../util/constants";
 
-import TimeScaleSelector from "./timescale";
+import TimeScaleDropdown from "./timescale";
 
 interface ClusterOverviewOwnProps {
   nodes: Proto2TypeScript.cockroach.server.status.NodeStatus[];
@@ -77,11 +77,11 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
     }
   }
 
-  nodeChange = (selected: SelectorOption) => {
+  nodeChange = (selected: DropdownOption) => {
     this.setClusterPath(selected.value, this.props.params[dashboardNameAttr]);
   }
 
-  dashChange = (selected: SelectorOption) => {
+  dashChange = (selected: DropdownOption) => {
     this.setClusterPath(this.props.params[nodeIDAttr], selected.value);
   }
 
@@ -96,15 +96,15 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
     return <div>
       <PageConfig>
         <PageConfigItem>
-          <Selector title="Graph" options={this.state.nodeOptions}
+          <Dropdown title="Graph" options={this.state.nodeOptions}
                     selected={node} onChange={this.nodeChange} />
         </PageConfigItem>
         <PageConfigItem>
-          <Selector title="Dashboard" options={dashboards}
+          <Dropdown title="Dashboard" options={dashboards}
                     selected={dashboard} onChange={this.dashChange} />
         </PageConfigItem>
         <PageConfigItem>
-            {displayTimescale ? <TimeScaleSelector /> : null }
+            {displayTimescale ? <TimeScaleDropdown /> : null }
         </PageConfigItem>
       </PageConfig>
       { this.props.children }
