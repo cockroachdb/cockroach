@@ -910,9 +910,14 @@ func TestRefreshPendingCommands(t *testing.T) {
 	// insufficient on its own. In addition, there is a fourth reproposal
 	// mechanism (reasonNewLeaderOrConfigChange) which is not relevant to this
 	// scenario.
+	//
+	// We don't test with only reasonNewLeader because that mechanism is less
+	// robust than refreshing due to snapshot or ticks. In particular, it is
+	// possible for node 3 to propose the RequestLease command and have that
+	// command executed by the other nodes but to never see the execution locally
+	// because it is caught up by applying a snapshot.
 	testCases := []storage.StoreTestingKnobs{
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonTicks: true},
-		{DisableRefreshReasonSnapshotApplied: true, DisableRefreshReasonTicks: true},
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
 	}
 	for _, c := range testCases {
