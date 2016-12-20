@@ -337,7 +337,9 @@ func (r *RocksDB) open() error {
 				versionCurrent, ver, versionMinimum)
 		}
 	} else {
-		log.Infof(context.TODO(), "opening in memory rocksdb instance")
+		if log.V(2) {
+			log.Infof(context.TODO(), "opening in memory rocksdb instance")
+		}
 
 		// In memory dbs are always current.
 		ver = versionCurrent
