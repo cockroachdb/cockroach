@@ -49,8 +49,10 @@ func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 		return true, expr
 	}
 
+	// An aggregateFuncHolder either contains an aggregation function or an
+	// expression that also appears as one of the GROUP BY expressions.
 	f, ok := fholder.expr.(*parser.FuncExpr)
-	if !ok {
+	if !ok || f.GetAggregateConstructor() == nil {
 		aggexpr := distsqlrun.AggregatorSpec_Expr{
 			Func: distsqlrun.AggregatorSpec_IDENT,
 		}
@@ -128,6 +130,7 @@ func (dsp *distSQLPlanner) extractAggExprs(
 	return aggExprs, nil
 }
 
+// See extractPostAggrExprs.
 type postAggExprVisitor struct {
 	count int
 }
