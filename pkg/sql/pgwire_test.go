@@ -105,7 +105,7 @@ func TestPGWire(t *testing.T) {
 			} else {
 				// No certificates provided in secure mode defaults to password
 				// authentication. This is disallowed for security.RootUser.
-				if !testutils.IsError(err, fmt.Sprintf("pq: user %s must authenticate using a client certificate", security.RootUser)) {
+				if !testutils.IsError(err, fmt.Sprintf("pq: user %s must use certificate authentication instead of password authentication", security.RootUser)) {
 					t.Errorf("unexpected error: %v", err)
 				}
 			}
@@ -135,7 +135,7 @@ func TestPGWire(t *testing.T) {
 					t.Error(err)
 				}
 			} else {
-				if !testutils.IsError(err, fmt.Sprintf("pq: user %s must authenticate using a client certificate", security.RootUser)) {
+				if !testutils.IsError(err, fmt.Sprintf("pq: user %s must use certificate authentication instead of password authentication", security.RootUser)) {
 					t.Errorf("unexpected error: %v", err)
 				}
 			}
