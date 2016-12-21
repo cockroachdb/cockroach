@@ -105,7 +105,9 @@ func (ac *AmbientContext) FinishEventLog() {
 // AnnotateCtx annotates a given context with the information in AmbientContext:
 //  - the EventLog is embedded in the context if the context doesn't already
 //    have en event log or an open trace.
-//  - the log tags in AmbientContext are added (if ctx doesn't already have them).
+//  - the log tags in AmbientContext are added (if ctx doesn't already have
+//  them). If the tags already exist, the values from the AmbientContext
+//  overwrite the existing values, but the order of the tags might change.
 //
 // For background operations, context.Background() should be passed; however, in
 // that case it is strongly recommended to open a span if possible (using
@@ -117,7 +119,7 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
 	if ac.tags != nil {
-		ctx = copyTagChain(ctx, ac.tags)
+		ctx = augmentTagChain(ctx, ac.tags)
 	}
 	return ctx
 }
@@ -133,7 +135,7 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
 ) (context.Context, opentracing.Span) {
 	if ac.tags != nil {
-		ctx = copyTagChain(ctx, ac.tags)
+		ctx = augmentTagChain(ctx, ac.tags)
 	}
 
 	var span opentracing.Span
