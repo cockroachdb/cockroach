@@ -324,7 +324,7 @@ func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []pla
 	return name, description, []planNode{n.plan}
 }
 
-func (n *sortNode) ExplainTypes(_ func(string, string)) {}
+func (n *sortNode) explainExprs(_ func(string, parser.Expr)) {}
 
 func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	if !n.needSort {

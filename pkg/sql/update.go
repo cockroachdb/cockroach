@@ -451,10 +451,10 @@ func (u *updateNode) ExplainPlan(v bool) (name, description string, children []p
 	return "update", buf.String(), subplans
 }
 
-func (u *updateNode) ExplainTypes(regTypes func(string, string)) {
+func (u *updateNode) explainExprs(regTypes func(string, parser.Expr)) {
 	cols := u.rh.columns
 	for i, rexpr := range u.rh.exprs {
-		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), rexpr)
 	}
 }
 

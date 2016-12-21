@@ -487,7 +487,7 @@ CREATE TABLE select_t (x INT,v INT,PRIMARY KEY (x))
 statement ok
 INSERT INTO select_t VALUES(1, 2),(2,3),(3,4)
 
-query ITT
+query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
 0  insert
@@ -513,21 +513,21 @@ SELECT * FROM insert_t
 ----
 1  2
 
-query ITT
+query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES(1,'AAA'),(2,'BBB') LIMIT 1
 ----
 0  insert
 1  limit   count: 1
 2  values  2 columns, 2 rows
 
-query ITT
+query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB')) LIMIT 1
 ----
 0  insert
 1  limit   count: 1
 2  values  2 columns, 2 rows
 
-query ITT
+query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1)
 ----
 0  insert

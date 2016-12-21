@@ -134,7 +134,7 @@ SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 
 3
 2
 
-query ITT rowsort
+query ITTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 0 union -

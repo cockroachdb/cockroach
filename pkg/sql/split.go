@@ -187,9 +187,9 @@ func (n *splitNode) ExplainPlan(_ bool) (name, description string, children []pl
 	return "split", buf.String(), children
 }
 
-func (n *splitNode) ExplainTypes(regTypes func(string, string)) {
+func (n *splitNode) explainExprs(regTypes func(string, parser.Expr)) {
 	for i, expr := range n.exprs {
-		regTypes(fmt.Sprintf("expr %d", i), parser.AsStringWithFlags(expr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("expr %d", i), expr)
 	}
 }
 

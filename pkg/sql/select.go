@@ -177,12 +177,10 @@ func (s *selectNode) Next() (bool, error) {
 	}
 }
 
-func (s *selectNode) ExplainTypes(regTypes func(string, string)) {
-	if s.filter != nil {
-		regTypes("filter", parser.AsStringWithFlags(s.filter, parser.FmtShowTypes))
-	}
+func (s *selectNode) explainExprs(regTypes func(string, parser.Expr)) {
+	regTypes("filter", s.filter)
 	for i, rexpr := range s.render {
-		regTypes(fmt.Sprintf("render %d", i), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+		regTypes(fmt.Sprintf("render %d", i), rexpr)
 	}
 }
 

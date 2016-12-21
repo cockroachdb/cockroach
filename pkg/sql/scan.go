@@ -247,6 +247,9 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	fmt.Fprintf(&desc, "%s@%s", n.desc.Name, n.index.Name)
 	spans := sqlbase.PrettySpans(n.spans, 2)
 	if spans != "" {
+		if spans == "-" {
+			spans = "ALL"
+		}
 		fmt.Fprintf(&desc, " %s", spans)
 	}
 	if n.limitHint > 0 && !n.limitSoft {
@@ -262,10 +265,8 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	return name, desc.String(), subplans
 }
 
-func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
-	if n.filter != nil {
-		regTypes("filter", parser.AsStringWithFlags(n.filter, parser.FmtShowTypes))
-	}
+func (n *scanNode) explainExprs(regTypes func(string, parser.Expr)) {
+	regTypes("filter", n.filter)
 }
 
 // Initializes a scanNode with a table descriptor.
