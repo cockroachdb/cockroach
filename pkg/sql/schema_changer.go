@@ -235,6 +235,16 @@ func (sc SchemaChanger) exec() error {
 			return err
 		}
 
+		// Wait for everybody to see the edited version of the tables this table
+		// previously referenced.
+		for _, idx := range table.AllNonDropIndexes() {
+			if idx.ForeignKey.IsSet() {
+				if err := sc.waitToUpdateLeases(idx.ForeignKey.Table); err != nil {
+					return err
+				}
+			}
+		}
+
 		// Truncate the table and delete the descriptor.
 		if err := sc.truncateAndDropTable(context.TODO(), &lease, table); err != nil {
 			return err
