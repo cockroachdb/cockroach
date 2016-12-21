@@ -115,14 +115,9 @@ func newReplicateQueue(
 		},
 	)
 
-	if g != nil { // gossip is nil for some unittests
-		// Register a gossip callback to signal queue that replicas in
-		// purgatory might be retried due to new store gossip.
-		pattern := gossip.MakeOrPattern(
-			gossip.MakePrefixPattern(gossip.KeyStorePrefix),
-			gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix),
-		)
-		g.RegisterCallback(pattern, func(_ string, _ roachpb.Value) {
+	// Register a callback for any store updates.
+	if sp := store.cfg.StorePool; sp != nil {
+		sp.registerStoreCallback(func(desc *roachpb.StoreDescriptor, status storeStatus) {
 			select {
 			case rq.updateChan <- struct{}{}:
 			default:

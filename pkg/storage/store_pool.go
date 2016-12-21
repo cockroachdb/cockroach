@@ -150,6 +150,10 @@ func (sd *storeDetail) status(
 	return storeStatusAvailable
 }
 
+// callback is invoked when a store's status changes. Clients of
+// StorePool can register callbacks via registerStoreCallback().
+type callback func(desc *roachpb.StoreDescriptor, status storeStatus)
+
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
@@ -165,6 +169,7 @@ type StorePool struct {
 		syncutil.RWMutex
 		storeDetails   map[roachpb.StoreID]*storeDetail
 		nodeLocalities map[roachpb.NodeID]roachpb.Locality
+		callbacks      []callback
 	}
 }
 
@@ -230,6 +235,14 @@ func (sp *StorePool) String() string {
 	return buf.String()
 }
 
+// registerStoreCallback allows the caller to register a callback
+// to be invoked when the status of a store changes.
+func (sp *StorePool) registerStoreCallback(cb callback) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.mu.callbacks = append(sp.mu.callbacks, cb)
+}
+
 // storeGossipUpdate is the gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
@@ -245,6 +258,12 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	detail.desc = &storeDesc
 	detail.lastUpdatedTime = sp.clock.PhysicalTime()
 	sp.mu.nodeLocalities[storeDesc.Node.NodeID] = storeDesc.Node.Locality
+
+	// Invoke any registered store status callbacks with newly gossiped store.
+	status := detail.status(sp.clock.PhysicalTime(), sp.timeUntilStoreDead, 0, sp.nodeLivenessFn)
+	for _, cb := range sp.mu.callbacks {
+		cb(detail.desc, status)
+	}
 }
 
 // deadReplicasGossipUpdate is the gossip callback used to keep the StorePool up to date.
