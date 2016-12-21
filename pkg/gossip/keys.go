@@ -91,12 +91,6 @@ func MakePrefixPattern(prefix string) string {
 	return regexp.QuoteMeta(prefix+separator) + ".*"
 }
 
-// MakeOrPattern returns a regular expression pattern that matches
-// any of the provided components.
-func MakeOrPattern(components ...string) string {
-	return strings.Join(components, "|")
-}
-
 // MakeNodeIDKey returns the gossip key for node ID info.
 func MakeNodeIDKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeIDPrefix, nodeID.String())
