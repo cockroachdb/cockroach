@@ -73,7 +73,7 @@ func TestDistSQLPlanner(t *testing.T) {
 	)
 }
 
-func TestDistSQLJoin(t *testing.T) {
+func TestDistSQLJoinAndAgg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// This test sets up a distributed join between two tables:
@@ -177,5 +177,36 @@ func TestDistSQLJoin(t *testing.T) {
 		if resMap[i] != sqlutils.IntToEnglish(i*i) {
 			t.Errorf("invalid string for %d: %s", i, resMap[i])
 		}
+	}
+
+	checkRes := func(exp int) bool {
+		return len(res) == 1 && len(res[0]) == 1 && res[0][0] == strconv.Itoa(exp)
+	}
+
+	// Sum the numbers in the NumToStr table.
+	res = r.QueryStr("SELECT SUM(y) FROM NumToStr")
+	if exp := n * n * (n*n + 1) / 2; !checkRes(exp) {
+		t.Errorf("expected [[%d]], got %s", exp, res)
+	}
+
+	// Count the rows in the NumToStr table.
+	res = r.QueryStr("SELECT COUNT(*) FROM NumToStr")
+	if !checkRes(n * n) {
+		t.Errorf("expected [[%d]], got %s", n*n, res)
+	}
+
+	// Count how many numbers contain the digit 5.
+	res = r.QueryStr("SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'")
+	exp := 0
+	for i := 1; i <= n*n; i++ {
+		for x := i; x > 0; x /= 10 {
+			if x%10 == 5 {
+				exp++
+				break
+			}
+		}
+	}
+	if !checkRes(exp) {
+		t.Errorf("expected [[%d]], got %s", exp, res)
 	}
 }
