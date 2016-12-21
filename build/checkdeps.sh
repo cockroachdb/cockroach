@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -exuo pipefail
+set -euo pipefail
 
 # This is intended to run in a CI to ensure dependencies are properly vendored.
 
@@ -14,11 +14,22 @@ echo "checking that 'vendor' matches manifest"
 
 echo "checking that all deps are in 'vendor''"
 
-missing=$(sed -n 's,[[:space:]]*_[[:space:]]*"\(.*\)",\1,p' build/tool_imports.go | awk '{print} END {print "./pkg/..."}' \
-  | xargs go list -f '{{ join .Deps "\n"}}{{"\n"}}{{ join .TestImports "\n"}}{{"\n"}}{{ join .XTestImports "\n"}}' \
-  | grep -v '^github.com/cockroachdb/cockroach' \
-  | sort | uniq \
-  | xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}')
+top_deps=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' ./pkg/...)
+cmd_deps=$(sed -n 's,[[:space:]]*_[[:space:]]*"\(.*\)",./vendor/\1,p' build/tool_imports.go)
+
+deps="
+$top_deps
+$cmd_deps
+"
+
+# Note that grep's exit status is ignored here to allow for packages with no
+# dependencies.
+missing=$(echo "$deps" | \
+	sort | uniq | grep -v '^C$' | \
+	xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | sort | uniq | \
+	sort | uniq | grep -v '^C$' | \
+	xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}' | \
+	grep -v '^github.com/cockroachdb/cockroach' || true)
 
 if [ -n "$missing" ]; then
   echo "vendor is missing some 3rd-party dependencies:"
