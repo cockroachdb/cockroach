@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -163,6 +164,9 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	gt.clientIndex++
 	gt.setPending(client.args.Replica, true)
 
+	// Fork the original context as this async send may outlast the
+	// caller's context.
+	ctx := tracing.ForkCtxSpan(ctx, "grpcTransport SendNext")
 	go func() {
 		gt.opts.metrics.SentCount.Inc(1)
 		reply, err := func() (*roachpb.BatchResponse, error) {
