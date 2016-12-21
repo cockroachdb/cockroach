@@ -44,8 +44,8 @@ func (jb *joinerBase) init(
 	output RowReceiver,
 	outputCols []uint32,
 	jType JoinType,
-	leftTypes []*sqlbase.ColumnType,
-	rightTypes []*sqlbase.ColumnType,
+	leftTypes []sqlbase.ColumnType,
+	rightTypes []sqlbase.ColumnType,
 	expr Expression,
 ) error {
 	jb.inputs = inputs
@@ -63,7 +63,11 @@ func (jb *joinerBase) init(
 		jb.emptyRight[i].Datum = parser.DNull
 	}
 
-	return jb.filter.init(expr, append(leftTypes, rightTypes...), flowCtx.evalCtx)
+	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes))
+	types = append(types, leftTypes...)
+	types = append(types, rightTypes...)
+
+	return jb.filter.init(expr, types, flowCtx.evalCtx)
 }
 
 // render evaluates the provided filter and constructs a row with columns from

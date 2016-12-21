@@ -30,10 +30,10 @@ import (
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 	null := sqlbase.EncDatum{Datum: parser.DNull}
 
@@ -48,7 +48,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -56,7 +56,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -92,7 +92,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -100,7 +100,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -141,7 +141,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -149,7 +149,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -200,7 +200,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -208,7 +208,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -247,7 +247,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -256,7 +256,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -294,7 +294,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -302,7 +302,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
