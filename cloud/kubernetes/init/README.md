@@ -3,8 +3,8 @@
 The Dockerfile in this directory defines a lightweight wrapper around the
 [Kubernetes-maintained "peer-finder"
 image](https://github.com/kubernetes/contrib/tree/master/pets/peer-finder),
-which finds whether any other instances from the same PetSet currently exist in
-the cluster.
+which finds whether any other instances from the same StatefulSet currently
+exist in the cluster.
 
 The `on-start.sh` script in this directory is invoked by the peer-finder binary
 with a newline separated list of the DNS results matching the provided
