@@ -37,7 +37,7 @@ func (ord *Ordering) diagramString() string {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "%d", c.ColIdx)
+		fmt.Fprintf(&buf, "@%d", c.ColIdx+1)
 		if c.Direction == Ordering_Column_DESC {
 			buf.WriteByte('-')
 		} else {
@@ -53,7 +53,7 @@ func colListStr(cols []uint32) string {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "%d", c)
+		fmt.Fprintf(&buf, "@%d", c+1)
 	}
 	return buf.String()
 }
@@ -70,9 +70,9 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	for _, expr := range a.Exprs {
 		distinct := ""
 		if expr.Distinct {
-			distinct = " DISTINCT"
+			distinct = "DISTINCT "
 		}
-		str := fmt.Sprintf("%s%s (@%d)", expr.Func, distinct, expr.ColIdx+1)
+		str := fmt.Sprintf("%s(%s@%d)", expr.Func, distinct, expr.ColIdx+1)
 		details = append(details, str)
 	}
 
