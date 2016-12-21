@@ -725,7 +725,7 @@ func (src *dataSourceInfo) findTableAlias(colIdx int) (parser.TableName, bool) {
 }
 
 func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f parser.FmtFlags, colIdx int) {
-	if f == parser.FmtQualify {
+	if f.ShowTableAliases {
 		tableAlias, found := src.findTableAlias(colIdx)
 		if found {
 			if tableAlias.TableName != "" {

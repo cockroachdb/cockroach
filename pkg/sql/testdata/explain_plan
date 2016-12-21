@@ -4,67 +4,68 @@ CREATE TABLE t (
   v INT
 )
 
-query ITT colnames
+query ITTT
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-Level  Type   Description
 0      insert
 1      values 2 columns, 1 row
 
 statement ok
 INSERT INTO t VALUES (1, 2)
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT * FROM t
 ----
-Level  Type  Description
 0      scan  t@primary
 
-query ITTTT colnames
-EXPLAIN (VERBOSE) SELECT * FROM t
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM t
 ----
-Level  Type          Description                Columns Ordering
 0      select                                   (k, v)  +k,unique
 1      render/filter from (test.t.k, test.t.v)  (k, v)  +k,unique
 2      scan          t@primary                  (k, v)  +k,unique
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-Level  Type  Description
 0      scan  t@primary /1-/2 /3-/4
 
-query ITT colnames
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
+----
+0  select                                              (k, v)  +k,unique
+1  render/filter            from (test.t.k, test.t.v)  (k, v)  +k,unique
+1  render/filter  render 0  test.t.k
+1  render/filter  render 1  test.t.v
+2  scan                     t@primary ALL              (k, v)  +k,unique
+2  scan           filter    (k % 2) = 0
+
+query ITTT
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
-Level  Type    Description
 0      values  3 columns, 2 rows
 
-query ITT colnames
+query ITTT
 EXPLAIN VALUES (1)
 ----
-Level  Type    Description
 0      values  1 column, 1 row
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
-Level  Type    Description
 0      limit   count: 1, offset:  1
 1      ordinality
 2      scan    t@primary (max 2 rows)
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT * FROM t
 ----
-Level  Type     Description
 0      distinct k
 1      scan     t@primary
 
-query ITT colnames
+query ITTT
 EXPLAIN SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 ----
-Level  Type     Description
 0      limit    count: 1, offset:  1
 1      distinct k
 2      scan     t@primary
@@ -72,10 +73,9 @@ Level  Type     Description
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
-query ITTTT colnames
-EXPLAIN(VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
+query ITTTTT
+EXPLAIN(METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-Level  Type           Description                                  Columns                         Ordering
 0      select                                                      (a, b)                          +b
 1      sort           +b                                           (a, b)                          +b
 2      render/filter  from (test.tc.a, test.tc.b, *test.tc.rowid)  (a, b)                          =a

@@ -331,11 +331,11 @@ func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []p
 	return name, description, subplans
 }
 
-func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {
+func (n *valuesNode) explainExprs(regTypes func(string, parser.Expr)) {
 	if n.n != nil {
 		for i, tuple := range n.tuples {
 			for j, expr := range tuple {
-				regTypes(fmt.Sprintf("row %d, expr %d", i, j), parser.AsStringWithFlags(expr, parser.FmtShowTypes))
+				regTypes(fmt.Sprintf("row %d, expr %d", i, j), expr)
 			}
 		}
 	}

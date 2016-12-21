@@ -35,24 +35,24 @@ type selectTopNode struct {
 	plan planNode
 }
 
-func (n *selectTopNode) ExplainTypes(f func(string, string)) {
+func (n *selectTopNode) explainExprs(f func(string, parser.Expr)) {
 	if n.plan == nil {
 		// The sub-nodes are not connected yet.
 		// Ask them for typing individually.
 		if n.limit != nil {
-			n.limit.ExplainTypes(f)
+			n.limit.explainExprs(f)
 		}
 		if n.distinct != nil {
-			n.distinct.ExplainTypes(f)
+			n.distinct.explainExprs(f)
 		}
 		if n.sort != nil {
-			n.sort.ExplainTypes(f)
+			n.sort.explainExprs(f)
 		}
 		if n.window != nil {
-			n.window.ExplainTypes(f)
+			n.window.explainExprs(f)
 		}
 		if n.group != nil {
-			n.group.ExplainTypes(f)
+			n.group.explainExprs(f)
 		}
 
 		// The source is always reported as sub-plan by ExplainPlan,
@@ -119,10 +119,6 @@ func (n *selectTopNode) expandPlan() error {
 }
 
 func (n *selectTopNode) ExplainPlan(v bool) (name, description string, subplans []planNode) {
-	if !v {
-		return n.plan.ExplainPlan(v)
-	}
-
 	if n.plan != nil {
 		subplans = []planNode{n.plan}
 	} else {

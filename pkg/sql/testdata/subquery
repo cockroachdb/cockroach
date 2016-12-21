@@ -40,11 +40,11 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 statement ok
 INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
-query ITT
+query ITTT
 EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
 ----
 0 split (SELECT 42)
-1 empty -
+1 nullrow
 
 statement ok
 ALTER TABLE abc SPLIT AT ((SELECT 1))
@@ -266,7 +266,7 @@ foo1 moo2 moo3
 2    4    4
 3    1    1
 
-query ITT
+query ITTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
 0 sort   +foo1
@@ -319,12 +319,12 @@ INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz
 true
 
 # check that residual filters are not expanded twice
-query ITTTT
-EXPLAIN(VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
+query ITTTTT
+EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 ----
 0  select                                                    (x)                          +x,unique
 1  render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z)  (x)                          +x,unique
-2  scan           xyz@primary -                              (x, y[omitted], z[omitted])  +x,unique
+2  scan           xyz@primary ALL                            (x, y[omitted], z[omitted])  +x,unique
 3  select                                                    (x)                          +x,unique
 4  render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z)  (x)                          +x,unique
 5  scan           xyz@primary                                (x, y[omitted], z[omitted])  +x,unique
@@ -345,11 +345,11 @@ query I
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 
-query ITT
+query ITTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 0  index-join
 1  scan        tab4@idx_tab4_0 /#-/5.38/1
-2  scan        tab4@primary    -
+2  scan        tab4@primary    ALL
 1  scan        tab4@primary
-2  scan        tab4@primary    -
+2  scan        tab4@primary    ALL

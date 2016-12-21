@@ -453,7 +453,7 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
 14.00000000000000000
 
-query ITT
+query ITTT
 EXPLAIN SELECT COUNT(k) FROM kv
 ----
 0 group count(k)
@@ -471,11 +471,11 @@ statement ok
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 
 # Verify we don't try to apply the single-key optimization to the primary index.
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(a) FROM abc
 ----
 0 group min(a)
-1 scan  abc@primary - (max 1 row)
+1 scan  abc@primary ALL (max 1 row)
 
 query TRBR
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
@@ -530,18 +530,18 @@ SELECT MIN(x) FROM xyz
 ----
 1
 
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(x) FROM xyz
 ----
 0 group min(x)
-1 scan  xyz@xy - (max 1 row)
+1 scan  xyz@xy ALL (max 1 row)
 
 query I
 SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 4
 
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 0 group min(x)
@@ -552,18 +552,18 @@ SELECT MAX(x) FROM xyz
 ----
 7
 
-query ITT
+query ITTT
 EXPLAIN SELECT MAX(x) FROM xyz
 ----
 0 group    max(x)
-1 revscan  xyz@xy - (max 1 row)
+1 revscan  xyz@xy ALL (max 1 row)
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 2
 
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 0 group min(y)
@@ -574,7 +574,7 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 2
 
-query ITT
+query ITTT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 0 group   max(y)
@@ -585,7 +585,7 @@ SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 NULL
 
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 0 group min(y)
@@ -596,7 +596,7 @@ SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 NULL
 
-query ITT
+query ITTT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 0 group   max(y)
@@ -607,7 +607,7 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 1
 
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 0 group min(x)
@@ -624,7 +624,7 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 1
 
-query ITT
+query ITTT
 EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 0 group   max(x)
@@ -658,7 +658,7 @@ SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 NULL
 
-query ITT
+query ITTT
 EXPLAIN SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 0 group variance(x)
@@ -766,11 +766,11 @@ INSERT INTO ab VALUES
   (4, 40),
   (5, 50)
 
-query ITT
+query ITTT
 EXPLAIN SELECT MIN(a) FROM abc
 ----
 0 group min(a)
-1 scan  abc@primary - (max 1 row)
+1 scan  abc@primary ALL (max 1 row)
 
 # Verify we only buffer one row.
 query ITTT
@@ -780,11 +780,11 @@ EXPLAIN (DEBUG) SELECT MIN(a) FROM ab
 0 /ab/primary/1/b 10   BUFFERED
 0 0               (1)  ROW
 
-query ITT
+query ITTT
 EXPLAIN SELECT MAX(a) FROM abc
 ----
 0 group   max(a)
-1 revscan abc@primary - (max 1 row)
+1 revscan abc@primary ALL (max 1 row)
 
 # Verify we only buffer one row.
 query ITTT
@@ -794,21 +794,21 @@ EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
 0 /ab/primary/5   NULL BUFFERED
 0 0               (5)  ROW
 
-query ITT
+query ITTT
 EXPLAIN SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 ----
 0   sort    +"COUNT(k)"
 1   group   v, count(k) GROUP BY (@3)
 2   scan    kv@primary
 
-query ITT
+query ITTT
 EXPLAIN SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
 0   sort    +"COUNT(*)"
 1   group   v, count(*) GROUP BY (@3)
 2   scan    kv@primary
 
-query ITT
+query ITTT
 EXPLAIN SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 ----
 0   sort    +"COUNT(1)"
