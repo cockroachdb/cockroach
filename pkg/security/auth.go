@@ -136,7 +136,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 		}
 
 		if requestedUser == RootUser {
-			return errors.Errorf("user %s must authenticate using a client certificate ", RootUser)
+			return errors.Errorf("user %s must use certificate authentication instead of password authentication", RootUser)
 		}
 
 		// If the requested user has an empty password, disallow authentication.

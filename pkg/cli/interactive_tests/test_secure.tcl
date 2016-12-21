@@ -49,7 +49,7 @@ eexpect $prompt
 
 # Root can only authenticate using certificate authentication.
 send "$argv sql --ca-cert=$ca_crt\r"
-eexpect "user root must authenticate using a client certificate"
+eexpect "user root must use certificate authentication instead of password authentication"
 
 eexpect $prompt
 
