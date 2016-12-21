@@ -62,8 +62,21 @@ func (*NoopCoreSpec) summary() (string, []string) {
 	return "No-op", []string{}
 }
 
-func (*AggregatorSpec) summary() (string, []string) {
-	return "Aggregator", []string{}
+func (a *AggregatorSpec) summary() (string, []string) {
+	details := make([]string, 0, len(a.Exprs)+1)
+	if len(a.GroupCols) > 0 {
+		details = append(details, colListStr(a.GroupCols))
+	}
+	for _, expr := range a.Exprs {
+		distinct := ""
+		if expr.Distinct {
+			distinct = " DISTINCT"
+		}
+		str := fmt.Sprintf("%s%s (@%d)", expr.Func, distinct, expr.ColIdx+1)
+		details = append(details, str)
+	}
+
+	return "Aggregator", details
 }
 
 func (tr *TableReaderSpec) summary() (string, []string) {
