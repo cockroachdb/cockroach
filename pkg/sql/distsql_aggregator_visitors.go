@@ -124,9 +124,6 @@ func (dsp *distSQLPlanner) extractAggExprs(
 		}
 		aggExprs = append(aggExprs, exprs...)
 	}
-	for i := range aggExprs {
-		aggExprs[i].ColIdx = uint32(i)
-	}
 	return aggExprs, nil
 }
 
