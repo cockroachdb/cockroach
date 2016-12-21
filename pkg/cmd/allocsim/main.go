@@ -33,6 +33,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -43,6 +44,7 @@ var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node
 var numNodes = flag.Int("n", 4, "number of nodes")
 var duration = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
 var blockSize = flag.Int("b", 1000, "block size")
+var numLocalities = flag.Int("l", 0, "number of localities")
 
 func newRand() *rand.Rand {
 	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -53,8 +55,7 @@ func newRand() *rand.Rand {
 // talks to node i%numNodes. Every second a monitor goroutine outputs status
 // such as the per-node replica and leaseholder counts.
 //
-// TODO(peter): Allow configuration of per-node locality settings and
-// zone-config constraints.
+// TODO(peter): Allow configuration zone-config constraints.
 
 type allocSim struct {
 	*localcluster.Cluster
@@ -68,6 +69,7 @@ type allocSim struct {
 		replicas []int
 		leases   []int
 	}
+	localities []roachpb.Locality
 }
 
 func newAllocSim(c *localcluster.Cluster) *allocSim {
@@ -183,11 +185,14 @@ func (a *allocSim) rangeStats(d time.Duration) {
 
 const padding = "__________"
 
-func formatHeader(header string, numberNodes int) string {
+func formatHeader(header string, numberNodes int, localities []roachpb.Locality) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString(header)
 	for i := 1; i <= numberNodes; i++ {
 		node := fmt.Sprintf("%d", i)
+		if localities != nil {
+			node += fmt.Sprintf(":%s", localities[i-1])
+		}
 		fmt.Fprintf(&buf, "%s%s", padding[:len(padding)-len(node)], node)
 	}
 	return buf.String()
@@ -229,7 +234,7 @@ func (a *allocSim) monitor(d time.Duration) {
 
 		if ticks%20 == 0 || numReplicas != len(replicas) {
 			numReplicas = len(replicas)
-			fmt.Println(formatHeader("_elapsed__ops/sec___errors_replicas", numReplicas))
+			fmt.Println(formatHeader("_elapsed__ops/sec___errors_replicas", numReplicas, a.localities))
 		}
 
 		fmt.Printf("%8s %8.1f %8d %8d%s\n",
@@ -248,7 +253,7 @@ func (a *allocSim) finalStatus() {
 	// TODO(bram): With the addition of localities, these stats will have to be
 	// updated.
 
-	fmt.Println(formatHeader("___stats___________________________", len(a.ranges.replicas)))
+	fmt.Println(formatHeader("___stats___________________________", len(a.ranges.replicas), a.localities))
 
 	genStats := func(name string, counts []int) {
 		var total float64
@@ -287,6 +292,24 @@ func main() {
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	a := newAllocSim(c)
 
+	var perNodeArgs map[int][]string
+	if *numLocalities > 0 {
+		perNodeArgs = make(map[int][]string)
+		a.localities = make([]roachpb.Locality, len(c.Nodes), len(c.Nodes))
+		for i := range c.Nodes {
+			locality := roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "l",
+						Value: fmt.Sprintf("%d", i%*numLocalities),
+					},
+				},
+			}
+			perNodeArgs[i] = []string{fmt.Sprintf("--locality=%s", locality)}
+			a.localities[i] = locality
+		}
+	}
+
 	go func() {
 		var exitStatus int
 		select {
@@ -296,12 +319,12 @@ func main() {
 		case <-time.After(*duration):
 			log.Infof(context.Background(), "finished run of: %s", *duration)
 		}
-		a.finalStatus()
 		c.Close()
+		a.finalStatus()
 		os.Exit(exitStatus)
 	}()
 
-	c.Start("allocsim", *workers, flag.Args(), []string{})
+	c.Start("allocsim", *workers, nil, flag.Args(), perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
 	a.run(*workers)
 }
