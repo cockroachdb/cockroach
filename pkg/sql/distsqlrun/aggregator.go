@@ -17,6 +17,7 @@
 package distsqlrun
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -26,18 +27,34 @@ import (
 	"golang.org/x/net/context"
 )
 
+// GetAggregateInfo returns the aggregate constructor and the return type for
+// the given aggregate function when applied on the given type.
+func GetAggregateInfo(
+	fn AggregatorSpec_Func, inputType sqlbase.ColumnType,
+) (aggregateConstructor func() parser.AggregateFunc, returnType sqlbase.ColumnType, err error) {
+	if fn == AggregatorSpec_IDENT {
+		return parser.NewIdentAggregate, inputType, nil
+	}
+
+	inputDatumType := inputType.ToDatumType()
+	builtins := parser.Aggregates[strings.ToLower(fn.String())]
+	for _, b := range builtins {
+		for _, t := range b.Types.Types() {
+			if inputDatumType.Equal(t) {
+				// Found!
+				return b.AggregateFunc, sqlbase.DatumTypeToColumnType(b.ReturnType), nil
+			}
+		}
+	}
+	return nil, sqlbase.ColumnType{}, errors.Errorf(
+		"no builtin aggregate for %s on %s", fn, inputType.Kind,
+	)
+}
+
 // aggregator is the processor core type that does "aggregation" in the SQL
 // sense. It groups rows and computes an aggregate for each group. The group is
 // configured using the group key and the aggregator can be configured with one
-// or more of the following aggregation functions:
-//
-//      SUM
-//      COUNT
-//      MIN
-//      MAX
-//      AVG
-//      DISTINCT
-//      COUNT DISTINCT
+// or more aggregation functions, as defined in the AggregatorSpec_Func enum.
 //
 // aggregator's output schema is comprised of what is specified by the
 // accompanying SELECT expressions.
@@ -47,7 +64,7 @@ type aggregator struct {
 	ctx         context.Context
 	rows        *RowBuffer
 	funcs       []*aggregateFuncHolder
-	outputTypes []*sqlbase.ColumnType
+	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
 	rowAlloc    sqlbase.EncDatumRowAlloc
 
@@ -66,7 +83,8 @@ func newAggregator(
 		rows:        &RowBuffer{},
 		buckets:     make(map[string]struct{}),
 		inputCols:   make(columns, len(spec.Exprs)),
-		outputTypes: make([]*sqlbase.ColumnType, len(spec.Exprs)),
+		funcs:       make([]*aggregateFuncHolder, len(spec.Exprs)),
+		outputTypes: make([]sqlbase.ColumnType, len(spec.Exprs)),
 		groupCols:   make(columns, len(spec.GroupCols)),
 	}
 
@@ -85,20 +103,17 @@ func newAggregator(
 	eh := &exprHelper{types: inputTypes}
 	eh.vars = parser.MakeIndexedVarHelper(eh, len(eh.types))
 	for i, expr := range spec.Exprs {
-		fn, retType, err := ag.extractFunc(expr, eh)
+		aggConstructor, retType, err := GetAggregateInfo(expr.Func, *inputTypes[i])
 		if err != nil {
 			return nil, err
 		}
-		ag.funcs = append(ag.funcs, fn)
 
-		// The aggregate function extracted is an identity function, the return
-		// type of this therefore being the i-th input type.
-		if retType == nil {
-			ag.outputTypes[i] = inputTypes[i]
-		} else {
-			typ := sqlbase.DatumTypeToColumnType(retType)
-			ag.outputTypes[i] = &typ
+		ag.funcs[i] = ag.newAggregateFuncHolder(aggConstructor)
+		if expr.Distinct {
+			ag.funcs[i].seen = make(map[string]struct{})
 		}
+
+		ag.outputTypes[i] = retType
 	}
 
 	return ag, nil
@@ -261,44 +276,4 @@ func (ag *aggregator) encode(appendTo []byte, row sqlbase.EncDatumRow) (encoding
 		}
 	}
 	return appendTo, nil
-}
-
-// extractFunc returns an aggregateFuncHolder for a given SelectExpr specifying
-// an aggregation function, along with the return type of the function. If the
-// return type is nil (provided error != nil) we are returning an identity
-// aggregation function, the return type of which is whatever is fed into the
-// function itself.
-func (ag *aggregator) extractFunc(
-	expr AggregatorSpec_Expr, eh *exprHelper,
-) (*aggregateFuncHolder, parser.Type, error) {
-	if expr.Func == AggregatorSpec_IDENT {
-		fn := ag.newAggregateFuncHolder(parser.NewIdentAggregate)
-		return fn, nil, nil
-	}
-
-	// In order to reuse the aggregate functions as defined in the parser
-	// package we are relying on the fact the each name defined in the Func enum
-	// within the AggregatorSpec matches a SQL function name known to the parser.
-	// See pkg/sql/parser/aggregate_builtins.go for the aggregate builtins we
-	// are repurposing.
-	p := &parser.FuncExpr{
-		Func: parser.ResolvableFunctionReference{
-			FunctionReference: parser.UnresolvedName{parser.Name(expr.Func.String())},
-		},
-		Exprs: []parser.Expr{eh.vars.IndexedVar(int(expr.ColIdx))},
-	}
-
-	t, err := p.TypeCheck(nil, parser.TypeAny)
-	if err != nil {
-		return nil, nil, err
-	}
-	if agg := p.GetAggregateConstructor(); agg != nil {
-		fn := ag.newAggregateFuncHolder(agg)
-		if expr.Distinct {
-			fn.seen = make(map[string]struct{})
-		}
-		return fn, t.ResolvedType(), nil
-	}
-	return nil, nil, errors.Errorf("unable to get aggregate constructor for %s",
-		AggregatorSpec_Func_name[int32(expr.Func)])
 }
