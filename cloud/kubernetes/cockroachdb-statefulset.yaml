@@ -54,6 +54,16 @@ spec:
   selector:
     app: cockroachdb
 ---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: cockroachdb-budget
+spec:
+  selector:
+    matchLabels:
+      app: cockroachdb
+  minAvailable: 67%
+---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
@@ -66,6 +76,21 @@ spec:
       labels:
         app: cockroachdb
       annotations:
+        scheduler.alpha.kubernetes.io/affinity: >
+            {
+              "podAntiAffinity": {
+                "requiredDuringSchedulingRequiredDuringExecution": [{
+                  "labelSelector": {
+                    "matchExpressions": [{
+                      "key": "app",
+                      "operator": "In",
+                      "values": ["cockroachdb"]
+                    }]
+                  },
+                  "topologyKey": "kubernetes.io/hostname"
+                }]
+              }
+            }
         # Init containers are run only once in the lifetime of a pod, before
         # it's started up for the first time. It has to exit successfully
         # before the pod's main containers are allowed to start.
