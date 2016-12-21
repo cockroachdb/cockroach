@@ -37,11 +37,11 @@ import (
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	v := [15]sqlbase.EncDatum{}
 	null := sqlbase.EncDatum{Datum: parser.DNull}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 
 	testCases := []struct {
@@ -53,7 +53,7 @@ func TestAggregator(t *testing.T) {
 			// SELECT MIN(@0), MAX(@0), COUNT(@0), AVG(@0), SUM(@0), STDDEV(@0),
 			// VARIANCE(@0) GROUP BY [] (no rows).
 			spec: AggregatorSpec{
-				Types: []*sqlbase.ColumnType{columnTypeInt},
+				Types: []sqlbase.ColumnType{columnTypeInt},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:   AggregatorSpec_MIN,
@@ -93,7 +93,7 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT @2, COUNT(@1), GROUP BY @2.
 			spec: AggregatorSpec{
-				Types:     []*sqlbase.ColumnType{columnTypeInt, columnTypeInt},
+				Types:     []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				GroupCols: []uint32{1},
 				Exprs: []AggregatorSpec_Expr{
 					{
@@ -122,7 +122,7 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT @2, COUNT(@1), GROUP BY @2.
 			spec: AggregatorSpec{
-				Types:     []*sqlbase.ColumnType{columnTypeInt, columnTypeInt},
+				Types:     []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				GroupCols: []uint32{1},
 				Exprs: []AggregatorSpec_Expr{
 					{
@@ -149,7 +149,7 @@ func TestAggregator(t *testing.T) {
 		}, {
 			// SELECT @2, SUM(@1), GROUP BY @2.
 			spec: AggregatorSpec{
-				Types:     []*sqlbase.ColumnType{columnTypeInt, columnTypeInt},
+				Types:     []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				GroupCols: []uint32{1},
 				Exprs: []AggregatorSpec_Expr{
 					{
@@ -176,7 +176,7 @@ func TestAggregator(t *testing.T) {
 		}, {
 			// SELECT COUNT(@1), SUM(@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []*sqlbase.ColumnType{columnTypeInt, columnTypeInt},
+				Types: []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:   AggregatorSpec_COUNT,
@@ -202,7 +202,7 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT SUM DISTINCT (@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []*sqlbase.ColumnType{columnTypeInt},
+				Types: []sqlbase.ColumnType{columnTypeInt},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:     AggregatorSpec_SUM,
@@ -225,7 +225,7 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT @1, GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []*sqlbase.ColumnType{columnTypeInt},
+				Types: []sqlbase.ColumnType{columnTypeInt},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:   AggregatorSpec_IDENT,
@@ -244,7 +244,7 @@ func TestAggregator(t *testing.T) {
 		}, {
 			// SELECT MAX(@1), MIN(@2), COUNT(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []*sqlbase.ColumnType{columnTypeInt, columnTypeInt},
+				Types: []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				Exprs: []AggregatorSpec_Expr{
 					{
 						Func:   AggregatorSpec_MAX,
