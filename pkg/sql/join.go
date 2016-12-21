@@ -271,6 +271,69 @@ func (p *planner) makeJoin(
 	}, nil
 }
 
+func (n *joinNode) addFilter(newFilter parser.ComparisonExpr) bool {
+	if newFilter.Operator != parser.EQ {
+		return false
+	}
+	lhs, ok := newFilter.Left.(*parser.IndexedVar)
+	if !ok {
+		return false
+	}
+	rhs, ok := newFilter.Right.(*parser.IndexedVar)
+	if !ok {
+		return false
+	}
+	if (lhs.Idx >= len(n.left.info.sourceColumns) && rhs.Idx >= len(n.left.info.sourceColumns)) ||
+		(lhs.Idx < len(n.left.info.sourceColumns) && rhs.Idx < len(n.left.info.sourceColumns)) {
+		return false
+	}
+
+	if lhs.Idx > rhs.Idx {
+		tmp := lhs
+		lhs = rhs
+		rhs = tmp
+	}
+
+	leftColNames := parser.NameList{parser.Name(n.left.info.sourceColumns[lhs.Idx].Name)}
+	rightColNames := parser.NameList{parser.Name(n.right.info.sourceColumns[rhs.Idx-len(n.left.info.sourceColumns)].Name)}
+
+	info := concatDataSourceInfos(n.left.info, n.right.info)
+
+	switch n.pred.(type) {
+	case *crossPredicate:
+		newPred, newInfo, err := n.planner.makeEqualityPredicate(n.left.info, n.right.info, leftColNames, rightColNames, false, info)
+		if err != nil {
+			return false
+		}
+		n.pred, n.columns = newPred, newInfo.sourceColumns
+		return true
+	case *onPredicate:
+		onPred, _ := n.pred.(*onPredicate)
+		c, ok := onPred.filter.(*parser.ComparisonExpr)
+		if !ok || c.Operator != parser.EQ {
+			return false
+		}
+		onPred.filter = &parser.AndExpr{Left: c, Right: &newFilter}
+		n.pred = onPred
+		return true
+	case *equalityPredicate:
+		equalPred, _ := n.pred.(*equalityPredicate)
+		leftCols, rightCols := equalPred.leftColNames, equalPred.rightColNames
+		leftColumns, rightColumns := []parser.Name(leftCols), []parser.Name(rightCols)
+		leftColumns = append(leftColumns, []parser.Name(leftColNames)...)
+		rightColumns = append(rightColumns, []parser.Name(rightColNames)...)
+		newPred, newInfo, err := n.planner.makeEqualityPredicate(n.left.info, n.right.info, parser.NameList(leftColumns), parser.NameList(rightColumns), false, info)
+		if err != nil {
+			return false
+		}
+		n.pred, n.columns = newPred, newInfo.sourceColumns
+		return true
+	default:
+		return false
+	}
+	return false
+}
+
 // ExplainTypes implements the planNode interface.
 func (n *joinNode) ExplainTypes(regTypes func(string, string)) {
 	if n.pred.filter != nil {
