@@ -216,14 +216,8 @@ message HashJoinerSpec {
 // type, not the logical plan computation stage). An aggregator performs
 // 'aggregation' in the SQL sense in that it groups rows and computes an aggregate
 // for each group. The group is configured using the group key. The aggregator
-// can be configured with one or more of the following aggregation functions:
-//    SUM
-//    COUNT
-//    MIN
-//    MAX
-//    AVG
-//    DISTINCT
-//    COUNT DISTINCT
+// can be configured with one or more aggregation functions.
+//
 // The aggregator's output schema consists of the group key, plus a
 // configurable subset of the generated aggregated values.
 message AggregatorSpec {
@@ -243,7 +237,8 @@ message AggregatorSpec {
     MIN = 8;
     STDDEV = 9;
     SUM = 10;
-    VARIANCE = 11;
+    SUM_INT = 11;
+    VARIANCE = 12;
   }
 
   message Expr {
