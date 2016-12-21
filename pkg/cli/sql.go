@@ -404,6 +404,19 @@ func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) c
 	return nextState
 }
 
+func (c *cliState) getCurrentUser() string {
+	username := ""
+	query := makeQuery(`SHOW CURRENT_USER`)
+	rows, err := query(c.conn)
+	if err == nil && len(rows.Columns()) != 0 {
+		val := make([]driver.Value, len(rows.Columns()))
+		if err := rows.Next(val); err == nil {
+			username = formatVal(val[0], false, false)
+		}
+	}
+	return username
+}
+
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
 func (c *cliState) preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt string) {
@@ -415,14 +428,7 @@ func (c *cliState) preparePrompts(dbURL string) (promptPrefix, fullPrompt, conti
 		if parsedURL.User != nil {
 			username = parsedURL.User.Username()
 		} else {
-			query := makeQuery(`SHOW CURRENT USER`)
-			rows, err := query(c.conn)
-			if err == nil && len(rows.Columns()) != 0 {
-				val := make([]driver.Value, len(rows.Columns()))
-				if err := rows.Next(val); err == nil {
-					username = formatVal(val[0], false, false)
-				}
-			}
+			username = c.getCurrentUser()
 		}
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.

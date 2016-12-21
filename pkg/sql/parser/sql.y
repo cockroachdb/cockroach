@@ -1538,9 +1538,9 @@ show_stmt:
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
-| SHOW CURRENT USER 
+| SHOW CURRENT_USER 
   {
-    $$.val = &Show{Name: "CURRENT USER"}
+    $$.val = &Show{Name: "CURRENT_USER"}
   }
 | SHOW KEYS FROM var_name
   {

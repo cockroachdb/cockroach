@@ -28,13 +28,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	// PgServerVersion is the latest version of postgres that we claim to support.
-	PgServerVersion = "9.5.0"
-)
-
 var varGen = map[string]func(p *planner) string{
-	`CURRENT USER`:                  func(p *planner) string { return p.session.User },
 	`DATABASE`:                      func(p *planner) string { return p.session.Database },
 	`DEFAULT_TRANSACTION_ISOLATION`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
 	`SYNTAX`:                        func(p *planner) string { return parser.Syntax(p.session.Syntax).String() },
@@ -43,7 +37,7 @@ var varGen = map[string]func(p *planner) string{
 	`TRANSACTION PRIORITY`:          func(p *planner) string { return p.txn.UserPriority.String() },
 	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
 	`SEARCH_PATH`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-	`SERVER_VERSION`:                func(_ *planner) string { return PgServerVersion },
+	`CURRENT_USER`:                  func(p *planner) string { return p.session.User },
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))
@@ -171,7 +165,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 				}
 
 				if virDesc == nil {
-					values, err := p.QueryRow(checkTablePrivilege, tn.Database(), tn.Table(), p.session.User)
+					values, err := p.queryRow(checkTablePrivilege, tn.Database(), tn.Table(), p.session.User)
 					if err != nil {
 						return nil, err
 					}
@@ -180,12 +174,6 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 					}
 				}
 			}
-			// Temporarily set the current database to get visibility into
-			// information_schema if the current user isn't root.
-			origDatabase := p.evalCtx.Database
-			p.evalCtx.Database = tn.Database()
-			defer func() { p.evalCtx.Database = origDatabase }()
-
 			// Get columns of table from information_schema.columns.
 			rows, err := p.queryRows(getColumns, tn.Database(), tn.Table())
 			if err != nil {
@@ -781,28 +769,16 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 					return nil, sqlbase.NewUndefinedDatabaseError(name)
 				}
 			}
-			// Temporarily set the current database to get visibility into
-			// information_schema if the current user isn't root.
-			origDatabase := p.evalCtx.Database
-			p.evalCtx.Database = name
-			defer func() { p.evalCtx.Database = origDatabase }()
 
 			// Get the tables of database from information_schema.tables.
 			const getTables = `SELECT TABLE_NAME FROM information_schema.tables
 							WHERE tables.TABLE_SCHEMA=$1 ORDER BY tables.TABLE_NAME`
-			rows, err := p.queryRows(getTables, name)
+			stmt, err := parser.ParseOneTraditional(getTables)
 			if err != nil {
 				return nil, err
 			}
-
-			v := p.newContainerValuesNode(columns, 0)
-			for _, r := range rows {
-				if _, err := v.rows.AddRow(r); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-			return v, nil
+			golangFillQueryArguments(p.semaCtx.Placeholders, []interface{}{name})
+			return p.newPlan(stmt, nil, false)
 		},
 	}, nil
 }
