@@ -1,10 +1,11 @@
-# CockroachDB on Kubernetes as a PetSet
+# CockroachDB on Kubernetes as a StatefulSet
 
-This example deploys CockroachDB on [Kubernetes](https://kubernetes.io) as
-a [PetSet](http://kubernetes.io/docs/user-guide/petset/). Kubernetes is an
-open source system for managing containerized applications across multiple
-hosts, providing basic mechanisms for deployment, maintenance, and scaling
-of applications.
+This example deploys CockroachDB on [Kubernetes](https://kubernetes.io) as a
+a
+[StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/).
+Kubernetes is an open source system for managing containerized applications
+across multiple hosts, providing basic mechanisms for deployment, maintenance,
+and scaling of applications.
 
 This is a copy of the [similar example stored in the Kubernetes
 repository](https://github.com/kubernetes/kubernetes/tree/master/examples/cockroachdb).
@@ -22,19 +23,20 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 ## Limitations
 
-### PetSet limitations
+### StatefulSet limitations
 
-PetSets are an alpha feature as of Kubernetes version 1.4. As such, they may
-not be available in some production-ready hosting environments.
+StatefulSets were broadly introduced in Kubernetes version 1.5. If using an
+older version of Kubernetes, you may want to look at [an older version of these
+instructions](https://github.com/cockroachdb/cockroach/blob/beta-20161215/cloud/kubernetes/README.md).
 
-Also, there is currently no possibility to use node-local storage (outside of
+There is currently no possibility to use node-local storage (outside of
 single-node tests), and so there is likely a performance hit associated with
 running CockroachDB on some external storage. Note that CockroachDB already
 does replication and thus, for better performance, should not be deployed on a
 persistent volume which already replicates internally. High-performance use
 cases on a private Kubernetes cluster may want to consider a
-[DaemonSet](http://kubernetes.io/docs/admin/daemons/) deployment until PetSets
-support node-local storage
+[DaemonSet](http://kubernetes.io/docs/admin/daemons/) deployment until
+StatefulSets support node-local storage
 ([open issue here](https://github.com/kubernetes/kubernetes/issues/7562)).
 
 ### Recovery after persistent storage failure
@@ -70,7 +72,7 @@ Set up your cluster following the
 [instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/aws/).
 
 Then once you have a Kubernetes cluster running, either run the
-[aws.sh](aws.sh) script or just run `kubectl create -f cockroachdb-petset.yaml`
+[aws.sh](aws.sh) script or just run `kubectl create -f cockroachdb-statefulset.yaml`
 to create your cockroachdb cluster.
 
 ## Testing in the cloud on GCE
@@ -85,12 +87,12 @@ gcloud alpha container clusters create NAME --enable-kubernetes-alpha
 ```
 
 Then once you have a Kubernetes cluster running, either run the
-[gce.sh](gce.sh) script or just run `kubectl create -f cockroachdb-petset.yaml`
+[gce.sh](gce.sh) script or just run `kubectl create -f cockroachdb-statefulset.yaml`
 to create your cockroachdb cluster.
 
 ## Accessing the database
 
-Along with our PetSet configuration, we expose a standard Kubernetes service
+Along with our StatefulSet configuration, we expose a standard Kubernetes service
 that offers a load-balanced virtual IP for clients to access the database
 with. In our example, we've called this service `cockroachdb-public`.
 
@@ -139,10 +141,10 @@ database and ensuring the other replicas have all data that was written.
 
 ## Scaling up or down
 
-Simply patch the PetSet by running
+Simply patch the StatefulSet by running
 
 ```shell
-kubectl patch petset cockroachdb -p '{"spec":{"replicas":4}}'
+kubectl patch statefulset cockroachdb -p '{"spec":{"replicas":4}}'
 ```
 
 Note that you may need to create a new persistent volume claim first. If you
@@ -157,5 +159,5 @@ Because all of the resources in this example have been tagged with the label `ap
 we can clean up everything that we created in one quick command using a selector on that label:
 
 ```shell
-kubectl delete petsets,pods,persistentvolumes,persistentvolumeclaims,services -l app=cockroachdb
+kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services -l app=cockroachdb
 ```

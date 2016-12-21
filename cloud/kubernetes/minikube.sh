@@ -3,7 +3,7 @@
 set -exuo pipefail
 
 # Clean up anything from a prior run:
-kubectl delete petsets,pods,persistentvolumes,persistentvolumeclaims,services -l app=cockroachdb
+kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services -l app=cockroachdb
 
 # Make persistent volumes and (correctly named) claims. We must create the
 # claims here manually even though that sounds counter-intuitive. For details
@@ -43,4 +43,4 @@ spec:
 EOF
 done;
 
-kubectl create -f cockroachdb-petset.yaml
+kubectl create -f cockroachdb-statefulset.yaml
