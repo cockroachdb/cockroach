@@ -313,6 +313,9 @@ type physicalPlan struct {
 	ordering distsqlrun.Ordering
 }
 
+// orderingTerminated is used when
+var orderingTerminated = distsqlrun.Ordering{}
+
 // makePlanToStreamColMap initializes a new physicalPlan.planToStreamColMap. The
 // columns that are present in the result stream(s) should be set in the map.
 func makePlanToStreamColMap(numCols int) []int {
@@ -820,19 +823,120 @@ func (dsp *distSQLPlanner) addAggregators(
 		groupCols = append(groupCols, uint32(p.planToStreamColMap[i]))
 	}
 
-	aggregatorSpec := distsqlrun.AggregatorSpec{
-		Exprs:     aggExprs,
-		Types:     types,
-		GroupCols: groupCols,
-	}
-	// TODO(irfansharif): Some possible optimizations:
-	//  - We could add a local "no grouping" stage to pre-aggregate results
-	//    before the final aggregation.
-	//  - We could route by hash to multiple final aggregators.
-	dsp.addSingleGroupStage(
-		p, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{Aggregator: &aggregatorSpec},
-	)
+	// We either have a local stage on each stream followed by a final stage, or
+	// just a final stage. We only use a local stage if:
+	//  - the previous stage is distributed on multiple nodes, and
+	//  - all aggregation functions support it. TODO(radu): we could relax this by
+	//    splitting the aggregation into two different paths and joining on the
+	//    results.
+	multiStage := false
 
+	// Check if the previous stage is all on one node.
+	prevStageNode := p.processors[p.resultRouters[0]].node
+	for i := 1; i < len(p.resultRouters); i++ {
+		if n := p.processors[p.resultRouters[i]].node; n != prevStageNode {
+			prevStageNode = 0
+			break
+		}
+	}
+
+	if prevStageNode == 0 {
+		// Check that all aggregation functions support a local stage.
+		multiStage = true
+		for _, e := range aggExprs {
+			if e.Distinct {
+				// We can't do local aggregation for functions with distinct (at least not
+				// in general).
+				multiStage = false
+				break
+			}
+			if _, ok := distsqlplan.DistAggregationTable[e.Func]; !ok {
+				multiStage = false
+				break
+			}
+		}
+	}
+
+	// The aggregators don't care about the input ordering, so don't guarantee
+	// one (p.ordering gets factored in when we add stages). This one-off
+	// optimization is a symptom of the larger issue that we don't yet determine
+	// what orderings are actually needed by each node's parent.
+	//
+	// Note that this won't be the case if we implement certain optimizations
+	// (like groupNode.needOnlyOneRow).
+	p.ordering = distsqlrun.Ordering{}
+
+	var finalAggSpec distsqlrun.AggregatorSpec
+
+	if !multiStage {
+		finalAggSpec = distsqlrun.AggregatorSpec{
+			Exprs:     aggExprs,
+			Types:     types,
+			GroupCols: groupCols,
+		}
+	} else {
+		localExprs := make([]distsqlrun.AggregatorSpec_Expr, len(aggExprs)+len(groupCols))
+		finalTypes := make([]sqlbase.ColumnType, len(aggExprs)+len(groupCols))
+		finalExprs := make([]distsqlrun.AggregatorSpec_Expr, len(aggExprs))
+		finalGroupCols := make([]uint32, len(groupCols))
+
+		for i, e := range aggExprs {
+			info := distsqlplan.DistAggregationTable[e.Func]
+			localExprs[i] = distsqlrun.AggregatorSpec_Expr{
+				Func:   info.LocalStage,
+				ColIdx: e.ColIdx,
+			}
+			finalExprs[i] = distsqlrun.AggregatorSpec_Expr{
+				Func: info.FinalStage,
+				// The input of the i-th final expression is the output of the i-th
+				// local expression.
+				ColIdx: uint32(i),
+			}
+			var err error
+			_, finalTypes[i], err = distsqlrun.GetAggregateInfo(e.Func, types[e.ColIdx])
+			if err != nil {
+				return err
+			}
+		}
+
+		// Add IDENT expressions for the group columns; these need to be part of the
+		// output of the local stage because the final stage needs them.
+		for i, groupColIdx := range groupCols {
+			exprIdx := len(aggExprs) + i
+			localExprs[exprIdx] = distsqlrun.AggregatorSpec_Expr{
+				Func:   distsqlrun.AggregatorSpec_IDENT,
+				ColIdx: groupColIdx,
+			}
+			finalTypes[exprIdx] = types[groupColIdx]
+			finalGroupCols[i] = uint32(exprIdx)
+		}
+
+		localAggSpec := distsqlrun.AggregatorSpec{
+			Exprs:     localExprs,
+			Types:     types,
+			GroupCols: groupCols,
+		}
+
+		dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Aggregator: &localAggSpec})
+		// The local aggregators don't guarantee any output ordering.
+		p.ordering = orderingTerminated
+
+		finalAggSpec = distsqlrun.AggregatorSpec{
+			Exprs:     finalExprs,
+			Types:     finalTypes,
+			GroupCols: finalGroupCols,
+		}
+	}
+
+	// TODO(radu): we could distribute the final stage by hash.
+
+	// If the previous stage was all on a single node, put the final stage there.
+	// Otherwise, bring the results back on this node.
+	node := dsp.nodeDesc.NodeID
+	if prevStageNode != 0 {
+		node = prevStageNode
+	}
+	dsp.addSingleGroupStage(p, node, distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec})
 	evalExprs, needEval := dsp.extractPostAggrExprs(n.render)
 	if needEval {
 		// Add a stage with Evaluator processors.
@@ -844,9 +948,7 @@ func (dsp *distSQLPlanner) addAggregators(
 			postevalSpec.Exprs[i] = distSQLExpression(evalExprs[i], nil)
 		}
 
-		dsp.addSingleGroupStage(
-			p, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{Evaluator: &postevalSpec},
-		)
+		dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Evaluator: &postevalSpec})
 	}
 
 	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
@@ -856,7 +958,11 @@ func (dsp *distSQLPlanner) addAggregators(
 	for i := range n.Columns() {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
 	}
-	p.ordering = dsp.convertOrdering(n.desiredOrdering, p.planToStreamColMap)
+	// We don't guarantee any ordering. Thankfully the groupNode doesn't either.
+	p.ordering = orderingTerminated
+	if len(n.Ordering().ordering) != 0 {
+		panic("groupNode promises ordering")
+	}
 	return nil
 }
 

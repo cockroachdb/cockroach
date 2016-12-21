@@ -32,6 +32,11 @@ type DistAggregationInfo struct {
 // DistAggregationTable is DistAggregationInfo look-up table. Functions that
 // don't have an entry in the table are not optimized with a local stage.
 var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInfo{
+	distsqlrun.AggregatorSpec_IDENT: {
+		LocalStage: distsqlrun.AggregatorSpec_IDENT,
+		FinalStage: distsqlrun.AggregatorSpec_IDENT,
+	},
+
 	distsqlrun.AggregatorSpec_BOOL_AND: {
 		LocalStage: distsqlrun.AggregatorSpec_BOOL_AND,
 		FinalStage: distsqlrun.AggregatorSpec_BOOL_AND,
