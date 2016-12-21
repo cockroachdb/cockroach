@@ -19,6 +19,9 @@ package log
 import (
 	"testing"
 
+	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/pkg/errors"
+
 	"golang.org/x/net/context"
 )
 
@@ -68,6 +71,19 @@ func TestLogContext(t *testing.T) {
 	}
 }
 
+// withLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
+// added on.
+//
+// The result is equivalent to replicating the WithLogTag* calls that were
+// used to obtain fromCtx and applying them to ctx in the same order - but
+// skipping those for which ctx already has a tag with the same name.
+func withLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
+	if bottomTag := contextBottomTag(fromCtx); bottomTag != nil {
+		return augmentTagChain(ctx, bottomTag)
+	}
+	return ctx
+}
+
 func TestWithLogTagsFromCtx(t *testing.T) {
 	ctx1 := context.Background()
 	ctx1A := WithLogTagInt(ctx1, "1A", 1)
@@ -82,54 +98,112 @@ func TestWithLogTagsFromCtx(t *testing.T) {
 		expected string
 	}{
 		{
-			ctx:      WithLogTagsFromCtx(ctx1, ctx2),
+			ctx:      withLogTagsFromCtx(ctx1, ctx2),
 			expected: "test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1, ctx2A),
+			ctx:      withLogTagsFromCtx(ctx1, ctx2A),
 			expected: "[2A=1] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1, ctx2B),
+			ctx:      withLogTagsFromCtx(ctx1, ctx2B),
 			expected: "[2A=1,2B] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1A, ctx2),
+			ctx:      withLogTagsFromCtx(ctx1A, ctx2),
 			expected: "[1A=1] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1A, ctx2A),
+			ctx:      withLogTagsFromCtx(ctx1A, ctx2A),
 			expected: "[1A=1,2A=1] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1A, ctx2B),
+			ctx:      withLogTagsFromCtx(ctx1A, ctx2B),
 			expected: "[1A=1,2A=1,2B] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1B, ctx2),
+			ctx:      withLogTagsFromCtx(ctx1B, ctx2),
 			expected: "[1A=1,1B] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1B, ctx2A),
+			ctx:      withLogTagsFromCtx(ctx1B, ctx2A),
 			expected: "[1A=1,1B,2A=1] test",
 		},
 
 		{
-			ctx:      WithLogTagsFromCtx(ctx1B, ctx2B),
+			ctx:      withLogTagsFromCtx(ctx1B, ctx2B),
 			expected: "[1A=1,1B,2A=1,2B] test",
 		},
 	}
 
-	for i, tc := range testCases {
-		if value := makeMessage(tc.ctx, "test", nil); value != tc.expected {
-			t.Errorf("test case %d failed: expected '%s', got '%s'", i, tc.expected, value)
+	for _, tc := range testCases {
+		t.Run(tc.expected, func(t *testing.T) {
+			if value := makeMessage(tc.ctx, "test", nil); value != tc.expected {
+				t.Errorf("expected '%s', got '%s'", tc.expected, value)
+			}
+		})
+	}
+}
+
+type chain struct {
+	head, tail *logTag
+}
+
+func (c *chain) appendToChain(t logTag) *chain {
+	if t.parent != nil {
+		panic("can't append a chain")
+	}
+	if c.head == nil {
+		c.head = &t
+	} else {
+		c.tail.parent = &t
+	}
+	c.tail = &t
+	return c
+}
+
+func makeTag(key string, val int) logTag {
+	return logTag{Field: otlog.Int(key, val)}
+}
+
+func checkChain(expected *logTag, actual *logTag) error {
+	e, a := expected, actual
+	for {
+		if e == nil && a == nil {
+			return nil
 		}
+		if e == nil && a != nil {
+			return errors.Errorf("expected done, actual has extra nodes starting with %s", a)
+		}
+		if e != nil && a == nil {
+			return errors.Errorf("actual done, expected has extra nodes starting with %s", e)
+		}
+		if e.Key() != a.Key() || e.Value() != a.Value() {
+			return errors.Errorf("%s != %s", e, a)
+		}
+		e = e.parent
+		a = a.parent
+	}
+}
+
+func TestMergeChains(t *testing.T) {
+	var c1, c2 chain
+	c1.appendToChain(makeTag("A", 1)).appendToChain(makeTag("B", 1)).appendToChain(
+		makeTag("C", 1)).appendToChain(makeTag("D", 1))
+	c2.appendToChain(makeTag("A", 2)).appendToChain(makeTag("B", 2)).appendToChain(
+		makeTag("D", 2)).appendToChain(makeTag("E", 2))
+	r := mergeChains(c1.head, c2.head)
+	var expected chain
+	if err := checkChain(r,
+		expected.appendToChain(makeTag("A", 2)).appendToChain(makeTag("B", 2)).appendToChain(
+			makeTag("D", 2)).appendToChain(makeTag("E", 2)).appendToChain(makeTag("C", 1)).head); err != nil {
+		t.Fatal(err)
 	}
 }
