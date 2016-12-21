@@ -104,6 +104,10 @@ func TestMinBoolResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newMinAggregate, makeBoolTestDatum(10))
 }
 
+func TestSumSmallIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newSmallIntSumAggregate, makeIntTestDatum(10))
+}
+
 func TestSumIntResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newIntSumAggregate, makeIntTestDatum(10))
 }
@@ -232,6 +236,10 @@ func BenchmarkAvgAggregateDecimal1K(b *testing.B) {
 
 func BenchmarkCountAggregate1K(b *testing.B) {
 	runBenchmarkAggregate(b, newCountAggregate, makeIntTestDatum(1000))
+}
+
+func BenchmarkSumIntAggregateInt1K(b *testing.B) {
+	runBenchmarkAggregate(b, newSmallIntSumAggregate, makeSmallIntTestDatum(1000))
 }
 
 func BenchmarkSumAggregateInt1K(b *testing.B) {
