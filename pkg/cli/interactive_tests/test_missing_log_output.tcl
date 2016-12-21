@@ -80,15 +80,15 @@ eexpect ":/# "
 
 # Now check that `--alsologtostderr` can override the default
 # properly, with or without `--logtostderr`.
-send "$argv quit --alsologtostderr=INFO --logtostderr\r"
+send "$argv quit --alsologtostderr=INFO --logtostderr --vmodule=stopper=1\r"
 eexpect "stop has been called"
 eexpect ":/# "
 
-send "$argv quit --alsologtostderr=INFO --logtostderr=false\r"
+send "$argv quit --alsologtostderr=INFO --logtostderr=false --vmodule=stopper=1\r"
 eexpect "stop has been called"
 eexpect ":/# "
 
-send "$argv quit --alsologtostderr=INFO\r"
+send "$argv quit --alsologtostderr=INFO --vmodule=stopper=1\r"
 eexpect "stop has been called"
 eexpect ":/# "
 

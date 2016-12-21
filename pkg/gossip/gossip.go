@@ -245,7 +245,9 @@ func New(
 		resolverAddrs[i] = resolver.Addr()
 	}
 	ctx := g.AnnotateCtx(context.Background())
-	log.Infof(ctx, "initial resolvers: %v", resolverAddrs)
+	if log.V(1) {
+		log.Infof(ctx, "initial resolvers: %v", resolverAddrs)
+	}
 	g.SetResolvers(resolvers)
 
 	g.mu.Lock()
@@ -1121,7 +1123,9 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 			log.Eventf(ctx, "now stalled")
 			if orphaned {
 				if len(g.resolvers) == 0 {
-					log.Warningf(ctx, "no resolvers found; use --join to specify a connected node")
+					if log.V(1) {
+						log.Warningf(ctx, "no resolvers found; use --join to specify a connected node")
+					}
 				} else {
 					log.Warningf(ctx, "no incoming or outgoing connections")
 				}
