@@ -80,6 +80,10 @@ type LivenessMetrics struct {
 	EpochIncrements    *metric.Counter
 }
 
+// IsLiveCallback is invoked when a node's IsLive state changes to true.
+// Callbacks can be registered via NodeLiveness.RegisterCallback().
+type IsLiveCallback func(nodeID roachpb.NodeID)
+
 // NodeLiveness encapsulates information on node liveness and provides
 // an API for querying, updating, and invalidating node
 // liveness. Nodes periodically "heartbeat" the range holding the node
@@ -101,8 +105,9 @@ type NodeLiveness struct {
 
 	mu struct {
 		syncutil.Mutex
-		self  Liveness
-		nodes map[roachpb.NodeID]Liveness
+		self      Liveness
+		callbacks []IsLiveCallback
+		nodes     map[roachpb.NodeID]Liveness
 	}
 }
 
@@ -380,6 +385,14 @@ func (nl *NodeLiveness) Metrics() LivenessMetrics {
 	return nl.metrics
 }
 
+// RegisterCallback registers a callback to be invoked any time a
+// node's IsLive() state changes to true.
+func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+	nl.mu.callbacks = append(nl.mu.callbacks, cb)
+}
+
 // updateLiveness does a conditional put on the node liveness record
 // for the node specified by nodeID. In the event that the conditional
 // put fails, and the handleCondFailed callback is not nil, it's
@@ -451,11 +464,25 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	// If there's an existing liveness record, only update the received
 	// timestamp if this is our first receipt of this node's liveness
 	// or if the expiration or epoch was advanced.
+	var callbacks []IsLiveCallback
 	nl.mu.Lock()
-	defer nl.mu.Unlock()
 	exLiveness, ok := nl.mu.nodes[liveness.NodeID]
 	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch {
 		nl.mu.nodes[liveness.NodeID] = liveness
+
+		// If isLive status is now true, but previously false, invoke any registered callbacks.
+		now, offset := nl.clock.Now(), nl.clock.MaxOffset()
+		if exLive, live := exLiveness.isLive(now, offset), liveness.isLive(now, offset); !exLive && live {
+			for _, cb := range nl.mu.callbacks {
+				callbacks = append(callbacks, cb)
+			}
+		}
+	}
+	nl.mu.Unlock()
+
+	// Invoke any "is live" callbacks after releasing lock.
+	for _, cb := range callbacks {
+		cb(liveness.NodeID)
 	}
 }
 
