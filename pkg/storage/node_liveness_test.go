@@ -107,6 +107,53 @@ func TestNodeLiveness(t *testing.T) {
 	}
 }
 
+// TestNodeLivenessCallback verifies that the liveness callback for a
+// node is invoked when it changes from state false to true.
+func TestNodeLivenessCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	// Verify liveness of all nodes for all nodes.
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	var cbMu syncutil.Mutex
+	cbs := map[roachpb.NodeID]struct{}{}
+	mtc.nodeLivenesses[0].RegisterCallback(func(nodeID roachpb.NodeID) {
+		cbMu.Lock()
+		defer cbMu.Unlock()
+		cbs[nodeID] = struct{}{}
+	})
+
+	// Advance clock past the liveness threshold.
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
+
+	// Trigger a manual heartbeat and verify callbacks for each node ID are invoked.
+	for _, nl := range mtc.nodeLivenesses {
+		l, err := nl.Self()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := nl.Heartbeat(context.Background(), l); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		cbMu.Lock()
+		defer cbMu.Unlock()
+		for _, g := range mtc.gossips {
+			nodeID := g.NodeID.Get()
+			if _, ok := cbs[nodeID]; !ok {
+				return errors.Errorf("expected IsLive callback for node %d", nodeID)
+			}
+		}
+		return nil
+	})
+}
+
 // TestNodeLivenessEpochIncrement verifies that incrementing the epoch
 // of a node requires the node to be considered not-live and that on
 // increment, no other nodes believe the epoch-incremented node to be
