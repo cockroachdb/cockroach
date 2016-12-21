@@ -30,6 +30,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/pkg/errors"
+	// Import postgres driver.
+	_ "github.com/lib/pq"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -44,11 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
-	"github.com/pkg/errors"
-	// Import postgres driver.
-	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 )
 
 const basePort = 26257
@@ -92,9 +92,13 @@ func New(size int) *Cluster {
 }
 
 // Start starts a cluster. The numWorkers parameter controls the SQL connection
-// settings to avoid unnecessary connection creation. The args parameter can be
-// used to pass extra arguments to each node.
-func (c *Cluster) Start(db string, numWorkers int, args, env []string) {
+// settings to avoid unnecessary connection creation. The allNodeArgs parameter
+// can be used to pass extra arguments to every node. The perNodeArgs parameter
+// can be used to pass extra arguments to an individual node. If not nil, its
+// size must equal the number of nodes.
+func (c *Cluster) Start(
+	db string, numWorkers int, env, allNodeArgs []string, perNodeArgs map[int][]string,
+) {
 	c.started = timeutil.Now()
 
 	baseCtx := &base.Config{
@@ -104,8 +108,13 @@ func (c *Cluster) Start(db string, numWorkers int, args, env []string) {
 	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
 		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
 
+	if perNodeArgs != nil && len(perNodeArgs) != len(c.Nodes) {
+		panic(fmt.Sprintf("there are %d nodes, but perNodeArgs' length is %d",
+			len(c.Nodes), len(perNodeArgs)))
+	}
+
 	for i := range c.Nodes {
-		c.Nodes[i] = c.makeNode(i, args, env)
+		c.Nodes[i] = c.makeNode(i, append(append([]string(nil), allNodeArgs...), perNodeArgs[i]...), env)
 		c.Clients[i] = c.makeClient(i)
 		c.Status[i] = c.makeStatus(i)
 		c.DB[i] = c.makeDB(i, numWorkers, db)
