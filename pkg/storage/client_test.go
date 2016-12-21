@@ -930,6 +930,72 @@ func (m *multiTestContext) restart() {
 	}
 }
 
+// changeReplicasLocked performs a ChangeReplicas operation, retrying
+// until the destination store has been addded or removed. m.mu must
+// be locked in read mode. Returns the range's NextReplicaID, which
+// is the ID of the newly-added replica if this is an add.
+func (m *multiTestContext) changeReplicasLocked(
+	rangeID roachpb.RangeID, dest int, changeType roachpb.ReplicaChangeType,
+) roachpb.ReplicaID {
+	startKey := m.findStartKeyLocked(rangeID)
+
+	// Perform a consistent read to get the updated range descriptor (as
+	// opposed to just going to one of the stores), to make sure we have
+	// the effects of any previous ChangeReplicas call. By the time
+	// ChangeReplicas returns the raft leader is guaranteed to have the
+	// updated version, but followers are not.
+	var desc roachpb.RangeDescriptor
+	if err := m.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		m.t.Fatal(err)
+	}
+
+	repl, err := m.findMemberStoreLocked(desc).GetReplica(desc.RangeID)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	ctx := repl.AnnotateCtx(context.Background())
+
+	var alreadyDoneErr string
+	switch changeType {
+	case roachpb.ADD_REPLICA:
+		alreadyDoneErr = "unable to add replica .* which is already present"
+	case roachpb.REMOVE_REPLICA:
+		alreadyDoneErr = "unable to remove replica .* which is not present"
+	}
+
+	for {
+		if err := repl.ChangeReplicas(
+			ctx,
+			changeType,
+			roachpb.ReplicaDescriptor{
+				NodeID:  m.idents[dest].NodeID,
+				StoreID: m.idents[dest].StoreID,
+			},
+			&desc,
+		); err == nil || testutils.IsError(err, alreadyDoneErr) {
+			break
+		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
+			// Try again after an AmbigousResultError. If the operation
+			// succeeded, then the next attempt will return alreadyDoneErr;
+			// if it failed then the next attempt should succeed.
+			continue
+		} else if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
+			// Try again after a ConditionFailedError. This could be
+			// because the replica we used here is out of date, and the
+			// operation will succeed after it has caught up.
+			//
+			// TODO(bdarnell): it would be nicer to find the lease holder
+			// and call ChangeReplicas on that replica, instead of calling
+			// it on an arbitrary replica and catching this failure.
+			continue
+		} else {
+			m.t.Fatal(err)
+		}
+	}
+	return desc.NextReplicaID
+}
+
 // replicateRange replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
 	m.mu.RLock()
@@ -939,44 +1005,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
 	for i, dest := range dests {
-		// Perform a consistent read to get the updated range descriptor (as opposed
-		// to just going to one of the stores), to make sure we have the effects of
-		// the previous ChangeReplicas call. By the time ChangeReplicas returns the
-		// raft leader is guaranteed to have the updated version, but followers are
-		// not.
-		var desc roachpb.RangeDescriptor
-		if err := m.dbs[dest].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
-			m.t.Fatal(err)
-		}
-
-		repl, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
-		if err != nil {
-			m.t.Fatal(err)
-		}
-
-		ctx := repl.AnnotateCtx(context.Background())
-
-		// Assume AmbiguousResultErrors are due to re-proposals and the
-		// underlying change replicas succeeded.
-		for {
-			if err := repl.ChangeReplicas(
-				ctx,
-				roachpb.ADD_REPLICA,
-				roachpb.ReplicaDescriptor{
-					NodeID:  m.stores[dest].Ident.NodeID,
-					StoreID: m.stores[dest].Ident.StoreID,
-				},
-				&desc,
-			); err == nil || testutils.IsError(err, "unable to add replica .* which is already present") {
-				break
-			} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-				continue
-			} else {
-				m.t.Fatal(err)
-			}
-		}
-
-		expectedReplicaIDs[i] = desc.NextReplicaID
+		expectedReplicaIDs[i] = m.changeReplicasLocked(rangeID, dest, roachpb.ADD_REPLICA)
 	}
 
 	// Wait for the replication to complete on all destination nodes.
@@ -1006,39 +1035,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	startKey := m.findStartKeyLocked(rangeID)
-
-	var desc roachpb.RangeDescriptor
-	if err := m.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
-		m.t.Fatal(err)
-	}
-
-	rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
-	if err != nil {
-		m.t.Fatal(err)
-	}
-
-	ctx := rep.AnnotateCtx(context.Background())
-
-	// Assume AmbiguousResultErrors are due to re-proposals and the
-	// underlying change replicas succeeded.
-	for {
-		if err := rep.ChangeReplicas(
-			ctx,
-			roachpb.REMOVE_REPLICA,
-			roachpb.ReplicaDescriptor{
-				NodeID:  m.idents[dest].NodeID,
-				StoreID: m.idents[dest].StoreID,
-			},
-			&desc,
-		); err == nil || testutils.IsError(err, "unable to remove replica .* which is not present") {
-			break
-		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
-			continue
-		} else {
-			m.t.Fatal(err)
-		}
-	}
+	m.changeReplicasLocked(rangeID, dest, roachpb.REMOVE_REPLICA)
 }
 
 // readIntFromEngines reads the current integer value at the given key
