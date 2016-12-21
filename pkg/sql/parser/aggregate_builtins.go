@@ -111,6 +111,10 @@ var Aggregates = map[string][]Builtin{
 	"max": makeAggBuiltins(newMaxAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
 	"min": makeAggBuiltins(newMinAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
 
+	"sum_int": {
+		makeAggBuiltin(TypeInt, TypeInt, newSmallIntSumAggregate),
+	},
+
 	"sum": {
 		makeAggBuiltin(TypeInt, TypeDecimal, newIntSumAggregate),
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatSumAggregate),
@@ -446,6 +450,33 @@ func (a *MinAggregate) Result() Datum {
 		return DNull
 	}
 	return a.min
+}
+
+type smallIntSumAggregate struct {
+	sum         int64
+	seenNonNull bool
+}
+
+func newSmallIntSumAggregate() AggregateFunc {
+	return &smallIntSumAggregate{}
+}
+
+// Add adds the value of the passed datum to the sum.
+func (a *smallIntSumAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+
+	a.sum += int64(*datum.(*DInt))
+	a.seenNonNull = true
+}
+
+// Result returns the sum.
+func (a *smallIntSumAggregate) Result() Datum {
+	if !a.seenNonNull {
+		return DNull
+	}
+	return NewDInt(DInt(a.sum))
 }
 
 type intSumAggregate struct {
