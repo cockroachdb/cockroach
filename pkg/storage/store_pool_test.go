@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -513,4 +515,30 @@ func TestGetNodeLocalities(t *testing.T) {
 			t.Fatalf("for node %d, expected %d tiers, only got %d", store.Node.NodeID, e, a)
 		}
 	}
+}
+
+func TestStorePoolStoreCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, sp, _ := createTestStorePool(
+		TestTimeUntilStoreDead, false /* deterministic */, false /* defaultNodeLiveness */)
+	defer stopper.Stop()
+
+	var callbackCount int32
+	sp.registerStoreCallback(func(_ *roachpb.StoreDescriptor, _ storeStatus) {
+		atomic.AddInt32(&callbackCount, 1)
+	})
+
+	sg := gossiputil.NewStoreGossiper(g)
+
+	if a, e := atomic.LoadInt32(&callbackCount), int32(0); a != e {
+		t.Errorf("expected callback count to be %d; got %d", e, a)
+	}
+
+	sg.GossipStores(uniqueStore, t)
+	testutils.SucceedsSoon(t, func() error {
+		if a, e := atomic.LoadInt32(&callbackCount), int32(1); a != e {
+			return errors.Errorf("expected callback count to be %d; got %d", e, a)
+		}
+		return nil
+	})
 }
