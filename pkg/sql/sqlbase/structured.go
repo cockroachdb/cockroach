@@ -678,6 +678,9 @@ func (desc *TableDescriptor) Validate(txn *client.Txn) error {
 	if err != nil {
 		return err
 	}
+	if desc.Dropped() {
+		return nil
+	}
 	return desc.validateCrossReferences(txn)
 }
 
