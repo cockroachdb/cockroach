@@ -392,7 +392,7 @@ func (s *selectNode) expandPlan() error {
 		ordering = s.top.group.desiredOrdering
 		grouping = true
 	} else if s.top.sort != nil {
-		ordering = s.top.sort.Ordering().ordering
+		ordering = s.top.sort.ordering
 	}
 
 	// Estimate the limit parameters. We can't full eval them just yet,
