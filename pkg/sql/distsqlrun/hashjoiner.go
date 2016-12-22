@@ -148,6 +148,22 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 // DNull row is emitted instead.
 func (h *hashJoiner) probePhase(ctx context.Context) error {
 	var scratch []byte
+
+	renderAndPush := func(lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
+	) (rowsLeft bool, failedFilter bool, err error) {
+		row, ff, err := h.render(lrow, rrow)
+		if err != nil {
+			return false, ff, err
+		}
+		if row != nil {
+			if log.V(3) {
+				log.Infof(ctx, "pushing row %s", row)
+			}
+			return h.output.PushRow(row), ff, nil
+		}
+		return true, ff, nil
+	}
+
 	for {
 		lrow, err := h.inputs[0].NextRow()
 		if err != nil {
@@ -167,14 +183,9 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == leftOuter || h.joinType == fullOuter {
-				row, _, err := h.render(lrow, nil)
-				if err != nil {
+				if rowsLeft, _, err := renderAndPush(lrow, nil); err != nil {
 					return err
-				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				} else if !rowsLeft {
 					return nil
 				}
 			}
@@ -183,30 +194,19 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			row, _, err := h.render(lrow, nil)
-			if err != nil {
+			if rowsLeft, _, err := renderAndPush(lrow, nil); err != nil {
 				return err
-			}
-			if log.V(3) && row != nil {
-				log.Infof(ctx, "pushing row %s", row)
-			}
-			if row != nil && !h.output.PushRow(row) {
+			} else if !rowsLeft {
 				return nil
 			}
 		} else {
 			for idx, rrow := range b.rows {
-				row, ff, err := h.render(lrow, rrow)
-				if !ff && (h.joinType == rightOuter || h.joinType == fullOuter) {
-					b.seen[idx] = true
-				}
-				if err != nil {
+				if rowsLeft, failedFilter, err := renderAndPush(lrow, rrow); err != nil {
 					return err
-				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				} else if !rowsLeft {
 					return nil
+				} else if !failedFilter && (h.joinType == rightOuter || h.joinType == fullOuter) {
+					b.seen[idx] = true
 				}
 			}
 		}
@@ -220,14 +220,9 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 	for _, b := range h.buckets {
 		for idx, rrow := range b.rows {
 			if !b.seen[idx] {
-				row, _, err := h.render(nil, rrow)
-				if err != nil {
+				if rowsLeft, _, err := renderAndPush(nil, rrow); err != nil {
 					return err
-				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				} else if !rowsLeft {
 					return nil
 				}
 			}
