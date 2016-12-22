@@ -25,10 +25,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/pkg/errors"
 )
 
 type aggExprVisitor struct {
 	exprs []distsqlrun.AggregatorSpec_Expr
+	err   error
 }
 
 var _ parser.Visitor = &aggExprVisitor{}
@@ -38,13 +40,19 @@ var _ parser.Visitor = &aggExprVisitor{}
 // If our expression is NOT of the type *aggregateFuncHolder we may have an
 // expression like 'COUNT(k) + 1', we recurse.
 func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+
 	fholder, ok := expr.(*aggregateFuncHolder)
 	if !ok {
 		return true, expr
 	}
 
+	// An aggregateFuncHolder either contains an aggregation function or an
+	// expression that also appears as one of the GROUP BY expressions.
 	f, ok := fholder.expr.(*parser.FuncExpr)
-	if !ok {
+	if !ok || f.GetAggregateConstructor() == nil {
 		aggexpr := distsqlrun.AggregatorSpec_Expr{
 			Func: distsqlrun.AggregatorSpec_IDENT,
 		}
@@ -52,12 +60,17 @@ func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 		return false, expr
 	}
 
+	// Convert the aggregate function to the enum value with the same string
+	// representation.
+	funcStr := strings.ToUpper(f.Func.FunctionReference.String())
+	funcIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
+	if !ok {
+		v.err = errors.Errorf("unknown aggregate %s", funcStr)
+		return false, expr
+	}
+
 	aggexpr := distsqlrun.AggregatorSpec_Expr{
-		Func: distsqlrun.AggregatorSpec_Func(
-			distsqlrun.AggregatorSpec_Func_value[strings.ToUpper(
-				f.Func.FunctionReference.String(),
-			)],
-		),
+		Func:     distsqlrun.AggregatorSpec_Func(funcIdx),
 		Distinct: f.Type == parser.DistinctFuncType,
 	}
 	v.exprs = append(v.exprs, aggexpr)
@@ -68,9 +81,11 @@ func (v *aggExprVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	return expr
 }
 
-func (v aggExprVisitor) extract(typedExpr parser.TypedExpr) []distsqlrun.AggregatorSpec_Expr {
+func (v aggExprVisitor) extract(
+	typedExpr parser.TypedExpr,
+) ([]distsqlrun.AggregatorSpec_Expr, error) {
 	parser.WalkExprConst(&v, typedExpr)
-	return v.exprs
+	return v.exprs, v.err
 }
 
 // extractAggExprs translates the render expressions into the form needed by
@@ -100,17 +115,22 @@ func (v aggExprVisitor) extract(typedExpr parser.TypedExpr) []distsqlrun.Aggrega
 //   postAggExprVisitor.
 func (dsp *distSQLPlanner) extractAggExprs(
 	render []parser.TypedExpr,
-) (aggExprs []distsqlrun.AggregatorSpec_Expr) {
+) (aggExprs []distsqlrun.AggregatorSpec_Expr, err error) {
 	v := aggExprVisitor{}
 	for _, expr := range render {
-		aggExprs = append(aggExprs, v.extract(expr)...)
+		exprs, err := v.extract(expr)
+		if err != nil {
+			return nil, err
+		}
+		aggExprs = append(aggExprs, exprs...)
 	}
 	for i := range aggExprs {
 		aggExprs[i].ColIdx = uint32(i)
 	}
-	return aggExprs
+	return aggExprs, nil
 }
 
+// See extractPostAggrExprs.
 type postAggExprVisitor struct {
 	count int
 }
