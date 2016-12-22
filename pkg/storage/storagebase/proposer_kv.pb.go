@@ -164,13 +164,19 @@ type RaftCommand struct {
 	// When the command is applied, its result is an error if the lease log
 	// counter has already reached (or exceeded) max_lease_index.
 	//
-	// The lease index is a replay protection mechanism. Similar to the Raft
-	// applied index, it is strictly increasing, but may have gaps. A command
-	// will only apply successfully if its max_lease_index has not been surpassed
-	// by the Range's applied lease index (in which case the command may need
-	// to be retried, that is, regenerated with a higher max_lease_index).
-	// When the command applies, the new lease index will increase to
-	// max_lease_index (so a potential later replay will fail).
+	// The lease index is a reorder protection mechanism - we don't want Raft
+	// commands (proposed by a single node, the one with origin_lease) executing
+	// in a different order than the one in which the corresponding KV requests
+	// were evaluated and the commands were proposed. This is important because
+	// the CommandQueue does not fully serialize commands - mostly when it comes
+	// to updates to the internal state of the range (this should be re-evaluated
+	// once proposer-evaluated KV is completed - see #10413).
+	// Similar to the Raft applied index, it is strictly increasing, but may have
+	// gaps. A command will only apply successfully if its max_lease_index has not
+	// been surpassed by the Range's applied lease index (in which case the
+	// command may need to be retried, that is, regenerated with a higher
+	// max_lease_index). When the command applies, the new lease index will
+	// increase to max_lease_index (so a potential later replay will fail).
 	//
 	// This mechanism was introduced as a simpler alternative to using the Raft
 	// applied index, which is fraught with complexity due to the need to predict
