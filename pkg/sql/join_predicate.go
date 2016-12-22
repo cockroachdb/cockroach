@@ -368,25 +368,6 @@ func makeEqualityPredicate(
 	return pred, info, nil
 }
 
-func (p *joinPredicate) format(buf *bytes.Buffer) {
-	if p.filter != nil || len(p.leftColNames) > 0 {
-		buf.WriteString(" ON ")
-	}
-	prefix := ""
-	if len(p.leftColNames) > 0 {
-		buf.WriteString("EQUALS((")
-		p.leftColNames.Format(buf, parser.FmtSimple)
-		buf.WriteString("),(")
-		p.rightColNames.Format(buf, parser.FmtSimple)
-		buf.WriteString("))")
-		prefix = " AND "
-	}
-	if p.filter != nil {
-		buf.WriteString(prefix)
-		p.filter.Format(buf, parser.FmtQualify)
-	}
-}
-
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
 func (p *joinPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
 	return p.curRow[idx].Eval(ctx)

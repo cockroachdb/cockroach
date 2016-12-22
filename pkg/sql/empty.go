@@ -27,24 +27,15 @@ type emptyNode struct {
 	results bool
 }
 
-func (*emptyNode) Columns() ResultColumns                   { return nil }
-func (*emptyNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (*emptyNode) Values() parser.DTuple                    { return nil }
-func (*emptyNode) explainExprs(_ func(string, parser.Expr)) {}
-func (*emptyNode) Start() error                             { return nil }
-func (*emptyNode) SetLimitHint(_ int64, _ bool)             {}
-func (*emptyNode) setNeededColumns(_ []bool)                {}
-func (*emptyNode) MarkDebug(_ explainMode)                  {}
-func (*emptyNode) expandPlan() error                        { return nil }
-func (*emptyNode) Close()                                   {}
-
-func (e *emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	name = "empty"
-	if e.results {
-		name = "nullrow"
-	}
-	return name, "", nil
-}
+func (*emptyNode) Columns() ResultColumns       { return nil }
+func (*emptyNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (*emptyNode) Values() parser.DTuple        { return nil }
+func (*emptyNode) Start() error                 { return nil }
+func (*emptyNode) SetLimitHint(_ int64, _ bool) {}
+func (*emptyNode) setNeededColumns(_ []bool)    {}
+func (*emptyNode) MarkDebug(_ explainMode)      {}
+func (*emptyNode) expandPlan() error            { return nil }
+func (*emptyNode) Close()                       {}
 
 func (e *emptyNode) DebugValues() debugValues {
 	return debugValues{

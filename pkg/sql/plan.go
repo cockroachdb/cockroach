@@ -70,11 +70,6 @@ var _ planMaker = &planner{}
 
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
-	// explainExprs reports the expressions involved in the node.
-	//
-	// Available after newPlan().
-	explainExprs(explainFn func(elem string, desc parser.Expr))
-
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.
 	//
@@ -114,11 +109,6 @@ type planNode interface {
 	//
 	// Available after newPlan().
 	expandPlan() error
-
-	// ExplainPlan returns a name and description and a list of child nodes.
-	//
-	// Available after expandPlan() (or makePlan).
-	ExplainPlan(verbose bool) (name, description string, children []planNode)
 
 	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the
@@ -210,15 +200,17 @@ var _ planNode = &indexJoinNode{}
 var _ planNode = &insertNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
+var _ planNode = &ordinalityNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &selectNode{}
 var _ planNode = &selectTopNode{}
 var _ planNode = &sortNode{}
+var _ planNode = &splitNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
-var _ planNode = &valuesNode{}
-var _ planNode = &ordinalityNode{}
 var _ planNode = &valueGenerator{}
+var _ planNode = &valuesNode{}
+var _ planNode = &windowNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {

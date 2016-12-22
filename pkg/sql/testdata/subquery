@@ -43,8 +43,9 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 query ITTT
 EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
 ----
-0 split (SELECT 42)
-1 nullrow
+0  split
+0           subqueries  1
+1  nullrow
 
 statement ok
 ALTER TABLE abc SPLIT AT ((SELECT 1))
@@ -269,9 +270,12 @@ foo1 moo2 moo3
 query ITTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
-0 sort   +foo1
-1 sort   +moo2
-2 values 3 columns, 3 rows
+0  sort
+0          order  +foo1
+1  sort
+1          order  +moo2
+2  values
+2          size   3 columns, 3 rows
 
 query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
@@ -322,12 +326,14 @@ true
 query ITTTTT
 EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 ----
-0  select                                                    (x)                          +x,unique
-1  render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z)  (x)                          +x,unique
-2  scan           xyz@primary ALL                            (x, y[omitted], z[omitted])  +x,unique
-3  select                                                    (x)                          +x,unique
-4  render/filter  from (test.xyz.x, test.xyz.y, test.xyz.z)  (x)                          +x,unique
-5  scan           xyz@primary                                (x, y[omitted], z[omitted])  +x,unique
+0  select                           (x)                          +x,unique
+1  scan                             (x, y[omitted], z[omitted])  +x,unique
+1          table       xyz@primary
+1          spans       ALL
+1          subqueries  1
+2  select                           (x)                          +x,unique
+3  scan                             (x, y[omitted], z[omitted])  +x,unique
+3          table       xyz@primary
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
@@ -349,7 +355,16 @@ query ITTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 0  index-join
-1  scan        tab4@idx_tab4_0 /#-/5.38/1
-2  scan        tab4@primary    ALL
-1  scan        tab4@primary
-2  scan        tab4@primary    ALL
+1  scan
+1              table       tab4@idx_tab4_0
+1              spans       /#-/5.38/1
+1              subqueries  1
+2  scan
+2              table       tab4@primary
+2              spans       ALL
+1  scan
+1              table       tab4@primary
+1              subqueries  1
+2  scan
+2              table       tab4@primary
+2              spans       ALL

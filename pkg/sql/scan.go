@@ -237,38 +237,6 @@ func (n *scanNode) Next() (bool, error) {
 	}
 }
 
-func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	if n.reverse {
-		name = "revscan"
-	} else {
-		name = "scan"
-	}
-	var desc bytes.Buffer
-	fmt.Fprintf(&desc, "%s@%s", n.desc.Name, n.index.Name)
-	spans := sqlbase.PrettySpans(n.spans, 2)
-	if spans != "" {
-		if spans == "-" {
-			spans = "ALL"
-		}
-		fmt.Fprintf(&desc, " %s", spans)
-	}
-	if n.limitHint > 0 && !n.limitSoft {
-		if n.limitHint == 1 {
-			desc.WriteString(" (max 1 row)")
-		} else {
-			fmt.Fprintf(&desc, " (max %d rows)", n.limitHint)
-		}
-	}
-
-	subplans := n.p.collectSubqueryPlans(n.filter, nil)
-
-	return name, desc.String(), subplans
-}
-
-func (n *scanNode) explainExprs(regTypes func(string, parser.Expr)) {
-	regTypes("filter", n.filter)
-}
-
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
 	p *planner,

@@ -239,12 +239,6 @@ func (n *explainDebugNode) Start() error        { return n.plan.Start() }
 func (n *explainDebugNode) Next() (bool, error) { return n.plan.Next() }
 func (n *explainDebugNode) Close()              { n.plan.Close() }
 
-func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	return n.plan.ExplainPlan(v)
-}
-
-func (n *explainDebugNode) explainExprs(fn func(string, parser.Expr)) {}
-
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()
 

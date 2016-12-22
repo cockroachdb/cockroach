@@ -41,8 +41,11 @@ SELECT a, b FROM t ORDER BY b
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
-0 sort +b
-1 scan t@primary ALL
+0  sort
+0        order  +b
+1  scan
+1        table  t@primary
+1        spans  ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC
@@ -54,8 +57,11 @@ SELECT a, b FROM t ORDER BY b DESC
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
-0 sort -b
-1 scan t@primary ALL
+0  sort
+0        order  -b
+1  scan
+1        table  t@primary
+1        spans  ALL
 
 query I
 SELECT a FROM t ORDER BY 1 DESC
@@ -67,9 +73,13 @@ SELECT a FROM t ORDER BY 1 DESC
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-0 limit count: 2
-1 sort  +b (top 2)
-2 scan  t@primary ALL
+0  limit
+1  sort
+1         order     +b
+1         strategy  top 2
+2  scan
+2         table     t@primary
+2         spans     ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -80,10 +90,14 @@ SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 query ITTT
 EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
 ----
-0 limit    count: 2
-1 distinct
-2 sort     +b (iterative)
-3 scan     t@primary ALL
+0  limit
+1  distinct
+2  sort
+2            order     +b
+2            strategy  iterative
+3  scan
+3            table     t@primary
+3            spans     ALL
 
 query I
 SELECT DISTINCT a FROM t ORDER BY b DESC LIMIT 2
@@ -133,20 +147,29 @@ SELECT b FROM t ORDER BY a DESC
 query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
-0 nosort -a
-1 revscan t@primary ALL
+0  nosort
+0           order  -a
+1  revscan
+1           table  t@primary
+1           spans  ALL
 
 query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-0 nosort -a,+b
-1 revscan t@primary ALL
+0  nosort
+0           order  -a,+b
+1  revscan
+1           table  t@primary
+1           spans  ALL
 
 query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-0 nosort -a,-b
-1 revscan t@primary ALL
+0  nosort
+0           order  -a,-b
+1  revscan
+1           table  t@primary
+1           spans  ALL
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -236,39 +259,47 @@ SELECT a FROM t ORDER BY a.b
 query ITTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-0 scan t@primary
+0  scan
+0        table  t@primary
 
 query ITTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-0 scan t@primary
+0  scan
+0        table  t@primary
 
 # Check that the sort key reuses the existing render.
 query ITTTTT
 EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 ----
-0   select                                              ("b + 2")   +"b + 2"
-1   sort            +"b + 2"                            ("b + 2")   +"b + 2"
-2   render/filter   from (test.t.a, test.t.b, test.t.c) ("b + 2")
-3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
+0  select                    ("b + 2")                    +"b + 2"
+1  sort                      ("b + 2")                    +"b + 2"
+1          order  +"b + 2"
+2  scan                      (a[omitted], b, c[omitted])  +a,unique
+2          table  t@primary
+2          spans  ALL
 
 # Check that the sort picks up a renamed render properly.
 query ITTTTT
 EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 ----
-0   select                                              (y)   +y
-1   sort            +y                                  (y)   +y
-2   render/filter   from (test.t.a, test.t.b, test.t.c) (y)
-3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
+0  select                    (y)                          +y
+1  sort                      (y)                          +y
+1          order  +y
+2  scan                      (a[omitted], b, c[omitted])  +a,unique
+2          table  t@primary
+2          spans  ALL
 
 # Check that the sort reuses a render behind a rename properly.
 query ITTTTT
 EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
-0   select                                              (y)   +y
-1   sort            +y                                  (y)   +y
-2   render/filter   from (test.t.a, test.t.b, test.t.c) (y)
-3   scan            t@primary ALL                       (a[omitted], b, c[omitted])   +a,unique
+0  select                    (y)                          +y
+1  sort                      (y)                          +y
+1          order  +y
+2  scan                      (a[omitted], b, c[omitted])  +a,unique
+2          table  t@primary
+2          spans  ALL
 
 statement ok
 CREATE TABLE abc (
@@ -303,7 +334,9 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 query ITTT
 EXPLAIN SELECT * FROM abc ORDER BY a
 ----
-0 scan abc@primary ALL
+0  scan
+0        table  abc@primary
+0        spans  ALL
 
 query ITTT
 EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
@@ -314,61 +347,84 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
-0 scan abc@ba ALL
+0  scan
+0        table  abc@ba
+0        spans  ALL
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
 query ITTT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-0 scan abc@ba ALL
+0  scan
+0        table  abc@ba
+0        spans  ALL
 
 # We use the WHERE condition to force the use of index ba.
 query ITTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-0 sort       +b,+a,+d
-1 index-join
-2 scan       abc@ba /11-
-2 scan       abc@primary
+0  sort
+0              order  +b,+a,+d
+1  index-join
+2  scan
+2              table  abc@ba
+2              spans  /11-
+2  scan
+2              table  abc@primary
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
 query ITTT
 EXPLAIN SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-0 index-join
-1 scan       abc@ba /11-
-1 scan       abc@primary
+0  index-join
+1  scan
+1              table  abc@ba
+1              spans  /11-
+1  scan
+1              table  abc@primary
 
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
-0 nosort +b,+c
-1 scan   abc@bc ALL
+0  nosort
+0          order  +b,+c
+1  scan
+1          table  abc@bc
+1          spans  ALL
 
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-0  select                                                                          (a, b)                 +b
-1  nosort                   +b,+c                                                  (a, b)                 +b
-2  render/filter            from (test.abc.a, test.abc.b, test.abc.c, test.abc.d)  (a, b, c)              +b,+c,unique
-2  render/filter  render 0  test.abc.a
-2  render/filter  render 1  test.abc.b
-2  render/filter  render 2  test.abc.c
-3  scan                     abc@bc ALL                                             (a, b, c, d[omitted])  +b,+c,unique
+0  select                               (a, b)                 +b
+1  nosort                               (a, b)                 +b
+1                 order     +b,+c
+2  render/filter                        (a, b, c)              +b,+c,unique
+2                 render 0  test.abc.a
+2                 render 1  test.abc.b
+2                 render 2  test.abc.c
+3  scan                                 (a, b, c, d[omitted])  +b,+c,unique
+3                 table     abc@bc
+3                 spans     ALL
 
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
-0 nosort +b,+c,+a
-1 scan   abc@bc ALL
+0  nosort
+0          order  +b,+c,+a
+1  scan
+1          table  abc@bc
+1          spans  ALL
 
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-0 nosort +b,+c,-a
-1 scan   abc@bc ALL
+0  nosort
+0          order  +b,+c,-a
+1  scan
+1          table  abc@bc
+1          spans  ALL
 
 query ITTT
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
@@ -393,7 +449,9 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 query ITTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-0 revscan abc@primary ALL
+0  revscan
+0           table  abc@primary
+0           spans  ALL
 
 query I
 SELECT a FROM abc ORDER BY a DESC
@@ -414,12 +472,16 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-0 scan abc@bc /2-/3
+0  scan
+0        table  abc@bc
+0        spans  /2-/3
 
 query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-0 revscan abc@bc /2-/3
+0  revscan
+0           table  abc@bc
+0           spans  /2-/3
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz));
@@ -449,22 +511,30 @@ INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-0 scan abcd@abc /1/4-/1/5
+0  scan
+0        table  abcd@abc
+0        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-0 scan abcd@abc /1/4-/1/5
+0  scan
+0        table  abcd@abc
+0        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-0 scan abcd@abc /1/4-/1/5
+0  scan
+0        table  abcd@abc
+0        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-0 scan abcd@abc /1/4-/1/5
+0  scan
+0        table  abcd@abc
+0        spans  /1/4-/1/5
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL);
@@ -484,45 +554,47 @@ query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x);
 ----
 0  select                           (x)        +x
-1  render/filter  from (""."".x)    (x)        +x
-2  select                           (x)        +x
-3  sort           +x                (x)        +x
-4  render/filter  from ("".c.x)     (x)
-5  select                           (column1)
-6  values         1 column, 3 rows  (column1)
+1  select                           (x)        +x
+2  sort                             (x)        +x
+2          order  +x
+3  select                           (column1)
+4  values                           (column1)
+4          size   1 column, 3 rows
 
 query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC;
 ----
-0 ordinality
-1 values 1 column, 3 rows
+0  ordinality
+1  values
+1              size  1 column, 3 rows
 
 query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC;
 ----
-0 sort -ordinality
-1 ordinality
-2 values 1 column, 3 rows
+0  sort
+0              order  -ordinality
+1  ordinality
+2  values
+2              size   1 column, 3 rows
 
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY;
 ----
-0  select                                           (x, ordinality)  +ordinality,unique
-1  render/filter  from (""."".x, ""."".ordinality)  (x, ordinality)  +ordinality,unique
-2  ordinality                                       (x, ordinality)  +ordinality,unique
-3  select                                           (x)
-4  render/filter  from ("".c.x)                     (x)
-5  select                                           (column1)
-6  values         1 column, 3 rows                  (column1)
+0  select                              (x, ordinality)  +ordinality,unique
+1  ordinality                          (x, ordinality)  +ordinality,unique
+2  select                              (x)
+3  select                              (column1)
+4  values                              (column1)
+4              size  1 column, 3 rows
 
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY;
 ----
-0  select                                           (x, ordinality)  +x
-1  render/filter  from (""."".x, ""."".ordinality)  (x, ordinality)  +x
-2  ordinality                                       (x, ordinality)  +x
-3  select                                           (x)              +x
-4  sort           +x                                (x)              +x
-5  render/filter  from ("".c.x)                     (x)
-6  select                                           (column1)
-7  values         1 column, 3 rows                  (column1)
+0  select                               (x, ordinality)  +x
+1  ordinality                           (x, ordinality)  +x
+2  select                               (x)              +x
+3  sort                                 (x)              +x
+3              order  +x
+4  select                               (column1)
+5  values                               (column1)
+5              size   1 column, 3 rows
