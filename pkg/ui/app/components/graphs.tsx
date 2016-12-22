@@ -3,6 +3,8 @@ import _ from "lodash";
 import * as protos from "../js/protos";
 import Long from "long";
 
+import { MetricProps } from "./metric";
+
 type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 // Global set of colors for graph series.
@@ -10,37 +12,6 @@ export let seriesPalette = [
   "#5F6C87", "#F2BE2C", "#F16969", "#4E9FD1", "#49D990", "#D77FBF", "#87326D", "#A3415B",
   "#B59153", "#C9DB6D", "#203D9B", "#748BF2", "#91C8F2", "#FF9696", "#EF843C", "#DCCD4B",
 ];
-
-/**
- * MetricProps reperesents the properties assigned to a selector component. A
- * selector describes a single time series that should be queried from the
- * server, along with some basic information on how that data should be rendered
- * in a graph context.
- */
-export interface MetricProps {
-  name: string;
-  sources?: string[];
-  title?: string;
-  rate?: boolean;
-  nonNegativeRate?: boolean;
-  aggregateMax?: boolean;
-  aggregateMin?: boolean;
-  aggregateAvg?: boolean;
-  downsampleMax?: boolean;
-  downsampleMin?: boolean;
-}
-
-/**
- * Metric is a React component which describes a selector. This exists as a
- * component for convenient syntax, and should not be rendered directly; rather,
- * a renderable component will contain metrics, but will use them
- * only informationally within rendering them.
- */
-export class Metric extends React.Component<MetricProps, {}> {
-  render(): React.ReactElement<any> {
-    throw new Error("Component <Metric /> should never render.");
-  }
-};
 
 /**
  * AxisProps represents the properties of a renderable graph axis.
@@ -114,7 +85,7 @@ class AxisDomain {
     this.max = _.max(_.values<number>(this.stackedSum));
   }
 
-  // ticks computes tick values for a graph given the current max/min and 
+  // ticks computes tick values for a graph given the current max/min and
   // tickCount.
   ticks(transform: (n: number) => any = _.identity): number[] {
     let increment = (this.max - this.min) / (this.tickCount + 1);
