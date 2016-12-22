@@ -86,8 +86,6 @@ func (r *Replica) executeCmd(
 
 	var err error
 	var pd EvalResult
-	var num int64
-	var span *roachpb.Span
 
 	// Note that responses are populated even when an error is returned.
 	// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
@@ -112,13 +110,13 @@ func (r *Replica) executeCmd(
 		*resp, err = r.Delete(ctx, batch, ms, h, *tArgs)
 	case *roachpb.DeleteRangeRequest:
 		resp := reply.(*roachpb.DeleteRangeResponse)
-		*resp, span, num, err = r.DeleteRange(ctx, batch, ms, h, maxKeys, *tArgs)
+		*resp, err = r.DeleteRange(ctx, batch, ms, h, maxKeys, *tArgs)
 	case *roachpb.ScanRequest:
 		resp := reply.(*roachpb.ScanResponse)
-		*resp, span, num, pd, err = r.Scan(ctx, batch, h, maxKeys, *tArgs)
+		*resp, pd, err = r.Scan(ctx, batch, h, maxKeys, *tArgs)
 	case *roachpb.ReverseScanRequest:
 		resp := reply.(*roachpb.ReverseScanResponse)
-		*resp, span, num, pd, err = r.ReverseScan(ctx, batch, h, maxKeys, *tArgs)
+		*resp, pd, err = r.ReverseScan(ctx, batch, h, maxKeys, *tArgs)
 	case *roachpb.BeginTransactionRequest:
 		resp := reply.(*roachpb.BeginTransactionResponse)
 		*resp, err = r.BeginTransaction(ctx, batch, ms, h, *tArgs)
@@ -169,20 +167,17 @@ func (r *Replica) executeCmd(
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	// Set the ResumeSpan, NumKeys, and range info.
-	header := reply.Header()
-	header.NumKeys = num
-	header.ResumeSpan = span
-	lease, _ := r.getLease()
 	if h.ReturnRangeInfo {
+		header := reply.Header()
+		lease, _ := r.getLease()
 		header.RangeInfos = []roachpb.RangeInfo{
 			{
 				Desc:  *r.Desc(),
 				Lease: *lease,
 			},
 		}
+		reply.SetHeader(header)
 	}
-	reply.SetHeader(header)
 
 	// TODO(peter): We'd like to assert that the hlc clock is always updated
 	// correctly, but various tests insert versioned data without going through
@@ -338,7 +333,7 @@ func (r *Replica) DeleteRange(
 	h roachpb.Header,
 	maxKeys int64,
 	args roachpb.DeleteRangeRequest,
-) (roachpb.DeleteRangeResponse, *roachpb.Span, int64, error) {
+) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
 	timestamp := hlc.ZeroTimestamp
 	if !args.Inline {
@@ -356,7 +351,9 @@ func (r *Replica) DeleteRange(
 			reply.Txn = &clonedTxn
 		}
 	}
-	return reply, resumeSpan, num, err
+	reply.NumKeys = num
+	reply.ResumeSpan = resumeSpan
+	return reply, err
 }
 
 // Scan scans the key range specified by start key through end key in ascending order up to some
@@ -368,10 +365,16 @@ func (r *Replica) Scan(
 	h roachpb.Header,
 	maxKeys int64,
 	args roachpb.ScanRequest,
-) (roachpb.ScanResponse, *roachpb.Span, int64, EvalResult, error) {
+) (roachpb.ScanResponse, EvalResult, error) {
 	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxKeys, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	return roachpb.ScanResponse{Rows: rows}, resumeSpan, int64(len(rows)), intentsToEvalResult(intents, &args), err
+	return roachpb.ScanResponse{
+		ResponseHeader: roachpb.ResponseHeader{
+			NumKeys:    int64(len(rows)),
+			ResumeSpan: resumeSpan,
+		},
+		Rows: rows,
+	}, intentsToEvalResult(intents, &args), err
 }
 
 // ReverseScan scans the key range specified by start key through end key in descending order up to
@@ -383,10 +386,16 @@ func (r *Replica) ReverseScan(
 	h roachpb.Header,
 	maxKeys int64,
 	args roachpb.ReverseScanRequest,
-) (roachpb.ReverseScanResponse, *roachpb.Span, int64, EvalResult, error) {
+) (roachpb.ReverseScanResponse, EvalResult, error) {
 	rows, resumeSpan, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxKeys,
 		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	return roachpb.ReverseScanResponse{Rows: rows}, resumeSpan, int64(len(rows)), intentsToEvalResult(intents, &args), err
+	return roachpb.ReverseScanResponse{
+		ResponseHeader: roachpb.ResponseHeader{
+			NumKeys:    int64(len(rows)),
+			ResumeSpan: resumeSpan,
+		},
+		Rows: rows,
+	}, intentsToEvalResult(intents, &args), err
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
