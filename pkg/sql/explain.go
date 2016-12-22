@@ -79,13 +79,15 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		} else if strings.EqualFold(opt, "QUALIFY") {
 			explainer.qualifyNames = true
 		} else if strings.EqualFold(opt, "VERBOSE") {
-			// VERBOSE shows expression fields.
+			// VERBOSE implies EXPRS.
 			explainer.showExprs = true
 			// VERBOSE implies QUALIFY.
 			explainer.qualifyNames = true
 			// VERBOSE implies METADATA.
 			explainer.showSelectTop = true
 			explainer.showMetadata = true
+		} else if strings.EqualFold(opt, "EXPRS") {
+			explainer.showExprs = true
 		} else if strings.EqualFold(opt, "NOEXPAND") {
 			expanded = false
 		} else if strings.EqualFold(opt, "NONORMALIZE") {
