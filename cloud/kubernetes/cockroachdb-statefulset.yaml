@@ -58,6 +58,8 @@ apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
   name: cockroachdb-budget
+  labels:
+    app: cockroachdb
 spec:
   selector:
     matchLabels:
@@ -105,6 +107,7 @@ spec:
             {
                 "name": "bootstrap",
                 "image": "cockroachdb/cockroach-k8s-init:0.1",
+                "imagePullPolicy": "IfNotPresent",
                 "args": [
                   "-on-start=/on-start.sh",
                   "-service=cockroachdb"
