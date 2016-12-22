@@ -17,9 +17,6 @@
 package sql
 
 import (
-	"bytes"
-	"fmt"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -174,24 +171,6 @@ func (*splitNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (*splitNode) SetLimitHint(_ int64, _ bool) {}
 func (*splitNode) setNeededColumns(_ []bool)    {}
 func (*splitNode) MarkDebug(_ explainMode)      {}
-
-func (n *splitNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	var buf bytes.Buffer
-	for i, e := range n.exprs {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		e.Format(&buf, parser.FmtSimple)
-		children = n.p.collectSubqueryPlans(e, children)
-	}
-	return "split", buf.String(), children
-}
-
-func (n *splitNode) explainExprs(regTypes func(string, parser.Expr)) {
-	for i, expr := range n.exprs {
-		regTypes(fmt.Sprintf("expr %d", i), expr)
-	}
-}
 
 func (n *splitNode) DebugValues() debugValues {
 	return debugValues{

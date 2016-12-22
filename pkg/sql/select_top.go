@@ -35,31 +35,6 @@ type selectTopNode struct {
 	plan planNode
 }
 
-func (n *selectTopNode) explainExprs(f func(string, parser.Expr)) {
-	if n.plan == nil {
-		// The sub-nodes are not connected yet.
-		// Ask them for typing individually.
-		if n.limit != nil {
-			n.limit.explainExprs(f)
-		}
-		if n.distinct != nil {
-			n.distinct.explainExprs(f)
-		}
-		if n.sort != nil {
-			n.sort.explainExprs(f)
-		}
-		if n.window != nil {
-			n.window.explainExprs(f)
-		}
-		if n.group != nil {
-			n.group.explainExprs(f)
-		}
-
-		// The source is always reported as sub-plan by ExplainPlan,
-		// so it will explain its own types.
-	}
-}
-
 func (n *selectTopNode) SetLimitHint(numRows int64, soft bool) {
 	n.plan.SetLimitHint(numRows, soft)
 }
@@ -118,38 +93,6 @@ func (n *selectTopNode) expandPlan() error {
 	return nil
 }
 
-func (n *selectTopNode) ExplainPlan(v bool) (name, description string, subplans []planNode) {
-	if n.plan != nil {
-		subplans = []planNode{n.plan}
-	} else {
-		// We are not connected yet, but we may still be interested in the
-		// sub-query plans. Get them.
-		subplans = []planNode{}
-		if n.limit != nil {
-			_, _, plans := n.limit.ExplainPlan(false)
-			subplans = append(subplans, plans[1:]...)
-		}
-		if n.distinct != nil {
-			_, _, plans := n.distinct.ExplainPlan(false)
-			subplans = append(subplans, plans[1:]...)
-		}
-		if n.sort != nil {
-			_, _, plans := n.sort.ExplainPlan(false)
-			subplans = append(subplans, plans[1:]...)
-		}
-		if n.window != nil {
-			_, _, plans := n.window.ExplainPlan(false)
-			subplans = append(subplans, plans[1:]...)
-		}
-		if n.group != nil {
-			_, _, plans := n.group.ExplainPlan(false)
-			subplans = append(subplans, plans[1:]...)
-		}
-		subplans = append(subplans, n.source)
-	}
-	return "select", "", subplans
-}
-
 func (n *selectTopNode) Columns() ResultColumns {
 	// sort, window, group and source may have different ideas about the
 	// result columns. Ask them in turn.
@@ -168,6 +111,15 @@ func (n *selectTopNode) Columns() ResultColumns {
 
 func (n *selectTopNode) Ordering() orderingInfo {
 	if n.plan == nil {
+		if n.sort != nil {
+			return n.sort.Ordering()
+		}
+		if n.window != nil {
+			return n.window.Ordering()
+		}
+		if n.group != nil {
+			return n.group.Ordering()
+		}
 		return n.source.Ordering()
 	}
 	return n.plan.Ordering()
