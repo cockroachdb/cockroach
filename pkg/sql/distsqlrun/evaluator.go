@@ -79,9 +79,9 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 		if first {
 			first = false
 
-			types := make([]*sqlbase.ColumnType, len(row))
+			types := make([]sqlbase.ColumnType, len(row))
 			for i := range types {
-				types[i] = &row[i].Type
+				types[i] = row[i].Type
 			}
 			for i, expr := range ev.specExprs {
 				err := ev.exprs[i].init(expr, types, ev.flowCtx.evalCtx)

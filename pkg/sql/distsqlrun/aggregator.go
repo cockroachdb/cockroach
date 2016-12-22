@@ -88,7 +88,7 @@ func newAggregator(
 		groupCols:   make(columns, len(spec.GroupCols)),
 	}
 
-	inputTypes := make([]*sqlbase.ColumnType, len(spec.Exprs))
+	inputTypes := make([]sqlbase.ColumnType, len(spec.Exprs))
 	for i, expr := range spec.Exprs {
 		ag.inputCols[i] = expr.ColIdx
 		inputTypes[i] = spec.Types[expr.ColIdx]
@@ -103,7 +103,7 @@ func newAggregator(
 	eh := &exprHelper{types: inputTypes}
 	eh.vars = parser.MakeIndexedVarHelper(eh, len(eh.types))
 	for i, expr := range spec.Exprs {
-		aggConstructor, retType, err := GetAggregateInfo(expr.Func, *inputTypes[i])
+		aggConstructor, retType, err := GetAggregateInfo(expr.Func, inputTypes[i])
 		if err != nil {
 			return nil, err
 		}
