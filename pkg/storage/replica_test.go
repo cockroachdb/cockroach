@@ -6671,12 +6671,10 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 }
 
-// TestAmbiguousResultErrorOnReproposal verifies that when a batch
-// with EndTransaction(commit=true) is re-proposed, it will return
-// an AmbiguousResultError if it fails on the re-proposal. It also
-// verifies that EndTransaction(commit=false) will not return an
-// AmbiguousResultError.
-func TestAmbiguousResultErrorOnReproposal(t *testing.T) {
+// TestAmbiguousResultErrorOnRetry verifies that when a batch with
+// EndTransaction(commit=true) is retried, it will return an
+// AmbiguousResultError if the retry fails.
+func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cfg := TestStoreConfig(nil)
@@ -6689,6 +6687,15 @@ func TestAmbiguousResultErrorOnReproposal(t *testing.T) {
 	{
 		key := roachpb.Key("put1")
 		put1 := putArgs(key, []byte("value1"))
+		// We're batching two put's to introduce uncertainty in
+		// replica.executeBatch() about whether WriteTooOldError's happened
+		// because of retries/reproposals or because of other writes in the same
+		// batch. If we didn't do this, the retry that this test performs would
+		// result in a WriteTooOldError.
+		// NOTE(andrei): I don't quite understand what we're testing with the
+		// retries of non-transactional batches. There's no "replay protection" for
+		// non-transactional batches, but the results of their retries are
+		// unreliable (you can easily get a WriteTooOldError).
 		put2 := putArgs(key, []byte("value2"))
 		baPuts.Add(&put1, &put2)
 	}
@@ -6718,34 +6725,64 @@ func TestAmbiguousResultErrorOnReproposal(t *testing.T) {
 					// protection for non-transactional commands, though this may
 					// change in the future.
 					return errors.Wrap(pErr.GoError(),
-						"expected success on re-proposal of puts-only batch")
+						"expected success on retry of puts-only batch")
 				}
 				return nil
 			},
 		},
 		{
+			// This test checks two things:
+			// - that we can do retries of 1pc batches
+			// - that they fail ambiguously if the original command had been applied
 			name: "1PC-txn",
 			ba:   ba1PCTxn,
 			checkFn: func(pErr *roachpb.Error) error {
-				// The full one phase transaction may either succeed or fail,
-				// depending on whether the re-proposed command finishes first
-				// or the original command finishes first. Both happen in this
-				// unittest.
+				// This unittest verifies that the timestamp cache isn't updated before
+				// sending the retry. Otherwise, the retry would receive an
+				// AmbiguousResultError, but it would be caused by a
+				// TransactionReplayError instead of a WriteTooOldError. This is because
+				// the EndTxn updates the timestamp cache and the subsequent begin (part
+				// of the retried) checks it. Before the fix in #10639, this
+				// retry of 1pc batches would always get TransactionReplayError (wrapped
+				// in an AmbiguousResultError), which would have been too pessimistic -
+				// unnecessary in case the original command was never actually applied.
 				//
-				// This unittest verifies that the timestamp cache isn't
-				// updated on the first retry. Otherwise, we'd receive a
-				// TransactionReplayError instead of AmbiguousResultError.
-				// This is because it's composed of an entire txn including
-				// begin & end. The end txn updates timestamp cache and the
-				// subsequent begin checks it. Before the fix in #10639, this
-				// would result in a spurious TransactionReplayError.
-				if pErr == nil {
-					return nil
-				}
+				// The one phase transaction will succeed because the original command
+				// executes first. However, the response the client gets corresponds to
+				// the retried one, and that one fails because of MVCC protections.
 				detail := pErr.GetDetail()
-				if _, ok := detail.(*roachpb.AmbiguousResultError); !ok {
-					return errors.Wrapf(detail, "unexpected error %T", detail)
+				are, ok := detail.(*roachpb.AmbiguousResultError)
+				if !ok {
+					return errors.Wrapf(detail, "expected AmbiguousResultError, got error %T", detail)
 				}
+				detail = are.WrappedErr.GetDetail()
+				if _, ok := detail.(*roachpb.WriteTooOldError); !ok {
+					return errors.Wrapf(detail,
+						"expected the AmbiguousResultError to be caused by a WriteTooOldError, "+
+							"got %T", detail)
+				}
+
+				// Test that the original proposal succeeded by checking the effects of
+				// the transaction.
+				key := roachpb.Key("1pc")
+				gArgs := getArgs(key)
+				var resp roachpb.Response
+				resp, pErr = tc.SendWrappedWith(roachpb.Header{}, &gArgs)
+				if pErr != nil {
+					return errors.Errorf("could not get data: %s", pErr)
+				}
+				v := resp.(*roachpb.GetResponse).Value
+				if v == nil {
+					return errors.Errorf("no value")
+				}
+				val, err := v.GetBytes()
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(val, []byte("value")) {
+					return errors.Errorf("expected \"value\", got: %s", val)
+				}
+
 				return nil
 			},
 		},
@@ -6755,22 +6792,35 @@ func TestAmbiguousResultErrorOnReproposal(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			// Install a proposal function which delays the proposal.
+			// Install a proposal function which starts a retry before doing the
+			// proposal.
 			tc.repl.mu.Lock()
 			tc.repl.mu.submitProposalFn = func(p *ProposalData) error {
-				// Submit the proposal with a delay, waiting for proceed channel.
 				go func() {
 					// Manually refresh proposals.
+
+					// Holding on to this mutex until after the
+					// defaultSubmitProposalLocked below guarantees that the "original"
+					// command will be proposed and applied before the retry.
 					tc.repl.mu.Lock()
 					// We are going to cheat here and increase the lease applied
-					// index to force the sort of re-proposal we're after.
+					// index to force the sort of re-proposal we're after (we want the
+					// command to be re-evaluated and re-proposed).
 					origLeaseAppliedIndex := tc.repl.mu.state.LeaseAppliedIndex
 					tc.repl.mu.state.LeaseAppliedIndex += 10
-					tc.repl.refreshProposalsLocked(tc.store.cfg.RaftElectionTimeoutTicks, reasonTicks)
+					// We need to use reasonSnapshotApplied here because that's the reason
+					// that causes retries instead of reproposals, and moreover makes the
+					// errors of retries ambiguous. It also allows the original command to
+					// still be applied, whereas other reasons assume that won't be the
+					// case.
+					tc.repl.refreshProposalsLocked(0, reasonSnapshotApplied)
 					tc.repl.mu.state.LeaseAppliedIndex = origLeaseAppliedIndex
 					// Unset the custom proposal function so re-proposal proceeds
 					// without blocking.
 					tc.repl.mu.submitProposalFn = nil
+					// We've just told the "client" to retry the request, but we still
+					// want this "original" command to be proposed. Moreover, the test
+					// relies on this original succeeding.
 					errCh <- defaultSubmitProposalLocked(tc.repl, p)
 					tc.repl.mu.Unlock()
 				}()

@@ -186,6 +186,9 @@ message SendError {
 // the final result is ambiguous.
 message AmbiguousResultError {
   optional string message = 1 [(gogoproto.nullable) = false];
+  // This can be set to give extra information about which error was converted
+  // into an AmbiguousResultError. Useful for tests.
+  optional Error wrapped_err = 2;
 }
 
 // A RaftGroupDeletedError indicates a raft group has been deleted for
