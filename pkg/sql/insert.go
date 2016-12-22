@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -578,52 +577,6 @@ func (n *insertNode) DebugValues() debugValues {
 
 func (n *insertNode) Ordering() orderingInfo {
 	return n.run.rows.Ordering()
-}
-
-func (n *insertNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	var buf bytes.Buffer
-	if v {
-		fmt.Fprintf(&buf, "into %s (", n.tableDesc.Name)
-		for i, col := range n.insertCols {
-			if i > 0 {
-				fmt.Fprintf(&buf, ", ")
-			}
-			fmt.Fprintf(&buf, "%s", col.Name)
-		}
-		fmt.Fprintf(&buf, ") returning (")
-		for i, col := range n.rh.columns {
-			if i > 0 {
-				fmt.Fprintf(&buf, ", ")
-			}
-			fmt.Fprintf(&buf, "%s", col.Name)
-		}
-		fmt.Fprintf(&buf, ")")
-	}
-
-	subplans := []planNode{n.run.rows}
-	for _, e := range n.defaultExprs {
-		subplans = n.p.collectSubqueryPlans(e, subplans)
-	}
-	for _, e := range n.checkHelper.exprs {
-		subplans = n.p.collectSubqueryPlans(e, subplans)
-	}
-	for _, e := range n.rh.exprs {
-		subplans = n.p.collectSubqueryPlans(e, subplans)
-	}
-	return "insert", buf.String(), subplans
-}
-
-func (n *insertNode) explainExprs(regTypes func(string, parser.Expr)) {
-	for i, dexpr := range n.defaultExprs {
-		regTypes(fmt.Sprintf("default %d", i), dexpr)
-	}
-	for i, cexpr := range n.checkHelper.exprs {
-		regTypes(fmt.Sprintf("check %d", i), cexpr)
-	}
-	cols := n.rh.columns
-	for i, rexpr := range n.rh.exprs {
-		regTypes(fmt.Sprintf("returning %s", cols[i].Name), rexpr)
-	}
 }
 
 func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}

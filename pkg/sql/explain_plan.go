@@ -56,11 +56,6 @@ type explainer struct {
 	// level is the current depth in the tree of planNodes.
 	level int
 
-	// prefix is the whitespace inserted in front of the description to
-	// clarify the hierarchical structure of the plans when doIndent is
-	// true.
-	prefix string
-
 	// doIndent indicates whether the output should be clarified
 	// with leading white spaces.
 	doIndent bool
@@ -97,6 +92,7 @@ func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan p
 		explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames)
 
 	node := &explainPlanNode{
+		p:         p,
 		explainer: explainer,
 		expanded:  expanded,
 		plan:      plan,
@@ -109,7 +105,7 @@ var emptyString = parser.NewDString("")
 
 // populateExplain invokes explain() with a makeRow method
 // which populates a valuesNode.
-func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
+func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) error {
 	e.makeRow = func(level int, name, field, description string, plan planNode) {
 		if e.err != nil {
 			return
@@ -135,7 +131,8 @@ func (e *explainer) populateExplain(v *valuesNode, plan planNode) error {
 	}
 
 	e.err = nil
-	e.explain(plan)
+	visitPlan := planVisitor{p: p, observer: e}
+	visitPlan.visit(plan)
 	return e.err
 }
 
@@ -157,63 +154,63 @@ func planToString(plan planNode) string {
 			)
 		},
 	}
-	e.explain(plan)
+	v := planVisitor{p: makePlanner("planToString"), observer: &e}
+	v.visit(plan)
 	return buf.String()
 }
 
-// explain extract information from planNodes and produces the EXPLAIN
-// output via the makeRow callback in the explainer.
-func (e *explainer) explain(plan planNode) {
-	if e.err != nil {
-		return
-	}
-
-	name, description, children := plan.ExplainPlan(e.showMetadata)
-
-	if name == "select" && !e.showSelectTop {
-		e.explain(children[len(children)-1])
-		return
-	}
-
-	e.node(name, description, plan)
-
-	if e.showExprs {
-		plan.explainExprs(func(elt string, expr parser.Expr) {
-			if e.err != nil {
-				return
-			}
-			if expr != nil {
-				e.attr(name, elt, parser.AsStringWithFlags(expr, e.fmtFlags))
-			}
-		})
-	}
-
-	for _, child := range children {
-		e.subnode(child)
+// expr implements the planObserver interface.
+func (e *explainer) expr(nodeName, fieldName string, n int, expr parser.Expr) {
+	if e.showExprs && expr != nil {
+		if nodeName == "join" {
+			qualifySave := e.fmtFlags.ShowTableAliases
+			e.fmtFlags.ShowTableAliases = true
+			defer func() { e.fmtFlags.ShowTableAliases = qualifySave }()
+		}
+		if n >= 0 {
+			fieldName = fmt.Sprintf("%s %d", fieldName, n)
+		}
+		e.attr(nodeName, fieldName,
+			parser.AsStringWithFlags(expr, e.fmtFlags))
 	}
 }
 
-func (e *explainer) node(name, desc string, plan planNode) {
+// node implements the planObserver interface.
+func (e *explainer) node(name string, plan planNode) bool {
+	if !e.showSelectTop && name == "select" {
+		return true
+	}
+	if !e.showExprs && name == "render/filter" {
+		return true
+	}
+
+	desc := ""
 	if e.doIndent {
-		desc = fmt.Sprintf("%s-> %s %s", e.prefix, name, desc)
-		e.prefix += "   "
+		desc = fmt.Sprintf("%*s-> %s", e.level*3, " ", name)
 	}
 	e.makeRow(e.level, name, "", desc, plan)
-}
 
-func (e *explainer) attr(name, t, v string) {
-	if e.doIndent {
-		v = fmt.Sprintf("%s%s", e.prefix, v)
-	}
-	e.makeRow(e.level, name, t, v, nil)
-}
-
-func (e *explainer) subnode(plan planNode) {
-	curPrefix := e.prefix
 	e.level++
-	e.explain(plan)
+	return true
+}
+
+// attr implements the planObserver interface.
+func (e *explainer) attr(nodeName, fieldName, attr string) {
+	if e.doIndent {
+		attr = fmt.Sprintf("%*s%s", e.level*3, " ", attr)
+	}
+	e.makeRow(e.level-1, "", fieldName, attr, nil)
+}
+
+// leave implements the planObserver interface.
+func (e *explainer) leave(name string) {
+	if !e.showSelectTop && name == "select" {
+		return
+	}
+	if !e.showExprs && name == "render/filter" {
+		return
+	}
 	e.level--
-	e.prefix = curPrefix
 }
 
 // formatColumns converts a column signature for a data source /
@@ -259,21 +256,21 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 
 // explainPlanNode wraps the logic for EXPLAIN as a planNode.
 type explainPlanNode struct {
+	p         *planner
 	explainer explainer
 	expanded  bool
 	plan      planNode
 	results   *valuesNode
 }
 
-func (e *explainPlanNode) explainExprs(fn func(string, parser.Expr)) {}
-func (e *explainPlanNode) Next() (bool, error)                       { return e.results.Next() }
-func (e *explainPlanNode) Columns() ResultColumns                    { return e.results.Columns() }
-func (e *explainPlanNode) Ordering() orderingInfo                    { return e.results.Ordering() }
-func (e *explainPlanNode) Values() parser.DTuple                     { return e.results.Values() }
-func (e *explainPlanNode) DebugValues() debugValues                  { return debugValues{} }
-func (e *explainPlanNode) SetLimitHint(n int64, s bool)              { e.results.SetLimitHint(n, s) }
-func (e *explainPlanNode) setNeededColumns(_ []bool)                 {}
-func (e *explainPlanNode) MarkDebug(mode explainMode)                {}
+func (e *explainPlanNode) Next() (bool, error)          { return e.results.Next() }
+func (e *explainPlanNode) Columns() ResultColumns       { return e.results.Columns() }
+func (e *explainPlanNode) Ordering() orderingInfo       { return e.results.Ordering() }
+func (e *explainPlanNode) Values() parser.DTuple        { return e.results.Values() }
+func (e *explainPlanNode) DebugValues() debugValues     { return debugValues{} }
+func (e *explainPlanNode) SetLimitHint(n int64, s bool) { e.results.SetLimitHint(n, s) }
+func (e *explainPlanNode) setNeededColumns(_ []bool)    {}
+func (e *explainPlanNode) MarkDebug(mode explainMode)   {}
 func (e *explainPlanNode) expandPlan() error {
 	if e.expanded {
 		if err := e.plan.expandPlan(); err != nil {
@@ -287,12 +284,9 @@ func (e *explainPlanNode) expandPlan() error {
 	}
 	return nil
 }
-func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "explain", "plan", []planNode{e.plan}
-}
 
 func (e *explainPlanNode) Start() error {
-	return e.explainer.populateExplain(e.results, e.plan)
+	return e.p.populateExplain(&e.explainer, e.results, e.plan)
 }
 
 func (e *explainPlanNode) Close() {

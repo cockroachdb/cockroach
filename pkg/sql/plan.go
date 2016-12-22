@@ -70,11 +70,6 @@ var _ planMaker = &planner{}
 
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
-	// explainExprs reports the expressions involved in the node.
-	//
-	// Available after newPlan().
-	explainExprs(explainFn func(elem string, desc parser.Expr))
-
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.
 	//
@@ -114,11 +109,6 @@ type planNode interface {
 	//
 	// Available after newPlan().
 	expandPlan() error
-
-	// ExplainPlan returns a name and description and a list of child nodes.
-	//
-	// Available after expandPlan() (or makePlan).
-	ExplainPlan(verbose bool) (name, description string, children []planNode)
 
 	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the

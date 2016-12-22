@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -306,39 +305,6 @@ func (n *valuesNode) InitMaxHeap() {
 func (n *valuesNode) InitMinHeap() {
 	n.invertSorting = false
 	heap.Init(n)
-}
-
-func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	name = "values"
-	suffix := "not yet populated"
-	if n.rows != nil {
-		suffix = fmt.Sprintf("%d row%s",
-			n.rows.Len(), util.Pluralize(int64(n.rows.Len())))
-	} else if n.tuples != nil {
-		suffix = fmt.Sprintf("%d row%s",
-			len(n.tuples), util.Pluralize(int64(len(n.tuples))))
-	}
-	description = fmt.Sprintf("%d column%s, %s",
-		len(n.columns), util.Pluralize(int64(len(n.columns))), suffix)
-
-	var subplans []planNode
-	for _, tuple := range n.tuples {
-		for _, expr := range tuple {
-			subplans = n.p.collectSubqueryPlans(expr, subplans)
-		}
-	}
-
-	return name, description, subplans
-}
-
-func (n *valuesNode) explainExprs(regTypes func(string, parser.Expr)) {
-	if n.n != nil {
-		for i, tuple := range n.tuples {
-			for j, expr := range tuple {
-				regTypes(fmt.Sprintf("row %d, expr %d", i, j), expr)
-			}
-		}
-	}
 }
 
 func (*valuesNode) SetLimitHint(_ int64, _ bool) {}

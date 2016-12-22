@@ -202,12 +202,6 @@ func (n *explainTraceNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (n *explainTraceNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	return "explain", "trace", []planNode{n.plan}
-}
-
-func (n *explainTraceNode) explainExprs(fn func(string, parser.Expr)) {}
-
 func (n *explainTraceNode) Values() parser.DTuple {
 	return n.rows[0]
 }

@@ -210,19 +210,15 @@ func (n *dropDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *dropDatabaseNode) Next() (bool, error)                      { return false, nil }
-func (n *dropDatabaseNode) Close()                                   {}
-func (n *dropDatabaseNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *dropDatabaseNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *dropDatabaseNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *dropDatabaseNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *dropDatabaseNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *dropDatabaseNode) setNeededColumns(_ []bool)                {}
-func (n *dropDatabaseNode) MarkDebug(mode explainMode)               {}
-func (n *dropDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "drop database", "", nil
-}
+func (n *dropDatabaseNode) Next() (bool, error)          { return false, nil }
+func (n *dropDatabaseNode) Close()                       {}
+func (n *dropDatabaseNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *dropDatabaseNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *dropDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *dropDatabaseNode) DebugValues() debugValues     { return debugValues{} }
+func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool) {}
+func (n *dropDatabaseNode) setNeededColumns(_ []bool)    {}
+func (n *dropDatabaseNode) MarkDebug(mode explainMode)   {}
 
 type dropIndexNode struct {
 	p        *planner
@@ -391,19 +387,15 @@ func (n *dropIndexNode) Start() error {
 	return nil
 }
 
-func (n *dropIndexNode) Next() (bool, error)                      { return false, nil }
-func (n *dropIndexNode) Close()                                   {}
-func (n *dropIndexNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *dropIndexNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *dropIndexNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *dropIndexNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *dropIndexNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *dropIndexNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *dropIndexNode) setNeededColumns(_ []bool)                {}
-func (n *dropIndexNode) MarkDebug(mode explainMode)               {}
-func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "drop index", "", nil
-}
+func (n *dropIndexNode) Next() (bool, error)          { return false, nil }
+func (n *dropIndexNode) Close()                       {}
+func (n *dropIndexNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *dropIndexNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *dropIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *dropIndexNode) DebugValues() debugValues     { return debugValues{} }
+func (n *dropIndexNode) SetLimitHint(_ int64, _ bool) {}
+func (n *dropIndexNode) setNeededColumns(_ []bool)    {}
+func (n *dropIndexNode) MarkDebug(mode explainMode)   {}
 
 type dropViewNode struct {
 	p  *planner
@@ -508,19 +500,15 @@ func (n *dropViewNode) Start() error {
 	return nil
 }
 
-func (n *dropViewNode) Next() (bool, error)                      { return false, nil }
-func (n *dropViewNode) Close()                                   {}
-func (n *dropViewNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *dropViewNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *dropViewNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *dropViewNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *dropViewNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *dropViewNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *dropViewNode) setNeededColumns(_ []bool)                {}
-func (n *dropViewNode) MarkDebug(mode explainMode)               {}
-func (n *dropViewNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "drop view", "", nil
-}
+func (n *dropViewNode) Next() (bool, error)          { return false, nil }
+func (n *dropViewNode) Close()                       {}
+func (n *dropViewNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *dropViewNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *dropViewNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *dropViewNode) DebugValues() debugValues     { return debugValues{} }
+func (n *dropViewNode) SetLimitHint(_ int64, _ bool) {}
+func (n *dropViewNode) setNeededColumns(_ []bool)    {}
+func (n *dropViewNode) MarkDebug(mode explainMode)   {}
 
 type dropTableNode struct {
 	p  *planner
@@ -737,19 +725,15 @@ func (n *dropTableNode) Start() error {
 	return nil
 }
 
-func (n *dropTableNode) Next() (bool, error)                      { return false, nil }
-func (n *dropTableNode) Close()                                   {}
-func (n *dropTableNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *dropTableNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *dropTableNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *dropTableNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *dropTableNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *dropTableNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *dropTableNode) setNeededColumns(_ []bool)                {}
-func (n *dropTableNode) MarkDebug(mode explainMode)               {}
-func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "drop table", "", nil
-}
+func (n *dropTableNode) Next() (bool, error)          { return false, nil }
+func (n *dropTableNode) Close()                       {}
+func (n *dropTableNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *dropTableNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *dropTableNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *dropTableNode) DebugValues() debugValues     { return debugValues{} }
+func (n *dropTableNode) SetLimitHint(_ int64, _ bool) {}
+func (n *dropTableNode) setNeededColumns(_ []bool)    {}
+func (n *dropTableNode) MarkDebug(mode explainMode)   {}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE

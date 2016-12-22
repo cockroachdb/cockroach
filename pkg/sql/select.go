@@ -177,55 +177,6 @@ func (s *selectNode) Next() (bool, error) {
 	}
 }
 
-func (s *selectNode) explainExprs(regTypes func(string, parser.Expr)) {
-	regTypes("filter", s.filter)
-	for i, rexpr := range s.render {
-		regTypes(fmt.Sprintf("render %d", i), rexpr)
-	}
-}
-
-func (s *selectNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	subplans := []planNode{s.source.plan}
-
-	subplans = s.planner.collectSubqueryPlans(s.filter, subplans)
-
-	for _, e := range s.render {
-		subplans = s.planner.collectSubqueryPlans(e, subplans)
-	}
-
-	if len(subplans) == 1 && !v {
-		return s.source.plan.ExplainPlan(v)
-	}
-
-	var buf bytes.Buffer
-
-	buf.WriteString("from (")
-	for i, col := range s.source.info.sourceColumns {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		if col.hidden {
-			buf.WriteByte('*')
-		}
-		alias, found := s.source.info.findTableAlias(i)
-		if found {
-			parser.FormatNode(&buf, parser.FmtSimple, &alias)
-		} else {
-			buf.WriteByte('_')
-		}
-		buf.WriteByte('.')
-		parser.FormatNode(&buf, parser.FmtSimple, parser.Name(col.Name))
-	}
-	buf.WriteByte(')')
-
-	name = "render/filter"
-	if s.explain != explainNone {
-		name = fmt.Sprintf("%s(%s)", name, explainStrings[s.explain])
-	}
-
-	return name, buf.String(), subplans
-}
-
 func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
 }

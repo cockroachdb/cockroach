@@ -488,11 +488,17 @@ statement ok
 INSERT INTO select_t VALUES(1, 2),(2,3),(3,4)
 
 query ITTT
-EXPLAIN (PLAN) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
+EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
 0  insert
-1  limit   count: 1
-2  scan    select_t@primary
+0                 into      insert_t(x, v)
+1  limit
+1                 count     1
+2  render/filter
+2                 render 0  x
+2                 render 1  v
+3  scan
+3                 table     select_t@primary
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -517,22 +523,28 @@ query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES(1,'AAA'),(2,'BBB') LIMIT 1
 ----
 0  insert
-1  limit   count: 1
-2  values  2 columns, 2 rows
+0          into           insert_t(x, v)
+1  limit
+2  values
+2          size           2 columns, 2 rows
 
 query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB')) LIMIT 1
 ----
 0  insert
-1  limit   count: 1
-2  values  2 columns, 2 rows
+0          into           insert_t(x, v)
+1  limit
+2  values
+2          size           2 columns, 2 rows
 
 query ITTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1)
 ----
 0  insert
-1  limit   count: 1
-2  values  2 columns, 2 rows
+0          into  insert_t(x, v)
+1  limit
+2  values
+2          size  2 columns, 2 rows
 
 statement error pq: multiple LIMIT clauses not allowed
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,'AAA'),(2,'BBB') LIMIT 1) LIMIT 1

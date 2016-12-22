@@ -136,19 +136,15 @@ func (n *createDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *createDatabaseNode) Next() (bool, error)                      { return false, nil }
-func (n *createDatabaseNode) Close()                                   {}
-func (n *createDatabaseNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *createDatabaseNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *createDatabaseNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *createDatabaseNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *createDatabaseNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *createDatabaseNode) setNeededColumns(_ []bool)                {}
-func (n *createDatabaseNode) MarkDebug(mode explainMode)               {}
-func (n *createDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "create database", "", nil
-}
+func (n *createDatabaseNode) Next() (bool, error)          { return false, nil }
+func (n *createDatabaseNode) Close()                       {}
+func (n *createDatabaseNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *createDatabaseNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *createDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *createDatabaseNode) DebugValues() debugValues     { return debugValues{} }
+func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool) {}
+func (n *createDatabaseNode) setNeededColumns(_ []bool)    {}
+func (n *createDatabaseNode) MarkDebug(mode explainMode)   {}
 
 type createIndexNode struct {
 	p         *planner
@@ -256,19 +252,15 @@ func (n *createIndexNode) Start() error {
 	return nil
 }
 
-func (n *createIndexNode) Next() (bool, error)                      { return false, nil }
-func (n *createIndexNode) Close()                                   {}
-func (n *createIndexNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *createIndexNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *createIndexNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *createIndexNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *createIndexNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *createIndexNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *createIndexNode) setNeededColumns(_ []bool)                {}
-func (n *createIndexNode) MarkDebug(mode explainMode)               {}
-func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "create index", "", nil
-}
+func (n *createIndexNode) Next() (bool, error)          { return false, nil }
+func (n *createIndexNode) Close()                       {}
+func (n *createIndexNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *createIndexNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *createIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *createIndexNode) DebugValues() debugValues     { return debugValues{} }
+func (n *createIndexNode) SetLimitHint(_ int64, _ bool) {}
+func (n *createIndexNode) setNeededColumns(_ []bool)    {}
+func (n *createIndexNode) MarkDebug(mode explainMode)   {}
 
 type createUserNode struct {
 	p        *planner
@@ -349,19 +341,15 @@ func (n *createUserNode) Start() error {
 	return nil
 }
 
-func (n *createUserNode) Next() (bool, error)                      { return false, nil }
-func (n *createUserNode) Close()                                   {}
-func (n *createUserNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *createUserNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *createUserNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *createUserNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *createUserNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *createUserNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *createUserNode) setNeededColumns(_ []bool)                {}
-func (n *createUserNode) MarkDebug(mode explainMode)               {}
-func (n *createUserNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "create user", "", nil
-}
+func (n *createUserNode) Next() (bool, error)          { return false, nil }
+func (n *createUserNode) Close()                       {}
+func (n *createUserNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *createUserNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *createUserNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *createUserNode) DebugValues() debugValues     { return debugValues{} }
+func (n *createUserNode) SetLimitHint(_ int64, _ bool) {}
+func (n *createUserNode) setNeededColumns(_ []bool)    {}
+func (n *createUserNode) MarkDebug(mode explainMode)   {}
 
 type createViewNode struct {
 	p           *planner
@@ -504,19 +492,15 @@ func (n *createViewNode) Close() {
 	n.sourcePlan = nil
 }
 
-func (n *createViewNode) expandPlan() error                        { return n.sourcePlan.expandPlan() }
-func (n *createViewNode) Next() (bool, error)                      { return false, nil }
-func (n *createViewNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *createViewNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *createViewNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *createViewNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *createViewNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *createViewNode) setNeededColumns(_ []bool)                {}
-func (n *createViewNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *createViewNode) MarkDebug(mode explainMode)               {}
-func (n *createViewNode) ExplainPlan(v bool) (string, string, []planNode) {
-	return "create view", "", nil
-}
+func (n *createViewNode) expandPlan() error            { return n.sourcePlan.expandPlan() }
+func (n *createViewNode) Next() (bool, error)          { return false, nil }
+func (n *createViewNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *createViewNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *createViewNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *createViewNode) DebugValues() debugValues     { return debugValues{} }
+func (n *createViewNode) setNeededColumns(_ []bool)    {}
+func (n *createViewNode) SetLimitHint(_ int64, _ bool) {}
+func (n *createViewNode) MarkDebug(mode explainMode)   {}
 
 type createTableNode struct {
 	p          *planner
@@ -739,21 +723,14 @@ func (n *createTableNode) Close() {
 	}
 }
 
-func (n *createTableNode) Next() (bool, error)                      { return false, nil }
-func (n *createTableNode) Columns() ResultColumns                   { return make(ResultColumns, 0) }
-func (n *createTableNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (n *createTableNode) Values() parser.DTuple                    { return parser.DTuple{} }
-func (n *createTableNode) DebugValues() debugValues                 { return debugValues{} }
-func (n *createTableNode) explainExprs(_ func(string, parser.Expr)) {}
-func (n *createTableNode) SetLimitHint(_ int64, _ bool)             {}
-func (n *createTableNode) setNeededColumns(_ []bool)                {}
-func (n *createTableNode) MarkDebug(mode explainMode)               {}
-func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
-	if n.n.As() {
-		return "create table", "create table as", []planNode{n.sourcePlan}
-	}
-	return "create table", "", nil
-}
+func (n *createTableNode) Next() (bool, error)          { return false, nil }
+func (n *createTableNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
+func (n *createTableNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (n *createTableNode) Values() parser.DTuple        { return parser.DTuple{} }
+func (n *createTableNode) DebugValues() debugValues     { return debugValues{} }
+func (n *createTableNode) SetLimitHint(_ int64, _ bool) {}
+func (n *createTableNode) setNeededColumns(_ []bool)    {}
+func (n *createTableNode) MarkDebug(mode explainMode)   {}
 
 type indexMatch bool
 
@@ -1155,7 +1132,7 @@ func (n *createViewNode) makeViewTableDesc(
 	}
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if planContainsStar(n.sourcePlan) {
+	if n.p.planContainsStar(n.sourcePlan) {
 		return desc, fmt.Errorf("views do not currently support * expressions")
 	}
 
@@ -1543,9 +1520,7 @@ func CreateTestTableDescriptor(
 func (n *createViewNode) resolveViewDependencies(
 	tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
-	// Add the necessary back-references to the descriptor for each referenced
-	// table / view.
-	populateViewBackrefs(n.sourcePlan, tbl, backrefs)
+	n.p.populateViewBackrefs(n.sourcePlan, tbl, backrefs)
 
 	// Also create the forward references in the new view's descriptor.
 	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
@@ -1554,9 +1529,27 @@ func (n *createViewNode) resolveViewDependencies(
 	}
 }
 
-func populateViewBackrefs(
-	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+// populateViewBackrefs adds back-references to the descriptor for each referenced
+// table / view in the plan.
+func (p *planner) populateViewBackrefs(
+	plan planNode,
+	tbl *sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
+	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
+	v := planVisitor{p: p, observer: b}
+	v.visit(plan)
+}
+
+type backrefCollector struct {
+	p        *planner
+	tbl      *sqlbase.TableDescriptor
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor
+}
+
+var _ planObserver = &backrefCollector{}
+
+func (b *backrefCollector) node(_ string, plan planNode) bool {
 	// I was initially concerned about doing type assertions on every node in
 	// the tree, but it's actually faster than a string comparison on the name
 	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
@@ -1566,31 +1559,31 @@ func populateViewBackrefs(
 		// We instead prefer to track the dependency on the view itself rather
 		// than on its indirect dependencies.
 		if sel.source.info.viewDesc != nil {
-			populateViewBackrefFromViewDesc(sel.source.info.viewDesc, tbl, backrefs)
+			populateViewBackrefFromViewDesc(sel.source.info.viewDesc, b.tbl, b.backrefs)
 			// Return early to avoid processing the view's underlying query.
-			return
+			return false
 		}
 	} else if join, ok := plan.(*joinNode); ok {
 		if join.left.info.viewDesc != nil {
-			populateViewBackrefFromViewDesc(join.left.info.viewDesc, tbl, backrefs)
+			populateViewBackrefFromViewDesc(join.left.info.viewDesc, b.tbl, b.backrefs)
 		} else {
-			populateViewBackrefs(join.left.plan, tbl, backrefs)
+			b.p.populateViewBackrefs(join.left.plan, b.tbl, b.backrefs)
 		}
 		if join.right.info.viewDesc != nil {
-			populateViewBackrefFromViewDesc(join.right.info.viewDesc, tbl, backrefs)
+			populateViewBackrefFromViewDesc(join.right.info.viewDesc, b.tbl, b.backrefs)
 		} else {
-			populateViewBackrefs(join.right.plan, tbl, backrefs)
+			b.p.populateViewBackrefs(join.right.plan, b.tbl, b.backrefs)
 		}
 		// Return early to avoid re-processing the children.
-		return
+		return false
 	} else if scan, ok := plan.(*scanNode); ok {
-		desc, ok := backrefs[scan.desc.ID]
+		desc, ok := b.backrefs[scan.desc.ID]
 		if !ok {
 			desc = &scan.desc
-			backrefs[desc.ID] = desc
+			b.backrefs[desc.ID] = desc
 		}
 		ref := sqlbase.TableDescriptor_Reference{
-			ID:        tbl.ID,
+			ID:        b.tbl.ID,
 			ColumnIDs: make([]sqlbase.ColumnID, 0, len(scan.cols)),
 		}
 		if scan.specifiedIndex != nil {
@@ -1604,14 +1597,11 @@ func populateViewBackrefs(
 		}
 		desc.DependedOnBy = append(desc.DependedOnBy, ref)
 	}
-
-	// We have to use the verbose version of ExplainPlan because the non-verbose
-	// form skips over some layers of the tree (e.g. selectTopNode, selectNode).
-	_, _, children := plan.ExplainPlan(true)
-	for _, child := range children {
-		populateViewBackrefs(child, tbl, backrefs)
-	}
+	return true
 }
+func (b *backrefCollector) attr(_, _, _ string)                    {}
+func (b *backrefCollector) expr(_, _ string, _ int, _ parser.Expr) {}
+func (b *backrefCollector) leave(_ string)                         {}
 
 func populateViewBackrefFromViewDesc(
 	dependency *sqlbase.TableDescriptor,
@@ -1627,18 +1617,34 @@ func populateViewBackrefFromViewDesc(
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
 }
 
-func planContainsStar(plan planNode) bool {
+// planContainsStar returns true if one of the select nodes in the
+// plan contains a star expansion.
+func (p *planner) planContainsStar(plan planNode) bool {
+	s := &starDetector{}
+	v := planVisitor{p: p, observer: s}
+	v.visit(plan)
+	return s.foundStar
+}
+
+// starDetector supports planContainsStar().
+type starDetector struct {
+	foundStar bool
+}
+
+var _ planObserver = &starDetector{}
+
+func (s *starDetector) node(_ string, plan planNode) bool {
+	if s.foundStar {
+		return false
+	}
 	if sel, ok := plan.(*selectNode); ok {
 		if sel.isStar {
-			return true
+			s.foundStar = true
+			return false
 		}
 	}
-
-	_, _, children := plan.ExplainPlan(true)
-	for _, child := range children {
-		if containsStar := planContainsStar(child); containsStar {
-			return true
-		}
-	}
-	return false
+	return true
 }
+func (s *starDetector) attr(_, _, _ string)                    {}
+func (s *starDetector) expr(_, _ string, _ int, _ parser.Expr) {}
+func (s *starDetector) leave(_ string)                         {}
