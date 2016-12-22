@@ -65,11 +65,9 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
-	l, err := sc.ExtendLease(*lease)
-	if err != nil {
+	if err := sc.ExtendLease(lease); err != nil {
 		return err
 	}
-	*lease = l
 	return truncateAndDropTable(ctx, tableDesc, &sc.db)
 }
 
@@ -162,19 +160,20 @@ func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChange
 
 // ExtendLease for the current leaser. This needs to be called often while
 // doing a schema change to prevent more than one node attempting to apply a
-// schema change (which is still safe, but unwise).
+// schema change (which is still safe, but unwise). It updates existingLease
+// with the new lease.
 func (sc *SchemaChanger) ExtendLease(
-	existingLease sqlbase.TableDescriptor_SchemaChangeLease,
-) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
+	existingLease *sqlbase.TableDescriptor_SchemaChangeLease,
+) error {
 	// Check if there is still time on this lease.
 	minDesiredExpiration := timeutil.Now().Add(MinSchemaChangeLeaseDuration)
 	if time.Unix(0, existingLease.ExpirationTime).After(minDesiredExpiration) {
-		return existingLease, nil
+		return nil
 	}
 	// Update lease.
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		tableDesc, err := sc.findTableWithLease(txn, existingLease)
+	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		tableDesc, err := sc.findTableWithLease(txn, *existingLease)
 		if err != nil {
 			return err
 		}
@@ -183,8 +182,11 @@ func (sc *SchemaChanger) ExtendLease(
 		tableDesc.Lease = &lease
 		txn.SetSystemConfigTrigger()
 		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
-	})
-	return lease, err
+	}); err != nil {
+		return err
+	}
+	*existingLease = lease
+	return nil
 }
 
 func isSchemaChangeRetryError(err error) bool {
@@ -224,8 +226,7 @@ func (sc SchemaChanger) exec() error {
 	table := desc.GetTable()
 
 	if table.Dropped() {
-		lease, err = sc.ExtendLease(lease)
-		if err != nil {
+		if err := sc.ExtendLease(&lease); err != nil {
 			return err
 		}
 		// Wait for everybody to see the version with the deleted bit set. When
@@ -265,8 +266,7 @@ func (sc SchemaChanger) exec() error {
 	}
 
 	if table.Renamed() {
-		lease, err = sc.ExtendLease(lease)
-		if err != nil {
+		if err := sc.ExtendLease(&lease); err != nil {
 			return err
 		}
 		// Wait for everyone to see the version with the new name. When this
