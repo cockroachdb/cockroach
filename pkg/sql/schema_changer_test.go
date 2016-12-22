@@ -93,40 +93,37 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Extend the lease.
-	newLease, err := changer.ExtendLease(lease)
-	if err != nil {
+	oldLease := lease
+	if err := changer.ExtendLease(&lease); err != nil {
 		t.Fatal(err)
 	}
 
-	if !validExpirationTime(newLease.ExpirationTime) {
-		t.Fatalf("invalid expiration time: %s", time.Unix(0, newLease.ExpirationTime))
+	if !validExpirationTime(lease.ExpirationTime) {
+		t.Fatalf("invalid expiration time: %s", time.Unix(0, lease.ExpirationTime))
 	}
 
 	// The new lease is a brand new lease.
-	if newLease == lease {
+	if oldLease == lease {
 		t.Fatalf("lease was not extended: %v", lease)
 	}
 
 	// Extending an old lease fails.
-	if _, err := changer.ExtendLease(lease); !testutils.IsError(err, "table: .* has lease") {
+	if err := changer.ExtendLease(&oldLease); !testutils.IsError(err, "table: .* has lease") {
 		t.Fatal(err)
 	}
 
 	// Releasing an old lease fails.
-	err = changer.ReleaseLease(lease)
-	if err == nil {
+	if err := changer.ReleaseLease(oldLease); err == nil {
 		t.Fatal("releasing a old lease succeeded")
 	}
 
 	// Release lease.
-	err = changer.ReleaseLease(newLease)
-	if err != nil {
+	if err := changer.ReleaseLease(lease); err != nil {
 		t.Fatal(err)
 	}
 
 	// Extending the lease fails.
-	_, err = changer.ExtendLease(newLease)
-	if err == nil {
+	if err := changer.ExtendLease(&lease); err == nil {
 		t.Fatalf("was able to extend an already released lease: %d, %v", id, lease)
 	}
 
@@ -138,13 +135,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Set MinSchemaChangeLeaseDuration to not expire the lease.
 	csql.MinSchemaChangeLeaseDuration = minLeaseDuration
-	newLease, err = changer.ExtendLease(lease)
-	if err != nil {
+	oldLease = lease
+	if err := changer.ExtendLease(&lease); err != nil {
 		t.Fatal(err)
 	}
 	// The old lease is renewed.
-	if newLease != lease {
-		t.Fatalf("acquired new lease: %v, old lease: %v", newLease, lease)
+	if oldLease != lease {
+		t.Fatalf("acquired new lease: %v, old lease: %v", lease, oldLease)
 	}
 }
 

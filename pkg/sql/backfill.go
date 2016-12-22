@@ -135,11 +135,9 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 
 // runBackfill runs the backfill for the schema changer.
 func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChangeLease) error {
-	l, err := sc.ExtendLease(*lease)
-	if err != nil {
+	if err := sc.ExtendLease(lease); err != nil {
 		return err
 	}
-	*lease = l
 
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
@@ -153,6 +151,7 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		return err
 	}); err != nil {
@@ -332,11 +331,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
-			l, err := sc.ExtendLease(*lease)
-			if err != nil {
+			if err := sc.ExtendLease(lease); err != nil {
 				return err
 			}
-			*lease = l
 			if log.V(2) {
 				log.Infof(context.TODO(), "column schema change (%d, %d) at row: %d, span: %s",
 					sc.tableID, sc.mutationID, row, sp)
@@ -507,11 +504,9 @@ func (sc *SchemaChanger) truncateIndexes(
 		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
-			l, err := sc.ExtendLease(*lease)
-			if err != nil {
+			if err := sc.ExtendLease(lease); err != nil {
 				return err
 			}
-			*lease = l
 
 			resumeAt := resume
 			if log.V(2) {
@@ -584,11 +579,9 @@ func (sc *SchemaChanger) backfillIndexes(
 	lastCheckpoint := timeutil.Now()
 	for row, done := int64(0), false; !done; row += chunkSize {
 		// First extend the schema change lease.
-		l, err := sc.ExtendLease(*lease)
-		if err != nil {
+		if err := sc.ExtendLease(lease); err != nil {
 			return err
 		}
-		*lease = l
 		if log.V(2) {
 			log.Infof(context.TODO(), "index add (%d, %d) at row: %d, span: %s",
 				sc.tableID, sc.mutationID, row, sp)
