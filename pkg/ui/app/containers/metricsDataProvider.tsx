@@ -3,11 +3,13 @@ import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import _ from "lodash";
 import Long from "long";
+import moment from "moment";
 
 import * as protos from  "../js/protos";
 import { AdminUIState } from "../redux/state";
 import { queryMetrics, MetricsQuery } from "../redux/metrics";
-import { MetricProps, Metric, MetricsDataComponentProps } from "../components/graphs";
+import { MetricsDataComponentProps } from "../components/graphs";
+import { Metric, MetricProps } from "../components/metric";
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
 import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
@@ -89,6 +91,8 @@ interface MetricsDataProviderConnectProps {
  */
 interface MetricsDataProviderExplicitProps {
   id: string;
+  // If current is true, uses the current time instead of the global timewindow.
+  current?: boolean;
 }
 
 /**
@@ -103,21 +107,22 @@ type MetricsDataProviderProps = MetricsDataProviderConnectProps & MetricsDataPro
  * component; the metric set becomes responsible for querying the server
  * required by that LineGraph.
  *
- * <MetricsSet id="series-x-graph">
+ * <MetricsDataProvider id="series-x-graph">
  *  <LineGraph data="[]">
  *    <Axis label="Series X over time.">
- *      <Avg title="" name="series.x" sources="node.1">
+ *      <Metric title="" name="series.x" sources="node.1">
  *    </Axis>
  *  </LineGraph>
  * </MetricsSet>;
  *
- * Each MetricSet must have an ID field, which identifies this particular set to
- * the metrics query reducer. Currently queries metrics from the reducer will be
- * provided to the metric set via the react-redux connection.
+ * Each MetricsDataProvider must have an ID field, which identifies this
+ * particular set of metrics to the metrics query reducer. Currently queries
+ * metrics from the reducer will be provided to the metric set via the
+ * react-redux connection.
  *
- * Additionally, each MetricSet has a single, externally set TimeSpan property,
- * that determines the window over which time series should be queried. This
- * property is also currently intended to be set via react-redux.
+ * Additionally, each MetricsDataProvider has a single, externally set TimeSpan
+ * property, that determines the window over which time series should be
+ * queried. This property is also currently intended to be set via react-redux.
  */
 class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> {
   private queriesSelector = createSelector(
@@ -157,7 +162,8 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
       return;
     }
     let { metrics, queryMetrics, id } = props;
-    if (!metrics || !metrics.nextRequest || !_.isEqual(metrics.nextRequest, request)) {
+    let nextRequest = metrics && metrics.nextRequest;
+    if (!nextRequest || !_.isEqual(nextRequest, request)) {
       queryMetrics(id, request);
     }
   }
@@ -173,11 +179,11 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     this.refreshMetricsIfStale(props);
   }
 
-  getData(props: MetricsDataProviderProps) {
+  getData(props = this.props) {
     if (this.props.metrics) {
       let { data, request } = this.props.metrics;
       // Do not attach data if queries are not equivalent.
-      if (data && _.isEqual(request.queries, this.requestMessage(props).queries)) {
+      if (data && request && _.isEqual(request.queries, this.requestMessage(props).queries)) {
         return data;
       }
     }
@@ -209,16 +215,28 @@ let timeInfoSelector = createSelector(
     };
   });
 
+let current = () => {
+  let now = moment();
+  // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
+  now = moment(Math.floor(now.valueOf() / 10000) * 10000);
+  return {
+    start: Long.fromNumber(MilliToNano(now.clone().subtract(30, "s").valueOf())),
+    end: Long.fromNumber(MilliToNano(now.valueOf())),
+    sampleDuration: Long.fromNumber(MilliToNano(moment.duration(10, "s").asMilliseconds())),
+  };
+};
+
 // Connect the MetricsDataProvider class to redux state.
 let metricsDataProviderConnected = connect(
   (state: AdminUIState, ownProps: MetricsDataProviderExplicitProps) => {
+
     return {
       metrics: state.metrics.queries[ownProps.id],
-      timeInfo: timeInfoSelector(state),
+      timeInfo: ownProps.current ? current() : timeInfoSelector(state),
     };
   },
   {
-    queryMetrics: queryMetrics,
+    queryMetrics,
   }
 )(MetricsDataProvider);
 

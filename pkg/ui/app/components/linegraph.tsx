@@ -7,8 +7,9 @@ import _ from "lodash";
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";
 import {
-  MetricsDataComponentProps, Axis, AxisProps, Metric, MetricProps, ProcessDataPoints, seriesPalette,
+  MetricsDataComponentProps, Axis, AxisProps, ProcessDataPoints, seriesPalette,
 } from "./graphs";
+import { Metric, MetricProps } from "./metric";
 import Visualization from "./visualization";
 
 // Chart margins to match design.
@@ -162,5 +163,3 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     </Visualization>;
   }
 }
-
-export { Axis, Metric } from "./graphs";
