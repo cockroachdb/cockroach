@@ -195,6 +195,7 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     let child = React.Children.only(this.props.children);
     let dataProps: MetricsDataComponentProps = {
       data: this.getData(this.props),
+      timeInfo: this.props.timeInfo,
     };
     return React.cloneElement(child as React.ReactElement<MetricsDataComponentProps>, dataProps);
   }
