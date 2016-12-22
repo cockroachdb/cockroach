@@ -206,8 +206,7 @@ func (a *identAggregate) Result() Datum {
 }
 
 type arrayAggregate struct {
-	arr        *DArray
-	sawNonNull bool
+	arr *DArray
 }
 
 func newIntArrayAggregate() AggregateFunc {
@@ -220,9 +219,6 @@ func newStringArrayAggregate() AggregateFunc {
 
 // Add accumulates the passed datum into the array.
 func (a *arrayAggregate) Add(datum Datum) {
-	if datum != DNull {
-		a.sawNonNull = true
-	}
 	if err := a.arr.Append(datum); err != nil {
 		panic(fmt.Sprintf("error appending to array: %s", err))
 	}
@@ -230,7 +226,7 @@ func (a *arrayAggregate) Add(datum Datum) {
 
 // Result returns an array of all datums passed to Add.
 func (a *arrayAggregate) Result() Datum {
-	if a.sawNonNull {
+	if len(a.arr.Array) > 0 {
 		return a.arr
 	}
 	return DNull
