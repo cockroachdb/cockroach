@@ -45,31 +45,27 @@
   font-size 14px
   text-transform none
   letter-spacing 0
-  border-radius 4px
+  border-radius 4px !important
   padding 0 0
 
-.Select-menu
-  max-height 200px !important
+.Select-menu, .Select-menu-outer
+  max-height 300px !important
 
 .Select-value-label
   display block !important
+
+.Select-arrow
+  border-top-color $secondary-blue-3 !important
 
 .Select
   display inline-block
   width 100%
 
-.dropdown
-  &--side-arrows
-    padding 0
-    .Select
-      padding 1rem 20px !important
-    .Select-arrow-zone
-      display none
-  &--no-right-arrow
-    .Select__side-arrow:last-child
-      display none
-    .Select-value
-      padding 0 0 0 20px !important
+.dropdown--side-arrows
+  .Select
+    padding 1rem 20px !important
+  .Select-arrow-zone
+    display none
 
 // @stylint on
 
