@@ -31,10 +31,10 @@ import (
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 	}
 	null := sqlbase.EncDatum{Datum: parser.DNull}
 
@@ -46,12 +46,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -84,12 +84,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -127,12 +127,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -180,12 +180,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -221,13 +221,13 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
@@ -262,12 +262,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -303,12 +303,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -341,12 +341,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0, 1},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0, 1},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -377,12 +377,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0, 1},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0, 1},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -416,12 +416,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0, 1},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0, 1},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -455,12 +455,12 @@ func TestHashJoiner(t *testing.T) {
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0, 1},
-				LeftTypes: []*sqlbase.ColumnType{
+				LeftTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 				},
 				RightEqColumns: []uint32{0, 1},
-				RightTypes: []*sqlbase.ColumnType{
+				RightTypes: []sqlbase.ColumnType{
 					columnTypeInt,
 					columnTypeInt,
 					columnTypeInt,
@@ -497,7 +497,7 @@ func TestHashJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		hs := c.spec
-		inputs := []RowSource{&RowBuffer{rows: c.inputs[0]}, &RowBuffer{rows: c.inputs[1]}}
+		inputs := []RowSource{&RowBuffer{Rows: c.inputs[0]}, &RowBuffer{Rows: c.inputs[1]}}
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
@@ -508,10 +508,10 @@ func TestHashJoiner(t *testing.T) {
 
 		h.Run(nil)
 
-		if out.err != nil {
-			t.Fatal(out.err)
+		if out.Err != nil {
+			t.Fatal(out.Err)
 		}
-		if !out.closed {
+		if !out.Closed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 

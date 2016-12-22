@@ -169,16 +169,16 @@ func TestSorter(t *testing.T) {
 
 	for _, c := range testCases {
 		ss := c.spec
-		in := &RowBuffer{rows: c.input}
+		in := &RowBuffer{Rows: c.input}
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background()}
 
 		s := newSorter(&flowCtx, &ss, in, out)
 		s.Run(nil)
-		if out.err != nil {
-			t.Fatal(out.err)
+		if out.Err != nil {
+			t.Fatal(out.Err)
 		}
-		if !out.closed {
+		if !out.Closed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 
