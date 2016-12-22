@@ -456,7 +456,8 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest,
 		},
 		"HELP LEAST": {
-			baseTest.Results("least", "(anyelement...) -> anyelement", "Comparison", ""),
+			baseTest.Results("least", "(anyelement...) -> anyelement", "Comparison",
+				"Returns the element with the lowest value."),
 		},
 		"SELECT (SELECT 1+$1)": {
 			baseTest.SetArgs(1).Results(2),
