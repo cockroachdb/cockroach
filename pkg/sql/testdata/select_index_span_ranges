@@ -56,8 +56,11 @@ query ITTT
 EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
 ----
 0  index-join
-1  scan        t@c /80-
-1  scan        t@primary
+1  scan
+1              table  t@c
+1              spans  /80-
+1  scan
+1              table  t@primary
 
 query IIII
 SELECT * FROM t WHERE (c >= 80) ORDER BY c

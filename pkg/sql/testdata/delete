@@ -134,9 +134,11 @@ k v
 query ITTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-Level Type   Field Description
-0     delete
-1     scan         unindexed@primary
+Level  Type    Field  Description
+0      delete
+0              from   unindexed
+1      scan
+1              table  unindexed@primary
 
 query II colnames
 SELECT k, v FROM unindexed

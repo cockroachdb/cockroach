@@ -56,13 +56,12 @@ type hookFnNode struct {
 
 var _ planNode = &hookFnNode{}
 
-func (*hookFnNode) Ordering() orderingInfo                   { return orderingInfo{} }
-func (*hookFnNode) explainExprs(_ func(string, parser.Expr)) {}
-func (*hookFnNode) SetLimitHint(_ int64, _ bool)             {}
-func (*hookFnNode) MarkDebug(_ explainMode)                  {}
-func (*hookFnNode) expandPlan() error                        { return nil }
-func (*hookFnNode) Close()                                   {}
-func (*hookFnNode) setNeededColumns(_ []bool)                {}
+func (*hookFnNode) Ordering() orderingInfo       { return orderingInfo{} }
+func (*hookFnNode) SetLimitHint(_ int64, _ bool) {}
+func (*hookFnNode) MarkDebug(_ explainMode)      {}
+func (*hookFnNode) expandPlan() error            { return nil }
+func (*hookFnNode) Close()                       {}
+func (*hookFnNode) setNeededColumns(_ []bool)    {}
 
 func (f *hookFnNode) Start() error {
 	var err error
@@ -81,10 +80,6 @@ func (f *hookFnNode) Next() (bool, error) {
 	return f.resIdx < len(f.res), nil
 }
 func (f *hookFnNode) Values() parser.DTuple { return f.res[f.resIdx] }
-
-func (*hookFnNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	return "func", "-", nil
-}
 
 func (*hookFnNode) DebugValues() debugValues {
 	return debugValues{

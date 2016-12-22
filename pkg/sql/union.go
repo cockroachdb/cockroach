@@ -158,12 +158,6 @@ func (n *unionNode) SetLimitHint(numRows int64, soft bool) {
 
 func (n *unionNode) setNeededColumns(_ []bool) {}
 
-func (n *unionNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	return "union", "-", []planNode{n.left, n.right}
-}
-
-func (n *unionNode) explainExprs(_ func(string, parser.Expr)) {}
-
 func (n *unionNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
 		panic(fmt.Sprintf("unknown debug mode %d", mode))

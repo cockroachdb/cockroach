@@ -83,19 +83,19 @@ true
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY;
 ----
-0  select                                           (x, ordinality)  +x,unique
-1  render/filter  from (""."".x, ""."".ordinality)  (x, ordinality)  +x,unique
-2  ordinality                                       (x, ordinality)  +x,unique
-3  select                                           (x)              +x,unique
-4  render/filter  from (test.foo.x)                 (x)              +x,unique
-5  scan           foo@primary /"a\x00"-             (x)              +x,unique
+0  select                          (x, ordinality)  +x,unique
+1  ordinality                      (x, ordinality)  +x,unique
+2  select                          (x)              +x,unique
+3  scan                            (x)              +x,unique
+3              table  foo@primary
+3              spans  /"a\x00"-
 
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a';
 ----
-0  select                                              (x, ordinality)  +ordinality,unique
-1  render/filter  from (test.foo.x, ""."".ordinality)  (x, ordinality)  +ordinality,unique
-2  ordinality                                          (x, ordinality)  +ordinality,unique
-3  scan           foo@primary                          (x)
+0  select                          (x, ordinality)  +ordinality,unique
+1  ordinality                      (x, ordinality)  +ordinality,unique
+2  scan                            (x)
+2              table  foo@primary

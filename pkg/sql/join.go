@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"unsafe"
@@ -271,11 +270,6 @@ func (p *planner) makeJoin(
 	}, nil
 }
 
-// explainExprs implements the planNode interface.
-func (n *joinNode) explainExprs(regTypes func(string, parser.Expr)) {
-	regTypes("filter", n.pred.filter)
-}
-
 // SetLimitHint implements the planNode interface.
 func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
 
@@ -298,32 +292,6 @@ func (n *joinNode) expandPlan() error {
 		return err
 	}
 	return n.right.plan.expandPlan()
-}
-
-// ExplainPlan implements the planNode interface.
-func (n *joinNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	var buf bytes.Buffer
-	switch n.joinType {
-	case joinTypeInner:
-		jType := "INNER"
-		if len(n.pred.leftColNames) == 0 && n.pred.filter == nil {
-			jType = "CROSS"
-		}
-		buf.WriteString(jType)
-	case joinTypeLeftOuter:
-		buf.WriteString("LEFT OUTER")
-	case joinTypeRightOuter:
-		buf.WriteString("RIGHT OUTER")
-	case joinTypeFullOuter:
-		buf.WriteString("FULL OUTER")
-	}
-
-	n.pred.format(&buf)
-
-	subplans := []planNode{n.left.plan, n.right.plan}
-	subplans = n.planner.collectSubqueryPlans(n.pred.filter, subplans)
-
-	return "join", buf.String(), subplans
 }
 
 // Columns implements the planNode interface.

@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"container/heap"
 	"fmt"
 	"math"
@@ -318,36 +317,6 @@ func (n *sortNode) DebugValues() debugValues {
 	}
 	return n.debugVals
 }
-
-func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	if n.needSort {
-		name = "sort"
-	} else {
-		name = "nosort"
-	}
-
-	var buf bytes.Buffer
-	var columns ResultColumns
-	if n.plan != nil {
-		columns = n.plan.Columns()
-	}
-	// We use n.ordering here because n.Ordering() does not contain
-	// columns not present in the output.
-	order := orderingInfo{ordering: n.ordering}
-	order.Format(&buf, columns)
-
-	switch ss := n.sortStrategy.(type) {
-	case *iterativeSortStrategy:
-		buf.WriteString(" (iterative)")
-	case *sortTopKStrategy:
-		fmt.Fprintf(&buf, " (top %d)", ss.topK)
-	}
-	description = buf.String()
-
-	return name, description, []planNode{n.plan}
-}
-
-func (n *sortNode) explainExprs(_ func(string, parser.Expr)) {}
 
 func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	if !n.needSort {

@@ -121,11 +121,6 @@ func (n *valueGenerator) Close() {
 	}
 }
 
-func (n *valueGenerator) ExplainPlan(_ bool) (string, string, []planNode) {
-	subplans := n.p.collectSubqueryPlans(n.expr, nil)
-	return "generator", n.expr.String(), subplans
-}
-
 func (n *valueGenerator) DebugValues() debugValues {
 	row := n.gen.Values()
 	return debugValues{
@@ -134,10 +129,6 @@ func (n *valueGenerator) DebugValues() debugValues {
 		value:  row.String(),
 		output: debugValueRow,
 	}
-}
-
-func (n *valueGenerator) explainExprs(regTypes func(string, parser.Expr)) {
-	regTypes("generator", n.expr)
 }
 
 func (n *valueGenerator) Ordering() orderingInfo       { return orderingInfo{} }
