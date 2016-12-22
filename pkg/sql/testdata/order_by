@@ -347,6 +347,17 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 0 nosort +b,+c
 1 scan   abc@bc ALL
 
+query ITTTTT
+EXPLAIN(VERBOSE) SELECT a, b FROM abc ORDER BY b, c
+----
+0  select                                                                          (a, b)                 +b
+1  nosort                   +b,+c                                                  (a, b)                 +b
+2  render/filter            from (test.abc.a, test.abc.b, test.abc.c, test.abc.d)  (a, b, c)              +b,+c,unique
+2  render/filter  render 0  test.abc.a
+2  render/filter  render 1  test.abc.b
+2  render/filter  render 2  test.abc.c
+3  scan                     abc@bc ALL                                             (a, b, c, d[omitted])  +b,+c,unique
+
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
