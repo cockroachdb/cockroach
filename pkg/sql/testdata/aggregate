@@ -433,6 +433,11 @@ SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM kv
 ----
 {1,3,5,6,7,8} {a,a,NULL,b,b,A}
 
+query T
+SELECT array_agg(s) FROM kv WHERE s IS NULL
+----
+{NULL}
+
 query RRRR
 SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 ----
