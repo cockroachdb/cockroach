@@ -842,8 +842,13 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 //        therefore k just passes through unchanged.
 //    All other expressions simply pass through unchanged, for e.g. '1' in
 //    'SELECT 1 GROUP BY k'.
-func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan, n *groupNode) {
-	aggExprs := dsp.extractAggExprs(n.render)
+func (dsp *distSQLPlanner) addAggregators(
+	planCtx *planningCtx, p *physicalPlan, n *groupNode,
+) error {
+	aggExprs, err := dsp.extractAggExprs(n.render)
+	if err != nil {
+		return err
+	}
 	types := dsp.getTypesForPlanResult(p.planToStreamColMap, n.plan)
 	// The way our planNode construction currently orders columns between
 	// groupNode and its source is that the first len(n.funcs) columns are the
@@ -889,6 +894,7 @@ func (dsp *distSQLPlanner) addAggregators(planCtx *planningCtx, p *physicalPlan,
 	// Remove any columns that were only used for grouping.
 	p.planToStreamColMap = p.planToStreamColMap[:len(n.Columns())]
 	p.ordering = dsp.convertOrdering(n.desiredOrdering, p.planToStreamColMap)
+	return nil
 }
 
 func (dsp *distSQLPlanner) createPlanForIndexJoin(
@@ -1190,7 +1196,9 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 
 		if n.group != nil {
-			dsp.addAggregators(planCtx, &plan, n.group)
+			if err := dsp.addAggregators(planCtx, &plan, n.group); err != nil {
+				return physicalPlan{}, err
+			}
 		}
 
 		if n.sort != nil {

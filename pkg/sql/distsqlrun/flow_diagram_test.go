@@ -126,10 +126,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	expected := `
 		{"nodeNames":["1","2","3"],
 			"processors":[
-				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","0,1"]},"outputs":[]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","0,1"]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","0,1"]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["1+"]}],"core":{"title":"JoinReader","details":["primary@Table","2","@1+@2\u003c@3"]},"outputs":[]},
+				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","@1,@2"]},"outputs":[]},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","@1,@2"]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","@1,@2"]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","@3","@1+@2\u003c@3"]},"outputs":[]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 			],
 			"edges":[
@@ -316,14 +316,14 @@ func TestPlanDiagramJoin(t *testing.T) {
 		{
 			"nodeNames":["1","2","3","4"],
 			"processors":[
-				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","0,1,3"]},"outputs":[{"title":"by hash","details":["0,1"]}]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","0,1,3"]},"outputs":[{"title":"by hash","details":["0,1"]}]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(0,2)=right(2,1)","0,1,2,3,4,5","@1+@2\u003c@6"]},"outputs":[]},
+				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","@1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","@1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)","@1,@2,@3,@4,@5,@6","@1+@2\u003c@6"]},"outputs":[]},
 				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","0,1,3"]},"outputs":[{"title":"by hash","details":["0,1"]}]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","1,2,4"]},"outputs":[{"title":"by hash","details":["2,1"]}]},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(0,2)=right(2,1)","0,1,2,3,4,5","@1+@2\u003c@6"]},"outputs":[]},
-				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","1,2,4"]},"outputs":[{"title":"by hash","details":["2,1"]}]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","@1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","@2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)","@1,@2,@3,@4,@5,@6","@1+@2\u003c@6"]},"outputs":[]},
+				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","@2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 			],
 			"edges":[
