@@ -4044,6 +4044,8 @@ func (r *Replica) executeBatch(
 		if ba.Txn != nil {
 			ba.Txn.BatchIndex = int32(index)
 		}
+		// Note that responses are populated even when an error is returned.
+		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
 		curResult, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, maxKeys, args, reply)
 
