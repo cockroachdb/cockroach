@@ -64,12 +64,12 @@ EXPLAIN (TRACE, UNKNOWN) SELECT 1
 query ITTTTT
 EXPLAIN(METADATA) EXPLAIN(TRACE) SELECT 1
 ----
-0      select                                        ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
-1      sort                  +Timestamp,+"Span Pos"  ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +@10,+"Span Pos"
-2      explain               trace                   ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition, Timestamp)
-3      select                                        ("1")
-4      render/filter(debug)  from ()                 ("1")
-5      nullrow                                       ()
+0  select                                          ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +"Span Pos"
+1  sort                    +Timestamp,+"Span Pos"  ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)             +"Span Pos"
+2  explain                 trace                   ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition, Timestamp)
+3  select                                          ("1")
+4  render/filter(debug)    from ()                 ("1")
+5  nullrow                                         ()
 
 # Ensure that all relevant statement types can be explained
 query ITTT

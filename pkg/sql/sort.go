@@ -275,7 +275,14 @@ func (n *sortNode) Ordering() orderingInfo {
 	if n == nil {
 		return orderingInfo{}
 	}
-	return orderingInfo{exactMatchCols: nil, ordering: n.ordering}
+	// Remove the added columns that are not present in the result columns.
+	ordering := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
+	for _, o := range n.ordering {
+		if o.ColIdx < len(n.columns) {
+			ordering = append(ordering, o)
+		}
+	}
+	return orderingInfo{exactMatchCols: nil, ordering: ordering}
 }
 
 func (n *sortNode) Values() parser.DTuple {
@@ -311,7 +318,10 @@ func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []pla
 	if n.plan != nil {
 		columns = n.plan.Columns()
 	}
-	n.Ordering().Format(&buf, columns)
+	// We use n.ordering here because n.Ordering() does not contain
+	// columns not present in the output.
+	order := orderingInfo{ordering: n.ordering}
+	order.Format(&buf, columns)
 
 	switch ss := n.sortStrategy.(type) {
 	case *iterativeSortStrategy:
