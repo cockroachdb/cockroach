@@ -170,11 +170,12 @@ const (
 	// proposalIllegalLeaseIndex indicates the proposal failed to apply at
 	// a Lease index it was not legal for. The command should be retried.
 	proposalIllegalLeaseIndex
-	// proposalReproposed indicates the proposal was re-proposed, meaning
-	// it should be retried. However, the original proposal may have succeeded,
-	// so if the retry does not succeed, care must be taken to correctly inform
-	// the caller via an AmbiguousResultError.
-	proposalReproposed
+	// proposalShouldBeReevaluated indicates that it's ambiguous whether the command
+	// was committed (and possibly even applied) or not. The command should be
+	// retried. However, the original proposal may have succeeded, so if the retry
+	// does not succeed, care must be taken to correctly inform the caller via an
+	// AmbiguousResultError.
+	proposalAmbiguousShouldBeReevaluated
 	// proposalErrorReproposing indicates that re-proposal
 	// failed. Because the original proposal may have succeeded, an
 	// AmbiguousResultError must be returned. The command should not be
@@ -188,7 +189,7 @@ const (
 )
 
 // proposalResult indicates the result of a proposal. Exactly one of
-// the BatchResponse or the Error are set and represent the result of
+// Reply, Err and ProposalRetry is set, and it represent the result of
 // the proposal.
 type proposalResult struct {
 	Reply         *roachpb.BatchResponse
@@ -1873,7 +1874,7 @@ func (r *Replica) addWriteCmd(
 		switch retry {
 		case proposalIllegalLeaseIndex:
 			continue // retry
-		case proposalReproposed:
+		case proposalAmbiguousShouldBeReevaluated:
 			ambiguousResult = true
 			continue // retry
 		case proposalRangeNoLongerExists, proposalErrorReproposing:
@@ -1937,7 +1938,6 @@ func (r *Replica) addWriteCmd(
 // reorderings. For example, a batch of writes and a split could be in flight
 // in parallel without overlap, but if the writes hit the RHS, something must
 // prevent them from writing outside of the key range when they apply.
-// Similarly, a command proposed under lease A must not apply under lease B.
 //
 // NB: changing BatchRequest to a pointer here would have to be done cautiously
 // as this method makes the assumption that it operates on a shallow copy (see
@@ -2987,7 +2987,9 @@ const (
 
 // refreshProposalsLocked goes through the pending proposals, notifying
 // proposers whose proposals need to be retried, and resubmitting proposals
-// which were likely dropped (but may still apply at a legal Lease index).
+// which were likely dropped (but may still apply at a legal Lease index) - this
+// way ensuring that the proposer will eventually get a reply on the channel
+// it's waiting on.
 // mu must be held.
 //
 // refreshAtDelta specifies how old (in ticks) a command must be for it to be
@@ -2999,8 +3001,25 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
 		if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
-			// The command's designated lease index range was filled up, so send it
-			// back to the proposer for a retry.
+			// The command's designated lease index slot was filled up.  We got to
+			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
+			// this means that proposal p didn't commit, and it will sent back to the
+			// proposer for a retry - the request needs to be re-evaluated and the
+			// command re-proposed with a new MaxLeaseIndex.
+			//
+			// Except in the case when we're refreshing because of
+			// reasonSnapshotApplied - in that case we don't know if p or some other
+			// command filled the p.command.MaxLeaseIndex slot (i.e. p might have been
+			// applied, but we're not watching for every proposal when applying a
+			// snapshot, so nobody removed p from r.mu.proposals). In this ambiguous
+			// case, we'll also send the command back to the proposer for a retry, but
+			// the proposer needs to be aware that, if the retry fails, an
+			// AmbiguousResultError needs to be returned to the higher layers.
+			// We're relying on the fact that all commands are either idempotent
+			// (generally achieved through the wonders of MVCC) or, if they aren't,
+			// the 2nd application will somehow fail to apply (e.g. a command
+			// resulting from a RequestLease is not idempotent, but the 2nd
+			// application will be rejected by the OriginLease verification).
 			//
 			// Note that we can't use the commit index here (which is typically a
 			// little ahead), because a pending command is removed only as it
@@ -3008,12 +3027,22 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// but not yet applied.
 			delete(r.mu.proposals, idKey)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-			p.finish(proposalResult{ProposalRetry: proposalReproposed})
+			if reason == reasonSnapshotApplied {
+				p.finish(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
+			} else {
+				p.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
+			}
 			numShouldRetry++
 		} else if p.proposedAtTicks > r.mu.ticks-refreshAtDelta {
 			// The command was proposed too recently, don't bother reproprosing it
 			// yet.
 		} else {
+			// The proposal can still apply according to its MaxLeaseIndex. But it's
+			// likely that the proposal was dropped, so we're going to repropose it
+			// directly. Doing so does not introduce any ambiguity (we're reproposing
+			// with the same MaxLeaseIndex) and is cheaper than asking the proposer to
+			// re-evaluate and re-propose. Commands in this situation are frequent
+			// enough.
 			reproposals = append(reproposals, p)
 		}
 	}
