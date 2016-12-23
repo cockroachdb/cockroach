@@ -1195,7 +1195,7 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 	if len(s) == 0 {
 		return nil, makeParseError(s, TypeInterval, nil)
 	}
-
+	letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	if s[0] == 'P' {
 		// If it has a leading P we're most likely working with an iso8601
 		// interval.
@@ -1204,66 +1204,10 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else if ((s[0] != '-') && strings.ContainsRune(s, '-')) || (strings.ContainsRune(s, ' ') && strings.ContainsRune(s, ':')) {
-		// No leading by '-' but containing '-', for example '1-2'
-		// Or, Containing both space and ':', for example '3 4:05:06'
-		parts := strings.Split(s, " ")
-		dur, err := dateToDuration(parts[0])
-		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
-		}
-		switch len(parts) {
-		case 1:
-			return &DInterval{Duration: dur}, nil
-		case 2:
-			ret, err := ParseDInterval(parts[1])
-			if err != nil {
-				return nil, makeParseError(s, TypeInterval, err)
-			}
-			return &DInterval{Duration: ret.Add(dur)}, nil
-		default:
-			return nil, makeParseError(s, TypeInterval, fmt.Errorf("unknown format"))
-		}
-	} else if strings.ContainsRune(s, ' ') {
-		// If it has a space, then we're most likely a postgres string,
-		// as neither iso8601 nor golang permit spaces.
-		dur, err := postgresToDuration(s)
-		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
-		}
-		return &DInterval{Duration: dur}, nil
-	} else if strings.ContainsRune(s, ':') {
-		// Colon-separated intervals in Postgres are odd. They have day, hour,
-		// minute, or second parts depending on number of fields and if the field
-		// is an int or float.
-		//
-		// Instead of supporting unit changing based on int or float, use the
-		// following rules:
-		// - One field is S.
-		// - Two fields is H:M.
-		// - Three fields is H:M:S.
-		// - All fields support both int and float.
-		parts := strings.Split(s, ":")
-		var err error
-		var dur time.Duration
-		switch len(parts) {
-		case 2:
-			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m")
-		case 3:
-			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
-		default:
-			return nil, makeParseError(s, TypeInterval, fmt.Errorf("unknown format"))
-		}
-		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
-		}
-		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
-	}
-
-	// An interval that's just a number uses the field as its unit.
-	// All numbers are rounded down unless the precision is SECOND.
-	ret := &DInterval{Duration: duration.Duration{}}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
+	} else if f, err := strconv.ParseFloat(s, 64); err == nil {
+		// An interval that's just a number uses the field as its unit.
+		// All numbers are rounded down unless the precision is SECOND.
+		ret := &DInterval{Duration: duration.Duration{}}
 		switch field {
 		case year:
 			ret.Months = int64(f) * 12
@@ -1281,8 +1225,24 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 			panic(fmt.Sprintf("unhandled DurationField constant %d", field))
 		}
 		return ret, nil
+	} else if !strings.ContainsAny(s, letters) {
+		// If it has no letter, then we're most likely working with a SQL standard
+		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
+		dur, err := sqlStdToDuration(s)
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval, err)
+		}
+		return &DInterval{Duration: dur}, nil
+	} else if strings.ContainsRune(s, ' ') {
+		// If it has a space, then we're most likely a postgres string,
+		// as golang duration does not permit spaces and iso8601, SQL standard have been tested.
+		dur, err := postgresToDuration(s)
+		if err != nil {
+			return nil, makeParseError(s, TypeInterval, err)
+		}
+		return &DInterval{Duration: dur}, nil
 	}
-
+	ret := &DInterval{Duration: duration.Duration{}}
 	d, err := time.ParseDuration(s)
 	if err != nil {
 		return nil, makeParseError(s, TypeInterval, err)

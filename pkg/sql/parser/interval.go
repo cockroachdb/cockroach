@@ -106,61 +106,164 @@ var isoTimeUnitMap = map[string]duration.Duration{
 	"H": {Nanos: time.Hour.Nanoseconds()},
 }
 
-const errInvalidSQLDuration = "interval: invalid SQL stardard duration %s"
+const errInvalidSQLDuration = "invalid input syntax for type interval %s"
 
-// Parse dash separated date string to interval.
-// We parse sql stardard string to interval by two steps.
-// Parsing the date part and parsing the time part.
+type parsedIndex uint8
+
+const (
+	nothingParsed parsedIndex = iota
+	hmsParsed
+	dayParsed
+	yearMonthParsed
+)
+
+// Parses a SQL standard interval string.
 // See the following links for exampels:
 //  - http://www.postgresql.org/docs/9.1/static/datatype-datetime.html#DATATYPE-INTERVAL-INPUT-EXAMPLES
-func dateToDuration(s string) (duration.Duration, error) {
+//  - http://www.ibm.com/support/knowledgecenter/SSGU8G_12.1.0/com.ibm.esqlc.doc/ids_esqlc_0190.htm
+func sqlStdToDuration(s string) (duration.Duration, error) {
 	var d duration.Duration
-	if len(s) == 0 {
+	parts := strings.Fields(s)
+	if len(parts) > 3 || len(parts) == 0 {
 		return d, fmt.Errorf(errInvalidSQLDuration, s)
 	}
-	parts := strings.Split(s, "-")
-	var v int
-	var err error
-	switch len(parts) {
-	case 1:
-		v, err = strconv.Atoi(parts[0])
-		if err != nil {
+	// Index of which part(s) have been parsed for detecting bad order such as `HH:MM:SS Year-Month`.
+	parsedIdx := nothingParsed
+	// Both 'Day' and 'Second' can be float, but 'Day Second'::interval is invalid.
+	floatParsed := false
+	// Parsing backward makes it easy to distinguish 'Day' and 'Second' when encountering a single value.
+	//   `1-2 5 9:` and `1-2 5`
+	//        |              |
+	// day ---+              |
+	// second ---------------+
+	for i := len(parts) - 1; i >= 0; i-- {
+		// Parses leading sign
+		part := parts[i]
+		neg := false
+		// Consumes [-+]
+		if part != "" {
+			c := part[0]
+			if c == '-' || c == '+' {
+				neg = c == '-'
+				part = part[1:]
+			}
+		}
+		if part[0] == '-' {
 			return d, fmt.Errorf(errInvalidSQLDuration, s)
 		}
-		d = d.Add(duration.Duration{Days: 1}.Mul(int64(v)))
-	case 2:
-		v, err = strconv.Atoi(parts[0])
-		if err != nil {
-			return d, fmt.Errorf(errInvalidSQLDuration, s)
-		}
-		d = d.Add(duration.Duration{Months: 12}.Mul(int64(v)))
 
-		v, err = strconv.Atoi(parts[1])
-		if err != nil {
-			return d, fmt.Errorf(errInvalidSQLDuration, s)
-		}
-		d = d.Add(duration.Duration{Months: 1}.Mul(int64(v)))
-	case 3:
-		v, err = strconv.Atoi(parts[0])
-		if err != nil {
-			return d, fmt.Errorf(errInvalidSQLDuration, s)
-		}
-		d = d.Add(duration.Duration{Months: 12}.Mul(int64(v)))
+		if strings.ContainsRune(part, ':') {
+			// Try to parse as HH:MM:SS
+			if parsedIdx != nothingParsed {
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
+			parsedIdx = hmsParsed
+			// Colon-separated intervals in Postgres are odd. They have day, hour,
+			// minute, or second parts depending on number of fields and if the field
+			// is an int or float.
+			//
+			// Instead of supporting unit changing based on int or float, use the
+			// following rules:
+			// - One field is S.
+			// - Two fields is H:M.
+			// - Three fields is H:M:S.
+			// - All fields support both int and float.
+			hms := strings.Split(part, ":")
+			var err error
+			var dur time.Duration
+			// Support such as `HH:` and `HH:MM:` as postgres do. Set the last part to "0".
+			if hms[len(hms)-1] == "" {
+				hms[len(hms)-1] = "0"
+			}
+			switch len(hms) {
+			case 2:
+				toParse := hms[0] + "h" + hms[1] + "m"
+				if neg {
+					toParse = "-" + toParse
+				}
+				dur, err = time.ParseDuration(toParse)
+			case 3:
+				// Support such as `HH::SS` as postgres do. Set minute part to 0.
+				// TODO(hainesc): `:1:2 -> 1 hour 2 min` as postgres do?
+				if hms[1] == "" {
+					hms[1] = "0"
+				}
+				toParse := hms[0] + "h" + hms[1] + "m" + hms[2] + "s"
+				if neg {
+					toParse = "-" + toParse
+				}
+				dur, err = time.ParseDuration(toParse)
+			default:
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
+			if err != nil {
+				return d, makeParseError(part, TypeInterval, err)
+			}
+			d = d.Add(duration.Duration{Nanos: dur.Nanoseconds()})
+		} else if strings.ContainsRune(part, '-') {
+			// Try to parse as Year-Month.
+			if parsedIdx >= yearMonthParsed {
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
+			parsedIdx = yearMonthParsed
 
-		v, err = strconv.Atoi(parts[1])
-		if err != nil {
-			return d, fmt.Errorf(errInvalidSQLDuration, s)
-		}
-		d = d.Add(duration.Duration{Months: 1}.Mul(int64(v)))
+			yms := strings.Split(part, "-")
+			if len(yms) != 2 {
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
+			year, errYear := strconv.Atoi(yms[0])
+			var month int
+			var errMonth error
+			if yms[1] != "" {
+				month, errMonth = strconv.Atoi(yms[1])
+			}
+			if errYear == nil && errMonth == nil {
+				delta := duration.Duration{Months: 1}.Mul(int64(year)*12 + int64(month))
+				if neg {
+					d = d.Sub(delta)
+				} else {
+					d = d.Add(delta)
+				}
+			} else {
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
 
-		v, err = strconv.Atoi(parts[2])
-		if err != nil {
-			return d, fmt.Errorf(errInvalidSQLDuration, s)
-		}
-		d = d.Add(duration.Duration{Days: 1}.Mul(int64(v)))
+		} else if value, err := strconv.ParseFloat(part, 64); err == nil {
+			// Try to parse as Day or Second.
+			var dur time.Duration
+			var err error
+			// Make sure 'Day Second'::interval invalid.
+			if floatParsed {
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
+			floatParsed = true
+			if parsedIdx == nothingParsed {
+				// It must be 'Second' part because nothing has been parsed.
+				toParse := part + "s"
+				if neg {
+					toParse = "-" + toParse
+				}
+				dur, err = time.ParseDuration(toParse)
 
-	default:
-		return d, fmt.Errorf(errInvalidSQLDuration, s)
+				if err != nil {
+					return d, fmt.Errorf(errInvalidSQLDuration, s)
+				}
+				d = d.Add(duration.Duration{Nanos: dur.Nanoseconds()})
+				parsedIdx = hmsParsed
+			} else if parsedIdx == hmsParsed {
+				// Day part.
+				// TODO(hainesc): support float value in day part?
+				delta := duration.Duration{Days: 1}.Mul(int64(value))
+				if neg {
+					d = d.Sub(delta)
+				} else {
+					d = d.Add(delta)
+				}
+				parsedIdx = dayParsed
+			} else {
+				return d, fmt.Errorf(errInvalidSQLDuration, s)
+			}
+		}
 	}
 	return d, nil
 }
