@@ -131,7 +131,7 @@ func (v *planVisitor) visit(plan planNode) {
 		switch n.joinType {
 		case joinTypeInner:
 			jType = "inner"
-			if len(n.pred.leftColNames) == 0 && n.pred.filter == nil {
+			if len(n.pred.leftColNames) == 0 && n.pred.onCond == nil {
 				jType = "cross"
 			}
 		case joinTypeLeftOuter:
@@ -152,7 +152,7 @@ func (v *planVisitor) visit(plan planNode) {
 			buf.WriteByte(')')
 			lv.attr("equality", buf.String())
 		}
-		subplans := lv.expr("filter", -1, n.pred.filter, nil)
+		subplans := lv.expr("filter", -1, n.pred.onCond, nil)
 		lv.subqueries(subplans)
 		lv.visit(n.left.plan)
 		lv.visit(n.right.plan)
