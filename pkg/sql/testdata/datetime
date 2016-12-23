@@ -687,6 +687,22 @@ SHOW TIME ZONE
 -5
 
 statement ok
+SET TIME ZONE INTERVAL '+04:00' HOUR TO MINUTE;
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0400 +0400
+
+statement ok
+SET TIME ZONE INTERVAL '-04:00' MINUTE TO SECOND;
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 -0400 -0400
+
+statement ok
 SET TIME ZONE 0
 
 query T

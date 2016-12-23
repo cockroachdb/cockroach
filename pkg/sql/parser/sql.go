@@ -8469,7 +8469,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3464
 		{
-			sqlVAL.union.val = sqlDollar[1].union
+			sqlVAL.union.val = sqlDollar[1].union.durationField()
 		}
 	case 564:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -8493,7 +8493,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3482
 		{
-			sqlVAL.union.val = sqlDollar[3].union
+			sqlVAL.union.val = sqlDollar[3].union.durationField()
 		}
 	case 568:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -8505,13 +8505,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3490
 		{
-			sqlVAL.union.val = sqlDollar[3].union
+			sqlVAL.union.val = sqlDollar[3].union.durationField()
 		}
 	case 570:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3494
 		{
-			sqlVAL.union.val = sqlDollar[3].union
+			sqlVAL.union.val = sqlDollar[3].union.durationField()
 		}
 	case 571:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
