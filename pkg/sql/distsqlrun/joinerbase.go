@@ -77,23 +77,31 @@ func (jb *joinerBase) init(
 // render returns a nil row if no row is to be emitted (eg. if join type is
 // inner join and one of the given rows is nil).
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+	lnil := lrow == nil
+	rnil := rrow == nil
 	switch jb.joinType {
 	case innerJoin:
-		if lrow == nil || rrow == nil {
+		if lnil || rnil {
 			return nil, nil
 		}
 	case fullOuter:
-		if lrow == nil {
+		if lnil {
 			lrow = jb.emptyLeft
-		} else if rrow == nil {
+		} else if rnil {
 			rrow = jb.emptyRight
 		}
 	case leftOuter:
-		if rrow == nil {
+		if lnil {
+			return nil, nil
+		}
+		if rnil {
 			rrow = jb.emptyRight
 		}
 	case rightOuter:
-		if lrow == nil {
+		if rnil {
+			return nil, nil
+		}
+		if lnil {
 			lrow = jb.emptyLeft
 		}
 	}
