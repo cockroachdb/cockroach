@@ -82,31 +82,17 @@ func (jb *joinerBase) render(
 ) (ret sqlbase.EncDatumRow, failedFilter bool, err error) {
 	lnil := lrow == nil
 	rnil := rrow == nil
-	switch jb.joinType {
-	case innerJoin:
-		if lnil || rnil {
+	if lnil {
+		if jb.joinType == innerJoin || jb.joinType == leftOuter {
 			return nil, false, nil
 		}
-	case fullOuter:
-		if lnil {
-			lrow = jb.emptyLeft
-		} else if rnil {
-			rrow = jb.emptyRight
-		}
-	case leftOuter:
-		if lnil {
+		lrow = jb.emptyLeft
+	}
+	if rnil {
+		if jb.joinType == innerJoin || jb.joinType == rightOuter {
 			return nil, false, nil
 		}
-		if rnil {
-			rrow = jb.emptyRight
-		}
-	case rightOuter:
-		if rnil {
-			return nil, false, nil
-		}
-		if lnil {
-			lrow = jb.emptyLeft
-		}
+		rrow = jb.emptyRight
 	}
 	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
