@@ -28,10 +28,10 @@ import (
 
 // bucket here is the set of rows for a given group key (comprised of
 // columns specified by the join constraints), 'seen' is used to determine if
-// there was a matching group (with the same group key) in the opposite stream.
+// there was a matching row in the opposite stream.
 type bucket struct {
 	rows sqlbase.EncDatumRows
-	seen bool
+	seen []bool
 }
 
 // HashJoiner performs hash join, it has two input streams and one output.
@@ -89,6 +89,12 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		h.output.Close(err)
 		return
 	}
+	if h.joinType == rightOuter || h.joinType == fullOuter {
+		for k, bucket := range h.buckets {
+			bucket.seen = make([]bool, len(bucket.rows))
+			h.buckets[k] = bucket
+		}
+	}
 	err := h.probePhase(ctx)
 	h.output.Close(err)
 }
@@ -115,7 +121,7 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == rightOuter || h.joinType == fullOuter {
-				row, err := h.render(nil, rrow)
+				row, _, err := h.render(nil, rrow)
 				if err != nil {
 					return err
 				}
@@ -142,6 +148,22 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 // DNull row is emitted instead.
 func (h *hashJoiner) probePhase(ctx context.Context) error {
 	var scratch []byte
+
+	renderAndPush := func(lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
+	) (rowsLeft bool, failedOnCond bool, err error) {
+		row, failedOnCond, err := h.render(lrow, rrow)
+		if err != nil {
+			return false, failedOnCond, err
+		}
+		if row != nil {
+			if log.V(3) {
+				log.Infof(ctx, "pushing row %s", row)
+			}
+			return h.output.PushRow(row), failedOnCond, nil
+		}
+		return true, failedOnCond, nil
+	}
+
 	for {
 		lrow, err := h.inputs[0].NextRow()
 		if err != nil {
@@ -161,14 +183,9 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == leftOuter || h.joinType == fullOuter {
-				row, err := h.render(lrow, nil)
-				if err != nil {
+				if rowsLeft, _, err := renderAndPush(lrow, nil); err != nil {
 					return err
-				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				} else if !rowsLeft {
 					return nil
 				}
 			}
@@ -177,29 +194,19 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			row, err := h.render(lrow, nil)
-			if err != nil {
+			if rowsLeft, _, err := renderAndPush(lrow, nil); err != nil {
 				return err
-			}
-			if log.V(3) && row != nil {
-				log.Infof(ctx, "pushing row %s", row)
-			}
-			if row != nil && !h.output.PushRow(row) {
+			} else if !rowsLeft {
 				return nil
 			}
 		} else {
-			b.seen = true
-			h.buckets[string(encoded)] = b
-			for _, rrow := range b.rows {
-				row, err := h.render(lrow, rrow)
-				if err != nil {
+			for idx, rrow := range b.rows {
+				if rowsLeft, failedOnCond, err := renderAndPush(lrow, rrow); err != nil {
 					return err
-				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				} else if !rowsLeft {
 					return nil
+				} else if !failedOnCond && (h.joinType == rightOuter || h.joinType == fullOuter) {
+					b.seen[idx] = true
 				}
 			}
 		}
@@ -211,16 +218,11 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 
 	// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
 	for _, b := range h.buckets {
-		if !b.seen {
-			for _, rrow := range b.rows {
-				row, err := h.render(nil, rrow)
-				if err != nil {
+		for idx, rrow := range b.rows {
+			if !b.seen[idx] {
+				if rowsLeft, _, err := renderAndPush(nil, rrow); err != nil {
 					return err
-				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				} else if !rowsLeft {
 					return nil
 				}
 			}
