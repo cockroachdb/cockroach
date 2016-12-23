@@ -58,6 +58,8 @@ const (
 	checkpointInterval = 10 * time.Second
 )
 
+var errVersionMismatch = errors.New("table version mismatch")
+
 func makeColIDtoRowIndex(
 	row planNode, desc *sqlbase.TableDescriptor,
 ) (map[sqlbase.ColumnID]int, error) {
@@ -157,7 +159,11 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	}); err != nil {
 		return err
 	}
-
+	// Short circuit the backfill if the table has been deleted.
+	if tableDesc.Dropped() {
+		return nil
+	}
+	version := tableDesc.Version
 	for i, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
@@ -200,19 +206,23 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	// First drop indexes, then add/drop columns, and only then add indexes.
 
 	// Drop indexes.
-	if err := sc.truncateIndexes(lease, droppedIndexDescs, droppedIndexMutationIdx); err != nil {
+	if err := sc.truncateIndexes(
+		lease, version, droppedIndexDescs, droppedIndexMutationIdx,
+	); err != nil {
 		return err
 	}
 
 	// Add and drop columns.
 	if err := sc.truncateAndBackfillColumns(
-		lease, addedColumnDescs, droppedColumnDescs, columnMutationIdx,
+		lease, version, addedColumnDescs, droppedColumnDescs, columnMutationIdx,
 	); err != nil {
 		return err
 	}
 
 	// Add new indexes.
-	if err := sc.backfillIndexes(lease, addedIndexDescs, addedIndexMutationIdx); err != nil {
+	if err := sc.backfillIndexes(
+		lease, version, addedIndexDescs, addedIndexMutationIdx,
+	); err != nil {
 		return err
 	}
 
@@ -275,6 +285,7 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
 	mutationIdx int,
@@ -341,7 +352,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 
 			// Add and delete columns for a chunk of the key space.
 			sp.Key, done, err = sc.truncateAndBackfillColumnsChunk(
-				added, dropped, defaultExprs, sp,
+				version, added, dropped, defaultExprs, sp,
 				updateValues, nonNullViolationColumnName, chunkSize, mutationIdx, &lastCheckpoint)
 			if err != nil {
 				return err
@@ -355,6 +366,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 // next-key and done are invalid if error != nil. next-key is invalid if done
 // is true.
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
 	defaultExprs []parser.TypedExpr,
@@ -381,9 +393,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err != nil {
 			return err
 		}
-		// Short circuit the backfill if the table has been deleted.
-		if done = tableDesc.Dropped(); done {
-			return nil
+		if tableDesc.Version != version {
+			return errVersionMismatch
 		}
 
 		updateCols := append(added, dropped...)
@@ -492,6 +503,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 
 func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
 	mutationIdx int,
 ) error {
@@ -527,9 +539,8 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
-				// Short circuit the truncation if the table has been deleted.
-				if done = tableDesc.Dropped(); done {
-					return nil
+				if tableDesc.Version != version {
+					return errVersionMismatch
 				}
 
 				rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
@@ -561,6 +572,7 @@ func (sc *SchemaChanger) truncateIndexes(
 
 func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.IndexDescriptor,
 	mutationIdx int,
 ) error {
@@ -586,7 +598,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			log.Infof(context.TODO(), "index add (%d, %d) at row: %d, span: %s",
 				sc.tableID, sc.mutationID, row, sp)
 		}
-		sp.Key, done, err = sc.backfillIndexesChunk(added, sp, chunkSize, mutationIdx, &lastCheckpoint)
+		sp.Key, done, err = sc.backfillIndexesChunk(version, added, sp, chunkSize, mutationIdx, &lastCheckpoint)
 		if err != nil {
 			return err
 		}
@@ -597,6 +609,7 @@ func (sc *SchemaChanger) backfillIndexes(
 // backfillIndexesChunk returns the next-key, done and an error. next-key and
 // done are invalid if error != nil. next-key is invalid if done is true.
 func (sc *SchemaChanger) backfillIndexesChunk(
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.IndexDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
@@ -620,9 +633,8 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		if err != nil {
 			return err
 		}
-		// Short circuit the backfill if the table has been deleted.
-		if done = tableDesc.Dropped(); done {
-			return nil
+		if tableDesc.Version != version {
+			return errVersionMismatch
 		}
 
 		// Get the next set of rows.
