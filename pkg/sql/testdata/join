@@ -447,8 +447,8 @@ EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 0                 render 2  x
 0                 render 3  y
 1  join
-1                 type      inner
-1                 filter    a.x = 44
+1                 type    inner
+1                 pred    a.x = 44
 2  scan
 2                 table     twocolumn@primary
 2  scan
@@ -500,8 +500,8 @@ EXPLAIN(EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a
 1                 render 4  d
 1                 render 5  e
 2  join
-2                 type      inner
-2                 filter    (a.b = c.d) AND (c.d = test.onecolumn.x)
+2                 type    inner
+2                 pred    (a.b = c.d) AND (c.d = test.onecolumn.x)
 3  join
 3                 type      inner
 3                 equality  (x) = (b)

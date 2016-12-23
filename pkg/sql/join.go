@@ -142,12 +142,12 @@ type joinNode struct {
 	buckets       buckets
 	bucketsMemAcc WrappableMemoryAccount
 
-	// emptyRight contain tuples of NULL values to use on the
-	// right for outer joins when the filter fails.
+	// emptyRight contain tuples of NULL values to use on the right for left and
+	// full outer joins when the on condition fails.
 	emptyRight parser.DTuple
 
-	// emptyLeft contains tuples of NULL values to use
-	// on the left for full outer joins when the filter fails.
+	// emptyLeft contains tuples of NULL values to use on the left for right and
+	// full outer joins when the on condition fails.
 	emptyLeft parser.DTuple
 
 	// explain indicates whether this node is running on behalf of
@@ -275,7 +275,7 @@ func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
 
 // expandPlan implements the planNode interface.
 func (n *joinNode) expandPlan() error {
-	if err := n.planner.expandSubqueryPlans(n.pred.filter); err != nil {
+	if err := n.planner.expandSubqueryPlans(n.pred.onCond); err != nil {
 		return err
 	}
 	if err := n.left.plan.expandPlan(); err != nil {
@@ -302,7 +302,7 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 
 // Start implements the planNode interface.
 func (n *joinNode) Start() error {
-	if err := n.planner.startSubqueryPlans(n.pred.filter); err != nil {
+	if err := n.planner.startSubqueryPlans(n.pred.onCond); err != nil {
 		return err
 	}
 
@@ -505,15 +505,15 @@ func (n *joinNode) Next() (res bool, err error) {
 		}
 
 		// We iterate through all the rows in the bucket attempting to match the
-		// filter, if the filter passes we add it to the buffer.
+		// on condition, if the on condition passes we add it to the buffer.
 		foundMatch := false
 		for idx, rrow := range b.Rows() {
-			passesFilter, err := n.pred.eval(&n.planner.evalCtx, n.output, lrow, rrow)
+			passesOnCond, err := n.pred.eval(&n.planner.evalCtx, n.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}
 
-			if !passesFilter {
+			if !passesOnCond {
 				continue
 			}
 			foundMatch = true
@@ -529,7 +529,7 @@ func (n *joinNode) Next() (res bool, err error) {
 			}
 		}
 		if !foundMatch && wantUnmatchedLeft {
-			// If none of the rows matched the filter and we are computing a
+			// If none of the rows matched the on condition and we are computing a
 			// left or full outer join, we need to add a row with an empty
 			// right side.
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)

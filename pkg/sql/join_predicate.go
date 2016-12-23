@@ -59,7 +59,7 @@ type joinPredicate struct {
 	iVarHelper parser.IndexedVarHelper
 	info       *dataSourceInfo
 	curRow     parser.DTuple
-	filter     parser.TypedExpr
+	onCond     parser.TypedExpr
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -74,14 +74,14 @@ func makeCrossPredicate(left, right *dataSourceInfo) (*joinPredicate, *dataSourc
 	return makeEqualityPredicate(left, right, nil, nil, 0, nil)
 }
 
-// optimizeOnPredicate tries to turn the filter in an onPredicate into
+// optimizeOnPredicate tries to turn the condition in an onPredicate into
 // equality columns in the joinPredicate, which enables faster
 // joins.  The concatInfos argument, if provided, must be a
 // precomputed concatenation of the left and right dataSourceInfos.
 func optimizeOnPredicate(
 	pred *joinPredicate, left, right *dataSourceInfo, concatInfos *dataSourceInfo,
 ) (*joinPredicate, *dataSourceInfo, error) {
-	c, ok := pred.filter.(*parser.ComparisonExpr)
+	c, ok := pred.onCond.(*parser.ComparisonExpr)
 	if !ok || c.Operator != parser.EQ {
 		return pred, pred.info, nil
 	}
@@ -134,8 +134,8 @@ func optimizeOnPredicate(
 	pred.leftColNames = append(pred.leftColNames, parser.Name(left.sourceColumns[leftColIdx].Name))
 	pred.rightColNames = append(pred.rightColNames, parser.Name(right.sourceColumns[rightColIdx].Name))
 
-	// The filter is optimized away now.
-	pred.filter = nil
+	// The on condition is optimized away now.
+	pred.onCond = nil
 
 	return pred, pred.info, nil
 }
@@ -149,12 +149,12 @@ func (p *planner) makeOnPredicate(
 		return nil, nil, err
 	}
 
-	// Determine the filter expression.
-	filter, err := p.analyzeExpr(expr, multiSourceInfo{info}, pred.iVarHelper, parser.TypeBool, true, "ON")
+	// Determine the on condition expression.
+	onCond, err := p.analyzeExpr(expr, multiSourceInfo{info}, pred.iVarHelper, parser.TypeBool, true, "ON")
 	if err != nil {
 		return nil, nil, err
 	}
-	pred.filter = filter
+	pred.onCond = onCond
 
 	return optimizeOnPredicate(pred, left, right, info)
 }
@@ -362,8 +362,8 @@ func makeEqualityPredicate(
 		info:                     info,
 	}
 	// We must initialize the indexed var helper in all cases, even when
-	// there is no filter expression, so that getNeededColumns() does
-	// not get confused.
+	// there is no on condition, so that getNeededColumns() does not get
+	// confused.
 	pred.iVarHelper = parser.MakeIndexedVarHelper(pred, len(columns))
 	return pred, info, nil
 }
@@ -383,18 +383,19 @@ func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 	p.info.FormatVar(buf, f, idx)
 }
 
-// eval for joinPredicate runs the filters across the columns that do
+// eval for joinPredicate runs the on condition across the columns that do
 // not participate in the equality (the equality columns are checked
 // in the join algorithm already).
-// Returns true if there is no filter or the filter accepts the row.
+// Returns true if there is no on condition or the on condition accepts the
+// row.
 func (p *joinPredicate) eval(
 	ctx *parser.EvalContext, result, leftRow, rightRow parser.DTuple,
 ) (bool, error) {
-	if p.filter != nil {
+	if p.onCond != nil {
 		p.curRow = result
 		copy(p.curRow[p.numMergedEqualityColumns:p.numMergedEqualityColumns+len(leftRow)], leftRow)
 		copy(p.curRow[p.numMergedEqualityColumns+len(leftRow):], rightRow)
-		return sqlbase.RunFilter(p.filter, ctx)
+		return sqlbase.RunFilter(p.onCond, ctx)
 	}
 	return true, nil
 }
@@ -406,7 +407,7 @@ func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
 	// Reset the helper and rebind the variable to detect which columns
 	// are effectively needed.
 	p.iVarHelper.Reset()
-	p.filter = p.iVarHelper.Rebind(p.filter)
+	p.onCond = p.iVarHelper.Rebind(p.onCond)
 
 	// The columns that are part of the expression are always needed.
 	neededJoined = append([]bool(nil), neededJoined...)
