@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -241,34 +240,6 @@ func (d *deleteNode) DebugValues() debugValues {
 
 func (d *deleteNode) Ordering() orderingInfo {
 	return d.run.rows.Ordering()
-}
-
-func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	var buf bytes.Buffer
-	if v {
-		fmt.Fprintf(&buf, "from %s returning (", d.tableDesc.Name)
-		for i, col := range d.rh.columns {
-			if i > 0 {
-				fmt.Fprintf(&buf, ", ")
-			}
-			fmt.Fprintf(&buf, "%s", col.Name)
-		}
-		fmt.Fprintf(&buf, ")")
-	}
-
-	subplans := []planNode{d.run.rows}
-	for _, e := range d.rh.exprs {
-		subplans = d.p.collectSubqueryPlans(e, subplans)
-	}
-
-	return "delete", buf.String(), subplans
-}
-
-func (d *deleteNode) explainExprs(regTypes func(string, parser.Expr)) {
-	cols := d.rh.columns
-	for i, rexpr := range d.rh.exprs {
-		regTypes(fmt.Sprintf("returning %s", cols[i].Name), rexpr)
-	}
 }
 
 func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}

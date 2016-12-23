@@ -413,49 +413,6 @@ func (n *groupNode) computeAggregates() error {
 	return nil
 }
 
-func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	name = "group"
-	var buf bytes.Buffer
-	for i, f := range n.funcs {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		f.Format(&buf, parser.FmtSimple)
-	}
-	if n.plan != nil {
-		sourceColumns := n.plan.Columns()
-		if len(sourceColumns) > len(n.funcs) {
-			buf.WriteString(" GROUP BY (")
-			for i := len(n.funcs); i < len(sourceColumns); i++ {
-				if i > len(n.funcs) {
-					buf.WriteString(", ")
-				}
-				fmt.Fprintf(&buf, "@%d", i+1)
-			}
-			buf.WriteByte(')')
-		}
-	}
-
-	subplans := []planNode{n.plan}
-	for _, e := range n.render {
-		subplans = n.planner.collectSubqueryPlans(e, subplans)
-	}
-	if n.having != nil {
-		buf.WriteString(" HAVING ")
-		n.having.Format(&buf, parser.FmtSimple)
-		subplans = n.planner.collectSubqueryPlans(n.having, subplans)
-	}
-	return name, buf.String(), subplans
-}
-
-func (n *groupNode) explainExprs(regTypes func(string, parser.Expr)) {
-	regTypes("having", n.having)
-	cols := n.Columns()
-	for i, rexpr := range n.render {
-		regTypes(fmt.Sprintf("render %s", cols[i].Name), rexpr)
-	}
-}
-
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
 func (*groupNode) setNeededColumns(_ []bool)    {}
 

@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -421,41 +420,6 @@ func (u *updateNode) DebugValues() debugValues {
 
 func (u *updateNode) Ordering() orderingInfo {
 	return u.run.rows.Ordering()
-}
-
-func (u *updateNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	var buf bytes.Buffer
-	if v {
-		fmt.Fprintf(&buf, "set %s (", u.tableDesc.Name)
-		for i, col := range u.tw.ru.updateCols {
-			if i > 0 {
-				fmt.Fprintf(&buf, ", ")
-			}
-			fmt.Fprintf(&buf, "%s", col.Name)
-		}
-		fmt.Fprintf(&buf, ") returning (")
-		for i, col := range u.rh.columns {
-			if i > 0 {
-				fmt.Fprintf(&buf, ", ")
-			}
-			fmt.Fprintf(&buf, "%s", col.Name)
-		}
-		fmt.Fprintf(&buf, ")")
-	}
-
-	subplans := []planNode{u.run.rows}
-	for _, e := range u.rh.exprs {
-		subplans = u.p.collectSubqueryPlans(e, subplans)
-	}
-
-	return "update", buf.String(), subplans
-}
-
-func (u *updateNode) explainExprs(regTypes func(string, parser.Expr)) {
-	cols := u.rh.columns
-	for i, rexpr := range u.rh.exprs {
-		regTypes(fmt.Sprintf("returning %s", cols[i].Name), rexpr)
-	}
 }
 
 func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}

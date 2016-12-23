@@ -29,5 +29,7 @@ VALUES ((SELECT 1)), ((SELECT 2))
 query ITTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
-0 values 1 column, 2 rows
-1 nullrow
+0  values
+0           size        1 column, 2 rows
+0           subqueries  1
+1  nullrow

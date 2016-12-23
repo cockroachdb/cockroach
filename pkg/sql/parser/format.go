@@ -48,10 +48,6 @@ type FmtFlags *fmtFlags
 // syntax that makes prettyprint+parse idempotent.
 var FmtSimple FmtFlags = &fmtFlags{showTypes: false}
 
-// FmtQualify instructs the pretty-printer to qualify names with the
-// table name.
-var FmtQualify FmtFlags = &fmtFlags{ShowTableAliases: true}
-
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
 var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
