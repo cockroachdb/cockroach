@@ -254,42 +254,58 @@ SELECT b FROM t WHERE c > 4.0 AND a < 4
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1
 ----
-0 scan t@bc ALL
+0  scan
+0        table  t@bc
+0        spans  ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-0 scan t@bc /#-/4/1
+0  scan
+0        table  t@bc
+0        spans  /#-/4/1
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
 ----
-0 scan t@bc ALL
+0  scan
+0        table  t@bc
+0        spans  ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c < 1.0
 ----
-0 scan t@bc ALL
+0  scan
+0        table  t@bc
+0        spans  ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-0 scan t@bc /#-/5
+0  scan
+0        table  t@bc
+0        spans  /#-/5
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-0 scan t@bc /#-/4/1
+0  scan
+0        table  t@bc
+0        spans  /#-/4/1
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-0 scan t@bc /5/1-/5/2
+0  scan
+0        table  t@bc
+0        spans  /5/1-/5/2
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-0 scan t@bc /5/1-/5/2
+0  scan
+0        table  t@bc
+0        spans  /5/1-/5/2
 
 query error tuples \(b, c\), \(5.1, 1\) are not the same type: expected 5.1 to be of type int, found type decimal
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
@@ -297,7 +313,9 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-0 scan t@b_desc /-6-/-5 /-2-/-1
+0  scan
+0        table  t@b_desc
+0        spans  /-6-/-5 /-2-/-1
 
 statement ok
 CREATE TABLE abcd (
@@ -314,12 +332,16 @@ CREATE TABLE abcd (
 query ITTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
-0 scan abcd@abcd /1/4-/1/5
+0  scan
+0        table  abcd@abcd
+0        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-0 scan abcd@abcd /1/4-/1/5 /2/9-/2/10
+0  scan
+0        table  abcd@abcd
+0        spans  /1/4-/1/5 /2/9-/2/10
 
 statement ok
 CREATE TABLE ab (
@@ -345,4 +367,6 @@ SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 query ITTT
 EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-0 scan ab@baz /#-/1/"c"
+0  scan
+0        table  ab@baz
+0        spans  /#-/1/"c"

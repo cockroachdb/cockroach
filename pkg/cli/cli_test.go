@@ -847,14 +847,16 @@ func Example_sql_escape() {
 	// +-------+
 	// (1 row)
 	// sql --pretty -e explain(indent) select s from t.t union all select s from t.t
-	// +-------+-------+-------+----------------------+
-	// | Level | Type  | Field |     Description      |
-	// +-------+-------+-------+----------------------+
-	// |     0 | union |       | -> union -           |
-	// |     1 | scan  |       | ‌   -> scan t@primary |
-	// |     1 | scan  |       | ‌   -> scan t@primary |
-	// +-------+-------+-------+----------------------+
-	// (3 rows)
+	// +-------+--------+-------+-----------------+
+	// | Level |  Type  | Field |   Description   |
+	// +-------+--------+-------+-----------------+
+	// |     0 | append |       | ‌ -> append      |
+	// |     1 | scan   |       | ‌   -> scan      |
+	// |     1 |        | table | ‌      t@primary |
+	// |     1 | scan   |       | ‌   -> scan      |
+	// |     1 |        | table | ‌      t@primary |
+	// +-------+--------+-------+-----------------+
+	// (5 rows)
 }
 
 func Example_user() {

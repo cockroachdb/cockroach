@@ -7,8 +7,10 @@ CREATE TABLE t (
 query ITTT
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-0      insert
-1      values 2 columns, 1 row
+0  insert
+0          into  t(k, v)
+1  values
+1          size  2 columns, 1 row
 
 statement ok
 INSERT INTO t VALUES (1, 2)
@@ -16,59 +18,83 @@ INSERT INTO t VALUES (1, 2)
 query ITTT
 EXPLAIN SELECT * FROM t
 ----
-0      scan  t@primary
+0  scan
+0        table  t@primary
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM t
 ----
-0      select                                   (k, v)  +k,unique
-1      render/filter from (test.t.k, test.t.v)  (k, v)  +k,unique
-2      scan          t@primary                  (k, v)  +k,unique
+0  select                    (k, v)  +k,unique
+1  scan                      (k, v)  +k,unique
+1          table  t@primary
 
 query ITTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-0      scan  t@primary /1-/2 /3-/4
+0  scan
+0        table  t@primary
+0        spans  /1-/2 /3-/4
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-0  select                                              (k, v)  +k,unique
-1  render/filter            from (test.t.k, test.t.v)  (k, v)  +k,unique
-1  render/filter  render 0  test.t.k
-1  render/filter  render 1  test.t.v
-2  scan                     t@primary ALL              (k, v)  +k,unique
-2  scan           filter    (k % 2) = 0
+0  select                                (k, v)  +k,unique
+1  render/filter                         (k, v)  +k,unique
+1                 render 0  test.t.k
+1                 render 1  test.t.v
+2  scan                                  (k, v)  +k,unique
+2                 table     t@primary
+2                 spans     ALL
+2                 filter    (k % 2) = 0
 
 query ITTT
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
-0      values  3 columns, 2 rows
+0  values
+0          size  3 columns, 2 rows
 
 query ITTT
 EXPLAIN VALUES (1)
 ----
-0      values  1 column, 1 row
+0  values
+0          size  1 column, 1 row
 
 query ITTT
-EXPLAIN SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
+EXPLAIN(EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
-0      limit   count: 1, offset:  1
-1      ordinality
-2      scan    t@primary (max 2 rows)
+0  limit
+0                 count     1
+0                 offset    1
+1  render/filter
+1                 render 0  k
+1                 render 1  v
+1                 render 2  ordinality
+2  ordinality
+3  scan
+3                 table     t@primary
+3                 limit     2
 
 query ITTT
 EXPLAIN SELECT DISTINCT * FROM t
 ----
-0      distinct k
-1      scan     t@primary
+0  distinct
+0            key    k
+1  scan
+1            table  t@primary
 
 query ITTT
-EXPLAIN SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
+EXPLAIN(EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 ----
-0      limit    count: 1, offset:  1
-1      distinct k
-2      scan     t@primary
+0  limit
+0                 count     1
+0                 offset    1
+1  distinct
+1                 key       k
+2  render/filter
+2                 render 0  k
+2                 render 1  v
+3  scan
+3                 table     t@primary
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
@@ -76,9 +102,12 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-0      select                                                      (a, b)                          +b
-1      sort           +b                                           (a, b)                          +b
-2      render/filter  from (test.tc.a, test.tc.b, *test.tc.rowid)  (a, b)                          =a
-3      index-join                                                  (a, b, rowid[hidden,omitted])   =a,+rowid,unique
-4      scan           tc@c /10-/11                                 (a, b[omitted], rowid[hidden])  =a,+rowid,unique
-4      scan           tc@primary                                   (a, b, rowid[hidden,omitted])   +rowid,unique
+0  select                         (a, b)                          +b
+1  sort                           (a, b)                          +b
+1              order  +b
+2  index-join                     (a, b, rowid[hidden,omitted])   =a,+rowid,unique
+3  scan                           (a, b[omitted], rowid[hidden])  =a,+rowid,unique
+3              table  tc@c
+3              spans  /10-/11
+3  scan                           (a, b, rowid[hidden,omitted])   +rowid,unique
+3              table  tc@primary

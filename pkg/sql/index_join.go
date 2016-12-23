@@ -239,12 +239,6 @@ func (n *indexJoinNode) Next() (bool, error) {
 	return false, nil
 }
 
-func (n *indexJoinNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	return "index-join", "", []planNode{n.index, n.table}
-}
-
-func (n *indexJoinNode) explainExprs(_ func(string, parser.Expr)) {}
-
 func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	n.index.SetLimitHint(numRows, soft)
 }

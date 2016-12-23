@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -119,8 +118,15 @@ func (n *distinctNode) Columns() ResultColumns {
 	return n.top.Columns()
 }
 
-func (n *distinctNode) Values() parser.DTuple  { return n.plan.Values() }
-func (n *distinctNode) Ordering() orderingInfo { return n.plan.Ordering() }
+func (n *distinctNode) Values() parser.DTuple { return n.plan.Values() }
+
+func (n *distinctNode) Ordering() orderingInfo {
+	if n.plan != nil {
+		return n.plan.Ordering()
+	}
+	// Pre-prepare: not connected yet. Ask the top select node.
+	return n.top.Ordering()
+}
 
 func (n *distinctNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
@@ -232,23 +238,6 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte, error
 	}
 	return prefix, suffix, err
 }
-
-func (n *distinctNode) ExplainPlan(_ bool) (string, string, []planNode) {
-	var description string
-	if n.columnsInOrder != nil {
-		columns := n.Columns()
-		strs := make([]string, 0, len(columns))
-		for i, column := range columns {
-			if n.columnsInOrder[i] {
-				strs = append(strs, column.Name)
-			}
-		}
-		description = strings.Join(strs, ",")
-	}
-	return "distinct", description, []planNode{n.plan}
-}
-
-func (n *distinctNode) explainExprs(_ func(string, parser.Expr)) {}
 
 func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 	// Any limit becomes a "soft" limit underneath.

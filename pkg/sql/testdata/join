@@ -407,56 +407,114 @@ x  x  y  b  d  e
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
+EXPLAIN(EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
-0  join  INNER ON EQUALS((x),(x))
-1  scan  onecolumn@primary
-1  scan  twocolumn@primary
+0  render/filter
+0                 render 0  x
+0                 render 1  y
+1  join
+1                 type      inner
+1                 equality  (x) = (x)
+2  scan
+2                 table     onecolumn@primary
+2  scan
+2                 table     twocolumn@primary
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
+EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
-0  join  INNER ON EQUALS((x),(y))
-1  scan  twocolumn@primary
-1  scan  twocolumn@primary
+0  render/filter
+0                 render 0  x
+0                 render 1  y
+0                 render 2  x
+0                 render 3  y
+1  join
+1                 type      inner
+1                 equality  (x) = (y)
+2  scan
+2                 table     twocolumn@primary
+2  scan
+2                 table     twocolumn@primary
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
+EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-0  join  INNER ON a.x = 44
-1  scan  twocolumn@primary
-1  scan  twocolumn@primary
+0  render/filter
+0                 render 0  x
+0                 render 1  y
+0                 render 2  x
+0                 render 3  y
+1  join
+1                 type      inner
+1                 filter    a.x = 44
+2  scan
+2                 table     twocolumn@primary
+2  scan
+2                 table     twocolumn@primary
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
+EXPLAIN(EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
-0  join  INNER ON EQUALS((x),(y))
-1  scan  onecolumn@primary
-1  scan  twocolumn@primary
+0  render/filter
+0                 render 0  x
+0                 render 1  x
+0                 render 2  y
+1  join
+1                 type      inner
+1                 equality  (x) = (y)
+2  scan
+2                 table     onecolumn@primary
+2  scan
+2                 table     twocolumn@primary
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
+EXPLAIN(EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
-0  join  INNER ON EQUALS((x),(y))
-1  scan  onecolumn@primary
-1  scan  twocolumn@primary
+0  render/filter
+0                 render 0  x
+0                 render 1  x
+0                 render 2  y
+1  join
+1                 type      inner
+1                 equality  (x) = (y)
+2  scan
+2                 table     onecolumn@primary
+2  scan
+2                 table     twocolumn@primary
 
 
 query ITTT
-EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
+EXPLAIN(EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
-0  limit  count: 1
-1  join   INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
-2  join   INNER ON EQUALS((x),(b))
-3  join   CROSS
-4  scan   onecolumn@primary
-4  scan   twocolumn@primary
-3  scan   onecolumn@primary
-2  scan   twocolumn@primary
+0  limit
+0                 count     1
+1  render/filter
+1                 render 0  x
+1                 render 1  x
+1                 render 2  y
+1                 render 3  b
+1                 render 4  d
+1                 render 5  e
+2  join
+2                 type      inner
+2                 filter    (a.b = c.d) AND (c.d = test.onecolumn.x)
+3  join
+3                 type      inner
+3                 equality  (x) = (b)
+4  join
+4                 type      cross
+5  scan
+5                 table     onecolumn@primary
+5  scan
+5                 table     twocolumn@primary
+4  scan
+4                 table     onecolumn@primary
+3  scan
+3                 table     twocolumn@primary
 
 # Check sub-queries in ON conditions.
 query III colnames
@@ -556,53 +614,66 @@ CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(
 query ITTTTT
 EXPLAIN (METADATA) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-0  select                                                                          (x, y)
-1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x, y)
-2  join           CROSS                                                            (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
-
+0  select                            (x, y)
+1  join                              (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
+1          type   cross
+2  scan                              (x, y[omitted], rowid[hidden,omitted])
+2          table  twocolumn@primary
+2  scan                              (x[omitted], y, rowid[hidden,omitted])
+2          table  twocolumn@primary
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-0  select                                                                                     (y)
-1  render/filter  from (""."".x, *"".a.x, "".a.y, *"".a.rowid, *"".b.x, "".b.y, *"".b.rowid)  (y)
-2  join           INNER ON EQUALS((x),(x))                                                    (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                           (x, y[omitted], rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                           (x, y, rowid[hidden,omitted])
+0  select                               (y)
+1  join                                 (x[omitted], x[hidden,omitted], y[omitted], rowid[hidden,omitted], x[hidden,omitted], y, rowid[hidden,omitted])
+1          type      inner
+1          equality  (x) = (x)
+2  scan                                 (x, y[omitted], rowid[hidden,omitted])
+2          table     twocolumn@primary
+2  scan                                 (x, y, rowid[hidden,omitted])
+2          table     twocolumn@primary
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
-0  select                                                                          (y)
-1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (y)
-2  join           INNER ON EQUALS((x),(x))                                         (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                (x, y, rowid[hidden,omitted])
+0  select                               (y)
+1  join                                 (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])
+1          type      inner
+1          equality  (x) = (x)
+2  scan                                 (x, y[omitted], rowid[hidden,omitted])
+2          table     twocolumn@primary
+2  scan                                 (x, y, rowid[hidden,omitted])
+2          table     twocolumn@primary
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-0  select                                                                          (x)
-1  render/filter  from ("".a.x, "".a.y, *"".a.rowid, "".b.x, "".b.y, *"".b.rowid)  (x)
-2  join           INNER ON a.x < b.y                                               (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                (x, y[omitted], rowid[hidden,omitted])
-3  scan           twocolumn@primary                                                (x[omitted], y, rowid[hidden,omitted])
+0  select                            (x)
+1  join                              (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])
+1          type   inner
+2  scan                              (x, y[omitted], rowid[hidden,omitted])
+2          table  twocolumn@primary
+2  scan                              (x[omitted], y, rowid[hidden,omitted])
+2          table  twocolumn@primary
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
 				INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-0   select                                                          (k, u, w)            +u
-1   sort            +u                                              (k, u, w)            +u
-2   render/filter   from (""."".k, _.u, *""."".k, *"".b.k, "".b.w)  (k, u, w)
-3   join            INNER ON EQUALS((k),(k))                        (k, u, k[hidden,omitted], k[hidden,omitted], w)
-4   select                                                          (u, k)               +k
-5   sort            +k                                              (u, k)               +k
-6   render/filter   from ("".a.u, "".a.k)                           (u, k)
-7   select                                                          (column1, column2)
-8   values          2 columns, 2 rows                               (column1, column2)
-4   select                                                          (column1, column2)
-5   values          2 columns, 2 rows                               (column1, column2)
+0  select                               (k, u, w)                                        +u
+1  sort                                 (k, u, w)                                        +u
+1          order     +u
+2  join                                 (k, u, k[hidden,omitted], k[hidden,omitted], w)
+2          type      inner
+2          equality  (k) = (k)
+3  select                               (u, k)                                           +k
+4  sort                                 (u, k)                                           +k
+4          order     +k
+5  select                               (column1, column2)
+6  values                               (column1, column2)
+6          size      2 columns, 2 rows
+3  select                               (column1, column2)
+4  values                               (column1, column2)
+4          size      2 columns, 2 rows

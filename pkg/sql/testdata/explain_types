@@ -7,11 +7,13 @@ CREATE TABLE t (
 query ITTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-Level  Type    Field          Description                 Columns                     Ordering
-0      insert                 into t (k, v) returning ()  ()
-1      values                 2 columns, 1 row            (column1 int, column2 int)
-1      values  row 0, expr 0  (1)[int]
-1      values  row 0, expr 1  (2)[int]
+Level  Type    Field          Description       Columns                     Ordering
+0      insert                                   ()
+0              into           t(k, v)
+1      values                                   (column1 int, column2 int)
+1              size           2 columns, 1 row
+1              row 0, expr 0  (1)[int]
+1              row 0, expr 1  (2)[int]
 
 statement ok
 INSERT INTO t VALUES (1, 2)
@@ -20,210 +22,257 @@ query ITTTTT
 EXPLAIN (TYPES) SELECT 42;
 ----
 0  select                              ("42" int)
-1  render/filter            from ()    ("42" int)
-1  render/filter  render 0  (42)[int]
+1  render/filter                       ("42" int)
+1                 render 0  (42)[int]
 2  nullrow                             ()
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT * FROM t
 ----
-0  select                                              (k int, v int)  +k,unique
-1  render/filter            from (test.t.k, test.t.v)  (k int, v int)  +k,unique
-1  render/filter  render 0  (k)[int]
-1  render/filter  render 1  (v)[int]
-2  scan                     t@primary                  (k int, v int)  +k,unique
+0  select                              (k int, v int)  +k,unique
+1  render/filter                       (k int, v int)  +k,unique
+1                 render 0  (k)[int]
+1                 render 1  (v)[int]
+2  scan                                (k int, v int)  +k,unique
+2                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES, SYMVARS) SELECT * FROM t
 ----
-0  select                                              (k int, v int)  +k,unique
-1  render/filter            from (test.t.k, test.t.v)  (k int, v int)  +k,unique
-1  render/filter  render 0  (@1)[int]
-1  render/filter  render 1  (@2)[int]
-2  scan                     t@primary                  (k int, v int)  +k,unique
+0  select                              (k int, v int)  +k,unique
+1  render/filter                       (k int, v int)  +k,unique
+1                 render 0  (@1)[int]
+1                 render 1  (@2)[int]
+2  scan                                (k int, v int)  +k,unique
+2                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES, QUALIFY) SELECT * FROM t
 ----
-0  select                                              (k int, v int)  +k,unique
-1  render/filter            from (test.t.k, test.t.v)  (k int, v int)  +k,unique
-1  render/filter  render 0  (test.t.k)[int]
-1  render/filter  render 1  (test.t.v)[int]
-2  scan                     t@primary                  (k int, v int)  +k,unique
+0  select                                    (k int, v int)  +k,unique
+1  render/filter                             (k int, v int)  +k,unique
+1                 render 0  (test.t.k)[int]
+1                 render 1  (test.t.v)[int]
+2  scan                                      (k int, v int)  +k,unique
+2                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM t WHERE v > 123
 ----
 0  select                                                  (k int, v int)
-1  render/filter            from (test.t.k, test.t.v)      (k int, v int)
-1  render/filter  filter    ((v)[int] > (123)[int])[bool]
-1  render/filter  render 0  (k)[int]
-1  render/filter  render 1  (v)[int]
-2  scan                     t@primary                      (k int, v int)
+1  render/filter                                           (k int, v int)
+1                 filter    ((v)[int] > (123)[int])[bool]
+1                 render 0  (k)[int]
+1                 render 1  (v)[int]
+2  scan                                                    (k int, v int)
+2                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
 ----
 0  select                                                  (k int, v int)  +k,unique
-1  render/filter            from (test.t.k, test.t.v)      (k int, v int)  +k,unique
-1  render/filter  render 0  (k)[int]
-1  render/filter  render 1  (v)[int]
-2  scan                     t@primary ALL                  (k int, v int)  +k,unique
-2  scan           filter    ((v)[int] > (123)[int])[bool]
+1  render/filter                                           (k int, v int)  +k,unique
+1                 render 0  (k)[int]
+1                 render 1  (v)[int]
+2  scan                                                    (k int, v int)  +k,unique
+2                 table     t@primary
+2                 spans     ALL
+2                 filter    ((v)[int] > (123)[int])[bool]
 
 query ITTTTT
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
 ----
 0  select                                    (column1 int, column2 int, column3 int)
-1  values                 3 columns, 2 rows  (column1 int, column2 int, column3 int)
-1  values  row 0, expr 0  (1)[int]
-1  values  row 0, expr 1  (2)[int]
-1  values  row 0, expr 2  (3)[int]
-1  values  row 1, expr 0  (4)[int]
-1  values  row 1, expr 1  (5)[int]
-1  values  row 1, expr 2  (6)[int]
+1  values                                    (column1 int, column2 int, column3 int)
+1          size           3 columns, 2 rows
+1          row 0, expr 0  (1)[int]
+1          row 0, expr 1  (2)[int]
+1          row 0, expr 2  (3)[int]
+1          row 1, expr 0  (4)[int]
+1          row 1, expr 1  (5)[int]
+1          row 1, expr 2  (6)[int]
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2
 ----
-0  select                                                             (z int, v int)
-0  select         having    ((v)[int] < (2)[int])[bool]
-0  select         render z  ((2)[int] * (count((k)[int]))[int])[int]
-0  select         render v  (v)[int]
-1  render/filter            from (test.t.k, test.t.v)                 ("2" int, k int, v int, "v < 2" bool, v int)
-1  render/filter  filter    ((v)[int] > (123)[int])[bool]
-1  render/filter  render 0  (2)[int]
-1  render/filter  render 1  (k)[int]
-1  render/filter  render 2  (v)[int]
-1  render/filter  render 3  ((v)[int] < (2)[int])[bool]
-1  render/filter  render 4  (v)[int]
-2  scan                     t@primary                                 (k int, v int)
+0  select                                                                (z int, v int)
+1  group                                                                 (z int, v int)
+1                 aggregate 0  (2)[int]
+1                 aggregate 1  (count((k)[int]))[int]
+1                 aggregate 2  (v)[int]
+1                 aggregate 3  ((v)[int] < (2)[int])[bool]
+1                 render 0     ((2)[int] * (count((k)[int]))[int])[int]
+1                 render 1     (v)[int]
+1                 having       ((v)[int] < (2)[int])[bool]
+1  render/filter                                                         ("2" int, k int, v int, "v < 2" bool, v int)
+1                 filter       ((v)[int] > (123)[int])[bool]
+1                 render 0     (2)[int]
+1                 render 1     (k)[int]
+1                 render 2     (v)[int]
+1                 render 3     ((v)[int] < (2)[int])[bool]
+1                 render 4     (v)[int]
+2  scan                                                                  (k int, v int)
+2                 table        t@primary
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2
 ----
-0  select                                                                     (z int, v int)
-1  group                    2, count(k), v, v < 2 GROUP BY (@5) HAVING v < 2  (z int, v int)
-1  group          having    ((v)[int] < (2)[int])[bool]
-1  group          render z  ((2)[int] * (count((k)[int]))[int])[int]
-1  group          render v  (v)[int]
-2  render/filter            from (test.t.k, test.t.v)                         ("2" int, k int, v int, "v < 2" bool, v int)  +k,unique
-2  render/filter  render 0  (2)[int]
-2  render/filter  render 1  (k)[int]
-2  render/filter  render 2  (v)[int]
-2  render/filter  render 3  ((v)[int] < (2)[int])[bool]
-2  render/filter  render 4  (v)[int]
-3  scan                     t@primary ALL                                     (k int, v int)                                +k,unique
-3  scan           filter    ((v)[int] > (123)[int])[bool]
+0  select                                                                (z int, v int)
+1  group                                                                 (z int, v int)
+1                 aggregate 0  (2)[int]
+1                 aggregate 1  (count((k)[int]))[int]
+1                 aggregate 2  (v)[int]
+1                 aggregate 3  ((v)[int] < (2)[int])[bool]
+1                 render 0     ((2)[int] * (count((k)[int]))[int])[int]
+1                 render 1     (v)[int]
+1                 having       ((v)[int] < (2)[int])[bool]
+2  render/filter                                                         ("2" int, k int, v int, "v < 2" bool, v int)  +k,unique
+2                 render 0     (2)[int]
+2                 render 1     (k)[int]
+2                 render 2     (v)[int]
+2                 render 3     ((v)[int] < (2)[int])[bool]
+2                 render 4     (v)[int]
+3  scan                                                                  (k int, v int)                                +k,unique
+3                 table        t@primary
+3                 spans        ALL
+3                 filter       ((v)[int] > (123)[int])[bool]
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
 ----
-0  delete                   from t returning ()          ()
+0  delete                                                ()
+0                 from      t
 1  select                                                (k int)
-2  render/filter            from (test.t.k, test.t.v)    (k int)
-2  render/filter  filter    ((v)[int] > (1)[int])[bool]
-2  render/filter  render 0  (k)[int]
-3  scan                     t@primary                    (k int, v int)
+2  render/filter                                         (k int)
+2                 filter    ((v)[int] > (1)[int])[bool]
+2                 render 0  (k)[int]
+3  scan                                                  (k int, v int)
+3                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-0  delete                   from t returning ()          ()              +@1,unique
+0  delete                                                ()              +@1,unique
+0                 from      t
 1  select                                                (k int)         +k,unique
-2  render/filter            from (test.t.k, test.t.v)    (k int)         +k,unique
-2  render/filter  render 0  (k)[int]
-3  scan                     t@primary ALL                (k int, v int)  +k,unique
-3  scan           filter    ((v)[int] > (1)[int])[bool]
+2  render/filter                                         (k int)         +k,unique
+2                 render 0  (k)[int]
+3  scan                                                  (k int, v int)  +k,unique
+3                 table     t@primary
+3                 spans     ALL
+3                 filter    ((v)[int] > (1)[int])[bool]
 
 query ITTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-0  update                   set t (v) returning ()         ()                           +@1,unique
+0  update                                                  ()                           +@1,unique
+0                 table     t
+0                 set       v
 1  select                                                  (k int, v int, "k + 1" int)  +k,unique
-2  render/filter            from (test.t.k, test.t.v)      (k int, v int, "k + 1" int)  +k,unique
-2  render/filter  render 0  (k)[int]
-2  render/filter  render 1  (v)[int]
-2  render/filter  render 2  ((k)[int] + (1)[int])[int]
-3  scan                     t@primary ALL                  (k int, v int)               +k,unique
-3  scan           filter    ((v)[int] > (123)[int])[bool]
+2  render/filter                                           (k int, v int, "k + 1" int)  +k,unique
+2                 render 0  (k)[int]
+2                 render 1  (v)[int]
+2                 render 2  ((k)[int] + (1)[int])[int]
+3  scan                                                    (k int, v int)               +k,unique
+3                 table     t@primary
+3                 spans     ALL
+3                 filter    ((v)[int] > (123)[int])[bool]
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-0  update                   set t (v) returning ()         ()
+0  update                                                  ()
+0                 table     t
+0                 set       v
 1  select                                                  (k int, v int, "k + 1" int)
-2  render/filter            from (test.t.k, test.t.v)      (k int, v int, "k + 1" int)
-2  render/filter  filter    ((v)[int] > (123)[int])[bool]
-2  render/filter  render 0  (k)[int]
-2  render/filter  render 1  (v)[int]
-2  render/filter  render 2  ((k)[int] + (1)[int])[int]
-3  scan                     t@primary                      (k int, v int)
+2  render/filter                                           (k int, v int, "k + 1" int)
+2                 filter    ((v)[int] > (123)[int])[bool]
+2                 render 0  (k)[int]
+2                 render 1  (v)[int]
+2                 render 2  ((k)[int] + (1)[int])[int]
+3  scan                                                    (k int, v int)
+3                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 ----
 0  select                                  (column1 int)
-1  union                  -                (column1 int)
+1  union                                   (column1 int)
 2  select                                  (column1 int)
-3  values                 1 column, 1 row  (column1 int)
-3  values  row 0, expr 0  (1)[int]
+3  values                                  (column1 int)
+3          size           1 column, 1 row
+3          row 0, expr 0  (1)[int]
 2  select                                  (column1 int)
-3  values                 1 column, 1 row  (column1 int)
-3  values  row 0, expr 0  (2)[int]
+3  values                                  (column1 int)
+3          size           1 column, 1 row
+3          row 0, expr 0  (2)[int]
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-0  select                                              (k int)                  +k,unique
-1  distinct                 k                          (k int)                  +k,unique
-2  render/filter            from (test.t.k, test.t.v)  (k int)                  +k,unique
-2  render/filter  render 0  (k)[int]
-3  scan                     t@primary                  (k int, v[omitted] int)  +k,unique
+0  select                              (k int)                  +k,unique
+1  distinct                            (k int)                  +k,unique
+1                 key       k
+2  render/filter                       (k int)                  +k,unique
+2                 render 0  (k)[int]
+3  scan                                (k int, v[omitted] int)  +k,unique
+3                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
 ----
-0  select                                              (k int)
-1  render/filter            from (test.t.k, test.t.v)  (k int)
-1  render/filter  render 0  (k)[int]
-2  scan                     t@primary                  (k int, v int)
+0  select                              (k int)
+1  distinct                            (k int)
+1  render/filter                       (k int)
+1                 render 0  (k)[int]
+2  scan                                (k int, v int)
+2                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
-0  select                                              (v int)                  +v
-1  sort                     +v                         (v int)                  +v
-2  render/filter            from (test.t.k, test.t.v)  (v int)
-2  render/filter  render 0  (v)[int]
-3  scan                     t@primary ALL              (k[omitted] int, v int)  +k,unique
+0  select                              (v int)                  +v
+1  sort                                (v int)                  +v
+1                 order     +v
+2  render/filter                       (v int)
+2                 render 0  (v)[int]
+3  scan                                (k[omitted] int, v int)  +k,unique
+3                 table     t@primary
+3                 spans     ALL
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t ORDER BY v
 ----
-0  select                                              (v int)
-1  render/filter            from (test.t.k, test.t.v)  (v int)
-1  render/filter  render 0  (v)[int]
-2  scan                     t@primary                  (k int, v int)
+0  select                              (v int)         +v
+1  nosort                              (v int)         +v
+1                 order     +@1
+1  render/filter                       (v int)
+1                 render 0  (v)[int]
+2  scan                                (k int, v int)
+2                 table     t@primary
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 ----
-0  select                                              (v int)
-1  limit                    count: 1                   (v int)
-1  limit          count     (1)[int]
-2  render/filter            from (test.t.k, test.t.v)  (v int)
-2  render/filter  render 0  (v)[int]
-3  scan                     t@primary (max 1 row)      (k[omitted] int, v int)  +k,unique
+0  select                              (v int)
+1  limit                               (v int)
+1                 count     (1)[int]
+2  render/filter                       (v int)
+2                 render 0  (v)[int]
+3  scan                                (k[omitted] int, v int)  +k,unique
+3                 table     t@primary
+3                 limit     1
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t LIMIT 1
 ----
-0  select                                              (v int)
-0  select         count     (1)[int]
-1  render/filter            from (test.t.k, test.t.v)  (v int)
-1  render/filter  render 0  (v)[int]
-2  scan                     t@primary                  (k int, v int)
+0  select                              (v int)
+1  limit                               (v int)
+1                 count     (1)[int]
+1  render/filter                       (v int)
+1                 render 0  (v)[int]
+2  scan                                (k int, v int)
+2                 table     t@primary
 
 statement ok
 CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
@@ -231,46 +280,50 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query ITTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-0  select                                                                (x int, y int)                              +x
-1  render/filter            from (test.tt.x, test.tt.y, *test.tt.rowid)  (x int, y int)                              +x
-1  render/filter  render 0  (x)[int]
-1  render/filter  render 1  (y)[int]
-2  index-join                                                            (x int, y int, rowid[hidden,omitted] int)   +x,+rowid,unique
-3  scan                     tt@a /#-/10                                  (x int, y[omitted] int, rowid[hidden] int)  +x,+rowid,unique
-3  scan           filter    ((x)[int] < (10)[int])[bool]
-3  scan                     tt@primary                                   (x int, y int, rowid[hidden,omitted] int)   +rowid,unique
-3  scan           filter    ((y)[int] > (10)[int])[bool]
+0  select                                                 (x int, y int)                              +x
+1  render/filter                                          (x int, y int)                              +x
+1                 render 0  (x)[int]
+1                 render 1  (y)[int]
+2  index-join                                             (x int, y int, rowid[hidden,omitted] int)   +x,+rowid,unique
+3  scan                                                   (x int, y[omitted] int, rowid[hidden] int)  +x,+rowid,unique
+3                 table     tt@a
+3                 spans     /#-/10
+3                 filter    ((x)[int] < (10)[int])[bool]
+3  scan                                                   (x int, y int, rowid[hidden,omitted] int)   +rowid,unique
+3                 table     tt@primary
+3                 filter    ((y)[int] > (10)[int])[bool]
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
 0  select                                                                                              (x int, y int)
-1  render/filter            from (test.tt.x, test.tt.y, *test.tt.rowid)                                (x int, y int)
-1  render/filter  filter    ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
-1  render/filter  render 0  (x)[int]
-1  render/filter  render 1  (y)[int]
-2  scan                     tt@primary                                                                 (x int, y int, rowid[hidden] int)
+1  render/filter                                                                                       (x int, y int)
+1                 filter    ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
+1                 render 0  (x)[int]
+1                 render 1  (y)[int]
+2  scan                                                                                                (x int, y int, rowid[hidden] int)
+2                 table     tt@primary
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT $1 + 2 AS a
 ----
 0  select                                                (a int)
-1  render/filter            from ()                      (a int)
-1  render/filter  render 0  (($1)[int] + (2)[int])[int]
+1  render/filter                                         (a int)
+1                 render 0  (($1)[int] + (2)[int])[int]
 2  nullrow                                               ()
 
 query ITTTTT
 EXPLAIN (TYPES, NONORMALIZE) SELECT ABS(2-3) AS a
 ----
 0  select                                          (a int)
-1  render/filter            from ()                (a int)
-1  render/filter  render 0  (abs((-1)[int]))[int]
+1  render/filter                                   (a int)
+1                 render 0  (abs((-1)[int]))[int]
 2  nullrow                                         ()
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 ----
 0  select                             (a int)
-1  render/filter            from ()   (a int)
-1  render/filter  render 0  (1)[int]
+1  render/filter                      (a int)
+1                 render 0  (1)[int]
 2  nullrow                            ()

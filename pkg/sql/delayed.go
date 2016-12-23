@@ -54,18 +54,10 @@ func (d *delayedNode) Close() {
 	}
 }
 
-func (d *delayedNode) ExplainPlan(verbose bool) (name, description string, children []planNode) {
-	if d.plan != nil {
-		children = []planNode{d.plan}
-	}
-	return "virtual table", d.name, children
-}
-
-func (d *delayedNode) explainExprs(rt func(string, parser.Expr)) {}
-func (d *delayedNode) Columns() ResultColumns                    { return d.columns }
-func (d *delayedNode) Ordering() orderingInfo                    { return orderingInfo{} }
-func (d *delayedNode) MarkDebug(_ explainMode)                   {}
-func (d *delayedNode) Start() error                              { return d.plan.Start() }
-func (d *delayedNode) Next() (bool, error)                       { return d.plan.Next() }
-func (d *delayedNode) Values() parser.DTuple                     { return d.plan.Values() }
-func (d *delayedNode) DebugValues() debugValues                  { return d.plan.DebugValues() }
+func (d *delayedNode) Columns() ResultColumns   { return d.columns }
+func (d *delayedNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (d *delayedNode) MarkDebug(_ explainMode)  {}
+func (d *delayedNode) Start() error             { return d.plan.Start() }
+func (d *delayedNode) Next() (bool, error)      { return d.plan.Next() }
+func (d *delayedNode) Values() parser.DTuple    { return d.plan.Values() }
+func (d *delayedNode) DebugValues() debugValues { return d.plan.DebugValues() }

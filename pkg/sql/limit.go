@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 
@@ -183,11 +182,6 @@ func (n *limitNode) evalLimit() error {
 	return nil
 }
 
-func (n *limitNode) explainExprs(regTypes func(string, parser.Expr)) {
-	regTypes("count", n.countExpr)
-	regTypes("offset", n.offsetExpr)
-}
-
 // setTop connects the limitNode back to the selectTopNode that caused
 // its existence. This is needed because the limitNode needs to refer
 // to other nodes in the selectTopNode before its expandPlan() method
@@ -206,8 +200,14 @@ func (n *limitNode) Columns() ResultColumns {
 	return n.top.Columns()
 }
 
-func (n *limitNode) Values() parser.DTuple  { return n.plan.Values() }
-func (n *limitNode) Ordering() orderingInfo { return n.plan.Ordering() }
+func (n *limitNode) Values() parser.DTuple { return n.plan.Values() }
+func (n *limitNode) Ordering() orderingInfo {
+	if n.plan != nil {
+		return n.plan.Ordering()
+	}
+	// Pre-prepare: not connected yet. Ask the top select node.
+	return n.top.Ordering()
+}
 
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
@@ -258,25 +258,6 @@ func (n *limitNode) Next() (bool, error) {
 		// Fetch the next row.
 	}
 	return true, nil
-}
-
-func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {
-	var buf bytes.Buffer
-	subplans := []planNode{n.plan}
-	prefix := ""
-	if n.countExpr != nil {
-		buf.WriteString("count: ")
-		n.countExpr.Format(&buf, parser.FmtSimple)
-		subplans = n.p.collectSubqueryPlans(n.countExpr, subplans)
-		prefix = ", "
-	}
-	if n.offsetExpr != nil {
-		buf.WriteString(prefix)
-		buf.WriteString("offset: ")
-		n.offsetExpr.Format(&buf, parser.FmtSimple)
-		subplans = n.p.collectSubqueryPlans(n.offsetExpr, subplans)
-	}
-	return "limit", buf.String(), subplans
 }
 
 func (n *limitNode) Close() {

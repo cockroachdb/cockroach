@@ -79,13 +79,15 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		} else if strings.EqualFold(opt, "QUALIFY") {
 			explainer.qualifyNames = true
 		} else if strings.EqualFold(opt, "VERBOSE") {
-			// VERBOSE shows expression fields.
+			// VERBOSE implies EXPRS.
 			explainer.showExprs = true
 			// VERBOSE implies QUALIFY.
 			explainer.qualifyNames = true
 			// VERBOSE implies METADATA.
 			explainer.showSelectTop = true
 			explainer.showMetadata = true
+		} else if strings.EqualFold(opt, "EXPRS") {
+			explainer.showExprs = true
 		} else if strings.EqualFold(opt, "NOEXPAND") {
 			expanded = false
 		} else if strings.EqualFold(opt, "NONORMALIZE") {
@@ -236,12 +238,6 @@ func (n *explainDebugNode) expandPlan() error {
 func (n *explainDebugNode) Start() error        { return n.plan.Start() }
 func (n *explainDebugNode) Next() (bool, error) { return n.plan.Next() }
 func (n *explainDebugNode) Close()              { n.plan.Close() }
-
-func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
-	return n.plan.ExplainPlan(v)
-}
-
-func (n *explainDebugNode) explainExprs(fn func(string, parser.Expr)) {}
 
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()

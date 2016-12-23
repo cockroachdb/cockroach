@@ -28,11 +28,20 @@ INSERT INTO t VALUES
   (9, 3, 3, '33')
 
 query ITTT
-EXPLAIN SELECT * FROM t WHERE b = 2 AND c % 2 = 0
+EXPLAIN(EXPRS) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 ----
-0 index-join
-1 scan       t@bc /2-/3
-1 scan       t@primary
+0  render/filter
+0                 render 0  a
+0                 render 1  b
+0                 render 2  c
+0                 render 3  s
+1  index-join
+2  scan
+2                 table     t@bc
+2                 spans     /2-/3
+2                 filter    (c % 2) = 0
+2  scan
+2                 table     t@primary
 
 # We do NOT look up the table row for '21' and '23'.
 query ITTT
@@ -47,11 +56,20 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 2 /t/bc/2/3/6    NULL FILTERED
 
 query ITTT
-EXPLAIN SELECT * FROM t WHERE b = 2 AND c != b
+EXPLAIN(EXPRS) SELECT * FROM t WHERE b = 2 AND c != b
 ----
-0 index-join
-1 scan       t@bc /2-/3
-1 scan       t@primary
+0  render/filter
+0                 render 0  a
+0                 render 1  b
+0                 render 2  c
+0                 render 3  s
+1  index-join
+2  scan
+2                 table     t@bc
+2                 spans     /2-/3
+2                 filter    c != b
+2  scan
+2                 table     t@primary
 
 # We do NOT look up the table row for '22'.
 query ITTT

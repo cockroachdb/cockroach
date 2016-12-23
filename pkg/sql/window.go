@@ -759,32 +759,6 @@ func (n *windowNode) populateValues() error {
 	return nil
 }
 
-func (n *windowNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
-	name = "window"
-	var buf bytes.Buffer
-	for i, f := range n.funcs {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		f.Format(&buf, parser.FmtSimple)
-	}
-
-	subplans := []planNode{n.plan}
-	for _, e := range n.windowRender {
-		subplans = n.planner.collectSubqueryPlans(e, subplans)
-	}
-	return name, buf.String(), subplans
-}
-
-func (n *windowNode) explainExprs(regTypes func(string, parser.Expr)) {
-	cols := n.Columns()
-	for i, rexpr := range n.windowRender {
-		if rexpr != nil {
-			regTypes(fmt.Sprintf("render %s", cols[i].Name), rexpr)
-		}
-	}
-}
-
 func (*windowNode) SetLimitHint(_ int64, _ bool) {}
 func (*windowNode) setNeededColumns(_ []bool)    {}
 
