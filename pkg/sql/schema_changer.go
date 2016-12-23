@@ -431,7 +431,7 @@ func (sc *SchemaChanger) waitToUpdateLeases(tableID sqlbase.ID) error {
 	if log.V(2) {
 		log.Infof(context.TODO(), "waiting for a single version of table %d...", tableID)
 	}
-	_, err := sc.leaseMgr.waitForOneVersion(tableID, retryOpts)
+	_, err := sc.leaseMgr.WaitForOneVersion(tableID, retryOpts)
 	if log.V(2) {
 		log.Infof(context.TODO(), "waiting for a single version of table %d... done", tableID)
 	}
