@@ -150,18 +150,18 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 	var scratch []byte
 
 	renderAndPush := func(lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
-	) (rowsLeft bool, failedFilter bool, err error) {
-		row, ff, err := h.render(lrow, rrow)
+	) (rowsLeft bool, failedOnCond bool, err error) {
+		row, failedOnCond, err := h.render(lrow, rrow)
 		if err != nil {
-			return false, ff, err
+			return false, failedOnCond, err
 		}
 		if row != nil {
 			if log.V(3) {
 				log.Infof(ctx, "pushing row %s", row)
 			}
-			return h.output.PushRow(row), ff, nil
+			return h.output.PushRow(row), failedOnCond, nil
 		}
-		return true, ff, nil
+		return true, failedOnCond, nil
 	}
 
 	for {
@@ -201,11 +201,11 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			}
 		} else {
 			for idx, rrow := range b.rows {
-				if rowsLeft, failedFilter, err := renderAndPush(lrow, rrow); err != nil {
+				if rowsLeft, failedOnCond, err := renderAndPush(lrow, rrow); err != nil {
 					return err
 				} else if !rowsLeft {
 					return nil
-				} else if !failedFilter && (h.joinType == rightOuter || h.joinType == fullOuter) {
+				} else if !failedOnCond && (h.joinType == rightOuter || h.joinType == fullOuter) {
 					b.seen[idx] = true
 				}
 			}
