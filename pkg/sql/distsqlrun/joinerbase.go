@@ -75,14 +75,17 @@ func (jb *joinerBase) init(
 // right to be nil if there was no explicit "join" match, the filter is then
 // evaluated on a combinedRow with null values for the columns of the nil row.
 // render returns a nil row if no row is to be emitted (eg. if join type is
-// inner join and one of the given rows is nil).
-func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+// inner join and one of the given rows is nil). The returned boolean indicates
+// whether or not the returned row failed the filter condition.
+func (jb *joinerBase) render(
+	lrow, rrow sqlbase.EncDatumRow,
+) (ret sqlbase.EncDatumRow, failedFilter bool, err error) {
 	lnil := lrow == nil
 	rnil := rrow == nil
 	switch jb.joinType {
 	case innerJoin:
 		if lnil || rnil {
-			return nil, nil
+			return nil, false, nil
 		}
 	case fullOuter:
 		if lnil {
@@ -92,14 +95,14 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 		}
 	case leftOuter:
 		if lnil {
-			return nil, nil
+			return nil, false, nil
 		}
 		if rnil {
 			rrow = jb.emptyRight
 		}
 	case rightOuter:
 		if rnil {
-			return nil, nil
+			return nil, false, nil
 		}
 		if lnil {
 			lrow = jb.emptyLeft
@@ -108,13 +111,27 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
 	res, err := jb.filter.evalFilter(jb.combinedRow)
-	if !res || err != nil {
-		return nil, err
+	if err != nil {
+		return nil, false, err
+	}
+	if !res && !rnil && !lnil {
+		// The filter failed and we're trying to render a row that's been
+		// successfully equality joined already. In this case, we need to output
+		// a failed match row that contains just the left side, if we're required
+		// to by the join style.
+		if jb.joinType == innerJoin || jb.joinType == rightOuter {
+			// If we're doing an inner or right outer join, we shouldn't return a row:
+			// we don't want to output rows with NULL right sides. We still need to
+			// notify the caller that the filter failed, though, because they'll want
+			// to render the corresponding right side row by itself later.
+			return nil, true, nil
+		}
+		jb.combinedRow = append(jb.combinedRow[:len(lrow)], jb.emptyRight...)
 	}
 
 	row := jb.rowAlloc.AllocRow(len(jb.outputCols))
 	for i, col := range jb.outputCols {
 		row[i] = jb.combinedRow[col]
 	}
-	return row, nil
+	return row, !res, nil
 }

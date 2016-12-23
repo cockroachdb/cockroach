@@ -124,6 +124,7 @@ func TestHashJoiner(t *testing.T) {
 				{v[0], v[1], v[4]},
 			},
 		},
+		// Test that inner joins work with filter expressions.
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns: []uint32{0},
@@ -334,6 +335,107 @@ func TestHashJoiner(t *testing.T) {
 			expected: sqlbase.EncDatumRows{
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
+			},
+		},
+		// Test that left outer joins work with filters as expected.
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0},
+				LeftTypes: []sqlbase.ColumnType{
+					columnTypeInt,
+				},
+				RightEqColumns: []uint32{0},
+				RightTypes: []sqlbase.ColumnType{
+					columnTypeInt,
+				},
+				Type:          JoinType_LEFT_OUTER,
+				OutputColumns: []uint32{0, 1},
+				Expr:          Expression{Expr: "@2 > 1"},
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0]},
+					{v[1]},
+					{v[2]},
+				},
+				{
+					{v[1]},
+					{v[2]},
+					{v[3]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], null},
+				{v[1], null},
+				{v[2], v[2]},
+			},
+		},
+		// Test that right outer joins work with filters as expected.
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0},
+				LeftTypes: []sqlbase.ColumnType{
+					columnTypeInt,
+				},
+				RightEqColumns: []uint32{0},
+				RightTypes: []sqlbase.ColumnType{
+					columnTypeInt,
+				},
+				Type:          JoinType_RIGHT_OUTER,
+				OutputColumns: []uint32{0, 1},
+				Expr:          Expression{Expr: "@2 > 1"},
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0]},
+					{v[1]},
+					{v[2]},
+				},
+				{
+					{v[1]},
+					{v[2]},
+					{v[3]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{null, v[1]},
+				{v[2], v[2]},
+				{null, v[3]},
+			},
+		},
+		// Test that full outer joins work with filters as expected.
+		{
+			spec: HashJoinerSpec{
+				LeftEqColumns: []uint32{0},
+				LeftTypes: []sqlbase.ColumnType{
+					columnTypeInt,
+				},
+				RightEqColumns: []uint32{0},
+				RightTypes: []sqlbase.ColumnType{
+					columnTypeInt,
+				},
+				Type:          JoinType_FULL_OUTER,
+				OutputColumns: []uint32{0, 1},
+				Expr:          Expression{Expr: "@2 > 1"},
+			},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{v[0]},
+					{v[1]},
+					{v[2]},
+				},
+				{
+					{v[1]},
+					{v[2]},
+					{v[3]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], null},
+				{null, v[1]},
+				{v[1], null},
+				{v[2], v[2]},
+				{null, v[3]},
 			},
 		},
 

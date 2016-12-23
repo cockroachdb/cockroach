@@ -86,7 +86,7 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 			return
 		}
 		for _, rowPair := range batch {
-			row, err := m.render(rowPair[0], rowPair[1])
+			row, _, err := m.render(rowPair[0], rowPair[1])
 			if err != nil {
 				m.output.Close(err)
 				return

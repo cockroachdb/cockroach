@@ -121,7 +121,7 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == rightOuter || h.joinType == fullOuter {
-				row, err := h.render(nil, rrow)
+				row, _, err := h.render(nil, rrow)
 				if err != nil {
 					return err
 				}
@@ -167,7 +167,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == leftOuter || h.joinType == fullOuter {
-				row, err := h.render(lrow, nil)
+				row, _, err := h.render(lrow, nil)
 				if err != nil {
 					return err
 				}
@@ -183,7 +183,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			row, err := h.render(lrow, nil)
+			row, _, err := h.render(lrow, nil)
 			if err != nil {
 				return err
 			}
@@ -194,10 +194,9 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 				return nil
 			}
 		} else {
-			h.buckets[string(encoded)] = b
 			for idx, rrow := range b.rows {
-				row, err := h.render(lrow, rrow)
-				if h.joinType == rightOuter || h.joinType == fullOuter {
+				row, ff, err := h.render(lrow, rrow)
+				if !ff && (h.joinType == rightOuter || h.joinType == fullOuter) {
 					b.seen[idx] = true
 				}
 				if err != nil {
@@ -221,7 +220,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 	for _, b := range h.buckets {
 		for idx, rrow := range b.rows {
 			if !b.seen[idx] {
-				row, err := h.render(nil, rrow)
+				row, _, err := h.render(nil, rrow)
 				if err != nil {
 					return err
 				}
