@@ -2978,8 +2978,11 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// Manually transfer raft leadership to node 0.
 	testutils.SucceedsSoon(t, func() error {
 		repl1.RaftTransferLeader(context.Background(), rd0.ReplicaID)
-		if a, e := repl1.RaftStatus().Lead, uint64(rd0.ReplicaID); a != e {
-			return errors.Errorf("expected raft leader be %d; got %d", e, a)
+		// We can't check repl1.RaftStatus().Lead here because leadership
+		// could have reverted back to the leaseholder faster than we
+		// could observe it. Instead, we just check the transfer metrics.
+		if a, e := store1.Metrics().RangeRaftLeaderTransfers.Count(), int64(1); a < e {
+			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
 		}
 		return nil
 	})
@@ -2989,7 +2992,9 @@ func TestTransferRaftLeadership(t *testing.T) {
 		if a, e := repl0.RaftStatus().Lead, uint64(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
-		if a, e := store1.Metrics().RangeRaftLeaderTransfers.Count(), int64(1); a < e {
+		// Expect a minimum of two transfers: one here and one for the
+		// earlier transfer above.
+		if a, e := store0.Metrics().RangeRaftLeaderTransfers.Count(), int64(2); a < e {
 			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
 		}
 		return nil
