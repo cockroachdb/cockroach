@@ -31,7 +31,7 @@ type joinerBase struct {
 
 	joinType    joinType
 	outputCols  columns
-	filter      exprHelper
+	onCond      exprHelper
 	rowAlloc    sqlbase.EncDatumRowAlloc
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
@@ -67,46 +67,58 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	return jb.filter.init(expr, types, flowCtx.evalCtx)
+	return jb.onCond.init(expr, types, flowCtx.evalCtx)
 }
 
-// render evaluates the provided filter and constructs a row with columns from
-// both rows as specified by the provided output columns. We expect left or
-// right to be nil if there was no explicit "join" match, the filter is then
-// evaluated on a combinedRow with null values for the columns of the nil row.
-// render returns a nil row if no row is to be emitted (eg. if join type is
-// inner join and one of the given rows is nil).
-func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	switch jb.joinType {
-	case innerJoin:
-		if lrow == nil || rrow == nil {
-			return nil, nil
+// render evaluates the provided on-condition and constructs a row with columns
+// from both rows as specified by the provided output columns. We expect left or
+// right to be nil if there was no explicit "join" match, the on condition is
+// then evaluated on a combinedRow with null values for the columns of the nil
+// row. render returns a nil row if no row is to be emitted (eg. if join type is
+// inner join and one of the given rows is nil). The returned boolean indicates
+// whether or not the returned row failed the on condition.
+func (jb *joinerBase) render(
+	lrow, rrow sqlbase.EncDatumRow,
+) (ret sqlbase.EncDatumRow, failedOnCond bool, err error) {
+	lnil := lrow == nil
+	rnil := rrow == nil
+	if lnil {
+		if jb.joinType == innerJoin || jb.joinType == leftOuter {
+			return nil, false, nil
 		}
-	case fullOuter:
-		if lrow == nil {
-			lrow = jb.emptyLeft
-		} else if rrow == nil {
-			rrow = jb.emptyRight
+		lrow = jb.emptyLeft
+	}
+	if rnil {
+		if jb.joinType == innerJoin || jb.joinType == rightOuter {
+			return nil, false, nil
 		}
-	case leftOuter:
-		if rrow == nil {
-			rrow = jb.emptyRight
-		}
-	case rightOuter:
-		if lrow == nil {
-			lrow = jb.emptyLeft
-		}
+		rrow = jb.emptyRight
 	}
 	jb.combinedRow = append(jb.combinedRow[:0], lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
-	res, err := jb.filter.evalFilter(jb.combinedRow)
-	if !res || err != nil {
-		return nil, err
+	res, err := jb.onCond.evalFilter(jb.combinedRow)
+	if err != nil {
+		return nil, false, err
+	}
+	if !res && !rnil && !lnil {
+		// The on condition failed and we're trying to render a row that's been
+		// successfully equality joined already. In this case, we need to
+		// output a failed match row that contains just the left side, if we're
+		// required to by the join style.
+		if jb.joinType == innerJoin || jb.joinType == rightOuter {
+			// If we're doing an inner or right outer join, we shouldn't return
+			// a row: we don't want to output rows with NULL right sides. We
+			// still need to notify the caller that the on condition failed,
+			// though, because they'll want to render the corresponding right
+			// side row by itself later.
+			return nil, true, nil
+		}
+		jb.combinedRow = append(jb.combinedRow[:len(lrow)], jb.emptyRight...)
 	}
 
 	row := jb.rowAlloc.AllocRow(len(jb.outputCols))
 	for i, col := range jb.outputCols {
 		row[i] = jb.combinedRow[col]
 	}
-	return row, nil
+	return row, !res, nil
 }
