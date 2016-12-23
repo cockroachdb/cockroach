@@ -883,6 +883,101 @@ COMMIT;
 	}
 }
 
+// Add an index and check that it succeeds.
+func addIndexSchemaChange(
+	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+) {
+	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The schema change succeeded. Verify that the index foo over v is
+	// consistent.
+	rows, err := sqlDB.Query(`SELECT v from t.test@foo`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	for ; rows.Next(); count++ {
+		var val int
+		if err := rows.Scan(&val); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if count != val {
+			t.Errorf("e = %d, v = %d", count, val)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := maxValue + 1; eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+		t.Fatal(err)
+	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
+
+// Add a column and check that it succeeds.
+func addColumnSchemaChange(
+	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+) {
+	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := sqlDB.Query(`SELECT x from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for ; rows.Next(); count++ {
+		var val float64
+		if err := rows.Scan(&val); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if e := 1.4; e != val {
+			t.Errorf("e = %f, v = %f", e, val)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := maxValue + 1; eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+		t.Fatal(err)
+	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
+
+// Drop a column and check that it succeeds.
+func dropColumnSchemaChange(
+	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+) {
+	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+		t.Fatal(err)
+	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
+
 // Test schema changes are retried and complete properly. This also checks
 // that a mutation checkpoint reduces the number of chunks operated on during
 // a retry.
@@ -928,96 +1023,116 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
+	const maxValue = 5000
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+
+	attempts = 0
+	seenSpan = roachpb.Span{}
+	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 3)
+
+	attempts = 0
+	seenSpan = roachpb.Span{}
+	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+}
+
+// Test schema changes are retried and complete properly when the table
+// version changes. This also checks that a mutation checkpoint reduces
+// the number of chunks operated on during a retry.
+func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	var upTableVersion func()
+	attempts := 0
+	// This represents the number of backfill chunks that get reevaluated.
+	// A retry results in a reevaluation of a chunk.
+	var numReevaluated uint32
+	seenSpan := roachpb.Span{}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				attempts++
+				// Fail somewhere in the middle.
+				if attempts == 3 {
+					// Publish a new version of the table.
+					upTableVersion()
+				}
+				if seenSpan.Key != nil {
+					// Keep track of the number of reevaluations.
+					if seenSpan.Key.Compare(sp.Key) >= 0 {
+						atomic.AddUint32(&numReevaluated, 1)
+					}
+					if !seenSpan.EndKey.Equal(sp.EndKey) {
+						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+					}
+				}
+				seenSpan = sp
+				return nil
+			},
+			// Disable asynchronous schema change execution to allow
+			// synchronous path to run schema changes.
+			AsyncExecNotification:   asyncSchemaChangerDisabled,
+			WriteCheckpointInterval: time.Nanosecond,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	id := tableDesc.ID
+
+	upTableVersion = func() {
+		leaseMgr := s.LeaseManager().(*csql.LeaseManager)
+		if _, err := leaseMgr.Publish(id,
+			func(table *sqlbase.TableDescriptor) error {
+				table.Version++
+				return nil
+			},
+			func(txn *client.Txn) error { return nil }); err != nil {
+			t.Error(err)
+		}
+		retryOpts := retry.Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Millisecond,
+		}
+		if _, err := leaseMgr.WaitForOneVersion(id, retryOpts); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// Bulk insert.
 	maxValue := 5000
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
-	// Add an index and check that it succeeds.
-	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
-		t.Fatal(err)
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
+		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
 	}
 
-	// The schema change succeeded. Verify that the index foo over v is
-	// consistent.
-	rows, err := sqlDB.Query(`SELECT v from t.test@foo`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	count := 0
-	for ; rows.Next(); count++ {
-		var val int
-		if err := rows.Scan(&val); err != nil {
-			t.Errorf("row %d scan failed: %s", count, err)
-			continue
-		}
-		if count != val {
-			t.Errorf("e = %d, v = %d", count, val)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if eCount := maxValue + 1; eCount != count {
-		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
-	}
-
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	tableEnd := tablePrefix.PrefixEnd()
-	numKeysPerRow := 2
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
-		t.Fatal(err)
-	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
-	}
-
-	// Add a column and check that it works.
 	attempts = 0
 	seenSpan = roachpb.Span{}
-	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')"); err != nil {
-		t.Fatal(err)
-	}
-	rows, err = sqlDB.Query(`SELECT x from t.test`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	count = 0
-	for ; rows.Next(); count++ {
-		var val float64
-		if err := rows.Scan(&val); err != nil {
-			t.Errorf("row %d scan failed: %s", count, err)
-			continue
-		}
-		if e := 1.4; e != val {
-			t.Errorf("e = %f, v = %f", e, val)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if eCount := maxValue + 1; eCount != count {
-		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
-	}
-	numKeysPerRow++
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
-		t.Fatal(err)
-	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 3)
+	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
+		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
 	}
 
-	// Delete a column and check that it works.
 	attempts = 0
 	seenSpan = roachpb.Span{}
-	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
-		t.Fatal(err)
-	}
-	numKeysPerRow--
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
-		t.Fatal(err)
-	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
+		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
 	}
 }
 
