@@ -2950,6 +2950,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// Force a read on Store 2 to request a new lease. Other moving parts in
 	// the system could have requested another lease as well, so we
 	// expire-request in a loop until we get our foot in the door.
+	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	for {
 		mtc.expireLeases(context.TODO())
 		if _, pErr := client.SendWrappedWith(
@@ -2969,17 +2970,22 @@ func TestTransferRaftLeadership(t *testing.T) {
 		if a, e := repl0.RaftStatus().Lead, uint64(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
-		if a, e := store0.Metrics().RangeRaftLeaderTransfers.Count(), int64(1); a < e {
+		if a, e := store0.Metrics().RangeRaftLeaderTransfers.Count()-origCount0, int64(1); a < e {
 			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
 		}
 		return nil
 	})
 
 	// Manually transfer raft leadership to node 0.
+	origCount0 = store0.Metrics().RangeRaftLeaderTransfers.Count()
+	origCount1 := store1.Metrics().RangeRaftLeaderTransfers.Count()
 	testutils.SucceedsSoon(t, func() error {
 		repl1.RaftTransferLeader(context.Background(), rd0.ReplicaID)
-		if a, e := repl1.RaftStatus().Lead, uint64(rd0.ReplicaID); a != e {
-			return errors.Errorf("expected raft leader be %d; got %d", e, a)
+		// We can't check repl1.RaftStatus().Lead here because leadership
+		// could have reverted back to the leaseholder faster than we
+		// could observe it. Instead, we just check the transfer metrics.
+		if a, e := store1.Metrics().RangeRaftLeaderTransfers.Count()-origCount1, int64(1); a < e {
+			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
 		}
 		return nil
 	})
@@ -2989,7 +2995,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 		if a, e := repl0.RaftStatus().Lead, uint64(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
-		if a, e := store1.Metrics().RangeRaftLeaderTransfers.Count(), int64(1); a < e {
+		if a, e := store0.Metrics().RangeRaftLeaderTransfers.Count()-origCount0, int64(1); a < e {
 			return errors.Errorf("expected raft leader transfer count >= %d; got %d", e, a)
 		}
 		return nil
