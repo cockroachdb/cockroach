@@ -305,12 +305,12 @@ func TestParseDIntervalWithField(t *testing.T) {
 		{"5", year, "5 year"},
 		{"5.8", year, "5 year"},
 		// Test cases for truncation based on fields
-		{"1-2-3 4:56:07", second, "1-2-3 4:56:07"},
-		{"1-2-3 4:56:07", minute, "1-2-3 4:56:00"},
-		{"1-2-3 4:56:07", hour, "1-2-3 4:00:00"},
-		{"1-2-3 4:56:07", day, "1-2-3"},
-		{"1-2-3 4:56:07", month, "1-2-0"},
-		{"1-2-3 4:56:07", year, "1 year"},
+		{"1-2 3 4:56:07", second, "1-2 3 4:56:07"},
+		{"1-2 3 4:56:07", minute, "1-2 3 4:56:00"},
+		{"1-2 3 4:56:07", hour, "1-2 3 4:00:00"},
+		{"1-2 3 4:56:07", day, "1-2 3 0:"},
+		{"1-2 3 4:56:07", month, "1-2 0 0:"},
+		{"1-2 3 4:56:07", year, "1 year"},
 	}
 	for _, td := range testData {
 		actual, err := ParseDIntervalWithField(td.str, td.field)
