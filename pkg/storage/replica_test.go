@@ -733,10 +733,13 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: one, Expiration: hlc.ZeroTimestamp},
 	} {
-		if _, _, err := tc.repl.RequestLease(context.Background(), tc.store.Engine(), nil,
-			roachpb.Header{}, roachpb.RequestLeaseRequest{
-				Lease: lease,
-			}); !testutils.IsError(err, "illegal lease") {
+		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
+			CommandArgs{
+				Repl: tc.repl,
+				Args: &roachpb.RequestLeaseRequest{
+					Lease: lease,
+				},
+			}, &roachpb.RequestLeaseResponse{}); !testutils.IsError(err, "illegal lease") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
@@ -3657,11 +3660,14 @@ func TestEndTransactionDirectGC(t *testing.T) {
 			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate abort cache entry */)
 
 			testutils.SucceedsSoon(t, func() error {
-				if gr, _, err := tc.repl.Get(
-					ctx, tc.engine, roachpb.Header{},
-					roachpb.GetRequest{Span: roachpb.Span{
-						Key: keys.TransactionKey(txn.Key, *txn.ID),
-					}},
+				var gr roachpb.GetResponse
+				if _, err := evalGet(
+					ctx, tc.engine, CommandArgs{
+						Args: &roachpb.GetRequest{Span: roachpb.Span{
+							Key: keys.TransactionKey(txn.Key, *txn.ID),
+						}},
+					},
+					&gr,
 				); err != nil {
 					return err
 				} else if gr.Value != nil {
@@ -4205,19 +4211,20 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 
 	ctx := context.Background()
 	// Should not be able to push or resolve in a transaction.
-	if _, err := tc.repl.PushTxn(ctx, b, &ms, roachpb.Header{Txn: txn}, pa); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalPushTxn(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
 	}
-	if _, err := tc.repl.ResolveIntent(ctx, b, &ms, roachpb.Header{Txn: txn}, ra); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalResolveIntent(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
 	}
-	if _, err := tc.repl.ResolveIntentRange(ctx, b, &ms, roachpb.Header{Txn: txn}, rra); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalResolveIntentRange(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
 	}
 
 	// Should not get a transaction back from PushTxn. It used to erroneously
 	// return args.PusherTxn.
-	if reply, err := tc.repl.PushTxn(ctx, b, &ms, roachpb.Header{}, pa); err != nil {
+	var reply roachpb.PushTxnResponse
+	if _, err := evalPushTxn(ctx, b, CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -5971,16 +5978,21 @@ func TestComputeChecksumVersioning(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.Start(t, stopper)
-	repl := tc.repl
 
-	if _, pct, _ := repl.ComputeChecksum(context.TODO(), nil, nil, roachpb.Header{},
-		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion},
+	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
+			ChecksumID: uuid.MakeV4(),
+			Version:    replicaChecksumVersion,
+		}}, &roachpb.ComputeChecksumResponse{},
 	); pct.Replicated.ComputeChecksum == nil {
 		t.Error("right checksum version: expected post-commit trigger")
 	}
 
-	if _, pct, _ := repl.ComputeChecksum(context.TODO(), nil, nil, roachpb.Header{},
-		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion + 1},
+	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
+			ChecksumID: uuid.MakeV4(),
+			Version:    replicaChecksumVersion + 1,
+		}}, &roachpb.ComputeChecksumResponse{},
 	); pct.Replicated.ComputeChecksum != nil {
 		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.Replicated.ComputeChecksum)
 	}
