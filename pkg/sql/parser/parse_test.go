@@ -355,17 +355,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 
 		{`SELECT '1':::INT`},
-
 		{`SELECT '1'::INT`},
-		{`SELECT BOOL 'foo'`},
-		{`SELECT INT 'foo'`},
-		{`SELECT REAL 'foo'`},
-		{`SELECT DECIMAL 'foo'`},
-		{`SELECT DATE 'foo'`},
-		{`SELECT TIMESTAMP 'foo'`},
-		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
-		{`SELECT INTERVAL 'foo'`},
-		{`SELECT CHAR 'foo'`},
 
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},
@@ -644,7 +634,7 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d))`},
 		{`CREATE INDEX ON a (b) COVERING (c)`, `CREATE INDEX ON a (b) STORING (c)`},
 
-		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
+		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT 'foo'::TIMESTAMP`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
@@ -672,6 +662,16 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+ b)`},
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (- b)`},
 		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~ b)`},
+
+		{`SELECT BOOL 'foo'`, `SELECT 'foo'::BOOL`},
+		{`SELECT INT 'foo'`, `SELECT 'foo'::INT`},
+		{`SELECT REAL 'foo'`, `SELECT 'foo'::REAL`},
+		{`SELECT DECIMAL 'foo'`, `SELECT 'foo'::DECIMAL`},
+		{`SELECT DATE 'foo'`, `SELECT 'foo'::DATE`},
+		{`SELECT TIMESTAMP 'foo'`, `SELECT 'foo'::TIMESTAMP`},
+		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`, `SELECT 'foo'::TIMESTAMP WITH TIME ZONE`},
+		{`SELECT INTERVAL 'foo'`, `SELECT 'foo'::INTERVAL`},
+		{`SELECT CHAR 'foo'`, `SELECT 'foo'::CHAR`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
@@ -759,9 +759,9 @@ func TestParse2(t *testing.T) {
 		{`SET TIME ZONE "Europe/Rome"`,
 			`SET TIME ZONE 'Europe/Rome'`},
 		{`SET TIME ZONE INTERVAL '-7h'`,
-			`SET TIME ZONE INTERVAL '-7h0m0s'`},
+			`SET TIME ZONE '-7h0m0s'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
-			`SET TIME ZONE INTERVAL '-7h0m0s'`},
+			`SET TIME ZONE '-7h0m0s'`},
 		// Special substring syntax
 		{`SELECT SUBSTRING('RoacH' from 2 for 3)`,
 			`SELECT substring('RoacH', 2, 3)`},

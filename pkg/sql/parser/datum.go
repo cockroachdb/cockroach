@@ -393,6 +393,9 @@ func (d *DFloat) min() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.disambiguateDatumTypes {
+		buf.WriteString("FLOAT ")
+	}
 	fl := float64(*d)
 	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
 		// d is a small whole number. Ensure it is printed using a decimal point.
@@ -476,6 +479,9 @@ func (d *DDecimal) min() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.disambiguateDatumTypes {
+		buf.WriteString("DECIMAL ")
+	}
 	buf.WriteString(d.Dec.String())
 }
 
@@ -553,6 +559,9 @@ func (d *DString) max() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.disambiguateDatumTypes {
+		buf.WriteString("STRING ")
+	}
 	encodeSQLStringWithFlags(buf, string(*d), f)
 }
 
@@ -850,6 +859,9 @@ func (d *DDate) min() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.disambiguateDatumTypes {
+		buf.WriteString("DATE ")
+	}
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1005,6 +1017,9 @@ func (d *DTimestamp) max() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.disambiguateDatumTypes {
+		buf.WriteString("TIMESTAMP ")
+	}
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1109,6 +1124,9 @@ func (d *DTimestampTZ) max() (Datum, bool) {
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.disambiguateDatumTypes {
+		buf.WriteString("TIMESTAMPTZ ")
+	}
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1323,9 +1341,16 @@ func (d *DInterval) ValueAsString() string {
 
 // Format implements the NodeFormatter interface. Example: "INTERVAL `1h2m`".
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INTERVAL '")
+	if f.disambiguateDatumTypes {
+		buf.WriteString("INTERVAL ")
+	}
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.ValueAsString())
-	buf.WriteByte('\'')
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
