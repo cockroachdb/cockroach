@@ -172,7 +172,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 				// Emit nothing on NULL.
 				continue
 			}
-			d.Format(&b.variablePutbuf, parser.FmtSimple)
+			d.Format(&b.variablePutbuf, parser.FmtValue)
 		}
 		b.variablePutbuf.WriteString(")")
 		b.writeLengthPrefixedVariablePutbuf()

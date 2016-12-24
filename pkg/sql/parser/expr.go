@@ -1004,8 +1004,6 @@ type castSyntaxMode int
 const (
 	castExplicit castSyntaxMode = iota
 	castShort
-	castPrefix
-	castPrefixParens
 )
 
 // CastTargetType represents a type that is a valid cast target.
@@ -1055,15 +1053,6 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Expr)
 		buf.WriteString("::")
 		FormatNode(buf, f, node.Type)
-	case castPrefix:
-		FormatNode(buf, f, node.Type)
-		buf.WriteByte(' ')
-		FormatNode(buf, f, node.Expr)
-	case castPrefixParens:
-		FormatNode(buf, f, node.Type)
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.Expr)
-		buf.WriteByte(')')
 	default:
 		buf.WriteString("CAST(")
 		FormatNode(buf, f, node.Expr)
@@ -1202,20 +1191,6 @@ func (node *CastExpr) String() string         { return AsString(node) }
 func (node *CoalesceExpr) String() string     { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
-func (node *DBool) String() string            { return AsString(node) }
-func (node *DBytes) String() string           { return AsString(node) }
-func (node *DDate) String() string            { return AsString(node) }
-func (node *DDecimal) String() string         { return AsString(node) }
-func (node *DFloat) String() string           { return AsString(node) }
-func (node *DInt) String() string             { return AsString(node) }
-func (node *DInterval) String() string        { return AsString(node) }
-func (node *DString) String() string          { return AsString(node) }
-func (node *DCollatedString) String() string  { return AsString(node) }
-func (node *DTimestamp) String() string       { return AsString(node) }
-func (node *DTimestampTZ) String() string     { return AsString(node) }
-func (node *DTuple) String() string           { return AsString(node) }
-func (node *DArray) String() string           { return AsString(node) }
-func (node *DTable) String() string           { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }

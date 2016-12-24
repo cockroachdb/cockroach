@@ -38,6 +38,9 @@ type fmtFlags struct {
 	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
 	// If true, strings will be rendered without wrapping quotes if possible.
 	bareStrings bool
+	// If true, constant values will not include type annotations like INTERVAL,
+	// DATE; useful when formatting a single value and the type is known.
+	noDatumTypes bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -48,9 +51,13 @@ type FmtFlags *fmtFlags
 // syntax that makes prettyprint+parse idempotent.
 var FmtSimple FmtFlags = &fmtFlags{showTypes: false}
 
+// FmtValue instructs the pretty-printer to produce
+// a value representation, which omits type annotations like INTERVAL, DATE.
+var FmtValue FmtFlags = &fmtFlags{noDatumTypes: true}
+
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
-var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
+var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true, noDatumTypes: true}
 
 // FmtSymbolicVars instructs the pretty-printer to
 // print indexedVars using symbolic notation, to
@@ -59,7 +66,7 @@ var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true}
 
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if possible.
-var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true, noDatumTypes: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
@@ -72,6 +79,7 @@ func FmtNormalizeTableNames(fn func(*NormalizableTableName) *TableName) FmtFlags
 func FmtExpr(showTypes, symbolicVars, showTableAliases bool) FmtFlags {
 	return &fmtFlags{
 		showTypes:        showTypes,
+		noDatumTypes:     showTypes,
 		symbolicVars:     symbolicVars,
 		ShowTableAliases: showTableAliases,
 	}

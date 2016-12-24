@@ -193,19 +193,18 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 	returnType := expr.castType()
 
+	if isConstant(expr.Expr) && canConstantBecome(expr.Expr.(Constant), returnType) {
+		// If a Constant is subject to a cast which it can naturally become (which
+		// is in its resolvable type set), we desire the cast's type for the
+		// Constant. In this case CastExpr becomes a no-op and can be elided.
+		return expr.Expr.TypeCheck(ctx, returnType)
+	}
+
 	// The desired type provided to a CastExpr is ignored. Instead,
 	// TypeAny is passed to the child of the cast. There are two
 	// exceptions, described below.
 	desired := TypeAny
-	switch {
-	case isConstant(expr.Expr):
-		if canConstantBecome(expr.Expr.(Constant), returnType) {
-			// If a Constant is subject to a cast which it can naturally become (which
-			// is in its resolvable type set), we desire the cast's type for the Constant,
-			// which will result in the CastExpr becoming an identity cast.
-			desired = returnType
-		}
-	case ctx.isUnresolvedPlaceholder(expr.Expr):
+	if ctx.isUnresolvedPlaceholder(expr.Expr) {
 		// This case will be triggered if ProcessPlaceholderAnnotations found
 		// the same placeholder in another location where it was either not
 		// the child of a cast, or was the child of a cast to a different type.
