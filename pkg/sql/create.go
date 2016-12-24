@@ -384,17 +384,21 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 
 	var queryBuf bytes.Buffer
 	var fmtErr error
-	n.AsSource.Format(&queryBuf, parser.FmtNormalizeTableNames(
-		parser.FmtSimple,
-		func(t *parser.NormalizableTableName) *parser.TableName {
-			tn, err := p.QualifyWithDatabase(t)
-			if err != nil {
-				log.Warningf(p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
-				fmtErr = err
-				return nil
-			}
-			return tn
-		}))
+	n.AsSource.Format(
+		&queryBuf,
+		parser.FmtNormalizeTableNames(
+			parser.FmtParsable,
+			func(t *parser.NormalizableTableName) *parser.TableName {
+				tn, err := p.QualifyWithDatabase(t)
+				if err != nil {
+					log.Warningf(p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
+					fmtErr = err
+					return nil
+				}
+				return tn
+			},
+		),
+	)
 	if fmtErr != nil {
 		return nil, fmtErr
 	}

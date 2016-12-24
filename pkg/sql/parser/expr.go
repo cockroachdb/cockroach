@@ -1004,8 +1004,6 @@ type castSyntaxMode int
 const (
 	castExplicit castSyntaxMode = iota
 	castShort
-	castPrefix
-	castPrefixParens
 )
 
 // CastTargetType represents a type that is a valid cast target.
@@ -1055,15 +1053,6 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Expr)
 		buf.WriteString("::")
 		FormatNode(buf, f, node.Type)
-	case castPrefix:
-		FormatNode(buf, f, node.Type)
-		buf.WriteByte(' ')
-		FormatNode(buf, f, node.Expr)
-	case castPrefixParens:
-		FormatNode(buf, f, node.Type)
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.Expr)
-		buf.WriteByte(')')
 	default:
 		buf.WriteString("CAST(")
 		FormatNode(buf, f, node.Expr)

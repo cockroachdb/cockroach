@@ -24,9 +24,9 @@ SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp
 ----
-0 /t/primary/'2015-08-25 04:45:45.53453+00:00'   NULL                   PARTIAL
-0 /t/primary/'2015-08-25 04:45:45.53453+00:00'/b '2015-08-25'           PARTIAL
-0 /t/primary/'2015-08-25 04:45:45.53453+00:00'/c INTERVAL '2h45m2.234s' ROW
+0 /t/primary/'2015-08-25 04:45:45.53453+00:00'   NULL          PARTIAL
+0 /t/primary/'2015-08-25 04:45:45.53453+00:00'/b '2015-08-25'  PARTIAL
+0 /t/primary/'2015-08-25 04:45:45.53453+00:00'/c '2h45m2.234s' ROW
 
 query ITTT
 EXPLAIN (DEBUG) SELECT b FROM t WHERE b < '2015-08-29'::date
@@ -36,8 +36,8 @@ EXPLAIN (DEBUG) SELECT b FROM t WHERE b < '2015-08-29'::date
 query ITTT
 EXPLAIN (DEBUG) SELECT c FROM t WHERE c < '234h45m2s234ms'::interval
 ----
-0 /t/t_c_key/INTERVAL '2h45m2.234s' /'2015-08-25 04:45:45.53453+00:00' ROW
-1 /t/t_c_key/INTERVAL '34h0m2s'     /'2015-08-30 03:34:45.34567+00:00' ROW
+0 /t/t_c_key/'2h45m2.234s' /'2015-08-25 04:45:45.53453+00:00' ROW
+1 /t/t_c_key/'34h0m2s'     /'2015-08-30 03:34:45.34567+00:00' ROW
 
 # insert duplicate value with different time zone offset
 statement error duplicate key value \(a\)=\('2015-08-30 03:34:45\.34567\+00:00'\) violates unique constraint "primary"
