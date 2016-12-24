@@ -159,14 +159,6 @@ bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 bench: test
 
-.PHONY: coverage
-coverage: gotestdashi
-ifeq ($(BENCHES),-)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
-else
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" -bench "$(BENCHES)" $(PKG) $(TESTFLAGS)
-endif
-
 .PHONY: upload-coverage
 upload-coverage:
 	$(GO) install ./vendor/github.com/wadey/gocovmerge
