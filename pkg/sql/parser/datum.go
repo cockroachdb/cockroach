@@ -1321,11 +1321,15 @@ func (d *DInterval) ValueAsString() string {
 	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
 
-// Format implements the NodeFormatter interface. Example: "INTERVAL `1h2m`".
+// Format implements the NodeFormatter interface.
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INTERVAL '")
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.ValueAsString())
-	buf.WriteByte('\'')
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.

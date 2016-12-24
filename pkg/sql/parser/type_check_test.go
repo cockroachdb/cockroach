@@ -28,69 +28,94 @@ import (
 )
 
 func TestTypeCheck(t *testing.T) {
-	testData := []string{
-		`NULL + 1`,
-		`NULL + 1.1`,
-		`NULL + '2006-09-23'::date`,
-		`NULL + '1h'::interval`,
-		`NULL + 'hello'`,
-		`NULL::int`,
-		`NULL + 'hello'::bytes`,
-		`(1.1::decimal)::decimal`,
-		`NULL = 1`,
-		`1 = NULL`,
-		`true AND NULL`,
-		`NULL OR false`,
-		`1 IN (1, 2, 3)`,
-		`IF(true, 2, 3)`,
-		`IF(false, 2, 3)`,
-		`IF(NULL, 2, 3)`,
-		`IF(NULL, 2, 3.0)`,
-		`IF(true, (1, 2), (1, 3))`,
-		`IFNULL(1, 2)`,
-		`IFNULL(1, 2.0)`,
-		`IFNULL(NULL, 2)`,
-		`IFNULL(2, NULL)`,
-		`IFNULL((1, 2), (1, 3))`,
-		`NULLIF(1, 2)`,
-		`NULLIF(1, 2.0)`,
-		`NULLIF(NULL, 2)`,
-		`NULLIF(2, NULL)`,
-		`NULLIF((1, 2), (1, 3))`,
-		`COALESCE(1, 2, 3, 4, 5)`,
-		`COALESCE(1, 2.0)`,
-		`COALESCE(NULL, 2)`,
-		`COALESCE(2, NULL)`,
-		`COALESCE((1, 2), (1, 3))`,
-		`true IS NULL`,
-		`true IS NOT NULL`,
-		`true IS TRUE`,
-		`true IS NOT TRUE`,
-		`true IS FALSE`,
-		`true IS NOT FALSE`,
-		`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`,
-		`1 BETWEEN 2 AND 3`,
-		`COUNT(3)`,
-		`ARRAY['a', 'b', 'c']`,
-		`ARRAY[1.5, 2.5, 3.5]`,
-		`ARRAY[NULL]`,
-		`1 = ANY ARRAY[1.5, 2.5, 3.5]`,
-		`true = SOME (ARRAY[true, false])`,
-		`1.3 = ALL ARRAY[1, 2, 3]`,
-		`1.3 = ALL ((ARRAY[]))`,
-		`NULL = ALL ARRAY[1.5, 2.5, 3.5]`,
-		`NULL = ALL ARRAY[NULL, NULL]`,
-		`1 = ALL NULL`,
-		`'a' = ALL CURRENT_SCHEMAS(true)`,
-		`NULL = ALL CURRENT_SCHEMAS(true)`,
+	testData := []struct {
+		expr string
+		// The expected serialized expression after type-checking. This tests both
+		// the serialization and that the constants are resolved to the expected
+		// types.
+		expected string
+	}{
+		{`NULL + 1`, `NULL`},
+		{`NULL + 1.1`, `NULL`},
+		{`NULL + '2006-09-23'::date`, `NULL`},
+		{`NULL + '1h'::interval`, `NULL`},
+		{`NULL + 'hello'`, `NULL`},
+		{`NULL::int`, `NULL::INT`},
+		{`NULL + 'hello'::bytes`, `NULL`},
+		{`INTERVAL '1s'`, `'1s':::interval`},
+		{`(1.1::decimal)::decimal`, `(1.1:::decimal::DECIMAL)::DECIMAL`},
+		{`NULL = 1`, `NULL = 1`},
+		{`1 = NULL`, `1 = NULL`},
+		{`true AND NULL`, `true AND NULL`},
+		{`NULL OR false`, `NULL OR false`},
+		{`1 IN (1, 2, 3)`, `1 IN (1, 2, 3)`},
+		{`IF(true, 2, 3)`, `IF(true, 2, 3)`},
+		{`IF(false, 2, 3)`, `IF(false, 2, 3)`},
+		{`IF(NULL, 2, 3)`, `IF(NULL, 2, 3)`},
+		{`IF(NULL, 2, 3.0)`, `IF(NULL, 2:::decimal, 3.0:::decimal)`},
+		{`IF(true, (1, 2), (1, 3))`, `IF(true, (1, 2), (1, 3))`},
+		{`IFNULL(1, 2)`, `IFNULL(1, 2)`},
+		{`IFNULL(1, 2.0)`, `IFNULL(1:::decimal, 2.0:::decimal)`},
+		{`IFNULL(NULL, 2)`, `IFNULL(NULL, 2)`},
+		{`IFNULL(2, NULL)`, `IFNULL(2, NULL)`},
+		{`IFNULL((1, 2), (1, 3))`, `IFNULL((1, 2), (1, 3))`},
+		{`NULLIF(1, 2)`, `NULLIF(1, 2)`},
+		{`NULLIF(1, 2.0)`, `NULLIF(1:::decimal, 2.0:::decimal)`},
+		{`NULLIF(NULL, 2)`, `NULLIF(NULL, 2)`},
+		{`NULLIF(2, NULL)`, `NULLIF(2, NULL)`},
+		{`NULLIF((1, 2), (1, 3))`, `NULLIF((1, 2), (1, 3))`},
+		{`COALESCE(1, 2, 3, 4, 5)`, `COALESCE(1, 2, 3, 4, 5)`},
+		{`COALESCE(1, 2.0)`, `COALESCE(1:::decimal, 2.0:::decimal)`},
+		{`COALESCE(NULL, 2)`, `COALESCE(NULL, 2)`},
+		{`COALESCE(2, NULL)`, `COALESCE(2, NULL)`},
+		{`COALESCE((1, 2), (1, 3))`, `COALESCE((1, 2), (1, 3))`},
+		{`true IS NULL`, `true IS NULL`},
+		{`true IS NOT NULL`, `true IS NOT NULL`},
+		{`true IS TRUE`, `true IS true`},
+		{`true IS NOT TRUE`, `true IS NOT true`},
+		{`true IS FALSE`, `true IS false`},
+		{`true IS NOT FALSE`, `true IS NOT false`},
+		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`},
+		{`1 BETWEEN 2 AND 3`, `1 BETWEEN 2 AND 3`},
+		{`COUNT(3)`, `count(3)`},
+		{`ARRAY['a', 'b', 'c']`, `ARRAY['a':::string, 'b':::string, 'c':::string]`},
+		{`ARRAY[1.5, 2.5, 3.5]`, `ARRAY[1.5:::decimal, 2.5:::decimal, 3.5:::decimal]`},
+		{`ARRAY[NULL]`, `ARRAY[NULL]`},
+		{`1 = ANY ARRAY[1.5, 2.5, 3.5]`, `1:::decimal = ANY ARRAY[1.5:::decimal, 2.5:::decimal, 3.5:::decimal]`},
+		{`true = SOME (ARRAY[true, false])`, `true = SOME (ARRAY[true, false])`},
+		{`1.3 = ALL ARRAY[1, 2, 3]`, `1.3:::decimal = ALL ARRAY[1:::decimal, 2:::decimal, 3:::decimal]`},
+		{`1.3 = ALL ((ARRAY[]))`, `1.3:::decimal = ALL ((ARRAY[]))`},
+		{`NULL = ALL ARRAY[1.5, 2.5, 3.5]`, `NULL = ALL ARRAY[1.5:::decimal, 2.5:::decimal, 3.5:::decimal]`},
+		{`NULL = ALL ARRAY[NULL, NULL]`, `NULL = ALL ARRAY[NULL, NULL]`},
+		{`1 = ALL NULL`, `1 = ALL NULL`},
+		{`'a' = ALL CURRENT_SCHEMAS(true)`, `'a':::string = ALL current_schemas(true)`},
+		{`NULL = ALL CURRENT_SCHEMAS(true)`, `NULL = ALL current_schemas(true)`},
+
+		{`INTERVAL '1'`, `'1s':::interval`},
+		{`DECIMAL '1.0'`, `'1.0':::string::DECIMAL`},
+
+		{`1 + 2`, `3`},
+		{`1:::decimal + 2`, `1:::decimal + 2:::decimal`},
+		{`1:::float + 2`, `1.0:::float + 2.0:::float`},
+		{`INTERVAL '1.5s' * 2`, `'1.5s':::interval * 2`},
+		{`2 * INTERVAL '1.5s'`, `2 * '1.5s':::interval`},
+
+		{`1 + $1`, `1 + $1:::int`},
+		{`1:::decimal + $1`, `1:::decimal + $1:::decimal`},
+		{`$1:::int`, `$1:::int`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d)
+		expr, err := ParseExprTraditional(d.expr)
 		if err != nil {
-			t.Fatalf("%s: %v", d, err)
+			t.Errorf("%s: %v", d.expr, err)
+			continue
 		}
-		if _, err := TypeCheck(expr, nil, TypeAny); err != nil {
-			t.Errorf("%s: unexpected error %s", d, err)
+		ctx := MakeSemaContext()
+		typeChecked, err := TypeCheck(expr, &ctx, TypeAny)
+		if err != nil {
+			t.Errorf("%s: unexpected error %s", d.expr, err)
+		} else if s := Serialize(typeChecked); s != d.expected {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
 }
