@@ -101,6 +101,7 @@ SET ROW (1, TRUE, NULL)
 query TT
 SHOW ALL
 ----
+CURRENT_USER                   root
 DATABASE                       foo
 DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE
 MAX_INDEX_KEYS                 32

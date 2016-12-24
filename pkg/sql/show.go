@@ -43,6 +43,7 @@ var varGen = map[string]func(p *planner) string{
 	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
 	`SEARCH_PATH`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
 	`SERVER_VERSION`:                func(_ *planner) string { return PgServerVersion },
+	`CURRENT_USER`:                  func(p *planner) string { return p.session.User },
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))
