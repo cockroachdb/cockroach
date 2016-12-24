@@ -56,10 +56,17 @@ var (
 // Datum represents a SQL value.
 type Datum interface {
 	TypedExpr
+
+	// AmbiguousFormat indicates whether the result of formatting this Datum can
+	// be interpreted into more than one type. Used with
+	// fmtFlags.disambiguateDatumTypes.
+	AmbiguousFormat() bool
+
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
 	// TODO(nvanbenschoten) Should we look into merging this with cmpOps?
 	Compare(other Datum) int
+
 	// Prev returns the previous datum and true, if one exists, or nil
 	// and false.  The previous datum satisfied the following
 	// definition: if the receiver is "b" and the returned datum is "a",
@@ -67,6 +74,7 @@ type Datum interface {
 	// b".
 	// The return value is undefined if `IsMin()` returns true.
 	Prev() (Datum, bool)
+
 	// IsMin returns true if the datum is equal to the minimum value the datum
 	// type can hold.
 	IsMin() bool
@@ -78,6 +86,7 @@ type Datum interface {
 	// b".
 	// The return value is undefined if `IsMax()` returns true.
 	Next() (Datum, bool)
+
 	// IsMax returns true if the datum is equal to the maximum value the datum
 	// type can hold.
 	IsMax() bool
@@ -152,6 +161,9 @@ func GetBool(d Datum) (DBool, error) {
 func (*DBool) ResolvedType() Type {
 	return TypeBool
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DBool) AmbiguousFormat() bool { return false }
 
 // Compare implements the Datum interface.
 func (d *DBool) Compare(other Datum) int {
@@ -234,6 +246,9 @@ func ParseDInt(s string) (*DInt, error) {
 func (*DInt) ResolvedType() Type {
 	return TypeInt
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DInt) AmbiguousFormat() bool { return true }
 
 // Compare implements the Datum interface.
 func (d *DInt) Compare(other Datum) int {
@@ -324,6 +339,9 @@ func ParseDFloat(s string) (*DFloat, error) {
 func (*DFloat) ResolvedType() Type {
 	return TypeFloat
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DFloat) AmbiguousFormat() bool { return true }
 
 // Compare implements the Datum interface.
 func (d *DFloat) Compare(other Datum) int {
@@ -427,6 +445,9 @@ func (*DDecimal) ResolvedType() Type {
 	return TypeDecimal
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DDecimal) AmbiguousFormat() bool { return true }
+
 // Compare implements the Datum interface.
 func (d *DDecimal) Compare(other Datum) int {
 	if other == DNull {
@@ -499,6 +520,9 @@ func NewDString(d string) *DString {
 func (*DString) ResolvedType() Type {
 	return TypeString
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DString) AmbiguousFormat() bool { return true }
 
 // Compare implements the Datum interface.
 func (d *DString) Compare(other Datum) int {
@@ -617,6 +641,9 @@ func (d *DCollatedString) ResolvedType() Type {
 	return TCollatedString{d.Locale}
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DCollatedString) AmbiguousFormat() bool { return false }
+
 // Compare implements the Datum interface.
 func (d *DCollatedString) Compare(other Datum) int {
 	if other == DNull {
@@ -679,6 +706,9 @@ func NewDBytes(d DBytes) *DBytes {
 func (*DBytes) ResolvedType() Type {
 	return TypeBytes
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DBytes) AmbiguousFormat() bool { return false }
 
 // Compare implements the Datum interface.
 func (d *DBytes) Compare(other Datum) int {
@@ -796,6 +826,9 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 func (*DDate) ResolvedType() Type {
 	return TypeDate
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DDate) AmbiguousFormat() bool { return true }
 
 // Compare implements the Datum interface.
 func (d *DDate) Compare(other Datum) int {
@@ -948,6 +981,9 @@ func (*DTimestamp) ResolvedType() Type {
 	return TypeTimestamp
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DTimestamp) AmbiguousFormat() bool { return true }
+
 // Compare implements the Datum interface.
 func (d *DTimestamp) Compare(other Datum) int {
 	if other == DNull {
@@ -1051,6 +1087,9 @@ func ParseDTimestampTZ(
 func (*DTimestampTZ) ResolvedType() Type {
 	return TypeTimestampTZ
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
 // Compare implements the Datum interface.
 func (d *DTimestampTZ) Compare(other Datum) int {
@@ -1256,6 +1295,9 @@ func (*DInterval) ResolvedType() Type {
 	return TypeInterval
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DInterval) AmbiguousFormat() bool { return true }
+
 // Compare implements the Datum interface.
 func (d *DInterval) Compare(other Datum) int {
 	if other == DNull {
@@ -1321,11 +1363,15 @@ func (d *DInterval) ValueAsString() string {
 	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
 
-// Format implements the NodeFormatter interface. Example: "INTERVAL `1h2m`".
+// Format implements the NodeFormatter interface.
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INTERVAL '")
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.ValueAsString())
-	buf.WriteByte('\'')
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -1344,6 +1390,9 @@ func (d *DTuple) ResolvedType() Type {
 	}
 	return typ
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Compare implements the Datum interface.
 func (d *DTuple) Compare(other Datum) int {
@@ -1564,6 +1613,9 @@ func (dNull) ResolvedType() Type {
 	return TypeNull
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (dNull) AmbiguousFormat() bool { return false }
+
 // Compare implements the Datum interface.
 func (d dNull) Compare(other Datum) int {
 	if other == DNull {
@@ -1628,6 +1680,9 @@ func NewDArray(paramTyp Type) *DArray {
 func (d *DArray) ResolvedType() Type {
 	return tArray{Typ: d.ParamTyp}
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DArray) AmbiguousFormat() bool { return false }
 
 // Compare implements the Datum interface.
 func (d *DArray) Compare(other Datum) int {
@@ -1769,6 +1824,9 @@ func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {
 func (t *DTable) ResolvedType() Type {
 	return TTable{t.ValueGenerator.ColumnTypes()}
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTable) AmbiguousFormat() bool { return false }
 
 // Compare implements the Datum interface.
 func (t *DTable) Compare(other Datum) int {
