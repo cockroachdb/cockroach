@@ -4841,15 +4841,15 @@ a_expr_const:
 | func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex) }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrefix}
+    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrepend}
   }
 | const_interval SCONST opt_interval
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrefix}
+    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrepend}
   }
 | const_interval '(' ICONST ')' SCONST
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $5}, Type: $1.colType(), syntaxMode: castPrefixParens}
+    $$.val = &CastExpr{Expr: &StrVal{s: $5}, Type: $1.colType(), syntaxMode: castPrepend}
   }
 | TRUE
   {
