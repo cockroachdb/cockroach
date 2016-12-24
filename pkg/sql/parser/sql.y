@@ -3466,7 +3466,7 @@ opt_interval:
   }
 | interval_second
   {
-    $$.val = $1
+    $$.val = $1.durationField()
   }
 // Like Postgres, we ignore the left duration field. See explanation:
 // https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net
@@ -3484,7 +3484,7 @@ opt_interval:
   }
 | DAY TO interval_second
   {
-    $$.val = $3
+    $$.val = $3.durationField()
   }
 | HOUR TO MINUTE
   {
@@ -3492,11 +3492,11 @@ opt_interval:
   }
 | HOUR TO interval_second
   {
-    $$.val = $3
+    $$.val = $3.durationField()
   }
 | MINUTE TO interval_second
   {
-    $$.val = $3
+    $$.val = $3.durationField()
   }
 | /* EMPTY */ {}
 
