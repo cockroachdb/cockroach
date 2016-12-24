@@ -148,9 +148,12 @@ func (r *Replica) executeCmd(
 
 	if cmd, ok := commands[args.Method()]; ok {
 		cArgs := CommandArgs{
-			Repl:    r,
-			Header:  h,
-			Args:    args,
+			Repl:   r,
+			Header: h,
+			// Some commands mutate their arguments, so give each invocation
+			// its own copy (shallow to mimic earlier versions of this code
+			// in which args were passed by value instead of pointer).
+			Args:    args.ShallowCopy(),
 			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
