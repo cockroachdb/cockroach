@@ -487,7 +487,7 @@ func applyColumnMutation(
 			); err != nil {
 				return err
 			}
-			s := t.Default.String()
+			s := parser.Serialize(t.Default)
 			col.DefaultExpr = &s
 		}
 

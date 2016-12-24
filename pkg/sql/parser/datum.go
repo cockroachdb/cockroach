@@ -56,10 +56,17 @@ var (
 // Datum represents a SQL value.
 type Datum interface {
 	TypedExpr
+
+	// AmbiguousFormat indicates whether the result of formatting this Datum can
+	// be interpreted into more than one type. Used with
+	// fmtFlags.disambiguateDatumTypes.
+	AmbiguousFormat() bool
+
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
 	// TODO(nvanbenschoten) Should we look into merging this with cmpOps?
 	Compare(other Datum) int
+
 	// Prev returns the previous datum and true, if one exists, or nil
 	// and false.  The previous datum satisfied the following
 	// definition: if the receiver is "b" and the returned datum is "a",
@@ -67,6 +74,7 @@ type Datum interface {
 	// b".
 	// The return value is undefined if `IsMin()` returns true.
 	Prev() (Datum, bool)
+
 	// IsMin returns true if the datum is equal to the minimum value the datum
 	// type can hold.
 	IsMin() bool
@@ -78,6 +86,7 @@ type Datum interface {
 	// b".
 	// The return value is undefined if `IsMax()` returns true.
 	Next() (Datum, bool)
+
 	// IsMax returns true if the datum is equal to the maximum value the datum
 	// type can hold.
 	IsMax() bool
@@ -202,6 +211,9 @@ func (d *DBool) max() (Datum, bool) {
 	return DBoolTrue, true
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DBool) AmbiguousFormat() bool { return false }
+
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(strconv.FormatBool(bool(*d)))
@@ -290,6 +302,9 @@ func (d *DInt) max() (Datum, bool) {
 func (d *DInt) min() (Datum, bool) {
 	return dMinInt, true
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DInt) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -391,6 +406,9 @@ func (d *DFloat) min() (Datum, bool) {
 	return dMinFloat, true
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DFloat) AmbiguousFormat() bool { return true }
+
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
 	fl := float64(*d)
@@ -474,6 +492,9 @@ func (d *DDecimal) min() (Datum, bool) {
 	return nil, false
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DDecimal) AmbiguousFormat() bool { return true }
+
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.Dec.String())
@@ -551,6 +572,9 @@ func (d *DString) max() (Datum, bool) {
 	return nil, false
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DString) AmbiguousFormat() bool { return true }
+
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLStringWithFlags(buf, string(*d), f)
@@ -606,6 +630,9 @@ func NewDCollatedString(contents string, locale string, env *CollationEnvironmen
 	env.buffer.Reset()
 	return &d
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -731,6 +758,9 @@ func (d *DBytes) max() (Datum, bool) {
 	return nil, false
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DBytes) AmbiguousFormat() bool { return false }
+
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLBytes(buf, string(*d))
@@ -847,6 +877,9 @@ func (d *DDate) min() (Datum, bool) {
 	// TODO(knz) figure a good way to find a minimum.
 	return nil, false
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DDate) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -1003,6 +1036,9 @@ func (d *DTimestamp) max() (Datum, bool) {
 	return nil, false
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DTimestamp) AmbiguousFormat() bool { return true }
+
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
@@ -1106,6 +1142,9 @@ func (d *DTimestampTZ) max() (Datum, bool) {
 	// TODO(knz) figure a good way to find a minimum.
 	return nil, false
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -1321,11 +1360,18 @@ func (d *DInterval) ValueAsString() string {
 	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
 
-// Format implements the NodeFormatter interface. Example: "INTERVAL `1h2m`".
+// AmbiguousFormat implements the Datum interface.
+func (*DInterval) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INTERVAL '")
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.ValueAsString())
-	buf.WriteByte('\'')
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -1482,6 +1528,9 @@ func (d *DTuple) IsMin() bool {
 	return true
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DTuple) AmbiguousFormat() bool { return false }
+
 // Format implements the NodeFormatter interface.
 func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('(')
@@ -1602,6 +1651,9 @@ func (dNull) min() (Datum, bool) {
 	return DNull, true
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (dNull) AmbiguousFormat() bool { return false }
+
 // Format implements the NodeFormatter interface.
 func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("NULL")
@@ -1691,6 +1743,9 @@ func (d *DArray) IsMin() bool {
 	return d.Len() == 0
 }
 
+// AmbiguousFormat implements the Datum interface.
+func (*DArray) AmbiguousFormat() bool { return false }
+
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('{')
@@ -1759,6 +1814,9 @@ func (d *DArray) Append(v Datum) error {
 type DTable struct {
 	ValueGenerator
 }
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTable) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {

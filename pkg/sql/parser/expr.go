@@ -1004,8 +1004,7 @@ type castSyntaxMode int
 const (
 	castExplicit castSyntaxMode = iota
 	castShort
-	castPrefix
-	castPrefixParens
+	castPrepend
 )
 
 // CastTargetType represents a type that is a valid cast target.
@@ -1051,19 +1050,21 @@ type CastExpr struct {
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	switch node.syntaxMode {
+	case castPrepend:
+		// This is a special case for things like INTERVAL '1s'. These only work
+		// with string constats; if the underlying expression was changed, we fall
+		// back to the short syntax.
+		if _, ok := node.Expr.(*StrVal); ok {
+			FormatNode(buf, f, node.Type)
+			buf.WriteByte(' ')
+			FormatNode(buf, f, node.Expr)
+			break
+		}
+		fallthrough
 	case castShort:
 		FormatNode(buf, f, node.Expr)
 		buf.WriteString("::")
 		FormatNode(buf, f, node.Type)
-	case castPrefix:
-		FormatNode(buf, f, node.Type)
-		buf.WriteByte(' ')
-		FormatNode(buf, f, node.Expr)
-	case castPrefixParens:
-		FormatNode(buf, f, node.Type)
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.Expr)
-		buf.WriteByte(')')
 	default:
 		buf.WriteString("CAST(")
 		FormatNode(buf, f, node.Expr)
@@ -1153,7 +1154,6 @@ type AnnotateTypeExpr struct {
 	Expr Expr
 	Type CastTargetType
 
-	typeAnnotation
 	syntaxMode annotateSyntaxMode
 }
 
@@ -1164,6 +1164,7 @@ func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Expr)
 		buf.WriteString(":::")
 		FormatNode(buf, f, node.Type)
+
 	default:
 		buf.WriteString("ANNOTATE_TYPE(")
 		FormatNode(buf, f, node.Expr)

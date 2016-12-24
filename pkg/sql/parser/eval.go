@@ -2249,11 +2249,6 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr *AnnotateTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
-	return expr.Expr.(TypedExpr).Eval(ctx)
-}
-
-// Eval implements the TypedExpr interface.
 func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
