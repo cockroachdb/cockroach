@@ -585,7 +585,12 @@ func (m *DescriptorMutation) GetIndex() *IndexDescriptor {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*DescriptorMutation) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*DescriptorMutation) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _DescriptorMutation_OneofMarshaler, _DescriptorMutation_OneofUnmarshaler, _DescriptorMutation_OneofSizer, []interface{}{
 		(*DescriptorMutation_Column)(nil),
 		(*DescriptorMutation_Index)(nil),
@@ -613,7 +618,9 @@ func _DescriptorMutation_OneofMarshaler(msg proto.Message, b *proto.Buffer) erro
 	return nil
 }
 
-func _DescriptorMutation_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+func _DescriptorMutation_OneofUnmarshaler(
+	msg proto.Message, tag, wire int, b *proto.Buffer,
+) (bool, error) {
 	m := msg.(*DescriptorMutation)
 	switch tag {
 	case 1: // descriptor.column
@@ -1087,7 +1094,12 @@ func (m *Descriptor) GetDatabase() *DatabaseDescriptor {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*Descriptor) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*Descriptor) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _Descriptor_OneofMarshaler, _Descriptor_OneofUnmarshaler, _Descriptor_OneofSizer, []interface{}{
 		(*Descriptor_Table)(nil),
 		(*Descriptor_Database)(nil),

@@ -38,14 +38,16 @@ type fmtFlags struct {
 	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
 	// If true, strings will be rendered without wrapping quotes if possible.
 	bareStrings bool
+	// If true, constant values will include type annotations (like INTERVAL,
+	// DATE) as necessary.
+	disambiguateDatumTypes bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
 type FmtFlags *fmtFlags
 
 // FmtSimple instructs the pretty-printer to produce
-// a straightforward representation, ideally using SQL
-// syntax that makes prettyprint+parse idempotent.
+// a straightforward representation.
 var FmtSimple FmtFlags = &fmtFlags{}
 
 // FmtShowTypes instructs the pretty-printer to
@@ -60,6 +62,11 @@ var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true}
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if possible.
 var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+
+// FmtSerialize instructs the pretty-printer to produce a representation that
+// can be parsed into an equivalent expression (useful for serialization of
+// expressions).
+var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
@@ -138,4 +145,11 @@ func AsStringWithFlags(n NodeFormatter, f FmtFlags) string {
 // AsString pretty prints a node to a string.
 func AsString(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtSimple)
+}
+
+// Serialize pretty prints a node to a string using FmtParsable; it is
+// appropriate when we store expressions into strings that are later parsed back
+// into expressions.
+func Serialize(n NodeFormatter) string {
+	return AsStringWithFlags(n, FmtParsable)
 }

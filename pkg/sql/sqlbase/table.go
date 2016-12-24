@@ -183,7 +183,7 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, err
 		}
-		s := d.DefaultExpr.Expr.String()
+		s := parser.Serialize(d.DefaultExpr.Expr)
 		col.DefaultExpr = &s
 	}
 

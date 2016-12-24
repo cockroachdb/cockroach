@@ -204,6 +204,14 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 			// is in its resolvable type set), we desire the cast's type for the Constant,
 			// which will result in the CastExpr becoming an identity cast.
 			desired = returnType
+
+			// If the type doesn't have any possible parameters (like length,
+			// precision), the CastExpr becomes a no-op and can be elided.
+			switch expr.Type.(type) {
+			case *BoolColType, *DateColType, *TimestampColType, *TimestampTZColType,
+				*IntervalColType, *BytesColType:
+				return expr.Expr.TypeCheck(ctx, returnType)
+			}
 		}
 	case ctx.isUnresolvedPlaceholder(expr.Expr):
 		// This case will be triggered if ProcessPlaceholderAnnotations found
