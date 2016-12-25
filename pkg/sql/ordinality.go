@@ -137,4 +137,3 @@ func (o *ordinalityNode) Columns() ResultColumns                { return o.colum
 func (o *ordinalityNode) Start() error                          { return o.source.Start() }
 func (o *ordinalityNode) Close()                                { o.source.Close() }
 func (o *ordinalityNode) SetLimitHint(numRows int64, soft bool) { o.source.SetLimitHint(numRows, soft) }
-func (o *ordinalityNode) setNeededColumns(_ []bool)             {}

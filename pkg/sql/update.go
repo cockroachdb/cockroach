@@ -418,9 +418,6 @@ func (u *updateNode) DebugValues() debugValues {
 	return u.run.rows.DebugValues()
 }
 
-func (u *updateNode) Ordering() orderingInfo {
-	return u.run.rows.Ordering()
-}
+func (u *updateNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}
-func (u *updateNode) setNeededColumns(_ []bool)             {}

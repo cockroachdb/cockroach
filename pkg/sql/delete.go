@@ -238,9 +238,6 @@ func (d *deleteNode) DebugValues() debugValues {
 	return d.run.rows.DebugValues()
 }
 
-func (d *deleteNode) Ordering() orderingInfo {
-	return d.run.rows.Ordering()
-}
+func (d *deleteNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}
-func (d *deleteNode) setNeededColumns(_ []bool)             {}

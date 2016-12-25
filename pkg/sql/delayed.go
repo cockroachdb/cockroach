@@ -32,7 +32,6 @@ type delayedNode struct {
 type nodeConstructor func(p *planner) (planNode, error)
 
 func (d *delayedNode) SetLimitHint(_ int64, _ bool) {}
-func (d *delayedNode) setNeededColumns(_ []bool)    {}
 
 func (d *delayedNode) expandPlan() error {
 	v, err := d.constructor(d.p)
