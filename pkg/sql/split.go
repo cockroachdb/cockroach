@@ -169,7 +169,6 @@ func (*splitNode) Columns() ResultColumns {
 func (*splitNode) Close()                       {}
 func (*splitNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (*splitNode) SetLimitHint(_ int64, _ bool) {}
-func (*splitNode) setNeededColumns(_ []bool)    {}
 func (*splitNode) MarkDebug(_ explainMode)      {}
 
 func (n *splitNode) DebugValues() debugValues {

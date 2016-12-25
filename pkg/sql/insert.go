@@ -578,4 +578,3 @@ func (n *insertNode) DebugValues() debugValues {
 func (n *insertNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}
-func (n *insertNode) setNeededColumns(_ []bool)             {}

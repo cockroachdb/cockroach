@@ -39,8 +39,6 @@ func (n *selectTopNode) SetLimitHint(numRows int64, soft bool) {
 	n.plan.SetLimitHint(numRows, soft)
 }
 
-func (*selectTopNode) setNeededColumns(_ []bool) {}
-
 func (n *selectTopNode) expandPlan() error {
 	if n.plan != nil {
 		panic("can't expandPlan twice!")

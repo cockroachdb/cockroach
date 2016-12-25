@@ -217,7 +217,6 @@ func (n *dropDatabaseNode) Ordering() orderingInfo       { return orderingInfo{}
 func (n *dropDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *dropDatabaseNode) DebugValues() debugValues     { return debugValues{} }
 func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropDatabaseNode) setNeededColumns(_ []bool)    {}
 func (n *dropDatabaseNode) MarkDebug(mode explainMode)   {}
 
 type dropIndexNode struct {
@@ -394,7 +393,6 @@ func (n *dropIndexNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (n *dropIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *dropIndexNode) DebugValues() debugValues     { return debugValues{} }
 func (n *dropIndexNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropIndexNode) setNeededColumns(_ []bool)    {}
 func (n *dropIndexNode) MarkDebug(mode explainMode)   {}
 
 type dropViewNode struct {
@@ -507,7 +505,6 @@ func (n *dropViewNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (n *dropViewNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *dropViewNode) DebugValues() debugValues     { return debugValues{} }
 func (n *dropViewNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropViewNode) setNeededColumns(_ []bool)    {}
 func (n *dropViewNode) MarkDebug(mode explainMode)   {}
 
 type dropTableNode struct {
@@ -732,7 +729,6 @@ func (n *dropTableNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (n *dropTableNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *dropTableNode) DebugValues() debugValues     { return debugValues{} }
 func (n *dropTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropTableNode) setNeededColumns(_ []bool)    {}
 func (n *dropTableNode) MarkDebug(mode explainMode)   {}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
