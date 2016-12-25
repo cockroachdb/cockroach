@@ -401,6 +401,12 @@ func (p *joinPredicate) eval(
 
 // getNeededColumns figures out the columns needed for the two sources.
 func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
+
+	// Reset the helper and rebind the variable to detect which columns
+	// are effectively needed.
+	p.iVarHelper.Reset()
+	p.filter = p.iVarHelper.Rebind(p.filter)
+
 	// The columns that are part of the expression are always needed.
 	neededJoined = append([]bool(nil), neededJoined...)
 	for i := range neededJoined {

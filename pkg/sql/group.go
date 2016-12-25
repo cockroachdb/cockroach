@@ -414,7 +414,6 @@ func (n *groupNode) computeAggregates() error {
 }
 
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
-func (*groupNode) setNeededColumns(_ []bool)    {}
 
 func (n *groupNode) Close() {
 	n.plan.Close()

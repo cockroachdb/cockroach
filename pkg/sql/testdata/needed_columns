@@ -1,0 +1,174 @@
+query ITTTTT
+EXPLAIN (METADATA, NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
+----
+0   select                          ("1")
+1   select                          (s)
+2   nullrow                         ()
+
+# Propagation to data sources.
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s)
+----
+0   select                          ("1")
+1   select                          (s[omitted])
+2   nullrow                         ()
+
+# Propagation through CREATE TABLE.
+query ITTTTT
+EXPLAIN (METADATA) CREATE TABLE t AS SELECT 1 FROM (SELECT 2 AS s)
+----
+0   create table                         ()
+1   select                               ("1")
+2   select                               (s[omitted])
+3   nullrow                              ()
+
+# Propagation through LIMIT.
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s) LIMIT 1
+----
+0   select                               ("1")
+1   limit                                ("1")
+2   select                               (s[omitted])
+3   nullrow                              ()
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s LIMIT 1)
+----
+0   select                               ("1")
+1   select                               (s[omitted])
+2   limit                                (s[omitted])
+3   nullrow                              ()
+
+# Propagation through UNION.
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION SELECT 2 AS s)
+----
+0   select                          ("1")
+1   select                          (s)
+2   union                           (s)
+3   select                          (s)
+4   nullrow                         ()
+3   select                          (s)
+4   nullrow                         ()
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
+----
+0   select                          ("1")
+1   select                          (s[omitted])
+2   append                          (s[omitted])
+3   select                          (s[omitted])
+4   nullrow                         ()
+3   select                          (s[omitted])
+4   nullrow                         ()
+
+# Propagation through WITH ORDINALITY.
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
+----
+0   select                             ("1")
+1   ordinality                         (s[omitted], ordinality)   +ordinality,unique
+2   select                             (s[omitted])
+3   nullrow                            ()
+
+# Propagation through sort, when the sorting column is in the results.
+query ITTTTT
+EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y) ORDER BY x
+----
+0   select                          (x)               +x
+1   sort                            (x)               +x
+1             order   +x
+2   select                          (x, y[omitted])
+3   nullrow                         ()
+
+# Propagation through sort, when the sorting column is not in the results.
+query ITTTTT
+EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
+----
+0   select                          (x)
+1   sort                            (x)
+1             order   +y
+2   select                          (x, y, z[omitted])
+3   nullrow                         ()
+
+# Propagation to sub-queries.
+query ITTTTT
+EXPLAIN (METADATA) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
+----
+0   select                               (y)
+0             subqueries             1
+1   select                               (x)
+2   select                               (s[omitted])
+3   nullrow                              ()
+1   nullrow                              ()
+
+# Propagation through table scans.
+statement ok
+CREATE TABLE kv(k INT PRIMARY KEY, v INT)
+
+query ITTTTT
+EXPLAIN(METADATA) SELECT 1 FROM kv
+----
+0   select                         ("1")
+1   scan                           (k[omitted], v[omitted])   +k,unique
+1            table   kv@primary
+
+# Propagation through DISTINCT.
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT v FROM kv;
+----
+0   select                           (v)
+1   distinct                         (v)
+2   scan                             (k[omitted], v)   +k,unique
+2              table   kv@primary
+
+# Propagation through INSERT.
+query ITTTTT
+EXPLAIN(METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
+----
+0   insert                          ()
+0             into    kv(k, v)
+1   select                          ("1", "2")
+2   select                          (x[omitted], y[omitted])
+3   nullrow                         ()
+
+# Propagation through DELETE.
+query ITTTTT
+EXPLAIN (METADATA) DELETE FROM kv WHERE k = 3
+----
+0   delete                         ()
+0            from    kv
+1   select                         (k)               +k,unique
+2   scan                           (k, v[omitted])   +k,unique
+2            table   kv@primary
+2            spans   /3-/4
+
+# Ensure that propagations through a select node removes the renders
+# and properly propagates the remaining needed columns.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT x FROM (SELECT 1 AS x, y FROM (SELECT 2 AS y))
+----
+0   select                                   (x)
+1   render/filter                            (x)
+1                   render 0   x
+2   select                                   (x, y[omitted])
+3   render/filter                            (x, y[omitted])
+3                   render 0   1
+3                   render 1   NULL
+4   select                                   (y[omitted])
+5   render/filter                            (y[omitted])
+5                   render 0   NULL
+6   nullrow                                  ()
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
+----
+0   select                                   ("1")
+1   render/filter                            ("1")
+1                   render 0   1
+2   select                                   (x[omitted], y[omitted])
+3   render/filter                            (x[omitted], y[omitted])
+3                   render 0   NULL
+3                   render 1   NULL
+4   scan                                     (k[omitted], v[omitted])   +k,unique
+4                   table      kv@primary

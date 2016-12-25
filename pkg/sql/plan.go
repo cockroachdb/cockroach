@@ -95,11 +95,6 @@ type planNode interface {
 	// Available during/after newPlan().
 	SetLimitHint(numRows int64, soft bool)
 
-	// setNeededColumns is optionally called when the values for some of the
-	// Columns() are not required for this node. There must be one value per
-	// column. It must be called before expandPlan.
-	setNeededColumns(needed []bool)
-
 	// expandPlan finalizes type checking of placeholders and expands
 	// the query plan to its final form, including index selection and
 	// expansion of sub-queries. Returns an error if the initialization
@@ -221,9 +216,22 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
 		return nil, err
 	}
+
+	// We propagate the needed columns once. This will remove any unused
+	// renders, which in turn may simplify expansion (remove
+	// sub-expressions).
+	p.initNeededColumns(plan, nil, false)
+
 	if err := plan.expandPlan(); err != nil {
 		return nil, err
 	}
+
+	// We now propagate the needed columns again. This will ensure that
+	// the needed columns are properly computed for newly expanded nodes.
+	// We also request initialization of needed columns in the sub-queries,
+	// which are now expanded.
+	p.initNeededColumns(plan, nil, true)
+
 	if log.V(3) {
 		log.Infof(p.ctx(), "statement %s compiled to:\n%s", stmt, planToString(plan))
 	}

@@ -68,7 +68,9 @@ type explainer struct {
 }
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
-func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan planNode) planNode {
+func (p *planner) makeExplainPlanNode(
+	explainer explainer, expanded, optimized bool, plan planNode,
+) planNode {
 	columns := ResultColumns{
 		// Level is the depth of the node in the tree.
 		{Name: "Level", Typ: parser.TypeInt},
@@ -95,6 +97,7 @@ func (p *planner) makeExplainPlanNode(explainer explainer, expanded bool, plan p
 		p:         p,
 		explainer: explainer,
 		expanded:  expanded,
+		optimized: optimized,
 		plan:      plan,
 		results:   p.newContainerValuesNode(columns, 0),
 	}
@@ -258,9 +261,18 @@ func formatColumns(cols ResultColumns, printTypes bool) string {
 type explainPlanNode struct {
 	p         *planner
 	explainer explainer
-	expanded  bool
-	plan      planNode
-	results   *valuesNode
+
+	// plan is the sub-node being explained.
+	plan planNode
+
+	// results is the container for EXPLAIN's output.
+	results *valuesNode
+
+	// expanded indicates whether to invoke expandPlan() on the sub-node.
+	expanded bool
+
+	// optimized indicates whether to invoke initNeededColumns() on the sub-node.
+	optimized bool
 }
 
 func (e *explainPlanNode) Next() (bool, error)          { return e.results.Next() }
@@ -269,10 +281,14 @@ func (e *explainPlanNode) Ordering() orderingInfo       { return e.results.Order
 func (e *explainPlanNode) Values() parser.DTuple        { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues     { return debugValues{} }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool) { e.results.SetLimitHint(n, s) }
-func (e *explainPlanNode) setNeededColumns(_ []bool)    {}
 func (e *explainPlanNode) MarkDebug(mode explainMode)   {}
 func (e *explainPlanNode) expandPlan() error {
+
 	if e.expanded {
+		if e.optimized {
+			e.p.initNeededColumns(e.plan, nil, false)
+		}
+
 		if err := e.plan.expandPlan(); err != nil {
 			return err
 		}
@@ -282,6 +298,11 @@ func (e *explainPlanNode) expandPlan() error {
 		// interested in.
 		e.plan.SetLimitHint(math.MaxInt64, true)
 	}
+
+	if e.optimized {
+		e.p.initNeededColumns(e.plan, nil, true)
+	}
+
 	return nil
 }
 

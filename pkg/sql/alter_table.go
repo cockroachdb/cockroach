@@ -402,7 +402,6 @@ func (n *alterTableNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (n *alterTableNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *alterTableNode) DebugValues() debugValues     { return debugValues{} }
 func (n *alterTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *alterTableNode) setNeededColumns(_ []bool)    {}
 func (n *alterTableNode) MarkDebug(mode explainMode)   {}
 
 func applyColumnMutation(

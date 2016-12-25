@@ -44,6 +44,7 @@ var explainStrings = []string{"", "debug", "plan", "trace", "types"}
 func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) {
 	mode := explainNone
 
+	optimized := true
 	expanded := true
 	normalizeExprs := true
 	explainer := explainer{
@@ -92,6 +93,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			expanded = false
 		} else if strings.EqualFold(opt, "NONORMALIZE") {
 			normalizeExprs = false
+		} else if strings.EqualFold(opt, "NOOPTIMIZE") {
+			optimized = false
 		} else {
 			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
@@ -130,7 +133,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		// We may want to show placeholder types, so ensure no values
 		// are missing.
 		p.semaCtx.Placeholders.FillUnassigned()
-		return p.makeExplainPlanNode(explainer, expanded, plan), nil
+		return p.makeExplainPlanNode(explainer, expanded, optimized, plan), nil
 
 	case explainTrace:
 		return p.makeTraceNode(plan, p.txn), nil
@@ -258,4 +261,3 @@ func (n *explainDebugNode) Values() parser.DTuple {
 func (*explainDebugNode) MarkDebug(_ explainMode)      {}
 func (*explainDebugNode) DebugValues() debugValues     { return debugValues{} }
 func (*explainDebugNode) SetLimitHint(_ int64, _ bool) {}
-func (*explainDebugNode) setNeededColumns(_ []bool)    {}
