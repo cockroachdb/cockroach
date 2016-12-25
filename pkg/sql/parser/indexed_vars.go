@@ -184,3 +184,34 @@ func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 	h.vars = nil
 	return ret
 }
+
+// Reset re-initialized an IndexedVarHelper structure with the same
+// number of slots. After a helper has been reset, all the expressions
+// that were linked to the helper before it was reset must be re-bound,
+// e.g. using Rebind().
+func (h *IndexedVarHelper) Reset() {
+	h.vars = make([]IndexedVar, len(h.vars))
+}
+
+// Rebind collects all the IndexedVars in the given expression
+// and re-binds them to this helper.
+func (h *IndexedVarHelper) Rebind(expr TypedExpr) TypedExpr {
+	if expr == nil {
+		return expr
+	}
+	ret, _ := WalkExpr(h, expr)
+	return ret.(TypedExpr)
+}
+
+var _ Visitor = &IndexedVarHelper{}
+
+// VisitPre implements the Visitor interface.
+func (h *IndexedVarHelper) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if iv, ok := expr.(*IndexedVar); ok {
+		return false, h.IndexedVar(iv.Idx)
+	}
+	return true, expr
+}
+
+// VisitPost implements the Visitor interface.
+func (*IndexedVarHelper) VisitPost(expr Expr) Expr { return expr }

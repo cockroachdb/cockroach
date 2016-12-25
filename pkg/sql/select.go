@@ -181,8 +181,6 @@ func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
 }
 
-func (*selectNode) setNeededColumns(_ []bool) {}
-
 func (s *selectNode) Close() {
 	s.source.plan.Close()
 }
@@ -350,15 +348,6 @@ func (s *selectNode) expandPlan() error {
 	// because evaluation requires running potential sub-queries, which
 	// cannot occur during expandPlan.
 	limitCount, limitOffset := s.top.limit.estimateLimit()
-
-	// Find the set of columns that we actually need values for. This is an
-	// optimization to avoid unmarshaling unnecessary values and is also
-	// used for index selection.
-	neededCols := make([]bool, len(s.source.info.sourceColumns))
-	for i := range neededCols {
-		neededCols[i] = s.ivarHelper.IndexedVarUsed(i)
-	}
-	s.source.plan.setNeededColumns(neededCols)
 
 	if scan, ok := s.source.plan.(*scanNode); ok {
 		// Compute a filter expression for the scan node.

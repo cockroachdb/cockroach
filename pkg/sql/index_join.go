@@ -37,6 +37,7 @@ type indexJoinNode struct {
 	table            *scanNode
 	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[sqlbase.ColumnID]int
+	valNeededIndex   []bool
 	explain          explainMode
 	debugVals        debugValues
 }
@@ -77,9 +78,6 @@ func (p *planner) makeIndexJoin(
 		colIDtoRowIndex[colID] = idx
 	}
 
-	// Transfer needed columns set to the table node.
-	table.setNeededColumns(origScan.valNeededForCol)
-
 	// For the index node, we need values for columns that are part of the index.
 	// TODO(radu): we could reduce this further - we only need the PK columns plus
 	// whatever filters may be used by the filter below.
@@ -87,39 +85,41 @@ func (p *planner) makeIndexJoin(
 	for _, idx := range colIDtoRowIndex {
 		valNeededIndex[idx] = true
 	}
-	indexScan.setNeededColumns(valNeededIndex)
 
 	if origScan.filter != nil {
-		// Transfer the filter to the table node. We must first convert the
-		// IndexedVars associated with indexNode.
-		convFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
-			iv := expr.(*parser.IndexedVar)
-			return true, table.filterVars.IndexedVar(iv.Idx)
-		}
-		table.filter = exprConvertVars(origScan.filter, convFunc)
+		// Now we split the filter by extracting the part that can be
+		// evaluated using just the index columns.
 
-		// Now we split the filter by extracting the part that can be evaluated using just the index
-		// columns.
+		// Since we are re-populating the IndexedVars, reset the helper
+		// first so that the new vars are properly accounted for.
+		indexScan.filterVars.Reset()
 		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
 			colIdx := expr.(*parser.IndexedVar).Idx
-			if !indexScan.valNeededForCol[colIdx] {
+			if !valNeededIndex[colIdx] {
 				return false, nil
 			}
 			return true, indexScan.filterVars.IndexedVar(colIdx)
 		}
-		indexScan.filter, table.filter = splitFilter(table.filter, splitFunc)
+		indexScan.filter, table.filter = splitFilter(origScan.filter, splitFunc)
 	}
+
+	// Ensure that the indexed vars are transferred to the scanNodes fully.
+	table.filterVars.Reset()
+	table.filter = table.filterVars.Rebind(table.filter)
 
 	indexScan.initOrdering(exactPrefix)
 
 	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&table.desc, table.index.ID))
 
-	return &indexJoinNode{
+	node := &indexJoinNode{
 		index:            indexScan,
 		table:            table,
 		primaryKeyPrefix: primaryKeyPrefix,
 		colIDtoRowIndex:  colIDtoRowIndex,
-	}, indexScan
+		valNeededIndex:   valNeededIndex,
+	}
+
+	return node, indexScan
 }
 
 func (n *indexJoinNode) Columns() ResultColumns {
@@ -242,8 +242,6 @@ func (n *indexJoinNode) Next() (bool, error) {
 func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	n.index.SetLimitHint(numRows, soft)
 }
-
-func (*indexJoinNode) setNeededColumns(_ []bool) {}
 
 func (n *indexJoinNode) Close() {
 	n.index.Close()

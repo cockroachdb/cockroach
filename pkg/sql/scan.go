@@ -273,18 +273,6 @@ func (n *scanNode) initTable(
 	return nil
 }
 
-// setNeededColumns sets the flags indicating which columns are needed by the upper layer.
-func (n *scanNode) setNeededColumns(needed []bool) {
-	if len(needed) != len(n.valNeededForCol) {
-		panic(fmt.Sprintf("invalid setNeededColumns argument (len %d instead of %d): %v",
-			len(needed), len(n.valNeededForCol), needed))
-	}
-	copy(n.valNeededForCol, needed)
-	for i, val := range needed {
-		n.resultColumns[i].omitted = !val
-	}
-}
-
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(scanVisibility scanVisibility) {
 	n.index = &n.desc.PrimaryIndex

@@ -336,8 +336,6 @@ func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	}
 }
 
-func (n *sortNode) setNeededColumns(_ []bool) {}
-
 // wrap the supplied planNode with the sortNode if sorting is required.
 // The first returned value is "true" if the sort node can be squashed
 // in the selectTopNode (sorting unneeded).
