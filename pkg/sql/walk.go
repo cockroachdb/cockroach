@@ -400,9 +400,11 @@ func nodeName(plan planNode) string {
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):     "alter table",
+	reflect.TypeOf(&copyNode{}):           "copy",
 	reflect.TypeOf(&createDatabaseNode{}): "create database",
 	reflect.TypeOf(&createIndexNode{}):    "create index",
 	reflect.TypeOf(&createTableNode{}):    "create table",
+	reflect.TypeOf(&createUserNode{}):     "create user",
 	reflect.TypeOf(&createViewNode{}):     "create view",
 	reflect.TypeOf(&delayedNode{}):        "virtual table",
 	reflect.TypeOf(&deleteNode{}):         "delete",
@@ -413,8 +415,10 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropViewNode{}):       "drop view",
 	reflect.TypeOf(&emptyNode{}):          "empty",
 	reflect.TypeOf(&explainDebugNode{}):   "explain debug",
+	reflect.TypeOf(&explainPlanNode{}):    "explain plan",
 	reflect.TypeOf(&explainTraceNode{}):   "explain trace",
 	reflect.TypeOf(&groupNode{}):          "group",
+	reflect.TypeOf(&hookFnNode{}):         "plugin",
 	reflect.TypeOf(&indexJoinNode{}):      "index-join",
 	reflect.TypeOf(&insertNode{}):         "insert",
 	reflect.TypeOf(&joinNode{}):           "join",
