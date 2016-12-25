@@ -61,7 +61,6 @@ func (*hookFnNode) SetLimitHint(_ int64, _ bool) {}
 func (*hookFnNode) MarkDebug(_ explainMode)      {}
 func (*hookFnNode) expandPlan() error            { return nil }
 func (*hookFnNode) Close()                       {}
-func (*hookFnNode) setNeededColumns(_ []bool)    {}
 
 func (f *hookFnNode) Start() error {
 	var err error

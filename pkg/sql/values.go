@@ -125,7 +125,10 @@ func (n *valuesNode) expandPlan() error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so it may contain subqueries.
 	for _, tupleRow := range n.tuples {
-		for _, typedExpr := range tupleRow {
+		for i, typedExpr := range tupleRow {
+			if n.columns[i].omitted {
+				continue
+			}
 			if err := n.p.expandSubqueryPlans(typedExpr); err != nil {
 				return err
 			}
@@ -149,14 +152,18 @@ func (n *valuesNode) Start() error {
 	row := make([]parser.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
-			if err := n.p.startSubqueryPlans(typedExpr); err != nil {
-				return err
-			}
+			if n.columns[i].omitted {
+				row[i] = parser.DNull
+			} else {
+				if err := n.p.startSubqueryPlans(typedExpr); err != nil {
+					return err
+				}
 
-			var err error
-			row[i], err = typedExpr.Eval(&n.p.evalCtx)
-			if err != nil {
-				return err
+				var err error
+				row[i], err = typedExpr.Eval(&n.p.evalCtx)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		if _, err := n.rows.AddRow(row); err != nil {
@@ -308,4 +315,3 @@ func (n *valuesNode) InitMinHeap() {
 }
 
 func (*valuesNode) SetLimitHint(_ int64, _ bool) {}
-func (*valuesNode) setNeededColumns(_ []bool)    {}

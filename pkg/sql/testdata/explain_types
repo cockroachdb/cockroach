@@ -152,7 +152,7 @@ EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
 query ITTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-0  delete                                                ()              +@1,unique
+0  delete                                                ()
 0                 from      t
 1  select                                                (k int)         +k,unique
 2  render/filter                                         (k int)         +k,unique
@@ -165,7 +165,7 @@ EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 query ITTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-0  update                                                  ()                           +@1,unique
+0  update                                                  ()
 0                 table     t
 0                 set       v
 1  select                                                  (k int, v int, "k + 1" int)  +k,unique
@@ -225,7 +225,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
 1  distinct                            (k int)
 1  render/filter                       (k int)
 1                 render 0  (k)[int]
-2  scan                                (k int, v int)
+2  scan                                (k int, v[omitted] int)
 2                 table     t@primary
 
 query ITTTTT
@@ -248,7 +248,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t ORDER BY v
 1                 order     +@1
 1  render/filter                       (v int)
 1                 render 0  (v)[int]
-2  scan                                (k int, v int)
+2  scan                                (k[omitted] int, v int)
 2                 table     t@primary
 
 query ITTTTT
@@ -271,7 +271,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t LIMIT 1
 1                 count     (1)[int]
 1  render/filter                       (v int)
 1                 render 0  (v)[int]
-2  scan                                (k int, v int)
+2  scan                                (k[omitted] int, v int)
 2                 table     t@primary
 
 statement ok
@@ -301,7 +301,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 1                 filter    ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
 1                 render 0  (x)[int]
 1                 render 1  (y)[int]
-2  scan                                                                                                (x int, y int, rowid[hidden] int)
+2  scan                                                                                                (x int, y int, rowid[hidden,omitted] int)
 2                 table     tt@primary
 
 query ITTTTT

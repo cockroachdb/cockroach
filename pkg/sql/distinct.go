@@ -244,8 +244,6 @@ func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 	n.plan.SetLimitHint(numRows, true)
 }
 
-func (*distinctNode) setNeededColumns(_ []bool) {}
-
 func (n *distinctNode) Close() {
 	n.plan.Close()
 	n.prefixSeen = nil

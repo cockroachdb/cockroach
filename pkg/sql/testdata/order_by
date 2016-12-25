@@ -598,3 +598,35 @@ EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c
 4  select                               (column1)
 5  values                               (column1)
 5              size   1 column, 3 rows
+
+# Check that the ordering of the source does not propagate blindly to RETURNING.
+query ITTTTT
+EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
+----
+0   insert                          (b)
+0             into    t(a, b)
+1   select                          (x, y)    +x
+2   sort                            (x, y)    +x
+2             order   +x
+3   select                          (x, y)
+4   nullrow                         ()
+
+query ITTTTT
+EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
+----
+0   delete                         (b)
+0            from    t
+1   select                         (a, b, c)    +a,unique
+2   scan                           (a, b, c)    +a,unique
+2            table   t@primary
+2            spans   /3-/4
+
+query ITTTTT
+EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
+----
+0  update                    (b)
+0          table  t
+0          set    c
+1  select                    (a, b, c, "true")  +a,unique
+2  scan                      (a, b, c)          +a,unique
+2          table  t@primary

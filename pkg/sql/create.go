@@ -143,7 +143,6 @@ func (n *createDatabaseNode) Ordering() orderingInfo       { return orderingInfo
 func (n *createDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *createDatabaseNode) DebugValues() debugValues     { return debugValues{} }
 func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createDatabaseNode) setNeededColumns(_ []bool)    {}
 func (n *createDatabaseNode) MarkDebug(mode explainMode)   {}
 
 type createIndexNode struct {
@@ -259,7 +258,6 @@ func (n *createIndexNode) Ordering() orderingInfo       { return orderingInfo{} 
 func (n *createIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *createIndexNode) DebugValues() debugValues     { return debugValues{} }
 func (n *createIndexNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createIndexNode) setNeededColumns(_ []bool)    {}
 func (n *createIndexNode) MarkDebug(mode explainMode)   {}
 
 type createUserNode struct {
@@ -348,7 +346,6 @@ func (n *createUserNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (n *createUserNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *createUserNode) DebugValues() debugValues     { return debugValues{} }
 func (n *createUserNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createUserNode) setNeededColumns(_ []bool)    {}
 func (n *createUserNode) MarkDebug(mode explainMode)   {}
 
 type createViewNode struct {
@@ -498,7 +495,6 @@ func (n *createViewNode) Columns() ResultColumns       { return make(ResultColum
 func (n *createViewNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (n *createViewNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *createViewNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createViewNode) setNeededColumns(_ []bool)    {}
 func (n *createViewNode) SetLimitHint(_ int64, _ bool) {}
 func (n *createViewNode) MarkDebug(mode explainMode)   {}
 
@@ -729,7 +725,6 @@ func (n *createTableNode) Ordering() orderingInfo       { return orderingInfo{} 
 func (n *createTableNode) Values() parser.DTuple        { return parser.DTuple{} }
 func (n *createTableNode) DebugValues() debugValues     { return debugValues{} }
 func (n *createTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createTableNode) setNeededColumns(_ []bool)    {}
 func (n *createTableNode) MarkDebug(mode explainMode)   {}
 
 type indexMatch bool

@@ -108,6 +108,9 @@ func exprCheckVars(expr parser.Expr, conv varConvertFunc) bool {
 // Convert the variables in the given expression; the expression must only contain
 // variables known to the conversion function (exprCheckVars should be used first).
 func exprConvertVars(expr parser.TypedExpr, conv varConvertFunc) parser.TypedExpr {
+	if expr == nil {
+		return expr
+	}
 	v := varConvertVisitor{justCheck: false, conv: conv}
 	ret, _ := parser.WalkExpr(&v, expr)
 	return ret.(parser.TypedExpr)
