@@ -575,9 +575,7 @@ func (n *insertNode) DebugValues() debugValues {
 	return n.run.rows.DebugValues()
 }
 
-func (n *insertNode) Ordering() orderingInfo {
-	return n.run.rows.Ordering()
-}
+func (n *insertNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}
 func (n *insertNode) setNeededColumns(_ []bool)             {}
