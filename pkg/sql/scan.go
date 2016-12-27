@@ -49,8 +49,15 @@ type scanNode struct {
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
 	row parser.DTuple
-	// For each column in resultColumns, indicates if the value is needed (used
-	// as an optimization when the upper layer doesn't need all values).
+	// For each column in resultColumns, indicates if the value is
+	// needed (used as an optimization when the upper layer doesn't need
+	// all values).
+	// TODO(radu/knz): currently the optimization always loads the
+	// entire row from KV and only skips unnecessary decodes to
+	// Datum. Investigate whether performance is to be gained (e.g. for
+	// tables with wide rows) by reading only certain columns from KV
+	// using point lookups instead of a single range lookup for the
+	// entire row.
 	valNeededForCol []bool
 
 	// Map used to get the index for columns in cols.

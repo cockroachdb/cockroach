@@ -28,18 +28,85 @@ import (
 const indexJoinBatchSize = 100
 
 // An indexJoinNode implements joining of results from an index with the rows
-// of a table. The index side of the join is pulled first and the resulting
-// rows are used to lookup rows in the table. The work is batched: we pull
-// joinBatchSize rows from the index and use the primary key to construct spans
-// that are looked up in the table.
+// of a table.
+//
+// There are three parameters to an index join:
+// - which index is being used;
+// - which table is providing the row values;
+// - which filter is applied on the result.
+//   From this filter, we can further distinguish:
+//   - the index-specific part of the filter, which uses only columns
+//     provided by the index; and
+//   - the rest of the filter, which uses (at least) non-indexed columns.
+//
+// The basic operation is as follows:
+//
+// - at instantiation:
+//
+//   - the original table scan is replaced by two scanNodes, one for the
+//     index and one for the table.
+//   - the filter expression is split in a filter-specific part and
+//     table-specific part, and propagated to the respective scanNodes.
+//
+// - during execution:
+//
+//   - rows from the index scanNode are fetched; this contains
+//     both the indexed columns (as pk of the index itself)
+//     and the PK of the indexed table.
+//   - using the PK of the indexed table, rows from the indexed
+//     table are fetched using the table scanNode.
+//
+//   The work is batched: we pull joinBatchSize rows from the index
+//   and use the primary key to construct spans that are looked up in
+//   the table.
+//
+// In addition to this basic operation, we need to support the
+// optimization implemented by setNeededColumns() (needed_columns.go)
+// which aims to reduce I/O by avoiding the decoding of column data
+// when it is not required downstream. This optimization needs to know
+// which columns are needed from the index scanNode and which are
+// needed from the table scanNode. This is determined as follows:
+//
+// - from the index scanNode: we need at least the indexed table's PK
+//   (for otherwise the table lookup would not be possible), and
+//   the columns needed by the index-specific filter.
+// - from the table scanNode: we need at least the columns needed by
+//   the table-specific filter.
+//
+// Here the question remains of where to obtain the additional columns
+// needed by the downstream consumer node. For any non-indexed
+// columns, the table scanNode naturally provides the values. For
+// indexed columns, currently the table scanNode also provides the
+// values, but really this could be optimized further to re-use the
+// column data from the index scanNode instead. See the comment
+// for valNeededForCol in scanNode.
+
 type indexJoinNode struct {
-	index            *scanNode
-	table            *scanNode
+	index *scanNode
+	table *scanNode
+
+	// primaryKeyPrefix is the KV key prefix of the rows
+	// retrieved from the table scanNode.
 	primaryKeyPrefix roachpb.Key
-	colIDtoRowIndex  map[sqlbase.ColumnID]int
-	valNeededIndex   []bool
-	explain          explainMode
-	debugVals        debugValues
+
+	// colIDtoRowIndex maps column IDs in the table scanNode into column
+	// IDs in the index scanNode's results. The presence of a column ID
+	// in this mapping is not sufficient to cause a column's values to
+	// be produced; which columns are effectively loaded are decided by
+	// the scanNodes' own valNeededForCol, which is updated by
+	// setNeededColumns(). So there may be more columns in
+	// colIDtoRowIndex than effectively accessed.
+	colIDtoRowIndex map[sqlbase.ColumnID]int
+
+	// primaryKeyColumns is the set of PK columns for which the
+	// indexJoinNode requires a value from the index scanNode, to use as
+	// lookup keys in the table scanNode. Note that the index scanNode
+	// may produce more values than this, e.g. when its filter expression
+	// uses more columns than the PK.
+	primaryKeyColumns []bool
+
+	explain   explainMode
+	debugVals debugValues
 }
 
 // makeIndexJoin build an index join node.
@@ -63,39 +130,49 @@ func (p *planner) makeIndexJoin(
 	table.disableBatchLimit()
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
+
+	// primaryKeyColumns defined here will serve both as the primaryKeyColumns
+	// field in the indexJoinNode, and to determine which columns are
+	// provided by this index for the purpose of splitting the WHERE
+	// filter into an index-specific part and a "rest" part.
+	primaryKeyColumns := make([]bool, len(origScan.valNeededForCol))
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
+		// All the PK columns from the table scanNode must
+		// be fetched in the index scanNode.
 		idx, ok := indexScan.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
 		}
+		primaryKeyColumns[idx] = true
 		colIDtoRowIndex[colID] = idx
 	}
+
+	// To split the WHERE filter into an index-specific part and a
+	// "rest" part below the splitFilter() code must know which columns
+	// are provided by the index scanNode. Since primaryKeyColumns only
+	// contains the PK columns of the indexed table, we also need to
+	// gather here which additional columns are indexed. This is done in
+	// valProvidedIndex.
+	valProvidedIndex := make([]bool, len(origScan.valNeededForCol))
+
+	// Then, in case the index-specific part, post-split, actually
+	// refers to any additional column, we also need to prepare the
+	// mapping for these columns in colIDtoRowIndex.
 	for _, colID := range indexScan.index.ColumnIDs {
 		idx, ok := indexScan.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("Unknown column %d in index!", colID))
 		}
+		valProvidedIndex[idx] = true
 		colIDtoRowIndex[colID] = idx
-	}
-
-	// For the index node, we need values for columns that are part of the index.
-	// TODO(radu): we could reduce this further - we only need the PK columns plus
-	// whatever filters may be used by the filter below.
-	valNeededIndex := make([]bool, len(origScan.valNeededForCol))
-	for _, idx := range colIDtoRowIndex {
-		valNeededIndex[idx] = true
 	}
 
 	if origScan.filter != nil {
 		// Now we split the filter by extracting the part that can be
 		// evaluated using just the index columns.
-
-		// Since we are re-populating the IndexedVars, reset the helper
-		// first so that the new vars are properly accounted for.
-		indexScan.filterVars.Reset()
 		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
 			colIdx := expr.(*parser.IndexedVar).Idx
-			if !valNeededIndex[colIdx] {
+			if !(primaryKeyColumns[colIdx] || valProvidedIndex[colIdx]) {
 				return false, nil
 			}
 			return true, indexScan.filterVars.IndexedVar(colIdx)
@@ -103,7 +180,17 @@ func (p *planner) makeIndexJoin(
 		indexScan.filter, table.filter = splitFilter(origScan.filter, splitFunc)
 	}
 
-	// Ensure that the indexed vars are transferred to the scanNodes fully.
+	// splitFilter above may have simplified the filter expression and
+	// eliminated all remaining references to some of the
+	// IndexedVars. Rebind the indexed vars here so that these stale
+	// references are eliminated from the filterVars helper and the set
+	// of needed columns is properly determined later by
+	// setNeededColumns().
+	indexScan.filterVars.Reset()
+	indexScan.filter = indexScan.filterVars.Rebind(indexScan.filter)
+
+	// Ensure that the remaining indexed vars are transferred to the
+	// table scanNode fully.
 	table.filterVars.Reset()
 	table.filter = table.filterVars.Rebind(table.filter)
 
@@ -112,11 +199,11 @@ func (p *planner) makeIndexJoin(
 	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&table.desc, table.index.ID))
 
 	node := &indexJoinNode{
-		index:            indexScan,
-		table:            table,
-		primaryKeyPrefix: primaryKeyPrefix,
-		colIDtoRowIndex:  colIDtoRowIndex,
-		valNeededIndex:   valNeededIndex,
+		index:             indexScan,
+		table:             table,
+		primaryKeyPrefix:  primaryKeyPrefix,
+		colIDtoRowIndex:   colIDtoRowIndex,
+		primaryKeyColumns: primaryKeyColumns,
 	}
 
 	return node, indexScan
