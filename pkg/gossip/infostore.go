@@ -143,8 +143,8 @@ func newInfoStore(
 	}
 }
 
-// newInfo allocates and returns a new info object using specified key,
-// value, and time-to-live.
+// newInfo allocates and returns a new info object using the specified
+// value and time-to-live.
 func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 	nodeID := is.nodeID.Get()
 	if nodeID == 0 {
@@ -258,7 +258,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 }
 
 // processCallbacks processes callbacks for the specified key by
-// matching callback regular expression against the key and invoking
+// matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
 func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
 	var matches []Callback

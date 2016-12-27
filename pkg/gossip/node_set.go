@@ -57,10 +57,10 @@ func (as nodeSet) asSlice() []roachpb.NodeID {
 	return slice
 }
 
-// filter returns an nodeSet of nodes which return true when passed to the
-// supplied filter function filterFn. filterFn should return true to keep an
-// node and false to remove an node. The new nodeSet has a separate gauge object
-// from the parent.
+// filter returns a nodeSet containing the nodes which return true when passed
+// to the supplied filter function filterFn. filterFn should return true to
+// keep a node and false to remove a node. The new nodeSet has a separate
+// gauge object from the parent.
 func (as nodeSet) filter(filterFn func(node roachpb.NodeID) bool) nodeSet {
 	avail := makeNodeSet(as.maxSize,
 		metric.NewGauge(metric.Metadata{Name: "TODO(marc)", Help: "TODO(marc)"}))

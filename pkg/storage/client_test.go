@@ -213,7 +213,7 @@ type multiTestContext struct {
 	stoppers []*stop.Stopper
 	idents   []roachpb.StoreIdent
 
-	// expireLeasesActive restricts expiration of leases so only os is
+	// expireLeasesActive restricts expiration of leases so only one is
 	// active at a time. This int32 value is set to 1 atomically to
 	// indicate that an expiration is active.
 	expireLeasesActive int32
