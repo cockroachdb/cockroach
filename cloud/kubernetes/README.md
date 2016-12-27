@@ -141,10 +141,10 @@ database and ensuring the other replicas have all data that was written.
 
 ## Scaling up or down
 
-Simply patch the StatefulSet by running
+Scale the StatefulSet by running
 
 ```shell
-kubectl patch statefulset cockroachdb -p '{"spec":{"replicas":4}}'
+kubectl scale statefulset cockroachdb --replicas=4
 ```
 
 Note that you may need to create a new persistent volume claim first. If you
