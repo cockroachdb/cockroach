@@ -102,12 +102,12 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-0  select                         (a, b)                          +b
-1  sort                           (a, b)                          +b
+0  select                         (a, b)                                   +b
+1  sort                           (a, b)                                   +b
 1              order  +b
-2  index-join                     (a, b, rowid[hidden,omitted])   =a,+rowid,unique
-3  scan                           (a, b[omitted], rowid[hidden])  =a,+rowid,unique
+2  index-join                     (a, b, rowid[hidden,omitted])            =a,+rowid,unique
+3  scan                           (a[omitted], b[omitted], rowid[hidden])  =a,+rowid,unique
 3              table  tc@c
 3              spans  /10-/11
-3  scan                           (a, b, rowid[hidden,omitted])   +rowid,unique
+3  scan                           (a, b, rowid[hidden,omitted])            +rowid,unique
 3              table  tc@primary

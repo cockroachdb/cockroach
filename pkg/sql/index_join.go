@@ -63,45 +63,56 @@ func (p *planner) makeIndexJoin(
 	table.disableBatchLimit()
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
+
+	// We need all the PK columns because they are necessary to look up
+	// the table's rows.
+	valNeededIndex := make([]bool, len(origScan.valNeededForCol))
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
 		idx, ok := indexScan.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
 		}
+		valNeededIndex[idx] = true
 		colIDtoRowIndex[colID] = idx
 	}
+
+	// We may need the columns included in the index in case they are
+	// used by the index's filter below.
+	//
+	// We use a different array from valNeededIndex here because
+	// the logic in setNeededColumns() uses valNeededIndex as mandatory
+	// columns and lets the index sub-scanNode recompute its additional
+	// required columns based on the filter itself; if we used
+	// the same array then all the additional columns would become
+	// mandatory in the index sub-node.
+	valProvidedIndex := make([]bool, len(origScan.valNeededForCol))
 	for _, colID := range indexScan.index.ColumnIDs {
 		idx, ok := indexScan.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("Unknown column %d in index!", colID))
 		}
+		valProvidedIndex[idx] = true
 		colIDtoRowIndex[colID] = idx
-	}
-
-	// For the index node, we need values for columns that are part of the index.
-	// TODO(radu): we could reduce this further - we only need the PK columns plus
-	// whatever filters may be used by the filter below.
-	valNeededIndex := make([]bool, len(origScan.valNeededForCol))
-	for _, idx := range colIDtoRowIndex {
-		valNeededIndex[idx] = true
 	}
 
 	if origScan.filter != nil {
 		// Now we split the filter by extracting the part that can be
 		// evaluated using just the index columns.
-
-		// Since we are re-populating the IndexedVars, reset the helper
-		// first so that the new vars are properly accounted for.
-		indexScan.filterVars.Reset()
 		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
 			colIdx := expr.(*parser.IndexedVar).Idx
-			if !valNeededIndex[colIdx] {
+			if !valNeededIndex[colIdx] && !valProvidedIndex[colIdx] {
 				return false, nil
 			}
 			return true, indexScan.filterVars.IndexedVar(colIdx)
 		}
 		indexScan.filter, table.filter = splitFilter(origScan.filter, splitFunc)
 	}
+
+	// splitFilter may have simplified the filter expression. Rebind the
+	// indexed vars so that the set of needed columns is properly
+	// determined later by setNeededColumns().
+	indexScan.filterVars.Reset()
+	indexScan.filter = indexScan.filterVars.Rebind(indexScan.filter)
 
 	// Ensure that the indexed vars are transferred to the scanNodes fully.
 	table.filterVars.Reset()
