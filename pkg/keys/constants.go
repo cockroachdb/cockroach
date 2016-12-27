@@ -41,7 +41,7 @@ const (
 var (
 	// localPrefix is the prefix for keys which hold data local to a
 	// RocksDB instance, such as store and range-specific metadata which
-	// must not pollute the user key space, but must be collocate with
+	// must not pollute the user key space, but must be collocated with
 	// the store and/or ranges which they refer to. Storing this
 	// information in the normal system keyspace would place the data on
 	// an arbitrary set of stores, with no guarantee of collocation.

@@ -1,5 +1,5 @@
 - Feature Name: Time Travel Queries
-- Status: compeleted
+- Status: completed
 - Start Date: 2016-05-07
 - Authors: Matt Jibson
 - RFC PR: [#6573](https://github.com/cockroachdb/cockroach/pull/6573)
