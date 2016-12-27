@@ -62,8 +62,15 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.plan, needed)
 
 	case *indexJoinNode:
-		setNeededColumns(n.index, n.valNeededIndex)
+		// Currently all the needed result columns are provided by the
+		// table sub-source; from the index sub-source we only need the PK
+		// columns sufficient to configure the table sub-source.
+		// TODO(radu/knz) see the comments at the start of index_join.go,
+		// perhaps this can be optimized to utilize the column values
+		// already provided by the index instead of re-retrieving them
+		// using the table scanNode.
 		setNeededColumns(n.table, needed)
+		setNeededColumns(n.index, n.valNeededIndex)
 
 	case *unionNode:
 		if !n.emitAll {
