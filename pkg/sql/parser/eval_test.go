@@ -592,8 +592,6 @@ func TestEval(t *testing.T) {
 		{`ANNOTATE_TYPE(NULL, string)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, timestamp)`, `NULL`},
 		// Extract from dates.
-		// TODO(nvanbenschoten): these casts can be removed once we improve
-		// strConst's type inference.
 		{`extract(year from '2010-09-28'::date)`, `2010`},
 		{`extract(year from '2010-09-28'::date)`, `2010`},
 		{`extract(month from '2010-09-28'::date)`, `9`},
