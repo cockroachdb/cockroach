@@ -313,6 +313,15 @@ var (
 )
 
 // AvailableTypes implements the Constant interface.
+//
+// To fully take advantage of literal type inference, this method would
+// determine exactly which types are available for a given string. This would
+// entail attempting to parse the literal string as a date, a timestamp, an
+// interval, etc. and having more fine-grained results than strValAvailAllParsable.
+// However, this is not feasible in practice because of the associated parsing
+// overhead. Conservative approaches like checking the string's length have been
+// investigated, but they were incomplete, resulted in unpredictable levels of
+// inference, and often failed to eliminate ambiguity.
 func (expr *StrVal) AvailableTypes() []Type {
 	if !expr.bytesEsc {
 		return strValAvailAllParsable
