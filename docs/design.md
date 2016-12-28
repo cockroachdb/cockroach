@@ -20,15 +20,15 @@ necessary and returns results to the client. CockroachDB implements a
 **single, monolithic sorted map** from key to value where both keys
 and values are byte strings.
 
-The KV map is logically composed of smaller segments of the keyspace
-called ranges. Each range is backed by data stored in a local KV
-storage engine (we use [RocksDB](http://rocksdb.org/), a variant of
-LevelDB). Range data is replicated to a configurable number of
-additional CockroachDB nodes. Ranges are merged and split to maintain
-a target size, by default `64M`. The relatively small size facilitates
-quick repair and rebalancing to address node failures, new capacity
-and even read/write load. However, the size must be balanced against
-the pressure on the system from having more ranges to manage.
+The KV map is logically composed of smaller segments of the keyspace called
+ranges. Each range is backed by data stored in a local KV storage engine (we
+use [RocksDB](http://rocksdb.org/), a variant of
+[LevelDB](https://github.com/google/leveldb)). Range data is replicated to a
+configurable number of additional CockroachDB nodes. Ranges are merged and
+split to maintain a target size, by default `64M`. The relatively small size
+facilitates quick repair and rebalancing to address node failures, new capacity
+and even read/write load. However, the size must be balanced against the
+pressure on the system from having more ranges to manage.
 
 CockroachDB achieves horizontally scalability:
 - adding more nodes increases the capacity of the cluster by the
@@ -1278,18 +1278,3 @@ by means of prefix compression.
 Finally, for SQL indexes, the KV key is formed using the SQL value of the
 indexed columns, and the KV value is the KV key prefix of the rest of
 the indexed row.
-
-# References
-
-[0]: http://rocksdb.org/
-[1]: https://github.com/google/leveldb
-[2]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf
-[3]: http://research.google.com/archive/spanner.html
-[4]: http://research.google.com/pubs/pub36971.html
-[5]: https://github.com/cockroachdb/cockroach/tree/master/sql
-[7]: https://godoc.org/github.com/cockroachdb/cockroach/kv
-[8]: https://github.com/cockroachdb/cockroach/tree/master/kv
-[9]: https://godoc.org/github.com/cockroachdb/cockroach/server
-[10]: https://github.com/cockroachdb/cockroach/tree/master/server
-[11]: https://godoc.org/github.com/cockroachdb/cockroach/storage
-[12]: https://github.com/cockroachdb/cockroach/tree/master/storage
