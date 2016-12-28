@@ -187,7 +187,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		if n.joinType != joinTypeInner {
 			return false, errors.Errorf("only inner join supported")
 		}
-		if err := dsp.checkExpr(n.pred.filter); err != nil {
+		if err := dsp.checkExpr(n.pred.onCond); err != nil {
 			return false, err
 		}
 		shouldRunDistLeft, err := dsp.CheckSupport(n.left.plan)
@@ -1086,11 +1086,11 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		joinCol++
 	}
 
-	if n.pred.filter != nil {
-		// We have to remap ordinal references in the filter (which refer to the
-		// join columns as described above) to values that make sense in the joiner
-		// (0 to N-1 for the left input columns, N to N+M-1 for the right input
-		// columns).
+	if n.pred.onCond != nil {
+		// We have to remap ordinal references in the on condition (which refer to
+		// the join columns as described above) to values that make sense in the
+		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
+		// input columns).
 		joinColMap := make([]int, 0, len(n.columns))
 		for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
 			// Merged column. See TODO above.
@@ -1102,7 +1102,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		for i := 0; i < n.pred.numRightCols; i++ {
 			joinColMap = append(joinColMap, rightPlan.planToStreamColMap[i]+len(joinerSpec.LeftTypes))
 		}
-		joinerSpec.Expr = distSQLExpression(n.pred.filter, joinColMap)
+		joinerSpec.Expr = distSQLExpression(n.pred.onCond, joinColMap)
 	}
 
 	pIdxStart := processorIdx(len(p.processors))
