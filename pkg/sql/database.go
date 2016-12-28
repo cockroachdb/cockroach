@@ -100,11 +100,6 @@ type DatabaseAccessor interface {
 	// returning an error if the descriptor is not found.
 	mustGetDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
-	// getCachedDatabaseDesc looks up the database descriptor from
-	// the descriptor cache, given its name.
-	// TODO(nvanbenschoten) This method doesn't belong in the interface.
-	getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
-
 	// getAllDatabaseDescs looks up and returns all available database
 	// descriptors.
 	getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error)
@@ -166,7 +161,8 @@ func MustGetDatabaseDesc(
 	return desc, nil
 }
 
-// getCachedDatabaseDesc implements the DatabaseAccessor interface.
+// getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
+// given its name.
 func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	if name == sqlbase.SystemDB.Name {
 		return &sqlbase.SystemDB, nil
