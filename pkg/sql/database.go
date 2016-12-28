@@ -100,11 +100,6 @@ type DatabaseAccessor interface {
 	// returning an error if the descriptor is not found.
 	mustGetDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
-	// getCachedDatabaseDesc looks up the database descriptor from
-	// the descriptor cache, given its name.
-	// TODO(nvanbenschoten) This method doesn't belong in the interface.
-	getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
-
 	// getAllDatabaseDescs looks up and returns all available database
 	// descriptors.
 	getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error)
@@ -166,42 +161,6 @@ func MustGetDatabaseDesc(
 	return desc, nil
 }
 
-// getCachedDatabaseDesc implements the DatabaseAccessor interface.
-func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if name == sqlbase.SystemDB.Name {
-		return &sqlbase.SystemDB, nil
-	}
-
-	nameKey := databaseKey{name}
-	nameVal := p.systemConfig.GetValue(nameKey.Key())
-	if nameVal == nil {
-		return nil, fmt.Errorf("database %q does not exist in system cache", name)
-	}
-
-	id, err := nameVal.GetInt()
-	if err != nil {
-		return nil, err
-	}
-
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
-	descVal := p.systemConfig.GetValue(descKey)
-	if descVal == nil {
-		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
-	}
-
-	desc := &sqlbase.Descriptor{}
-	if err := descVal.GetProto(desc); err != nil {
-		return nil, err
-	}
-
-	database := desc.GetDatabase()
-	if database == nil {
-		return nil, errors.Errorf("%q is not a database", name)
-	}
-
-	return database, database.Validate()
-}
-
 // getAllDatabaseDescs implements the DatabaseAccessor interface.
 func (p *planner) getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error) {
 	descs, err := p.getAllDescriptors()
@@ -245,6 +204,43 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 
 	p.databaseCache.setID(name, desc.ID)
 	return desc.ID, nil
+}
+
+// getCachedDtabaseDesc looks up the database descriptor from the descriptor cache,
+// given its name.
+func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	if name == sqlbase.SystemDB.Name {
+		return &sqlbase.SystemDB, nil
+	}
+
+	nameKey := databaseKey{name}
+	nameVal := p.systemConfig.GetValue(nameKey.Key())
+	if nameVal == nil {
+		return nil, fmt.Errorf("database %q does not exist in system cache", name)
+	}
+
+	id, err := nameVal.GetInt()
+	if err != nil {
+		return nil, err
+	}
+
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
+	descVal := p.systemConfig.GetValue(descKey)
+	if descVal == nil {
+		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
+	}
+
+	desc := &sqlbase.Descriptor{}
+	if err := descVal.GetProto(desc); err != nil {
+		return nil, err
+	}
+
+	database := desc.GetDatabase()
+	if database == nil {
+		return nil, errors.Errorf("%q is not a database", name)
+	}
+
+	return database, database.Validate()
 }
 
 // createDatabase implements the DatabaseAccessor interface.
