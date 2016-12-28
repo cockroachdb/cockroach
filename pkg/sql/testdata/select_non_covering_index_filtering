@@ -125,3 +125,27 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a >
 2 /t/primary/9/b 3    PARTIAL
 2 /t/primary/9/c 3    PARTIAL
 2 /t/primary/9/s '33' ROW
+
+# Check that splitting of the expression filter does not mistakenly
+# bring non-indexed columns (s) under the index scanNode. (#12582)
+# To test this we need an expression containing non-indexed
+# columns that disappears during range simplification.
+query ITTTTT
+EXPLAIN(VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
+----
+0  select                              (a)
+1  render/filter                       (a)
+1                 render 0  test.t.a
+2  index-join                          (a, b[omitted], c[omitted], s[omitted])  +b,+c,+a,unique
+3  scan                                (a, b[omitted], c[omitted], s[omitted])  +b,+c,+a,unique
+3                 table     t@bc
+3                 spans     /2-/3
+3  scan                                (a, b[omitted], c[omitted], s[omitted])  +a,unique
+3                 table     t@primary
+
+query I
+SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
+----
+4
+5
+6
