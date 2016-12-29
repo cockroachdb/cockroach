@@ -193,6 +193,7 @@ EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
 0  scan
 0        table  abcd@bcd
+0        hint   no index join
 0        spans  ALL
 
 query ITTT
@@ -200,6 +201,7 @@ EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
 ----
 0  scan
 0        table  abcd@bcd
+0        hint   no index join
 0        spans  ALL
 
 query ITTT
@@ -207,6 +209,7 @@ EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 1
 ----
 0  scan
 0        table  abcd@primary
+0        hint   no index join
 0        spans  ALL
 
 query error index \"cd\" is not covering and NO_INDEX_JOIN was specified

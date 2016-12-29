@@ -1580,8 +1580,8 @@ func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
 			ID:        b.tbl.ID,
 			ColumnIDs: make([]sqlbase.ColumnID, 0, len(scan.cols)),
 		}
-		if scan.specifiedIndex != nil {
-			ref.IndexID = scan.specifiedIndex.ID
+		if scan.index != nil && scan.isSecondaryIndex {
+			ref.IndexID = scan.index.ID
 		}
 		for i := range scan.cols {
 			// Only include the columns that are actually needed.
