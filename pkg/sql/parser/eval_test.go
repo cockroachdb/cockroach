@@ -45,39 +45,37 @@ func TestEval(t *testing.T) {
 		{`3.1 % 2.0`, `1.1`},
 		{`5 % 3`, `2`},
 		{`1 + NULL`, `NULL`},
-		// TODO(nvanbenschoten) These should all be changed to test float, now that decimal
-		// is the default non-int numeric type.
-		{`1.1::decimal + 2.4::decimal`, `3.5`},
-		{`1.1::decimal - 2.4::decimal`, `-1.3`},
-		{`1.1::decimal * 2.4::decimal`, `2.64`},
-		{`1.1::decimal % 2.4::decimal`, `1.1`},
-		{`4.1::decimal // 2.4::decimal`, `1`},
-		{`-4.5::float // 1.2::float`, `-3.0`},
+		{`1.1 + 2.4`, `3.5`},
+		{`1.1 - 2.4`, `-1.3`},
+		{`1.1 * 2.4`, `2.64`},
+		{`1.1 % 2.4`, `1.1`},
+		{`4.1 // 2.4`, `1`},
+		{`-4.5:::float // 1.2:::float`, `-3.0`},
 		// Heterogeneous int/decimal arithmetic is valid.
-		{`1.1::decimal + 2::int`, `3.1`},
-		{`1.1::decimal - 2::int`, `-0.9`},
-		{`1.1::decimal * 2::int`, `2.2`},
-		{`1.1::decimal % 2::int`, `1.1`},
-		{`4.1::decimal // 2::int`, `2`},
-		{`2::int +  2.1::decimal`, `4.1`},
-		{`2::int -  2.1::decimal`, `-0.1`},
-		{`2::int *  2.1::decimal`, `4.2`},
-		{`2::int %  2.1::decimal`, `2.0`},
-		{`4::int // 2.1::decimal`, `1`},
+		{`1.1:::decimal + 2:::int`, `3.1`},
+		{`1.1:::decimal - 2:::int`, `-0.9`},
+		{`1.1:::decimal * 2:::int`, `2.2`},
+		{`1.1:::decimal % 2:::int`, `1.1`},
+		{`4.1:::decimal // 2:::int`, `2`},
+		{`2:::int +  2.1:::decimal`, `4.1`},
+		{`2:::int -  2.1:::decimal`, `-0.1`},
+		{`2:::int *  2.1:::decimal`, `4.2`},
+		{`2:::int %  2.1:::decimal`, `2.0`},
+		{`4:::int // 2.1:::decimal`, `1`},
 		// Division is always done on floats or decimals.
 		{`4 / 5`, `0.8000000000000000`},
-		{`1.1::decimal / 2.2::decimal`, `0.5000000000000000`},
-		{`1::int / 2.2::decimal`, `0.4545454545454545`},
-		{`1.1::decimal / 2::int`, `0.5500000000000000`},
+		{`1.1:::decimal / 2.2:::decimal`, `0.5000000000000000`},
+		{`1:::int / 2.2:::decimal`, `0.4545454545454545`},
+		{`1.1:::decimal / 2:::int`, `0.5500000000000000`},
 		// Only floats support infinity.
-		{`1.0::float / 0.0`, `+Inf`},
-		{`-1.0::float * (1.0::float / 0.0)`, `-Inf`},
+		{`1.0:::float / 0.0`, `+Inf`},
+		{`-1.0:::float * (1.0:::float / 0.0)`, `-Inf`},
 		// Grouping
 		{`1 + 2 + (3 * 4)`, `15`},
 		// Unary operators.
 		{`-3`, `-3`},
 		{`-4.1`, `-4.1`},
-		{`-6.1::float`, `-6.1`},
+		{`-6.1:::float`, `-6.1`},
 		// Ones complement operates on signed integers.
 		{`~0`, `-1`},
 		{`~0 - 1`, `-2`},
@@ -591,6 +589,11 @@ func TestEval(t *testing.T) {
 		{`ANNOTATE_TYPE(NULL, int)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, string)`, `NULL`},
 		{`ANNOTATE_TYPE(NULL, timestamp)`, `NULL`},
+		// Shorthand type annotation notation.
+		{`123:::int + 1`, `124`},
+		{`123:::float + 1`, `124.0`},
+		{`(123 + 1):::int`, `124`},
+		{`(123 + 1):::float`, `124.0`},
 		// Extract from dates.
 		// TODO(nvanbenschoten): these casts can be removed once we improve
 		// strConst's type inference.
@@ -624,7 +627,7 @@ func TestEval(t *testing.T) {
 		{`extract_duration(second from '10m20s30ms'::interval)`, `620`},
 		{`extract_duration(millisecond from '20s30ms40µs'::interval)`, `20030`},
 		{`extract_duration(microsecond from '12345ns'::interval)`, `12`},
-		// Time and date conversion
+		// Time and date conversion.
 		{`experimental_strftime('2016-09-28'::date, '%d@%Y/%m')`, `'28@2016/09'`},
 		{`experimental_strftime('2010-01-10 12:13:14.123456+00:00'::timestamp, '%a %A %w %d %b %B %m %y %Y %H %I %p %M %S %f %z %Z %j %U %W %c %x %X %%')`,
 			`'Sun Sunday 0 10 Jan January 01 10 2010 12 12 PM 13 14 123456 +0000 UTC 010 02 01 Sun Jan 10 12:13:14 2010 01/10/10 12:13:14 %'`},
@@ -632,11 +635,6 @@ func TestEval(t *testing.T) {
 			`'Sun Sunday 0 10 Jan January 01 10 2010 12 12 PM 13 14 123456 +0000 UTC 010 02 01 Sun Jan 10 12:13:14 2010 01/10/10 12:13:14 %'`},
 		{`experimental_strptime('%d %Y %B', '03 2006 December')`, `'2006-12-03 00:00:00+00:00'`},
 		{`experimental_strptime('%y %m %d %M %S %H', '06 12 21 05 33 14')`, `'2006-12-21 14:05:33+00:00'`},
-		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-		// {`123!int + 1`, `124`},
-		// {`123!float + 1`, `124.0`},
-		// {`(123 + 1)!int`, `124`},
-		// {`(123 + 1)!float`, `124.0`},
 		// Need two interval ops to verify the return type matches the return struct type.
 		{`'2010-09-28 12:00:00.1-04:00'::timestamptz - '0s'::interval - '0s'::interval`, `'2010-09-28 16:00:00.1+00:00'`},
 		{`'12h2m1s23ms'::interval + '1h'::interval`, `INTERVAL '13h2m1.023s'`},
