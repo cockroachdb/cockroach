@@ -846,6 +846,62 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	}
 }
 
+// TestLeaseOwnedByNodeWithoutReplica verifies that if an epoch-based lease
+// is owned by a node that doesn't hold a replica for the range, the lease will
+// be acquired.
+func TestLeaseOwnedByNodeWithoutReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set up a fake NodeLiveness instance so that an epoch-based range lease can
+	// function well enough for the sake of the test.
+	tc.store.cfg.NodeLiveness = &NodeLiveness{}
+	liveness := Liveness{
+		Epoch:      1,
+		Expiration: hlc.MaxTimestamp,
+	}
+	tc.store.cfg.NodeLiveness.mu.nodes = map[roachpb.NodeID]Liveness{
+		tc.store.Ident.NodeID: liveness,
+		secondReplica.NodeID:  liveness,
+	}
+
+	tc.manualClock.Set(leaseExpiry(tc.repl))
+	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		Start:   tc.Clock().Now(),
+		Replica: secondReplica,
+		Epoch:   proto.Int64(liveness.Epoch),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now remove secondReplica from the range descriptor without taking away
+	// its lease.
+	tc.repl.mu.Lock()
+	replicas := tc.repl.mu.state.Desc.Replicas
+	for i := range replicas {
+		if replicas[i] == secondReplica {
+			replicas = append(replicas[:i], replicas[i+1:]...)
+			break
+		}
+	}
+	tc.repl.mu.state.Desc.Replicas = replicas
+	tc.repl.mu.Unlock()
+
+	{
+		_, err := tc.repl.redirectOnOrAcquireLease(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // TestReplicaLeaseCounters verifies leaseRequest metrics counters are updated
 // correctly after a lease request.
 func TestReplicaLeaseCounters(t *testing.T) {
