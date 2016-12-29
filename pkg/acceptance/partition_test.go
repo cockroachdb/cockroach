@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -46,7 +47,6 @@ func TestPartitionNemesis(t *testing.T) {
 }
 
 func TestPartitionBank(t *testing.T) {
-	t.Skip("#7978")
 	SkipUnlessPrivileged(t)
 	runTestOnConfigs(t, testBankWithNemesis(BidirectionalPartitionNemesis))
 }
@@ -98,6 +98,7 @@ func (b *Bank) Init(ctx context.Context, numAccounts, initialBalance int) {
 // Verify makes sure that the total amount of money in the system has not
 // changed.
 func (b *Bank) Verify(ctx context.Context) {
+	log.Info(ctx, "verifying")
 	exp := b.accounts * b.initialBalance
 	db := makePGClient(b.T, b.PGUrl(ctx, 0))
 	defer db.Close()
@@ -160,42 +161,55 @@ func (b *Bank) Invoke(ctx context.Context, i int) {
 	handle(err)
 	_, err = txn.Exec(`UPDATE bank.accounts SET balance = $1 WHERE id = $2`, bTo+amount, to)
 	handle(err)
+	handle(txn.Commit())
 }
 
 func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 	return func(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-		const (
-			concurrency = 5
-			accounts    = 10
-		)
-		deadline := timeutil.Now().Add(cfg.Duration)
+		const accounts = 10
 		b := NewBank(t, c)
 		b.Init(ctx, accounts, 10)
-		for _, nemesis := range nemeses {
-			stopper.RunWorker(func() {
-				nemesis(ctx, t, c, stopper)
-			})
-		}
-		for i := 0; i < concurrency; i++ {
-			localI := i
-			if err := stopper.RunAsyncTask(ctx, func(_ context.Context) {
-				for timeutil.Now().Before(deadline) {
-					select {
-					case <-stopper.ShouldQuiesce():
-						return
-					default:
-					}
-					b.Invoke(ctx, localI)
-				}
-			}); err != nil {
-				t.Fatal(err)
-			}
-		}
-		select {
-		case <-stopper.ShouldStop():
-		case <-time.After(cfg.Duration):
-		}
-		log.Warningf(ctx, "finishing test")
+		runTransactionsAndNemeses(ctx, t, c, b, cfg.Duration, nemeses...)
 		b.Verify(ctx)
+	}
+}
+
+func runTransactionsAndNemeses(
+	ctx context.Context,
+	t *testing.T,
+	c cluster.Cluster,
+	b *Bank,
+	duration time.Duration,
+	nemeses ...NemesisFn,
+) {
+	deadline := timeutil.Now().Add(duration)
+	// We're going to run the nemeses for the duration of this function, which may
+	// return before `stopper` is stopped.
+	nemesesStopper := stop.NewStopper()
+	defer nemesesStopper.Stop()
+	const concurrency = 5
+	for _, nemesis := range nemeses {
+		stopper.RunWorker(func() {
+			nemesis(ctx, t, c, nemesesStopper)
+		})
+	}
+	for i := 0; i < concurrency; i++ {
+		localI := i
+		if err := stopper.RunAsyncTask(ctx, func(_ context.Context) {
+			for timeutil.Now().Before(deadline) {
+				select {
+				case <-stopper.ShouldQuiesce():
+					return
+				default:
+				}
+				b.Invoke(ctx, localI)
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-stopper.ShouldStop():
+	case <-time.After(duration):
 	}
 }
