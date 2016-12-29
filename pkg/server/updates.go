@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -42,22 +43,35 @@ var updatesURL, reportingURL *url.URL
 
 func init() {
 	var err error
-	updatesURL, err = url.Parse(baseUpdatesURL)
+	updatesURL, err = url.Parse(
+		envutil.EnvOrDefaultString("COCKROACH_UPDATE_CHECK_URL", baseUpdatesURL),
+	)
 	if err != nil {
 		panic(err)
 	}
-	reportingURL, err = url.Parse(baseReportingURL)
+	reportingURL, err = url.Parse(
+		envutil.EnvOrDefaultString("COCKROACH_USAGE_REPORT_URL", baseReportingURL),
+	)
 	if err != nil {
 		panic(err)
 	}
 }
 
 const updateCheckFrequency = time.Hour * 24
-const updateCheckJitterSeconds = 120
+const usageReportFrequency = updateCheckFrequency
+const updateCheckPostStartup = time.Minute * 5
 const updateCheckRetryFrequency = time.Hour
 const updateMaxVersionsToReport = 3
 
 const optinKey = serverUIDataKeyPrefix + "optin-reporting"
+
+const updateCheckJitterSeconds = 120
+
+// randomly shift `d` to be up to `jitterSec` shorter or longer.
+func addJitter(d time.Duration, jitterSec int) time.Duration {
+	j := time.Duration(rand.Intn(jitterSec*2)-jitterSec) * time.Second
+	return d + j
+}
 
 type versionInfo struct {
 	Version string `json:"version"`
@@ -89,106 +103,78 @@ type storeInfo struct {
 func (s *Server) PeriodicallyCheckForUpdates() {
 	s.stopper.RunWorker(func() {
 		startup := timeutil.Now()
+		nextUpdateCheck := time.Time{}
 
+		var timer timeutil.Timer
+		defer timer.Stop()
 		for {
-			// `maybeCheckForUpdates` and `maybeReportUsage` both return the
-			// duration until they should next be checked.
-			// Wait for the shorter of the durations returned by the two checks.
-			wait := s.maybeCheckForUpdates()
-			if reportWait := s.maybeReportUsage(timeutil.Since(startup)); reportWait < wait {
+			runningTime := timeutil.Since(startup)
+
+			nextUpdateCheck = s.maybeCheckForUpdates(nextUpdateCheck, runningTime)
+
+			// Nominally we'll want to sleep until the next update check.
+			wait := nextUpdateCheck.Sub(timeutil.Now())
+
+			// If a usage report needs to happen sooner than the next update check,
+			// we'll schedule a wake-up then instead.
+			if reportWait := s.maybeReportUsage(runningTime); reportWait < wait {
 				wait = reportWait
 			}
-			jitter := rand.Intn(updateCheckJitterSeconds) - updateCheckJitterSeconds/2
-			wait = wait + (time.Duration(jitter) * time.Second)
+
+			timer.Reset(addJitter(wait, updateCheckJitterSeconds))
 			select {
 			case <-s.stopper.ShouldQuiesce():
 				return
-			case <-time.After(wait):
+			case <-timer.C:
+				timer.Read = true
 			}
 		}
 	})
 }
 
-// Determines if it is time to check for updates and does so if it is.
-// Returns a duration indicating when to make the next call to this method.
-func (s *Server) maybeCheckForUpdates() time.Duration {
-	return s.maybeRunPeriodicCheck("updates check", keys.UpdateCheckCluster, s.checkForUpdates)
+func (s *Server) maybeCheckForUpdates(scheduled time.Time, runningTime time.Duration) time.Time {
+	if scheduled.After(timeutil.Now()) {
+		return scheduled
+	}
+
+	// checkForUpdates handles its own errors, but it returns a bool indicating if
+	// it succeeded, so we can schedule a re-attempt if it did not.
+	if succeeded := s.checkForUpdates(runningTime); !succeeded {
+		return timeutil.Now().Add(updateCheckRetryFrequency)
+	}
+
+	// If we've just started up, we want to check again shortly after, in case the
+	// startup-time check gets lost in the noise, and also to make it easier to
+	// identify real (long-lived) deployments vs short-lived instances for tests.
+	if runningTime < updateCheckPostStartup {
+		return timeutil.Now().Add(time.Hour - runningTime)
+	}
+
+	return timeutil.Now().Add(updateCheckFrequency)
 }
 
-// If the time is greater than the timestamp stored at `key`, run `f`.
-// Before running `f`, the timestamp is updated forward by a small amount via
-// a compare-and-swap to ensure at-most-one concurrent execution. After `f`
-// executes the timestamp is set to the next execution time.
-// Returns how long until `f` should be run next (i.e. when this method should
-// be called again).
-func (s *Server) maybeRunPeriodicCheck(
-	op string, key roachpb.Key, f func(context.Context),
-) time.Duration {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "op")
+// checkForUpdates calls home to check for new versions for the current platform
+// and logs messages if it finds them, as well as if it encounters any errors.
+// The returned boolean indicates if the check succeeded (and thus does not need
+// to be re-attempted by the scheduler after a retry-interval).
+func (s *Server) checkForUpdates(runningTime time.Duration) bool {
+	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
-	// Add the op name to the log context.
-	ctx = log.WithLogTag(ctx, op, nil)
-
-	resp, err := s.db.Get(ctx, key)
-	if err != nil {
-		log.Infof(ctx, "error reading time: %s", err)
-		return updateCheckRetryFrequency
-	}
-
-	// We should early returned below if either the next check time is in the
-	// future or if the atomic compare-and-set of that time failed (which
-	// would happen if two nodes tried at the same time).
-	if resp.Exists() {
-		whenToCheck, pErr := resp.Value.GetTime()
-		if pErr != nil {
-			log.Warningf(ctx, "error decoding time: %s", err)
-			return updateCheckRetryFrequency
-		} else if delay := whenToCheck.Sub(timeutil.Now()); delay > 0 {
-			return delay
-		}
-
-		nextRetry := whenToCheck.Add(updateCheckRetryFrequency)
-		if err := s.db.CPut(ctx, key, nextRetry, whenToCheck); err != nil {
-			if log.V(2) {
-				log.Infof(ctx, "could not set next version check time (maybe another node checked?): %s", err)
-			}
-			return updateCheckRetryFrequency
-		}
-	} else {
-		log.Infof(ctx, "No previous %s time.", op)
-		nextRetry := timeutil.Now().Add(updateCheckRetryFrequency)
-		// CPut with `nil` prev value to assert that no other node has checked.
-		if err := s.db.CPut(ctx, key, nextRetry, nil); err != nil {
-			if log.V(2) {
-				log.Infof(ctx, "Could not set %s time (maybe another node checked?): %v", op, err)
-			}
-			return updateCheckRetryFrequency
-		}
-	}
-
-	f(ctx)
-
-	if err := s.db.Put(ctx, key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
-		log.Infof(ctx, "Error updating %s time: %v", op, err)
-	}
-	return updateCheckFrequency
-}
-
-func (s *Server) checkForUpdates(ctx context.Context) {
 	q := updatesURL.Query()
-	q.Set("version", build.GetInfo().Tag)
+	b := build.GetInfo()
+	q.Set("version", b.Tag)
+	q.Set("platform", b.Platform)
 	q.Set("uuid", s.node.ClusterID.String())
+	q.Set("nodeid", s.NodeID().String())
+	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	updatesURL.RawQuery = q.Encode()
 
 	res, err := http.Get(updatesURL.String())
 	if err != nil {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
-		if log.V(2) {
-			log.Warning(ctx, "Failed to check for updates: ", err)
-		}
-		return
+		return false
 	}
 	defer res.Body.Close()
 
@@ -196,7 +182,7 @@ func (s *Server) checkForUpdates(ctx context.Context) {
 		b, err := ioutil.ReadAll(res.Body)
 		log.Warningf(ctx, "Failed to check for updates: status: %s, body: %s, error: %v",
 			res.Status, b, err)
-		return
+		return false
 	}
 
 	decoder := json.NewDecoder(res.Body)
@@ -207,7 +193,7 @@ func (s *Server) checkForUpdates(ctx context.Context) {
 	err = decoder.Decode(&r)
 	if err != nil && err != io.EOF {
 		log.Warning(ctx, "Error decoding updates info: ", err)
-		return
+		return false
 	}
 
 	// Ideally the updates server only returns the most relevant updates for us,
@@ -219,6 +205,7 @@ func (s *Server) checkForUpdates(ctx context.Context) {
 	for _, v := range r.Details {
 		log.Infof(ctx, "A new version is available: %s, details: %s", v.Version, v.Details)
 	}
+	return true
 }
 
 func (s *Server) usageReportingEnabled() bool {
@@ -246,6 +233,9 @@ func (s *Server) usageReportingEnabled() bool {
 	return optin
 }
 
+// mayebReportUsage differs from maybeCheckForUpdates in that it persists the
+// last-report time across restarts (since store usage, unlike version, isn't
+// directly tied to the *running* binary).
 func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
 	if running < updateCheckRetryFrequency {
 		// On first check, we decline to report usage as metrics may not yet
@@ -255,8 +245,33 @@ func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
 	if !s.usageReportingEnabled() {
 		return updateCheckFrequency
 	}
-	return s.maybeRunPeriodicCheck("metrics reporting",
-		keys.NodeLastUsageReportKey(s.node.Descriptor.NodeID), s.reportUsage)
+
+	// Look up the persisted time to do the next report, if it exists.
+	key := keys.NodeLastUsageReportKey(s.node.Descriptor.NodeID)
+	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
+	defer span.Finish()
+	resp, err := s.db.Get(ctx, key)
+	if err != nil {
+		log.Infof(ctx, "error reading time of next usage report: %s", err)
+		return updateCheckRetryFrequency
+	}
+	if resp.Exists() {
+		whenToCheck, pErr := resp.Value.GetTime()
+		if pErr != nil {
+			log.Warningf(ctx, "error decoding time of next usage report: %s", err)
+			return updateCheckRetryFrequency
+		} else if delay := whenToCheck.Sub(timeutil.Now()); delay > 0 {
+			return delay
+		}
+	} else {
+		log.Info(ctx, "No previously set usage report time.")
+	}
+
+	s.reportUsage(ctx)
+	if err := s.db.Put(ctx, key, timeutil.Now().Add(usageReportFrequency)); err != nil {
+		log.Infof(ctx, "Error updating usage report time: %v", err)
+	}
+	return usageReportFrequency
 }
 
 func (s *Server) getReportingInfo() reportingInfo {
