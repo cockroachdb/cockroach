@@ -595,8 +595,6 @@ func TestEval(t *testing.T) {
 		{`(123 + 1):::int`, `124`},
 		{`(123 + 1):::float`, `124.0`},
 		// Extract from dates.
-		// TODO(nvanbenschoten): these casts can be removed once we improve
-		// strConst's type inference.
 		{`extract(year from '2010-09-28'::date)`, `2010`},
 		{`extract(year from '2010-09-28'::date)`, `2010`},
 		{`extract(month from '2010-09-28'::date)`, `9`},

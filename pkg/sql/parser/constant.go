@@ -313,6 +313,34 @@ var (
 )
 
 // AvailableTypes implements the Constant interface.
+//
+// To fully take advantage of literal type inference, this method would
+// determine exactly which types are available for a given string. This would
+// entail attempting to parse the literal string as a date, a timestamp, an
+// interval, etc. and having more fine-grained results than strValAvailAllParsable.
+// However, this is not feasible in practice because of the associated parsing
+// overhead.
+//
+// Conservative approaches like checking the string's length have been investigated
+// to reduce ambiguity and improve type inference in some cases. When doing so, the
+// length of the string literal was compared against all valid date and timestamp
+// formats to quickly gain limited insight into whether parsing the string as the
+// respective datum types could succeed. The hope was to eliminate impossibilities
+// and constrain the returned type sets as much as possible. Unfortunately, two issues
+// were found with this approach:
+// - date and timestamp formats do not always imply a fixed-length valid input. For
+//   instance, timestamp formats that take fractional seconds can successfully parse
+//   inputs of varied length.
+// - the set of date and timestamp formats are not disjoint, which means that ambiguity
+//   can not be eliminated when inferring the type of string literals that use these
+//   shared formats.
+// While these limitations still permitted improved type inference in many cases, they
+// resulted in behavior that was ultimately incomplete, resulted in unpredictable levels
+// of inference, and occasionally failed to eliminate ambiguity. Further heuristics could
+// have been applied to improve the accuracy of the inference, like checking that all
+// or some characters were digits, but it would not have circumvented the fundamental
+// issues here. Fully parsing the literal into each type would be the only way to
+// concretely avoid the issue of unpredictable inference behavior.
 func (expr *StrVal) AvailableTypes() []Type {
 	if !expr.bytesEsc {
 		return strValAvailAllParsable
