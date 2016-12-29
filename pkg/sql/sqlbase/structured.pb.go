@@ -433,31 +433,74 @@ func (*InterleaveDescriptor_Ancestor) Descriptor() ([]byte, []int) {
 	return fileDescriptorStructured, []int{4, 0}
 }
 
+// IndexDescriptor describes an index (primary or secondary).
+//
+// Sample field values on the following table:
+//
+//   CREATE TABLE t (
+//     k1 INT NOT NULL,   // column ID: 1
+//     k2 INT NOT NULL,   // column ID: 2
+//     u INT NULL,        // column ID: 3
+//     v INT NULL,        // column ID: 4
+//     w INT NULL,        // column ID: 5
+//     CONSTRAINT "primary" PRIMARY KEY (k1, k2),
+//     INDEX k1v (k1, v) STORING (w),
+//     FAMILY "primary" (k1, k2, u, v, w)
+//   )
+//
+// Primary index:
+//   name:                 primary
+//   id:                   1
+//   unique:               true
+//   column_names:         k1, k2
+//   column_directions:    ASC, ASC
+//   column_ids:           1, 2   // k1, k2
+//
+// Index k1v (k1, v) STORING (w):
+//   name:                 k1v
+//   id:                   2
+//   unique:               false
+//   column_names:         k1, v
+//   column_directions:    ASC, ASC
+//   store_column_names:   w
+//   column_ids:           1, 4   // k1, v
+//   implicit_column:ids:  2, 5   // k2, w
 type IndexDescriptor struct {
 	Name   string  `protobuf:"bytes,1,opt,name=name" json:"name"`
 	ID     IndexID `protobuf:"varint,2,opt,name=id,casttype=IndexID" json:"id"`
 	Unique bool    `protobuf:"varint,3,opt,name=unique" json:"unique"`
-	// An ordered list of column names of which the index is comprised. This list
-	// parallels the column_ids list. If duplicating the storage of the column
-	// names here proves to be prohibitive, we could clear this field before
-	// saving and reconstruct it after loading.
+	// An ordered list of column names of which the index is comprised; these
+	// columns do not include any additional stored columns (which are in
+	// stored_column_names). This list parallels the column_ids list.
+	//
+	// Note: if duplicating the storage of the column names here proves to be
+	// prohibitive, we could clear this field before saving and reconstruct it
+	// after loading.
 	ColumnNames []string `protobuf:"bytes,4,rep,name=column_names,json=columnNames" json:"column_names,omitempty"`
-	// Parallel with column_names - the sort direction of each column.
+	// The sort direction of each column in column_names.
 	ColumnDirections []IndexDescriptor_Direction `protobuf:"varint,8,rep,name=column_directions,json=columnDirections,enum=cockroach.sql.sqlbase.IndexDescriptor_Direction" json:"column_directions,omitempty"`
-	// An ordered list of column names which the index stores in
-	// addition to the columns which are explicitly part of the index.
+	// An ordered list of column names which the index stores in addition to the
+	// columns which are explicitly part of the index (STORING clause). Only used
+	// for secondary indexes.
 	StoreColumnNames []string `protobuf:"bytes,5,rep,name=store_column_names,json=storeColumnNames" json:"store_column_names,omitempty"`
-	// An ordered list of column ids of which the index is comprised. This list
-	// parallels the column_names list.
+	// An ordered list of column IDs of which the index is comprised. This list
+	// parallels the column_names list and does not include any additional stored
+	// columns.
 	ColumnIDs []ColumnID `protobuf:"varint,6,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
-	// An ordered list of implicit column ids associated with the index. For
-	// non-unique indexes, these columns will be appended to the key. For unique
-	// indexes these columns will be stored in the value. The extra column IDs is
-	// computed as PrimaryIndex.column_ids - column_ids. For the primary index
-	// the list will be empty.
-	// The distinction about whether the columns are written in the key or the value
-	// comes because we want to always do writes using a single operation - this
-	// way for unique indexes we can do a conditional put on the key.
+	// An ordered list of IDs for the additional columns associated with the
+	// index:
+	//  - implicit columns, which are all the primary key columns that are not
+	//    already part of the index (i.e. PrimaryIndex.column_ids - column_ids).
+	//  - stored columns (the columns in store_column_names).
+	//
+	// Only used for secondary indexes.
+	// For non-unique indexes, these columns are appended to the key.
+	// For unique indexes, these columns are stored in the value.
+	// This distinction exists because we want to be able to insert an entry using
+	// a single conditional put on the key.
+	//
+	// Note: for non-unique indexes, the stored columns could be part of the
+	// value rather than the key, but we don't currently do this.
 	ImplicitColumnIDs []ColumnID            `protobuf:"varint,7,rep,name=implicit_column_ids,json=implicitColumnIds,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
 	ForeignKey        ForeignKeyReference   `protobuf:"bytes,9,opt,name=foreign_key,json=foreignKey" json:"foreign_key"`
 	ReferencedBy      []ForeignKeyReference `protobuf:"bytes,10,rep,name=referenced_by,json=referencedBy" json:"referenced_by"`
