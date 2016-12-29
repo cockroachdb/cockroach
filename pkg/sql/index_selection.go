@@ -197,6 +197,7 @@ func selectIndex(
 	// the scanNode.
 	c := candidates[0]
 	s.index = c.index
+	s.specifiedIndex = nil
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 	s.spans = makeSpans(c.constraints, c.desc, c.index)
 	if len(s.spans) == 0 {
