@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -59,7 +60,7 @@ func TestCheckVersion(t *testing.T) {
 	defer stubURL(&updatesURL, u)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s.(*TestServer).checkForUpdates(context.TODO())
+	s.(*TestServer).checkForUpdates(time.Minute)
 	recorder.Close()
 	s.Stopper().Stop()
 

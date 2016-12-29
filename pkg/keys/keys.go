@@ -69,10 +69,10 @@ func NodeStatusKey(nodeID roachpb.NodeID) roachpb.Key {
 	return key
 }
 
-// NodeLastUsageReportKey returns the key for accessing the node last update check
-// time (when version check or usage reporting was done).
+// NodeLastUsageReportKey returns the key for accessing last usage report time
+// for a given node.
 func NodeLastUsageReportKey(nodeID roachpb.NodeID) roachpb.Key {
-	prefix := append([]byte(nil), UpdateCheckPrefix...)
+	prefix := append([]byte(nil), ReportUsagePrefix...)
 	return encoding.EncodeUvarintAscending(prefix, uint64(nodeID))
 }
 
