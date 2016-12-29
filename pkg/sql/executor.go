@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -56,22 +57,25 @@ var errNotRetriable = errors.New("the transaction is not in a retriable state")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
+const defaultMetricsSampleInterval = 10 * time.Second
 
 // Fully-qualified names for metrics.
 var (
-	MetaLatency       = metric.Metadata{Name: "sql.latency"}
-	MetaTxnBegin      = metric.Metadata{Name: "sql.txn.begin.count"}
-	MetaTxnCommit     = metric.Metadata{Name: "sql.txn.commit.count"}
-	MetaTxnAbort      = metric.Metadata{Name: "sql.txn.abort.count"}
-	MetaTxnRollback   = metric.Metadata{Name: "sql.txn.rollback.count"}
-	MetaSelect        = metric.Metadata{Name: "sql.select.count"}
-	MetaDistSQLSelect = metric.Metadata{Name: "sql.distsql.select.count"}
-	MetaUpdate        = metric.Metadata{Name: "sql.update.count"}
-	MetaInsert        = metric.Metadata{Name: "sql.insert.count"}
-	MetaDelete        = metric.Metadata{Name: "sql.delete.count"}
-	MetaDdl           = metric.Metadata{Name: "sql.ddl.count"}
-	MetaMisc          = metric.Metadata{Name: "sql.misc.count"}
-	MetaQuery         = metric.Metadata{Name: "sql.query.count"}
+	MetaLatency            = metric.Metadata{Name: "sql.latency"}
+	MetaTxnBegin           = metric.Metadata{Name: "sql.txn.begin.count"}
+	MetaTxnCommit          = metric.Metadata{Name: "sql.txn.commit.count"}
+	MetaTxnAbort           = metric.Metadata{Name: "sql.txn.abort.count"}
+	MetaTxnRollback        = metric.Metadata{Name: "sql.txn.rollback.count"}
+	MetaSelect             = metric.Metadata{Name: "sql.select.count"}
+	MetaDistSQLSelect      = metric.Metadata{Name: "sql.distsql.select.count"}
+	MetaDistSQLExecLatency = metric.Metadata{Name: "sql.distsql.exec.latency"}
+	MetaSQLExecLatency     = metric.Metadata{Name: "sql.exec.latency"}
+	MetaUpdate             = metric.Metadata{Name: "sql.update.count"}
+	MetaInsert             = metric.Metadata{Name: "sql.insert.count"}
+	MetaDelete             = metric.Metadata{Name: "sql.delete.count"}
+	MetaDdl                = metric.Metadata{Name: "sql.ddl.count"}
+	MetaMisc               = metric.Metadata{Name: "sql.misc.count"}
+	MetaQuery              = metric.Metadata{Name: "sql.query.count"}
 )
 
 // distSQLExecMode controls if and when the Executor uses DistSQL.
@@ -204,6 +208,8 @@ type Executor struct {
 	SelectCount *metric.Counter
 	// The subset of SELECTs that are processed through DistSQL.
 	DistSQLSelectCount *metric.Counter
+	DistSQLExecLatency *metric.Histogram
+	SQLExecLatency     *metric.Histogram
 	TxnBeginCount      *metric.Counter
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
@@ -305,6 +311,8 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		TxnRollbackCount:   metric.NewCounter(MetaTxnRollback),
 		SelectCount:        metric.NewCounter(MetaSelect),
 		DistSQLSelectCount: metric.NewCounter(MetaDistSQLSelect),
+		DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency, defaultMetricsSampleInterval),
+		SQLExecLatency:     metric.NewLatency(MetaSQLExecLatency, defaultMetricsSampleInterval),
 		UpdateCount:        metric.NewCounter(MetaUpdate),
 		InsertCount:        metric.NewCounter(MetaInsert),
 		DeleteCount:        metric.NewCounter(MetaDelete),
@@ -995,6 +1003,7 @@ func (e *Executor) execStmtInOpenTxn(
 	txnState *txnState,
 	isAutomaticRetry bool,
 ) (Result, error) {
+	tStart := timeutil.Now()
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
@@ -1110,7 +1119,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-	result, err := e.execStmt(stmt, planMaker, autoCommit, isAutomaticRetry)
+	result, err := e.execStmt(stmt, planMaker, autoCommit, isAutomaticRetry, tStart)
 	if err != nil {
 		if result.Rows != nil {
 			result.Rows.Close()
@@ -1308,7 +1317,11 @@ func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, erro
 // The current transaction might have been committed/rolled back when this returns.
 // The caller closes result.Rows (even in error cases).
 func (e *Executor) execStmt(
-	stmt parser.Statement, planMaker *planner, autoCommit bool, isAutomaticRetry bool,
+	stmt parser.Statement,
+	planMaker *planner,
+	autoCommit bool,
+	isAutomaticRetry bool,
+	tStart time.Time,
 ) (Result, error) {
 	plan, err := planMaker.makePlan(stmt, autoCommit)
 	if err != nil {
@@ -1341,8 +1354,12 @@ func (e *Executor) execStmt(
 			e.DistSQLSelectCount.Inc(1)
 		}
 		err = e.execDistSQL(planMaker, plan, &result)
+		execDuration := timeutil.Since(tStart).Nanoseconds() + 1000
+		e.DistSQLExecLatency.RecordValue(execDuration)
 	} else {
 		err = e.execClassic(planMaker, plan, &result)
+		execDuration := timeutil.Since(tStart).Nanoseconds()
+		e.SQLExecLatency.RecordValue(execDuration)
 	}
 	return result, err
 }

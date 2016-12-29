@@ -151,6 +151,30 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
               </Axis>
             </LineGraph>
 
+            <LineGraph title="Backend Statement Execution Latency"
+                       subtitle="(Max Per Percentile)"
+                       tooltip={`The latency of backend statements executed over 10 second periods.
+                                 Percentiles are calculated on each node.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.node.sql.distsql.exec.latency-max" title="Max DistSQL Latency"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.distsql.exec.latency-p99" title="99th percentile DistSQL latency"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.distsql.exec.latency-p90" title="90th percentile DistSQL latency"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.distsql.exec.latency-p50" title="50th percentile DistSQL latency"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.exec.latency-max" title="Max SQL Latency"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.exec.latency-p99" title="99th percentile SQL latency"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.exec.latency-p90" title="90th percentile SQL latency"
+                        aggregateMax downsampleMax />
+              <Metric name="cr.node.sql.exec.latency-p50" title="50th percentile SQL latency"
+                        aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
           </GraphGroup>
 
           <GraphGroup groupId="node.resources" hide={dashboard !== "resources"}>
