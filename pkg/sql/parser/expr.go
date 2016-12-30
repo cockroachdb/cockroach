@@ -876,9 +876,11 @@ func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Func      ResolvableFunctionReference
-	Type      funcType
-	Exprs     Exprs
+	Func  ResolvableFunctionReference
+	Type  funcType
+	Exprs Exprs
+	// Filter is used for filters on aggregates: SUM(k) FILTER (WHERE k > 0)
+	Filter    Expr
 	WindowDef *WindowDef
 
 	typeAnnotation
@@ -947,6 +949,11 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		} else {
 			FormatNode(buf, f, window)
 		}
+	}
+	if node.Filter != nil {
+		buf.WriteString(" FILTER (WHERE ")
+		FormatNode(buf, f, node.Filter)
+		buf.WriteString(")")
 	}
 }
 

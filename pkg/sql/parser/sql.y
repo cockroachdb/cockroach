@@ -552,7 +552,7 @@ func (u *sqlSymUnion) durationField() durationField {
 %type <empty> cte_list
 
 %type <empty> within_group_clause
-%type <empty> filter_clause
+%type <Expr> filter_clause
 %type <Exprs> opt_partition_clause
 %type <Window> window_clause window_definition_list
 %type <*WindowDef> window_definition over_clause window_specification
@@ -4018,6 +4018,7 @@ func_expr:
   func_application within_group_clause filter_clause over_clause
   {
     f := $1.expr().(*FuncExpr)
+    f.Filter = $3.expr()
     f.WindowDef = $4.windowDef()
     $$.val = f
   }
@@ -4133,8 +4134,14 @@ WITHIN GROUP '(' sort_clause ')' { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 filter_clause:
-  FILTER '(' WHERE a_expr ')' { return unimplemented(sqllex) }
-| /* EMPTY */ {}
+  FILTER '(' WHERE a_expr ')'
+  {
+    $$.val = $4.expr()
+  }
+| /* EMPTY */
+  {
+    $$.val = Expr(nil)
+  }
 
 // Window Definitions
 window_clause:

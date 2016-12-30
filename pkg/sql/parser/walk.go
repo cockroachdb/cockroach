@@ -241,6 +241,15 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			}
 		}
 	}
+	if expr.Filter != nil {
+		e, changed := WalkExpr(v, expr.Filter)
+		if changed {
+			if ret == expr {
+				ret = expr.CopyNode()
+			}
+			ret.Filter = e
+		}
+	}
 	return ret
 }
 
