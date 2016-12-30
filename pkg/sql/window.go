@@ -406,19 +406,6 @@ func (n *windowNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *windowNode) expandPlan() error {
-	// We do not need to recurse into the child node here; selectTopNode
-	// does this for us.
-
-	for _, e := range n.windowRender {
-		if err := n.planner.expandSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (n *windowNode) Start() error {
 	if err := n.plan.Start(); err != nil {
 		return err
@@ -780,15 +767,6 @@ func (n *windowNode) Close() {
 		n.windowsAcc.Wtxn(n.planner.session).Close()
 	}
 	n.values.Close()
-}
-
-// wrap the supplied planNode with the windowNode if windowing is required.
-func (n *windowNode) wrap(plan planNode) planNode {
-	if n == nil {
-		return plan
-	}
-	n.plan = plan
-	return n
 }
 
 type extractWindowFuncsVisitor struct {

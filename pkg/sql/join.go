@@ -273,17 +273,6 @@ func (p *planner) makeJoin(
 // SetLimitHint implements the planNode interface.
 func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
 
-// expandPlan implements the planNode interface.
-func (n *joinNode) expandPlan() error {
-	if err := n.planner.expandSubqueryPlans(n.pred.onCond); err != nil {
-		return err
-	}
-	if err := n.left.plan.expandPlan(); err != nil {
-		return err
-	}
-	return n.right.plan.expandPlan()
-}
-
 // Columns implements the planNode interface.
 func (n *joinNode) Columns() ResultColumns { return n.columns }
 

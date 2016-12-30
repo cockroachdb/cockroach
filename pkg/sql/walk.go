@@ -87,6 +87,9 @@ func (v *planVisitor) visit(plan planNode) {
 		var subplans []planNode
 		for i, tuple := range n.tuples {
 			for j, expr := range tuple {
+				if n.columns[j].omitted {
+					continue
+				}
 				subplans = lv.expr(fmt.Sprintf("row %d, expr", i), j, expr, subplans)
 			}
 		}

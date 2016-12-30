@@ -16,11 +16,7 @@
 
 package sql
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // ordinalityNode represents a node that adds an "ordinality" column
 // to its child node which numbers the rows it produces. Used to
@@ -81,39 +77,6 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	ds.plan = res
 
 	return ds
-}
-
-func (o *ordinalityNode) expandPlan() error {
-	if err := o.source.expandPlan(); err != nil {
-		return err
-	}
-
-	// We are going to "optimize" the ordering. We had an ordering
-	// initially from the source, but expandPlan() may have caused it to
-	// change. So here retrieve the ordering of the source again.
-	origOrdering := o.source.Ordering()
-
-	if len(origOrdering.ordering) > 0 {
-		// TODO(knz/radu) we basically have two simultaneous orderings.
-		// What we really want is something that orderingInfo cannot
-		// currently express: that the rows are ordered by a set of
-		// columns AND at the same time they are also ordered by a
-		// different set of columns. However since ordinalityNode is
-		// currently the only case where this happens we consider it's not
-		// worth the hassle and just use the source ordering.
-		o.ordering = origOrdering
-	} else {
-		// No ordering defined in the source, so create a new one.
-		o.ordering.exactMatchCols = origOrdering.exactMatchCols
-		o.ordering.ordering = sqlbase.ColumnOrdering{
-			sqlbase.ColumnOrderInfo{
-				ColIdx:    len(o.columns) - 1,
-				Direction: encoding.Ascending,
-			},
-		}
-		o.ordering.unique = true
-	}
-	return nil
 }
 
 func (o *ordinalityNode) Next() (bool, error) {
