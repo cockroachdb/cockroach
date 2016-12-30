@@ -415,6 +415,9 @@ func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsqlrun.Expres
 	}
 	var buf bytes.Buffer
 	expr.Format(&buf, f)
+	if log.V(1) {
+		log.Infof(context.TODO(), "Expr %s:\n%ss", buf.String(), parser.ExprDebugString(expr))
+	}
 	return distsqlrun.Expression{Expr: buf.String()}
 }
 

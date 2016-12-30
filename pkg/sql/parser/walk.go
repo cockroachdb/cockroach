@@ -17,8 +17,10 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 // Visitor defines methods that are called for nodes during an expression or statement walk.
@@ -967,4 +969,44 @@ func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
 		return nil, v.err
 	}
 	return newExpr, nil
+}
+
+type debugVisitor struct {
+	buf   bytes.Buffer
+	level int
+}
+
+var _ Visitor = &debugVisitor{}
+
+func (v *debugVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	v.level++
+	for i := 0; i < v.level; i++ {
+		v.buf.WriteString("  ")
+	}
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitPost(expr Expr) Expr {
+	v.level--
+	return expr
+}
+
+// ExprDebugString generates a multi-line debug string with one node per line in
+// Go format.
+func ExprDebugString(expr Expr) string {
+	v := debugVisitor{}
+	WalkExprConst(&v, expr)
+	return v.buf.String()
+}
+
+// StmtDebugString generates multi-line debug strings in Go format for the
+// expressions that are part of the given statement.
+func StmtDebugString(stmt Statement) string {
+	v := debugVisitor{}
+	WalkStmt(&v, stmt)
+	return v.buf.String()
 }
