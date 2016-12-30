@@ -22,22 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
-// initNeededColumns triggers needed column detection and propagation
-// throughout the planNode. Sub-queries, if any and doSubqueries is
-// true, are also processed.
-func (p *planner) initNeededColumns(plan planNode, needed []bool, doSubqueries bool) {
-	setNeededColumns(plan, needed)
-	if doSubqueries {
-		v := planVisitor{p: p, observer: subqueryInitializer{p: p}}
-		v.visit(plan)
-	}
-}
-
 // setNeededColumns informs the node about which columns are
-// effectively needed by the consumer of its result rows. The needed
-// array can be nil, which means that the current non-omitted columns
-// in the result set are needed, i.e. preserve and propagate the
-// existing settings.
+// effectively needed by the consumer of its result rows.
 func setNeededColumns(plan planNode, needed []bool) {
 	switch n := plan.(type) {
 	case *createTableNode:
@@ -55,8 +41,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *explainPlanNode:
-		// EXPLAIN(PLAN) takes care of its needed column initialization
-		// itself, based on the presence of the NOOPTIMIZE option.
+		if n.optimized {
+			setNeededColumns(n.plan, allColumns(n.plan))
+		}
 
 	case *limitNode:
 		setNeededColumns(n.plan, needed)
@@ -231,43 +218,3 @@ func markOmitted(cols ResultColumns, needed []bool) {
 		cols[i].omitted = !val
 	}
 }
-
-// subqueryInitializer ensures that initNeededColumns() is called on
-// the planNodes of all sub-query expressions.
-type subqueryInitializer struct {
-	p *planner
-}
-
-var _ planObserver = subqueryInitializer{}
-var _ parser.Visitor = subqueryInitializer{}
-
-// expr implements the planObserver interface.
-func (i subqueryInitializer) expr(_, _ string, _ int, expr parser.Expr) {
-	if expr == nil {
-		return
-	}
-	parser.WalkExprConst(i, expr)
-}
-
-func (i subqueryInitializer) enterNode(_ string, _ planNode) bool { return true }
-func (i subqueryInitializer) leaveNode(_ string)                  {}
-func (i subqueryInitializer) attr(_, _, _ string)                 {}
-
-// VisitPre implements the parser.Visitor interface.
-func (i subqueryInitializer) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if sq, ok := expr.(*subquery); ok && sq.plan != nil {
-		needed := make([]bool, len(sq.plan.Columns()))
-		if sq.execMode != execModeExists {
-			// EXISTS does not need values; the rest does.
-			for i := range needed {
-				needed[i] = true
-			}
-		}
-		i.p.initNeededColumns(sq.plan, needed, true)
-		return false, expr
-	}
-	return true, expr
-}
-
-// VisitPost implements the parser.Visitor interface.
-func (i subqueryInitializer) VisitPost(expr parser.Expr) parser.Expr { return expr }

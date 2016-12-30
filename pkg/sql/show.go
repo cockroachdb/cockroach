@@ -81,7 +81,6 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 	}
 
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW " + name,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -132,7 +131,6 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		{Name: "Default", Typ: parser.TypeString},
 	}
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW COLUMNS FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -245,7 +243,6 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	}
 
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW CREATE TABLE " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -370,7 +367,6 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 		{Name: "CreateView", Typ: parser.TypeString},
 	}
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW CREATE VIEW " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -463,7 +459,6 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	}
 
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW GRANTS",
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -587,8 +582,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 
 			// Sort the result by target name, user name and privileges.
 			sort := &sortNode{
-				ctx: p.ctx(),
-				p:   p,
+				p: p,
 				ordering: sqlbase.ColumnOrdering{
 					{ColIdx: 0, Direction: encoding.Ascending},
 					{ColIdx: 1, Direction: encoding.Ascending},
@@ -630,7 +624,6 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	}
 
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW INDEX FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -700,7 +693,6 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 	}
 
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW CONSTRAINTS FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -738,8 +730,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 
 			// Sort the results by constraint name.
 			sort := &sortNode{
-				ctx: p.ctx(),
-				p:   p,
+				p: p,
 				ordering: sqlbase.ColumnOrdering{
 					{ColIdx: 0, Direction: encoding.Ascending},
 					{ColIdx: 1, Direction: encoding.Ascending},
@@ -766,7 +757,6 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 
 	columns := ResultColumns{{Name: "Table", Typ: parser.TypeString}}
 	return &delayedNode{
-		p:       p,
 		name:    "SHOW TABLES FROM " + name,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
@@ -827,7 +817,6 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 		{Name: "Details", Typ: parser.TypeString},
 	}
 	return &delayedNode{
-		p:       p,
 		name:    "HELP " + name,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {

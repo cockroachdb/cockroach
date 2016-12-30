@@ -102,15 +102,6 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 	return resRow, nil
 }
 
-func (rh *returningHelper) expandPlans() error {
-	for _, expr := range rh.exprs {
-		if err := rh.p.expandSubqueryPlans(expr); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (rh *returningHelper) startPlans() error {
 	for _, expr := range rh.exprs {
 		if err := rh.p.startSubqueryPlans(expr); err != nil {
