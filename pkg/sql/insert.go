@@ -250,8 +250,7 @@ func ProcessDefaultColumns(
 	return cols, defaultExprs, err
 }
 
-func (n *insertNode) expandPlan() error {
-
+func (n *insertNode) Start() error {
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
 		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
@@ -275,10 +274,6 @@ func (n *insertNode) expandPlan() error {
 		}
 	}
 
-	return n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
-}
-
-func (n *insertNode) Start() error {
 	if err := n.rh.startPlans(); err != nil {
 		return err
 	}

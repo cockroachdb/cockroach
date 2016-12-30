@@ -238,16 +238,6 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *indexJoinNode) expandPlan() error {
-	// If we arrive here, selectNode's expandPlan has run already and
-	// created the indexJoinNode by means of makeIndexJoin() above.
-	// We thus now need to expand the sub-nodes.
-	if err := n.table.expandPlan(); err != nil {
-		return err
-	}
-	return n.index.expandPlan()
-}
-
 func (n *indexJoinNode) Start() error {
 	if err := n.table.Start(); err != nil {
 		return err

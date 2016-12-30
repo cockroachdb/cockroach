@@ -56,54 +56,13 @@ func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 	return d
 }
 
-// wrap connects the distinctNode to its source planNode.
-// invoked by selectTopNode.expandPlan() prior
-// to invoking distinctNode.expandPlan() below.
-func (n *distinctNode) wrap(plan planNode) planNode {
-	if n == nil {
-		return plan
-	}
-	n.plan = plan
-	return n
-}
-
-func (n *distinctNode) expandPlan() error {
-	// At this point the selectTopNode has already expanded the plans
-	// upstream of distinctNode.
-	ordering := n.plan.Ordering()
-	if !ordering.isEmpty() {
-		n.columnsInOrder = make([]bool, len(n.plan.Columns()))
-		for colIdx := range ordering.exactMatchCols {
-			if colIdx >= len(n.columnsInOrder) {
-				// If the exact-match column is not part of the output, we can safely ignore it.
-				continue
-			}
-			n.columnsInOrder[colIdx] = true
-		}
-		for _, c := range ordering.ordering {
-			if c.ColIdx >= len(n.columnsInOrder) {
-				// Cannot use sort order. This happens when the
-				// columns used for sorting are not part of the output.
-				// e.g. SELECT a FROM t ORDER BY c.
-				n.columnsInOrder = nil
-				break
-			}
-			n.columnsInOrder[c.ColIdx] = true
-		}
-	}
-	return nil
-}
-
 func (n *distinctNode) Start() error {
 	n.suffixSeen = make(map[string]struct{})
 	return n.plan.Start()
 }
 
 // setTop connects the distinctNode back to the selectTopNode that
-// caused its existence. This is needed because the distinctNode needs
-// to refer to other nodes in the selectTopNode before its
-// expandPlan() method has ran and its child plan is known and
-// connected.
+// caused its existence.
 func (n *distinctNode) setTop(top *selectTopNode) {
 	if n != nil {
 		n.top = top

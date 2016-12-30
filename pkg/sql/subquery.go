@@ -196,6 +196,7 @@ func (s *subquery) doEval() (parser.Datum, error) {
 // subqueryVisitor.  This visitor supports both expanding, starting
 // and evaluating the sub-plans in one recursion.
 type subqueryPlanVisitor struct {
+	p        *planner
 	doExpand bool
 	doStart  bool
 	doEval   bool
@@ -210,7 +211,7 @@ func (v *subqueryPlanVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 	}
 	if sq, ok := expr.(*subquery); ok {
 		if v.doExpand && !sq.expanded {
-			v.err = sq.plan.expandPlan()
+			v.err = v.p.optimizePlan(sq.plan, allColumns(sq.plan))
 			sq.expanded = true
 		}
 		if v.err == nil && v.doStart && !sq.started {
@@ -240,7 +241,7 @@ func (p *planner) expandSubqueryPlans(expr parser.Expr) error {
 	if expr == nil {
 		return nil
 	}
-	p.subqueryPlanVisitor = subqueryPlanVisitor{doExpand: true}
+	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p, doExpand: true}
 	_, _ = parser.WalkExpr(&p.subqueryPlanVisitor, expr)
 	return p.subqueryPlanVisitor.err
 }

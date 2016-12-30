@@ -59,10 +59,6 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	return &alterTableNode{n: n, p: p, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) expandPlan() error {
-	return nil
-}
-
 func (n *alterTableNode) Start() error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
