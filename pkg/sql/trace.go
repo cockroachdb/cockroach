@@ -76,20 +76,6 @@ func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 			// messages do not go to the planner's context which will be
 			// responsible to collect the trace.
 
-			// TODO(andrei): I think ideally we would also use the planner's
-			// Span, but create a sub-span for the Sorting with a special
-			// tag that is ignored by the EXPLAIN TRACE logic. This way,
-			// this sorting would still appear in our debug tracing, it just
-			// wouldn't be reported. Of course, currently statements under
-			// EXPLAIN TRACE are not present in our normal debug tracing at
-			// all since we override the tracer, but I'm hoping to stop
-			// doing that. And even then I'm not completely sure how this
-			// would work exactly, since the sort node "wraps" the inner
-			// select node, but we can probably do something using
-			// opentracing's "follows-from" spans as opposed to
-			// "parent-child" spans when expressing this relationship
-			// between the sort and the select.
-			ctx:      opentracing.ContextWithSpan(p.ctx(), nil),
 			p:        p,
 			ordering: traceOrdering,
 			// These are the columns that the sortNode (and thus the selectTopNode)
@@ -101,18 +87,8 @@ func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 
 func (*explainTraceNode) Columns() ResultColumns { return traceColumnsWithTS }
 func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (n *explainTraceNode) expandPlan() error {
-	if err := n.plan.expandPlan(); err != nil {
-		return err
-	}
-
-	n.plan.MarkDebug(explainDebug)
-	return nil
-}
-
-func (n *explainTraceNode) Start() error { return n.plan.Start() }
-func (n *explainTraceNode) Close()       { n.plan.Close() }
+func (n *explainTraceNode) Start() error         { return n.plan.Start() }
+func (n *explainTraceNode) Close()               { n.plan.Close() }
 
 func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil

@@ -277,32 +277,6 @@ func (n *groupNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *groupNode) expandPlan() error {
-	// We do not need to recurse into the child node here; selectTopNode
-	// does this for us.
-
-	for _, e := range n.render {
-		if err := n.planner.expandSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-
-	if err := n.planner.expandSubqueryPlans(n.having); err != nil {
-		return err
-	}
-
-	if len(n.desiredOrdering) > 0 {
-		match := computeOrderingMatch(n.desiredOrdering, n.plan.Ordering(), false)
-		if match == len(n.desiredOrdering) {
-			// We have a single MIN/MAX function and the underlying plan's
-			// ordering matches the function. We only need to retrieve one row.
-			n.plan.SetLimitHint(1, false /* !soft */)
-			n.needOnlyOneRow = true
-		}
-	}
-	return nil
-}
-
 func (n *groupNode) Start() error {
 	if err := n.plan.Start(); err != nil {
 		return err
@@ -422,15 +396,6 @@ func (n *groupNode) Close() {
 	}
 	n.values.Close()
 	n.buckets = nil
-}
-
-// wrap the supplied planNode with the groupNode if grouping/aggregation is required.
-func (n *groupNode) wrap(plan planNode) planNode {
-	if n == nil {
-		return plan
-	}
-	n.plan = plan
-	return n
 }
 
 // isNotNullFilter adds as a "col IS NOT NULL" constraint to the expression if

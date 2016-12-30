@@ -131,15 +131,6 @@ func (n *splitNode) Start() error {
 	return n.p.execCfg.DB.AdminSplit(context.TODO(), n.key)
 }
 
-func (n *splitNode) expandPlan() error {
-	for _, e := range n.exprs {
-		if err := n.p.expandSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (n *splitNode) Next() (bool, error) {
 	return n.key != nil, nil
 }

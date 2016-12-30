@@ -136,7 +136,7 @@ func (p *planner) validateCheckExpr(
 	if err != nil {
 		return err
 	}
-	if err := rows.expandPlan(); err != nil {
+	if err := p.optimizePlan(rows, allColumns(rows)); err != nil {
 		return err
 	}
 	if err := rows.Start(); err != nil {

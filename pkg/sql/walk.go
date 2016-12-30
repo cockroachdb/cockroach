@@ -87,6 +87,9 @@ func (v *planVisitor) visit(plan planNode) {
 		var subplans []planNode
 		for i, tuple := range n.tuples {
 			for j, expr := range tuple {
+				if n.columns[j].omitted {
+					continue
+				}
 				subplans = lv.expr(fmt.Sprintf("row %d, expr", i), j, expr, subplans)
 			}
 		}
@@ -98,6 +101,12 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *scanNode:
 		lv.attr("table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
+		if n.noIndexJoin {
+			lv.attr("hint", "no index join")
+		}
+		if n.specifiedIndex != nil {
+			lv.attr("hint", fmt.Sprintf("force index @%s", n.specifiedIndex.Name))
+		}
 		spans := sqlbase.PrettySpans(n.spans, 2)
 		if spans != "" {
 			if spans == "-" {

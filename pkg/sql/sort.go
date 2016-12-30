@@ -22,19 +22,15 @@ import (
 	"math"
 	"strconv"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
-	ctx      context.Context
 	p        *planner
 	plan     planNode
 	columns  ResultColumns
@@ -228,7 +224,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// All the sort expressions are constant. Simply drop the sort node.
 		return nil, nil
 	}
-	return &sortNode{ctx: p.ctx(), p: p, columns: columns, ordering: ordering}, nil
+	return &sortNode{p: p, columns: columns, ordering: ordering}, nil
 }
 
 // colIndex takes an expression that refers to a column using an integer, verifies it refers to a
@@ -334,45 +330,6 @@ func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 			}
 		}
 	}
-}
-
-// wrap the supplied planNode with the sortNode if sorting is required.
-// The first returned value is "true" if the sort node can be squashed
-// in the selectTopNode (sorting unneeded).
-func (n *sortNode) wrap(plan planNode) (bool, planNode) {
-	if n != nil {
-		// Check to see if the requested ordering is compatible with the existing
-		// ordering.
-		existingOrdering := plan.Ordering()
-		if log.V(2) {
-			log.Infof(n.ctx, "Sort: existing=%+v desired=%+v", existingOrdering, n.ordering)
-		}
-		match := computeOrderingMatch(n.ordering, existingOrdering, false)
-		if match < len(n.ordering) {
-			n.plan = plan
-			n.needSort = true
-			return false, n
-		}
-
-		if len(n.columns) < len(plan.Columns()) {
-			// No sorting required, but we have to strip off the extra render
-			// expressions we added.
-			n.plan = plan
-			return false, n
-		}
-
-		if log.V(2) {
-			log.Infof(n.ctx, "Sort: no sorting required")
-		}
-	}
-
-	return true, plan
-}
-
-func (n *sortNode) expandPlan() error {
-	// We do not need to recurse into the child node here; selectTopNode
-	// does this for us.
-	return nil
 }
 
 func (n *sortNode) Start() error {

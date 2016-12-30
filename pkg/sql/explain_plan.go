@@ -18,7 +18,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
@@ -271,7 +270,7 @@ type explainPlanNode struct {
 	// expanded indicates whether to invoke expandPlan() on the sub-node.
 	expanded bool
 
-	// optimized indicates whether to invoke initNeededColumns() on the sub-node.
+	// optimized indicates whether to invoke setNeededColumns() on the sub-node.
 	optimized bool
 }
 
@@ -282,30 +281,6 @@ func (e *explainPlanNode) Values() parser.DTuple        { return e.results.Value
 func (e *explainPlanNode) DebugValues() debugValues     { return debugValues{} }
 func (e *explainPlanNode) SetLimitHint(n int64, s bool) { e.results.SetLimitHint(n, s) }
 func (e *explainPlanNode) MarkDebug(mode explainMode)   {}
-func (e *explainPlanNode) expandPlan() error {
-
-	if e.expanded {
-		if e.optimized {
-			e.p.initNeededColumns(e.plan, allColumns(e.plan), false)
-		}
-
-		if err := e.plan.expandPlan(); err != nil {
-			return err
-		}
-		// Trigger limit hint propagation, which would otherwise only occur
-		// during the plan's Start() phase. This may trigger additional
-		// optimizations (eg. in sortNode) which the user of EXPLAIN will be
-		// interested in.
-		e.plan.SetLimitHint(math.MaxInt64, true)
-	}
-
-	if e.optimized {
-		e.p.initNeededColumns(e.plan, allColumns(e.plan), true)
-	}
-
-	return nil
-}
-
 func (e *explainPlanNode) Start() error {
 	return e.p.populateExplain(&e.explainer, e.results, e.plan)
 }

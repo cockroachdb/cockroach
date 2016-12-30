@@ -30,7 +30,7 @@ type planMaker interface {
 	// It performs as many early checks as possible on the structure of
 	// the SQL statement, including verifying permissions and type
 	// checking.  The returned plan object is not ready to execute; the
-	// planNode.expandPlan() method must be called first. See makePlan()
+	// optimizePlan() method must be called first. See makePlan()
 	// below.
 	//
 	// This method should not be used directly; instead prefer makePlan()
@@ -38,7 +38,7 @@ type planMaker interface {
 	newPlan(stmt parser.Statement, desiredTypes []parser.Type, autoCommit bool) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
-	// calls newPlan() then expandPlan() on the result.  Execution must
+	// calls newPlan() then optimizePlan() on the result.  Execution must
 	// start by calling Start() first and then iterating using Next()
 	// and Values() in order to retrieve matching rows.
 	//
@@ -61,7 +61,7 @@ type planMaker interface {
 	// that the plan will never be run. A planNode built with prepare()
 	// will do just enough work to check the structural validity of the
 	// SQL statement and determine types for placeholders. However it is
-	// not appropriate to call expandPlan(), Next() or Values() on a plan
+	// not appropriate to call optimizePlan(), Next() or Values() on a plan
 	// object created with prepare().
 	prepare(stmt parser.Statement) (planNode, error)
 }
@@ -82,10 +82,10 @@ type planNode interface {
 	// never be called more than numRows times.
 	//
 	// The action of calling this method triggers limit-based query plan
-	// optimizations, e.g. in selectNode.expandPlan(). The primary user
-	// is limitNode.Start() after it has fully evaluated the limit and
-	// offset expressions. EXPLAIN also does this, see
-	// explainTypesNode.expandPlan() and explainPlanNode.expandPlan().
+	// optimizations, e.g. in expandSelectNode(). The primary user is
+	// limitNode.Start() after it has fully evaluated the limit and
+	// offset expressions. EXPLAIN also does this, see expandPlan() for
+	// explainPlanNode.
 	//
 	// TODO(radu) Arguably, this interface has room for improvement.  A
 	// limitNode may have a hard limit locally which is larger than the
@@ -95,30 +95,18 @@ type planNode interface {
 	// Available during/after newPlan().
 	SetLimitHint(numRows int64, soft bool)
 
-	// expandPlan finalizes type checking of placeholders and expands
-	// the query plan to its final form, including index selection and
-	// expansion of sub-queries. Returns an error if the initialization
-	// fails.  The SQL "prepare" phase, as well as the EXPLAIN
-	// statement, should merely build the plan node(s) and call
-	// expandPlan(). This is called automatically by makePlan().
-	//
-	// Available after newPlan().
-	expandPlan() error
-
 	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
 	//
-	// Stable after expandPlan() (or makePlan).
-	// Available after newPlan(), but may change on intermediate plan
-	// nodes during expandPlan() due to index selection.
+	// Available after newPlan().
 	Columns() ResultColumns
 
 	// The indexes of the columns the output is ordered by.
 	//
-	// Stable after expandPlan() (or makePlan).
+	// Stable after optimizePlan() (or makePlan).
 	// Available after newPlan(), but may change on intermediate plan
-	// nodes during expandPlan() due to index selection.
+	// nodes during optimizePlan() due to index selection.
 	Ordering() orderingInfo
 
 	// MarkDebug puts the node in a special debugging mode, which allows
@@ -126,14 +114,14 @@ type planNode interface {
 	// before the first call to Next() since it may need to recurse into
 	// sub-nodes created by Start().
 	//
-	// Available after expandPlan().
+	// Available after optimizePlan().
 	MarkDebug(mode explainMode)
 
 	// Start begins the processing of the query/statement and starts
 	// performing side effects for data-modifying statements. Returns an
 	// error if initial processing fails.
 	//
-	// Available after expandPlan() (or makePlan).
+	// Available after optimizePlan() (or makePlan).
 	Start() error
 
 	// Next performs one unit of work, returning false if an error is
@@ -217,21 +205,10 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 		return nil, err
 	}
 
-	// We propagate the needed columns once. This will remove any unused
-	// renders, which in turn may simplify expansion (remove
-	// sub-expressions).
 	needed := allColumns(plan)
-	p.initNeededColumns(plan, needed, false)
-
-	if err := plan.expandPlan(); err != nil {
+	if err := p.optimizePlan(plan, needed); err != nil {
 		return nil, err
 	}
-
-	// We now propagate the needed columns again. This will ensure that
-	// the needed columns are properly computed for newly expanded nodes.
-	// We also request initialization of needed columns in the sub-queries,
-	// which are now expanded.
-	p.initNeededColumns(plan, needed, true)
 
 	if log.V(3) {
 		log.Infof(p.ctx(), "statement %s compiled to:\n%s", stmt, planToString(plan))
