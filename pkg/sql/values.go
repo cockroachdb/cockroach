@@ -116,28 +116,6 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
-func (n *valuesNode) expandPlan() error {
-	if n.n == nil {
-		return nil
-	}
-
-	// This node is coming from a SQL query (as opposed to sortNode and
-	// others that create a valuesNode internally for storing results
-	// from other planNodes), so it may contain subqueries.
-	for _, tupleRow := range n.tuples {
-		for i, typedExpr := range tupleRow {
-			if n.columns[i].omitted {
-				continue
-			}
-			if err := n.p.expandSubqueryPlans(typedExpr); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 func (n *valuesNode) Start() error {
 	if n.n == nil {
 		return nil

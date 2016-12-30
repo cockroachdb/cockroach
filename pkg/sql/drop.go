@@ -143,10 +143,6 @@ func (p *planner) accumulateDependentTables(
 	return nil
 }
 
-func (n *dropDatabaseNode) expandPlan() error {
-	return nil
-}
-
 func (n *dropDatabaseNode) Start() error {
 	tbNameStrings := make([]string, 0, len(n.td))
 	for _, tbDesc := range n.td {
@@ -255,10 +251,6 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		idxNames[i].idxName = index.Index
 	}
 	return &dropIndexNode{n: n, p: p, idxNames: idxNames}, nil
-}
-
-func (n *dropIndexNode) expandPlan() error {
-	return nil
 }
 
 func (n *dropIndexNode) Start() error {
@@ -465,10 +457,6 @@ func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
 	return false
 }
 
-func (n *dropViewNode) expandPlan() error {
-	return nil
-}
-
 func (n *dropViewNode) Start() error {
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
@@ -567,10 +555,6 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		return &emptyNode{}, nil
 	}
 	return &dropTableNode{p: p, n: n, td: td}, nil
-}
-
-func (n *dropTableNode) expandPlan() error {
-	return nil
 }
 
 func (p *planner) canRemoveFK(

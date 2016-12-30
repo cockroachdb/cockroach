@@ -87,10 +87,6 @@ func (r *editNodeRun) initEditNode(
 }
 
 func (r *editNodeRun) expandEditNodePlan(en *editNodeBase, tw tableWriter) error {
-	if err := en.rh.expandPlans(); err != nil {
-		return err
-	}
-
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
@@ -101,7 +97,7 @@ func (r *editNodeRun) expandEditNodePlan(en *editNodeBase, tw tableWriter) error
 	}
 
 	r.tw = tw
-	return r.rows.expandPlan()
+	return en.p.expandPlan(r.rows)
 }
 
 func (r *editNodeRun) startEditNode() error {
@@ -279,10 +275,6 @@ func (p *planner) Update(
 		return nil, err
 	}
 	return un, nil
-}
-
-func (u *updateNode) expandPlan() error {
-	return u.run.expandEditNodePlan(&u.editNodeBase, &u.tw)
 }
 
 func (u *updateNode) Start() error {

@@ -229,18 +229,9 @@ var debugColumns = ResultColumns{
 
 func (*explainDebugNode) Columns() ResultColumns { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (n *explainDebugNode) expandPlan() error {
-	if err := n.plan.expandPlan(); err != nil {
-		return err
-	}
-	n.plan.MarkDebug(explainDebug)
-	return nil
-}
-
-func (n *explainDebugNode) Start() error        { return n.plan.Start() }
-func (n *explainDebugNode) Next() (bool, error) { return n.plan.Next() }
-func (n *explainDebugNode) Close()              { n.plan.Close() }
+func (n *explainDebugNode) Start() error         { return n.plan.Start() }
+func (n *explainDebugNode) Next() (bool, error)  { return n.plan.Next() }
+func (n *explainDebugNode) Close()               { n.plan.Close() }
 
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()

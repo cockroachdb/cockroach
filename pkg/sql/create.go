@@ -106,10 +106,6 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	return &createDatabaseNode{p: p, n: n}, nil
 }
 
-func (n *createDatabaseNode) expandPlan() error {
-	return nil
-}
-
 func (n *createDatabaseNode) Start() error {
 	desc := makeDatabaseDesc(n.n)
 
@@ -171,10 +167,6 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	}
 
 	return &createIndexNode{p: p, tableDesc: tableDesc, n: n}, nil
-}
-
-func (n *createIndexNode) expandPlan() error {
-	return nil
 }
 
 func (n *createIndexNode) Start() error {
@@ -298,10 +290,6 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 	}
 
 	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
-}
-
-func (n *createUserNode) expandPlan() error {
-	return nil
 }
 
 func (n *createUserNode) Start() error {
@@ -489,7 +477,6 @@ func (n *createViewNode) Close() {
 	n.sourcePlan = nil
 }
 
-func (n *createViewNode) expandPlan() error            { return n.sourcePlan.expandPlan() }
 func (n *createViewNode) Next() (bool, error)          { return false, nil }
 func (n *createViewNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
 func (n *createViewNode) Ordering() orderingInfo       { return orderingInfo{} }
@@ -586,13 +573,6 @@ func hoistConstraints(n *parser.CreateTable) {
 	}
 }
 
-func (n *createTableNode) expandPlan() error {
-	if n.sourcePlan != nil {
-		return n.sourcePlan.expandPlan()
-	}
-	return nil
-}
-
 func (n *createTableNode) Start() error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
@@ -681,10 +661,11 @@ func (n *createTableNode) Start() error {
 		// TODO(knz): Ideally we would want to plug the sourcePlan which
 		// was already computed as a data source into the insertNode. Now
 		// unfortunately this is not so easy: when this point is reached,
-		// sourcePlan.expandPlan() has already been called (for EXPLAIN),
-		// and insertPlan.expandPlan() below would cause a 2nd invocation
-		// and cause a panic. So instead we close this sourcePlan and let
-		// the insertNode create it anew from the AsSource syntax node.
+		// expandPlan() has already been called on sourcePlan (for
+		// EXPLAIN), and expandPlan() on insertPlan (via optimizePlan)
+		// below would cause a 2nd invocation and cause a panic. So
+		// instead we close this sourcePlan and let the insertNode create
+		// it anew from the AsSource syntax node.
 		n.sourcePlan.Close()
 		n.sourcePlan = nil
 
@@ -694,7 +675,7 @@ func (n *createTableNode) Start() error {
 			return err
 		}
 		defer insertPlan.Close()
-		if err := insertPlan.expandPlan(); err != nil {
+		if err := n.p.optimizePlan(insertPlan, allColumns(insertPlan)); err != nil {
 			return err
 		}
 		if err = insertPlan.Start(); err != nil {

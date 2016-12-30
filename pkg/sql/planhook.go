@@ -59,7 +59,6 @@ var _ planNode = &hookFnNode{}
 func (*hookFnNode) Ordering() orderingInfo       { return orderingInfo{} }
 func (*hookFnNode) SetLimitHint(_ int64, _ bool) {}
 func (*hookFnNode) MarkDebug(_ explainMode)      {}
-func (*hookFnNode) expandPlan() error            { return nil }
 func (*hookFnNode) Close()                       {}
 
 func (f *hookFnNode) Start() error {

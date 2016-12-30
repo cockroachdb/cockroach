@@ -74,24 +74,6 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 	return &res, nil
 }
 
-func (n *limitNode) wrap(plan planNode) planNode {
-	if n == nil {
-		return plan
-	}
-	n.plan = plan
-	return n
-}
-
-func (n *limitNode) expandPlan() error {
-	// We do not need to recurse into the child node here; selectTopNode
-	// does this for us.
-
-	if err := n.p.expandSubqueryPlans(n.countExpr); err != nil {
-		return err
-	}
-	return n.p.expandSubqueryPlans(n.offsetExpr)
-}
-
 func (n *limitNode) Start() error {
 	if err := n.plan.Start(); err != nil {
 		return err
@@ -183,9 +165,7 @@ func (n *limitNode) evalLimit() error {
 }
 
 // setTop connects the limitNode back to the selectTopNode that caused
-// its existence. This is needed because the limitNode needs to refer
-// to other nodes in the selectTopNode before its expandPlan() method
-// has ran and its child plan is known and connected.
+// its existence.
 func (n *limitNode) setTop(top *selectTopNode) {
 	if n != nil {
 		n.top = top

@@ -102,10 +102,6 @@ func (p *planner) Delete(
 	return dn, nil
 }
 
-func (d *deleteNode) expandPlan() error {
-	return d.run.expandEditNodePlan(&d.editNodeBase, &d.tw)
-}
-
 func (d *deleteNode) Start() error {
 	if err := d.run.startEditNode(); err != nil {
 		return err
