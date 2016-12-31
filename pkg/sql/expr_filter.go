@@ -51,7 +51,7 @@ import (
 //          return false, nil
 //       }
 //    }
-type varConvertFunc func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr)
+type varConvertFunc func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr)
 
 type varConvertVisitor struct {
 	// If justCheck is true, the visitor only checks that all VariableExpr in the expression can be
