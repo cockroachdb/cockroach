@@ -186,13 +186,11 @@ func (p *planner) makeIndexJoin(
 	// references are eliminated from the filterVars helper and the set
 	// of needed columns is properly determined later by
 	// setNeededColumns().
-	indexScan.filterVars.Reset()
-	indexScan.filter = indexScan.filterVars.Rebind(indexScan.filter)
+	indexScan.filter = indexScan.filterVars.Rebind(indexScan.filter, true, false)
 
 	// Ensure that the remaining indexed vars are transferred to the
 	// table scanNode fully.
-	table.filterVars.Reset()
-	table.filter = table.filterVars.Rebind(table.filter)
+	table.filter = table.filterVars.Rebind(table.filter, true, false)
 
 	indexScan.initOrdering(exactPrefix)
 

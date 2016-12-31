@@ -28,11 +28,16 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 	// sub-expressions).
 	setNeededColumns(plan, needed)
 
+	newPlan, err := p.triggerFilterPropagation(plan)
+	if err != nil {
+		return plan, err
+	}
+
 	// Perform plan expansion; this does index selection, sort
 	// optimization etc.
-	newPlan, err := p.expandPlan(plan)
+	newPlan, err = p.expandPlan(newPlan)
 	if err != nil {
-		return nil, err
+		return plan, err
 	}
 
 	// We now propagate the needed columns again. This will ensure that
