@@ -74,31 +74,29 @@ func makeCrossPredicate(left, right *dataSourceInfo) (*joinPredicate, *dataSourc
 	return makeEqualityPredicate(left, right, nil, nil, 0, nil)
 }
 
-// optimizeOnPredicate tries to turn the condition in an onPredicate into
-// equality columns in the joinPredicate, which enables faster
-// joins.  The concatInfos argument, if provided, must be a
-// precomputed concatenation of the left and right dataSourceInfos.
-func optimizeOnPredicate(
-	pred *joinPredicate, left, right *dataSourceInfo, concatInfos *dataSourceInfo,
-) (*joinPredicate, *dataSourceInfo, error) {
-	c, ok := pred.onCond.(*parser.ComparisonExpr)
+// tryAddEqualityFilter attempts to turn the given filter expression into
+// an equality predicate. It returns true iff the transformation succeeds.
+func (p *joinPredicate) tryAddEqualityFilter(
+	filter parser.Expr, left, right *dataSourceInfo,
+) bool {
+	c, ok := filter.(*parser.ComparisonExpr)
 	if !ok || c.Operator != parser.EQ {
-		return pred, pred.info, nil
+		return false
 	}
 	lhs, ok := c.Left.(*parser.IndexedVar)
 	if !ok {
-		return pred, pred.info, nil
+		return false
 	}
 	rhs, ok := c.Right.(*parser.IndexedVar)
 	if !ok {
-		return pred, pred.info, nil
+		return false
 	}
 
-	sourceBoundary := pred.numMergedEqualityColumns + len(left.sourceColumns)
+	sourceBoundary := p.numMergedEqualityColumns + len(left.sourceColumns)
 	if (lhs.Idx >= sourceBoundary && rhs.Idx >= sourceBoundary) ||
 		(lhs.Idx < sourceBoundary && rhs.Idx < sourceBoundary) {
 		// Both variables are on the same side of the join (e.g. `a JOIN b ON a.x = a.y`).
-		return pred, pred.info, nil
+		return false
 	}
 
 	if lhs.Idx > rhs.Idx {
@@ -107,6 +105,21 @@ func optimizeOnPredicate(
 
 	// At this point we have an equality, so we can add it to the list
 	// of equality columns.
+
+	// To do this we must be a bit careful: the expression contains
+	// IndexedVars, and the column indices at this point will refer to
+	// the full column set of the joinPredicate, including the
+	// merged columns.
+	leftColIdx := lhs.Idx - p.numMergedEqualityColumns
+	rightColIdx := rhs.Idx - len(left.sourceColumns) - p.numMergedEqualityColumns
+
+	// Also, we will want to avoid redundant equality checks.
+	for i := range p.leftEqualityIndices {
+		if p.leftEqualityIndices[i] == leftColIdx && p.rightEqualityIndices[i] == rightColIdx {
+			// The filter is already there; simply absorb it and say we succeeded.
+			return true
+		}
+	}
 
 	// First resolve the comparison function. We can't use the
 	// ComparisonExpr's memoized comparison directly, because we may
@@ -120,24 +133,14 @@ func optimizeOnPredicate(
 		// loudly.
 		panic(fmt.Errorf("predicate %s is valid, but '%T = %T' cannot be type checked", c, lhs, rhs))
 	}
-	pred.cmpFunctions = append(pred.cmpFunctions, fn)
+	p.cmpFunctions = append(p.cmpFunctions, fn)
 
-	// To do this we must be a bit careful: the expression contains
-	// IndexedVars, and the column indices at this point will refer to
-	// the full column set of the joinPredicate, including the
-	// merged columns.
-	leftColIdx := lhs.Idx - pred.numMergedEqualityColumns
-	rightColIdx := rhs.Idx - len(left.sourceColumns) - pred.numMergedEqualityColumns
+	p.leftEqualityIndices = append(p.leftEqualityIndices, leftColIdx)
+	p.rightEqualityIndices = append(p.rightEqualityIndices, rightColIdx)
+	p.leftColNames = append(p.leftColNames, parser.Name(left.sourceColumns[leftColIdx].Name))
+	p.rightColNames = append(p.rightColNames, parser.Name(right.sourceColumns[rightColIdx].Name))
 
-	pred.leftEqualityIndices = append(pred.leftEqualityIndices, leftColIdx)
-	pred.rightEqualityIndices = append(pred.rightEqualityIndices, rightColIdx)
-	pred.leftColNames = append(pred.leftColNames, parser.Name(left.sourceColumns[leftColIdx].Name))
-	pred.rightColNames = append(pred.rightColNames, parser.Name(right.sourceColumns[rightColIdx].Name))
-
-	// The on condition is optimized away now.
-	pred.onCond = nil
-
-	return pred, pred.info, nil
+	return true
 }
 
 // makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
@@ -155,8 +158,7 @@ func (p *planner) makeOnPredicate(
 		return nil, nil, err
 	}
 	pred.onCond = onCond
-
-	return optimizeOnPredicate(pred, left, right, info)
+	return pred, info, nil
 }
 
 // makeUsingPredicate constructs a joinPredicate object for joins with
