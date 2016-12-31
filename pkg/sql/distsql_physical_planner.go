@@ -158,13 +158,16 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		}
 		return dsp.CheckSupport(n.source)
 
-	case *selectNode:
+	case *filterNode:
 		if n.filter != nil {
 			// The Evaluator processors we use for select don't support filters yet.
 			// This is easily fixed, but it will only matter when we support joins
 			// (normally, all filters are pushed down to scanNodes).
 			return false, errors.Errorf("filter not supported at select level yet")
 		}
+		return dsp.CheckSupport(n.source.plan)
+
+	case *selectNode:
 		for i, e := range n.render {
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
@@ -175,12 +178,15 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 				return false, err
 			}
 		}
-		shouldDistribute, err := dsp.CheckSupport(n.source.plan)
+		return dsp.CheckSupport(n.source.plan)
+
+	case *sortNode:
+		shouldDistribute, err := dsp.CheckSupport(n.plan)
 		if err != nil {
 			return false, err
 		}
 		// If we have to sort, distribute the query.
-		shouldDistribute = shouldDistribute || (n.top.sort != nil && n.top.sort.needSort)
+		shouldDistribute = shouldDistribute || (n.needSort)
 		return shouldDistribute, nil
 
 	case *joinNode:
@@ -1163,21 +1169,26 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 		return plan, nil
 
-	case *selectTopNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.source)
+	case *groupNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 
-		if n.group != nil {
-			if err := dsp.addAggregators(planCtx, &plan, n.group); err != nil {
-				return physicalPlan{}, err
-			}
+		if err := dsp.addAggregators(planCtx, &plan, n); err != nil {
+			return physicalPlan{}, err
 		}
 
-		if n.sort != nil {
-			dsp.addSorters(planCtx, &plan, n.sort)
+		return plan, nil
+
+	case *sortNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		if err != nil {
+			return physicalPlan{}, err
 		}
+
+		dsp.addSorters(planCtx, &plan, n)
+
 		return plan, nil
 
 	default:

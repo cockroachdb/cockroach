@@ -97,7 +97,7 @@ WHERE eventType = 'alter_table'
 ----
 51 1
 
-# Add a UNIQUE constraint to the table in a way that will ensure the schema 
+# Add a UNIQUE constraint to the table in a way that will ensure the schema
 # change is reversed.
 ##################
 
