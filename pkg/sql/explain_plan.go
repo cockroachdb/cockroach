@@ -146,14 +146,19 @@ func planToString(plan planNode) string {
 		showTypes:     true,
 		showExprs:     true,
 		showSelectTop: true,
+		fmtFlags:      parser.FmtExpr(true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field
 			}
-			fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
-				formatColumns(plan.Columns(), true),
-				plan.Ordering().AsString(plan.Columns()),
-			)
+			if plan == nil {
+				fmt.Fprintf(&buf, "%d %s%s %s\n", level, name, field, description)
+			} else {
+				fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
+					formatColumns(plan.Columns(), true),
+					plan.Ordering().AsString(plan.Columns()),
+				)
+			}
 		},
 	}
 	v := planVisitor{p: makePlanner("planToString"), observer: &e}
