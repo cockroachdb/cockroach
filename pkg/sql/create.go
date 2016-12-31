@@ -398,6 +398,11 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, fmtErr
 	}
 
+	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
+	if p.planContainsStar(sourcePlan) {
+		return nil, fmt.Errorf("views do not currently support * expressions")
+	}
+
 	return &createViewNode{
 		p:           p,
 		n:           n,
@@ -1105,11 +1110,6 @@ func (n *createViewNode) makeViewTableDesc(
 			return desc, err
 		}
 		desc.AddColumn(*col)
-	}
-
-	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if n.p.planContainsStar(n.sourcePlan) {
-		return desc, fmt.Errorf("views do not currently support * expressions")
 	}
 
 	n.resolveViewDependencies(&desc, affected)
