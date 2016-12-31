@@ -326,12 +326,12 @@ true
 query ITTTTT
 EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 ----
-0  select                           (x)                          +x,unique
+0  render                           (x)                          +x,unique
 1  scan                             (x, y[omitted], z[omitted])  +x,unique
 1          table       xyz@primary
 1          spans       ALL
 1          subqueries  1
-2  select                           (x)                          +x,unique
+2  render                           (x)                          +x,unique
 3  scan                             (x, y[omitted], z[omitted])  +x,unique
 3          table       xyz@primary
 

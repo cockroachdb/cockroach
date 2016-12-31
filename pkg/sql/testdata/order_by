@@ -272,9 +272,9 @@ EXPLAIN SELECT * FROM t ORDER BY length('abc')
 query ITTTTT
 EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 ----
-0  select                    ("b + 2")                    +"b + 2"
-1  sort                      ("b + 2")                    +"b + 2"
-1          order  +"b + 2"
+0  sort                      ("b + 2")                    +"b + 2"
+0          order  +"b + 2"
+1  render                    ("b + 2")
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
 2          spans  ALL
@@ -283,9 +283,9 @@ EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 query ITTTTT
 EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 ----
-0  select                    (y)                          +y
-1  sort                      (y)                          +y
-1          order  +y
+0  sort                      (y)                          +y
+0          order  +y
+1  render                    (y)
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
 2          spans  ALL
@@ -294,9 +294,9 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 query ITTTTT
 EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
-0  select                    (y)                          +y
-1  sort                      (y)                          +y
-1          order  +y
+0  sort                      (y)                          +y
+0          order  +y
+1  render                    (y)
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
 2          spans  ALL
@@ -397,16 +397,15 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-0  select                               (a, b)                 +b
-1  nosort                               (a, b)                 +b
-1                 order     +b,+c
-2  render/filter                        (a, b, c)              +b,+c,unique
-2                 render 0  test.abc.a
-2                 render 1  test.abc.b
-2                 render 2  test.abc.c
-3  scan                                 (a, b, c, d[omitted])  +b,+c,unique
-3                 table     abc@bc
-3                 spans     ALL
+0  nosort                        (a, b)                 +b
+0          order     +b,+c
+1  render                        (a, b, c)              +b,+c,unique
+1          render 0  test.abc.a
+1          render 1  test.abc.b
+1          render 2  test.abc.c
+2  scan                          (a, b, c, d[omitted])  +b,+c,unique
+2          table     abc@bc
+2          spans     ALL
 
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
@@ -553,13 +552,11 @@ NaN
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x);
 ----
-0  select                           (x)        +x
-1  select                           (x)        +x
-2  sort                             (x)        +x
-2          order  +x
-3  select                           (column1)
-4  values                           (column1)
-4          size   1 column, 3 rows
+0  sort                             (x)        +x
+0          order  +x
+1  render                           (x)
+2  values                           (column1)
+2          size   1 column, 3 rows
 
 query ITTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC;
@@ -580,46 +577,40 @@ EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordi
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY;
 ----
-0  select                              (x, ordinality)  +ordinality,unique
-1  ordinality                          (x, ordinality)  +ordinality,unique
-2  select                              (x)
-3  select                              (column1)
-4  values                              (column1)
-4              size  1 column, 3 rows
+0  ordinality                          (x, ordinality)  +ordinality,unique
+1  render                              (x)
+2  values                              (column1)
+2              size  1 column, 3 rows
 
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY;
 ----
-0  select                               (x, ordinality)  +x
-1  ordinality                           (x, ordinality)  +x
-2  select                               (x)              +x
-3  sort                                 (x)              +x
-3              order  +x
-4  select                               (column1)
-5  values                               (column1)
-5              size   1 column, 3 rows
+0  ordinality                           (x, ordinality)  +x
+1  sort                                 (x)              +x
+1              order  +x
+2  render                               (x)
+3  values                               (column1)
+3              size   1 column, 3 rows
 
 # Check that the ordering of the source does not propagate blindly to RETURNING.
 query ITTTTT
 EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-0   insert                          (b)
-0             into    t(a, b)
-1   select                          (x, y)    +x
-2   sort                            (x, y)    +x
-2             order   +x
-3   select                          (x, y)
-4   nullrow                         ()
+0  insert                   (b)
+0           into   t(a, b)
+1  sort                     (x, y)  +x
+1           order  +x
+2  render                   (x, y)
+3  nullrow                  ()
 
 query ITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-0   delete                         (b)
-0            from    t
-1   select                         (a, b, c)    +a,unique
-2   scan                           (a, b, c)    +a,unique
-2            table   t@primary
-2            spans   /3-/4
+0  delete                    (b)
+0          from   t
+1  scan                      (a, b, c)  +a,unique
+1          table  t@primary
+1          spans  /3-/4
 
 query ITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
@@ -627,6 +618,6 @@ EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 0  update                    (b)
 0          table  t
 0          set    c
-1  select                    (a, b, c, "true")  +a,unique
+1  render                    (a, b, c, "true")  +a,unique
 2  scan                      (a, b, c)          +a,unique
 2          table  t@primary

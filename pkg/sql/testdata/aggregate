@@ -464,7 +464,7 @@ EXPLAIN(EXPRS) SELECT COUNT(k) FROM kv
 0  group
 0                 aggregate 0  count(k)
 0                 render 0     count(k)
-1  render/filter
+1  render
 1                 render 0     k
 2  scan
 2                 table        kv@primary
@@ -487,7 +487,7 @@ EXPLAIN(EXPRS) SELECT MIN(a) FROM abc
 0  group
 0                 aggregate 0  min(a)
 0                 render 0     min(a)
-1  render/filter
+1  render
 1                 render 0     a
 2  scan
 2                 table        abc@primary
@@ -553,7 +553,7 @@ EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz
 0  group
 0                 aggregate 0  min(x)
 0                 render 0     min(x)
-1  render/filter
+1  render
 1                 render 0     x
 2  scan
 2                 table        xyz@xy
@@ -571,7 +571,7 @@ EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 0  group
 0                 aggregate 0  min(x)
 0                 render 0     min(x)
-1  render/filter
+1  render
 1                 render 0     x
 2  scan
 2                 table        xyz@xy
@@ -589,7 +589,7 @@ EXPLAIN(EXPRS) SELECT MAX(x) FROM xyz
 0  group
 0                 aggregate 0  max(x)
 0                 render 0     max(x)
-1  render/filter
+1  render
 1                 render 0     x
 2  revscan
 2                 table        xyz@xy
@@ -607,7 +607,7 @@ EXPLAIN(EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
 0  group
 0                 aggregate 0  min(y)
 0                 render 0     min(y)
-1  render/filter
+1  render
 1                 render 0     y
 2  scan
 2                 table        xyz@xy
@@ -625,7 +625,7 @@ EXPLAIN(EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 0  group
 0                 aggregate 0  max(y)
 0                 render 0     max(y)
-1  render/filter
+1  render
 1                 render 0     y
 2  revscan
 2                 table        xyz@xy
@@ -643,7 +643,7 @@ EXPLAIN(EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
 0  group
 0                 aggregate 0  min(y)
 0                 render 0     min(y)
-1  render/filter
+1  render
 1                 render 0     y
 2  scan
 2                 table        xyz@xy
@@ -661,7 +661,7 @@ EXPLAIN(EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
 0  group
 0                 aggregate 0  max(y)
 0                 render 0     max(y)
-1  render/filter
+1  render
 1                 render 0     y
 2  revscan
 2                 table        xyz@xy
@@ -679,7 +679,7 @@ EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 0  group
 0                 aggregate 0  min(x)
 0                 render 0     min(x)
-1  render/filter
+1  render
 1                 render 0     x
 2  scan
 2                 table        xyz@zyx
@@ -703,7 +703,7 @@ EXPLAIN(EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 0  group
 0                 aggregate 0  max(x)
 0                 render 0     max(x)
-1  render/filter
+1  render
 1                 render 0     x
 2  revscan
 2                 table        xyz@zyx
@@ -744,7 +744,7 @@ EXPLAIN(EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 0  group
 0                 aggregate 0  variance(x)
 0                 render 0     variance(x)
-1  render/filter
+1  render
 1                 render 0     x
 2  scan
 2                 table        xyz@xy
@@ -858,7 +858,7 @@ EXPLAIN(EXPRS) SELECT MIN(a) FROM abc
 0  group
 0                 aggregate 0  min(a)
 0                 render 0     min(a)
-1  render/filter
+1  render
 1                 render 0     a
 2  scan
 2                 table        abc@primary
@@ -879,7 +879,7 @@ EXPLAIN(EXPRS) SELECT MAX(a) FROM abc
 0  group
 0                 aggregate 0  max(a)
 0                 render 0     max(a)
-1  render/filter
+1  render
 1                 render 0     a
 2  revscan
 2                 table        abc@primary
@@ -904,7 +904,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 1                 aggregate 1  count(k)
 1                 render 0     v
 1                 render 1     count(k)
-2  render/filter
+2  render
 2                 render 0     v
 2                 render 1     k
 2                 render 2     v
@@ -921,7 +921,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 1                 aggregate 1  count(*)
 1                 render 0     v
 1                 render 1     count(*)
-2  render/filter
+2  render
 2                 render 0     v
 2                 render 1     *
 2                 render 2     v
@@ -938,7 +938,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 1                 aggregate 1  count(1)
 1                 render 0     v
 1                 render 1     count(1)
-2  render/filter
+2  render
 2                 render 0     v
 2                 render 1     1
 2                 render 2     v
@@ -1000,7 +1000,7 @@ EXPLAIN (exprs) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) F
 0                 aggregate 1  max(k > 5) FILTER (WHERE k > 5)
 0                 render 0     count(*) FILTER (WHERE k > 5)
 0                 render 1     max(k > 5) FILTER (WHERE k > 5)
-1  render/filter
+1  render
 1                 render 0     *
 1                 render 1     k > 5
 1                 render 2     v
@@ -1010,13 +1010,12 @@ EXPLAIN (exprs) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) F
 query ITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-0  select                                                                                         ("COUNT(*) FILTER (WHERE k > 5)" int)
-1  group                                                                                          ("COUNT(*) FILTER (WHERE k > 5)" int)
-1                 aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-1                 render 0     (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
-2  render/filter                                                                                  ("*" int, v int, "k > 5" bool)
-2                 render 0     (*)[int]
-2                 render 1     (v)[int]
-2                 render 2     ((k)[int] > (5)[int])[bool]
-3  scan                                                                                           (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  +rowid,unique
-3                 table        filter_test@primary
+0  group                                                                                          ("COUNT(*) FILTER (WHERE k > 5)" int)
+0                 aggregate 0  (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
+0                 render 0     (count((*)[int]) FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]
+1  render                                                                                         ("*" int, v int, "k > 5" bool)
+1                 render 0     (*)[int]
+1                 render 1     (v)[int]
+1                 render 2     ((k)[int] > (5)[int])[bool]
+2  scan                                                                                           (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  +rowid,unique
+2                 table        filter_test@primary

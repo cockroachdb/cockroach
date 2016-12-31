@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -74,19 +73,13 @@ type selectNode struct {
 	// and the other initializations that may add render columns.
 	numOriginalCols int
 
-	// Filtering expression for rows.
-	// populated initially by initWhere().
-	// modified by index selection (split between scan filter and post-indexjoin filter).
-	filter parser.TypedExpr
-
 	// ordering indicates the order of returned rows.
 	// initially suggested by the GROUP BY and ORDER BY clauses;
 	// modified by index selection.
 	ordering orderingInfo
 
-	// support attributes for EXPLAIN(DEBUG)
-	explain   explainMode
-	debugVals debugValues
+	// explain supports EXPLAIN(DEBUG).
+	explain explainMode
 
 	// The current source row, with one value per source column.
 	// populated by Next(), used by renderRow().
@@ -125,10 +118,7 @@ func (s *selectNode) MarkDebug(mode explainMode) {
 }
 
 func (s *selectNode) DebugValues() debugValues {
-	if s.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", s.explain))
-	}
-	return s.debugVals
+	return s.source.plan.DebugValues()
 }
 
 func (s *selectNode) Start() error {
@@ -141,44 +131,29 @@ func (s *selectNode) Start() error {
 			return err
 		}
 	}
-	return s.planner.startSubqueryPlans(s.filter)
+
+	return nil
 }
 
 func (s *selectNode) Next() (bool, error) {
-	for {
-		if next, err := s.source.plan.Next(); !next {
-			return false, err
-		}
-
-		if s.explain == explainDebug {
-			s.debugVals = s.source.plan.DebugValues()
-
-			if s.debugVals.output != debugValueRow {
-				// Let the debug values pass through.
-				return true, nil
-			}
-		}
-		row := s.source.plan.Values()
-		s.curSourceRow = row
-		passesFilter, err := sqlbase.RunFilter(s.filter, &s.planner.evalCtx)
-		if err != nil {
-			return false, err
-		}
-
-		if passesFilter {
-			err := s.renderRow()
-			return err == nil, err
-		} else if s.explain == explainDebug {
-			// Mark the row as filtered out.
-			s.debugVals.output = debugValueFiltered
-			return true, nil
-		}
-		// Row was filtered out; grab the next row.
+	if next, err := s.source.plan.Next(); !next {
+		return false, err
 	}
+
+	if s.explain == explainDebug && s.source.plan.DebugValues().output != debugValueRow {
+		// Pass through non-row debug values.
+		return true, nil
+	}
+
+	row := s.source.plan.Values()
+	s.curSourceRow = row
+
+	err := s.renderRow()
+	return err == nil, err
 }
 
 func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
-	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
+	s.source.plan.SetLimitHint(numRows, soft)
 }
 
 func (s *selectNode) Close() {
@@ -281,13 +256,14 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
-
-	if err := s.initTargets(parsed.Exprs, desiredTypes); err != nil {
+	where, err := s.initWhere(parsed.Where)
+	if err != nil {
 		return nil, err
 	}
 
-	if err := s.initWhere(parsed.Where); err != nil {
+	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
+
+	if err := s.initTargets(parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
 	}
 
@@ -306,9 +282,9 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	if s.filter != nil && group != nil {
+	if where != nil && where.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		s.filter = group.isNotNullFilter(s.filter)
+		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter))
 	}
 
 	limitPlan, err := p.Limit(limit)
@@ -374,27 +350,35 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 	return nil
 }
 
-func (s *selectNode) initWhere(where *parser.Where) error {
+func (s *selectNode) initWhere(where *parser.Where) (*filterNode, error) {
 	if where == nil {
-		return nil
+		return nil, nil
 	}
 
+	f := &filterNode{p: s.planner, source: s.source}
+	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(s.sourceInfo[0].sourceColumns))
+
 	var err error
-	s.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, s.ivarHelper,
+	f.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, f.ivarHelper,
 		parser.TypeBool, true, "WHERE")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Make sure there are no aggregation/window functions in the filter
 	// (after subqueries have been expanded).
 	if err := s.planner.parser.AssertNoAggregationOrWindowing(
-		s.filter, "WHERE", s.planner.session.SearchPath,
+		f.filter, "WHERE", s.planner.session.SearchPath,
 	); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	// Insert the newly created filterNode between the selectNode and
+	// its original FROM source.
+	f.source = s.source
+	s.source.plan = f
+
+	return f, nil
 }
 
 // getRenderColName returns the output column name for a render expression.

@@ -211,7 +211,7 @@ func (v *subqueryPlanVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 	}
 	if sq, ok := expr.(*subquery); ok {
 		if v.doExpand && !sq.expanded {
-			v.err = v.p.optimizePlan(sq.plan, allColumns(sq.plan))
+			sq.plan, v.err = v.p.optimizePlan(sq.plan, allColumns(sq.plan))
 			sq.expanded = true
 		}
 		if v.err == nil && v.doStart && !sq.started {

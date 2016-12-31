@@ -494,11 +494,8 @@ EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 0                 into      insert_t(x, v)
 1  limit
 1                 count     1
-2  render/filter
-2                 render 0  x
-2                 render 1  v
-3  scan
-3                 table     select_t@primary
+2  scan
+2                 table     select_t@primary
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1

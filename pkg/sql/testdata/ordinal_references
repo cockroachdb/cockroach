@@ -48,15 +48,14 @@ a 3
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
-0  select                                (b, a)                         +a
-1  sort                                  (b, a)                         +a
-1                 order     +a
-2  render/filter                         (b, a)
-2                 render 0  test.foo.b
-2                 render 1  test.foo.a
-3  scan                                  (a, b, rowid[hidden,omitted])  +rowid,unique
-3                 table     foo@primary
-3                 spans     ALL
+0  sort                           (b, a)                         +a
+0          order     +a
+1  render                         (b, a)
+1          render 0  test.foo.b
+1          render 1  test.foo.a
+2  scan                           (a, b, rowid[hidden,omitted])  +rowid,unique
+2          table     foo@primary
+2          spans     ALL
 
 statement ok
 INSERT INTO foo(a, b) VALUES (4, 'c'), (5, 'c'), (6, 'c')
@@ -82,30 +81,28 @@ SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
 ----
-0  select                                       (m)
-1  group                                        (m)
-1                 aggregate 0  min(test.foo.a)
-1                 render 0     min(test.foo.a)
-2  render/filter                                (a, a)
-2                 render 0     test.foo.a
-2                 render 1     test.foo.a
-3  scan                                         (a, b[omitted], rowid[hidden,omitted])  +rowid,unique
-3                 table        foo@primary
-3                 spans        ALL
+0  group                                 (m)
+0          aggregate 0  min(test.foo.a)
+0          render 0     min(test.foo.a)
+1  render                                (a, a)
+1          render 0     test.foo.a
+1          render 1     test.foo.a
+2  scan                                  (a, b[omitted], rowid[hidden,omitted])  +rowid,unique
+2          table        foo@primary
+2          spans        ALL
 
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2;
 ----
-0  select                                       (m)
-1  group                                        (m)
-1                 aggregate 0  min(test.foo.a)
-1                 render 0     min(test.foo.a)
-2  render/filter                                (a, b)
-2                 render 0     test.foo.a
-2                 render 1     test.foo.b
-3  scan                                         (a, b, rowid[hidden,omitted])  +rowid,unique
-3                 table        foo@primary
-3                 spans        ALL
+0  group                                 (m)
+0          aggregate 0  min(test.foo.a)
+0          render 0     min(test.foo.a)
+1  render                                (a, b)
+1          render 0     test.foo.a
+1          render 1     test.foo.b
+2  scan                                  (a, b, rowid[hidden,omitted])  +rowid,unique
+2          table        foo@primary
+2          spans        ALL
 
 statement error column reference @1 not allowed in this context
 INSERT INTO foo(a, b) VALUES (@1, @2)

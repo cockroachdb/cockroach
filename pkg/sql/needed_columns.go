@@ -102,6 +102,16 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 		setNeededColumns(n.plan, sourceNeeded)
 
+	case *filterNode:
+		// Detect which columns from the source are needed in addition to
+		// those needed by the context.
+		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))
+		copy(sourceNeeded, needed)
+		for i := range sourceNeeded {
+			sourceNeeded[i] = sourceNeeded[i] || n.ivarHelper.IndexedVarUsed(i)
+		}
+		setNeededColumns(n.source.plan, sourceNeeded)
+
 	case *selectNode:
 		// Optimization: remove all the render expressions that are not
 		// needed. While doing so, some indexed vars may disappear
@@ -117,7 +127,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 			}
 			n.render[i] = n.ivarHelper.Rebind(n.render[i])
 		}
-		n.filter = n.ivarHelper.Rebind(n.filter)
 
 		// Now detect which columns from the source are still needed.
 		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))

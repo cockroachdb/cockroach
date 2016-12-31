@@ -125,7 +125,8 @@ func TestValues(t *testing.T) {
 		}
 		if plan != nil {
 			defer plan.Close()
-			if err := p.optimizePlan(plan, allColumns(plan)); err != nil {
+			plan, err = p.optimizePlan(plan, allColumns(plan))
+			if err != nil {
 				t.Errorf("%d: unexpected error in optimizePlan: %v", i, err)
 				continue
 			}
