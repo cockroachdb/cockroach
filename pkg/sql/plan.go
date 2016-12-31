@@ -69,6 +69,18 @@ type planMaker interface {
 var _ planMaker = &planner{}
 
 // planNode defines the interface for executing a query or portion of a query.
+//
+// The following methods apply to planNodes and contain special cases
+// for each type; they thus need to be extended when adding/removing
+// planNode instances:
+// - planMaker.newPlan()
+// - planMaker.prepare()
+// - planMaker.setNeededColumns()  (needed_columns.go)
+// - planMaker.expandPlan()        (expand_plan.go)
+// - planVisitor.visit()           (walk.go)
+// - planNodeNames                 (walk.go)
+// - planMaker.optimizeFilters()   (filter_opt.go)
+//
 type planNode interface {
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.
