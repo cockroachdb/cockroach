@@ -97,7 +97,10 @@ func (r *editNodeRun) expandEditNodePlan(en *editNodeBase, tw tableWriter) error
 	}
 
 	r.tw = tw
-	return en.p.expandPlan(r.rows)
+
+	var err error
+	r.rows, err = en.p.expandPlan(r.rows)
+	return err
 }
 
 func (r *editNodeRun) startEditNode() error {
