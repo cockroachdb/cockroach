@@ -187,7 +187,7 @@ func (e *explainer) enterNode(name string, plan planNode) bool {
 	if !e.showSelectTop && name == "select" {
 		return true
 	}
-	if !e.showExprs && name == "render/filter" {
+	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
 		return true
 	}
 
@@ -214,7 +214,7 @@ func (e *explainer) leaveNode(name string) {
 	if !e.showSelectTop && name == "select" {
 		return
 	}
-	if !e.showExprs && name == "render/filter" {
+	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
 		return
 	}
 	e.level--

@@ -158,13 +158,16 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		}
 		return dsp.CheckSupport(n.source)
 
-	case *selectNode:
+	case *filterNode:
 		if n.filter != nil {
 			// The Evaluator processors we use for select don't support filters yet.
 			// This is easily fixed, but it will only matter when we support joins
 			// (normally, all filters are pushed down to scanNodes).
 			return false, errors.Errorf("filter not supported at select level yet")
 		}
+		return dsp.CheckSupport(n.source.plan)
+
+	case *selectNode:
 		for i, e := range n.render {
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
@@ -175,12 +178,15 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 				return false, err
 			}
 		}
-		shouldDistribute, err := dsp.CheckSupport(n.source.plan)
+		return dsp.CheckSupport(n.source.plan)
+
+	case *sortNode:
+		shouldDistribute, err := dsp.CheckSupport(n.plan)
 		if err != nil {
 			return false, err
 		}
 		// If we have to sort, distribute the query.
-		shouldDistribute = shouldDistribute || (n.top.sort != nil && n.top.sort.needSort)
+		shouldDistribute = shouldDistribute || (n.needSort)
 		return shouldDistribute, nil
 
 	case *joinNode:
@@ -709,48 +715,31 @@ func (dsp *distSQLPlanner) selectRenders(
 ) error {
 	// First check if we need an Evaluator, or we are just returning values.
 	needEval := false
-
-	if n.top.group != nil || n.top.sort != nil {
-		// We are simply looking for a 1-1 mapping between n.Columns() and
-		// n.source.plan.Columns(). If there isn't one, in order to bridge the
-		// gap between the two we will need the evaluator.
-		if len(n.Columns()) != len(n.source.plan.Columns()) {
+	for _, e := range n.render {
+		if _, ok := e.(*parser.IndexedVar); !ok {
 			needEval = true
-		} else {
-			for i, c := range n.source.plan.Columns() {
-				if c != n.columns[i] {
-					needEval = true
-				}
-			}
-		}
-		if !needEval {
-			return nil
-		}
-	} else {
-		for _, e := range n.render {
-			if _, ok := e.(*parser.IndexedVar); !ok {
-				needEval = true
-				break
-			}
-		}
-		if !needEval {
-			// We don't need an evaluator stage. However, we do need to update
-			// p.planToStreamColMap to make the plan correspond to the selectNode
-			// (rather than n.source).
-			planToStreamColMap := makePlanToStreamColMap(len(n.render))
-			for i, e := range n.render {
-				idx := e.(*parser.IndexedVar).Idx
-				streamCol := p.planToStreamColMap[idx]
-				if streamCol == -1 {
-					panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
-				}
-				planToStreamColMap[i] = streamCol
-			}
-			p.planToStreamColMap = planToStreamColMap
-			p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-			return nil
+			break
 		}
 	}
+
+	if !needEval {
+		// We don't need an evaluator stage. However, we do need to update
+		// p.planToStreamColMap to make the plan correspond to the selectNode
+		// (rather than n.source).
+		planToStreamColMap := makePlanToStreamColMap(len(n.render))
+		for i, e := range n.render {
+			idx := e.(*parser.IndexedVar).Idx
+			streamCol := p.planToStreamColMap[idx]
+			if streamCol == -1 {
+				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
+			}
+			planToStreamColMap[i] = streamCol
+		}
+		p.planToStreamColMap = planToStreamColMap
+		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
+		return nil
+	}
+
 	// Add a stage with Evaluator processors.
 	evalSpec := distsqlrun.EvaluatorSpec{
 		Exprs: make([]distsqlrun.Expression, len(n.render)),
@@ -1191,21 +1180,26 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 		return plan, nil
 
-	case *selectTopNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.source)
+	case *groupNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 
-		if n.group != nil {
-			if err := dsp.addAggregators(planCtx, &plan, n.group); err != nil {
-				return physicalPlan{}, err
-			}
+		if err := dsp.addAggregators(planCtx, &plan, n); err != nil {
+			return physicalPlan{}, err
 		}
 
-		if n.sort != nil {
-			dsp.addSorters(planCtx, &plan, n.sort)
+		return plan, nil
+
+	case *sortNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		if err != nil {
+			return physicalPlan{}, err
 		}
+
+		dsp.addSorters(planCtx, &plan, n)
+
 		return plan, nil
 
 	default:
