@@ -270,7 +270,7 @@ func (p *planner) SelectClause(
 
 	if where != nil && where.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter))
+		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter), false)
 	}
 
 	limitPlan, err := p.Limit(limit)

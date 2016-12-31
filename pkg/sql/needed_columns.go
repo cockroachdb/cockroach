@@ -125,7 +125,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 				n.render[i] = parser.DNull
 				continue
 			}
-			n.render[i] = n.ivarHelper.Rebind(n.render[i])
+			n.render[i] = n.ivarHelper.Rebind(n.render[i], false)
 		}
 
 		// Now detect which columns from the source are still needed.

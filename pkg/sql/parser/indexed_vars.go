@@ -187,15 +187,22 @@ func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 
 // Reset re-initialized an IndexedVarHelper structure with the same
 // number of slots. After a helper has been reset, all the expressions
-// that were linked to the helper before it was reset must be re-bound,
-// e.g. using Rebind().
+// that were linked to the helper before it was reset must be
+// re-bound, e.g. using Rebind(). Resetting is useful to ensure that
+// the helper's knowledge of which IndexedVars are actually used by
+// linked expressions is up to date, especially after
+// optimizations/transforms which eliminate sub-expressions. The
+// optimizations performed by setNeededColumns() work then best.
 func (h *IndexedVarHelper) Reset() {
 	h.vars = make([]IndexedVar, len(h.vars))
 }
 
 // Rebind collects all the IndexedVars in the given expression
 // and re-binds them to this helper.
-func (h *IndexedVarHelper) Rebind(expr TypedExpr) TypedExpr {
+func (h *IndexedVarHelper) Rebind(expr TypedExpr, alsoReset bool) TypedExpr {
+	if alsoReset {
+		h.Reset()
+	}
 	if expr == nil {
 		return expr
 	}
