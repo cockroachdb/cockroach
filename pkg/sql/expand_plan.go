@@ -282,20 +282,11 @@ func (p *planner) expandSelectNode(s *selectNode) (planNode, error) {
 	limitCount, limitOffset := s.top.limit.estimateLimit()
 
 	maybeScanNode := s.source.plan
-	var whereFilter parser.TypedExpr
-	where, ok := maybeScanNode.(*filterNode)
-	if ok {
-		whereFilter = where.filter
+	if where, ok := maybeScanNode.(*filterNode); ok {
 		maybeScanNode = where.source.plan
 	}
 
 	if scan, ok := maybeScanNode.(*scanNode); ok {
-		if whereFilter != nil {
-			// Migrate the filter to the scan node.
-			// (Will be done soon by filter propagation.)
-			scan.filter = scan.filterVars.Rebind(whereFilter)
-		}
-
 		var analyzeOrdering analyzeOrderingFn
 		if ordering != nil {
 			analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {

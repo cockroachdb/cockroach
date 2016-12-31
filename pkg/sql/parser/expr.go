@@ -582,6 +582,14 @@ type CoalesceExpr struct {
 	typeAnnotation
 }
 
+// NewTypedCoalesceExpr returns a new CoalesceExpr that is verified to
+// be well-typed. The underlying expressions must have the same type.
+func NewTypedCoalesceExpr(exprs ...Expr) *CoalesceExpr {
+	node := &CoalesceExpr{Name: "COALESCE", Exprs: exprs}
+	node.typ = exprs[0].(TypedExpr).ResolvedType()
+	return node
+}
+
 // TypedExprAt returns the expression at the specified index as a TypedExpr.
 func (node *CoalesceExpr) TypedExprAt(idx int) TypedExpr {
 	return node.Exprs[idx].(TypedExpr)
