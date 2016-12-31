@@ -120,11 +120,11 @@ func setNeededColumns(plan planNode, needed []bool) {
 		n.filter = n.ivarHelper.Rebind(n.filter)
 
 		// Now detect which columns from the source are still needed.
-		neededFromSource := make([]bool, len(n.source.info.sourceColumns))
-		for i := range neededFromSource {
-			neededFromSource[i] = n.ivarHelper.IndexedVarUsed(i)
+		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))
+		for i := range sourceNeeded {
+			sourceNeeded[i] = n.ivarHelper.IndexedVarUsed(i)
 		}
-		setNeededColumns(n.source.plan, neededFromSource)
+		setNeededColumns(n.source.plan, sourceNeeded)
 		markOmitted(n.columns, needed)
 
 	case *selectTopNode:
