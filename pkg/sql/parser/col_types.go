@@ -43,6 +43,7 @@ func (*NameColType) columnType()           {}
 func (*BytesColType) columnType()          {}
 func (*CollatedStringColType) columnType() {}
 func (*ArrayColType) columnType()          {}
+func (*OidColType) columnType()            {}
 
 // All ColumnTypes also implement CastTargetType.
 func (*BoolColType) castTargetType()           {}
@@ -58,6 +59,7 @@ func (*NameColType) castTargetType()           {}
 func (*BytesColType) castTargetType()          {}
 func (*CollatedStringColType) castTargetType() {}
 func (*ArrayColType) castTargetType()          {}
+func (*OidColType) castTargetType()            {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -314,6 +316,17 @@ func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	}
 }
 
+// Pre-allocated immutable oid column type.
+var oidColTypeOid = &OidColType{}
+
+// OidColType represents an OID type
+type OidColType struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("OID")
+}
+
 func (node *BoolColType) String() string           { return AsString(node) }
 func (node *IntColType) String() string            { return AsString(node) }
 func (node *FloatColType) String() string          { return AsString(node) }
@@ -327,6 +340,7 @@ func (node *NameColType) String() string           { return AsString(node) }
 func (node *BytesColType) String() string          { return AsString(node) }
 func (node *CollatedStringColType) String() string { return AsString(node) }
 func (node *ArrayColType) String() string          { return AsString(node) }
+func (node *OidColType) String() string            { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
@@ -353,6 +367,8 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return nameColTypeName, nil
 	case TypeBytes:
 		return bytesColTypeBytes, nil
+	case TypeOid:
+		return oidColTypeOid, nil
 	default:
 		if typ, ok := t.(TCollatedString); ok {
 			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
@@ -392,7 +408,10 @@ func ColumnTypeToDatumType(t CastTargetType) Type {
 	case *ArrayColType:
 		return tArray{ColumnTypeToDatumType(ct.ParamType)}
 	case *PGOIDType:
-		return TypeInt
+		// TODO(nvanbenschoten) This needs to be fixed.
+		return TypePGOID
+	case *OidColType:
+		return TypeOid
 	default:
 		panic(errors.Errorf("unexpected ColumnType %T", t))
 	}
