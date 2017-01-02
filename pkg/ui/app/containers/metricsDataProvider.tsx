@@ -110,10 +110,10 @@ type MetricsDataProviderProps = MetricsDataProviderConnectProps & MetricsDataPro
  * <MetricsDataProvider id="series-x-graph">
  *  <LineGraph data="[]">
  *    <Axis label="Series X over time.">
- *      <Metric title="" name="series.x" sources="node.1">
+ *      <Metric title="" name="series.x" sources="node.1" />
  *    </Axis>
  *  </LineGraph>
- * </MetricsSet>;
+ * </MetricsDataProvider>;
  *
  * Each MetricsDataProvider must have an ID field, which identifies this
  * particular set of metrics to the metrics query reducer. Currently queries
