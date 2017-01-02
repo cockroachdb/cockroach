@@ -3250,6 +3250,10 @@ simple_typename:
   {
     $$.val = intColTypeBigSerial
   }
+| OID
+  {
+    $$.val = oidColTypeOid
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -3376,11 +3380,7 @@ numeric:
 
 // Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 postgres_oid:
-  OID
-  {
-    $$.val = oidPseudoTypeOid
-  }
-| REGPROC
+  REGPROC
   {
     $$.val = oidPseudoTypeRegProc
   }

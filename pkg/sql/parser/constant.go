@@ -256,6 +256,12 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 			dd.SetScale(dd.Scale() - eScale)
 		}
 		return dd, nil
+	case TypeOid:
+		d, err := expr.ResolveAsType(ctx, TypeInt)
+		if err != nil {
+			return nil, err
+		}
+		return NewDOidFromDInt(d.(*DInt)), nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}

@@ -1031,7 +1031,6 @@ func (node *PGOIDType) String() string { return AsString(node) }
 
 // Pre-allocated immutable postgres oid pseudo-types.
 var (
-	oidPseudoTypeOid          = &PGOIDType{Name: "OID"}
 	oidPseudoTypeRegProc      = &PGOIDType{Name: "REGPROC"}
 	oidPseudoTypeRegClass     = &PGOIDType{Name: "REGCLASS"}
 	oidPseudoTypeRegType      = &PGOIDType{Name: "REGTYPE"}
@@ -1092,7 +1091,6 @@ var (
 	dateCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	timestampCastTypes = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeInterval}
-	oidCastTypes       = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1116,8 +1114,6 @@ func validCastTypes(t Type) []Type {
 		return timestampCastTypes
 	case TypeInterval:
 		return intervalCastTypes
-	case TypePGOID:
-		return oidCastTypes
 	default:
 		// TODO(eisen): currently dead -- there is no syntax yet for casting
 		// directly to collated string.
