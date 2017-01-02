@@ -247,13 +247,13 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 	return err
 }
 
-// waitForOneVersion returns once there are no unexpired leases on the
+// WaitForOneVersion returns once there are no unexpired leases on the
 // previous version of the table descriptor. It returns the current version.
 // After returning there can only be versions of the descriptor >= to the
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
-func (s LeaseStore) waitForOneVersion(
+func (s LeaseStore) WaitForOneVersion(
 	tableID sqlbase.ID, retryOpts retry.Options,
 ) (sqlbase.DescriptorVersion, error) {
 	desc := &sqlbase.Descriptor{}
@@ -306,7 +306,7 @@ func (s LeaseStore) Publish(
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
-		expectedVersion, err := s.waitForOneVersion(tableID, base.DefaultRetryOptions())
+		expectedVersion, err := s.WaitForOneVersion(tableID, base.DefaultRetryOptions())
 		if err != nil {
 			return nil, err
 		}
