@@ -74,7 +74,7 @@ func (i *subqueryInitializer) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 		return false, expr
 	}
 
-	if sq, ok := expr.(*subquery); ok && sq.plan != nil {
+	if sq, ok := expr.(*subquery); ok && sq.plan != nil && !sq.expanded {
 		needed := make([]bool, len(sq.plan.Columns()))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.

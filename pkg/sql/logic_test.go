@@ -548,7 +548,7 @@ func (t *logicTest) processTestFile(path string) error {
 			time.Sleep(duration)
 
 		case "statement":
-			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", path, s.line)}
+			stmt := logicStatement{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
 			// Parse "statement error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
@@ -576,7 +576,7 @@ func (t *logicTest) processTestFile(path string) error {
 			t.success(path)
 
 		case "query":
-			query := logicQuery{pos: fmt.Sprintf("%s:%d", path, s.line)}
+			query := logicQuery{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
 			label := ""
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {

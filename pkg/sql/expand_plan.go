@@ -267,7 +267,7 @@ func (p *planner) expandSelectNode(s *selectNode) error {
 
 	if scan, ok := s.source.plan.(*scanNode); ok {
 		// Compute a filter expression for the scan node.
-		convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
+		convFunc := func(expr parser.VariableExpr) (bool, parser.Expr) {
 			ivar := expr.(*parser.IndexedVar)
 			s.ivarHelper.AssertSameContainer(ivar)
 			return true, scan.filterVars.IndexedVar(ivar.Idx)
