@@ -114,7 +114,7 @@ func MakeColumnDefDescs(
 	case *parser.IntervalColType:
 	case *parser.StringColType:
 		col.Type.Width = int32(t.N)
-		colDatumType = parser.TypeString
+	case *parser.NameColType:
 	case *parser.BytesColType:
 	case *parser.CollatedStringColType:
 		col.Type.Width = int32(t.N)
@@ -856,6 +856,11 @@ func (a *DatumAlloc) NewDString(v parser.DString) *parser.DString {
 	return r
 }
 
+// NewDName allocates a DName.
+func (a *DatumAlloc) NewDName(v parser.DString) parser.Datum {
+	return parser.NewDNameFromDString(a.NewDString(v))
+}
+
 // NewDBytes allocates a DBytes.
 func (a *DatumAlloc) NewDBytes(v parser.DBytes) *parser.DBytes {
 	buf := &a.dbytesAlloc
@@ -986,6 +991,14 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDString(parser.DString(r)), rkey, err
+	case parser.TypeName:
+		var r string
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+		}
+		return a.NewDName(parser.DString(r)), rkey, err
 	case parser.TypeBytes:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -1080,6 +1093,10 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)
 		return a.NewDString(parser.DString(data)), b, err
+	case parser.TypeName:
+		var data []byte
+		b, data, err = encoding.DecodeBytesValue(b)
+		return a.NewDName(parser.DString(data)), b, err
 	case parser.TypeBytes:
 		var data []byte
 		b, data, err = encoding.DecodeBytesValue(b)
@@ -1223,6 +1240,8 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 			panic("locale is required for COLLATEDSTRING")
 		}
 		set = parser.TCollatedString{Locale: *col.Type.Locale}
+	case ColumnType_NAME:
+		set = parser.TypeName
 	default:
 		return errors.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
@@ -1273,7 +1292,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			err := r.SetDecimal(&v.Dec)
 			return r, err
 		}
-	case ColumnType_STRING:
+	case ColumnType_STRING, ColumnType_NAME:
 		if v, ok := parser.AsDString(val); ok {
 			r.SetString(string(v))
 			return r, nil
@@ -1401,6 +1420,12 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return parser.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
+	case ColumnType_NAME:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDName(parser.DString(v)), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Kind)
 	}

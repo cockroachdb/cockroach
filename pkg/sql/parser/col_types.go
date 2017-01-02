@@ -39,6 +39,7 @@ func (*TimestampColType) columnType()      {}
 func (*TimestampTZColType) columnType()    {}
 func (*IntervalColType) columnType()       {}
 func (*StringColType) columnType()         {}
+func (*NameColType) columnType()           {}
 func (*BytesColType) columnType()          {}
 func (*CollatedStringColType) columnType() {}
 func (*ArrayColType) columnType()          {}
@@ -53,6 +54,7 @@ func (*TimestampColType) castTargetType()      {}
 func (*TimestampTZColType) castTargetType()    {}
 func (*IntervalColType) castTargetType()       {}
 func (*StringColType) castTargetType()         {}
+func (*NameColType) castTargetType()           {}
 func (*BytesColType) castTargetType()          {}
 func (*CollatedStringColType) castTargetType() {}
 func (*ArrayColType) castTargetType()          {}
@@ -242,6 +244,17 @@ func (node *StringColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// Pre-allocated immutable name column type.
+var nameColTypeName = &NameColType{}
+
+// NameColType represents a a NAME type.
+type NameColType struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *NameColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("NAME")
+}
+
 // Pre-allocated immutable bytes column types.
 var (
 	bytesColTypeBlob  = &BytesColType{Name: "BLOB"}
@@ -310,6 +323,7 @@ func (node *TimestampColType) String() string      { return AsString(node) }
 func (node *TimestampTZColType) String() string    { return AsString(node) }
 func (node *IntervalColType) String() string       { return AsString(node) }
 func (node *StringColType) String() string         { return AsString(node) }
+func (node *NameColType) String() string           { return AsString(node) }
 func (node *BytesColType) String() string          { return AsString(node) }
 func (node *CollatedStringColType) String() string { return AsString(node) }
 func (node *ArrayColType) String() string          { return AsString(node) }
@@ -335,6 +349,8 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return dateColTypeDate, nil
 	case TypeString:
 		return stringColTypeString, nil
+	case TypeName:
+		return nameColTypeName, nil
 	case TypeBytes:
 		return bytesColTypeBytes, nil
 	default:
@@ -359,6 +375,8 @@ func ColumnTypeToDatumType(t CastTargetType) Type {
 		return TypeDecimal
 	case *StringColType:
 		return TypeString
+	case *NameColType:
+		return TypeName
 	case *BytesColType:
 		return TypeBytes
 	case *DateColType:
