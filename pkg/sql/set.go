@@ -167,12 +167,12 @@ func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, 
 	if err != nil {
 		return "", err
 	}
-	s, ok := val.(*parser.DString)
+	s, ok := parser.AsDString(val)
 	if !ok {
 		return "", fmt.Errorf("%s: requires a single string value: %s is a %s",
 			name, values[0], val.ResolvedType())
 	}
-	return string(*s), nil
+	return string(s), nil
 }
 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
@@ -201,7 +201,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 
 	var loc *time.Location
 	var offset int64
-	switch v := d.(type) {
+	switch v := parser.UnwrapDatum(d).(type) {
 	case *parser.DString:
 		location := string(*v)
 		loc, err = timeutil.LoadLocation(location)

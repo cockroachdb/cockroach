@@ -1374,7 +1374,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 }
 
 func typCategory(typ parser.Type) parser.Datum {
-	return datumToTypeCategory[reflect.TypeOf(typ)]
+	return datumToTypeCategory[reflect.TypeOf(parser.UnwrapType(typ))]
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-views.html.

@@ -54,7 +54,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		templateStr := string(*template.(*parser.DString))
+		templateStr := string(parser.MustBeDString(template))
 		// See https://www.postgresql.org/docs/current/static/manage-ag-templatedbs.html
 		if !strings.EqualFold(templateStr, "template0") {
 			return nil, fmt.Errorf("unsupported template: %s", templateStr)
@@ -66,7 +66,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		encodingStr := string(*encoding.(*parser.DString))
+		encodingStr := string(parser.MustBeDString(encoding))
 		// We only support UTF8 (and aliases for UTF8).
 		if !(strings.EqualFold(encodingStr, "UTF8") ||
 			strings.EqualFold(encodingStr, "UTF-8") ||
@@ -80,7 +80,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		collateStr := string(*collate.(*parser.DString))
+		collateStr := string(parser.MustBeDString(collate))
 		// We only support C and C.UTF-8.
 		if collateStr != "C" && collateStr != "C.UTF-8" {
 			return nil, fmt.Errorf("unsupported collation: %s", collate)
@@ -92,7 +92,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		ctypeStr := string(*ctype.(*parser.DString))
+		ctypeStr := string(parser.MustBeDString(ctype))
 		// We only support C and C.UTF-8.
 		if ctypeStr != "C" && ctypeStr != "C.UTF-8" {
 			return nil, fmt.Errorf("unsupported character classification: %s", ctype)
@@ -283,7 +283,7 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 			return nil, err
 		}
 
-		resolvedPassword = string(*password.(*parser.DString))
+		resolvedPassword = string(parser.MustBeDString(password))
 		if resolvedPassword == "" {
 			return nil, security.ErrEmptyPassword
 		}

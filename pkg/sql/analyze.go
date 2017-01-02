@@ -1431,20 +1431,24 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 			return n, true
 		case parser.Like:
 			// a LIKE 'foo%' -> a >= "foo" AND a < "fop"
-			if d, ok := right.(*parser.DString); ok {
-				if i := strings.IndexAny(string(*d), "_%"); i >= 0 {
-					return makePrefixRange((*d)[:i], left, false), false
+			if d, ok := right.(parser.Datum); ok {
+				if s, ok := parser.AsDString(d); ok {
+					if i := strings.IndexAny(string(s), "_%"); i >= 0 {
+						return makePrefixRange(s[:i], left, false), false
+					}
+					return makePrefixRange(s, left, true), false
 				}
-				return makePrefixRange(*d, left, true), false
 			}
 			// TODO(pmattis): Support parser.DBytes?
 		case parser.SimilarTo:
 			// a SIMILAR TO "foo.*" -> a >= "foo" AND a < "fop"
-			if d, ok := right.(*parser.DString); ok {
-				pattern := parser.SimilarEscape(string(*d))
-				if re, err := regexp.Compile(pattern); err == nil {
-					prefix, complete := re.LiteralPrefix()
-					return makePrefixRange(parser.DString(prefix), left, complete), false
+			if d, ok := right.(parser.Datum); ok {
+				if s, ok := parser.AsDString(d); ok {
+					pattern := parser.SimilarEscape(string(s))
+					if re, err := regexp.Compile(pattern); err == nil {
+						prefix, complete := re.LiteralPrefix()
+						return makePrefixRange(parser.DString(prefix), left, complete), false
+					}
 				}
 			}
 			// TODO(pmattis): Support parser.DBytes?

@@ -693,7 +693,7 @@ func init() {
 // zero.
 func IsNumericZero(expr TypedExpr) bool {
 	if d, ok := expr.(Datum); ok {
-		switch t := d.(type) {
+		switch t := UnwrapDatum(d).(type) {
 		case *DDecimal:
 			return t.Dec.Cmp(&DecimalZero.Dec) == 0
 		case *DFloat:
@@ -709,7 +709,7 @@ func IsNumericZero(expr TypedExpr) bool {
 // one.
 func IsNumericOne(expr TypedExpr) bool {
 	if d, ok := expr.(Datum); ok {
-		switch t := d.(type) {
+		switch t := UnwrapDatum(d).(type) {
 		case *DDecimal:
 			return t.Dec.Cmp(&DecimalOne.Dec) == 0
 		case *DFloat:

@@ -403,7 +403,7 @@ func (s LeaseStore) countLeases(
 		if err != nil {
 			return err
 		}
-		count = int(*(values[0].(*parser.DInt)))
+		count = int(parser.MustBeDInt(values[0]))
 		return nil
 	})
 	return count, err

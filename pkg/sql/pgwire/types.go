@@ -99,7 +99,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.putInt32(-1)
 		return
 	}
-	switch v := d.(type) {
+	switch v := parser.UnwrapDatum(d).(type) {
 	case *parser.DBool:
 		b.putInt32(1)
 		if *v {
@@ -202,7 +202,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		b.putInt32(-1)
 		return
 	}
-	switch v := d.(type) {
+	switch v := parser.UnwrapDatum(d).(type) {
 	case *parser.DBool:
 		b.putInt32(1)
 		if *v {

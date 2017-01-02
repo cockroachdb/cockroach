@@ -740,8 +740,8 @@ func forEachUser(p *planner, fn func(username string) error) error {
 			break
 		}
 		row := plan.Values()
-		username := row[0].(*parser.DString)
-		if err := fn(string(*username)); err != nil {
+		username := parser.MustBeDString(row[0])
+		if err := fn(string(username)); err != nil {
 			return err
 		}
 	}

@@ -1440,7 +1440,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 
 func checkResultType(typ parser.Type) error {
 	// Compare all types that can rely on == equality.
-	switch typ {
+	switch parser.UnwrapType(typ) {
 	case parser.TypeNull:
 	case parser.TypeBool:
 	case parser.TypeInt:

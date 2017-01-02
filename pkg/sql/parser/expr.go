@@ -1074,7 +1074,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func (node *CastExpr) castType() Type {
-	return columnTypeToDatumType(node.Type)
+	return ColumnTypeToDatumType(node.Type)
 }
 
 var (
@@ -1096,7 +1096,7 @@ var (
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t Type) []Type {
-	switch t {
+	switch UnwrapType(t) {
 	case TypeBool:
 		return boolCastTypes
 	case TypeInt:
@@ -1173,7 +1173,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 }
 
 func (node *AnnotateTypeExpr) annotationType() Type {
-	return columnTypeToDatumType(node.Type)
+	return ColumnTypeToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.
@@ -1216,6 +1216,7 @@ func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
+func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }

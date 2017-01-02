@@ -349,7 +349,7 @@ func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
 			return DNull, nil
 		}
 
-		nbuckets := int(*arg.(*DInt))
+		nbuckets := int(MustBeDInt(arg))
 		if nbuckets <= 0 {
 			// per spec: If argument is less than or equal to 0, then an error is returned.
 			return nil, errInvalidArgumentForNtile
@@ -409,7 +409,7 @@ func (w *leadLagWindow) Compute(wf WindowFrame) (Datum, error) {
 		if offsetArg == DNull {
 			return DNull, nil
 		}
-		offset = int(*offsetArg.(*DInt))
+		offset = int(MustBeDInt(offsetArg))
 	}
 	if !w.forward {
 		offset *= -1
@@ -465,7 +465,7 @@ func (nthValueWindow) Compute(wf WindowFrame) (Datum, error) {
 		return DNull, nil
 	}
 
-	nth := int(*arg.(*DInt))
+	nth := int(MustBeDInt(arg))
 	if nth <= 0 {
 		return nil, errInvalidArgumentForNthValue
 	}
