@@ -744,59 +744,63 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DBool) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DBool) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DInt) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DInt) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DFloat) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DFloat) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DDecimal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DDecimal) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DString) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DString) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DCollatedString) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DCollatedString) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DBytes) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DBytes) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DDate) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DDate) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTimestamp) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DTimestamp) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTimestampTZ) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DTimestampTZ) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DInterval) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DInterval) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTuple) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DTuple) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DArray) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DArray) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTable) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d *DTable) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.

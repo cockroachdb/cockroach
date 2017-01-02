@@ -176,7 +176,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		return "NULL"
 	}
 	var v interface{}
-	switch typ {
+	switch parser.UnwrapType(typ) {
 	case parser.TypeInt:
 		i := r.Int63()
 		i -= r.Int63()

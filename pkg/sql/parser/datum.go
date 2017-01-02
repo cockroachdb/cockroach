@@ -35,6 +35,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -242,6 +243,30 @@ func ParseDInt(s string) (*DInt, error) {
 	return NewDInt(DInt(i)), nil
 }
 
+// AsDInt attempts to retrieve a DInt from an Expr, returning a DInt and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DInt wrapped by a
+// *DOidWrapper is possible.
+func AsDInt(e Expr) (DInt, bool) {
+	switch t := e.(type) {
+	case *DInt:
+		return *t, true
+	case *DOidWrapper:
+		return AsDInt(t.Wrapped)
+	}
+	return 0, false
+}
+
+// MustBeDInt attempts to retrieve a DInt from an Expr, panicking if the
+// assertion fails.
+func MustBeDInt(e Expr) DInt {
+	i, ok := AsDInt(e)
+	if !ok {
+		panic(fmt.Errorf("expected *DInt, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DInt) ResolvedType() Type {
 	return TypeInt
@@ -253,7 +278,7 @@ func (d *DInt) Compare(other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DInt)
+	v, ok := AsDInt(other)
 	if !ok {
 		cmp, ok := mixedTypeCompare(d, other)
 		if !ok {
@@ -261,10 +286,10 @@ func (d *DInt) Compare(other Datum) int {
 		}
 		return cmp
 	}
-	if *d < *v {
+	if *d < v {
 		return -1
 	}
-	if *d > *v {
+	if *d > v {
 		return 1
 	}
 	return 0
@@ -516,6 +541,30 @@ func NewDString(d string) *DString {
 	return &r
 }
 
+// AsDString attempts to retrieve a DString from an Expr, returning a DString and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DString wrapped by a
+// *DOidWrapper is possible.
+func AsDString(e Expr) (DString, bool) {
+	switch t := e.(type) {
+	case *DString:
+		return *t, true
+	case *DOidWrapper:
+		return AsDString(t.Wrapped)
+	}
+	return "", false
+}
+
+// MustBeDString attempts to retrieve a DString from an Expr, panicking if the
+// assertion fails.
+func MustBeDString(e Expr) DString {
+	i, ok := AsDString(e)
+	if !ok {
+		panic(fmt.Errorf("expected *DString, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DString) ResolvedType() Type {
 	return TypeString
@@ -527,14 +576,14 @@ func (d *DString) Compare(other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DString)
+	v, ok := AsDString(other)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if *d < v {
 		return -1
 	}
-	if *d > *v {
+	if *d > v {
 		return 1
 	}
 	return 0
@@ -1858,6 +1907,130 @@ func (*DTable) min() (Datum, bool) { return nil, false }
 
 // Size implements the Datum interface.
 func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
+
+// DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
+// custom Oid values to be attached to the Datum and its Type (see tOidWrapper).
+// The reason the Datum type was introduced was to permit the introduction of Datum
+// types with new Object IDs while maintaining identical behavior to current Datum
+// types. Specifically, it obviates the need to:
+// - define a new parser.Datum type.
+// - define a new parser.Type type.
+// - support operations and functions for the new Type.
+// - support mixed-type operations between the new Type and the old Type.
+//
+// Instead, DOidWrapper allows a standard Datum to be wrapped with a new Oid.
+// This approach provides two major advantages:
+// - performance of the existing Datum types are not affected because they
+//   do not need to have custom oid.Oids added to their structure.
+// - the introduction of new Datum aliases is straightforward and does not require
+//   additions to typing rules or type-dependent evaluation behavior.
+//
+// Types that currently benefit from DOidWrapper are:
+// - DOid  => DOidWrapper(*DInt,    oid.T_oid)
+// - DName => DOidWrapper(*DString, oid.T_name)
+//
+type DOidWrapper struct {
+	Wrapped Datum
+	Oid     oid.Oid
+}
+
+// wrapWithOid wraps a Datum with a custom Oid.
+func wrapWithOid(d Datum, oid oid.Oid) Datum {
+	switch v := d.(type) {
+	case nil:
+		return nil
+	case *DInt:
+	case *DString:
+	case dNull, *DOidWrapper:
+		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
+	default:
+		// Currently only *DInt and *DString are hooked up to work with *DOidWrapper.
+		// To support another base Datum type, replace all type assertions to that type
+		// with calls to functions like AsDInt and MustBeDInt.
+		panic(fmt.Errorf("unsupported Datum type passed to wrapWithOid: %T", d))
+	}
+	return &DOidWrapper{
+		Wrapped: d,
+		Oid:     oid,
+	}
+}
+
+// UnwrapDatum returns the base Datum type for a provided datum, stripping
+// an *DOidWrapper if present. This is useful for cases like type switches,
+// where type aliases should be ignored.
+func UnwrapDatum(d Datum) Datum {
+	if w, ok := d.(*DOidWrapper); ok {
+		return w.Wrapped
+	}
+	return d
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DOidWrapper) ResolvedType() Type {
+	return wrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
+}
+
+// Compare implements the Datum interface.
+func (d *DOidWrapper) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	if v, ok := other.(*DOidWrapper); ok {
+		return d.Wrapped.Compare(v.Wrapped)
+	}
+	return d.Wrapped.Compare(other)
+}
+
+// Prev implements the Datum interface.
+func (d *DOidWrapper) Prev() (Datum, bool) {
+	prev, ok := d.Wrapped.Prev()
+	return wrapWithOid(prev, d.Oid), ok
+}
+
+// Next implements the Datum interface.
+func (d *DOidWrapper) Next() (Datum, bool) {
+	next, ok := d.Wrapped.Next()
+	return wrapWithOid(next, d.Oid), ok
+}
+
+// IsMax implements the Datum interface.
+func (d *DOidWrapper) IsMax() bool {
+	return d.Wrapped.IsMax()
+}
+
+// IsMin implements the Datum interface.
+func (d *DOidWrapper) IsMin() bool {
+	return d.Wrapped.IsMin()
+}
+
+// max implements the Datum interface.
+func (d *DOidWrapper) max() (Datum, bool) {
+	max, ok := d.Wrapped.max()
+	return wrapWithOid(max, d.Oid), ok
+}
+
+// min implements the Datum interface.
+func (d *DOidWrapper) min() (Datum, bool) {
+	min, ok := d.Wrapped.min()
+	return wrapWithOid(min, d.Oid), ok
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (d *DOidWrapper) AmbiguousFormat() bool {
+	return d.Wrapped.AmbiguousFormat()
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DOidWrapper) Format(buf *bytes.Buffer, f FmtFlags) {
+	// Custom formatting based on d.OID could go here.
+	d.Wrapped.Format(buf, f)
+}
+
+// Size implements the Datum interface.
+func (d *DOidWrapper) Size() uintptr {
+	return unsafe.Sizeof(*d) + d.Wrapped.Size()
+}
 
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.

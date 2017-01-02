@@ -97,7 +97,7 @@ func canConstantBecome(c Constant, typ Type) bool {
 // past the decimal point as an DInt. This is possible, but it is not desirable.
 func shouldConstantBecome(c Constant, typ Type) bool {
 	if num, ok := c.(*NumVal); ok {
-		if typ == TypeInt && num.Kind() == constant.Float {
+		if UnwrapType(typ) == TypeInt && num.Kind() == constant.Float {
 			return false
 		}
 	}
