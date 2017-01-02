@@ -106,7 +106,11 @@ var (
 	// TypePGOID is a pseudo-type representing a postgres-style OID type.  It's
 	// a special case cast target and can't be used as a normal type. See
 	// PGOIDType in expr.go.
+	// TODO(nvanbenschoten) This should be fixed.
 	TypePGOID = wrapTypeWithOid(TypeInt, oid.T_oid)
+	// TypeOid is a type-alias for TypeInt with a different OID. Can be
+	// compared with ==.
+	TypeOid = wrapTypeWithOid(TypeInt, oid.T_oid)
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
 	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
@@ -126,6 +130,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_interval:    TypeInterval,
 	oid.T_name:        TypeName,
 	oid.T_numeric:     TypeDecimal,
+	oid.T_oid:         TypeOid,
 	oid.T_text:        TypeString,
 	oid.T__text:       TypeStringArray,
 	oid.T__int2:       TypeIntArray,

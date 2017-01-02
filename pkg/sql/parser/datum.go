@@ -1999,6 +1999,18 @@ func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
 }
 
+// NewDOidFromDInt is a helper routine to create a *DOid (implemented as
+// a *DOidWrapper) initialized from an existing *DInt.
+func NewDOidFromDInt(d *DInt) Datum {
+	return wrapWithOid(d, oid.T_oid)
+}
+
+// NewDOid is a helper routine to create a *DOid (implemented as a *DOidWrapper)
+// initialized from a DInt.
+func NewDOid(d DInt) Datum {
+	return NewDOidFromDInt(NewDInt(d))
+}
+
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.
 // TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?

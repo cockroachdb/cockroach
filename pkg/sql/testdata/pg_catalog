@@ -66,21 +66,21 @@ pg_views
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
 ----
-Table                  CreateTable
+Table                    CreateTable
 pg_catalog.pg_namespace  CREATE TABLE "pg_catalog.pg_namespace" (
-                           oid INT NULL,
-                           nspname NAME NOT NULL,
-                           nspowner INT NULL,
-                           aclitem STRING NULL
-                       )
+                             oid OID NULL,
+                             nspname NAME NOT NULL,
+                             nspowner OID NULL,
+                             aclitem STRING NULL
+)
 
 query TTBT colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-Field     Type    Null  Default
-oid       INT     true   NULL
+Field     Type    Null   Default
+oid       OID     true   NULL
 nspname   NAME    false  NULL
-nspowner  INT     true   NULL
+nspowner  OID     true   NULL
 aclitem   STRING  true   NULL
 
 query TTTTTTT colnames
@@ -134,7 +134,7 @@ CREATE VIEW constraint_db.v1 AS SELECT p,a,b,c FROM constraint_db.t1;
 
 ## pg_catalog.pg_namespace
 
-query ITIT colnames
+query OTOT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner  aclitem
@@ -145,7 +145,7 @@ oid         nspname             nspowner  aclitem
 
 ## pg_catalog.pg_database
 
-query ITIITTBB colnames
+query OTOITTBB colnames
 SELECT oid, datname, datdba, encoding, datcollate, datctype, datistemplate, datallowconn
 FROM pg_catalog.pg_database
 ORDER BY oid
@@ -157,7 +157,7 @@ oid         datname             datdba  encoding  datcollate  datctype    datist
 2157629366  pg_catalog          NULL    6         en_US.utf8  en_US.utf8  false          true
 3177026209  information_schema  NULL    6         en_US.utf8  en_US.utf8  false          true
 
-query ITIIIIIT colnames
+query OTIOIIOT colnames
 SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
 FROM pg_catalog.pg_database
 ORDER BY oid
@@ -197,7 +197,7 @@ constraint_db  v1        NULL       SELECT p, a, b, c FROM constraint_db.t1
 
 ## pg_catalog.pg_class
 
-query ITIIIIII colnames
+query OTOOOOOO colnames
 SELECT c.oid, relname, relnamespace, reltype, relowner, relam, relfilenode, reltablespace
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -216,7 +216,7 @@ oid         relname       relnamespace  reltype  relowner  relam  relfilenode  r
 624432001   t3_a_b_idx    268867073     0        NULL      NULL   0            0
 2875635133  v1            268867073     0        NULL      NULL   0            0
 
-query TIRIIBB colnames
+query TIRIOBB colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -275,7 +275,7 @@ v1            false        false           false           0             NULL   
 
 ## pg_catalog.pg_attribute
 
-query ITTIIIIII colnames
+query OTTOIIIII colnames
 SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
@@ -362,7 +362,7 @@ v1            c        false         true        0            NULL    NULL      
 
 ## pg_catalog.pg_am
 
-query ITIT colnames
+query OTOT colnames
 SELECT *
 FROM pg_catalog.pg_am
 ----
@@ -371,7 +371,7 @@ oid         amname  amhandler  amtype
 
 ## pg_catalog.pg_attrdef
 
-query ITIITT colnames
+query OTOITT colnames
 SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc
 FROM pg_catalog.pg_attrdef ad
 JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
@@ -384,7 +384,7 @@ oid         relname  adrelid     adnum  adbin  adsrc
 
 ## pg_catalog.pg_indexes
 
-query ITTTT colnames
+query OTTTT colnames
 SELECT crdb_oid, schemaname, tablename, indexname, tablespace
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
@@ -398,7 +398,7 @@ crdb_oid    schemaname  tablename  indexname     tablespace
 624432002   public      t3         primary       NULL
 624432001   public      t3         t3_a_b_idx    NULL
 
-query ITTT colnames
+query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
@@ -414,7 +414,7 @@ crdb_oid    tablename  indexname     indexdef
 
 ## pg_catalog.pg_index
 
-query IIIBBB colnames
+query OOIBBB colnames
 SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
 from pg_catalog.pg_index
 WHERE indnatts = 2
@@ -426,7 +426,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 3505585425  2199392917  2         true         true          false
 3491800018  3270885600  2         true         true          false
 
-query IBBBBB colnames
+query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
 from pg_catalog.pg_index
 WHERE indnatts = 2
@@ -438,7 +438,7 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 3505585425  true          false           true        false         false
 3491800018  true          false           true        false         false
 
-query IIBBTIIITT colnames
+query OOBBTIIITT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
 from pg_catalog.pg_index
 WHERE indnatts = 2
@@ -455,7 +455,7 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 ## These order of this virtual table is non-deterministic, so all queries must
 ## explicitly add an ORDER BY clause.
 
-query ITIT colnames
+query OTOT colnames
 SELECT con.oid, conname, connamespace, contype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
@@ -472,7 +472,7 @@ oid         conname    connamespace  contype
 4150478613  fk         268867073     f
 4206367032  fk         268867073     f
 
-query TTBBBIII colnames
+query TTBBBOOO colnames
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
@@ -497,7 +497,7 @@ WHERE n.nspname = 'public' AND contype NOT IN ('c', 'f', 'p', 'u')
 ORDER BY con.oid
 ----
 
-query TITTT colnames
+query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
@@ -512,7 +512,7 @@ primary    0          NULL         NULL         NULL
 primary    0          NULL         NULL         NULL
 primary    0          NULL         NULL         NULL
 
-query TITTT colnames
+query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
@@ -568,7 +568,7 @@ fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
 
 ## pg_catalog.pg_depend
 
-query IIIIIIT colnames
+query OOIOOIT colnames
 SELECT classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype
 FROM pg_catalog.pg_depend
 ORDER BY objid
@@ -580,7 +580,7 @@ classid    objid       objsubid  refclassid  refobjid   refobjsubid  deptype
 # All entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table.
 
-query IITT colnames
+query OOTT colnames
 SELECT DISTINCT classid, refclassid, cla.relname AS tablename, refcla.relname AS reftablename
 FROM pg_catalog.pg_depend
 JOIN pg_class cla ON classid=cla.oid
@@ -616,7 +616,7 @@ f
 
 ## pg_catalog.pg_type
 
-query ITIIIBT colnames
+query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 ORDER BY oid
@@ -629,6 +629,7 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 21    int          1782195457    NULL      8       true      b
 23    int          1782195457    NULL      8       true      b
 25    string       1782195457    NULL      -1      false     b
+26    oid          1782195457    NULL      8       true      b
 700   float        1782195457    NULL      8       true      b
 701   float        1782195457    NULL      8       true      b
 1005  int[]        1782195457    NULL      -1      false     b
@@ -643,7 +644,7 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 1700  decimal      1782195457    NULL      -1      false     b
 2283  anyelement   1782195457    NULL      -1      false     b
 
-query ITTBBTIII colnames
+query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
 FROM pg_catalog.pg_type
 ORDER BY oid
@@ -656,6 +657,7 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 21    int          N            false           true          ,         0         0        0
 23    int          N            false           true          ,         0         0        0
 25    string       S            false           true          ,         0         0        0
+26    oid          N            false           true          ,         0         0        0
 700   float        N            false           true          ,         0         0        0
 701   float        N            false           true          ,         0         0        0
 1005  int[]        A            false           true          ,         0         0        0
@@ -670,7 +672,7 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 1700  decimal      N            false           true          ,         0         0        0
 2283  anyelement   P            false           true          ,         0         0        0
 
-query ITIIIIIII colnames
+query OTIIIIIII colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
 FROM pg_catalog.pg_type
 ORDER BY oid
@@ -683,6 +685,7 @@ oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout
 21    int          0         0          0           0        0         0          0
 23    int          0         0          0           0        0         0          0
 25    string       0         0          0           0        0         0          0
+26    oid          0         0          0           0        0         0          0
 700   float        0         0          0           0        0         0          0
 701   float        0         0          0           0        0         0          0
 1005  int[]        0         0          0           0        0         0          0
@@ -697,7 +700,7 @@ oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout
 1700  decimal      0         0          0           0        0         0          0
 2283  anyelement   0         0          0           0        0         0          0
 
-query ITTTBII colnames
+query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
 FROM pg_catalog.pg_type
 ORDER BY oid
@@ -710,6 +713,7 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 21    int          NULL      NULL        false       0            -1
 23    int          NULL      NULL        false       0            -1
 25    string       NULL      NULL        false       0            -1
+26    oid          NULL      NULL        false       0            -1
 700   float        NULL      NULL        false       0            -1
 701   float        NULL      NULL        false       0            -1
 1005  int[]        NULL      NULL        false       0            -1
@@ -724,7 +728,7 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 1700  decimal      NULL      NULL        false       0            -1
 2283  anyelement   NULL      NULL        false       0            -1
 
-query ITIITTT colnames
+query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
 FROM pg_catalog.pg_type
 ORDER BY oid
@@ -737,6 +741,7 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 21    int          0         0             NULL           NULL        NULL
 23    int          0         0             NULL           NULL        NULL
 25    string       0         0             NULL           NULL        NULL
+26    oid          0         0             NULL           NULL        NULL
 700   float        0         0             NULL           NULL        NULL
 701   float        0         0             NULL           NULL        NULL
 1005  int[]        0         0             NULL           NULL        NULL
@@ -753,7 +758,7 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 
 ## pg_catalog.pg_proc
 
-query TITITTI colnames
+query TOOOTTO colnames
 SELECT proname, pronamespace, proowner, prolang, procost, prorows, provariadic
 FROM pg_catalog.pg_proc
 WHERE proname='substring';
@@ -786,7 +791,7 @@ substring  false        false      NULL         NULL
 substring  false        false      NULL         NULL
 substring  false        false      NULL         NULL
 
-query TIIITTTT colnames
+query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
 FROM pg_catalog.pg_proc
 WHERE proname='substring';
@@ -808,7 +813,7 @@ substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 
-query TIIITT colnames
+query TOIOTT colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
 FROM pg_catalog.pg_proc
 WHERE proname='least'
@@ -824,7 +829,7 @@ rngtypid  rngsubtype  rngcollation  rngsubopc  rngcanonical  rngsubdiff
 
 ## pg_catalog.pg_roles
 
-query ITBBBBBBI colnames
+query OTBBBBBBI colnames
 SELECT oid, rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcatupdate, rolcanlogin, rolconnlimit
 FROM pg_catalog.pg_roles
 ORDER BY rolname;
@@ -833,7 +838,7 @@ oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatup
 2901009604  root      true      false       true           true         false         true         -1
 2499926009  testuser  false     false       false          false        false         true         -1
 
-query ITTTT colnames
+query OTTTT colnames
 SELECT oid, rolname, rolpassword, rolvaliduntil, rolconfig
 FROM pg_catalog.pg_roles
 ORDER BY rolname;
@@ -844,8 +849,8 @@ oid         rolname   rolpassword  rolvaliduntil  rolconfig
 
 ## pg_catalog.pg_description
 
-query IIIT colnames
-SELECT * FROM pg_catalog.pg_description
+query OOIT colnames
+SELECT objoid, classoid, objsubid, description FROM pg_catalog.pg_description
 ----
 objoid  classoid  objsubid  description
 
@@ -906,7 +911,7 @@ SELECT pg_catalog.pg_get_expr('1', 0, true)
 ----
 1
 
-query ITT
+query OTT
 SELECT def.oid, c.relname, pg_catalog.pg_get_expr(def.adbin, def.adrelid)
 FROM pg_catalog.pg_attrdef def
 JOIN pg_catalog.pg_class c ON def.adrelid = c.oid

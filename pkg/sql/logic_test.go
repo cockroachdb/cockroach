@@ -961,6 +961,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 					if valT != reflect.Bool {
 						return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
+				case 'O':
+					if valT != reflect.Slice {
+						return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v", query.pos, i, val, val)
+					}
 				default:
 					return fmt.Errorf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
 				}

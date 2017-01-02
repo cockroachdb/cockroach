@@ -2167,10 +2167,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInterval:
 			return d, nil
 		}
-	case *PGOIDType:
+	case *OidColType, *PGOIDType:
 		switch v := d.(type) {
 		case *DInt:
-			return v, nil
+			return NewDOidFromDInt(v), nil
 		case *DString:
 			queryOid := func(table_name string, col_name string, obj_name string) (Datum, error) {
 				results, err := ctx.Planner.QueryRow(

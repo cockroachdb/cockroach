@@ -135,6 +135,7 @@ func MakeColumnDefDescs(
 			b := parser.MustBeDInt(d)
 			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
 		}
+	case *parser.OidColType:
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}
@@ -933,6 +934,11 @@ func (a *DatumAlloc) NewDInterval(v parser.DInterval) *parser.DInterval {
 	return r
 }
 
+// NewDOid allocates a DOid.
+func (a *DatumAlloc) NewDOid(v parser.DInt) parser.Datum {
+	return parser.NewDOidFromDInt(a.NewDInt(v))
+}
+
 // DecodeTableKey decodes a table key/value.
 func DecodeTableKey(
 	a *DatumAlloc, valType parser.Type, key []byte, dir encoding.Direction,
@@ -1039,6 +1045,14 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
+	case parser.TypeOid:
+		var i int64
+		if dir == encoding.Ascending {
+			rkey, i, err = encoding.DecodeVarintAscending(key)
+		} else {
+			rkey, i, err = encoding.DecodeVarintDescending(key)
+		}
+		return a.NewDOid(parser.DInt(i)), rkey, err
 	default:
 		if typ, ok := valType.(parser.TCollatedString); ok {
 			if !stackTraceContainsTesting() {
@@ -1117,6 +1131,10 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		var d duration.Duration
 		b, d, err = encoding.DecodeDurationValue(b)
 		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
+	case parser.TypeOid:
+		var i int64
+		b, i, err = encoding.DecodeIntValue(b)
+		return a.NewDOid(parser.DInt(i)), b, err
 	default:
 		if typ, ok := valType.(parser.TCollatedString); ok {
 			var data []byte
@@ -1242,6 +1260,8 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 		set = parser.TCollatedString{Locale: *col.Type.Locale}
 	case ColumnType_NAME:
 		set = parser.TypeName
+	case ColumnType_OID:
+		set = parser.TypeOid
 	default:
 		return errors.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
@@ -1277,7 +1297,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetBool(bool(*v))
 			return r, nil
 		}
-	case ColumnType_INT:
+	case ColumnType_INT, ColumnType_OID:
 		if v, ok := parser.AsDInt(val); ok {
 			r.SetInt(int64(v))
 			return r, nil
@@ -1423,6 +1443,12 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDName(parser.DString(v)), nil
+	case ColumnType_OID:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDOid(parser.DInt(v)), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Kind)
 	}
