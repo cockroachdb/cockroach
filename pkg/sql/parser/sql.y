@@ -3154,6 +3154,10 @@ simple_typename:
   {
     $$.val = stringColTypeText
   }
+| NAME
+  {
+    $$.val = nameColTypeName
+  }
 | SERIAL
   {
     $$.val = intColTypeSerial
@@ -4972,7 +4976,6 @@ unreserved_keyword:
 | MATCH
 | MINUTE
 | MONTH
-| NAME
 | NAMES
 | NEXT
 | NO
@@ -5088,6 +5091,7 @@ col_name_keyword:
 | INTEGER
 | INTERVAL
 | LEAST
+| NAME
 | NULLIF
 | NUMERIC
 | OUT

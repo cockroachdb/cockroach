@@ -91,10 +91,6 @@ var (
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
-	// TypePGOID is a pseudo-type representing a postgres-style OID type.  It's
-	// a special case cast target and can't be used as a normal type. See
-	// PGOIDType in expr.go.
-	TypePGOID Type = tInt{}
 	// TypeStringArray is the type family of a DArray containing strings. Can be
 	// compared with ==.
 	TypeStringArray Type = tArray{TypeString}
@@ -106,6 +102,14 @@ var (
 	TypeAnyArray Type = tArray{TypeAny}
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
+
+	// TypePGOID is a pseudo-type representing a postgres-style OID type.  It's
+	// a special case cast target and can't be used as a normal type. See
+	// PGOIDType in expr.go.
+	TypePGOID = wrapTypeWithOid(TypeInt, oid.T_oid)
+	// TypeName is a type-alias for TypeString with a different OID. Can be
+	// compared with ==.
+	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
@@ -120,6 +124,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_int4:        TypeInt,
 	oid.T_int8:        TypeInt,
 	oid.T_interval:    TypeInterval,
+	oid.T_name:        TypeName,
 	oid.T_numeric:     TypeDecimal,
 	oid.T_text:        TypeString,
 	oid.T__text:       TypeStringArray,

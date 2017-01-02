@@ -1987,6 +1987,18 @@ func (d *DOidWrapper) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// NewDNameFromDString is a helper routine to create a *DName (implemented as
+// a *DOidWrapper) initialized from an existing *DString.
+func NewDNameFromDString(d *DString) Datum {
+	return wrapWithOid(d, oid.T_name)
+}
+
+// NewDName is a helper routine to create a *DName (implemented as a *DOidWrapper)
+// initialized from a string.
+func NewDName(d string) Datum {
+	return NewDNameFromDString(NewDString(d))
+}
+
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.
 // TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?

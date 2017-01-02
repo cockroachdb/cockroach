@@ -357,6 +357,9 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	case TypeString:
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
+	case TypeName:
+		expr.resString = DString(expr.s)
+		return NewDNameFromDString(&expr.resString), nil
 	case TypeBytes:
 		expr.resBytes = DBytes(expr.s)
 		return &expr.resBytes, nil

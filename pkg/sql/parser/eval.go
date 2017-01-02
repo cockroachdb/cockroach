@@ -2058,7 +2058,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return &res, nil
 		}
 
-	case *StringColType:
+	case *StringColType, *NameColType:
 		var s DString
 		switch t := d.(type) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
@@ -2086,6 +2086,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if c.N > 0 && c.N < len(s) {
 				s = s[:c.N]
 			}
+		}
+
+		if _, ok := expr.Type.(*NameColType); ok {
+			return NewDName(string(s)), nil
 		}
 		return &s, nil
 
