@@ -1,19 +1,19 @@
-query I
+query O
 SELECT 3::OID;
 ----
 3
 
-query I
+query O
 SELECT 'pg_constraint'::REGCLASS
 ----
 402060402
 
-query II
+query OO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
 1736923753  1736923753
 
-query II
+query OO
 SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE
 ----
 1736923753  1736923753
@@ -36,12 +36,12 @@ SELECT 'blah(, )'::REGPROC
 query error more than one function named 'max'
 SELECT 'max'::REGPROC
 
-query I
+query O
 SELECT 'public'::REGNAMESPACE
 ----
 268867073
 
-query I
+query O
 SELECT 'bool'::REGTYPE
 ----
 16
@@ -63,13 +63,13 @@ SELECT 'blah'::REGTYPE
 
 ## Test other cast syntaxes
 
-query I
+query O
 SELECT CAST ('pg_constraint' AS REGCLASS)
 ----
 402060402
 
 # This forces the b_expr form of the cast syntax.
-query I
+query O
 SELECT ('pg_constraint')::REGCLASS
 ----
 402060402
