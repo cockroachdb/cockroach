@@ -302,7 +302,7 @@ func (n *windowNode) replaceIndexedVars(s *selectNode) {
 		if render == nil {
 			continue
 		}
-		replaceIdxVars := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
+		replaceIdxVars := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
 			iv, ok := expr.(*parser.IndexedVar)
 			if !ok {
 				return true, expr

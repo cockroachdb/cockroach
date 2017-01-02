@@ -170,7 +170,7 @@ func (p *planner) makeIndexJoin(
 	if origScan.filter != nil {
 		// Now we split the filter by extracting the part that can be
 		// evaluated using just the index columns.
-		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
+		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
 			colIdx := expr.(*parser.IndexedVar).Idx
 			if !(primaryKeyColumns[colIdx] || valProvidedIndex[colIdx]) {
 				return false, nil
