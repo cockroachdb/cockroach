@@ -20,12 +20,24 @@ import "bytes"
 
 // Explain represents an EXPLAIN statement.
 type Explain struct {
-	Options   []string
+	// Options defines how EXPLAIN should operate (VERBOSE, METADATA,
+	// etc.) Which options are valid depends on the explain mode. See
+	// sql/explain.go for details.
+	Options []string
+
+	// Statement is the statement being EXPLAINed.
 	Statement Statement
+
+	// Enclosed is set to true if the EXPLAIN syntax was used as a data
+	// source, and thus enclosed in square brackets.
+	Enclosed bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Enclosed {
+		buf.WriteByte('[')
+	}
 	buf.WriteString("EXPLAIN ")
 	if len(node.Options) > 0 {
 		buf.WriteByte('(')
@@ -38,4 +50,7 @@ func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(") ")
 	}
 	FormatNode(buf, f, node.Statement)
+	if node.Enclosed {
+		buf.WriteByte(']')
+	}
 }

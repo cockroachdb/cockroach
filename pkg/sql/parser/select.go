@@ -217,6 +217,12 @@ func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}
 func (*FuncExpr) tableExpr()         {}
 
+// The Explain node, used for the EXPLAIN statement, can also be
+// present as a data source in FROM, and thus implements the TableExpr
+// interface.
+
+func (*Explain) tableExpr() {}
+
 // IndexHints represents "@<index_name>" or "@{param[,param]}" where param is
 // one of:
 //  - FORCE_INDEX=<index_name>
