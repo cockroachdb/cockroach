@@ -2063,7 +2063,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return &res, nil
 		}
 
-	case *StringColType, *CollatedStringColType:
+	case *StringColType, *CollatedStringColType, *NameColType:
 		var s string
 		switch t := d.(type) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
@@ -2098,6 +2098,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				s = s[:c.N]
 			}
 			return NewDCollatedString(s, c.Locale, &ctx.collationEnv), nil
+		case *NameColType:
+			return NewDName(s), nil
 		default:
 			panic(fmt.Sprintf("missing case for cast to string: %T", c))
 		}
