@@ -123,6 +123,13 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 			buf.WriteRune(r)
 		}
 		return parser.NewDCollatedString(buf.String(), *typ.Locale, &parser.CollationEnvironment{})
+	case ColumnType_NAME:
+		// Generate a random ASCII string.
+		p := make([]byte, rng.Intn(10))
+		for i := range p {
+			p[i] = byte(1 + rng.Intn(127))
+		}
+		return parser.NewDName(string(p))
 	case ColumnType_INT_ARRAY:
 		// TODO(cuongdo): we don't support for persistence of arrays yet
 		return parser.DNull

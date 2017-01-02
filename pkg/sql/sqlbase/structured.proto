@@ -39,6 +39,7 @@ message ColumnType {
     BYTES = 8;
     TIMESTAMPTZ = 9;
     COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
+    NAME = 11;
 
     // Array types.
     //

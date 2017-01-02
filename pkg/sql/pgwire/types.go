@@ -609,6 +609,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, errors.Errorf("unsupported text format code: %d", code)
 		}
+	case oid.T_name:
+		switch code {
+		case formatText, formatBinary:
+			d = parser.NewDName(string(b))
+		default:
+			return d, errors.Errorf("unsupported name format code: %d", code)
+		}
 	case oid.T_bytea:
 		switch code {
 		case formatText:
