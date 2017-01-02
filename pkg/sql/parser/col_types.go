@@ -345,9 +345,9 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
 }
 
-// columnTypeToDatumType produces a Datum type equivalent to the given
+// ColumnTypeToDatumType produces a Type equivalent to the given
 // SQL column type.
-func columnTypeToDatumType(t CastTargetType) Type {
+func ColumnTypeToDatumType(t CastTargetType) Type {
 	switch ct := t.(type) {
 	case *BoolColType:
 		return TypeBool
@@ -372,7 +372,7 @@ func columnTypeToDatumType(t CastTargetType) Type {
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
-		return tArray{columnTypeToDatumType(ct.ParamType)}
+		return tArray{ColumnTypeToDatumType(ct.ParamType)}
 	case *PGOIDType:
 		return TypeInt
 	default:

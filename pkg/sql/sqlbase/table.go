@@ -77,15 +77,16 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
-	var colDatumType parser.Type
+	colDatumType := parser.ColumnTypeToDatumType(d.Type)
+
+	// Set Type.Kind and Type.Locale.
+	col.Type = DatumTypeToColumnType(colDatumType)
+
+	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
 	case *parser.BoolColType:
-		col.Type.Kind = ColumnType_BOOL
-		colDatumType = parser.TypeBool
 	case *parser.IntColType:
-		col.Type.Kind = ColumnType_INT
 		col.Type.Width = int32(t.N)
-		colDatumType = parser.TypeInt
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
 				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
@@ -94,45 +95,33 @@ func MakeColumnDefDescs(
 			col.DefaultExpr = &s
 		}
 	case *parser.FloatColType:
-		col.Type.Kind = ColumnType_FLOAT
 		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.TypeFloat
 	case *parser.DecimalColType:
-		col.Type.Kind = ColumnType_DECIMAL
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
-		colDatumType = parser.TypeDecimal
+
+		switch {
+		case col.Type.Precision == 0 && col.Type.Width > 0:
+			// TODO (seif): Find right range for error message.
+			return nil, nil, errors.New("invalid NUMERIC precision 0")
+		case col.Type.Precision < col.Type.Width:
+			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+				col.Type.Width, col.Type.Precision)
+		}
 	case *parser.DateColType:
-		col.Type.Kind = ColumnType_DATE
-		colDatumType = parser.TypeDate
 	case *parser.TimestampColType:
-		col.Type.Kind = ColumnType_TIMESTAMP
-		colDatumType = parser.TypeTimestamp
 	case *parser.TimestampTZColType:
-		col.Type.Kind = ColumnType_TIMESTAMPTZ
-		colDatumType = parser.TypeTimestampTZ
 	case *parser.IntervalColType:
-		col.Type.Kind = ColumnType_INTERVAL
-		colDatumType = parser.TypeInterval
 	case *parser.StringColType:
-		col.Type.Kind = ColumnType_STRING
 		col.Type.Width = int32(t.N)
 		colDatumType = parser.TypeString
 	case *parser.BytesColType:
-		col.Type.Kind = ColumnType_BYTES
-		colDatumType = parser.TypeBytes
 	case *parser.CollatedStringColType:
-		col.Type.Kind = ColumnType_COLLATEDSTRING
 		col.Type.Width = int32(t.N)
-		col.Type.Locale = &t.Locale
-		colDatumType = &parser.TCollatedString{Locale: t.Locale}
 	case *parser.ArrayColType:
-		if _, ok := t.ParamType.(*parser.IntColType); ok {
-			col.Type.Kind = ColumnType_INT_ARRAY
-		} else {
+		if _, ok := t.ParamType.(*parser.IntColType); !ok {
 			return nil, nil, errors.Errorf("arrays of type %s are unsupported", t.ParamType)
 		}
-		colDatumType = parser.TypeIntArray
 		for i, e := range t.BoundsExprs {
 			ctx := parser.SemaContext{SearchPath: searchPath}
 			te, err := parser.TypeCheckAndRequire(e, &ctx, parser.TypeInt, "array bounds")
@@ -143,22 +132,11 @@ func MakeColumnDefDescs(
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "couldn't Eval bound %d", i)
 			}
-			b := d.(*parser.DInt)
-			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(*b))
+			b := parser.MustBeDInt(d)
+			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
 		}
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)
-	}
-
-	if col.Type.Kind == ColumnType_DECIMAL {
-		switch {
-		case col.Type.Precision == 0 && col.Type.Width > 0:
-			// TODO (seif): Find right range for error message.
-			return nil, nil, errors.New("invalid NUMERIC precision 0")
-		case col.Type.Precision < col.Type.Width:
-			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				col.Type.Width, col.Type.Precision)
-		}
 	}
 
 	if len(d.CheckExprs) > 0 {
@@ -421,7 +399,7 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		return encoding.EncodeNullDescending(b), nil
 	}
 
-	switch t := val.(type) {
+	switch t := parser.UnwrapDatum(val).(type) {
 	case *parser.DBool:
 		var x int64
 		if *t {
@@ -517,7 +495,7 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 	if val == parser.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
-	switch t := val.(type) {
+	switch t := parser.UnwrapDatum(val).(type) {
 	case *parser.DBool:
 		return encoding.EncodeBoolValue(appendTo, uint32(colID), bool(*t)), nil
 	case *parser.DInt:
@@ -1281,8 +1259,8 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, nil
 		}
 	case ColumnType_INT:
-		if v, ok := val.(*parser.DInt); ok {
-			r.SetInt(int64(*v))
+		if v, ok := parser.AsDInt(val); ok {
+			r.SetInt(int64(v))
 			return r, nil
 		}
 	case ColumnType_FLOAT:
@@ -1296,8 +1274,8 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, err
 		}
 	case ColumnType_STRING:
-		if v, ok := val.(*parser.DString); ok {
-			r.SetString(string(*v))
+		if v, ok := parser.AsDString(val); ok {
+			r.SetString(string(v))
 			return r, nil
 		}
 	case ColumnType_BYTES:
@@ -1434,14 +1412,14 @@ func UnmarshalColumnValue(
 func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
 	case ColumnType_STRING:
-		if v, ok := val.(*parser.DString); ok {
-			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
+		if v, ok := parser.AsDString(val); ok {
+			if col.Type.Width > 0 && utf8.RuneCountInString(string(v)) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)",
 					col.Type.SQLString(), col.Name)
 			}
 		}
 	case ColumnType_INT:
-		if v, ok := val.(*parser.DInt); ok {
+		if v, ok := parser.AsDInt(val); ok {
 			if col.Type.Width > 0 {
 				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
 				// "bit type data must match the length n exactly; it is an error
@@ -1453,7 +1431,7 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// flag on the column type, the best we can do here is conservatively
 				// assume the varying bit type and error only on longer bit strings.
 				mostSignificantBit := int32(0)
-				for bits := uint64(*v); bits != 0; mostSignificantBit++ {
+				for bits := uint64(v); bits != 0; mostSignificantBit++ {
 					bits >>= 1
 				}
 				if mostSignificantBit > col.Type.Width {

@@ -195,11 +195,11 @@ func (s *adminServer) Databases(
 	var resp serverpb.DatabasesResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		dbDatum, ok := row[0].(*parser.DString)
+		dbDatum, ok := parser.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
-		dbName := string(*dbDatum)
+		dbName := string(dbDatum)
 		if !s.server.sqlExecutor.IsVirtualDatabase(dbName) {
 			resp.Databases = append(resp.Databases, dbName)
 		}
@@ -670,7 +670,7 @@ func (s *adminServer) Users(
 	var resp serverpb.UsersResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(*row[0].(*parser.DString))})
+		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(parser.MustBeDString(row[0]))})
 	}
 	return &resp, nil
 }
@@ -773,7 +773,7 @@ func (s *adminServer) getUIData(
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		dKey, ok := row[0].(*parser.DString)
+		dKey, ok := parser.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
 		}
@@ -786,7 +786,7 @@ func (s *adminServer) getUIData(
 			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row[2])
 		}
 
-		resp.KeyValues[string(*dKey)] = serverpb.GetUIDataResponse_Value{
+		resp.KeyValues[string(dKey)] = serverpb.GetUIDataResponse_Value{
 			Value:       []byte(*dValue),
 			LastUpdated: serverpb.GetUIDataResponse_Timestamp{Sec: dLastUpdated.Unix(), Nsec: uint32(dLastUpdated.Nanosecond())},
 		}
@@ -1249,11 +1249,11 @@ func (rs resultScanner) ScanIndex(row parser.DTuple, index int, dst interface{})
 		if dst == nil {
 			return errors.Errorf("nil destination pointer passed in")
 		}
-		s, ok := src.(*parser.DString)
+		s, ok := parser.AsDString(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = string(*s)
+		*d = string(s)
 
 	case *bool:
 		if dst == nil {
@@ -1269,11 +1269,11 @@ func (rs resultScanner) ScanIndex(row parser.DTuple, index int, dst interface{})
 		if dst == nil {
 			return errors.Errorf("nil destination pointer passed in")
 		}
-		s, ok := src.(*parser.DInt)
+		s, ok := parser.AsDInt(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = int64(*s)
+		*d = int64(s)
 
 	case *time.Time:
 		if dst == nil {

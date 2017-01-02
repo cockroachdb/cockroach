@@ -248,7 +248,7 @@ func TestClusterFlow(t *testing.T) {
 	var results []string
 	for sum := 1; sum <= 50; sum++ {
 		for i := 1; i <= numRows; i++ {
-			if int(*sumDigitsFn(i).(*parser.DInt)) == sum {
+			if int(parser.MustBeDInt(sumDigitsFn(i))) == sum {
 				results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
 			}
 		}

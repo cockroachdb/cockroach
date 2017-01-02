@@ -140,11 +140,11 @@ type seriesValueGenerator struct {
 var errStepCannotBeZero = errors.New("step cannot be 0")
 
 func makeSeriesGenerator(_ *EvalContext, args DTuple) (ValueGenerator, error) {
-	start := int64(*args[0].(*DInt))
-	stop := int64(*args[1].(*DInt))
+	start := int64(MustBeDInt(args[0]))
+	stop := int64(MustBeDInt(args[1]))
 	step := int64(1)
 	if len(args) > 2 {
-		step = int64(*args[2].(*DInt))
+		step = int64(MustBeDInt(args[2]))
 	}
 	if step == 0 {
 		return nil, errStepCannotBeZero

@@ -1659,6 +1659,8 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.Kind = ColumnType_TIMESTAMPTZ
 	case parser.TypeInterval:
 		ctyp.Kind = ColumnType_INTERVAL
+	case parser.TypeIntArray:
+		ctyp.Kind = ColumnType_INT_ARRAY
 	default:
 		if t, ok := ptyp.(parser.TCollatedString); ok {
 			ctyp.Kind = ColumnType_COLLATEDSTRING
