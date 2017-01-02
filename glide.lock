@@ -56,7 +56,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: d62ce55584a064968c11b309f1d57a9c1872bc40
+  version: 24601ca24b46f5d700746c5902ee62aca6b1b805
   subpackages:
   - raft
   - raft/raftpb
