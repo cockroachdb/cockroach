@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 	"unsafe"
+
+	"github.com/lib/pq/oid"
 )
 
 // Type represents a SQL type.
@@ -33,6 +35,8 @@ type Type interface {
 	// constructor.
 	FamilyEqual(other Type) bool
 
+	// Oid returns the type's Postgres object ID.
+	Oid() oid.Oid
 	// Size returns a lower bound on the total size of a Datum whose type is the
 	// receiver in bytes, including memory that is pointed at (even if shared
 	// between Datum instances) but excluding allocation overhead.
@@ -104,6 +108,29 @@ var (
 	TypeAny Type = tAny{}
 )
 
+// OidToType maps Postgres object IDs to CockroachDB types.
+var OidToType = map[oid.Oid]Type{
+	oid.T_anyelement:  TypeAny,
+	oid.T_bool:        TypeBool,
+	oid.T_bytea:       TypeBytes,
+	oid.T_date:        TypeDate,
+	oid.T_float4:      TypeFloat,
+	oid.T_float8:      TypeFloat,
+	oid.T_int2:        TypeInt,
+	oid.T_int4:        TypeInt,
+	oid.T_int8:        TypeInt,
+	oid.T_interval:    TypeInterval,
+	oid.T_numeric:     TypeDecimal,
+	oid.T_text:        TypeString,
+	oid.T__text:       TypeStringArray,
+	oid.T__int2:       TypeIntArray,
+	oid.T__int4:       TypeIntArray,
+	oid.T__int8:       TypeIntArray,
+	oid.T_timestamp:   TypeTimestamp,
+	oid.T_timestamptz: TypeTimestampTZ,
+	oid.T_varchar:     TypeString,
+}
+
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
 // to be singletons.
 type tNull struct{}
@@ -112,6 +139,7 @@ func (tNull) String() string              { return "NULL" }
 func (tNull) Equal(other Type) bool       { return other == TypeNull || other == TypeAny }
 func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
 func (tNull) Size() (uintptr, bool)       { return unsafe.Sizeof(dNull{}), fixedSize }
+func (tNull) Oid() oid.Oid                { return oid.T_unknown }
 func (tNull) IsAmbiguous() bool           { return true }
 
 type tBool struct{}
@@ -120,6 +148,7 @@ func (tBool) String() string              { return "bool" }
 func (tBool) Equal(other Type) bool       { return other == TypeBool || other == TypeAny }
 func (tBool) FamilyEqual(other Type) bool { return other == TypeBool }
 func (tBool) Size() (uintptr, bool)       { return unsafe.Sizeof(DBool(false)), fixedSize }
+func (tBool) Oid() oid.Oid                { return oid.T_bool }
 func (tBool) IsAmbiguous() bool           { return false }
 
 type tInt struct{}
@@ -128,6 +157,7 @@ func (tInt) String() string              { return "int" }
 func (tInt) Equal(other Type) bool       { return other == TypeInt || other == TypeAny }
 func (tInt) FamilyEqual(other Type) bool { return other == TypeInt }
 func (tInt) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
+func (tInt) Oid() oid.Oid                { return oid.T_int8 }
 func (tInt) IsAmbiguous() bool           { return false }
 
 type tFloat struct{}
@@ -136,6 +166,7 @@ func (tFloat) String() string              { return "float" }
 func (tFloat) Equal(other Type) bool       { return other == TypeFloat || other == TypeAny }
 func (tFloat) FamilyEqual(other Type) bool { return other == TypeFloat }
 func (tFloat) Size() (uintptr, bool)       { return unsafe.Sizeof(DFloat(0.0)), fixedSize }
+func (tFloat) Oid() oid.Oid                { return oid.T_float8 }
 func (tFloat) IsAmbiguous() bool           { return false }
 
 type tDecimal struct{}
@@ -144,6 +175,7 @@ func (tDecimal) String() string              { return "decimal" }
 func (tDecimal) Equal(other Type) bool       { return other == TypeDecimal || other == TypeAny }
 func (tDecimal) FamilyEqual(other Type) bool { return other == TypeDecimal }
 func (tDecimal) Size() (uintptr, bool)       { return unsafe.Sizeof(DDecimal{}), variableSize }
+func (tDecimal) Oid() oid.Oid                { return oid.T_numeric }
 func (tDecimal) IsAmbiguous() bool           { return false }
 
 type tString struct{}
@@ -152,6 +184,7 @@ func (tString) String() string              { return "string" }
 func (tString) Equal(other Type) bool       { return other == TypeString || other == TypeAny }
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+func (tString) Oid() oid.Oid                { return oid.T_text }
 func (tString) IsAmbiguous() bool           { return false }
 
 // TCollatedString is the type of strings with a locale.
@@ -187,6 +220,9 @@ func (TCollatedString) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize
 }
 
+// Oid implements the Type interface.
+func (TCollatedString) Oid() oid.Oid { return oid.T_unknown }
+
 // IsAmbiguous implements the Type interface.
 func (t TCollatedString) IsAmbiguous() bool {
 	return t.Locale == ""
@@ -198,6 +234,7 @@ func (tBytes) String() string              { return "bytes" }
 func (tBytes) Equal(other Type) bool       { return other == TypeBytes || other == TypeAny }
 func (tBytes) FamilyEqual(other Type) bool { return other == TypeBytes }
 func (tBytes) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }
+func (tBytes) Oid() oid.Oid                { return oid.T_bytea }
 func (tBytes) IsAmbiguous() bool           { return false }
 
 type tDate struct{}
@@ -206,6 +243,7 @@ func (tDate) String() string              { return "date" }
 func (tDate) Equal(other Type) bool       { return other == TypeDate || other == TypeAny }
 func (tDate) FamilyEqual(other Type) bool { return other == TypeDate }
 func (tDate) Size() (uintptr, bool)       { return unsafe.Sizeof(DDate(0)), fixedSize }
+func (tDate) Oid() oid.Oid                { return oid.T_date }
 func (tDate) IsAmbiguous() bool           { return false }
 
 type tTimestamp struct{}
@@ -214,6 +252,7 @@ func (tTimestamp) String() string              { return "timestamp" }
 func (tTimestamp) Equal(other Type) bool       { return other == TypeTimestamp || other == TypeAny }
 func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
 func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
+func (tTimestamp) Oid() oid.Oid                { return oid.T_timestamp }
 func (tTimestamp) IsAmbiguous() bool           { return false }
 
 type tTimestampTZ struct{}
@@ -222,6 +261,7 @@ func (tTimestampTZ) String() string              { return "timestamptz" }
 func (tTimestampTZ) Equal(other Type) bool       { return other == TypeTimestampTZ || other == TypeAny }
 func (tTimestampTZ) FamilyEqual(other Type) bool { return other == TypeTimestampTZ }
 func (tTimestampTZ) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampTZ{}), fixedSize }
+func (tTimestampTZ) Oid() oid.Oid                { return oid.T_timestamptz }
 func (tTimestampTZ) IsAmbiguous() bool           { return false }
 
 type tInterval struct{}
@@ -230,6 +270,7 @@ func (tInterval) String() string              { return "interval" }
 func (tInterval) Equal(other Type) bool       { return other == TypeInterval || other == TypeAny }
 func (tInterval) FamilyEqual(other Type) bool { return other == TypeInterval }
 func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}), fixedSize }
+func (tInterval) Oid() oid.Oid                { return oid.T_interval }
 func (tInterval) IsAmbiguous() bool           { return false }
 
 // TTuple is the type of a DTuple.
@@ -287,6 +328,9 @@ func (t TTuple) Size() (uintptr, bool) {
 	return sz, variable
 }
 
+// Oid implements the Type interface.
+func (TTuple) Oid() oid.Oid { return oid.T_record }
+
 // IsAmbiguous implements the Type interface.
 func (t TTuple) IsAmbiguous() bool {
 	for _, typ := range t {
@@ -323,6 +367,9 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 // Size implements the Type interface.
 func (TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
 
+// Oid implements the Type interface.
+func (TPlaceholder) Oid() oid.Oid { panic("TPlaceholder.Oid() is undefined") }
+
 // IsAmbiguous implements the Type interface.
 func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
 
@@ -351,6 +398,19 @@ func (tArray) FamilyEqual(other Type) bool {
 // Size implements the Type interface.
 func (tArray) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DString("")), variableSize
+}
+
+// Oid implements the Type interface.
+func (a tArray) Oid() oid.Oid {
+	switch a.Typ {
+	case TypeInt:
+		return oid.T__int8
+	case TypeString:
+		return oid.T__text
+	case TypeAny:
+		return oid.T_anyarray
+	}
+	panic("unknown tArray Oid")
 }
 
 // IsAmbiguous implements the Type interface.
@@ -384,6 +444,11 @@ func (a TTable) Size() (uintptr, bool) {
 	return sz, variableSize
 }
 
+// Oid implements the Type interface.
+func (TTable) Oid() oid.Oid {
+	panic("TODO(knz) unknown Oid for TTable")
+}
+
 // IsAmbiguous implements the Type interface.
 func (a TTable) IsAmbiguous() bool {
 	return a.Cols == nil || a.Cols.IsAmbiguous()
@@ -395,4 +460,5 @@ func (tAny) String() string              { return "anyelement" }
 func (tAny) Equal(other Type) bool       { return true }
 func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
 func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
+func (tAny) Oid() oid.Oid                { return oid.T_anyelement }
 func (tAny) IsAmbiguous() bool           { return true }

@@ -899,15 +899,6 @@ var (
 	_ = proArgModeTable
 )
 
-func datumToOidOrPanic(typ parser.Type, builtin parser.Builtin) oid.Oid {
-	oid, ok := DatumToOid(typ)
-	if !ok {
-		panic(fmt.Sprintf("programmer error: could not find referenced type %v on builtin %v",
-			typ, builtin))
-	}
-	return oid
-}
-
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-proc.html
 var pgCatalogProcTable = virtualSchemaTable{
 	schema: `
@@ -981,10 +972,10 @@ CREATE TABLE pg_catalog.pg_proc (
 							// Functions returning tables with exactly one column
 							// are marked to return the type of that column
 							// (e.g. `generate_series`).
-							retOid = datumToOidOrPanic(t.Cols[0], builtin)
+							retOid = t.Cols[0].Oid()
 						}
 					} else {
-						retOid = datumToOidOrPanic(builtin.ReturnType, builtin)
+						retOid = builtin.ReturnType.Oid()
 					}
 					retType = parser.NewDInt(parser.DInt(retOid))
 				}
@@ -992,7 +983,7 @@ CREATE TABLE pg_catalog.pg_proc (
 				argTypes := builtin.Types
 				dArgTypes := make([]string, len(argTypes.Types()))
 				for i, argType := range argTypes.Types() {
-					dArgType := datumToOidOrPanic(argType, builtin)
+					dArgType := argType.Oid()
 					dArgTypes[i] = strconv.Itoa(int(dArgType))
 				}
 				dArgTypeString := strings.Join(dArgTypes, ", ")
@@ -1003,12 +994,12 @@ CREATE TABLE pg_catalog.pg_proc (
 				case parser.VariadicType:
 					argmodes = proArgModeVariadic
 					argType := argTypes.Types()[0]
-					oid := datumToOidOrPanic(argType, builtin)
+					oid := argType.Oid()
 					variadicType = parser.NewDInt(parser.DInt(oid))
 				case parser.AnyType:
 					argmodes = proArgModeVariadic
 					argType := parser.TypeAny
-					oid := datumToOidOrPanic(argType, builtin)
+					oid := argType.Oid()
 					variadicType = parser.NewDInt(parser.DInt(oid))
 
 				default:
@@ -1300,7 +1291,7 @@ CREATE TABLE pg_catalog.pg_type (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
-		for oid, typ := range oidToDatum {
+		for oid, typ := range parser.OidToType {
 			if err := addRow(
 				parser.NewDInt(parser.DInt(oid)), // oid
 				parser.NewDString(typ.String()),  // typname
@@ -1348,8 +1339,7 @@ CREATE TABLE pg_catalog.pg_type (
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
 func typOid(typ parser.Type) *parser.DInt {
-	oid, _ := DatumToOid(typ)
-	return parser.NewDInt(parser.DInt(oid))
+	return parser.NewDInt(parser.DInt(typ.Oid()))
 }
 
 func typLen(typ parser.Type) *parser.DInt {
