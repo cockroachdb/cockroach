@@ -2907,6 +2907,14 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), Ordinality: $4.bool(), As: $5.aliasClause() }
   }
+| '[' EXPLAIN  explainable_stmt ']' opt_ordinality opt_alias_clause
+  {
+    $$.val = &AliasedTableExpr{Expr: &Explain{ Statement: $3.stmt(), Enclosed: true }, Ordinality: $5.bool(), As: $6.aliasClause() }
+  }
+| '[' EXPLAIN '(' explain_option_list ')' explainable_stmt ']' opt_ordinality opt_alias_clause
+  {
+    $$.val = &AliasedTableExpr{Expr: &Explain{ Options: $4.strs(), Statement: $6.stmt(), Enclosed: true }, Ordinality: $8.bool(), As: $9.aliasClause() }
+  }
 
 opt_ordinality:
   WITH_LA ORDINALITY

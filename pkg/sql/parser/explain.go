@@ -22,10 +22,14 @@ import "bytes"
 type Explain struct {
 	Options   []string
 	Statement Statement
+	Enclosed  bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Enclosed {
+		buf.WriteByte('[')
+	}
 	buf.WriteString("EXPLAIN ")
 	if len(node.Options) > 0 {
 		buf.WriteByte('(')
@@ -38,4 +42,7 @@ func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(") ")
 	}
 	FormatNode(buf, f, node.Statement)
+	if node.Enclosed {
+		buf.WriteByte(']')
+	}
 }

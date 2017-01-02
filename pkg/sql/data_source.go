@@ -292,6 +292,8 @@ func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bo
 	return planDataSource{}, false, nil
 }
 
+var explainTableName = parser.TableName{TableName: parser.Name("explain")}
+
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
@@ -332,6 +334,16 @@ func (p *planner) getDataSource(
 			return right, err
 		}
 		return p.makeJoin(t.Join, left, right, t.Cond)
+
+	case *parser.Explain:
+		plan, err := p.Explain(t, false)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		return planDataSource{
+			info: newSourceInfoForSingleTable(explainTableName, plan.Columns()),
+			plan: plan,
+		}, nil
 
 	case *parser.ParenTableExpr:
 		return p.getDataSource(t.Expr, hints, scanVisibility)

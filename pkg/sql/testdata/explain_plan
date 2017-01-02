@@ -12,6 +12,11 @@ EXPLAIN INSERT INTO t VALUES (1, 2)
 1  values
 1          size  2 columns, 1 row
 
+query I
+SELECT MAX(LEVEL) FROM [EXPLAIN INSERT INTO t VALUES (1, 2)]
+----
+1
+
 statement ok
 INSERT INTO t VALUES (1, 2)
 
