@@ -76,7 +76,7 @@ type RowFetcher struct {
 
 	kvFetcher      kvFetcher
 	keyVals        []EncDatum  // the index key values for the current row
-	implicitVals   EncDatumRow // the implicit values for unique indexes
+	extraVals      EncDatumRow // the extra column values for unique indexes
 	indexKey       []byte      // the index key of the current row
 	row            EncDatumRow
 	decodedRow     parser.DTuple
@@ -137,10 +137,10 @@ func (rf *RowFetcher) Init(
 
 	if isSecondaryIndex && index.Unique {
 		// Unique secondary indexes have a value that is the primary index
-		// key. Prepare implicitVals for use in decoding this value.
+		// key. Prepare extraVals for use in decoding this value.
 		// Primary indexes only contain ascendingly-encoded values. If this
 		// ever changes, we'll probably have to figure out the directions here too.
-		rf.implicitVals, err = MakeEncodedKeyVals(desc, index.ImplicitColumnIDs)
+		rf.extraVals, err = MakeEncodedKeyVals(desc, index.ExtraColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -300,26 +300,26 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 	} else {
-		if rf.implicitVals != nil {
-			// This is a unique index; decode the implicit column values from
+		if rf.extraVals != nil {
+			// This is a unique index; decode the extra column values from
 			// the value.
-			_, err := DecodeKeyVals(&rf.alloc, rf.implicitVals, nil, kv.ValueBytes())
+			_, err := DecodeKeyVals(&rf.alloc, rf.extraVals, nil, kv.ValueBytes())
 			if err != nil {
 				return "", "", err
 			}
-			for i, id := range rf.index.ImplicitColumnIDs {
+			for i, id := range rf.index.ExtraColumnIDs {
 				if idx, ok := rf.colIdxMap[id]; ok && rf.valNeededForCol[idx] {
-					rf.row[idx] = rf.implicitVals[i]
+					rf.row[idx] = rf.extraVals[i]
 				}
 			}
 			if debugStrings {
-				prettyValue = prettyEncDatums(rf.implicitVals)
+				prettyValue = prettyEncDatums(rf.extraVals)
 			}
 		}
 
 		if log.V(2) {
-			if rf.implicitVals != nil {
-				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyEncDatums(rf.implicitVals))
+			if rf.extraVals != nil {
+				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyEncDatums(rf.extraVals))
 			} else {
 				log.Infof(context.TODO(), "Scan %s", kv.Key)
 			}
