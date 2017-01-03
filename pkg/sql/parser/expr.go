@@ -1007,36 +1007,6 @@ const (
 	castPrepend
 )
 
-// CastTargetType represents a type that is a valid cast target.
-type CastTargetType interface {
-	fmt.Stringer
-	NodeFormatter
-	castTargetType()
-}
-
-// PGOIDType represents a postgres oid pseudo-type.
-// See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
-type PGOIDType struct {
-	Name string
-}
-
-func (*PGOIDType) castTargetType() {}
-
-// Format implements the NodeFormatter interface.
-func (node *PGOIDType) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(node.Name)
-}
-
-func (node *PGOIDType) String() string { return AsString(node) }
-
-// Pre-allocated immutable postgres oid pseudo-types.
-var (
-	oidPseudoTypeRegProc      = &PGOIDType{Name: "REGPROC"}
-	oidPseudoTypeRegClass     = &PGOIDType{Name: "REGCLASS"}
-	oidPseudoTypeRegType      = &PGOIDType{Name: "REGTYPE"}
-	oidPseudoTypeRegNamespace = &PGOIDType{Name: "REGNAMESPACE"}
-)
-
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
@@ -1074,7 +1044,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func (node *CastExpr) castType() Type {
-	return ColumnTypeToDatumType(node.Type)
+	return CastTargetToDatumType(node.Type)
 }
 
 var (
@@ -1176,7 +1146,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 }
 
 func (node *AnnotateTypeExpr) annotationType() Type {
-	return ColumnTypeToDatumType(node.Type)
+	return CastTargetToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.

@@ -77,9 +77,8 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
-	colDatumType := parser.ColumnTypeToDatumType(d.Type)
-
 	// Set Type.Kind and Type.Locale.
+	colDatumType := parser.CastTargetToDatumType(d.Type)
 	col.Type = DatumTypeToColumnType(colDatumType)
 
 	// Set other attributes of col.Type and perform type-specific verification.

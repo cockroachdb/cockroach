@@ -23,6 +23,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CastTargetType represents a type that is a valid cast target.
+type CastTargetType interface {
+	fmt.Stringer
+	NodeFormatter
+
+	castTargetType()
+}
+
 // ColumnType represents a type in a column definition.
 type ColumnType interface {
 	CastTargetType
@@ -60,6 +68,7 @@ func (*BytesColType) castTargetType()          {}
 func (*CollatedStringColType) castTargetType() {}
 func (*ArrayColType) castTargetType()          {}
 func (*OidColType) castTargetType()            {}
+func (*OidPseudoType) castTargetType()         {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -316,7 +325,7 @@ func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	}
 }
 
-// Pre-allocated immutable oid column type.
+// Pre-allocated immutable postgres oid column type.
 var oidColTypeOid = &OidColType{}
 
 // OidColType represents an OID type
@@ -325,6 +334,30 @@ type OidColType struct{}
 // Format implements the NodeFormatter interface.
 func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("OID")
+}
+
+// Pre-allocated immutable postgres oid pseudo-types.
+var (
+	oidPseudoTypeRegProc      = &OidPseudoType{Name: "REGPROC"}
+	oidPseudoTypeRegClass     = &OidPseudoType{Name: "REGCLASS"}
+	oidPseudoTypeRegType      = &OidPseudoType{Name: "REGTYPE"}
+	oidPseudoTypeRegNamespace = &OidPseudoType{Name: "REGNAMESPACE"}
+)
+
+// OidPseudoType represents a postgres oid pseudo-type. It implements CastTargetType,
+// but NOT ColumnType. This is because a cast to one of these types is specialized to
+// accept and display symbolic names for system objects, rather than the raw numeric
+// value that type oid would use. However, they can not actually be used as column types,
+// and a cast to them will produce an OID type.
+//
+// See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
+type OidPseudoType struct {
+	Name string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *OidPseudoType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(node.Name)
 }
 
 func (node *BoolColType) String() string           { return AsString(node) }
@@ -341,6 +374,7 @@ func (node *BytesColType) String() string          { return AsString(node) }
 func (node *CollatedStringColType) String() string { return AsString(node) }
 func (node *ArrayColType) String() string          { return AsString(node) }
 func (node *OidColType) String() string            { return AsString(node) }
+func (node *OidPseudoType) String() string         { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
@@ -377,9 +411,9 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
 }
 
-// ColumnTypeToDatumType produces a Type equivalent to the given
-// SQL column type.
-func ColumnTypeToDatumType(t CastTargetType) Type {
+// CastTargetToDatumType produces a Type equivalent to the given
+// SQL cast target type.
+func CastTargetToDatumType(t CastTargetType) Type {
 	switch ct := t.(type) {
 	case *BoolColType:
 		return TypeBool
@@ -406,13 +440,12 @@ func ColumnTypeToDatumType(t CastTargetType) Type {
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
-		return tArray{ColumnTypeToDatumType(ct.ParamType)}
-	case *PGOIDType:
-		// TODO(nvanbenschoten) This needs to be fixed.
-		return TypePGOID
+		return tArray{CastTargetToDatumType(ct.ParamType)}
 	case *OidColType:
 		return TypeOid
+	case *OidPseudoType:
+		return TypeOid
 	default:
-		panic(errors.Errorf("unexpected ColumnType %T", t))
+		panic(errors.Errorf("unexpected CastTarget %T", t))
 	}
 }

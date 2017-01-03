@@ -108,12 +108,6 @@ var (
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
 
-	// TypePGOID is a pseudo-type representing a postgres-style OID type.  It's
-	// a special case cast target and can't be used as a normal type. See
-	// PGOIDType in expr.go.
-	// TODO(nvanbenschoten) TypePGOID is superseded by TypeOid and will be removed
-	// in a subsequent commit.
-	TypePGOID = wrapTypeWithOid(TypeInt, oid.T_oid)
 	// TypeOid is a type-alias for TypeInt with a different OID. Can be
 	// compared with ==.
 	TypeOid = wrapTypeWithOid(TypeInt, oid.T_oid)
