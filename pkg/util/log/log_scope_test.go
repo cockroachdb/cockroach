@@ -111,5 +111,5 @@ func isDirEmpty(dirname string) (bool, error) {
 	if errClose != nil {
 		return false, errClose
 	}
-	return len(list) > 0, nil
+	return len(list) == 0, nil
 }
