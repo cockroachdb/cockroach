@@ -113,19 +113,28 @@ func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) e
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// convertBatchError() will only work correctly if the schema elements are
-	// "live" in the tableDesc. Apply the mutations belonging to the same
-	// mutationID to make all the mutations live in tableDesc. Note: this
-	// tableDesc is not written to the k:v store.
-	mutationID := tableDesc.Mutations[0].MutationID
-	for _, mutation := range tableDesc.Mutations {
+	// "live" in the tableDesc. The tableDesc passed in is from a shared lease
+	// which is immutable. First make a copy of the table descriptor and then
+	// apply the mutations belonging to the same mutationID to make all the
+	// mutations live.
+	marshaled, err := tableDesc.Marshal()
+	if err != nil {
+		return err
+	}
+	var desc sqlbase.TableDescriptor
+	if err := desc.Unmarshal(marshaled); err != nil {
+		return err
+	}
+	mutationID := desc.Mutations[0].MutationID
+	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
 			// Mutations are applied in a FIFO order. Only apply the first set
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		tableDesc.MakeMutationComplete(mutation)
+		desc.MakeMutationComplete(mutation)
 	}
-	return convertBatchError(tableDesc, b)
+	return convertBatchError(&desc, b)
 }
 
 func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
