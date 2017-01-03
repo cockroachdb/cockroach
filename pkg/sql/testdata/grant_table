@@ -80,7 +80,7 @@ SHOW GRANTS ON t
 query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t  readwrite  CREATE  
+t  readwrite  CREATE
 t  readwrite  DROP
 t  readwrite  GRANT
 t  readwrite  SELECT
@@ -174,7 +174,7 @@ REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON v
 ----
-v  readwrite  CREATE  
+v  readwrite  CREATE
 v  readwrite  DROP
 v  readwrite  GRANT
 v  readwrite  SELECT
@@ -189,7 +189,7 @@ v  test-user  UPDATE
 query TTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-v  readwrite  CREATE  
+v  readwrite  CREATE
 v  readwrite  DROP
 v  readwrite  GRANT
 v  readwrite  SELECT

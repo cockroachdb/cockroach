@@ -141,30 +141,13 @@ func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
 //  - whether it is recommended that the query be run with DistSQL.
 func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notSuppErr error) {
 	switch n := tree.(type) {
-	case *selectTopNode:
-		if n.group != nil {
-			if _, err := dsp.CheckSupport(n.group); err != nil {
-				return false, err
-			}
-		}
-		if n.window != nil {
-			return false, errors.Errorf("windows not supported yet")
-		}
-		if n.distinct != nil {
-			return false, errors.Errorf("distinct not supported yet")
-		}
-		if n.limit != nil {
-			return false, errors.Errorf("limit not supported yet")
-		}
-		return dsp.CheckSupport(n.source)
+	case *filterNode:
+		// The Evaluator processors we use for select don't support filters yet.
+		// This is easily fixed, but it will only matter when we support joins
+		// (normally, all filters are pushed down to scanNodes).
+		return false, errors.Errorf("filter not supported as separate node")
 
 	case *selectNode:
-		if n.filter != nil {
-			// The Evaluator processors we use for select don't support filters yet.
-			// This is easily fixed, but it will only matter when we support joins
-			// (normally, all filters are pushed down to scanNodes).
-			return false, errors.Errorf("filter not supported at select level yet")
-		}
 		for i, e := range n.render {
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
@@ -175,13 +158,15 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 				return false, err
 			}
 		}
-		shouldDistribute, err := dsp.CheckSupport(n.source.plan)
+		return dsp.CheckSupport(n.source.plan)
+
+	case *sortNode:
+		shouldDistribute, err := dsp.CheckSupport(n.plan)
 		if err != nil {
 			return false, err
 		}
 		// If we have to sort, distribute the query.
-		shouldDistribute = shouldDistribute || (n.top.sort != nil && n.top.sort.needSort)
-		return shouldDistribute, nil
+		return shouldDistribute || n.needSort, nil
 
 	case *joinNode:
 		if n.joinType != joinTypeInner {
@@ -242,7 +227,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 				}
 			}
 		}
-		return false, nil
+		return dsp.CheckSupport(n.plan)
 
 	default:
 		return false, errors.Errorf("unsupported node %T", tree)
@@ -685,71 +670,34 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsqlrun.P
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the select node itself. An evaluator stage is added if the
 // select node has any expressions which are not just simple column references.
-//
-// An evaluator stage is also added in some cases where a strict 1-1 mapping is
-// required between the planNode columns and the distSQL streams.
-// Arguably simple multiplexing or column re-mapping is too lightweight to
-// warrant an entire evaluator processor, but the current implementations of
-// certain processors don't have mappings to push such multiplexing/column
-// re-mapping down to the processor. This happens for when n.top.group != nil
-// because aggregators don't have internal mappings, also for n.top.sort != nil
-// because sorters are not configured to output only specific columns.
-//
-// For e.g. for 'SELECT COUNT(k), SUM(k) GROUP BY k', if the output schema of a
-// scanNode is [k], the input schema of the groupNode (and by parity
-// aggregators as well) is [k k k]. In order to multiplex [k] to [k k k] we
-// add an evaluator stage. The specs for such processors can definitely be
-// improved upon.
-//
-// TODO(irfansharif): Add "projections" for sorters to "hide" certain columns.
-// TODO(irfansharif): Add multiplexing/column re-mapping logic to aggregators,
-// this avoids the need to add an evaluator before the aggregator.
 func (dsp *distSQLPlanner) selectRenders(
 	planCtx *planningCtx, p *physicalPlan, n *selectNode,
 ) error {
 	// First check if we need an Evaluator, or we are just returning values.
 	needEval := false
 
-	if n.top.group != nil || n.top.sort != nil {
-		// We are simply looking for a 1-1 mapping between n.Columns() and
-		// n.source.plan.Columns(). If there isn't one, in order to bridge the
-		// gap between the two we will need the evaluator.
-		if len(n.Columns()) != len(n.source.plan.Columns()) {
+	for _, e := range n.render {
+		if _, ok := e.(*parser.IndexedVar); !ok {
 			needEval = true
-		} else {
-			for i, c := range n.source.plan.Columns() {
-				if c != n.columns[i] {
-					needEval = true
-				}
+			break
+		}
+	}
+	if !needEval {
+		// We don't need an evaluator stage. However, we do need to update
+		// p.planToStreamColMap to make the plan correspond to the selectNode
+		// (rather than n.source).
+		planToStreamColMap := makePlanToStreamColMap(len(n.render))
+		for i, e := range n.render {
+			idx := e.(*parser.IndexedVar).Idx
+			streamCol := p.planToStreamColMap[idx]
+			if streamCol == -1 {
+				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
 			}
+			planToStreamColMap[i] = streamCol
 		}
-		if !needEval {
-			return nil
-		}
-	} else {
-		for _, e := range n.render {
-			if _, ok := e.(*parser.IndexedVar); !ok {
-				needEval = true
-				break
-			}
-		}
-		if !needEval {
-			// We don't need an evaluator stage. However, we do need to update
-			// p.planToStreamColMap to make the plan correspond to the selectNode
-			// (rather than n.source).
-			planToStreamColMap := makePlanToStreamColMap(len(n.render))
-			for i, e := range n.render {
-				idx := e.(*parser.IndexedVar).Idx
-				streamCol := p.planToStreamColMap[idx]
-				if streamCol == -1 {
-					panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
-				}
-				planToStreamColMap[i] = streamCol
-			}
-			p.planToStreamColMap = planToStreamColMap
-			p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-			return nil
-		}
+		p.planToStreamColMap = planToStreamColMap
+		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
+		return nil
 	}
 	// Add a stage with Evaluator processors.
 	evalSpec := distsqlrun.EvaluatorSpec{
@@ -852,6 +800,10 @@ func (dsp *distSQLPlanner) addAggregators(
 	if err != nil {
 		return err
 	}
+	for i := range aggExprs {
+		aggExprs[i].ColIdx = uint32(p.planToStreamColMap[i])
+	}
+
 	types := dsp.getTypesForPlanResult(p.planToStreamColMap, n.plan)
 	// The way our planNode construction currently orders columns between
 	// groupNode and its source is that the first len(n.funcs) columns are the
@@ -862,7 +814,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	// functions and k being the column we group by.
 	groupCols := make([]uint32, 0, len(n.plan.Columns())-len(n.funcs))
 	for i := len(n.funcs); i < len(n.plan.Columns()); i++ {
-		groupCols = append(groupCols, uint32(i))
+		groupCols = append(groupCols, uint32(p.planToStreamColMap[i]))
 	}
 
 	aggregatorSpec := distsqlrun.AggregatorSpec{
@@ -886,7 +838,7 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 
 		for i := range evalExprs {
-			postevalSpec.Exprs[i] = distSQLExpression(evalExprs[i], p.planToStreamColMap)
+			postevalSpec.Exprs[i] = distSQLExpression(evalExprs[i], nil)
 		}
 
 		dsp.addSingleGroupStage(
@@ -894,8 +846,13 @@ func (dsp *distSQLPlanner) addAggregators(
 		)
 	}
 
-	// Remove any columns that were only used for grouping.
-	p.planToStreamColMap = p.planToStreamColMap[:len(n.Columns())]
+	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
+	// planNode columns to stream columns because the aggregator (and possibly
+	// evaluator) have been programmed to produce the columns in order.
+	p.planToStreamColMap = p.planToStreamColMap[:0]
+	for i := range n.Columns() {
+		p.planToStreamColMap = append(p.planToStreamColMap, i)
+	}
 	p.ordering = dsp.convertOrdering(n.desiredOrdering, p.planToStreamColMap)
 	return nil
 }
@@ -1191,21 +1148,26 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 		return plan, nil
 
-	case *selectTopNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.source)
+	case *groupNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 
-		if n.group != nil {
-			if err := dsp.addAggregators(planCtx, &plan, n.group); err != nil {
-				return physicalPlan{}, err
-			}
+		if err := dsp.addAggregators(planCtx, &plan, n); err != nil {
+			return physicalPlan{}, err
 		}
 
-		if n.sort != nil {
-			dsp.addSorters(planCtx, &plan, n.sort)
+		return plan, nil
+
+	case *sortNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		if err != nil {
+			return physicalPlan{}, err
 		}
+
+		dsp.addSorters(planCtx, &plan, n)
+
 		return plan, nil
 
 	default:

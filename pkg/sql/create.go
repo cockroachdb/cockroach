@@ -680,7 +680,8 @@ func (n *createTableNode) Start() error {
 			return err
 		}
 		defer insertPlan.Close()
-		if err := n.p.optimizePlan(insertPlan, allColumns(insertPlan)); err != nil {
+		insertPlan, err = n.p.optimizePlan(insertPlan, allColumns(insertPlan))
+		if err != nil {
 			return err
 		}
 		if err = insertPlan.Start(); err != nil {
