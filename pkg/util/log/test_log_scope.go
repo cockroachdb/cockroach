@@ -41,14 +41,16 @@ type tShim interface {
 	Errorf(fmt string, args ...interface{})
 }
 
-// LogScope creates a TestLogScope which corresponds to the
-// lifetime of a logging directory. The logging directory is named
-// after the caller of MakeTestLogScope, up `skip` caller levels.
-func LogScope(t tShim) TestLogScope {
-	testName := "logUnknown"
-	if _, _, f := caller.Lookup(1); f != "" {
-		parts := strings.Split(f, ".")
-		testName = "log" + parts[len(parts)-1]
+// LogScope creates a TestLogScope which corresponds to the lifetime
+// of a logging directory. If testName is empty, the logging directory
+// is named after the caller of LogScope, up `skip` caller levels.
+func LogScope(t tShim, testName string) TestLogScope {
+	if testName == "" {
+		testName = "logUnknown"
+		if _, _, f := caller.Lookup(1); f != "" {
+			parts := strings.Split(f, ".")
+			testName = "log" + parts[len(parts)-1]
+		}
 	}
 	tempDir, err := ioutil.TempDir("", testName)
 	if err != nil {
