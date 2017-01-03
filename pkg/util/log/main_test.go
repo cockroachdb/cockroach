@@ -25,6 +25,13 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// We need to execute the code of runTest() via a function call, so
+	// as to ensure that its defer is guaranteed to run (os.Exit
+	// explicitly does not run defers).
+	os.Exit(runTests(m))
+}
+
+func runTests(m *testing.M) int {
 	tmpDir, err := ioutil.TempDir("", "logtest")
 	if err != nil {
 		Fatalf(context.Background(), "could not create temporary directory: %s", err)
@@ -37,5 +44,5 @@ func TestMain(m *testing.M) {
 	if err := logDir.Set(tmpDir); err != nil {
 		Fatal(context.Background(), err)
 	}
-	os.Exit(m.Run())
+	return m.Run()
 }
