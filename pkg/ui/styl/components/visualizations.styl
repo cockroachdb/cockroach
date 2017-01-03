@@ -76,3 +76,19 @@ $viz-sides = 62px
   .nv-group
   .nv-areaWrap
     opacity .2
+
+.graph-line
+  width 1px
+  background-color $glow-blue
+  border 0
+  padding 0
+  margin 0
+  height 50%
+  position absolute
+  top 83px
+  visibility hidden
+
+.graph-line__show .graph-line
+  visibility visible
+  &.graph-line__hidden
+    visibility hidden
