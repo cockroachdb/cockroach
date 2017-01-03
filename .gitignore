@@ -11,6 +11,7 @@
 #   git ls-files '*.gitignore' | xargs cat >> ~/.gitignore_global &&
 #   git config --global core.excludesfile ~/.gitignore_global)
 
+artifacts
 .bootstrap
 /cockroach
 /cockroach-data

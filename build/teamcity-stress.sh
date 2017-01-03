@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-mkdir artifacts
+mkdir -p artifacts
 
 exit_status=0
 build/builder.sh make stress COCKROACH_NIGHTLY_STRESS="${COCKROACH_NIGHTLY_STRESS-}" COCKROACH_PROPOSER_EVALUATED_KV="${COCKROACH_PROPOSER_EVALUATED_KV-}" PKG="$PKG" GOFLAGS="${GOFLAGS-}" TAGS="${TAGS-}" TESTTIMEOUT=30m TESTFLAGS='-test.v' STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' 2>&1 | tee artifacts/stress.log || exit_status=$?
