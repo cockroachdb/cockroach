@@ -38,6 +38,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -363,9 +365,14 @@ type logicTest struct {
 	// been marked using a result label in the input. See the
 	// explanation for labels in processInputFiles().
 	labelMap map[string]string
+
+	// logScope binds the lifetime of the log files to this test.
+	logScope log.TestLogScope
 }
 
 func (t *logicTest) close() {
+	defer t.logScope.Close(t.t)
+
 	t.traceStop()
 
 	if t.cleanupRootUser != nil {
@@ -383,6 +390,16 @@ func (t *logicTest) close() {
 		t.clients = nil
 	}
 	t.db = nil
+}
+
+// out emits a message both on stdout and the log files if
+// verbose is set.
+func (t *logicTest) outf(format string, args ...interface{}) {
+	if t.verbose {
+		fmt.Printf(format, args...)
+		fmt.Println()
+		log.Infof(context.Background(), format, args...)
+	}
 }
 
 // setUser sets the DB client to the specified user.
@@ -432,14 +449,14 @@ func (t *logicTest) setUser(user string) func() {
 	t.db = db
 	t.user = user
 
-	if t.verbose {
-		fmt.Printf("--- new user: %s\n", user)
-	}
+	t.outf("--- new user: %s", user)
 
 	return cleanupFunc
 }
 
 func (t *logicTest) setup() {
+	t.logScope = log.Scope(t.t, "TestLogic")
+
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -490,7 +507,7 @@ func (t *logicTest) processTestFile(path string) error {
 	defer t.traceStop()
 
 	if t.verbose {
-		fmt.Println("--- queries start here")
+		t.outf("--- queries start here")
 		defer t.printCompletion(path)
 	}
 
@@ -771,7 +788,7 @@ func (t *logicTest) processTestFile(path string) error {
 			if len(fields) != 1 {
 				return fmt.Errorf("fix-txn-priority takes no arguments, found: %v", fields[1:])
 			}
-			fmt.Println("Setting deterministic priorities.")
+			t.outf("Setting deterministic priorities.")
 
 			execKnobs.FixTxnPriority = true
 			defer func() { execKnobs.FixTxnPriority = false }()
@@ -786,7 +803,7 @@ func (t *logicTest) processTestFile(path string) error {
 			if err != nil {
 				return fmt.Errorf("kv-batch-size needs an integer argument; %s", err)
 			}
-			fmt.Printf("Setting kv batch size %d\n", batchSize)
+			t.outf("Setting kv batch size %d", batchSize)
 			defer sqlbase.SetKVBatchSize(int64(batchSize))()
 
 		default:
@@ -843,7 +860,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 		stmt, err := t.db.Prepare(sql)
 		if err != nil {
 			if *showSQL {
-				fmt.Printf("\t-- fails prepare: %s\n", err)
+				t.outf("\t-- fails prepare: %s", err)
 			}
 			t.signalIgnoredError(err, pos, sql)
 			return true
@@ -858,7 +875,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 
 func (t *logicTest) execStatement(stmt logicStatement) bool {
 	if *showSQL {
-		fmt.Printf("%s;\n", stmt.sql)
+		t.outf("%s;", stmt.sql)
 	}
 	_, err := t.db.Exec(stmt.sql)
 
@@ -890,7 +907,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 
 func (t *logicTest) execQuery(query logicQuery) error {
 	if *showSQL {
-		fmt.Printf("%s;\n", query.sql)
+		t.outf("%s;", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
 	if ok := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); !ok {
@@ -1047,7 +1064,7 @@ func (t *logicTest) success(file string) {
 	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
 		t.lastProgress = now
-		fmt.Printf("--- progress: %s: %d statements/queries\n", file, t.progress)
+		t.outf("--- progress: %s: %d statements/queries", file, t.progress)
 	}
 }
 
@@ -1142,7 +1159,7 @@ func TestLogic(t *testing.T) {
 		now := timeutil.Now()
 		if now.Sub(lastProgress) >= 2*time.Second {
 			lastProgress = now
-			fmt.Printf("--- total progress: %d statements/queries\n", total)
+			l.outf("--- total progress: %d statements/queries", total)
 		}
 	}
 
@@ -1151,7 +1168,7 @@ func TestLogic(t *testing.T) {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", totalUnsupported)
 	}
 
-	fmt.Printf("--- total: %d tests, %d failures%s\n", total, totalFail, unsupportedMsg)
+	l.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
 }
 
 type errorSummaryEntry struct {
@@ -1180,19 +1197,21 @@ func (t *logicTest) printErrorSummary() {
 		return
 	}
 
-	fmt.Println("--- summary of ignored errors:")
+	t.outf("--- summary of ignored errors:")
 	summary := make(errorSummary, len(t.perErrorSummary))
 	i := 0
 	for errmsg, sql := range t.perErrorSummary {
 		summary[i] = errorSummaryEntry{errmsg: errmsg, sql: sql}
 	}
 	sort.Sort(summary)
-	for _, t := range summary {
-		fmt.Printf("%s (%d entries)\n", t.errmsg, len(t.sql))
-		for _, q := range t.sql {
-			fmt.Println("\t", strings.Replace(q, "\n", "\n\t", -1))
+	for _, s := range summary {
+		t.outf("%s (%d entries)", s.errmsg, len(s.sql))
+		var buf bytes.Buffer
+		for _, q := range s.sql {
+			buf.WriteByte('\t')
+			buf.WriteString(strings.Replace(q, "\n", "\n\t", -1))
 		}
-		fmt.Println()
+		t.outf("%s", buf.String())
 	}
 }
 
@@ -1271,7 +1290,7 @@ func (t *logicTest) signalIgnoredError(err error, pos string, sql string) {
 // failure counter.
 func (t *logicTest) Error(args ...interface{}) {
 	if *showSQL {
-		fmt.Println("\t-- FAIL")
+		t.outf("\t-- FAIL")
 	}
 	t.t.Error(args...)
 	t.failures++
@@ -1282,7 +1301,7 @@ func (t *logicTest) Error(args ...interface{}) {
 // the failure counter.
 func (t *logicTest) Errorf(format string, args ...interface{}) {
 	if *showSQL {
-		fmt.Println("\t-- FAIL")
+		t.outf("\t-- FAIL")
 	}
 	t.t.Errorf(format, args...)
 	t.failures++
@@ -1310,7 +1329,7 @@ func (t *logicTest) Fatalf(format string, args ...interface{}) {
 // printing the success marker then -show-sql is set.
 func (t *logicTest) finishOne(msg string) {
 	if *showSQL {
-		fmt.Printf("\t-- %s;\n", msg)
+		t.outf("\t-- %s;", msg)
 	}
 }
 
@@ -1321,6 +1340,6 @@ func (t *logicTest) printCompletion(path string) {
 	if t.unsupported > 0 {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", t.unsupported)
 	}
-	fmt.Printf("--- done: %s: %d tests, %d failures%s\n", path, t.progress, t.failures,
+	t.outf("--- done: %s: %d tests, %d failures%s", path, t.progress, t.failures,
 		unsupportedMsg)
 }
