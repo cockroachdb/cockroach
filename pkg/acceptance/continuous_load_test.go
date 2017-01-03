@@ -38,7 +38,7 @@ import (
 //   PKG=./pkg/acceptance \
 //   TESTTIMEOUT=6h \
 //   TESTS=ContinuousLoad_BlockWriter \
-//   TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -nodes 4 -tf.keep-cluster=failed'
+//   TESTFLAGS='-v -remote -key-name azure -cwd terraform/azure -nodes 4 -tf.keep-cluster=failed'
 //
 // Load is generated for the duration specified by TESTTIMEOUT, minus some time
 // required for the orderly teardown of resources created by the test.  Because
