@@ -5,6 +5,7 @@ import { createSelector } from "reselect";
 import { findChildrenOfType } from "../util/find";
 import {
   MetricsDataComponentProps, Axis, AxisProps, ConfigureLineChart, InitLineChart,
+  GraphLineState, mouseEnter, mouseMove, mouseLeave,
 } from "./graphs";
 import { Metric, MetricProps } from "./metric";
 import Visualization from "./visualization";
@@ -22,9 +23,11 @@ interface LineGraphProps extends MetricsDataComponentProps {
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+export class LineGraph extends React.Component<LineGraphProps, GraphLineState> {
   // The SVG Element in the DOM used to render the graph.
   svgEl: SVGElement;
+
+  state = new GraphLineState();
 
   // A configured NVD3 chart used to render the chart.
   chart: nvd3.LineChart;
@@ -104,9 +107,18 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
   render() {
     let { title, subtitle, tooltip, data } = this.props;
+    let graphLineClass = "graph-lines__line";
+    if (this.state.mouseIn) {
+      graphLineClass += " graph-lines__line--hidden";
+    }
+
+    let mouseEnterBound = () => mouseEnter(this);
+    let mouseLeaveBound = () => mouseLeave(this);
+
     return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">
-        <svg className="graph" ref={(svg) => this.svgEl = svg}/>
+        <div className={graphLineClass}></div>
+        <svg className="graph" ref={(svg) => this.svgEl = svg} onMouseMove={mouseMove} onMouseEnter={mouseEnterBound} onMouseLeave={mouseLeaveBound} />
       </div>
     </Visualization>;
   }
