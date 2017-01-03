@@ -399,7 +399,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 func (c *cliState) refreshDatabaseName() string {
 	var retVal string
-	var dbVals []driver.Value
+	var dbVals [1]driver.Value
 
 	query := makeQuery(`SHOW DATABASE`)
 	rows, err := query(c.conn)
@@ -410,8 +410,7 @@ func (c *cliState) refreshDatabaseName() string {
 		if len(rows.Columns()) == 0 {
 			retVal = ""
 		} else {
-			dbVals = make([]driver.Value, len(rows.Columns()))
-			err = rows.Next(dbVals)
+			err = rows.Next(dbVals[:])
 			if err != nil {
 				retVal = ""
 			} else {
