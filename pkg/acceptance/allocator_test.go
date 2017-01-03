@@ -18,41 +18,30 @@ package acceptance
 // and run tests against dedicated test clusters.
 //
 // Required setup:
-// 1. Have a GCE account.
-// 2. Have someone grant permissions (for new *and* existing objects) for the
-//    GCS bucket referenced in `archivedStoreURL`. You'll want permissions
-//    granted to the following email addresses:
-//      a. The email address you use to log into Google Cloud Console.
-//      b. Your default Google Compute Engine service account (it'll look like
-//         111111111111-compute@developer.gserviceaccount.com)
-// 3. Set the environment variable GOOGLE_PROJECT to the name of the Google
-//    Project you want Terraform to use.
+// 1. Have an Azure account.
+// 2. Passphrase-less SSH key in ~/.ssh/{azure,azure.pub}.
+// 3. Set the ARM_SUBSCRIPTION_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET, and
+//    ARM_TENANT_ID variables as documented here:
+//    https://www.terraform.io/docs/providers/azurerm/#argument-reference
 //
 // Example use:
 //
-// build/builder.sh make build && make test \
+// make test \
 //	 TESTTIMEOUT=48h \
 //	 PKG=./pkg/acceptance \
 //	 TESTS=Rebalance_3To5Small \
-//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -tf.keep-cluster=failed -tf.cockroach-binary=../../cockroach'
+//	 TESTFLAGS='-v -remote -key-name azure -cwd terraform/azure -tf.keep-cluster=failed'
 //
 // Things to note:
-// - You must use an SSH key without a passphrase. It is recommended that you
-//   create a new key for this purpose named google_compute_engine so that
-//   gcloud and related tools can use it too. Create the key with:
-//     ssh-keygen -f ~/.ssh/google_compute_engine
-// - Your SSH key (-key-name) for Google Cloud Platform must be in
-//   ~/.ssh/google_compute_engine
+// - You must use an SSH key without a passphrase. This is a Terraform
+//   requirement.
 // - If you want to manually fiddle with a test cluster, start the test with
 //   `-tf.keep-cluster=failed". After the cluster has been created, press
 //   Control-C and the cluster will remain up.
 // - These tests rely on a specific Terraform config that's specified using the
 //   -cwd test flag.
 // - You *must* set the TESTTIMEOUT high enough for any of these tests to
-//   finish. To be safe, specify a timeout of at least 24 hours.
-// - Your Google Cloud credentials must be accessible by Terraform, as described
-//   here:
-//   https://www.terraform.io/docs/providers/google/
+//   finish. To be really safe, specify a timeout of at least 24 hours.
 // - There are various flags that start with `tf.` that control the
 //   of Terrafarm and allocator tests, respectively. For example, you can add
 //   "-tf.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
@@ -64,7 +53,8 @@ package acceptance
 //
 // Troubleshooting:
 // - The minimum recommended version of Terraform is 0.7.2. If you see strange
-//   Terraform errors, upgrade your install of Terraform.
+//   Terraform errors, upgrade your install of Terraform. Terraform 0.8.x or
+//   later might not work because of breaking changes to Terraform.
 // - Adding `-tf.keep-cluster=always` to your TESTFLAGS allows the cluster to
 //   stay around after the test completes.
 
