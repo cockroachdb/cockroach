@@ -225,7 +225,7 @@ func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
 //
 // Returns the key and whether any of the encoded values were NULLs.
 //
-// Note that ImplicitColumnIDs are not encoded, so the result isn't always a
+// Note that ExtraColumnIDs are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
 	tableDesc *TableDescriptor,
@@ -344,7 +344,7 @@ func appendEncDatumsToKey(
 // An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 //
-// Note that ImplicitColumnIDs are not encoded, so the result isn't always a
+// Note that ExtraColumnIDs are not encoded, so the result isn't always a
 // full index key.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
@@ -779,35 +779,35 @@ func ExtractIndexKey(
 		}
 	}
 
-	// Extract the values for index.ImplicitColumnIDs
-	implicitValues, err := MakeEncodedKeyVals(tableDesc, index.ImplicitColumnIDs)
+	// Extract the values for index.ExtraColumnIDs
+	extraValues, err := MakeEncodedKeyVals(tableDesc, index.ExtraColumnIDs)
 	if err != nil {
 		return nil, err
 	}
-	dirs = make([]encoding.Direction, len(index.ImplicitColumnIDs))
-	for i := range index.ImplicitColumnIDs {
+	dirs = make([]encoding.Direction, len(index.ExtraColumnIDs))
+	for i := range index.ExtraColumnIDs {
 		// Implicit columns are always encoded Ascending.
 		dirs[i] = encoding.Ascending
 	}
-	implicitKey := key
+	extraKey := key
 	if index.Unique {
-		implicitKey, err = entry.Value.GetBytes()
+		extraKey, err = entry.Value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 	}
-	_, err = DecodeKeyVals(a, implicitValues, dirs, implicitKey)
+	_, err = DecodeKeyVals(a, extraValues, dirs, extraKey)
 	if err != nil {
 		return nil, err
 	}
 
 	// Encode the index key from its components.
-	values = append(values, implicitValues...)
+	values = append(values, extraValues...)
 	colMap := make(map[ColumnID]int)
 	for i, columnID := range index.ColumnIDs {
 		colMap[columnID] = i
 	}
-	for i, columnID := range index.ImplicitColumnIDs {
+	for i, columnID := range index.ExtraColumnIDs {
 		colMap[columnID] = i + len(index.ColumnIDs)
 	}
 	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
@@ -1153,9 +1153,9 @@ func EncodeSecondaryIndex(
 		return IndexEntry{}, err
 	}
 
-	// Add the implicit columns - they are encoded ascendingly which is done by
+	// Add the extra columns - they are encoded ascendingly which is done by
 	// passing nil for the encoding directions.
-	extraKey, _, err := EncodeColumns(secondaryIndex.ImplicitColumnIDs, nil,
+	extraKey, _, err := EncodeColumns(secondaryIndex.ExtraColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
 		return IndexEntry{}, err

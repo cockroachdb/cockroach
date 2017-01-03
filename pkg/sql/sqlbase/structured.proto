@@ -165,22 +165,22 @@ message InterleaveDescriptor {
 //   )
 //
 // Primary index:
-//   name:                 primary
-//   id:                   1
-//   unique:               true
-//   column_names:         k1, k2
-//   column_directions:    ASC, ASC
-//   column_ids:           1, 2   // k1, k2
+//   name:                primary
+//   id:                  1
+//   unique:              true
+//   column_names:        k1, k2
+//   column_directions:   ASC, ASC
+//   column_ids:          1, 2   // k1, k2
 //
 // Index k1v (k1, v) STORING (w):
-//   name:                 k1v
-//   id:                   2
-//   unique:               false
-//   column_names:         k1, v
-//   column_directions:    ASC, ASC
-//   store_column_names:   w
-//   column_ids:           1, 4   // k1, v
-//   implicit_column:ids:  2, 5   // k2, w
+//   name:                k1v
+//   id:                  2
+//   unique:              false
+//   column_names:        k1, v
+//   column_directions:   ASC, ASC
+//   store_column_names:  w
+//   column_ids:          1, 4   // k1, v
+//   extra_column_ids:    2, 5   // k2, w
 message IndexDescriptor {
   // The direction of a column in the index.
   enum Direction {
@@ -230,7 +230,7 @@ message IndexDescriptor {
   //
   // Note: for non-unique indexes, the stored columns could be part of the
   // value rather than the key, but we don't currently do this.
-  repeated uint32 implicit_column_ids = 7 [(gogoproto.customname) = "ImplicitColumnIDs",
+  repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 
   optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false];
