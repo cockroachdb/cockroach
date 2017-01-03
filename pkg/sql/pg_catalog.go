@@ -1005,12 +1005,11 @@ CREATE TABLE pg_catalog.pg_proc (
 					argType := argTypes.Types()[0]
 					oid := datumToOidOrPanic(argType, builtin)
 					variadicType = parser.NewDInt(parser.DInt(oid))
-				case parser.AnyType:
+				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
 					argType := parser.TypeAny
 					oid := datumToOidOrPanic(argType, builtin)
 					variadicType = parser.NewDInt(parser.DInt(oid))
-
 				default:
 					argmodes = parser.DNull
 					variadicType = oidZero

@@ -13,8 +13,8 @@ SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
 1736923753  1736923753
 
-query error more than one function named 'max'
-SELECT 'max'::REGPROC
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
 
 query I
 SELECT 'public'::REGNAMESPACE

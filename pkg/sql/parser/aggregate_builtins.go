@@ -80,10 +80,7 @@ type AggregateFunc interface {
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
-		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate,
-			"Aggregates the selected values into an array."),
-		makeAggBuiltin(
-			TypeString, TypeStringArray, newStringArrayAggregate,
+		makeIdentityArrayAggBuiltin(newArrayAggregate,
 			"Aggregates the selected values into an array."),
 	},
 
@@ -116,14 +113,19 @@ var Aggregates = map[string][]Builtin{
 			"Concatenates all selected values."),
 	},
 
-	"count": countImpls(),
+	"count": {
+		makeAggBuiltin(TypeAny, TypeInt, newCountAggregate,
+			"Calculates the number of selected elements."),
+	},
 
-	"max": makeAggBuiltins(newMaxAggregate, "Identifies the maximum selected value.",
-		TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
-		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
-	"min": makeAggBuiltins(newMinAggregate, "Identifies the minimum selected value.",
-		TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
-		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
+	"max": {
+		makeIdentityAggBuiltin(newMaxAggregate,
+			"Identifies the maximum selected value."),
+	},
+	"min": {
+		makeIdentityAggBuiltin(newMinAggregate,
+			"Identifies the minimum selected value."),
+	},
 
 	"sum_int": {
 		makeAggBuiltin(TypeInt, TypeInt, newSmallIntSumAggregate,
@@ -174,23 +176,16 @@ func makeAggBuiltin(in, ret Type, f func() AggregateFunc, info string) Builtin {
 	}
 }
 
-func makeAggBuiltins(f func() AggregateFunc, info string, types ...Type) []Builtin {
-	ret := make([]Builtin, len(types))
-	for i := range types {
-		ret[i] = makeAggBuiltin(types[i], types[i], f, info)
-	}
-	return ret
+func makeIdentityAggBuiltin(f func() AggregateFunc, info string) Builtin {
+	b := makeAggBuiltin(TypeAny, TypeAny, f, info)
+	b.ReturnTypeStyle = identity
+	return b
 }
 
-func countImpls() []Builtin {
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
-		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
-	r := make([]Builtin, len(types))
-	for i := range types {
-		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate,
-			"Calculates the number of selected elements.")
-	}
-	return r
+func makeIdentityArrayAggBuiltin(f func() AggregateFunc, info string) Builtin {
+	b := makeAggBuiltin(TypeAny, TypeAny, f, info)
+	b.ReturnTypeStyle = identityArray
+	return b
 }
 
 var _ AggregateFunc = &arrayAggregate{}
@@ -236,16 +231,15 @@ type arrayAggregate struct {
 	arr *DArray
 }
 
-func newIntArrayAggregate() AggregateFunc {
-	return &arrayAggregate{arr: NewDArray(TypeInt)}
-}
-
-func newStringArrayAggregate() AggregateFunc {
-	return &arrayAggregate{arr: NewDArray(TypeString)}
+func newArrayAggregate() AggregateFunc {
+	return &arrayAggregate{}
 }
 
 // Add accumulates the passed datum into the array.
 func (a *arrayAggregate) Add(datum Datum) {
+	if a.arr == nil {
+		a.arr = NewDArray(datum.ResolvedType())
+	}
 	if err := a.arr.Append(datum); err != nil {
 		panic(fmt.Sprintf("error appending to array: %s", err))
 	}
@@ -253,10 +247,10 @@ func (a *arrayAggregate) Add(datum Datum) {
 
 // Result returns an array of all datums passed to Add.
 func (a *arrayAggregate) Result() Datum {
-	if len(a.arr.Array) > 0 {
-		return a.arr
+	if a.arr == nil {
+		return DNull
 	}
-	return DNull
+	return a.arr
 }
 
 type avgAggregate struct {

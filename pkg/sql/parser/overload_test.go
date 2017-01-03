@@ -34,6 +34,10 @@ func (to *testOverload) params() typeList {
 	return to.paramTypes
 }
 
+func (to *testOverload) returnTypeStyle() returnTypeStyle {
+	return standard
+}
+
 func (to *testOverload) returnType() Type {
 	return to.retType
 }
