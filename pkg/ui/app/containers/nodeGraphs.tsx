@@ -17,6 +17,7 @@ import { Axis, AxisUnits } from "../components/graphs";
 import { LineGraph } from "../components/linegraph";
 import { Metric } from "../components/metric";
 import { StackedAreaGraph } from "../components/stackedgraph";
+import Events from "../containers/events";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
 import { MetricConstants } from "../util/proto";
@@ -480,6 +481,10 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           <SummaryMetricStat id="p99" title="P99 latency" format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} >
             <Metric sources={sources} name="cr.node.exec.latency-p99" aggregateMax downsampleMax />
           </SummaryMetricStat>
+        </SummaryBar>
+        <SummaryBar>
+          <SummaryLabel>Events</SummaryLabel>
+          <Events />
         </SummaryBar>
       </div>
     </div>;

@@ -48,7 +48,7 @@ export function getEventInfo(e: Event) {
   }
 
   return {
-    timestamp: TimestampToMoment(e.timestamp).format("YYYY-MM-DD HH:mm:ss"),
+    timestamp: TimestampToMoment(e.timestamp).fromNow(),
     content: content,
   };
 }
@@ -58,9 +58,8 @@ export class EventRow extends React.Component<EventRowProps, {}> {
     let { event } = this.props;
     let e = getEventInfo(event);
     return <tr>
-      <td><div className="icon-info-filled"></div></td>
-      <td><div className="timestamp">{e.timestamp}</div></td>
-      <td><div className="message">{e.content}</div></td>
+      <td><div className="events__message">{e.content}</div></td>
+      <td><div className="events__timestamp">{e.timestamp}</div></td>
     </tr>;
   }
 }
@@ -70,24 +69,37 @@ export interface EventListProps {
   refreshEvents: typeof refreshEvents;
 };
 
-export class EventList extends React.Component<EventListProps, {}> {
+class EventListState {
+  numEvents = 10;
+}
+
+export class EventList extends React.Component<EventListProps, EventListState> {
+  state = new EventListState();
+
   componentWillMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
   }
 
+  moreEventsClick = () => {
+    this.setState({
+      numEvents: this.state.numEvents + 10,
+    });
+  }
+
   render() {
     let events = this.props.events;
-    return <div className="event-table-container">
-      <div className="event-table">
-        <table>
-          <tbody>
-            {_.map(events, (e: Event, i: number) => {
-              return <EventRow event={e} key={i} />;
+    return <div className="events">
+      <table>
+        <tbody>
+          {_.map(_.take(events, this.state.numEvents), (e: Event, i: number) => {
+            return <EventRow event={e} key={i} />;
           })}
-          </tbody>
-        </table>
-      </div>
+          <tr>
+            <td className="events__more-link" colSpan={2} onClick={this.moreEventsClick}>More Events</td>
+          </tr>
+        </tbody>
+      </table>
     </div>;
   }
 }
