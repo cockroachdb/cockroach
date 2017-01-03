@@ -1,5 +1,6 @@
 import * as React from "react";
 import _ from "lodash";
+import classNames from "classnames";
 
 /**
  * SortableColumn describes the contents a single column of a
@@ -91,37 +92,38 @@ export class SortableTable extends React.Component<TableProps, {}> {
   render() {
     let { sortSetting, columns } = this.props;
 
-    return <table>
+    return <table className="sort-table">
      <thead>
-        <tr className="column">
+        <tr className="sort-table__row sort-table__row--header">
           {_.map(columns, (c: SortableColumn, colIndex: number) => {
-            let className = "column";
+            let classes = ["sort-table__cell"];
             let onClick: (e: any) => void = undefined;
 
             if (!_.isUndefined(c.sortKey)) {
+              classes.push("sort-table__cell--sortable");
               onClick = () => {
                 this.clickSort(c.sortKey);
               };
               if (c.sortKey === sortSetting.sortKey) {
-                className += " sorted";
                 if (sortSetting.ascending) {
-                  className += " ascending";
+                  classes.push(" sort-table__cell--ascending");
+                } else {
+                  classes.push("sort-table__cell--descending");
                 }
               }
             }
-            return <th className={className} key={colIndex} onClick={onClick}>{c.title}</th>;
-          })}
-        </tr>
-        <tr className="rollup">
-          {_.map(columns, (c: SortableColumn, colIndex: number) => {
-            return <th className="rollup" key={colIndex}>{c.rollup}</th>;
+            return <th className={classNames(classes)} key={colIndex} onClick={onClick}>{c.title}</th>;
           })}
         </tr>
       </thead>
       <tbody>
         {_.times(this.props.count, (rowIndex) => {
-          return <tr key={rowIndex}>
-            {_.map(columns, (c: SortableColumn, colIndex: number) => <td className={c.className} key={colIndex}>{c.cell(rowIndex)}</td>)}
+          return <tr key={rowIndex} className="sort-table__row sort-table__row--body">
+            {
+              _.map(columns, (c: SortableColumn, colIndex: number) => {
+                return <td className={classNames("sort-table__cell", c.className)} key={colIndex}>{c.cell(rowIndex)}</td>;
+              })
+            }
             </tr>;
         })}
       </tbody>
