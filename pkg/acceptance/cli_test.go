@@ -37,6 +37,9 @@ var cmdBase = []string{
 }
 
 func TestDockerCLI(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	containerConfig := container.Config{
 		Image: postgresTestImage,
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
@@ -59,6 +62,7 @@ func TestDockerCLI(t *testing.T) {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)
 		t.Run(testFile, func(t *testing.T) {
+			log.Infof(ctx, "-- starting tests from: %s", testFile)
 			cmd := cmdBase
 			if verbose {
 				cmd = append(cmd, "-d")
