@@ -21,21 +21,30 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
-// testLogScope represents the lifetime of a logging output.  It
+// TestLogScope represents the lifetime of a logging output.  It
 // ensures that the log files are stored in a directory specific to a
 // test, and asserts that logging output is not written to this
 // directory beyond the lifetime of the scope.
-type testLogScope string
+type TestLogScope string
 
-// logScope creates a testLogScope which corresponds to the
+// tShim is the part of testing.T used by TestLogScope.
+// We can't use testing.T directly because we have
+// a linter which forbids its use in public interfaces.
+type tShim interface {
+	Fatal(...interface{})
+	Failed() bool
+	Error(...interface{})
+	Errorf(fmt string, args ...interface{})
+}
+
+// LogScope creates a TestLogScope which corresponds to the
 // lifetime of a logging directory. The logging directory is named
-// after the caller of MaketestLogScope, up `skip` caller levels.
-func logScope(t *testing.T) testLogScope {
+// after the caller of MakeTestLogScope, up `skip` caller levels.
+func LogScope(t tShim) TestLogScope {
 	testName := "logUnknown"
 	if _, _, f := caller.Lookup(1); f != "" {
 		parts := strings.Split(f, ".")
@@ -48,12 +57,12 @@ func logScope(t *testing.T) testLogScope {
 	if err := dirTestOverride(tempDir); err != nil {
 		t.Fatal(err)
 	}
-	return testLogScope(tempDir)
+	return TestLogScope(tempDir)
 }
 
-// close cleans up a testLogScope. The directory and its contents are
+// Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
-func (l testLogScope) close(t *testing.T) {
+func (l TestLogScope) Close(t tShim) {
 	defer func() {
 		// Check whether there is something to remove.
 		emptyDir, err := isDirEmpty(string(l))
@@ -71,7 +80,6 @@ func (l testLogScope) close(t *testing.T) {
 			}
 		}
 	}()
-
 	// Flush/Close the log files.
 	if err := dirTestOverride(""); err != nil {
 		t.Fatal(err)

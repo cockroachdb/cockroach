@@ -357,8 +357,8 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
-	s := logScope(t)
-	defer s.close(t)
+	s := LogScope(t)
+	defer s.Close(t)
 	setFlags()
 
 	methods := map[Severity]func(context.Context, ...interface{}){
@@ -401,8 +401,8 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
-	s := logScope(t)
-	defer s.close(t)
+	s := LogScope(t)
+	defer s.Close(t)
 
 	setFlags()
 	Warning(context.Background(), "x")
@@ -485,8 +485,8 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
-	s := logScope(t)
-	defer s.close(t)
+	s := LogScope(t)
+	defer s.Close(t)
 
 	setFlags()
 	var err error
@@ -528,8 +528,8 @@ func TestRollover(t *testing.T) {
 }
 
 func TestLogBacktraceAt(t *testing.T) {
-	s := logScope(t)
-	defer s.close(t)
+	s := LogScope(t)
+	defer s.Close(t)
 
 	setFlags()
 	defer logging.swap(logging.newBuffers())
@@ -573,8 +573,8 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
-	s := logScope(t)
-	defer s.close(t)
+	s := LogScope(t)
+	defer s.Close(t)
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
