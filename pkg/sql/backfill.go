@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -112,20 +113,19 @@ func (ids indexesByID) Swap(i, j int) {
 func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
-	// convertBatchError() will only work correctly if the schema elements are
-	// "live" in the tableDesc. Apply the mutations belonging to the same
-	// mutationID to make all the mutations live in tableDesc. Note: this
-	// tableDesc is not written to the k:v store.
-	mutationID := tableDesc.Mutations[0].MutationID
-	for _, mutation := range tableDesc.Mutations {
+	// convertBatchError() will only work correctly if the schema elements
+	// are "live" in the tableDesc.
+	desc := protoutil.Clone(tableDesc).(*sqlbase.TableDescriptor)
+	mutationID := desc.Mutations[0].MutationID
+	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
 			// Mutations are applied in a FIFO order. Only apply the first set
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		tableDesc.MakeMutationComplete(mutation)
+		desc.MakeMutationComplete(mutation)
 	}
-	return convertBatchError(tableDesc, b)
+	return convertBatchError(desc, b)
 }
 
 func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
