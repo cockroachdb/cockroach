@@ -1091,8 +1091,6 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 // Intersect returns the intersection of the current span and the
 // descriptor's range. Returns an error if the span and the
 // descriptor's range do not overlap.
-// TODO(nvanbenschoten) Investigate why this returns an endKey when
-// rs.EndKey is nil. This gives the method unexpected behavior.
 func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	if !rs.Key.Less(desc.EndKey) || !desc.StartKey.Less(rs.EndKey) {
 		return rs, errors.Errorf("span and descriptor's range do not overlap: %s vs %s", rs, desc)
@@ -1103,7 +1101,7 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 		key = desc.StartKey
 	}
 	endKey := rs.EndKey
-	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
+	if !desc.ContainsKeyRange(desc.StartKey, endKey) {
 		endKey = desc.EndKey
 	}
 	return RSpan{key, endKey}, nil
