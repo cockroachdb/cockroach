@@ -39,9 +39,13 @@ export default class extends React.Component<IInjectedProps, {}> {
       <Banner/>
       <NavigationBar/>
       <StickyContainer className="page">
-        <section className="header">
-          { title }
-        </section>
+        {
+          // TODO(mrtracy): The title can be moved down to individual pages,
+          // it is not always the top element on the page (for example, on
+          // pages with a back button).
+          !!title ? <section className="header">{ title }</section>
+                  : null
+        }
         { children }
       </StickyContainer>
     </div>;

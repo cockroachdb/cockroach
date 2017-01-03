@@ -6,17 +6,21 @@
   padding 24px 24px 12px
   border-radius 5px
   border 1px solid rgba(0, 0, 0, .1)
-  font-family lato-light
+  font-family lato
 
 .summary-headline
   margin-bottom 12px
 
   &__title
-    font-size 12px
     padding 6px 0
+    font-size 12px
+    font-weight 500
+    text-transform uppercase
+    letter-spacing 2px
     color $light-gray
 
   &__value
+    font-weight 200
     font-size 30px
     color $light-blue
 
@@ -34,6 +38,12 @@
   &__title
     color $light-blue
     float left
+
+    // A link is present on at least one summary stat.
+    a
+      text-decoration none
+      color $glow-blue
+      padding-left 6px
 
   &__value
     float right

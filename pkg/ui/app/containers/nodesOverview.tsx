@@ -1,18 +1,18 @@
 import * as React from "react";
-import _ from "lodash";
 import { Link } from "react-router";
 import { connect } from "react-redux";
-import * as d3 from "d3";
 import moment from "moment";
 
+import { nodeSums } from "./nodeGraphs";
+import { SummaryBar, SummaryHeadlineStat } from "../components/summaryBar";
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import { setUISetting } from "../redux/ui";
 import { SortSetting } from "../components/sortabletable";
 import { SortedTable } from "../components/sortedtable";
 import { NanoToMilli } from "../util/convert";
-import { BytesToUnitValue } from "../util/format";
-import { NodeStatus, MetricConstants, TotalCpu, BytesUsed } from  "../util/proto";
+import { Bytes } from "../util/format";
+import { NodeStatus, MetricConstants, BytesUsed } from  "../util/proto";
 
 // Constant used to store sort settings in the redux UI store.
 const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
@@ -35,6 +35,12 @@ interface NodesMainData {
   sortSetting: SortSetting;
   // A list of store statuses to display.
   statuses: NodeStatus[];
+  // Count of replicas across all nodes.
+  replicaCount: number;
+  // Total used bytes across all nodes.
+  usedBytes: number;
+  // Total used memory across all nodes.
+  usedMem: number;
   // True if current status results are still valid. Needed so that this
   // component refreshes status query when it becomes invalid.
   statusesValid: boolean;
@@ -78,101 +84,111 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
     props.refreshNodes();
   }
 
+  totalNodes() {
+    if (!this.props.statuses) {
+      return 0;
+    }
+    return this.props.statuses.length;
+  }
+
   render() {
     let { statuses, sortSetting } = this.props;
 
-    return <div className="section table node-overview">
-      { this.props.children }
-      <div className="stats-table">
-        <NodeSortedTable
-          data={statuses}
-          sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.changeSortSetting(setting) }
-          columns={[
-            // Health column - a simple red/yellow/green status indicator.
-            {
-              title: "",
-              cell: (ns) => {
-                let lastUpdate = moment(NanoToMilli(ns.updated_at.toNumber()));
-                let s = staleStatus(lastUpdate);
-                return <div className={"status icon-circle-filled " + s}/>;
+    return <div>
+      {
+        // TODO(mrtracy): This currently always links back to the main cluster
+        // page, when it should link back to the dashboard previously visible.
+      }
+      <section className="section parent-link">
+        <Link to="/cluster">&lt; Back to Cluster</Link>
+      </section>
+      <section className="header header--subsection">
+        Nodes Overview
+      </section>
+      <section className="section l-columns">
+        <div className="l-columns__left">
+          <NodeSortedTable
+            data={statuses}
+            sortSetting={sortSetting}
+            onChangeSortSetting={(setting) => this.changeSortSetting(setting) }
+            columns={[
+              // Node column - displays the node ID, links to the node-specific page for
+              // this node.
+              {
+                title: "Node",
+                cell: (ns) => {
+                  let lastUpdate = moment(NanoToMilli(ns.updated_at.toNumber()));
+                  let s = staleStatus(lastUpdate);
+                  return <div>
+                    <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
+                    <div className={"icon-circle-filled node-status-icon node-status-icon--" + s}/>
+                  </div>;
+                },
+                sort: (ns) => ns.desc.node_id,
+                // TODO(mrtracy): Consider if there is a better way to use BEM
+                // style CSS in cases like this; it is a bit awkward to write out
+                // the entire modifier class here, but it might not be better to
+                // construct the full BEM class in the table component itself.
+                className: "sort-table__cell--link",
               },
-            },
-            // Node column - displays the node ID, links to the node-specific page for
-            // this node.
-            {
-              title: "Node",
-              cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>,
-              sort: (ns) => ns.desc.node_id,
-              rollup: (rows) => {
-                interface StatusTotals {
-                  missing?: number;
-                  stale?: number;
-                  healthy?: number;
-                }
-                let healthTotals: StatusTotals = _.countBy(rows, (row) => staleStatus(moment(NanoToMilli(row.updated_at.toNumber()))));
-
-                return <div className="node-counts">
-                  <span className="healthy">{healthTotals.healthy || 0}</span>
-                  <span>/</span>
-                  <span className="stale">{healthTotals.stale || 0}</span>
-                  <span>/</span>
-                  <span className="missing">{healthTotals.missing || 0}</span>
-                </div>;
+              // Started at - displays the time that the node started.
+              {
+                title: "Uptime",
+                cell: (ns) => {
+                  let startTime = moment(NanoToMilli(ns.started_at.toNumber()));
+                  return moment.duration(startTime.diff(moment())).humanize();
+                },
+                sort: (ns) => ns.started_at,
               },
-              className: "expand-link",
-            },
-            // Started at - displays the time that the node started.
-            {
-              title: "Started",
-              cell: (ns) => {
-                return moment(NanoToMilli(ns.started_at.toNumber())).fromNow();
+              // Bytes - displays the total persisted bytes maintained by the node.
+              {
+                title: "Bytes",
+                cell: (ns) => Bytes(BytesUsed(ns)),
+                sort: (ns) => BytesUsed(ns),
               },
-              sort: (ns) => ns.started_at,
-            },
-            // Bytes - displays the total persisted bytes maintained by the node.
-            {
-              title: "Bytes",
-              cell: (ns) => formatBytes(BytesUsed(ns)),
-              sort: (ns) => BytesUsed(ns),
-              rollup: (rows) => formatBytes(_.sumBy(rows, (row) => BytesUsed(row))),
-            },
-            // Replicas - displays the total number of replicas on the node.
-            {
-              title: "Replicas",
-              cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
-              sort: (ns) => ns.metrics.get(MetricConstants.replicas),
-              rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.replicas)).toString(),
-            },
-            // Connections - the total number of open connections on the node.
-            {
-              title: "Connections",
-              cell: (ns) => ns.metrics.get(MetricConstants.sqlConns).toString(),
-              sort: (ns) => ns.metrics.get(MetricConstants.sqlConns),
-              rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.sqlConns)).toString(),
-            },
-            // CPU - total CPU being used on this node.
-            {
-              title: "CPU Usage",
-              cell: (ns) => d3.format(".2%")(TotalCpu(ns)),
-              sort: (ns) => TotalCpu(ns),
-              rollup: (rows) => d3.format(".2%")(_.sumBy(rows, (row) => TotalCpu(row))),
-            },
-            // Mem Usage - total memory being used on this node.
-            {
-              title: "Mem Usage",
-              cell: (ns) => formatBytes(ns.metrics.get(MetricConstants.rss)),
-              sort: (ns) => ns.metrics.get(MetricConstants.rss),
-              rollup: (rows) => formatBytes(_.sumBy(rows, (row) => row.metrics.get(MetricConstants.rss))),
-            },
-            // Logs - a link to the logs data for this node.
-            {
-              title: "Logs",
-              cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
-              className: "expand-link",
-            },
-          ]}/>
-      </div>
+              // Replicas - displays the total number of replicas on the node.
+              {
+                title: "Replicas",
+                cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
+                sort: (ns) => ns.metrics.get(MetricConstants.replicas),
+              },
+              // Mem Usage - total memory being used on this node.
+              {
+                title: "Mem Usage",
+                cell: (ns) => Bytes(ns.metrics.get(MetricConstants.rss)),
+                sort: (ns) => ns.metrics.get(MetricConstants.rss),
+              },
+              // Logs - a link to the logs data for this node.
+              {
+                title: "Logs",
+                cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
+                className: "expand-link",
+              },
+            ]}/>
+        </div>
+        <div className="l-columns__right">
+          <SummaryBar>
+            <SummaryHeadlineStat
+              title="Total Nodes"
+              tooltip="Total number of nodes in the cluster."
+              value={ this.totalNodes() }/>
+            <SummaryHeadlineStat
+              title={ "Total Bytes" }
+              tooltip="The total number of bytes stored across all nodes."
+              value={ this.props.usedBytes }
+              format={ Bytes } />
+            <SummaryHeadlineStat
+              title="Total Replicas"
+              tooltip="The total number of replicas stored across all nodes."
+              value={ this.props.replicaCount }/>
+            <SummaryHeadlineStat
+              title={ "Total Memory Usage" }
+              tooltip="The total amount of memory used across all nodes."
+              value={ this.props.usedMem }
+              format={ Bytes } />
+          </SummaryBar>
+        </div>
+      </section>
     </div>;
   }
 }
@@ -189,10 +205,14 @@ let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_SORT_S
 // Connect the NodesMain class with our redux store.
 let nodesMainConnected = connect(
   (state: AdminUIState) => {
+    let sums = nodeSums(state);
     return {
       statuses: nodeStatuses(state),
       sortSetting: sortSetting(state),
       statusesValid: nodeQueryValid(state),
+      replicaCount: sums.replicas,
+      usedBytes: sums.usedBytes,
+      usedMem: sums.usedMem,
     };
   },
   {
@@ -223,17 +243,4 @@ function staleStatus(lastUpdate: moment.Moment): string {
     return "stale";
   }
   return "healthy";
-}
-
-/**
- * formatBytes creates a human-readable representation of the given byte
- * count, converting to an appropriate prefix unit and appending a unit symbol
- * to the amount.
- */
-function formatBytes(bytes: number): React.ReactNode {
-  let b = BytesToUnitValue(bytes);
-  return <div>
-    {b.value.toFixed(1)}
-    <span className="units">{b.units}</span>
-  </div>;
 }
