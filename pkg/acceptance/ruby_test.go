@@ -20,10 +20,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	"golang.org/x/net/context"
 )
 
 func TestDockerRuby(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
 	testDockerFail(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})

@@ -33,6 +33,10 @@ const longWaitTime = 2 * time.Minute
 const shortWaitTime = 20 * time.Second
 
 func TestGossipPeerings(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testGossipPeeringsInner)
 }
 
@@ -75,6 +79,10 @@ func testGossipPeeringsInner(
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
 	// agents should be required.
 	runTestOnConfigs(t, testGossipRestartInner)

@@ -35,6 +35,10 @@ import (
 // up an N node cluster and running N workers that are all
 // incrementing the value associated with a single key.
 func TestSingleKey(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testSingleKeyInner)
 }
 

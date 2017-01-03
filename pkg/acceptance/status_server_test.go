@@ -105,6 +105,10 @@ func checkNode(
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testStatusServerInner)
 }
 

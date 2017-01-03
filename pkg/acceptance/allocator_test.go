@@ -203,6 +203,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 }
 
 func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
+	s := log.LogScope(t, "AllocatorTest-"+at.Prefix)
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	defer at.Cleanup(t)
 	at.Run(ctx, t)
 }

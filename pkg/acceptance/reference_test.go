@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/docker/docker/api/types/container"
 )
 
@@ -103,6 +104,10 @@ bin=/%s/cockroach
 }
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	ctx := context.Background()
 	backwardReferenceTest := `
 touch out
@@ -122,6 +127,10 @@ $bin quit && wait
 }
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	ctx := context.Background()
 	backwardReferenceTest := `
 touch out
@@ -140,6 +149,10 @@ $bin quit && wait
 }
 
 func TestDockerMigration_7429(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	ctx := context.Background()
 	script := `
 set -eux

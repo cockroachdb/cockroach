@@ -28,12 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	csql "github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestEventLog verifies that "node joined" and "node restart" events are
 // recorded whenever a node starts and contacts the cluster.
 func TestEventLog(t *testing.T) {
+	s := log.LogScope(t, "")
+	log.EnableLogFileOutput(string(s), log.Severity_ERROR)
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testEventLogInner)
 }
 
