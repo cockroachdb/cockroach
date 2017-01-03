@@ -1,5 +1,5 @@
 import * as React from "react";
-import { IInjectedProps } from "react-router";
+import { IInjectedProps, Link } from "react-router";
 import { connect } from "react-redux";
 
 import * as protos from "../../js/protos";
@@ -85,49 +85,54 @@ class TableMain extends React.Component<TableMainProps, {}> {
     let { tableInfo, grantsSortSetting } = this.props;
 
     if (tableInfo) {
-      return <div className="section">
-        <div className="database-summary-title">
-          { this.props.params[tableNameAttr] }
-        </div>
-        <div className="content l-columns">
-          <div className="l-columns__left">
-            <pre className="sql" ref={(node) => this.createStmtNode = node}>
-              {/* TODO (mrtracy): format and highlight create table statement */}
-              {tableInfo.createStatement}
-            </pre>
-            <div className="sql-table">
-              <GrantsSortedTable
-                data={tableInfo.grants}
-                sortSetting={grantsSortSetting}
-                onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
-                columns={[
-                  {
-                    title: "User",
-                    cell: (grants) => grants.user,
-                    sort: (grants) => grants.user,
-                  },
-                  {
-                    title: "Grants",
-                    cell: (grants) => grants.privileges.join(", "),
-                    sort: (grants) => grants.privileges.join(", "),
-                  },
-                ]}/>
+      return <div>
+        <section className="section parent-link">
+          <Link to="/databases/tables">&lt; Back to Databases</Link>
+        </section>
+        <section className="section">
+          <div className="database-summary-title">
+            { this.props.params[tableNameAttr] }
+          </div>
+          <div className="content l-columns">
+            <div className="l-columns__left">
+              <pre className="sql" ref={(node) => this.createStmtNode = node}>
+                {/* TODO (mrtracy): format and highlight create table statement */}
+                {tableInfo.createStatement}
+              </pre>
+              <div className="sql-table">
+                <GrantsSortedTable
+                  data={tableInfo.grants}
+                  sortSetting={grantsSortSetting}
+                  onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
+                  columns={[
+                    {
+                      title: "User",
+                      cell: (grants) => grants.user,
+                      sort: (grants) => grants.user,
+                    },
+                    {
+                      title: "Grants",
+                      cell: (grants) => grants.privileges.join(", "),
+                      sort: (grants) => grants.privileges.join(", "),
+                    },
+                  ]}/>
+              </div>
+            </div>
+            <div className="l-columns__right">
+              <SummaryBar>
+                <SummaryHeadlineStat
+                  title="Size"
+                  tooltip="Total disk size of this table."
+                  value={ tableInfo.size }
+                  format={ Bytes }/>
+                <SummaryHeadlineStat
+                  title="Ranges"
+                  tooltip="The total count of ranges in this database"
+                  value={ tableInfo.rangeCount }/>
+              </SummaryBar>
             </div>
           </div>
-          <div className="l-columns__right">
-            <SummaryBar>
-              <SummaryHeadlineStat
-                title="Size"
-                tooltip="Total disk size of this table."
-                value={ tableInfo.size }
-                format={ Bytes }/>
-              <SummaryHeadlineStat
-                title="Ranges"
-                tooltip="The total count of ranges in this database"
-                value={ tableInfo.rangeCount }/>
-            </SummaryBar>
-          </div>
-        </div>
+        </section>
       </div>;
     }
     return <div>No results.</div>;

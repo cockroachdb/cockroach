@@ -1,7 +1,7 @@
 import _ from "lodash";
 import * as React from "react";
 import * as d3 from "d3";
-import { IInjectedProps } from "react-router";
+import { IInjectedProps, Link } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
@@ -19,7 +19,7 @@ import { Metric } from "../components/metric";
 import { StackedAreaGraph } from "../components/stackedgraph";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
-import { MetricConstants } from "../util/proto";
+import { MetricConstants, BytesUsed } from "../util/proto";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
@@ -465,7 +465,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       <div className="l-columns__right">
         <SummaryBar>
           <SummaryLabel>Summary</SummaryLabel>
-          <SummaryStat title="Total Nodes" value={this.props.nodeCount} />
+          <SummaryStat title={<span>Total Nodes <Link to="/cluster/nodes">View nodes list</Link></span>}
+                       value={this.props.nodeCount} />
           <SummaryStat title="Capacity Used" value={capacityPercent}
                        format={(v) => `${d3.format(".2f")(v)}%`}
                        tooltip={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)}
@@ -488,21 +489,27 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
 let nodeStatuses = (state: AdminUIState) => state.cachedData.nodes.data;
 
-let nodeSums = createSelector(
+export let nodeSums = createSelector(
   nodeStatuses,
   (ns) => {
     let result = {
       nodeCount: 0,
       capacityAvailable: 0,
       capacityTotal: 0,
+      usedBytes: 0,
+      usedMem: 0,
       unavailableRanges: 0,
+      replicas: 0,
     };
     if (_.isArray(ns)) {
       ns.forEach((n) => {
         result.nodeCount += 1;
         result.capacityAvailable += n.metrics.get(MetricConstants.availableCapacity);
         result.capacityTotal += n.metrics.get(MetricConstants.capacity);
+        result.usedBytes += BytesUsed(n);
+        result.usedMem += n.metrics.get(MetricConstants.rss);
         result.unavailableRanges += n.metrics.get(MetricConstants.unavailableRanges);
+        result.replicas += n.metrics.get(MetricConstants.replicas);
       });
     }
     return result;
