@@ -54,24 +54,27 @@ func logScope(t *testing.T) testLogScope {
 // close cleans up a testLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
 func (l testLogScope) close(t *testing.T) {
+	defer func() {
+		// Check whether there is something to remove.
+		emptyDir, err := isDirEmpty(string(l))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if t.Failed() && !emptyDir {
+			// If the test failed, we keep the log files for further investigation,
+			// but only if there were any.
+			t.Errorf("test log files left over in: %s", l)
+		} else {
+			// Clean up.
+			if err := os.RemoveAll(string(l)); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+
 	// Flush/Close the log files.
 	if err := dirTestOverride(""); err != nil {
 		t.Fatal(err)
-	}
-	// Check whether there is something to remove.
-	emptyDir, err := isDirEmpty(string(l))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if t.Failed() && !emptyDir {
-		// If the test failed, we keep the log files for further investigation,
-		// but only if there were any.
-		t.Errorf("test log files left over in: %s", l)
-	} else {
-		// Clean up.
-		if err := os.RemoveAll(string(l)); err != nil {
-			t.Error(err)
-		}
 	}
 }
 
