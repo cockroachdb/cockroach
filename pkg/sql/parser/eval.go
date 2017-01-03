@@ -1935,21 +1935,23 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return ParseDBool(v.Contents)
 		}
 
-	case *IntColType:
+	case *IntColType, *OidColType:
+		var res *DInt
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
-				return NewDInt(1), nil
+				res = NewDInt(1)
+			} else {
+				res = NewDInt(0)
 			}
-			return NewDInt(0), nil
 		case *DInt:
-			return d, nil
+			res = v
 		case *DFloat:
 			f, err := round(float64(*v), 0)
 			if err != nil {
 				panic(fmt.Sprintf("round should never fail with digits hardcoded to 0: %s", err))
 			}
-			return NewDInt(DInt(*f.(*DFloat))), nil
+			res = NewDInt(DInt(*f.(*DFloat)))
 		case *DDecimal:
 			dec := new(inf.Dec)
 			dec.Round(&v.Dec, 0, inf.RoundHalfUp)
@@ -1957,20 +1959,31 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if !ok {
 				return nil, errIntOutOfRange
 			}
-			return NewDInt(DInt(i)), nil
+			res = NewDInt(DInt(i))
 		case *DString:
-			return ParseDInt(string(*v))
+			var err error
+			if res, err = ParseDInt(string(*v)); err != nil {
+				return nil, err
+			}
 		case *DCollatedString:
-			return ParseDInt(v.Contents)
+			var err error
+			if res, err = ParseDInt(v.Contents); err != nil {
+				return nil, err
+			}
 		case *DTimestamp:
-			return NewDInt(DInt(v.Unix())), nil
+			res = NewDInt(DInt(v.Unix()))
 		case *DTimestampTZ:
-			return NewDInt(DInt(v.Unix())), nil
+			res = NewDInt(DInt(v.Unix()))
 		case *DDate:
-			return NewDInt(DInt(int64(*v))), nil
+			res = NewDInt(DInt(int64(*v)))
 		case *DInterval:
-			return NewDInt(DInt(v.Nanos / 1000000000)), nil
+			res = NewDInt(DInt(v.Nanos / 1000000000))
 		}
+
+		if _, ok := expr.Type.(*OidColType); ok {
+			return NewDOidFromDInt(res), nil
+		}
+		return res, nil
 
 	case *FloatColType:
 		switch v := d.(type) {
@@ -2173,7 +2186,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInterval:
 			return d, nil
 		}
-	case *OidColType, *PGOIDType:
+	case *OidPseudoType:
 		switch v := d.(type) {
 		case *DInt:
 			return NewDOidFromDInt(v), nil
@@ -2384,7 +2397,7 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	datumTyp := d.ResolvedType()
 
 	for _, t := range expr.Types {
-		wantTyp := ColumnTypeToDatumType(t)
+		wantTyp := CastTargetToDatumType(t)
 		if datumTyp.FamilyEqual(wantTyp) {
 			return MakeDBool(DBool(!expr.Not)), nil
 		}
