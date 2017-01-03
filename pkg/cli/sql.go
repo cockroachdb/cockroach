@@ -397,15 +397,43 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	return c.refreshPrompts(promptSuffix, nextState)
 }
 
-func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
+func (c *cliState) refreshDatabaseName() string {
+	var retVal string
+	var dbVals []driver.Value
+
 	query := makeQuery(`SHOW DATABASE`)
-	rows, _ := query(c.conn)
-	val := make([]driver.Value, len(rows.Columns()))
-	rows.Next(val)
+	rows, err := query(c.conn)
+
+	if err != nil {
+		retVal = ""
+	} else {
+		if len(rows.Columns()) == 0 {
+			retVal = ""
+		} else {
+			dbVals = make([]driver.Value, len(rows.Columns()))
+			err = rows.Next(dbVals)
+			if err != nil {
+				retVal = ""
+			} else {
+				retVal = dbVals[0].(string)
+			}
+		}
+	}
+
+	return retVal
+}
+
+func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
+	dbName := c.refreshDatabaseName()
 
 	c.fullPrompt = c.promptPrefix + promptSuffix
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
-	c.fullPrompt += "/" + formatVal(val[0], false, false) + "> "
+	if dbName != "" {
+		c.fullPrompt += "/" + formatVal(dbName /* showPrintableUnicode */, false /*showNewLinesAndTabs */, false) + "> "
+	} else {
+		c.fullPrompt += "> "
+	}
+
 	return nextState
 }
 
