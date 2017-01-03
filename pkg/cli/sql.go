@@ -398,9 +398,14 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 }
 
 func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
+	query := makeQuery(`SHOW DATABASE`)
+	rows, _ := query(c.conn)
+	val := make([]driver.Value, len(rows.Columns()))
+	rows.Next(val)
+
 	c.fullPrompt = c.promptPrefix + promptSuffix
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
-	c.fullPrompt += "> "
+	c.fullPrompt += "/" + formatVal(val[0], false, false) + "> "
 	return nextState
 }
 
