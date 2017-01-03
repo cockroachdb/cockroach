@@ -49,7 +49,7 @@ resource "google_compute_instance" "cockroach" {
 
 data "template_file" "supervisor" {
   count = "${var.num_instances}"
-  template = "${file("supervisor.conf.tpl")}"
+  template = "${file("../common/supervisor.conf.tpl")}"
   vars {
     stores = "${var.stores}"
     cockroach_port = "${var.sql_port}"
@@ -74,12 +74,12 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    source = "../../../cloud/gce/download_binary.sh"
+    source = "../common/download_binary.sh"
     destination = "/home/ubuntu/download_binary.sh"
   }
 
   provisioner "file" {
-    source = "./nodectl"
+    source = "../common/nodectl"
     destination = "/home/ubuntu/nodectl"
   }
 
