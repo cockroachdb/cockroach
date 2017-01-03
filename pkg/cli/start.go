@@ -272,11 +272,13 @@ func runStart(_ *cobra.Command, args []string) error {
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
 	//
-	// It is important that no logging occur before this point or the log files
+	// It is important that no logging occurs before this point or the log files
 	// will be created in $TMPDIR instead of their expected location.
 	pf := cockroachCmd.PersistentFlags()
 	f := pf.Lookup(logflags.LogDirName)
-	if !log.DirSet() {
+	if !log.DirSet() && !f.Changed {
+		// We only override the log directory if the user has not explicitly
+		// disabled file logging using --log-dir="".
 		for _, spec := range serverCfg.Stores.Specs {
 			if spec.InMemory {
 				continue
