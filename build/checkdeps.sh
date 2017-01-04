@@ -14,7 +14,8 @@ echo "checking that 'vendor' matches manifest"
 
 echo "checking that all deps are in 'vendor''"
 
-top_deps=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' ./pkg/...)
+top_deps=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' ./pkg/... | \
+    sort | uniq | grep -v '^C$')
 cmd_deps=$(sed -n 's,[[:space:]]*_[[:space:]]*"\(.*\)",./vendor/\1,p' build/tool_imports.go)
 
 deps="
@@ -25,8 +26,7 @@ $cmd_deps
 # Note that grep's exit status is ignored here to allow for packages with no
 # dependencies.
 missing=$(echo "$deps" | \
-	sort | uniq | grep -v '^C$' | \
-	xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | sort | uniq | \
+	xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | \
 	sort | uniq | grep -v '^C$' | \
 	xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}' | \
 	grep -v '^github.com/cockroachdb/cockroach' || true)
@@ -36,3 +36,5 @@ if [ -n "$missing" ]; then
   echo "$missing"
   exit 1
 fi
+
+echo "all 3rd-party dependencies appear to be properly vendored."
