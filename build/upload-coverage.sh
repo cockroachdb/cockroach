@@ -30,7 +30,7 @@ for pkg in $(go list $prefix/...); do
   # dependencies.
   coverpkg=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' $pkg | \
     sort | uniq | grep -v '^C$' | \
-    xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | sort | uniq | \
+    xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | \
     sort | uniq | grep -v '^C$' | \
     xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}' | \
     grep $prefix || true)
