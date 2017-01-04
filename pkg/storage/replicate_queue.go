@@ -334,7 +334,7 @@ func (rq *replicateQueue) processOneChange(
 		deadReplica := deadReplicas[0]
 		rq.metrics.RemoveDeadReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "removing dead replica %+v from store", deadReplica)
-		if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
+		if err := rq.removeReplica(ctx, repl, deadReplica, desc); err != nil {
 			return false, err
 		}
 	case AllocatorNoop:

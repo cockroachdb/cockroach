@@ -86,19 +86,18 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
+	if snap, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
 		t.Fatal(err)
+	} else {
+		snap.Close()
 	}
-	rep.CloseOutSnap()
 
 	if err := fillTestRange(rep, snapSize*2); err != nil {
 		t.Fatal(err)
 	}
 
-	rep.mu.Lock()
-	_, err = rep.Snapshot()
-	rep.mu.Unlock()
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
+	expected := raft.ErrSnapshotTemporarilyUnavailable
+	if _, err := rep.GetSnapshot(context.Background(), "test"); err != expected {
 		rep.mu.Lock()
 		after := rep.mu.state.Stats.Total()
 		rep.mu.Unlock()

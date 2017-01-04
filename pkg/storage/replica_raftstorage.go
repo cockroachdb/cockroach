@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -268,26 +267,31 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 	return r.FirstIndex()
 }
 
-// Snapshot implements the raft.Storage interface.
-// Snapshot requires that the replica lock is held.
+// Snapshot implements the raft.Storage interface. Snapshot requires that the
+// replica lock is held. Note that the returned snapshot is a placeholder and
+// does not contain any of the replica data. The snapshot is actually generated
+// (and sent) by the replicate queue.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
-	ctx := r.AnnotateCtx(context.TODO())
-	snap, err := r.snapshotWithContext(ctx, snapTypeRaft)
+	appliedIndex := r.mu.state.RaftAppliedIndex
+	term, err := r.Term(appliedIndex)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
-	return snap.RaftSnap, err
+	return raftpb.Snapshot{
+		Metadata: raftpb.SnapshotMetadata{
+			Index: appliedIndex,
+			Term:  term,
+		},
+	}, nil
 }
 
-// snapshotWithContext is the main implementation for Snapshot() but it takes
-// a context to allow tracing. If this method returns without error, callers
-// must eventually call CloseOutSnap to ready this replica for more snapshots.
-// r.mu must be held.
-func (r *Replica) snapshotWithContext(
-	ctx context.Context, snapType string,
-) (*OutgoingSnapshot, error) {
-	r.mu.AssertHeld()
+// GetSnapshot returns a snapshot of the replica appropriate for sending to a
+// replica. If this method returns without error, callers must eventually call
+// OutgoingSnapshot.Close.
+func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSnapshot, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	rangeID := r.RangeID
 
 	if r.exceedsDoubleSplitSizeLocked() {
@@ -299,17 +303,7 @@ func (r *Replica) snapshotWithContext(
 		return &OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
-	// See if there is already a snapshot running for this store.
-	select {
-	case <-r.mu.outSnapDone:
-	default:
-		log.Event(ctx, "snapshot already running")
-		return nil, raft.ErrSnapshotTemporarilyUnavailable
-	}
-	if !r.store.AcquireRaftSnapshot() {
-		log.Event(ctx, "snapshot already running")
-		return nil, raft.ErrSnapshotTemporarilyUnavailable
-	}
+	r.store.AcquireRaftSnapshot()
 
 	startKey := r.mu.state.Desc.StartKey
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
@@ -322,56 +316,19 @@ func (r *Replica) snapshotWithContext(
 	// state of the Replica). Everything must come from the snapshot.
 	snapData, err := snapshot(ctx, snapType, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
+		r.store.ReleaseRaftSnapshot()
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
 	}
+	snapData.store = r.store
 	log.Event(ctx, "snapshot generated")
 	r.store.metrics.RangeSnapshotsGenerated.Inc(1)
-	r.mu.outSnap = snapData
-	r.mu.outSnapDone = make(chan struct{})
-	return &r.mu.outSnap, nil
-}
-
-// GetSnapshot wraps Snapshot() but does not require the replica lock
-// to be held and it will block instead of returning
-// ErrSnapshotTemporaryUnavailable. The caller is directly responsible for
-// calling r.CloseOutSnap.
-func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSnapshot, error) {
-	// Use shorter-than-usual backoffs because this rarely succeeds on
-	// the first attempt and this method is used a lot in tests.
-	// Unsuccessful attempts are cheap, so we can have a low MaxBackoff.
-	retryOpts := retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     100 * time.Millisecond,
-		Multiplier:     2,
-	}
-	for retryObj := retry.StartWithCtx(ctx, retryOpts); retryObj.Next(); {
-		log.Eventf(ctx, "snapshot retry loop pass %d", retryObj.CurrentAttempt())
-
-		r.mu.Lock()
-		doneChan := r.mu.outSnapDone
-		r.mu.Unlock()
-
-		<-doneChan
-
-		r.mu.Lock()
-		snap, err := r.snapshotWithContext(ctx, snapType)
-		if err == nil {
-			r.mu.outSnap.claimed = true
-		}
-		r.mu.Unlock()
-		if err == raft.ErrSnapshotTemporarilyUnavailable {
-			continue
-		} else {
-			return snap, err
-		}
-	}
-	return nil, ctx.Err() // the only loop exit condition
+	return &snapData, nil
 }
 
 // OutgoingSnapshot contains the data required to stream a snapshot to a
-// recipient. Once one is created, it needs to be closed via CloseOutSnap()
-// to prevent resource leakage.
+// recipient. Once one is created, it needs to be closed via Close() to prevent
+// resource leakage.
 type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
@@ -382,8 +339,14 @@ type OutgoingSnapshot struct {
 	Iter *ReplicaDataIterator
 	// The replica state within the snapshot.
 	State storagebase.ReplicaState
-	// True if a goroutine has scheduled a call to CloseOutSnap for this snap.
-	claimed bool
+	store *Store
+}
+
+// Close releases the resources associated with the snapshot.
+func (s *OutgoingSnapshot) Close() {
+	s.Iter.Close()
+	s.EngineSnap.Close()
+	s.store.ReleaseRaftSnapshot()
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -395,19 +358,6 @@ type IncomingSnapshot struct {
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
 	State *storagebase.ReplicaState
-}
-
-// CloseOutSnap closes the Replica's outgoing snapshot, freeing its resources
-// and readying the Replica to send more snapshots. Must be called after any
-// invocation of snapshotWithContext.
-func (r *Replica) CloseOutSnap() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.outSnap.Iter.Close()
-	r.mu.outSnap.EngineSnap.Close()
-	r.mu.outSnap = OutgoingSnapshot{}
-	close(r.mu.outSnapDone)
-	r.store.ReleaseRaftSnapshot()
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
