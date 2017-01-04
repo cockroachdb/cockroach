@@ -366,17 +366,18 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	query := makeQuery(`SHOW TRANSACTION STATUS`)
 	rows, err := query(c.conn)
 	if err != nil {
-		return c.refreshPrompts(" ?", nextState)
+		return c.refreshDatabaseName(" ?", nextState)
 	}
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(osStderr, "invalid transaction status")
-		return c.refreshPrompts(" ?", nextState)
+		return c.refreshDatabaseName(" ?", nextState)
 	}
 	val := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(val)
 	if err != nil {
 		fmt.Fprintf(osStderr, "invalid transaction status")
-		return c.refreshPrompts(" ?", nextState)
+		//return c.refreshPrompts(" ?", nextState)
+		return c.refreshDatabaseName(" ?", nextState)
 	}
 	txnString := formatVal(val[0], false, false)
 
@@ -394,44 +395,41 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	case sql.Open.String():
 		promptSuffix = "  OPEN"
 	}
-	return c.refreshPrompts(promptSuffix, nextState)
+
+	return c.refreshDatabaseName(promptSuffix, nextState)
 }
 
-func (c *cliState) refreshDatabaseName() string {
-	var retVal string
+//This function is performing the 'refresh' action to update the cli prompt with the current
+//database in the user's context.
+func (c *cliState) refreshDatabaseName(promptSuffix string, nextState cliStateEnum) cliStateEnum {
 	var dbVals [1]driver.Value
 
 	query := makeQuery(`SHOW DATABASE`)
 	rows, err := query(c.conn)
 
 	if err != nil {
-		retVal = ""
+		return c.refreshPrompts(promptSuffix, nextState)
 	} else {
 		if len(rows.Columns()) == 0 {
-			retVal = ""
+			fmt.Fprintf(osStderr, "cannot get the database name")
+			return c.refreshPrompts(promptSuffix, nextState)
 		} else {
 			err = rows.Next(dbVals[:])
 			if err != nil {
-				retVal = ""
+				promptSuffix = ""
 			} else {
-				retVal = dbVals[0].(string)
+				promptSuffix = "/" + formatVal(dbVals[0].(string) /* showPrintableUnicode */, false /*showNewLinesAndTabs */, false)
 			}
 		}
 	}
 
-	return retVal
+	return c.refreshPrompts(promptSuffix, nextState)
 }
 
 func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
-	dbName := c.refreshDatabaseName()
-
 	c.fullPrompt = c.promptPrefix + promptSuffix
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
-	if dbName != "" {
-		c.fullPrompt += "/" + formatVal(dbName /* showPrintableUnicode */, false /*showNewLinesAndTabs */, false) + "> "
-	} else {
-		c.fullPrompt += "> "
-	}
+	c.fullPrompt += "> "
 
 	return nextState
 }
