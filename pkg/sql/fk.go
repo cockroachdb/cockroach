@@ -118,7 +118,7 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 			found, ok := fk.ids[colID]
 			if !ok {
-				panic("fk ids missing column id")
+				panic(fmt.Sprintf("fk ids (%v) missing column id %d", fk.ids, colID))
 			}
 			nulls = nulls && row[found] == parser.DNull
 		}
@@ -281,6 +281,8 @@ func makeBaseFKHelper(
 		if found, ok := colMap[writeColID]; ok {
 			b.ids[searchIdx.ColumnIDs[i]] = found
 			nulls = false
+		} else if !nulls {
+			return b, errors.Errorf("missing value for column %q in multi-part foreign key", writeIdx.ColumnNames[i])
 		}
 	}
 	if nulls {

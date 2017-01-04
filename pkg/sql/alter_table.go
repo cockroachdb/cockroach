@@ -295,7 +295,7 @@ func (n *alterTableNode) Start() error {
 					}
 				}
 				if !found {
-					panic("constrint returned by GetConstraintInfo not found")
+					panic("constraint returned by GetConstraintInfo not found")
 				}
 				ck := n.tableDesc.Checks[idx]
 				if err := n.p.validateCheckExpr(ck.Expr, &n.n.Table, n.tableDesc); err != nil {
