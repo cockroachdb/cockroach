@@ -70,6 +70,13 @@ func Clone(pb proto.Message) proto.Message {
 }
 
 func findVerboten(v reflect.Value, verboten reflect.Kind) interface{} {
+	if val := findVerbotenInner(v, verboten); val != nil {
+		return val.Interface()
+	}
+	return nil
+}
+
+func findVerbotenInner(v reflect.Value, verboten reflect.Kind) *reflect.Value {
 	// Check if v's type can ever contain anything verboten.
 	if v.IsValid() && !typeIsOrContainsVerboten(v.Type(), verboten) {
 		return nil
@@ -79,35 +86,35 @@ func findVerboten(v reflect.Value, verboten reflect.Kind) interface{} {
 	// actually does.
 	switch v.Kind() {
 	case verboten:
-		return v.Interface()
+		return &v
 
 	case reflect.Ptr:
-		return findVerboten(v.Elem(), verboten)
+		return findVerbotenInner(v.Elem(), verboten)
 
 	case reflect.Map:
 		for _, key := range v.MapKeys() {
-			if elem := findVerboten(v.MapIndex(key), verboten); elem != nil {
+			if elem := findVerbotenInner(v.MapIndex(key), verboten); elem != nil {
 				return elem
 			}
 		}
 
 	case reflect.Array, reflect.Slice:
 		for i := 0; i < v.Len(); i++ {
-			if elem := findVerboten(v.Index(i), verboten); elem != nil {
+			if elem := findVerbotenInner(v.Index(i), verboten); elem != nil {
 				return elem
 			}
 		}
 
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
-			if elem := findVerboten(v.Field(i), verboten); elem != nil {
+			if elem := findVerbotenInner(v.Field(i), verboten); elem != nil {
 				return elem
 			}
 		}
 
-	case reflect.Chan, reflect.Func, reflect.Interface:
+	case reflect.Chan, reflect.Func:
 		// Not strictly correct, but cloning these kinds is not allowed.
-		return v
+		return &v
 	}
 
 	return nil
@@ -152,7 +159,7 @@ func typeIsOrContainsVerbotenImpl(t reflect.Type, verboten reflect.Kind) bool {
 			}
 		}
 
-	case reflect.Chan, reflect.Func, reflect.Interface:
+	case reflect.Chan, reflect.Func:
 		// Not strictly correct, but cloning these kinds is not allowed.
 		return true
 
