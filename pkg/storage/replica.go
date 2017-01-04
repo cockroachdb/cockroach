@@ -2372,6 +2372,18 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		log.Infof(ctx, "proposing %s %+v: %+v",
 			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
 
+		// Ensure that we aren't trying to remove ourselves from the range without
+		// having previously given up our lease. Since this method only runs on the
+		// leaseholder, something is wrong if such a command has made it to this
+		// point.
+		if crt.ChangeType == roachpb.REMOVE_REPLICA &&
+			crt.Replica.ReplicaID == r.mu.replicaID {
+			log.Errorf(ctx, "received invalid ChangeReplicasTrigger %+v to remove leaseholder replica %+v",
+				crt, r.mu.state)
+			return errors.Errorf("%s: invalid ChangeReplicasTrigger %+v to remove leaseholder replica",
+				r, crt)
+		}
+
 		confChangeCtx := ConfChangeContext{
 			CommandID: string(p.idKey),
 			Payload:   data,
