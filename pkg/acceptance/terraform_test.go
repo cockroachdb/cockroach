@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	"golang.org/x/net/context"
 )
 
@@ -30,6 +32,10 @@ import (
 // the `terrafarm` package.
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
+
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	ctx := context.Background()
 	f := MakeFarmer(t, "baby", stopper)
 	defer f.CollectLogs()
@@ -50,6 +56,9 @@ func TestBuildBabyCluster(t *testing.T) {
 //	 TESTS=FiveNodesAndWriters \
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform'
 func TestFiveNodesAndWriters(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	ctx := context.Background()
 	deadline := time.After(*flagDuration)
 	f := MakeFarmer(t, "write-5n5w", stopper)

@@ -90,6 +90,10 @@ func compareTraces(expected, actual events) bool {
 func TestTrace(t *testing.T) {
 	ctx := context.Background()
 
+	// The test below merely cares about observing events in traces.
+	// Do not pollute the test's stderr with them.
+	logging.stderrThreshold = Severity_FATAL
+
 	// Events to context without a trace should be no-ops.
 	Event(ctx, "should-not-show-up")
 

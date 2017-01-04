@@ -108,7 +108,7 @@ func DirSet() bool { return logDir.isSet() }
 // underscores and all periods are escaped to an underscore.
 // For compatibility with Windows filenames, all colons from the timestamp
 // (RFC3339) are converted from underscores.
-var logFileRE = regexp.MustCompile(`([^\.]+)\.([^\.]+)\.([^\.]+)\.([^\.]+)\.(\d+)\.(ERROR|WARNING|INFO)\.log`)
+var logFileRE = regexp.MustCompile(`^(?:.*/)?([^/.]+)\.([^/\.]+)\.([^/\.]+)\.([^/\.]+)\.(\d+)\.(ERROR|WARNING|INFO)\.log$`)
 
 var (
 	pid      = os.Getpid()
@@ -259,7 +259,7 @@ func getFileDetails(info os.FileInfo) (FileDetails, error) {
 func verifyFile(filename string) error {
 	info, err := os.Stat(filename)
 	if err != nil {
-		return err
+		return errors.Errorf("stat: %s: %v", filename, err)
 	}
 	_, err = getFileDetails(info)
 	return err
@@ -297,32 +297,70 @@ func ListLogFiles() ([]FileInfo, error) {
 // restricted mode, the filename must be the base name of a file in
 // this process's log directory (this is safe for cases when the
 // filename comes from external sources, such as the admin UI via
-// HTTP). In unrestricted mode any path is allowed, with the added
-// feature that relative paths will be searched in both the current
-// directory and this process's log directory.
+// HTTP). In unrestricted mode any path is allowed, relative to the
+// current directory, with the added feature that simple (base name)
+// file names will be searched in this process's log directory if not
+// found in the current directory.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	// Verify there are no path separators in a restricted-mode pathname.
-	if restricted && filepath.Base(filename) != filename {
-		return nil, errors.Errorf("pathnames must be basenames only: %s", filename)
+	dir, err := logDir.get()
+	if err != nil {
+		return nil, err
 	}
-	if !filepath.IsAbs(filename) {
-		dir, err := logDir.get()
-		if err != nil {
-			return nil, err
+
+	switch restricted {
+	case true:
+		// Verify there are no path separators in a restricted-mode pathname.
+		if filepath.Base(filename) != filename {
+			return nil, errors.Errorf("pathnames must be basenames only: %s", filename)
 		}
 		filename = filepath.Join(dir, filename)
-	}
-	if !restricted {
-		var err error
+
+	case false:
+		if !filepath.IsAbs(filename) {
+			exists, err := fileExists(filename)
+			if err != nil {
+				return nil, err
+			}
+			if !exists && filepath.Base(filename) == filename {
+				// If the file name is not absolute and is simple and not
+				// found in the cwd, try to find the file first relative to
+				// the log directory.
+				fileNameAttempt := filepath.Join(dir, filename)
+				exists, err = fileExists(fileNameAttempt)
+				if err != nil {
+					return nil, err
+				}
+				if !exists {
+					return nil, errors.Errorf("no such file %s either in current directory or in %s", filename, dir)
+				}
+				filename = fileNameAttempt
+			}
+		}
+
+		// Normalize the name to an absolute path without symlinks.
 		filename, err = filepath.EvalSymlinks(filename)
 		if err != nil {
-			return nil, err
+			return nil, errors.Errorf("EvalSymLinks: %s: %v", filename, err)
 		}
 	}
+
+	// Check the file name is valid.
 	if err := verifyFile(filename); err != nil {
 		return nil, err
 	}
+
 	return os.Open(filename)
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }
 
 // sortableFileInfoSlice is required so we can sort FileInfos.

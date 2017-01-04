@@ -30,11 +30,15 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestMonotonicInserts replicates the 'monotonic' test from the Jepsen
 // CockroachDB test suite (https://github.com/cockroachdb/jepsen).
 func TestMonotonicInserts(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testMonotonicInsertsInner)
 }
 
@@ -100,7 +104,10 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 	invoke := func(client mtClient) {
 		logPrefix := fmt.Sprintf("%03d.%03d: ", atomic.AddUint64(&idGen, 1), client.ID)
 		l := func(msg string, args ...interface{}) {
-			t.Logf(logPrefix+msg, args...)
+			log.Infof(ctx, logPrefix+msg, args...)
+			if log.V(2) {
+				t.Logf(logPrefix+msg, args...)
+			}
 		}
 		l("begin")
 		defer l("done")

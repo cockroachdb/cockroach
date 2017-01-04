@@ -20,10 +20,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	"golang.org/x/net/context"
 )
 
 func TestDockerNodeJS(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", "3", 1)})
 	testDockerFail(ctx, t, "node.js", []string{"node", "-e", strings.Replace(nodeJS, "%v", `'a'`, 1)})

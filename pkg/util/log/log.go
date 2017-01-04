@@ -52,11 +52,11 @@ func FatalOnPanic() {
 
 // EnableLogFileOutput turns on logging using the specified directory.
 // For unittesting only.
-func EnableLogFileOutput(dir string) error {
+func EnableLogFileOutput(dir string, stderrSeverity Severity) error {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	logging.toStderr = false
-	logging.stderrThreshold = Severity_INFO
+	logging.stderrThreshold = stderrSeverity
 	return logDir.Set(dir)
 }
 

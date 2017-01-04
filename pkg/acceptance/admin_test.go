@@ -29,10 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestAdminLossOfQuorum(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testAdminLossOfQuorumInner)
 }
 
