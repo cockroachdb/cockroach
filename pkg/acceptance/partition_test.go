@@ -47,6 +47,7 @@ func TestPartitionNemesis(t *testing.T) {
 }
 
 func TestPartitionBank(t *testing.T) {
+	t.Skip("#12654")
 	SkipUnlessPrivileged(t)
 	runTestOnConfigs(t, testBankWithNemesis(BidirectionalPartitionNemesis))
 }
