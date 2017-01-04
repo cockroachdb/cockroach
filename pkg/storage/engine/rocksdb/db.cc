@@ -1587,11 +1587,14 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // this number is reached.
   //
   // TODO(peter): untuned.
-  options.level0_slowdown_writes_trigger = 16;
-  // Maximum number of L0 files. Writes are stopped at this point.
+  options.level0_slowdown_writes_trigger = 20;
+  // Maximum number of L0 files. Writes are stopped at this
+  // point. This is set significantly higher than
+  // level0_slowdown_writes_trigger to avoid completely blocking
+  // writes.
   //
   // TODO(peter): untuned.
-  options.level0_stop_writes_trigger = 17;
+  options.level0_stop_writes_trigger = 32;
   // Flush write buffers to L0 as soon as they are full. A higher
   // value could be beneficial if there are duplicate records in each
   // of the individual write buffers, but perf testing hasn't shown
