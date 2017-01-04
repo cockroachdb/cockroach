@@ -1217,6 +1217,8 @@ func TestUnreplicateFirstRange(t *testing.T) {
 	const rangeID = roachpb.RangeID(1)
 	// Replicate the range to store 1.
 	mtc.replicateRange(rangeID, 1)
+	// Move the lease away from store 0 before removing its replica.
+	mtc.transferLease(rangeID, 0, 1)
 	// Unreplicate the from from store 0.
 	mtc.unreplicateRange(rangeID, 0)
 	// Replicate the range to store 2. The first range is no longer available on
@@ -2395,8 +2397,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// Move the first range from the first node to the other three.
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2, 3)
+	mtc.transferLease(rangeID, 0, 1)
 	mtc.unreplicateRange(rangeID, 0)
-	mtc.expireLeases(context.TODO())
 
 	// Ensure that we have a stable lease and raft leader so we can tell if the
 	// removed node causes a disruption. This is a three-step process.
@@ -2658,10 +2660,8 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 16})
 }
 
-// TestLeaseHolderRemoveSelf verifies that a lease holder can remove itself
-// without panicking and future access to the range returns a
-// RangeNotFoundError (not RaftGroupDeletedError, and even before
-// the ReplicaGCQueue has run).
+// TestLeaseHolderRemoveSelf verifies that a lease holder cannot remove itself
+// without encountering an error.
 func TestLeaseHolderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2671,23 +2671,57 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 
 	leaseHolder := mtc.stores[0]
 
-	// Disable the replica GC queue. This verifies that the replica is
-	// considered removed even before the gc queue has run, and also
-	// helps avoid a deadlock at shutdown.
-	leaseHolder.SetReplicaGCQueueActive(false)
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1)
-	// Remove the replica from first store.
-	mtc.unreplicateRange(raftID, 0)
+
+	// Attempt to remove the replica from first store.
+	expectedErr := "invalid ChangeReplicasTrigger"
+	if err := mtc.unreplicateRangeNonFatal(raftID, 0); !testutils.IsError(err, expectedErr) {
+		t.Fatalf("expected %q error trying to remove leaseholder replica; got %v", expectedErr, err)
+	}
+
+	// Expect that we can still successfully do a get on the range.
 	getArgs := getArgs([]byte("a"))
-
-	// Force the read command request a new lease.
-	mtc.manualClock.Increment(leaseHolder.LeaseExpiration(mtc.clock))
-
-	// Expect get a RangeNotFoundError.
 	_, pErr := client.SendWrappedWith(context.Background(), rg1(leaseHolder), roachpb.Header{}, getArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
-		t.Fatalf("expect get RangeNotFoundError, actual get %v ", pErr)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
+// TestRemovedReplicaError verifies that a replica that has been removed from a
+// range returns a RangeNotFoundError if it receives a request for that range
+// (not RaftGroupDeletedError, and even before the ReplicaGCQueue has run).
+func TestRemovedReplicaError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	// Disable the replica GC queues. This verifies that the replica is
+	// considered removed even before the gc queue has run, and also
+	// helps avoid a deadlock at shutdown.
+	mtc.stores[0].SetReplicaGCQueueActive(false)
+
+	raftID := roachpb.RangeID(1)
+	mtc.replicateRange(raftID, 1)
+	mtc.transferLease(raftID, 0, 1)
+	mtc.unreplicateRange(raftID, 0)
+
+	mtc.manualClock.Increment(mtc.stores[1].LeaseExpiration(mtc.clock))
+
+	// Expect to get a RangeNotFoundError. We have to allow for ambiguous result
+	// errors to avoid the occasional test flake.
+	getArgs := getArgs([]byte("a"))
+	for {
+		_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{}, getArgs)
+		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); ok {
+			break
+		} else if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
+			continue
+		} else {
+			t.Fatalf("expected RangeNotFoundError; got %v", pErr)
+		}
 	}
 }
 
@@ -2704,6 +2738,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	mtc.Start(t, 2)
 	const rangeID roachpb.RangeID = 1
 	mtc.replicateRange(rangeID, 1)
+	mtc.transferLease(rangeID, 0, 1)
 	mtc.unreplicateRange(rangeID, 0)
 
 	// Wait for store 0 to process the removal. The in-memory replica

@@ -3049,7 +3049,7 @@ func IsPreemptiveSnapshotError(err error) bool {
 // When removing a replica, only the NodeID and StoreID fields of the Replica are used.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
-// comment of "AdminSplit" for more information on this pattern.
+// comment of "adminSplitWithDescriptor" for more information on this pattern.
 //
 // Changing the replicas for a range is complicated. A change is initiated by
 // the "replicate" queue when it encounters a range which has too many
@@ -3260,7 +3260,7 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas: read existing descriptor %+v", oldDesc)
+		log.Infof(ctx, "change replicas (remove %s): read existing descriptor %+v", repDesc, oldDesc)
 
 		{
 			b := txn.NewBatch()
