@@ -20,10 +20,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	"golang.org/x/net/context"
 )
 
 func TestDockerPython(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
 	testDockerFail(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})

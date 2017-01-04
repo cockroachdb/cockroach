@@ -35,6 +35,10 @@ import (
 func TestPartitionNemesis(t *testing.T) {
 	t.Skip("only enabled for manually playing with the partitioning agent")
 	SkipUnlessLocal(t)
+
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	runTestOnConfigs(t, func(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 		stopper.RunWorker(func() {
 			BidirectionalPartitionNemesis(ctx, t, c, stopper)
@@ -47,6 +51,7 @@ func TestPartitionNemesis(t *testing.T) {
 }
 
 func TestPartitionBank(t *testing.T) {
+	t.Skip("#12654")
 	SkipUnlessPrivileged(t)
 	runTestOnConfigs(t, testBankWithNemesis(BidirectionalPartitionNemesis))
 }

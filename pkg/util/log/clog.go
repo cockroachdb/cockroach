@@ -723,7 +723,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if s >= l.stderrThreshold.get() {
 		l.outputToStderr(entry, stacks)
 	}
-	if !l.toStderr && logDir.isSet() {
+	if logDir.isSet() {
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
 				// Make sure the message appears somewhere.

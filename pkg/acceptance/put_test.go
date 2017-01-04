@@ -33,6 +33,9 @@ import (
 // TestPut starts up an N node cluster and runs N workers that write
 // to independent keys.
 func TestPut(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
 	runTestOnConfigs(t, testPutInner)
 }
 
