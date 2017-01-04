@@ -216,6 +216,14 @@ var (
 		Help: "Number of pending replicas in the Raft log queue"}
 	metaRaftLogQueueProcessingNanos = metric.Metadata{Name: "queue.raftlog.processingnanos",
 		Help: "Nanoseconds spent processing replicas in the Raft log queue"}
+	metaRaftSnapshotQueueSuccesses = metric.Metadata{Name: "queue.raftsnapshot.process.success",
+		Help: "Number of replicas successfully processed by the Raft repair queue"}
+	metaRaftSnapshotQueueFailures = metric.Metadata{Name: "queue.raftsnapshot.process.failure",
+		Help: "Number of replicas which failed processing in the Raft repair queue"}
+	metaRaftSnapshotQueuePending = metric.Metadata{Name: "queue.raftsnapshot.pending",
+		Help: "Number of pending replicas in the Raft repair queue"}
+	metaRaftSnapshotQueueProcessingNanos = metric.Metadata{Name: "queue.raftsnapshot.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the Raft repair queue"}
 	metaConsistencyQueueSuccesses = metric.Metadata{Name: "queue.consistency.process.success",
 		Help: "Number of replicas successfully processed by the consistency checker queue"}
 	metaConsistencyQueueFailures = metric.Metadata{Name: "queue.consistency.process.failure",
@@ -432,6 +440,10 @@ type StoreMetrics struct {
 	RaftLogQueueFailures                      *metric.Counter
 	RaftLogQueuePending                       *metric.Gauge
 	RaftLogQueueProcessingNanos               *metric.Counter
+	RaftSnapshotQueueSuccesses                *metric.Counter
+	RaftSnapshotQueueFailures                 *metric.Counter
+	RaftSnapshotQueuePending                  *metric.Gauge
+	RaftSnapshotQueueProcessingNanos          *metric.Counter
 	ConsistencyQueueSuccesses                 *metric.Counter
 	ConsistencyQueueFailures                  *metric.Counter
 	ConsistencyQueuePending                   *metric.Gauge
@@ -604,6 +616,10 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RaftLogQueueFailures:                      metric.NewCounter(metaRaftLogQueueFailures),
 		RaftLogQueuePending:                       metric.NewGauge(metaRaftLogQueuePending),
 		RaftLogQueueProcessingNanos:               metric.NewCounter(metaRaftLogQueueProcessingNanos),
+		RaftSnapshotQueueSuccesses:                metric.NewCounter(metaRaftSnapshotQueueSuccesses),
+		RaftSnapshotQueueFailures:                 metric.NewCounter(metaRaftSnapshotQueueFailures),
+		RaftSnapshotQueuePending:                  metric.NewGauge(metaRaftSnapshotQueuePending),
+		RaftSnapshotQueueProcessingNanos:          metric.NewCounter(metaRaftSnapshotQueueProcessingNanos),
 		ConsistencyQueueSuccesses:                 metric.NewCounter(metaConsistencyQueueSuccesses),
 		ConsistencyQueueFailures:                  metric.NewCounter(metaConsistencyQueueFailures),
 		ConsistencyQueuePending:                   metric.NewGauge(metaConsistencyQueuePending),
