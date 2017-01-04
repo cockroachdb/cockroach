@@ -421,13 +421,6 @@ type Replica struct {
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
-
-		// When closed, indicates that this replica has finished sending
-		// an outgoing snapshot. Nothing is sent on this channel.
-		outSnapDone chan struct{}
-
-		// The pending outgoing snapshot if there is one.
-		outSnap OutgoingSnapshot
 	}
 
 	unreachablesMu struct {
@@ -553,12 +546,6 @@ func (r *Replica) withRaftGroup(
 
 var _ client.Sender = &Replica{}
 
-var initialOutSnapDone = func() chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}()
-
 func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
@@ -597,7 +584,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.mu.TimedMutex = syncutil.MakeTimedMutex(replicaMuLogger)
-	r.mu.outSnapDone = initialOutSnapDone
 
 	cmdQMuLogger := syncutil.ThresholdLogger(
 		r.AnnotateCtx(context.Background()),
@@ -2471,29 +2457,6 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	}
 }
 
-func (r *Replica) maybeAbandonSnapshot(ctx context.Context) {
-	r.mu.Lock()
-	doneChan := r.mu.outSnapDone
-	claimed := r.mu.outSnap.claimed
-	snapUUID := r.mu.outSnap.SnapUUID
-	r.mu.Unlock()
-
-	if !claimed && snapUUID != (uuid.UUID{}) {
-		// There is an unclaimed but valid snapshot. If it is not currently being
-		// generated (i.e. doneChan is closed) then close it.
-		select {
-		// We can read from this without the replica lock because we're holding the
-		// raft lock, which protects modification of the snapshot data.
-		case <-doneChan:
-		default:
-			// If we're blocking on outSnapDone but not sending a snapshot, we
-			// have a leaked/abandoned snapshot and need to clean it up.
-			log.Warningf(ctx, "abandoning unsent snapshot %s", snapUUID)
-			r.CloseOutSnap()
-		}
-	}
-}
-
 type handleRaftReadyStats struct {
 	processed int
 }
@@ -2939,14 +2902,6 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		}
 		return false
 	}
-	select {
-	case <-r.mu.outSnapDone:
-	default:
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: replica %d has an in-progress snapshot", r.mu.replicaID)
-		}
-		return false
-	}
 
 	r.quiesceLocked()
 	for id := range status.Progress {
@@ -3128,20 +3083,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
-	snap := &r.mu.outSnap
-	snap.claimed = true
 	r.mu.Unlock()
-
-	hasSnapshot := !raft.IsEmptySnap(msg.Snapshot)
-
-	var beganStreaming bool
-	if hasSnapshot {
-		defer func() {
-			if !beganStreaming {
-				r.CloseOutSnap()
-			}
-		}()
-	}
 
 	if fromErr != nil {
 		log.Warningf(ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
@@ -3154,43 +3096,10 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
-	if hasSnapshot {
-		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
-		if err != nil {
-			log.Fatalf(ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
-		}
-		if msgUUID != snap.SnapUUID {
-			log.Fatalf(ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
-				msgUUID.Short(), snap.SnapUUID.Short())
-		}
-		// Asynchronously stream the snapshot to the recipient.
-		if err := r.store.Stopper().RunTask(func() {
-			beganStreaming = true
-			r.store.Stopper().RunWorker(func() {
-				defer r.CloseOutSnap()
-				if err := r.store.cfg.Transport.SendSnapshot(
-					ctx,
-					r.store.allocator.storePool,
-					SnapshotRequest_Header{
-						State: snap.State,
-						RaftMessageRequest: RaftMessageRequest{
-							RangeID:     r.RangeID,
-							FromReplica: fromReplica,
-							ToReplica:   toReplica,
-							Message:     msg,
-							Quiesce:     false,
-						},
-						RangeSize:  r.GetMVCCStats().Total(),
-						CanDecline: false,
-					}, snap, r.store.Engine().NewBatch); err != nil {
-					log.Warningf(ctx, "failed to send snapshot: %s", err)
-				}
-				// Report the snapshot status to Raft, which expects us to do this once
-				// we finish attempting to send the snapshot.
-				r.reportSnapshotStatus(msg.To, err)
-			})
-		}); err != nil {
-			log.Warningf(ctx, "failed to send snapshot: %s", err)
+	// Raft-initiated snapshots are handled by the Raft snapshot queue.
+	if msg.Type == raftpb.MsgSnap {
+		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
+			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
 		}
 		return
 	}
@@ -4250,6 +4159,10 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
 	); err != nil {
 		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
+	}
+
+	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
+		return nil
 	}
 
 	hasLease, pErr := r.getLeaseForGossip(ctx)
