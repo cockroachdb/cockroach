@@ -163,8 +163,14 @@ SHOW CONSTRAINTS FROM scans
 scans  fk_scanned_ref_products  FOREIGN KEY (UNVALIDATED)  scanned  products.[upc]
 scans  primary                  PRIMARY KEY                rowid    NULL
 
-statement error validating FOREIGN KEY constraint "fk_scanned_ref_products" unsupported
+statement error foreign key violation: no match in products for values scanned='885155001450' in scans
 ALTER TABLE scans VALIDATE CONSTRAINT fk_scanned_ref_products
+
+query TTTTT
+SHOW CONSTRAINTS FROM scans
+----
+scans  fk_scanned_ref_products  FOREIGN KEY (UNVALIDATED)  scanned  products.[upc]
+scans  primary                  PRIMARY KEY                rowid    NULL
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
@@ -172,6 +178,15 @@ UPDATE products SET upc = '885155001450' WHERE sku = '780'
 # Changing referenced non-pk index fails once again with constraint re-added.
 statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "scans"
 UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE scans VALIDATE CONSTRAINT fk_scanned_ref_products
+
+query TTTTT
+SHOW CONSTRAINTS FROM scans
+----
+scans  fk_scanned_ref_products  FOREIGN KEY   scanned  products.[upc]
+scans  primary                  PRIMARY KEY   rowid    NULL
 
 statement ok
 TRUNCATE orders, reviews

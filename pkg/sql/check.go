@@ -16,10 +16,12 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -150,6 +152,82 @@ func (p *planner) validateCheckExpr(
 	if next {
 		return errors.Errorf("validation of CHECK %q failed on row: %s",
 			expr.String(), labeledRowValues(tableDesc.Columns, rows.Values()))
+	}
+	return nil
+}
+
+func (p *planner) validateForeignKey(
+	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
+) error {
+	targetTable, err := sqlbase.GetTableDescFromID(p.txn, srcIdx.ForeignKey.Table)
+	if err != nil {
+		return err
+	}
+	targetIdx, err := targetTable.FindIndexByID(srcIdx.ForeignKey.Index)
+	if err != nil {
+		return err
+	}
+
+	srcName, err := p.getQualifiedTableName(srcTable)
+	if err != nil {
+		return err
+	}
+
+	targetName, err := p.getQualifiedTableName(targetTable)
+	if err != nil {
+		return err
+	}
+
+	prefix := len(srcIdx.ColumnNames)
+	if p := len(targetIdx.ColumnNames); p < prefix {
+		prefix = p
+	}
+	srcCols, targetCols := srcIdx.ColumnNames[:prefix], targetIdx.ColumnNames[:prefix]
+
+	var srcColsSelects bytes.Buffer
+	for i := range srcCols {
+		if i > 0 {
+			srcColsSelects.WriteString(", ")
+		}
+		srcColsSelects.WriteString(fmt.Sprintf("s.%s", srcCols[i]))
+	}
+
+	var on, where bytes.Buffer
+	for i := 0; i < prefix; i++ {
+		if i > 0 {
+			on.WriteString(" AND ")
+			where.WriteString(" AND ")
+		}
+		on.WriteString(fmt.Sprintf("s.%s = t.%s", srcCols[i], targetCols[i]))
+		where.WriteString(fmt.Sprintf("t.%s IS NULL AND s.%s IS NOT NULL", targetCols[i], srcCols[i]))
+	}
+
+	query := fmt.Sprintf(
+		`SELECT %s FROM %s AS s LEFT OUTER JOIN %s AS t ON %s WHERE %s LIMIT 1`,
+		srcColsSelects.String(), srcName, targetName, on.String(), where.String(),
+	)
+
+	log.Infof(ctx, "Validating FK %q (%s [%v] -> %s [%v]) with query %q",
+		srcIdx.ForeignKey.Name,
+		srcTable.Name, srcCols, targetTable.Name, targetCols,
+		query,
+	)
+
+	values, err := p.queryRows(query)
+	if err != nil {
+		return err
+	}
+
+	if len(values) > 0 {
+		var pairs bytes.Buffer
+		for i := range values[0] {
+			pairs.WriteString(fmt.Sprintf("%s=%v", srcCols[i], values[0][i]))
+			if i > 0 {
+				pairs.WriteString(", ")
+			}
+		}
+		return errors.Errorf("foreign key violation: no match in %s for values %s in %s",
+			targetTable.Name, pairs.String(), srcTable.Name)
 	}
 	return nil
 }
