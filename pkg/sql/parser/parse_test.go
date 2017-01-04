@@ -201,6 +201,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
 		{`EXPLAIN (A, B, C) SELECT 1`},
+		{`SELECT * FROM [EXPLAIN SELECT 1]`},
 
 		{`HELP count`},
 		{`HELP VARCHAR`},
