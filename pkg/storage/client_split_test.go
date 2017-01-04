@@ -953,9 +953,17 @@ func runSetupSplitSnapshotRace(
 	// rightRangeID).
 	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
 
-	// Replicate the left range onto nodes 1-3 and remove it from node 0.
+	// Replicate the left range onto nodes 1-3 and remove it from node 0. We have
+	// to transfer the lease before unreplicating from range 0 because it isn't
+	// safe (or allowed) for a leaseholder to remove itself from a cluster
+	// without first giving up its lease.
 	mtc.replicateRange(leftRangeID, 1, 2, 3)
+	log.Infof(context.TODO(), "transferring lease range")
+	mtc.transferLease(leftRangeID, 0, 1)
+	log.Infof(context.TODO(), "unreplicating range")
 	mtc.unreplicateRange(leftRangeID, 0)
+	// TODO: Remove?
+	log.Infof(context.TODO(), "expiring leases")
 	mtc.expireLeases(context.TODO())
 
 	mtc.waitForValues(leftKey, []int64{0, 1, 1, 1, 0, 0})
@@ -985,6 +993,7 @@ func runSetupSplitSnapshotRace(
 	// Relocate the right range onto nodes 3-5.
 	mtc.replicateRange(rightRangeID, 4, 5)
 	mtc.unreplicateRange(rightRangeID, 2)
+	mtc.transferLease(rightRangeID, 1, 4)
 	mtc.unreplicateRange(rightRangeID, 1)
 
 	// Perform another increment after all the replication changes. This
@@ -1050,8 +1059,8 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 // TestSplitSnapshotRace_SnapshotWins exercises one outcome of the
 // split/snapshot race: The right side of the split replicates first,
-// so target node sees a raft snapshot before it has processed the split,
-// so it still has a conflicting range.
+// so the target node sees a raft snapshot before it has processed the
+// split, so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
