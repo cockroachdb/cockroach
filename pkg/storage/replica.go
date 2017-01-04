@@ -934,8 +934,12 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				if !status.lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.lease.Replica.StoreID)
 					if !stillMember {
-						// If the leaseholder doesn't have a replica of the range, something has
-						// likely gone wrong (e.g. #12591). Try to take the lease from it.
+						// If the leaseholder doesn't have a replica of the range, we should try
+						// to take the lease even if it hasn't actually expired, since the range
+						// won't be able to make progress while the lease is in such a state (and
+						// leases can stay in such a state for a very long time when using epoch-
+						// based range leases, as in #12591).
+						// TODO(a-robinson/#12680): Make occurrences of this more visible.
 						log.Errorf(ctx, "lease owned by replica %+v that no longer exists",
 							status.lease.Replica)
 						return r.requestLeaseLocked(status), nil
@@ -2371,6 +2375,20 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// opaque command.
 		log.Infof(ctx, "proposing %s %+v: %+v",
 			crt.ChangeType, crt.Replica, crt.UpdatedReplicas)
+
+		// Ensure that we aren't trying to remove ourselves from the range without
+		// having previously given up our lease, since the range won't be able
+		// to make progress while the lease is owned by a removed replica (and
+		// leases can stay in such a state for a very long time when using epoch-
+		// based range leases). This shouldn't happen often, but has been seen
+		// before (#12591).
+		if crt.ChangeType == roachpb.REMOVE_REPLICA &&
+			crt.Replica.ReplicaID == r.mu.replicaID {
+			log.Errorf(ctx, "received invalid ChangeReplicasTrigger %+v to remove leaseholder replica %+v",
+				crt, r.mu.state)
+			return errors.Errorf("%s: invalid ChangeReplicasTrigger %+v to remove leaseholder replica",
+				r, crt)
+		}
 
 		confChangeCtx := ConfChangeContext{
 			CommandID: string(p.idKey),

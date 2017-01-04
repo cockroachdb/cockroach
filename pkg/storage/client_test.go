@@ -936,7 +936,7 @@ func (m *multiTestContext) restart() {
 // is the ID of the newly-added replica if this is an add.
 func (m *multiTestContext) changeReplicasLocked(
 	rangeID roachpb.RangeID, dest int, changeType roachpb.ReplicaChangeType,
-) roachpb.ReplicaID {
+) (roachpb.ReplicaID, error) {
 	startKey := m.findStartKeyLocked(rangeID)
 
 	// Perform a consistent read to get the updated range descriptor (as
@@ -946,12 +946,12 @@ func (m *multiTestContext) changeReplicasLocked(
 	// updated version, but followers are not.
 	var desc roachpb.RangeDescriptor
 	if err := m.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
-		m.t.Fatal(err)
+		return 0, err
 	}
 
 	repl, err := m.findMemberStoreLocked(desc).GetReplica(desc.RangeID)
 	if err != nil {
-		m.t.Fatal(err)
+		return 0, err
 	}
 
 	ctx := repl.AnnotateCtx(context.Background())
@@ -990,10 +990,10 @@ func (m *multiTestContext) changeReplicasLocked(
 			// it on an arbitrary replica and catching this failure.
 			continue
 		} else {
-			m.t.Fatal(err)
+			return 0, err
 		}
 	}
-	return desc.NextReplicaID
+	return desc.NextReplicaID, nil
 }
 
 // replicateRange replicates the given range onto the given stores.
@@ -1005,7 +1005,11 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
 	for i, dest := range dests {
-		expectedReplicaIDs[i] = m.changeReplicasLocked(rangeID, dest, roachpb.ADD_REPLICA)
+		var err error
+		expectedReplicaIDs[i], err = m.changeReplicasLocked(rangeID, dest, roachpb.ADD_REPLICA)
+		if err != nil {
+			m.t.Fatal(err)
+		}
 	}
 
 	// Wait for the replication to complete on all destination nodes.
@@ -1032,10 +1036,19 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 
 // unreplicateRange removes a replica of the range from the dest store.
 func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
+	if err := m.unreplicateRangeNonFatal(rangeID, dest); err != nil {
+		m.t.Fatal(err)
+	}
+}
+
+// unreplicateRangeNonFatal removes a replica of the range from the dest store.
+// Returns an error rather than calling m.t.Fatal upon error.
+func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, dest int) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	m.changeReplicasLocked(rangeID, dest, roachpb.REMOVE_REPLICA)
+	_, err := m.changeReplicasLocked(rangeID, dest, roachpb.REMOVE_REPLICA)
+	return err
 }
 
 // readIntFromEngines reads the current integer value at the given key
@@ -1070,6 +1083,19 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 		}
 		return nil
 	})
+}
+
+// transferLease transfers the lease for the given range from the source
+// replica to the target replica. Assumes that the caller knows who the
+// current leaseholder is.
+func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, source int, dest int) {
+	sourceRepl, err := m.stores[source].GetReplica(rangeID)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	if err := sourceRepl.AdminTransferLease(m.idents[dest].StoreID); err != nil {
+		m.t.Fatal(err)
+	}
 }
 
 // expireLeases increments the context's manual clock far enough into
