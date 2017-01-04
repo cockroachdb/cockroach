@@ -58,8 +58,11 @@ var (
 
 // LeaseState holds the state for a lease. Exported only for testing.
 type LeaseState struct {
+	// This descriptor is immutable and can be shared by many goroutines.
+	// Care must be taken to not modify it.
 	sqlbase.TableDescriptor
 	expiration parser.DTimestamp
+
 	// mu protects refcount and released
 	mu       syncutil.Mutex
 	refcount int
@@ -173,6 +176,8 @@ func (s LeaseStore) Acquire(
 		return nil, err
 	}
 	tableDesc.MaybeUpgradeFormatVersion()
+	// Once the descriptor is set it is immutable and care must be taken
+	// to not modify it.
 	lease.TableDescriptor = *tableDesc
 
 	// ValidateTable instead of Validate, even though we have a txn available,
