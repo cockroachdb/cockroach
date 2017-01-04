@@ -160,6 +160,11 @@ resource "null_resource" "cockroach-runner" {
       "sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' >/dev/null",
       # Allow access to the cockroach instances from the Jepsen controller.
       "sudo cp ~/.ssh/authorized_keys2 /root/.ssh/authorized_keys2",
+      # Download latest cockroach binary, zip so that Jepsen understands it
+      "mkdir -p /tmp/cockroach",
+      "curl http://s3.amazonaws.com/cockroach/cockroach/cockroach.$(curl http://s3.amazonaws.com/cockroach/cockroach/cockroach.LATEST) -o /tmp/cockroach/cockroach",
+      "chmod +x /tmp/cockroach/cockroach",
+      "tar -C /tmp -czf /home/ubuntu/cockroach.tgz cockroach",
     ]
   }
 }
