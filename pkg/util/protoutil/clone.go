@@ -35,11 +35,11 @@ type typeKey struct {
 
 var types struct {
 	syncutil.Mutex
-	known map[typeKey]bool
+	known map[typeKey]reflect.Type
 }
 
 func init() {
-	types.known = make(map[typeKey]bool)
+	types.known = make(map[typeKey]reflect.Type)
 }
 
 // Clone uses proto.Clone to return a deep copy of pb. It panics if pb
@@ -56,78 +56,22 @@ func init() {
 // upstream, see https://github.com/gogo/protobuf/issues/147.
 func Clone(pb proto.Message) proto.Message {
 	for _, verbotenKind := range verbotenKinds {
-		if typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind) {
-			// Try to find an example of the problematic field.
-			if v := findVerboten(reflect.ValueOf(pb), verbotenKind); v != nil {
-				panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable %T %+v", pb, v, v))
-			}
-			// If we couldn't find one, panic anyway.
-			panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable fields", pb))
+		if t := typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind); t != nil {
+			panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
 		}
 	}
 
 	return proto.Clone(pb)
 }
 
-func findVerboten(v reflect.Value, verboten reflect.Kind) interface{} {
-	if val := findVerbotenInner(v, verboten); val != nil {
-		return val.Interface()
-	}
-	return nil
-}
-
-func findVerbotenInner(v reflect.Value, verboten reflect.Kind) *reflect.Value {
-	// Check if v's type can ever contain anything verboten.
-	if v.IsValid() && !typeIsOrContainsVerboten(v.Type(), verboten) {
-		return nil
-	}
-
-	// OK, v might contain something verboten based on its type, now check if it
-	// actually does.
-	switch v.Kind() {
-	case verboten:
-		return &v
-
-	case reflect.Ptr:
-		return findVerbotenInner(v.Elem(), verboten)
-
-	case reflect.Map:
-		for _, key := range v.MapKeys() {
-			if elem := findVerbotenInner(v.MapIndex(key), verboten); elem != nil {
-				return elem
-			}
-		}
-
-	case reflect.Array, reflect.Slice:
-		for i := 0; i < v.Len(); i++ {
-			if elem := findVerbotenInner(v.Index(i), verboten); elem != nil {
-				return elem
-			}
-		}
-
-	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			if elem := findVerbotenInner(v.Field(i), verboten); elem != nil {
-				return elem
-			}
-		}
-
-	case reflect.Chan, reflect.Func:
-		// Not strictly correct, but cloning these kinds is not allowed.
-		return &v
-	}
-
-	return nil
-}
-
-func typeIsOrContainsVerboten(t reflect.Type, verboten reflect.Kind) bool {
+func typeIsOrContainsVerboten(t reflect.Type, verboten reflect.Kind) reflect.Type {
 	types.Lock()
 	defer types.Unlock()
 
 	return typeIsOrContainsVerbotenLocked(t, verboten)
 }
 
-func typeIsOrContainsVerbotenLocked(t reflect.Type, verboten reflect.Kind) bool {
+func typeIsOrContainsVerbotenLocked(t reflect.Type, verboten reflect.Kind) reflect.Type {
 	key := typeKey{t, verboten}
 	knownTypeIsOrContainsVerboten, ok := types.known[key]
 	if !ok {
@@ -137,33 +81,36 @@ func typeIsOrContainsVerbotenLocked(t reflect.Type, verboten reflect.Kind) bool 
 	return knownTypeIsOrContainsVerboten
 }
 
-func typeIsOrContainsVerbotenImpl(t reflect.Type, verboten reflect.Kind) bool {
+func typeIsOrContainsVerbotenImpl(t reflect.Type, verboten reflect.Kind) reflect.Type {
 	switch t.Kind() {
 	case verboten:
-		return true
+		return t
 
 	case reflect.Map:
-		if typeIsOrContainsVerbotenLocked(t.Key(), verboten) || typeIsOrContainsVerbotenLocked(t.Elem(), verboten) {
-			return true
+		if key := typeIsOrContainsVerbotenLocked(t.Key(), verboten); key != nil {
+			return key
+		}
+		if value := typeIsOrContainsVerbotenLocked(t.Elem(), verboten); value != nil {
+			return value
 		}
 
 	case reflect.Array, reflect.Ptr, reflect.Slice:
-		if typeIsOrContainsVerbotenLocked(t.Elem(), verboten) {
-			return true
+		if value := typeIsOrContainsVerbotenLocked(t.Elem(), verboten); value != nil {
+			return value
 		}
 
 	case reflect.Struct:
 		for i := 0; i < t.NumField(); i++ {
-			if typeIsOrContainsVerbotenLocked(t.Field(i).Type, verboten) {
-				return true
+			if field := typeIsOrContainsVerbotenLocked(t.Field(i).Type, verboten); field != nil {
+				return field
 			}
 		}
 
 	case reflect.Chan, reflect.Func:
 		// Not strictly correct, but cloning these kinds is not allowed.
-		return true
+		return t
 
 	}
 
-	return false
+	return nil
 }
