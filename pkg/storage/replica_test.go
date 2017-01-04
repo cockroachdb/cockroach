@@ -6207,13 +6207,12 @@ func TestSyncSnapshot(t *testing.T) {
 	tc.repl.mu.Lock()
 	snap, err := tc.repl.Snapshot()
 	tc.repl.mu.Unlock()
-	tc.repl.CloseOutSnap()
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snap.Data) == 0 {
-		t.Fatal("snapshot is empty")
+	if len(snap.Data) != 0 {
+		t.Fatal("snapshot is not empty")
 	}
 }
 
