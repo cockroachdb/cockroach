@@ -15,4 +15,4 @@ mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
 cd pkg/acceptance
-../../acceptance.test -nodes 3 -l "$TMPDIR" -test.v -test.timeout 10m 2>&1 | go-test-teamcity
+../../acceptance.test -nodes 3 -l "$TMPDIR" -test.v -test.timeout 10m 2>&1 | tee "$TMPDIR/acceptance.log" | go-test-teamcity

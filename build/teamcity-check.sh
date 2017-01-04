@@ -8,7 +8,11 @@ set -exuo pipefail
 # https://github.com/golang/go/issues/10249 for some more concrete discussion
 # on `stringer` and https://github.com/golang/go/issues/16086 for `vet`.
 build/builder.sh make gotestdashi
-build/builder.sh make check 2>&1 | go-test-teamcity
+
+mkdir -p artifacts
+
+build/builder.sh make check 2>&1 | tee artifacts/check.log | go-test-teamcity
+
 build/builder.sh go generate ./pkg/...
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'
 
