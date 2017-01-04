@@ -992,15 +992,33 @@ func TestRefreshPendingCommands(t *testing.T) {
 				return nil
 			})
 
+			if !c.DisableRefreshReasonNewLeader {
+				// Wait for range 1 to have a leader again. When node 3 restarts, it
+				// might become aware of the leader while the leader itself is not
+				// sure. Detecting leadership change via changes to SoftState.Lead is
+				// somewhat less robust than other refresh reasons but used because it
+				// can often detect a new leader earlier.
+				testutils.SucceedsSoon(t, func() error {
+					if status := mtc.stores[0].RaftStatus(1); status != nil && status.SoftState.Lead != 0 {
+						return nil
+					}
+					return errors.New("no leader for range")
+				})
+			}
+
 			// Restart node 2 and wait for the snapshot to be applied. Note that
 			// waitForValues reads directly from the engine and thus isn't executing
 			// a Raft command.
+			log.Infof(context.Background(), "restarting node")
 			mtc.restartStore(2)
+			pauseNodeLivenessHeartbeats(mtc, true)
+
 			mtc.waitForValues(roachpb.Key("a"), []int64{10, 10, 10})
 
 			// Send an increment to the restarted node. If we don't refresh pending
 			// commands appropriately, the range lease command will not get
 			// re-proposed when we discover the new leader.
+			log.Infof(context.Background(), "sending increment")
 			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[2]), incArgs); err != nil {
 				t.Fatal(err)
 			}
