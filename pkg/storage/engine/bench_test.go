@@ -39,6 +39,8 @@ import (
 	"github.com/termie/go-shutil"
 )
 
+const overhead = 48 // Per key/value overhead (empirically determined)
+
 // readAllFiles reads all of the files matching pattern thus ensuring they are
 // in the OS buffer cache.
 func readAllFiles(pattern string) {
@@ -191,7 +193,6 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
 func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
-	const overhead = 48          // Per key/value overhead (empirically determined)
 	const targetSize = 512 << 20 // 512 MB
 	// Adjust the number of keys so that each test has approximately the same
 	// amount of data.
@@ -470,7 +471,6 @@ func BenchmarkMVCCMergeTimeSeries_RocksDB(b *testing.B) {
 func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 	// 512 KB ranges so the benchmark doesn't take forever
 	const rangeBytes = 512 * 1024
-	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
 	eng, dir := setupMVCCData(emk, 1, numKeys, valueBytes, b)
 	defer eng.Close()
@@ -505,7 +505,6 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
 func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	const rangeBytes = 64 * 1024 * 1024
-	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
 	eng, _ := setupMVCCData(emk, 1, numKeys, valueBytes, b)
 	defer eng.Close()
@@ -592,5 +591,40 @@ func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 		if err := MVCCDelete(context.Background(), rocksdb, nil, key, zeroTS, nil /* txn */); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func BenchmarkClearRange_RocksDB(b *testing.B) {
+	const rangeBytes = 64 << 20
+	const valueBytes = 92
+	numKeys := rangeBytes / (overhead + valueBytes)
+	eng, dir := setupMVCCData(setupMVCCRocksDB, 1, numKeys, valueBytes, b)
+	defer eng.Close()
+
+	b.SetBytes(rangeBytes)
+	b.StopTimer()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		locDirty := dir + "_dirty"
+		if err := os.RemoveAll(locDirty); err != nil {
+			b.Fatal(err)
+		}
+		if err := shutil.CopyTree(dir, locDirty, nil); err != nil {
+			b.Fatal(err)
+		}
+		dupEng := setupMVCCRocksDB(b, locDirty)
+
+		b.StartTimer()
+		batch := dupEng.NewWriteOnlyBatch()
+		if err := batch.ClearRange(NilKey, MVCCKeyMax); err != nil {
+			b.Fatal(err)
+		}
+		if err := batch.Commit(); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+
+		dupEng.Close()
 	}
 }

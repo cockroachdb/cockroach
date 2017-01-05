@@ -590,22 +590,15 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	// Clear the range using a distinct batch in order to prevent the iteration
-	// from forcing the batch to flush from Go to C++.
-	distinctBatch := batch.Distinct()
-
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(s.Desc, r.store.Engine(), false /* !replicatedOnly */)
-	defer iter.Close()
-	for ; iter.Valid(); iter.Next() {
-		if err := distinctBatch.Clear(iter.Key()); err != nil {
+	for _, keyRange := range makeAllKeyRanges(s.Desc) {
+		if err := batch.ClearRange(keyRange.start, keyRange.end); err != nil {
 			return err
 		}
 	}
 
-	distinctBatch.Close()
 	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.
@@ -617,7 +610,7 @@ func (r *Replica) applySnapshot(
 
 	// The log entries are all written to distinct keys so we can use a
 	// distinct batch.
-	distinctBatch = batch.Distinct()
+	distinctBatch := batch.Distinct()
 	stats.batch = timeutil.Now()
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
