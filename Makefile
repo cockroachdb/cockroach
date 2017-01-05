@@ -154,10 +154,23 @@ stressrace: GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 stressrace: stress
 
+# We're stuck copy-pasting this command from the test target because `ifeq`
+# clauses are all executed by Make before any targets are ever run. That means
+# that setting the BENCHES variable here doesn't effect the `ifeq` evaluation in
+# the test target. Thus, if we were to simply set BENCHES and declare the test
+# target as a prerequisite, we'd never actually run the benchmarks unless an
+# override for BENCHES was specified on the command-line (which would take
+# effect during `ifeq` processing). The alternative to copy-pasting would be to
+# use shell-conditionals in the test target, which would quickly make the output
+# of running `make test` or `make bench` very ugly.
+# If golang/go#18010 is ever fixed, we can just get rid of all the `ifeq`s,
+# always include -bench, and switch this back to specifying test as a prereq.
 .PHONY: bench
+bench: BENCHES := .
 bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
-bench: test
+bench: gotestdashi
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: upload-coverage
 upload-coverage:
