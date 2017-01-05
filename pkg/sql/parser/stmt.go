@@ -102,7 +102,7 @@ func (*CommitTransaction) StatementTag() string { return "COMMIT" }
 func (*CopyFrom) StatementType() StatementType { return CopyIn }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CopyFrom) StatementTag() string { return "COPY FROM" }
+func (*CopyFrom) StatementTag() string { return "COPY" }
 
 // StatementType implements the Statement interface.
 func (*CreateDatabase) StatementType() StatementType { return DDL }
