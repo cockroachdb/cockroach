@@ -168,7 +168,7 @@ func makeConstraints(
 	sql string,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-	sel *selectNode,
+	sel *renderNode,
 ) (orIndexConstraints, parser.TypedExpr) {
 	expr := parseAndNormalizeExpr(t, sql, sel)
 	exprs, equiv := analyzeExpr(expr)

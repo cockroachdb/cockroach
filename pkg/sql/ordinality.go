@@ -27,7 +27,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 // specification. In particular, applying a filter before or after
 // an intermediate ordinalityNode will produce different results.
 //
-// It is inserted in the logical plan between the selectNode and its
+// It is inserted in the logical plan between the renderNode and its
 // source node, thus earlier than the WHERE filters.
 //
 // In other words, *ordinalityNode establishes a barrier to many

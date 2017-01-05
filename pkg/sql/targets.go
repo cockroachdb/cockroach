@@ -61,14 +61,14 @@ func (p *planner) computeRender(
 
 // equivalentRenders returns true if and only if the two render expressions
 // are equivalent.
-func (s *selectNode) equivalentRenders(i, j int) bool {
+func (s *renderNode) equivalentRenders(i, j int) bool {
 	firstExprStr := parser.AsStringWithFlags(s.render[i], parser.FmtSymbolicVars)
 	return s.isRenderEquivalent(firstExprStr, j)
 }
 
 // isRenderEquivalent is a helper function for equivalentRenders() and
 // addOrMergeRenders(). Do not use directly.
-func (s *selectNode) isRenderEquivalent(exprStr string, j int) bool {
+func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 	return parser.AsStringWithFlags(s.render[j], parser.FmtSymbolicVars) == exprStr
 }
 
@@ -76,7 +76,7 @@ func (s *selectNode) isRenderEquivalent(exprStr string, j int) bool {
 // render list and returns their column indices. If an expression is
 // already rendered, and the reuse flag is true, no new render is
 // added and the index of the existing column is returned instead.
-func (s *selectNode) addOrMergeRenders(
+func (s *renderNode) addOrMergeRenders(
 	cols ResultColumns, exprs []parser.TypedExpr, reuseExistingRender bool,
 ) (colIdxs []int) {
 	colIdxs = make([]int, len(cols))

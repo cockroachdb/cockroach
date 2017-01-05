@@ -28,8 +28,8 @@ import (
 )
 
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
-// render targets in the selectNode as necessary.
-func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, error) {
+// render targets in the renderNode as necessary.
+func (p *planner) groupBy(n *parser.SelectClause, s *renderNode) (*groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -51,7 +51,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// Invalid: `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
 	// - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
 	//
-	// In the construction of the outer selectNode, when renders are
+	// In the construction of the outer renderNode, when renders are
 	// processed (via computeRender()), the expressions are
 	// normalized. In order to compare these normalized render
 	// expressions to GROUP BY expressions, we need to normalize the
@@ -182,7 +182,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	newColumns := make(ResultColumns, len(group.funcs))
 	for i, f := range group.funcs {
 		// Note: we do not need to normalize the expressions again because
-		// they were normalized by selectNode's initFrom() before we
+		// they were normalized by renderNode's initFrom() before we
 		// extracted aggregation functions above.
 		newRenders[i] = f.arg
 		newColumns[i] = ResultColumn{

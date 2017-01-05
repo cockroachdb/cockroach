@@ -26,7 +26,7 @@ import (
 
 // filterNode implements a filtering stage. It is intended to be used
 // during plan optimizations in order to avoid instantiating a fully
-// blown selectTopNode/selectNode pair.
+// blown selectTopNode/renderNode pair.
 type filterNode struct {
 	p          *planner
 	source     planDataSource
