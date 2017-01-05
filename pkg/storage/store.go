@@ -64,7 +64,6 @@ const (
 	rangeIDAllocCount               = 10
 	defaultHeartbeatIntervalTicks   = 5
 	defaultRaftElectionTimeoutTicks = 15
-	defaultAsyncSnapshotMaxAge      = time.Minute
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
 
@@ -627,11 +626,6 @@ type StoreConfig struct {
 	// the range event log.
 	LogRangeEvents bool
 
-	// AsyncSnapshotMaxAge is the maximum amount of time that an
-	// asynchronous snapshot will be held while waiting for raft to pick
-	// it up (counted from when the snapshot generation is completed).
-	AsyncSnapshotMaxAge time.Duration
-
 	// RaftEntryCacheSize is the size in bytes of the Raft log entry cache
 	// shared by all Raft groups managed by the store.
 	RaftEntryCacheSize uint64
@@ -797,9 +791,6 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 	if sc.RaftElectionTimeoutTicks == 0 {
 		sc.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
-	}
-	if sc.AsyncSnapshotMaxAge == 0 {
-		sc.AsyncSnapshotMaxAge = defaultAsyncSnapshotMaxAge
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
