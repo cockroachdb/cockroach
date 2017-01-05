@@ -13,6 +13,8 @@ interface VisualizationProps {
   // If stale is true, the visualization is faded
   // and the icon is changed to a warning icon.
   stale?: boolean;
+  // If loading is true a spinner is shown instead of the graph.
+  loading?: boolean;
 }
 
 /**
@@ -51,8 +53,8 @@ export default class extends React.Component<VisualizationProps, {}> {
           (tooltip) ? <ToolTip text={tooltip} title={title} warning={warning} warningTitle={warningTitle} /> : ""
         }
       </div>
-      <div className="visualization__content">
-        { this.props.children }
+      <div className={"visualization__content" + (this.props.loading ? " visualization--loading" : "")}>
+        {this.props.loading ? <img className="visualization__spinner" src="assets/spinner.gif" /> :  this.props.children }
       </div>
     </div>;
   }
