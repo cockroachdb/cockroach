@@ -76,8 +76,6 @@ func (p *planner) makeExplainPlanNode(
 		// Type is the node type.
 		{Name: "Type", Typ: parser.TypeString},
 		// Field is the part of the node that a row of output pertains to.
-		// For example a select node may have separate "render" and
-		// "filter" fields.
 		{Name: "Field", Typ: parser.TypeString},
 		// Description contains details about the field.
 		{Name: "Description", Typ: parser.TypeString},

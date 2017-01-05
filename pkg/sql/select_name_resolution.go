@@ -163,7 +163,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, bool, error) {
+func (s *renderNode) resolveNames(expr parser.Expr) (parser.Expr, bool, error) {
 	return s.planner.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 }
 

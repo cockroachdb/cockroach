@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
+func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
 	p := makeTestPlanner()
 	scan := &scanNode{p: p}
 	scan.desc = *desc
 	scan.initDescDefaults(publicColumns)
 
-	sel := &selectNode{planner: p}
+	sel := &renderNode{planner: p}
 	sel.source.plan = scan
 	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
 	sel.source.info = newSourceInfoForSingleTable(testName, scan.Columns())
