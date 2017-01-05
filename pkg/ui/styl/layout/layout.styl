@@ -62,6 +62,10 @@ $subnav-background  = $secondary-gray-4
   font-family Lato-Bold
   letter-spacing 5px
 
+.header--subsection
+  text-transform none
+  letter-spacing 0
+
 .l-columns
   clearfix()
   min-width 1360px
@@ -82,21 +86,6 @@ $subnav-background  = $secondary-gray-4
   padding 12px 24px
   max-width 1350px
   clearfix()
-
-  .header
-    width calc(100% + 40px)
-    height 88px
-    background-color $secondary-gray-4
-    margin -20px -20px 0 -21px
-    padding 40px 30px
-    border-bottom 1px solid $secondary-gray-1
-    h1
-      font-size 19px
-      line-height 19px
-      padding 0
-      margin 0
-    &:not(:first-child)
-      border-top 1px solid $secondary-gray-1
 
   .form
     padding 40px 10px
@@ -134,6 +123,14 @@ $subnav-background  = $secondary-gray-4
           content "Required"
       &:invalid + * + span.icon:after
         content "\26A0"
+
+.parent-link a
+  color $glow-blue
+  font-size 13px
+  font-family lato
+  text-transform uppercase
+  text-decoration none
+  letter-spacing 2px
 
 span.status
   position absolute
@@ -366,7 +363,6 @@ a.toggle
     background-color white
   .table-header
     padding 15px
-    padding-left 3rem
     button, h1
       margin 0
       padding 0
@@ -425,10 +421,6 @@ a.toggle
   .num-ranges
     font-size 16px
     margin-bottom 2rem
-
-table
-  td:first-child
-    padding-left 3rem
 
 #footer
   height $footer-height

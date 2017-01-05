@@ -47,16 +47,15 @@ describe("<SortedTable>", function() {
   it("renders the expected table structure.", function() {
     let wrapper = makeTable([new TestRow("test", 1)]);
     assert.lengthOf(wrapper.find("table"), 1, "one table");
-    assert.lengthOf(wrapper.find("thead").find("tr"), 2, "two header rows");
-    assert.lengthOf(wrapper.find("tr.column"), 1, "column header row");
-    assert.lengthOf(wrapper.find("tr.rollup"), 1, "rollup header row");
+    assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
+    assert.lengthOf(wrapper.find("tr.sort-table__row--header"), 1, "column header row");
     assert.lengthOf(wrapper.find("tbody"), 1, "tbody element");
   });
 
   it("correctly uses onChangeSortSetting", function() {
     let spy = sinon.spy();
     let wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
-    wrapper.find("th.column").first().simulate("click");
+    wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.getCall(0).args[0], {
       sortKey: 0,

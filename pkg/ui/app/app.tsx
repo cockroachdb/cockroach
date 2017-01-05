@@ -105,10 +105,8 @@ ReactDOM.render(
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
           <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
         </Route>
-        <Route path="nodes" >
-          <IndexRedirect to="overview" />
-          <Route path="overview" component={ NodesOverview } />
-          <Route path="graphs" component={NodeGraphs} />
+        <Route path="cluster">
+          <Route path="nodes" component={ NodesOverview } />
         </Route>
         <Route path="nodes">
           // This path has to match the "nodes" route for the purpose of
