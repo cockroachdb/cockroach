@@ -151,13 +151,10 @@ func (p *planner) makeUpsertHelper(
 	return helper, nil
 }
 
-func (uh *upsertHelper) expand() error {
-	for _, evalExpr := range uh.evalExprs {
-		if err := uh.p.expandSubqueryPlans(evalExpr); err != nil {
-			return err
-		}
+func (uh *upsertHelper) walkExprs(walk func(desc string, index int, expr parser.TypedExpr)) {
+	for i, evalExpr := range uh.evalExprs {
+		walk("eval", i, evalExpr)
 	}
-	return nil
 }
 
 func (uh *upsertHelper) start() error {

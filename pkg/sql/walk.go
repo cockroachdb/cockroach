@@ -290,6 +290,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = lv.expr("returning", i, rexpr, subplans)
 		}
+		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+			subplans = lv.expr(d, i, e, subplans)
+		})
 		lv.subqueries(subplans)
 		lv.visit(n.run.rows)
 
@@ -309,6 +312,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = lv.expr("returning", i, rexpr, subplans)
 		}
+		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+			subplans = lv.expr(d, i, e, subplans)
+		})
 		lv.subqueries(subplans)
 		lv.visit(n.run.rows)
 
@@ -318,6 +324,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = lv.expr("returning", i, rexpr, subplans)
 		}
+		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+			subplans = lv.expr(d, i, e, subplans)
+		})
 		lv.subqueries(subplans)
 		lv.visit(n.run.rows)
 
