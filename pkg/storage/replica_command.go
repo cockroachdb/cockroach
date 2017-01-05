@@ -3280,6 +3280,11 @@ func (r *Replica) ChangeReplicas(
 func (r *Replica) sendSnapshot(
 	ctx context.Context, repDesc roachpb.ReplicaDescriptor, snapType string,
 ) error {
+	if err := r.store.AcquireRaftSnapshot(ctx); err != nil {
+		return err
+	}
+	defer r.store.ReleaseRaftSnapshot()
+
 	snap, err := r.GetSnapshot(ctx, snapTypePreemptive)
 	if err != nil {
 		return errors.Wrapf(err, "%s: change replicas failed to generate snapshot", r)

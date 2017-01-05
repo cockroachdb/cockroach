@@ -2196,10 +2196,15 @@ func (s *Store) NewSnapshot() engine.Reader {
 	return s.engine.NewSnapshot()
 }
 
-// AcquireRaftSnapshot blocks waiting for the an available snapshot slot. The
-// caller MUST call ReleaseRaftSnapshot.
-func (s *Store) AcquireRaftSnapshot() {
-	s.snapshotSem <- struct{}{}
+// AcquireRaftSnapshot returns true if a new raft snapshot can start. If no
+// error is returned, the caller MUST call ReleaseRaftSnapshot.
+func (s *Store) AcquireRaftSnapshot(ctx context.Context) error {
+	select {
+	case s.snapshotSem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // ReleaseRaftSnapshot decrements the count of active snapshots.
