@@ -46,7 +46,15 @@ type planObserver interface {
 	leaveNode(nodeName string)
 }
 
-// planVisitor is the support structure for visit().
+// walkPlan performs a depth-first traversal of the plan given as
+// argument, informing the planObserver of the node details at each
+// level.
+func walkPlan(plan planNode, observer planObserver) {
+	v := planVisitor{observer: observer}
+	v.visit(plan)
+}
+
+// planVisitor is the support structure for walkPlan().
 type planVisitor struct {
 	observer planObserver
 	nodeName string
@@ -56,9 +64,7 @@ type planVisitor struct {
 	subplans []planNode
 }
 
-// visit performs a depth-first traversal of the plan given as
-// argument, informing the planObserver of the node details at each
-// level.
+// visit is the recursive function that supports walkPlan().
 func (v *planVisitor) visit(plan planNode) {
 	if plan == nil {
 		return
