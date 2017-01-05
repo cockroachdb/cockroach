@@ -128,7 +128,7 @@ func (v *planVisitor) visit(plan planNode) {
 		lv.subqueries(subplans)
 		lv.visit(n.source.plan)
 
-	case *selectNode:
+	case *renderNode:
 		var subplans []planNode
 		for i, r := range n.render {
 			subplans = lv.expr("render", i, r, subplans)
@@ -440,7 +440,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&limitNode{}):          "limit",
 	reflect.TypeOf(&ordinalityNode{}):     "ordinality",
 	reflect.TypeOf(&scanNode{}):           "scan",
-	reflect.TypeOf(&selectNode{}):         "render",
+	reflect.TypeOf(&renderNode{}):         "render",
 	reflect.TypeOf(&selectTopNode{}):      "select",
 	reflect.TypeOf(&sortNode{}):           "sort",
 	reflect.TypeOf(&splitNode{}):          "split",
