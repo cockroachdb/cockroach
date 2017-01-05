@@ -248,39 +248,6 @@ func (p *planner) startSubqueryPlans(expr parser.Expr) error {
 	return p.subqueryPlanVisitor.err
 }
 
-// collectSubqueryPlansVisitor gathers all the planNodes implementing
-// sub-queries in a given expression. This is used by EXPLAIN to show
-// the sub-plans.
-type collectSubqueryPlansVisitor struct {
-	plans []planNode
-}
-
-var _ parser.Visitor = &collectSubqueryPlansVisitor{}
-
-func (v *collectSubqueryPlansVisitor) VisitPre(
-	expr parser.Expr,
-) (recurse bool, newExpr parser.Expr) {
-	if sq, ok := expr.(*subquery); ok {
-		if sq.plan == nil {
-			panic("cannot collect the sub-plans before they were expanded")
-		}
-		v.plans = append(v.plans, sq.plan)
-		return false, expr
-	}
-	return true, expr
-}
-
-func (v *collectSubqueryPlansVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
-
-func (p *planner) collectSubqueryPlans(expr parser.Expr, result []planNode) []planNode {
-	if expr == nil {
-		return result
-	}
-	p.collectSubqueryPlansVisitor = collectSubqueryPlansVisitor{plans: result}
-	_, _ = parser.WalkExpr(&p.collectSubqueryPlansVisitor, expr)
-	return p.collectSubqueryPlansVisitor.plans
-}
-
 // subqueryVisitor replaces parser.Subquery syntax nodes by a
 // sql.subquery node and an initial query plan for running the
 // sub-query.

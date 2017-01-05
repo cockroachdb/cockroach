@@ -72,10 +72,9 @@ type planner struct {
 	copyFrom *copyNode
 
 	// Avoid allocations by embedding commonly used visitors.
-	subqueryVisitor             subqueryVisitor
-	subqueryPlanVisitor         subqueryPlanVisitor
-	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
-	nameResolutionVisitor       nameResolutionVisitor
+	subqueryVisitor       subqueryVisitor
+	subqueryPlanVisitor   subqueryPlanVisitor
+	nameResolutionVisitor nameResolutionVisitor
 
 	execCfg *ExecutorConfig
 

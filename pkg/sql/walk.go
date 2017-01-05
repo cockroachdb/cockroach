@@ -48,9 +48,12 @@ type planObserver interface {
 
 // planVisitor is the support structure for visit().
 type planVisitor struct {
-	p        *planner
 	observer planObserver
 	nodeName string
+
+	// subplans is a temporary accumulator array used when collecting
+	// sub-query plans at each planNode.
+	subplans []planNode
 }
 
 // visit performs a depth-first traversal of the plan given as
@@ -381,9 +384,28 @@ func (v *planVisitor) expr(
 	fieldName string, n int, expr parser.Expr, subplans []planNode,
 ) []planNode {
 	v.observer.expr(v.nodeName, fieldName, n, expr)
-	subplans = v.p.collectSubqueryPlans(expr, subplans)
+
+	if expr != nil {
+		v.subplans = subplans
+		parser.WalkExprConst(v, expr)
+		subplans = v.subplans
+		v.subplans = nil
+	}
 	return subplans
 }
+
+// planVisitor is also an Expr visitor whose task is to collect
+// sub-query plans for the surrounding planNode.
+var _ parser.Visitor = &planVisitor{}
+
+func (v *planVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
+	if sq, ok := expr.(*subquery); ok && sq.plan != nil {
+		v.subplans = append(v.subplans, sq.plan)
+		return false, expr
+	}
+	return true, expr
+}
+func (v *planVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 // nodeName returns the name of the given planNode as string.  The
 // node's current state is taken into account, e.g. sortNode has

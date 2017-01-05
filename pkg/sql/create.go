@@ -1512,7 +1512,7 @@ func (p *planner) populateViewBackrefs(
 	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
 	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
-	v := planVisitor{p: p, observer: b}
+	v := planVisitor{observer: b}
 	v.visit(plan)
 }
 
@@ -1597,7 +1597,7 @@ func populateViewBackrefFromViewDesc(
 // plan contains a star expansion.
 func (p *planner) planContainsStar(plan planNode) bool {
 	s := &starDetector{}
-	v := planVisitor{p: p, observer: s}
+	v := planVisitor{observer: s}
 	v.visit(plan)
 	return s.foundStar
 }
