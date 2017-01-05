@@ -594,14 +594,11 @@ func TestEngineDeleteRange(t *testing.T) {
 		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
 
 		// Delete a range of keys
-		numDeleted, err := ClearRange(engine, mvccKey("aa"), mvccKey("abc"))
-		// Verify what was deleted
-		if err != nil {
+		iter := engine.NewIterator(false)
+		if err := engine.ClearRange(iter, mvccKey("aa"), mvccKey("abc")); err != nil {
 			t.Error("Not expecting an error")
 		}
-		if numDeleted != 3 {
-			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
-		}
+		iter.Close()
 		// Verify what's left
 		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10,
 			[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)

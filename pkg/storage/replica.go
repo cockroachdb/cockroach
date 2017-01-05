@@ -706,18 +706,18 @@ func (r *Replica) String() string {
 func (r *Replica) destroyDataRaftMuLocked(
 	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
 ) error {
-	iter := NewReplicaDataIterator(
-		// NB: this uses the local descriptor instead of the consistent one to
-		// match the data on disk.
-		r.Desc(),
-		r.store.Engine(),
-		false, /* !replicatedOnly */
-	)
-	defer iter.Close()
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
-	for ; iter.Valid(); iter.Next() {
-		_ = batch.Clear(iter.Key())
+
+	iter := r.store.Engine().NewIterator(false)
+	defer iter.Close()
+
+	// NB: this uses the local descriptor instead of the consistent one to match
+	// the data on disk.
+	for _, keyRange := range makeAllKeyRanges(r.Desc()) {
+		if err := batch.ClearRange(iter, keyRange.start, keyRange.end); err != nil {
+			return err
+		}
 	}
 
 	// Save a tombstone. The range cannot be re-replicated onto this node
