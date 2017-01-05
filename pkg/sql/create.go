@@ -1530,7 +1530,7 @@ func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
 	// the tree, but it's actually faster than a string comparison on the name
 	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
 	// with go 1.7.1.
-	if sel, ok := plan.(*selectNode); ok {
+	if sel, ok := plan.(*renderNode); ok {
 		// If this is a view, we don't want to resolve the underlying scan(s).
 		// We instead prefer to track the dependency on the view itself rather
 		// than on its indirect dependencies.
@@ -1593,7 +1593,7 @@ func populateViewBackrefFromViewDesc(
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
 }
 
-// planContainsStar returns true if one of the select nodes in the
+// planContainsStar returns true if one of the render nodes in the
 // plan contains a star expansion.
 func (p *planner) planContainsStar(plan planNode) bool {
 	s := &starDetector{}
@@ -1614,7 +1614,7 @@ func (s *starDetector) enterNode(_ string, plan planNode) bool {
 	if s.foundStar {
 		return false
 	}
-	if sel, ok := plan.(*selectNode); ok {
+	if sel, ok := plan.(*renderNode); ok {
 		if sel.isStar {
 			s.foundStar = true
 			return false

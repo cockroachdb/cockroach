@@ -119,7 +119,7 @@ func (d *deleteNode) Start() error {
 		if topSel, ok := maybeScanNode.(*selectTopNode); ok {
 			maybeScanNode = topSel.source
 		}
-		if sel, ok := maybeScanNode.(*selectNode); ok {
+		if sel, ok := maybeScanNode.(*renderNode); ok {
 			maybeScanNode = sel.source.plan
 		}
 		if scan, ok := maybeScanNode.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
