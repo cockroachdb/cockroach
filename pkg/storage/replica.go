@@ -1024,13 +1024,16 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				select {
 				case pErr = <-llChan:
 					if pErr != nil {
-						// Getting a LeaseRejectedError back means someone else got there
-						// first, or the lease request was somehow invalid due to a
-						// concurrent change. Convert the error to a NotLeaseHolderError.
+						// Getting a LeaseRejectedError back either means that someone else
+						// got there first or that the lease request was somehow invalid due
+						// to a concurrent change. That concurrent change could have been
+						// that this replica was removed, so check for that case before
+						// falling back to a NotLeaseHolderError.
 						if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
-							lease, _ := r.getLease()
 							var err error
-							if !r.IsLeaseValid(lease, r.store.Clock().Now()) {
+							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
+								err = descErr
+							} else if lease, _ := r.getLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
 							} else {
 								err = newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc())
