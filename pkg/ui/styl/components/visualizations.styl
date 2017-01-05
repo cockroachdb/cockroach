@@ -30,7 +30,7 @@ $viz-sides = 62px
   width 925px
 
   &__content
-    padding 15px 10px
+    padding 0 10px 15px
     height 200px
     &.visualization--loading
       display flex
@@ -40,20 +40,21 @@ $viz-sides = 62px
   &__header
     padding 15px 25px 0
     clearfix()
+    text-align center
 
   &__title
     font-size 14px
     font-family lato
-    float left
     font-weight bold
     color $light-blue
+    display inline
 
   &__subtitle
     color $light-gray
     margin-left 5px
     font-size 12px
     font-family lato
-    float left
+    display inline
 
   &__spinner
     width 40px
@@ -62,6 +63,7 @@ $viz-sides = 62px
   &__info-icon
     float right
     color $secondary-gray-5
+    display none
 
   .icon-warning
     color $secondary-gold
