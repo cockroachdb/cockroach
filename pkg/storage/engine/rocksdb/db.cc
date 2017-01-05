@@ -1777,6 +1777,22 @@ DBStatus DBDelete(DBEngine *db, DBKey key) {
   return db->Delete(key);
 }
 
+DBStatus DBDeleteRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end) {
+  // TODO(peter): Replace with the RocksDB DeleteRange support when
+  // that lands and is stable.
+  rocksdb::Iterator *const iter_rep = iter->rep.get();
+  iter_rep->Seek(EncodeKey(start));
+  const std::string end_key = EncodeKey(end);
+  for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0;
+       iter_rep->Next()) {
+    DBStatus status = db->Delete(ToDBKey(iter_rep->key()));
+    if (status.data != NULL) {
+      return status;
+    }
+  }
+  return kSuccess;
+}
+
 DBStatus DBImpl::CommitBatch() {
   return FmtStatus("unsupported");
 }
@@ -1895,7 +1911,12 @@ DBIterator* DBBatch::NewIter(bool prefix) {
 }
 
 DBIterator* DBWriteOnlyBatch::NewIter(bool prefix) {
-  return NULL;
+  DBIterator* iter = new DBIterator;
+  rocksdb::ReadOptions opts;
+  opts.prefix_same_as_start = prefix;
+  opts.total_order_seek = !prefix;
+  iter->rep.reset(rep->NewIterator(opts));
+  return iter;
 }
 
 DBIterator* DBSnapshot::NewIter(bool prefix) {
