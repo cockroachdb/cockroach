@@ -139,9 +139,18 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     }
   }
 
+  keypress = (event: KeyboardEvent) => {
+    if (event.which === 37) {
+      this.arrowClick(ArrowDirection.LEFT);
+    } else if (event.which === 39) {
+      this.arrowClick(ArrowDirection.RIGHT);
+    }
+  }
+
   componentWillMount() {
     this.props.refreshNodes();
     this.setDefaultTime();
+    document.addEventListener("keydown", this.keypress);
   }
 
   componentWillReceiveProps(props: TimeScaleDropdownProps) {
@@ -150,6 +159,10 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     } else {
       this.setDefaultTime(props);
     }
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener("keydown", this.keypress);
   }
 
   render() {
