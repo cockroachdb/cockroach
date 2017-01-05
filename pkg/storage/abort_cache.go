@@ -76,9 +76,9 @@ func (sc *AbortCache) max() roachpb.Key {
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *AbortCache) ClearData(e engine.Engine) error {
-	b := e.NewBatch()
+	b := e.NewWriteOnlyBatch()
 	defer b.Close()
-	_, err := engine.ClearRange(b, engine.MakeMVCCMetadataKey(sc.min()), engine.MakeMVCCMetadataKey(sc.max()))
+	err := b.ClearRange(engine.MakeMVCCMetadataKey(sc.min()), engine.MakeMVCCMetadataKey(sc.max()))
 	if err != nil {
 		return err
 	}

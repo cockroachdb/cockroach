@@ -597,10 +597,8 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(s.Desc, r.store.Engine(), false /* !replicatedOnly */)
-	defer iter.Close()
-	for ; iter.Valid(); iter.Next() {
-		if err := distinctBatch.Clear(iter.Key()); err != nil {
+	for _, keyRange := range makeAllKeyRanges(s.Desc) {
+		if err := distinctBatch.ClearRange(keyRange.start, keyRange.end); err != nil {
 			return err
 		}
 	}

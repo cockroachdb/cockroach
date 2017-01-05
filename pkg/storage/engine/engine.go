@@ -131,6 +131,10 @@ type Writer interface {
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
 	Clear(key MVCCKey) error
+	// ClearRange removes a set of entries, from start (inclusive) to end
+	// (exclusive). Similar to Clear, this method actually removes entries from
+	// the storage engine.
+	ClearRange(start, end MVCCKey) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
@@ -262,24 +266,4 @@ func Scan(engine Reader, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) 
 		return false, nil
 	})
 	return kvs, err
-}
-
-// ClearRange removes a set of entries, from start (inclusive) to end
-// (exclusive). This function returns the number of entries
-// removed. Either all entries within the range will be deleted, or
-// none, and an error will be returned. Note that this function
-// actually removes entries from the storage engine, rather than
-// inserting tombstones, as with deletion through the MVCC.
-func ClearRange(engine ReadWriter, start, end MVCCKey) (int, error) {
-	count := 0
-	if err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
-		if err := engine.Clear(kv.Key); err != nil {
-			return false, err
-		}
-		count++
-		return false, nil
-	}); err != nil {
-		return 0, err
-	}
-	return count, nil
 }

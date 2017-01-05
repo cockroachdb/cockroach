@@ -594,3 +594,39 @@ func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkClearRange_RocksDB(b *testing.B) {
+	const rangeBytes = 64 << 20
+	const valueBytes = 92
+	const overhead = 48 // Per key/value overhead (empirically determined)
+	numKeys := rangeBytes / (overhead + valueBytes)
+	eng, dir := setupMVCCData(setupMVCCRocksDB, 1, numKeys, valueBytes, b)
+	defer eng.Close()
+
+	b.SetBytes(rangeBytes)
+	b.StopTimer()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		locDirty := dir + "_dirty"
+		if err := os.RemoveAll(locDirty); err != nil {
+			b.Fatal(err)
+		}
+		if err := shutil.CopyTree(dir, locDirty, nil); err != nil {
+			b.Fatal(err)
+		}
+		dupEng := setupMVCCRocksDB(b, locDirty)
+
+		b.StartTimer()
+		batch := dupEng.NewWriteOnlyBatch()
+		if err := batch.ClearRange(NilKey, MVCCKeyMax); err != nil {
+			b.Fatal(err)
+		}
+		if err := batch.Commit(); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+
+		dupEng.Close()
+	}
+}
