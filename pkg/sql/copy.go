@@ -170,6 +170,9 @@ func (p *planner) ProcessCopyData(data string, msg copyMsg) (parser.StatementLis
 		if len(line) > 0 && line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
 		}
+		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
+			break
+		}
 		if err := cf.addRow(line); err != nil {
 			return nil, err
 		}
