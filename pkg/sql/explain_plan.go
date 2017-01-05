@@ -131,8 +131,7 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 	}
 
 	e.err = nil
-	visitPlan := planVisitor{observer: e}
-	visitPlan.visit(plan)
+	walkPlan(plan, e)
 	return e.err
 }
 
@@ -159,8 +158,7 @@ func planToString(plan planNode) string {
 			}
 		},
 	}
-	v := planVisitor{observer: &e}
-	v.visit(plan)
+	walkPlan(plan, &e)
 	return buf.String()
 }
 

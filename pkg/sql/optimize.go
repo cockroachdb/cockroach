@@ -42,8 +42,7 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 
 	// Now do the same work for all sub-queries.
 	i := subqueryInitializer{p: p}
-	v := planVisitor{observer: &i}
-	v.visit(plan)
+	walkPlan(plan, &i)
 	return plan, i.err
 }
 
