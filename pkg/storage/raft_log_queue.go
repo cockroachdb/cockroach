@@ -180,7 +180,9 @@ func computeTruncatableIndex(
 // getQuorumIndex returns the index which a quorum of the nodes have
 // committed. The pendingSnapshotIndex indicates the index of a pending
 // snapshot which is considered part of the Raft group even though it hasn't
-// been added yet.
+// been added yet. Note that getQuorumIndex may return 0 if the progress map
+// doesn't contain information for a sufficient number of followers (e.g. the
+// local replica has only recently become the leader).
 func getQuorumIndex(raftStatus *raft.Status, pendingSnapshotIndex uint64) uint64 {
 	match := make([]uint64, 0, len(raftStatus.Progress)+1)
 	for _, progress := range raftStatus.Progress {

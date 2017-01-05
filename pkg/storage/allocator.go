@@ -648,11 +648,16 @@ func filterBehindReplicas(
 		// Raft leader. This is rare enough not to matter.
 		return nil
 	}
-	quorumIndex := getQuorumIndex(raftStatus, 0)
+	// NB: We use raftStatus.Commit instead of getQuorumIndex() because the
+	// latter can return a value that is less than the commit index. This is
+	// useful for Raft log truncation which sometimes wishes to keep those
+	// earlier indexes, but not appropriate for determining which nodes are
+	// behind the actual commit index of the range.
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
 	for _, r := range replicas {
 		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
-			if progress.Match >= quorumIndex {
+			if progress.State == raft.ProgressStateReplicate &&
+				progress.Match >= raftStatus.Commit {
 				candidates = append(candidates, r)
 			}
 		}
