@@ -303,8 +303,6 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 		return &OutgoingSnapshot{}, err
 	}
 
-	r.store.AcquireRaftSnapshot()
-
 	startKey := r.mu.state.Desc.StartKey
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
@@ -316,11 +314,9 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 	// state of the Replica). Everything must come from the snapshot.
 	snapData, err := snapshot(ctx, snapType, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
-		r.store.ReleaseRaftSnapshot()
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
 	}
-	snapData.store = r.store
 	log.Event(ctx, "snapshot generated")
 	r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	return &snapData, nil
@@ -339,14 +335,12 @@ type OutgoingSnapshot struct {
 	Iter *ReplicaDataIterator
 	// The replica state within the snapshot.
 	State storagebase.ReplicaState
-	store *Store
 }
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
 	s.Iter.Close()
 	s.EngineSnap.Close()
-	s.store.ReleaseRaftSnapshot()
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
