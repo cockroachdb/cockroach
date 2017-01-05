@@ -3285,7 +3285,7 @@ func (r *Replica) sendSnapshot(
 	}
 	defer r.store.ReleaseRaftSnapshot()
 
-	snap, err := r.GetSnapshot(ctx, snapTypePreemptive)
+	snap, err := r.GetSnapshot(ctx, snapType)
 	if err != nil {
 		return errors.Wrapf(err, "%s: change replicas failed to generate snapshot", r)
 	}
