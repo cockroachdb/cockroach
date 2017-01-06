@@ -121,6 +121,8 @@ type planNode interface {
 	// performing side effects for data-modifying statements. Returns an
 	// error if initial processing fails.
 	//
+	// Note: Don't use directly. Use startPlan() instead.
+	//
 	// Available after optimizePlan() (or makePlan).
 	Start() error
 
@@ -216,6 +218,14 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 		log.Infof(p.ctx(), "statement %s compiled to:\n%s", stmt, planToString(plan))
 	}
 	return plan, nil
+}
+
+// startPlan starts the plan and all its sub-query nodes.
+func (p *planner) startPlan(plan planNode) error {
+	if err := p.startSubqueryPlans(plan); err != nil {
+		return err
+	}
+	return plan.Start()
 }
 
 // newPlan constructs a planNode from a statement. This is used

@@ -684,7 +684,7 @@ func (n *createTableNode) Start() error {
 		if err != nil {
 			return err
 		}
-		if err = insertPlan.Start(); err != nil {
+		if err = n.p.startPlan(insertPlan); err != nil {
 			return err
 		}
 		// This loop is done here instead of in the Next method

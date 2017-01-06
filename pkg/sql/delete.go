@@ -129,10 +129,6 @@ func (d *deleteNode) Start() error {
 		}
 	}
 
-	if err := d.rh.startPlans(); err != nil {
-		return err
-	}
-
 	return d.run.tw.init(d.p.txn)
 }
 
