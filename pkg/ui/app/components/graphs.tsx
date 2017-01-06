@@ -70,7 +70,7 @@ export class Axis extends React.Component<AxisProps, {}> {
 }
 
 /**
- * AxisRange implements functionality to compute the range of points being 
+ * AxisRange implements functionality to compute the range of points being
  * displayed on an axis.
  */
 class AxisRange {

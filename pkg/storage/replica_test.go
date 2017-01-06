@@ -559,7 +559,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	// Initiate a transfer (async) and wait for it to be blocked.
 	transferResChan := make(chan error)
 	go func() {
-		err := tc.repl.AdminTransferLease(secondReplica.StoreID)
+		err := tc.repl.AdminTransferLease(context.Background(), secondReplica.StoreID)
 		if !testutils.IsError(err, "injected") {
 			transferResChan <- err
 		} else {
@@ -842,6 +842,62 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 
 		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Errorf("%d: expected not lease holder error: %s", i, pErr)
+		}
+	}
+}
+
+// TestLeaseOwnedByNodeWithoutReplica verifies that if an epoch-based lease
+// is owned by a node that doesn't hold a replica for the range, the lease will
+// be acquired.
+func TestLeaseOwnedByNodeWithoutReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set up a fake NodeLiveness instance so that an epoch-based range lease can
+	// function well enough for the sake of the test.
+	tc.store.cfg.NodeLiveness = &NodeLiveness{}
+	liveness := Liveness{
+		Epoch:      1,
+		Expiration: hlc.MaxTimestamp,
+	}
+	tc.store.cfg.NodeLiveness.mu.nodes = map[roachpb.NodeID]Liveness{
+		tc.store.Ident.NodeID: liveness,
+		secondReplica.NodeID:  liveness,
+	}
+
+	tc.manualClock.Set(leaseExpiry(tc.repl))
+	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		Start:   tc.Clock().Now(),
+		Replica: secondReplica,
+		Epoch:   proto.Int64(liveness.Epoch),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now remove secondReplica from the range descriptor without taking away
+	// its lease.
+	tc.repl.mu.Lock()
+	replicas := tc.repl.mu.state.Desc.Replicas
+	for i := range replicas {
+		if replicas[i] == secondReplica {
+			replicas = append(replicas[:i], replicas[i+1:]...)
+			break
+		}
+	}
+	tc.repl.mu.state.Desc.Replicas = replicas
+	tc.repl.mu.Unlock()
+
+	{
+		_, err := tc.repl.redirectOnOrAcquireLease(context.Background())
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -1166,7 +1222,7 @@ func TestReplicaDrainLease(t *testing.T) {
 		t.Fatal("DrainLeases returned with active lease")
 	}
 	tc.repl.mu.Lock()
-	pErr = <-tc.repl.requestLeaseLocked(status)
+	pErr = <-tc.repl.requestLeaseLocked(context.Background(), status)
 	tc.repl.mu.Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
@@ -1816,10 +1872,10 @@ func TestLeaseConcurrent(t *testing.T) {
 			ts := tc.Clock().Now()
 			pErrCh := make(chan *roachpb.Error, num)
 			for i := 0; i < num; i++ {
-				if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+				if err := stopper.RunAsyncTask(context.Background(), func(ctx context.Context) {
 					tc.repl.mu.Lock()
 					status := tc.repl.leaseStatus(tc.repl.mu.state.Lease, ts, hlc.ZeroTimestamp)
-					leaseCh := tc.repl.requestLeaseLocked(status)
+					leaseCh := tc.repl.requestLeaseLocked(ctx, status)
 					tc.repl.mu.Unlock()
 					wg.Done()
 					pErr := <-leaseCh

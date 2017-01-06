@@ -133,10 +133,6 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
           props.setTimeScale(props.availableScales["1 hour"]);
         } else if (clusterDurationHrs < 12) {
           props.setTimeScale(props.availableScales["6 hours"]);
-        } else if (clusterDurationHrs < 24) {
-          props.setTimeScale(props.availableScales["12 hours"]);
-        } else {
-          props.setTimeScale(props.availableScales["1 day"]);
         }
       }
       props.setUISetting(UI_TIMESCALE_DEFAULT_SET, true);

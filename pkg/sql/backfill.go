@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -57,6 +58,8 @@ const (
 	// schema change is posted.
 	checkpointInterval = 10 * time.Second
 )
+
+var errVersionMismatch = errors.New("table version mismatch")
 
 func makeColIDtoRowIndex(
 	row planNode, desc *sqlbase.TableDescriptor,
@@ -110,20 +113,19 @@ func (ids indexesByID) Swap(i, j int) {
 func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
-	// convertBatchError() will only work correctly if the schema elements are
-	// "live" in the tableDesc. Apply the mutations belonging to the same
-	// mutationID to make all the mutations live in tableDesc. Note: this
-	// tableDesc is not written to the k:v store.
-	mutationID := tableDesc.Mutations[0].MutationID
-	for _, mutation := range tableDesc.Mutations {
+	// convertBatchError() will only work correctly if the schema elements
+	// are "live" in the tableDesc.
+	desc := protoutil.Clone(tableDesc).(*sqlbase.TableDescriptor)
+	mutationID := desc.Mutations[0].MutationID
+	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
 			// Mutations are applied in a FIFO order. Only apply the first set
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		tableDesc.MakeMutationComplete(mutation)
+		desc.MakeMutationComplete(mutation)
 	}
-	return convertBatchError(tableDesc, b)
+	return convertBatchError(desc, b)
 }
 
 func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
@@ -157,7 +159,11 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	}); err != nil {
 		return err
 	}
-
+	// Short circuit the backfill if the table has been deleted.
+	if tableDesc.Dropped() {
+		return nil
+	}
+	version := tableDesc.Version
 	for i, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
@@ -200,19 +206,23 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	// First drop indexes, then add/drop columns, and only then add indexes.
 
 	// Drop indexes.
-	if err := sc.truncateIndexes(lease, droppedIndexDescs, droppedIndexMutationIdx); err != nil {
+	if err := sc.truncateIndexes(
+		lease, version, droppedIndexDescs, droppedIndexMutationIdx,
+	); err != nil {
 		return err
 	}
 
 	// Add and drop columns.
 	if err := sc.truncateAndBackfillColumns(
-		lease, addedColumnDescs, droppedColumnDescs, columnMutationIdx,
+		lease, version, addedColumnDescs, droppedColumnDescs, columnMutationIdx,
 	); err != nil {
 		return err
 	}
 
 	// Add new indexes.
-	if err := sc.backfillIndexes(lease, addedIndexDescs, addedIndexMutationIdx); err != nil {
+	if err := sc.backfillIndexes(
+		lease, version, addedIndexDescs, addedIndexMutationIdx,
+	); err != nil {
 		return err
 	}
 
@@ -251,7 +261,7 @@ func (sc *SchemaChanger) getTableSpan(mutationIdx int) (roachpb.Span, error) {
 
 func (sc *SchemaChanger) maybeWriteResumeSpan(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
+	version sqlbase.DescriptorVersion,
 	resume roachpb.Span,
 	mutationIdx int,
 	lastCheckpoint *time.Time,
@@ -263,6 +273,13 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	if timeutil.Since(*lastCheckpoint) < checkpointInterval {
 		return nil
 	}
+	tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+	if err != nil {
+		return err
+	}
+	if tableDesc.Version != version {
+		return errVersionMismatch
+	}
 	tableDesc.Mutations[mutationIdx].ResumeSpan = resume
 	txn.SetSystemConfigTrigger()
 	if err := txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
@@ -273,8 +290,22 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	return nil
 }
 
+func (sc *SchemaChanger) getTableLease(
+	p *planner, version sqlbase.DescriptorVersion,
+) (*sqlbase.TableDescriptor, error) {
+	tableDesc, err := p.getTableLeaseByID(sc.tableID)
+	if err != nil {
+		return nil, err
+	}
+	if version != tableDesc.Version {
+		return nil, errVersionMismatch
+	}
+	return tableDesc, nil
+}
+
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
 	mutationIdx int,
@@ -341,7 +372,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 
 			// Add and delete columns for a chunk of the key space.
 			sp.Key, done, err = sc.truncateAndBackfillColumnsChunk(
-				added, dropped, defaultExprs, sp,
+				version, added, dropped, defaultExprs, sp,
 				updateValues, nonNullViolationColumnName, chunkSize, mutationIdx, &lastCheckpoint)
 			if err != nil {
 				return err
@@ -355,6 +386,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 // next-key and done are invalid if error != nil. next-key is invalid if done
 // is true.
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
 	defaultExprs []parser.TypedExpr,
@@ -377,19 +409,20 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			defer sc.testingKnobs.RunAfterBackfillChunk()
 		}
 
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		p := &planner{
+			txn:      txn,
+			leaseMgr: sc.leaseMgr,
+		}
+		defer p.releaseLeases()
+		tableDesc, err := sc.getTableLease(p, version)
 		if err != nil {
 			return err
-		}
-		// Short circuit the backfill if the table has been deleted.
-		if done = tableDesc.Dropped(); done {
-			return nil
 		}
 
 		updateCols := append(added, dropped...)
 		fkTables := tablesNeededForFKs(*tableDesc, CheckUpdates)
 		for k := range fkTables {
-			table, err := sqlbase.GetTableDescFromID(txn, k)
+			table, err := p.getTableLeaseByID(k)
 			if err != nil {
 				return err
 			}
@@ -481,7 +514,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 		resume := roachpb.Span{Key: roachpb.Key(curIndexKey).PrefixEnd(), EndKey: sp.EndKey}
-		if err := sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, lastCheckpoint); err != nil {
+		if err := sc.maybeWriteResumeSpan(txn, version, resume, mutationIdx, lastCheckpoint); err != nil {
 			return err
 		}
 		nextKey = resume.Key
@@ -492,6 +525,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 
 func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
 	mutationIdx int,
 ) error {
@@ -523,13 +557,14 @@ func (sc *SchemaChanger) truncateIndexes(
 					defer sc.testingKnobs.RunAfterBackfillChunk()
 				}
 
-				tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+				p := &planner{
+					txn:      txn,
+					leaseMgr: sc.leaseMgr,
+				}
+				defer p.releaseLeases()
+				tableDesc, err := sc.getTableLease(p, version)
 				if err != nil {
 					return err
-				}
-				// Short circuit the truncation if the table has been deleted.
-				if done = tableDesc.Dropped(); done {
-					return nil
 				}
 
 				rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
@@ -546,7 +581,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
-				if err := sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, &lastCheckpoint); err != nil {
+				if err := sc.maybeWriteResumeSpan(txn, version, resume, mutationIdx, &lastCheckpoint); err != nil {
 					return err
 				}
 				done = resume.Key == nil
@@ -561,6 +596,7 @@ func (sc *SchemaChanger) truncateIndexes(
 
 func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.IndexDescriptor,
 	mutationIdx int,
 ) error {
@@ -586,7 +622,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			log.Infof(context.TODO(), "index add (%d, %d) at row: %d, span: %s",
 				sc.tableID, sc.mutationID, row, sp)
 		}
-		sp.Key, done, err = sc.backfillIndexesChunk(added, sp, chunkSize, mutationIdx, &lastCheckpoint)
+		sp.Key, done, err = sc.backfillIndexesChunk(version, added, sp, chunkSize, mutationIdx, &lastCheckpoint)
 		if err != nil {
 			return err
 		}
@@ -597,6 +633,7 @@ func (sc *SchemaChanger) backfillIndexes(
 // backfillIndexesChunk returns the next-key, done and an error. next-key and
 // done are invalid if error != nil. next-key is invalid if done is true.
 func (sc *SchemaChanger) backfillIndexesChunk(
+	version sqlbase.DescriptorVersion,
 	added []sqlbase.IndexDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
@@ -616,15 +653,6 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			defer sc.testingKnobs.RunAfterBackfillChunk()
 		}
 
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-		// Short circuit the backfill if the table has been deleted.
-		if done = tableDesc.Dropped(); done {
-			return nil
-		}
-
 		// Get the next set of rows.
 		// TODO(tamird): Support partial indexes?
 		//
@@ -636,7 +664,13 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// correct state to handle intermediate OLTP commands which delete
 		// and add values during the scan.
 		planner := makePlanner("backfill")
+		defer planner.releaseLeases()
 		planner.setTxn(txn)
+		planner.leaseMgr = sc.leaseMgr
+		tableDesc, err := sc.getTableLease(planner, version)
+		if err != nil {
+			return err
+		}
 		scan := planner.Scan()
 		scan.desc = *tableDesc
 		scan.spans = []roachpb.Span{sp}
@@ -692,7 +726,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		}
 		// Keep track of the next key.
 		resume := roachpb.Span{Key: scan.fetcher.Key(), EndKey: sp.EndKey}
-		if err := sc.maybeWriteResumeSpan(txn, tableDesc, resume, mutationIdx, lastCheckpoint); err != nil {
+		if err := sc.maybeWriteResumeSpan(txn, version, resume, mutationIdx, lastCheckpoint); err != nil {
 			return err
 		}
 		nextKey = resume.Key

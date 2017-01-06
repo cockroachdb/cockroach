@@ -22,7 +22,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 // includes calling expandPlan().  The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
-func (p *planner) optimizePlan(plan planNode, needed []bool) error {
+func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 	// We propagate the needed columns a first time. This will remove
 	// any unused renders, which in turn may simplify expansion (remove
 	// sub-expressions).
@@ -30,9 +30,11 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) error {
 
 	// Perform plan expansion; this does index selection, sort
 	// optimization etc.
-	if err := p.expandPlan(plan); err != nil {
-		return err
+	newPlan, err := p.expandPlan(plan)
+	if err != nil {
+		return nil, err
 	}
+	plan = newPlan
 
 	// We now propagate the needed columns again. This will ensure that
 	// the needed columns are properly computed for newly expanded nodes.
@@ -42,7 +44,7 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) error {
 	i := subqueryInitializer{p: p}
 	v := planVisitor{p: p, observer: &i}
 	v.visit(plan)
-	return i.err
+	return plan, i.err
 }
 
 // subqueryInitializer ensures that initNeededColumns() and
@@ -74,7 +76,7 @@ func (i *subqueryInitializer) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 		return false, expr
 	}
 
-	if sq, ok := expr.(*subquery); ok && sq.plan != nil {
+	if sq, ok := expr.(*subquery); ok && sq.plan != nil && !sq.expanded {
 		needed := make([]bool, len(sq.plan.Columns()))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.
@@ -82,7 +84,9 @@ func (i *subqueryInitializer) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 				needed[i] = true
 			}
 		}
-		if err := i.p.optimizePlan(sq.plan, needed); err != nil {
+		var err error
+		sq.plan, err = i.p.optimizePlan(sq.plan, needed)
+		if err != nil {
 			i.err = err
 		}
 		sq.expanded = true

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -xeuo pipefail
 
 image="cockroachdb/builder"
 
@@ -49,6 +49,12 @@ fi
 
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel="$(dirname "$(cd "$(dirname "${0}")"; pwd)")"
+
+# Ensure the artifact sub-directory always exists and redirect
+# temporary file creation to it, so that CI always picks up temp files
+# (including stray log files).
+mkdir -p "${cockroach_toplevel}"/artifacts
+export TMPDIR=$cockroach_toplevel/artifacts
 
 # Make a fake passwd file for the invoking user.
 #
@@ -130,6 +136,7 @@ docker run -i ${tty-} --rm \
   -u "${uid_gid}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
+  --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
   --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX-0}" \

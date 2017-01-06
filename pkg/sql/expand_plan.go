@@ -29,46 +29,50 @@ import (
 // the query plan to its final form, including index selection and
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
-func (p *planner) expandPlan(plan planNode) error {
+func (p *planner) expandPlan(plan planNode) (planNode, error) {
 	if plan == nil {
-		return nil
+		return nil, nil
 	}
 
+	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
-		return p.expandPlan(n.sourcePlan)
+		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
 
 	case *updateNode:
 		// TODO(knz) eliminate this once #12599 is fixed.
-		return n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
+		err = n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
 
 	case *insertNode:
 		// TODO(knz) eliminate this once #12599 is fixed.
-		return n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
+		err = n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
 
 	case *deleteNode:
 		// TODO(knz) eliminate this once #12599 is fixed.
-		return n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
+		err = n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
 
 	case *createViewNode:
-		return p.expandPlan(n.sourcePlan)
+		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
 
 	case *explainDebugNode:
-		if err := p.expandPlan(n.plan); err != nil {
-			return err
+		n.plan, err = p.expandPlan(n.plan)
+		if err != nil {
+			return plan, err
 		}
 		n.plan.MarkDebug(explainDebug)
 
 	case *explainTraceNode:
-		if err := p.expandPlan(n.plan); err != nil {
-			return err
+		n.plan, err = p.expandPlan(n.plan)
+		if err != nil {
+			return plan, err
 		}
 		n.plan.MarkDebug(explainDebug)
 
 	case *explainPlanNode:
 		if n.expanded {
-			if err := p.expandPlan(n.plan); err != nil {
-				return err
+			n.plan, err = p.expandPlan(n.plan)
+			if err != nil {
+				return plan, err
 			}
 			// Trigger limit hint propagation, which would otherwise only occur
 			// during the plan's Start() phase. This may trigger additional
@@ -78,26 +82,34 @@ func (p *planner) expandPlan(plan planNode) error {
 		}
 
 	case *indexJoinNode:
-		if err := p.expandPlan(n.table); err != nil {
-			return err
+		// We ignore the return value because we know the scanNode is preserved.
+		_, err = p.expandPlan(n.table)
+		if err != nil {
+			return plan, err
 		}
-		return p.expandPlan(n.index)
+		_, err = p.expandPlan(n.index)
 
 	case *unionNode:
-		if err := p.expandPlan(n.right); err != nil {
-			return err
+		n.right, err = p.expandPlan(n.right)
+		if err != nil {
+			return plan, err
 		}
-		return p.expandPlan(n.left)
+		n.left, err = p.expandPlan(n.left)
+
+	case *filterNode:
+		n.source.plan, err = p.expandPlan(n.source.plan)
 
 	case *joinNode:
-		if err := p.expandPlan(n.left.plan); err != nil {
-			return err
+		n.left.plan, err = p.expandPlan(n.left.plan)
+		if err != nil {
+			return plan, err
 		}
-		return p.expandPlan(n.right.plan)
+		n.right.plan, err = p.expandPlan(n.right.plan)
 
 	case *ordinalityNode:
-		if err := p.expandPlan(n.source); err != nil {
-			return err
+		n.source, err = p.expandPlan(n.source)
+		if err != nil {
+			return plan, err
 		}
 
 		// We are going to "optimize" the ordering. We had an ordering
@@ -129,19 +141,19 @@ func (p *planner) expandPlan(plan planNode) error {
 	case *limitNode, *sortNode, *windowNode, *groupNode, *distinctNode:
 		panic(fmt.Sprintf("expandPlan for %T must be handled by selectTopNode", plan))
 
-	case *selectNode:
-		return p.expandSelectNode(n)
+	case *renderNode:
+		plan, err = p.expandSelectNode(n)
 
 	case *selectTopNode:
-		return p.expandSelectTopNode(n)
+		plan, err = p.expandSelectTopNode(n)
 
 	case *delayedNode:
 		v, err := n.constructor(p)
 		if err != nil {
-			return err
+			return plan, err
 		}
 		n.plan = v
-		return p.expandPlan(n.plan)
+		n.plan, err = p.expandPlan(n.plan)
 
 	case *valuesNode:
 	case *scanNode:
@@ -162,17 +174,19 @@ func (p *planner) expandPlan(plan planNode) error {
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}
-	return nil
+	return plan, err
 }
 
-func (p *planner) expandSelectTopNode(n *selectTopNode) error {
+func (p *planner) expandSelectTopNode(n *selectTopNode) (planNode, error) {
 	if n.plan != nil {
-		// Plan is already expanded. No-op.
-		return nil
+		// Plan is already expanded. Just elide.
+		return n.plan, nil
 	}
 
-	if err := p.expandPlan(n.source); err != nil {
-		return err
+	var err error
+	n.source, err = p.expandPlan(n.source)
+	if err != nil {
+		return n, err
 	}
 	n.plan = n.source
 
@@ -245,10 +259,12 @@ func (p *planner) expandSelectTopNode(n *selectTopNode) error {
 		n.limit.plan = n.plan
 		n.plan = n.limit
 	}
-	return nil
+
+	// Everything's expanded, so elide the remaining selectTopNode.
+	return n.plan, nil
 }
 
-func (p *planner) expandSelectNode(s *selectNode) error {
+func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 	// Get the ordering for index selection (if any).
 	var ordering sqlbase.ColumnOrdering
 	var grouping bool
@@ -265,19 +281,19 @@ func (p *planner) expandSelectNode(s *selectNode) error {
 	// cannot occur during expandPlan.
 	limitCount, limitOffset := s.top.limit.estimateLimit()
 
-	if scan, ok := s.source.plan.(*scanNode); ok {
-		// Compute a filter expression for the scan node.
-		convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
-			ivar := expr.(*parser.IndexedVar)
-			s.ivarHelper.AssertSameContainer(ivar)
-			return true, scan.filterVars.IndexedVar(ivar.Idx)
-		}
+	maybeScanNode := s.source.plan
+	var whereFilter parser.TypedExpr
+	where, ok := maybeScanNode.(*filterNode)
+	if ok {
+		whereFilter = where.filter
+		maybeScanNode = where.source.plan
+	}
 
-		scan.filter, s.filter = splitFilter(s.filter, convFunc)
-		if s.filter != nil {
-			// Right now we support only one table, so the entire expression
-			// should be converted.
-			panic(fmt.Sprintf("residual filter `%s` (scan filter `%s`)", s.filter, scan.filter))
+	if scan, ok := maybeScanNode.(*scanNode); ok {
+		if whereFilter != nil {
+			// Migrate the filter to the scan node.
+			// (Will be done soon by filter propagation.)
+			scan.filter = scan.filterVars.Rebind(whereFilter)
 		}
 
 		var analyzeOrdering analyzeOrderingFn
@@ -298,20 +314,56 @@ func (p *planner) expandSelectNode(s *selectNode) error {
 
 		plan, err := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
 		if err != nil {
-			return err
+			return s, err
 		}
 
-		// Update s.source.info with the new plan.
+		// Update s.source.info with the new plan. This removes the
+		// filterNode, if any.
 		s.source.plan = plan
 	}
 
 	// Expand the source node. We need to do this before computing the
 	// ordering, since expansion may modify the ordering.
-	if err := p.expandPlan(s.source.plan); err != nil {
-		return err
+	var err error
+	s.source.plan, err = p.expandPlan(s.source.plan)
+	if err != nil {
+		return s, err
+	}
+
+	// Elide the render node if it renders its source as-is.
+
+	sourceCols := s.source.plan.Columns()
+	if len(s.columns) == len(sourceCols) && s.source.info.viewDesc == nil {
+		// 1) we don't drop renderNodes which also interface to a view, because
+		// CREATE VIEW needs it.
+		// TODO(knz) make this optimization conditional on a flag, which can
+		// be set to false by CREATE VIEW.
+		//
+		// 2) we don't drop renderNodes which have a different number of
+		// columns than their sources, because some nodes currently assume
+		// the number of source columns doesn't change between
+		// instantiation and Start() (e.g. groupNode).
+		// TODO(knz) investigate this further and enable the optimization fully.
+
+		foundNonTrivialRender := false
+		for i, e := range s.render {
+			if s.columns[i].omitted {
+				continue
+			}
+			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) &&
+				(iv.Idx == i && sourceCols[i].Name == s.columns[i].Name) {
+				continue
+			}
+			foundNonTrivialRender = true
+			break
+		}
+		if !foundNonTrivialRender {
+			// Nothing special rendered, remove the render node entirely.
+			return s.source.plan, nil
+		}
 	}
 
 	s.ordering = s.computeOrdering(s.source.plan.Ordering())
 
-	return nil
+	return s, nil
 }

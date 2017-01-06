@@ -19,7 +19,7 @@ package sql
 import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // selectTopNode encapsulate the whole logic of a select statement.
-// This exposes the selectNode, groupNode, windowNode, sortNode, distinctNode and limitNode
+// This exposes the renderNode, groupNode, windowNode, sortNode, distinctNode and limitNode
 // side-by-side so that they can "see" each other during query optimization.
 type selectTopNode struct {
 	// The various nodes involved in obtaining the results.

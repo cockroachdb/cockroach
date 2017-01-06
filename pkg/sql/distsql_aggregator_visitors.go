@@ -96,7 +96,7 @@ func (v aggExprVisitor) extract(
 // The following examples detail out what we mean by this.
 //
 // - 'SELECT COUNT(k), SUM(v + w), v + w FROM kv GROUP BY v + w'
-//   The output schema of the selectNode (groupNode's source) here is
+//   The output schema of the renderNode (groupNode's source) here is
 //   [k v+w v+w v+w], the render expressions we are concerned with are
 //   [k v+w v+w].
 //   We see for COUNT, the corresponding input stream is the very first (k).
@@ -123,9 +123,6 @@ func (dsp *distSQLPlanner) extractAggExprs(
 			return nil, err
 		}
 		aggExprs = append(aggExprs, exprs...)
-	}
-	for i := range aggExprs {
-		aggExprs[i].ColIdx = uint32(i)
 	}
 	return aggExprs, nil
 }

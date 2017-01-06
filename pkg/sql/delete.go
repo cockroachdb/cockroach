@@ -115,8 +115,14 @@ func (d *deleteNode) Start() error {
 		//
 		// (When explain == explainDebug, we use the slow path so that
 		// each debugVal gets a chance to be reported via Next().)
-		sel := d.run.rows.(*selectTopNode).source.(*selectNode)
-		if scan, ok := sel.source.plan.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
+		maybeScanNode := d.run.rows
+		if topSel, ok := maybeScanNode.(*selectTopNode); ok {
+			maybeScanNode = topSel.source
+		}
+		if sel, ok := maybeScanNode.(*renderNode); ok {
+			maybeScanNode = sel.source.plan
+		}
+		if scan, ok := maybeScanNode.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 			d.run.fastPath = true
 			err := d.fastDelete(scan)
 			return err

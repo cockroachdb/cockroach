@@ -120,13 +120,18 @@ func (v *planVisitor) visit(plan planNode) {
 		subplans := lv.expr("filter", -1, n.filter, nil)
 		lv.subqueries(subplans)
 
-	case *selectNode:
+	case *filterNode:
 		subplans := lv.expr("filter", -1, n.filter, nil)
-		for i, r := range n.render {
-			subplans = lv.expr("render", i, r, subplans)
-		}
 		if n.explain != explainNone {
 			lv.attr("mode", explainStrings[n.explain])
+		}
+		lv.subqueries(subplans)
+		lv.visit(n.source.plan)
+
+	case *renderNode:
+		var subplans []planNode
+		for i, r := range n.render {
+			subplans = lv.expr("render", i, r, subplans)
 		}
 		lv.subqueries(subplans)
 		lv.visit(n.source.plan)
@@ -426,6 +431,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&explainDebugNode{}):   "explain debug",
 	reflect.TypeOf(&explainPlanNode{}):    "explain plan",
 	reflect.TypeOf(&explainTraceNode{}):   "explain trace",
+	reflect.TypeOf(&filterNode{}):         "filter",
 	reflect.TypeOf(&groupNode{}):          "group",
 	reflect.TypeOf(&hookFnNode{}):         "plugin",
 	reflect.TypeOf(&indexJoinNode{}):      "index-join",
@@ -434,7 +440,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&limitNode{}):          "limit",
 	reflect.TypeOf(&ordinalityNode{}):     "ordinality",
 	reflect.TypeOf(&scanNode{}):           "scan",
-	reflect.TypeOf(&selectNode{}):         "render/filter",
+	reflect.TypeOf(&renderNode{}):         "render",
 	reflect.TypeOf(&selectTopNode{}):      "select",
 	reflect.TypeOf(&sortNode{}):           "sort",
 	reflect.TypeOf(&splitNode{}):          "split",

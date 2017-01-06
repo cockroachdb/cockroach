@@ -49,10 +49,10 @@ describe("<EventList>", function() {
     });
 
       let provider = makeEventList(eventsResponse.events, spy);
-      let eventRows = provider.children().first().children().first().children().first().children();
+      let eventRows = provider.children().first().children().first().children();
       let event1Props: any = eventRows.first().props();
       let event2Props: any = eventRows.at(1).props();
-      assert.lengthOf(eventRows, 2);
+      assert.lengthOf(eventRows, 3); // 3rd row is "more events" link
       assert.isDefined(event1Props.event);
       assert.deepEqual(event1Props.event, eventsResponse.events[0]);
       assert.isDefined(event2Props.event);
@@ -70,8 +70,8 @@ describe("<EventRow>", function () {
       });
 
       let provider = makeEvent(e);
-      assert.lengthOf(provider.first().children(), 3);
-      let text = provider.first().childAt(2).text();
+      assert.lengthOf(provider.first().children(), 2);
+      let text = provider.first().childAt(0).text();
       assert(_.includes(text, "created database"));
     });
 
@@ -82,8 +82,8 @@ describe("<EventRow>", function () {
       });
 
       let provider = makeEvent(e);
-      assert.lengthOf(provider.first().children(), 3);
-      let text = provider.first().childAt(2).text();
+      assert.lengthOf(provider.first().children(), 2);
+      let text = provider.first().childAt(0).text();
       assert(_.includes(text, "Unknown event type"));
     });
   });
