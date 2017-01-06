@@ -470,7 +470,9 @@ func (n *Node) initStores(
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
-	n.connectGossip(ctx)
+	if err := n.connectGossip(ctx); err != nil {
+		return err
+	}
 	log.Event(ctx, "connected to gossip")
 
 	// If no NodeID has been assigned yet, allocate a new node ID by
@@ -565,28 +567,33 @@ func (n *Node) bootstrapStores(
 // this node is already part of a cluster, the cluster ID is verified
 // for a match. If not part of a cluster, the cluster ID is set. The
 // node's address is gossiped with node ID as the gossip key.
-func (n *Node) connectGossip(ctx context.Context) {
+func (n *Node) connectGossip(ctx context.Context) error {
 	log.Infof(ctx, "connecting to gossip network to verify cluster ID...")
-	// No timeout or stop condition is needed here. Log statements should be
-	// sufficient for diagnosing this type of condition.
-	<-n.storeCfg.Gossip.Connected
+	select {
+	case <-n.stopper.ShouldStop():
+		return errors.New("stop called before we could connect to gossip")
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-n.storeCfg.Gossip.Connected:
+	}
 
 	uuidBytes, err := n.storeCfg.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil {
-		log.Fatalf(ctx, "unable to ascertain cluster ID from gossip network: %s", err)
+		return errors.Wrap(err, "unable to ascertain cluster ID from gossip network")
 	}
 	gossipClusterID, err := uuid.FromBytes(uuidBytes)
 	if err != nil {
-		log.Fatalf(ctx, "unable to ascertain cluster ID from gossip network: %s", err)
+		return errors.Wrap(err, "unable to parse cluster ID from gossip network")
 	}
 
 	if n.ClusterID == (uuid.UUID{}) {
 		n.ClusterID = gossipClusterID
 	} else if n.ClusterID != gossipClusterID {
-		log.Fatalf(ctx, "node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
+		return errors.Errorf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}
 	log.Infof(ctx, "node connected via gossip and verified as part of cluster %q", gossipClusterID)
+	return nil
 }
 
 // startGossip loops on a periodic ticker to gossip node-related
