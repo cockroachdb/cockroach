@@ -366,16 +366,15 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	query := makeQuery(`SHOW TRANSACTION STATUS`)
 	rows, err := query(c.conn)
 	if err != nil {
-<<<<<<< HEAD
 		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
-=======
->>>>>>> 8ebfd1097c078e53e52165c74bd51dc3ae7ca13f
 		return c.refreshDatabaseName(" ?", nextState)
 	}
+
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(osStderr, "invalid transaction status")
 		return c.refreshDatabaseName(" ?", nextState)
 	}
+
 	val := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(val)
 	if err != nil {
@@ -412,6 +411,7 @@ func (c *cliState) refreshDatabaseName(promptSuffix string, nextState cliStateEn
 	rows, err := query(c.conn)
 
 	if err != nil {
+		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
 		return c.refreshPrompts(promptSuffix, nextState)
 	}
 
@@ -423,22 +423,10 @@ func (c *cliState) refreshDatabaseName(promptSuffix string, nextState cliStateEn
 	err = rows.Next(dbVals[:])
 	if err != nil {
 		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
-		promptSuffix = ""
+		c.refreshPrompts(promptSuffix, nextState)
 	} else {
 		dbName := formatVal(dbVals[0].(string), false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 		return c.refreshPrompts(promptSuffix+":/"+dbName, nextState)
-	} else {
-		if len(rows.Columns()) == 0 {
-			fmt.Fprintf(osStderr, "cannot get the database name")
-			return c.refreshPrompts(promptSuffix, nextState)
-		} else {
-			err = rows.Next(dbVals[:])
-			if err != nil {
-				promptSuffix = ""
-			} else {
-				promptSuffix = "/" + formatVal(dbVals[0].(string) /* showPrintableUnicode */, false /*showNewLinesAndTabs */, false)
-			}
-		}
 	}
 
 	return c.refreshPrompts(promptSuffix, nextState)
