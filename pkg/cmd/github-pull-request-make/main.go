@@ -171,17 +171,12 @@ func main() {
 			if len(pkg.tests) > 0 {
 				tests = "(" + strings.Join(pkg.tests, "|") + ")"
 			}
-			benchmarks := "-"
-			if len(pkg.benchmarks) > 0 {
-				benchmarks = "(" + strings.Join(pkg.benchmarks, "|") + ")"
-			}
 
 			cmd := exec.Command(
 				"make",
 				target,
 				fmt.Sprintf("PKG=./%s", name),
 				fmt.Sprintf("TESTS=%s", tests),
-				fmt.Sprintf("BENCHES=%s", benchmarks),
 				fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 			)
 			cmd.Dir = crdb.Dir
