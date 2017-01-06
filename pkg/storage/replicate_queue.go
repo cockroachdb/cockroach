@@ -159,7 +159,7 @@ func (rq *replicateQueue) shouldQueue(
 	action, priority := rq.allocator.ComputeAction(zone, desc)
 	if action != AllocatorNoop {
 		if log.V(2) {
-			log.Infof(ctx, "%s repair needed (%s), enqueuing", repl, action)
+			log.Infof(ctx, "repair needed (%s), enqueuing", action)
 		}
 		return true, priority
 	}
@@ -172,7 +172,7 @@ func (rq *replicateQueue) shouldQueue(
 			rq.allocator.ShouldTransferLease(
 				zone.Constraints, desc.Replicas, leaseStoreID, desc.RangeID) {
 			if log.V(2) {
-				log.Infof(ctx, "%s lease transfer needed, enqueuing", repl)
+				log.Infof(ctx, "lease transfer needed, enqueuing")
 			}
 			return true, 0
 		}
@@ -193,9 +193,9 @@ func (rq *replicateQueue) shouldQueue(
 	}
 	if log.V(2) {
 		if target != nil {
-			log.Infof(ctx, "%s rebalance target found, enqueuing", repl)
+			log.Infof(ctx, "rebalance target found, enqueuing")
 		} else {
-			log.Infof(ctx, "%s no rebalance target found, not enqueuing", repl)
+			log.Infof(ctx, "no rebalance target found, not enqueuing")
 		}
 	}
 	return target != nil, 0
@@ -334,7 +334,7 @@ func (rq *replicateQueue) processOneChange(
 		deadReplica := deadReplicas[0]
 		rq.metrics.RemoveDeadReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "removing dead replica %+v from store", deadReplica)
-		if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
+		if err := rq.removeReplica(ctx, repl, deadReplica, desc); err != nil {
 			return false, err
 		}
 	case AllocatorNoop:

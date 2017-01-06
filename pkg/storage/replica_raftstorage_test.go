@@ -20,7 +20,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -86,19 +86,18 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
+	if snap, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
 		t.Fatal(err)
+	} else {
+		snap.Close()
 	}
-	rep.CloseOutSnap()
 
 	if err := fillTestRange(rep, snapSize*2); err != nil {
 		t.Fatal(err)
 	}
 
-	rep.mu.Lock()
-	_, err = rep.Snapshot()
-	rep.mu.Unlock()
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
+	const expected = "not generating test snapshot because replica is too large"
+	if _, err := rep.GetSnapshot(context.Background(), "test"); !testutils.IsError(err, expected) {
 		rep.mu.Lock()
 		after := rep.mu.state.Stats.Total()
 		rep.mu.Unlock()

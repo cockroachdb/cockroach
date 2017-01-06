@@ -376,7 +376,8 @@ type Store struct {
 	splitQueue         *splitQueue                 // Range splitting queue
 	replicateQueue     *replicateQueue             // Replication queue
 	replicaGCQueue     *replicaGCQueue             // Replica GC queue
-	raftLogQueue       *raftLogQueue               // Raft Log Truncation queue
+	raftLogQueue       *raftLogQueue               // Raft log truncation queue
+	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
 	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
 	scanner            *replicaScanner             // Replica scanner
 	consistencyQueue   *consistencyQueue           // Replica consistency check queue
@@ -900,10 +901,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
+		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip, s.cfg.Clock)
 		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
 		s.scanner.AddQueues(
-			s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue, s.consistencyQueue,
-		)
+			s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
+			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
 
 		if s.cfg.TimeSeriesDataStore != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
@@ -1217,29 +1219,27 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.cfg.Gossip != nil {
-		if !s.cfg.TestingKnobs.DisablePeriodicGossips {
-			// Register update channel for any changes to the system config.
-			// This may trigger splits along structured boundaries,
-			// and update max range bytes.
-			gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
-			s.stopper.RunWorker(func() {
-				for {
-					select {
-					case <-gossipUpdateC:
-						cfg, _ := s.cfg.Gossip.GetSystemConfig()
-						s.systemGossipUpdate(cfg)
-					case <-s.stopper.ShouldStop():
-						return
-					}
+		// Register update channel for any changes to the system config.
+		// This may trigger splits along structured boundaries,
+		// and update max range bytes.
+		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
+		s.stopper.RunWorker(func() {
+			for {
+				select {
+				case <-gossipUpdateC:
+					cfg, _ := s.cfg.Gossip.GetSystemConfig()
+					s.systemGossipUpdate(cfg)
+				case <-s.stopper.ShouldStop():
+					return
 				}
-			})
+			}
+		})
 
-			// Start a single goroutine in charge of periodically gossiping the
-			// sentinel and first range metadata if we have a first range.
-			// This may wake up ranges and requires everything to be set up and
-			// running.
-			s.startGossip()
-		}
+		// Start a single goroutine in charge of periodically gossiping the
+		// sentinel and first range metadata if we have a first range.
+		// This may wake up ranges and requires everything to be set up and
+		// running.
+		s.startGossip()
 
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
@@ -1352,6 +1352,10 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 // and acquires the range lease for them which in turn will trigger
 // Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
 func (s *Store) maybeGossipSystemData(ctx context.Context) error {
+	if s.cfg.TestingKnobs.DisablePeriodicGossips {
+		return nil
+	}
+
 	for _, span := range keys.GossipedSystemSpans {
 		repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
 		if repl == nil {
@@ -2192,14 +2196,14 @@ func (s *Store) NewSnapshot() engine.Reader {
 	return s.engine.NewSnapshot()
 }
 
-// AcquireRaftSnapshot returns true if a new raft snapshot can start.
-// If true is returned, the caller MUST call ReleaseRaftSnapshot.
-func (s *Store) AcquireRaftSnapshot() bool {
+// AcquireRaftSnapshot returns true if a new raft snapshot can start. If no
+// error is returned, the caller MUST call ReleaseRaftSnapshot.
+func (s *Store) AcquireRaftSnapshot(ctx context.Context) error {
 	select {
 	case s.snapshotSem <- struct{}{}:
-		return true
-	default:
-		return false
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -3400,19 +3404,8 @@ func (s *Store) processRaft() {
 	}
 
 	s.scheduler.Start(s.stopper)
-	s.stopper.RunWorker(func() {
-		// Wait for the scheduler worker goroutines to finish. Necessary because a
-		// worker might be generating a snapshot.
-		s.scheduler.Wait()
-
-		// Abandon any unsent snapshots (releasing the associated RocksDB
-		// resources).
-		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-			ctx := r.AnnotateCtx(context.TODO())
-			r.maybeAbandonSnapshot(ctx)
-			return true
-		})
-	})
+	// Wait for the scheduler worker goroutines to finish.
+	s.stopper.RunWorker(s.scheduler.Wait)
 
 	s.raftTickLoop()
 	s.startCoalescedHeartbeatsLoop()

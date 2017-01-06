@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -44,6 +45,9 @@ const (
 	// progressed past and thus is no longer needed and can be truncated.
 	RaftLogQueueStaleThreshold = 100
 )
+
+// raftLogMaxSize limits the maximum size of the Raft log.
+var raftLogMaxSize = envutil.EnvOrDefaultInt64("COCKROACH_RAFT_LOG_MAX_SIZE", 1<<20 /* 1 MB */)
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs
 // truncated by removing unneeded entries.
@@ -103,6 +107,9 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 	targetSize := r.mu.state.Stats.Total()
 	if targetSize > r.mu.maxBytes {
 		targetSize = r.mu.maxBytes
+	}
+	if targetSize > raftLogMaxSize {
+		targetSize = raftLogMaxSize
 	}
 	firstIndex, err := r.FirstIndex()
 	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
