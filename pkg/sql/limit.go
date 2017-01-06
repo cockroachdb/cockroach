@@ -139,10 +139,6 @@ func (n *limitNode) evalLimit() error {
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if err := n.p.startSubqueryPlans(datum.src); err != nil {
-				return err
-			}
-
 			dstDatum, err := datum.src.Eval(&n.p.evalCtx)
 			if err != nil {
 				return err

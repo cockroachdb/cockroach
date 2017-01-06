@@ -31,16 +31,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// expressionCarrier handles visiting sub-expressions and starting
-// sub-query plans contained in Expr objects.
+// expressionCarrier handles visiting sub-expressions.
 type expressionCarrier interface {
 	// walkExprs explores all sub-expressions held by this object, if
 	// any.
 	walkExprs(func(desc string, index int, expr parser.TypedExpr))
-
-	// start the sub-plans contained by expressions
-	// held by this object, if any.
-	start() error
 }
 
 // tableWriter handles writing kvs and forming table rows.
@@ -88,7 +83,6 @@ type tableInserter struct {
 }
 
 func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
-func (ti *tableInserter) start() error                                                    { return nil }
 
 func (ti *tableInserter) init(txn *client.Txn) error {
 	ti.txn = txn
@@ -128,7 +122,6 @@ type tableUpdater struct {
 }
 
 func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
-func (tu *tableUpdater) start() error                                                    { return nil }
 
 func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
@@ -225,13 +218,6 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr parser
 	if tu.evaler != nil {
 		tu.evaler.walkExprs(walk)
 	}
-}
-
-func (tu *tableUpserter) start() error {
-	if tu.evaler != nil {
-		return tu.evaler.start()
-	}
-	return nil
 }
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
@@ -481,7 +467,6 @@ type tableDeleter struct {
 }
 
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
-func (td *tableDeleter) start() error                                                    { return nil }
 
 func (td *tableDeleter) init(txn *client.Txn) error {
 	td.txn = txn

@@ -721,7 +721,7 @@ func forEachUser(p *planner, fn func(username string) error) error {
 		return nil
 	}
 	defer plan.Close()
-	if err := plan.Start(); err != nil {
+	if err := p.startPlan(plan); err != nil {
 		return err
 	}
 

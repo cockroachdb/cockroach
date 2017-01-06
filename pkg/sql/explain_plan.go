@@ -217,7 +217,7 @@ func (e *explainer) leaveNode(name string) {
 }
 
 // subqueryNode implements the planObserver interface.
-func (e *explainer) subqueryNode(_ *subquery) error { return nil }
+func (e *explainer) subqueryNode(sq *subquery) error { return nil }
 
 // formatColumns converts a column signature for a data source /
 // planNode to a string. The column types are printed iff the 2nd

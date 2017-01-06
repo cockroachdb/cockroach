@@ -119,19 +119,7 @@ func (s *renderNode) DebugValues() debugValues {
 	return s.source.plan.DebugValues()
 }
 
-func (s *renderNode) Start() error {
-	if err := s.source.plan.Start(); err != nil {
-		return err
-	}
-
-	for _, e := range s.render {
-		if err := s.planner.startSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
+func (s *renderNode) Start() error { return s.source.plan.Start() }
 
 func (s *renderNode) Next() (bool, error) {
 	if next, err := s.source.plan.Next(); !next {

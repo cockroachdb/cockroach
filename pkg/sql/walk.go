@@ -405,6 +405,13 @@ func (v *planVisitor) expr(
 	v.observer.expr(v.nodeName, fieldName, n, expr)
 
 	if expr != nil {
+		// Note: the recursion through WalkExprConst does nothing else
+		// than calling observer.subqueryNode() and collect subplans in
+		// v.subplans, in particular it does not recurse into the
+		// collected subplans (this recursion is performed by visit() only
+		// after all the subplans have been collected). Therefore, there
+		// is no risk that v.subplans will be clobbered by a recursion
+		// into visit().
 		v.subplans = subplans
 		parser.WalkExprConst(v, expr)
 		subplans = v.subplans
