@@ -567,9 +567,13 @@ func (n *Node) bootstrapStores(
 // node's address is gossiped with node ID as the gossip key.
 func (n *Node) connectGossip(ctx context.Context) {
 	log.Infof(ctx, "connecting to gossip network to verify cluster ID...")
-	// No timeout or stop condition is needed here. Log statements should be
-	// sufficient for diagnosing this type of condition.
-	<-n.storeCfg.Gossip.Connected
+	select {
+	case <-n.stopper.ShouldStop():
+		return
+	case <-ctx.Done():
+		return
+	case <-n.storeCfg.Gossip.Connected:
+	}
 
 	uuidBytes, err := n.storeCfg.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil {
