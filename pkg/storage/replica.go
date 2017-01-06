@@ -736,7 +736,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
 			ProposalRetry: proposalRangeNoLongerExists,
 		}
-		p.finish(resp)
+		p.finishLocked(resp)
 	}
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 }
@@ -1431,6 +1431,22 @@ type endCmds struct {
 // done removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
+	ec.doneInternal(br, pErr, retry, false /* replicaLocked */)
+}
+
+// doneLocked is like done but should be called when the replica.mu is already
+// held.
+func (ec *endCmds) doneLocked(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
+	ec.repl.mu.AssertHeld()
+	ec.doneInternal(br, pErr, retry, true /* replicaLocked */)
+}
+
+// replicaLocked should be set if replica.mu is already held.
+func (ec *endCmds) doneInternal(
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+	retry proposalRetryReason,
+	replicaLocked bool) {
 	// Update the timestamp cache if the command succeeded and is not
 	// being retried. Each request is considered in turn; only those
 	// marked as affecting the cache are processed. Inconsistent reads
@@ -1461,9 +1477,13 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 			}
 		}
 
-		ec.repl.mu.Lock()
+		if !replicaLocked {
+			ec.repl.mu.Lock()
+		}
 		ec.repl.mu.tsCache.AddRequest(cr)
-		ec.repl.mu.Unlock()
+		if !replicaLocked {
+			ec.repl.mu.Unlock()
+		}
 	}
 
 	ec.repl.cmdQMu.Lock()
@@ -3005,7 +3025,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			delete(r.mu.proposals, idKey)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
-			p.finish(proposalResult{Err: roachpb.NewError(
+			p.finishLocked(proposalResult{Err: roachpb.NewError(
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
@@ -3019,7 +3039,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// but not yet applied.
 			delete(r.mu.proposals, idKey)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-			p.finish(proposalResult{ProposalRetry: proposalReproposed})
+			p.finishLocked(proposalResult{ProposalRetry: proposalReproposed})
 			numShouldRetry++
 		} else if p.proposedAtTicks > r.mu.ticks-refreshAtDelta {
 			// The command was proposed too recently, don't bother reproprosing it
@@ -3048,7 +3068,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
 		if err := r.submitProposalLocked(p); err != nil {
 			delete(r.mu.proposals, p.idKey)
-			p.finish(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
+			p.finishLocked(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
 }
@@ -3379,7 +3399,7 @@ func (r *Replica) processRaftCommand(
 				// Assert against another defer trying to use the context after
 				// the client has been signaled.
 				ctx = nil
-				copyProposal.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
+				copyProposal.finishLocked(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}()
 		}
 	}
@@ -3504,7 +3524,9 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if proposedLocally {
-		proposal.finish(response)
+		r.mu.Lock()
+		proposal.finishLocked(response)
+		r.mu.Unlock()
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
 	}
