@@ -102,7 +102,17 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 		setNeededColumns(n.plan, sourceNeeded)
 
-	case *selectNode:
+	case *filterNode:
+		// Detect which columns from the source are needed in addition to
+		// those needed by the context.
+		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))
+		copy(sourceNeeded, needed)
+		for i := range sourceNeeded {
+			sourceNeeded[i] = sourceNeeded[i] || n.ivarHelper.IndexedVarUsed(i)
+		}
+		setNeededColumns(n.source.plan, sourceNeeded)
+
+	case *renderNode:
 		// Optimization: remove all the render expressions that are not
 		// needed. While doing so, some indexed vars may disappear
 		// entirely, which may enable omission of more columns from the
@@ -117,14 +127,13 @@ func setNeededColumns(plan planNode, needed []bool) {
 			}
 			n.render[i] = n.ivarHelper.Rebind(n.render[i])
 		}
-		n.filter = n.ivarHelper.Rebind(n.filter)
 
 		// Now detect which columns from the source are still needed.
-		neededFromSource := make([]bool, len(n.source.info.sourceColumns))
-		for i := range neededFromSource {
-			neededFromSource[i] = n.ivarHelper.IndexedVarUsed(i)
+		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))
+		for i := range sourceNeeded {
+			sourceNeeded[i] = n.ivarHelper.IndexedVarUsed(i)
 		}
-		setNeededColumns(n.source.plan, neededFromSource)
+		setNeededColumns(n.source.plan, sourceNeeded)
 		markOmitted(n.columns, needed)
 
 	case *selectTopNode:

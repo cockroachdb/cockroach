@@ -1169,6 +1169,30 @@ SELECT 'not test' = ANY (CURRENT_SCHEMAS(true))
 ----
 false
 
+statement ok
+SET DATABASE = ''
+
+query T
+SELECT current_schema()
+----
+NULL
+
+statement ok
+SET DATABASE = 'test'
+
+query T
+SELECT current_schema()
+----
+test
+
+statement ok
+SET DATABASE = ''
+
+query T
+SELECT current_schema()
+----
+NULL
+
 query I
 SELECT array_length(ARRAY['a', 'b'], 1);
 ----
@@ -1229,50 +1253,35 @@ SELECT array_upper(ARRAY['a'], 2);
 ----
 NULL
 
-# TODO(nvanbenschoten): Until we support casts to array types, or support the
-# array_remove builtin, this is the easiest way to test with an empty array.
-
-statement ok
-SET DATABASE = ''
-
-query TI
-SELECT current_schemas(false), array_length(current_schemas(false), 1);
-----
-{}  NULL
-
-query TI
-SELECT current_schemas(false), array_lower(current_schemas(false), 1);
-----
-{}  NULL
-
-query TI
-SELECT current_schemas(false), array_upper(current_schemas(false), 1);
-----
-{}  NULL
-
-statement ok
-SET DATABASE = ''
-
-query T
-SELECT current_schema()
+query I
+SELECT array_length(ARRAY[]:::int[], 1);
 ----
 NULL
 
-statement ok
-SET DATABASE = 'test'
-
-query T
-SELECT current_schema()
-----
-test
-
-statement ok
-SET DATABASE = ''
-
-query T
-SELECT current_schema()
+query I
+SELECT array_lower(ARRAY[]:::int[], 1);
 ----
 NULL
+
+query I
+SELECT array_upper(ARRAY[]:::int[], 1);
+----
+NULL
+
+query I
+SELECT array_length(ARRAY[ARRAY[1, 2]], 2);
+----
+2
+
+query I
+SELECT array_lower(ARRAY[ARRAY[1, 2]], 2);
+----
+1
+
+query I
+SELECT array_upper(ARRAY[ARRAY[1, 2]], 2);
+----
+2
 
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')

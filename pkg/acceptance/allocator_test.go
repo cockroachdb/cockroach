@@ -82,6 +82,8 @@ import (
 	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -121,6 +123,8 @@ type allocatorTest struct {
 	// Terraform configs. This must be in GB, because Terraform only accepts
 	// disk size for GCE in GB.
 	CockroachDiskSizeGB int
+	// Run some schema changes during the rebalancing.
+	RunSchemaChanges bool
 
 	f *terrafarm.Farmer
 }
@@ -184,6 +188,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	if err := at.f.Resize(at.EndNodes); err != nil {
 		t.Fatal(err)
 	}
+
 	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.EndNodes))
 	at.f.Assert(ctx, t)
 
@@ -195,16 +200,107 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if at.RunSchemaChanges {
+		log.Info(ctx, "running schema changes while cluster is rebalancing")
+		if err := at.runSchemaChanges(ctx, t); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	log.Info(ctx, "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(ctx, t); err != nil {
 		t.Fatal(err)
 	}
+
 	at.f.Assert(ctx, t)
 }
 
 func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
+	s := log.Scope(t, "AllocatorTest-"+at.Prefix)
+	defer s.Close(t)
+
 	defer at.Cleanup(t)
 	at.Run(ctx, t)
+}
+
+func (at *allocatorTest) runSchemaChanges(ctx context.Context, t *testing.T) error {
+	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	const tableName = "datablocks.blocks"
+	schemaChanges := []string{
+		"ALTER TABLE %s ADD COLUMN newcol DECIMAL DEFAULT (DECIMAL '1.4')",
+		"CREATE INDEX foo ON %s (block_id)",
+	}
+	var wg sync.WaitGroup
+	wg.Add(len(schemaChanges))
+	for i := range schemaChanges {
+		go func(i int) {
+			start := timeutil.Now()
+			cmd := fmt.Sprintf(schemaChanges[i], tableName)
+			log.Infof(ctx, "starting schema change: %s", cmd)
+			if _, err := db.Exec(cmd); err != nil {
+				log.Infof(ctx, "hit schema change error: %s, for %s, in %s", err, cmd, timeutil.Since(start))
+				t.Error(err)
+				return
+			}
+			log.Infof(ctx, "completed schema change: %s, in %s", cmd, timeutil.Since(start))
+			wg.Done()
+			// TODO(vivek): Monitor progress of schema changes and log progress.
+		}(i)
+	}
+	wg.Wait()
+
+	log.Info(ctx, "validate applied schema changes")
+	if err := at.ValidateSchemaChanges(ctx, t); err != nil {
+		t.Fatal(err)
+	}
+	return nil
+}
+
+func (at *allocatorTest) ValidateSchemaChanges(ctx context.Context, t *testing.T) error {
+	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	const tableName = "datablocks.blocks"
+	var now string
+	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&now); err != nil {
+		t.Fatal(err)
+	}
+	var eCount int64
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM %s AS OF SYSTEM TIME %s`, tableName, now)
+	if err := db.QueryRow(q).Scan(&eCount); err != nil {
+		return err
+	}
+	log.Infof(ctx, "%s: %d rows", q, eCount)
+
+	// Validate the different schema changes
+	validationQueries := []string{
+		"SELECT COUNT(newcol) FROM %s AS OF SYSTEM TIME %s",
+		"SELECT COUNT(block_id) FROM %s@foo AS OF SYSTEM TIME %s",
+	}
+	for i := range validationQueries {
+		var count int64
+		q := fmt.Sprintf(validationQueries[i], tableName, now)
+		if err := db.QueryRow(q).Scan(&count); err != nil {
+			return err
+		}
+		log.Infof(ctx, "query: %s, found %d rows", q, count)
+		if count != eCount {
+			t.Fatalf("%s: %d rows found, expected %d rows", q, count, eCount)
+		}
+	}
+	return nil
 }
 
 func (at *allocatorTest) stdDev() (float64, error) {
@@ -396,6 +492,21 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 		EndNodes:   3,
 		StoreURL:   urlStore1s,
 		Prefix:     "uprep-1to3s",
+	}
+	at.RunAndCleanup(ctx, t)
+}
+
+// TestRebalance3to5Small_WithSchemaChanges tests rebalancing in
+// the midst of schema changes, starting with 3 nodes (each
+// containing 10 GiB of data) and growing to 5 nodes.
+func TestRebalance_3To5Small_WithSchemaChanges(t *testing.T) {
+	ctx := context.Background()
+	at := allocatorTest{
+		StartNodes:       3,
+		EndNodes:         5,
+		StoreURL:         urlStore3s,
+		Prefix:           "rebal-3to5s",
+		RunSchemaChanges: true,
 	}
 	at.RunAndCleanup(ctx, t)
 }

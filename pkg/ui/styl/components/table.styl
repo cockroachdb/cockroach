@@ -16,169 +16,78 @@ permissions and limitations under the License.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-$stats-table-cell--border = 1px solid $secondary-gray-8
+$stats-table-cell--border = 1px solid $secondary-gray-12
 
 $stats-table-th--fg = $secondary-light-gray
-$stats-table-td--fg = $main-navy
+$stats-table-td--fg = $table-gray
 
 $stats-table-th--bg     = white
 $stats-table-tr--bg     = white
 $stats-table-tr--bg-alt = $secondary-gray-7
 
 // ---- Data table ----
-.stats-table, .sql-table, .event-table, .logs-table
-  table
-    border-collapse collapse
-    margin-bottom 2rem
+.sort-table
+  font-family lato
+  border-collapse collapse
+  border $stats-table-cell--border
+  width 100%
 
-  thead
-    tr
-      border $stats-table-cell--border
-      border-left none
-      border-top none
-      height 30px
-      vertical-align top
-      &.header-section
-        height 30px
-      &.column
-        border-bottom none
-      &.rollup
-        border-top none
-      &:last-child
-        th
-          padding-bottom 15px
-
-  tbody tr
-      height 45px
+  &__row
+    &--body
       background-color $stats-table-tr--bg
       &:nth-child(odd)
         background-color $stats-table-tr--bg-alt
-      &:last-child
-        border-bottom $stats-table-cell--border
-      &:first-child
-        border-top $stats-table-cell--border
 
-  th
-    color $stats-table-th--fg
-    font-family Lato
-    font-size 10px
-    letter-spacing 1.5px
-    text-transform uppercase
-    font-weight normal
-    text-align left
-    background-color $stats-table-th--bg
-    white-space nowrap
-    &.column
-      border-bottom none
-
-    &.header-section
-      font-size 12px
-      font-family Lato-Medium
-      letter-spacing 2px
+    &--header
+      padding 20px
+      background-color $stats-table-th--bg
       text-transform uppercase
-      color $secondary-light-gray
-      padding 10px 20px
+      font-weight normal
+      text-align left
+      font-size 10px
+      letter-spacing 1.5px
+      white-space nowrap
 
-    &.rollup
-      border-top none
-      font-family Lato-Medium
-      color $main-navy
-      font-size 19px
-      padding-top 0
-      .units
-        font-size 13px
+      // Display the sort direction arrow in header cells.
+      .sort-table__cell
+        padding 18px 20px
+        color $stats-table-th--fg
+        font-size 12px
+        font-weight 400
+        letter-spacing 2px
+        color $lighter-blue
 
-    &.sorted
-      &:after
-        content "▼"
-      &.ascending
-        &:after
-          content "▲"
+        &--sortable:after
+          display inline-block
+          width 20px
+          line-height 12px
+          font-size 6px
+          vertical-align middle
+          text-align center
+          content "▼"
 
-  td
+        &--descending
+          color $light-blue
+
+        &--ascending
+          color $light-blue
+          &:after
+            content "▲"
+          
+
+  &__cell
+    vertical-align top
+    padding 10px 20px
     color $stats-table-td--fg
-    font-family Lato-Regular
-    font-size 12px
+    font-weight 300
+    font-size 14px
     letter-spacing .33px
     white-space nowrap
-    .units
-      font-size 12px
-
-    &.expand-link
-      padding 0
-      a
-        display block
-        width 100%
-        height 100%
-        padding 10px 15px
-    &:first-child a
-        padding-left 3em
-
-  td
-  th
-    padding 10px 15px
     border-right $stats-table-cell--border
-    .missing
-      color $secondary-red
-    .stale
-      color $secondary-gold
-    .healthy
-      color $main-green
 
-table
-  a
-    color $main-green
-    text-decoration none
-
-.sql-table
-  margin 20
-
-  table
-    width 100%
-    thead
-      border-left $stats-table-cell--border
-      border-top $stats-table-cell--border
-    tr
-      border-left $stats-table-cell--border
-
-  .rollup
-    display none
-
-.stat
-  .title
-    display inline-block
-    width 20rem
-
-.stats-table
-  table
-    min-width 100%
-
-.event-table
-  table
-    width 100%
-    margin-bottom 0
-    tbody
-      td
-        border 0
-        padding 20px
-        &:first-child
-          padding-left 3rem
-        font-size 16px
-        font-family Lato-Medium
-        &:first-child
-          width 50px
-        &:nth-child(2)
-          width 75px
-
-        .message
-          font-size 14px
-
-      tr
-        height 60px
-        width 100%
-
-        &:first-child
-          border 0
-
-.logs-table
-  padding 0
+    a
+      font-weight 400
+      color $link-blue
+      text-decoration none
+      width 100%
+      height 100%

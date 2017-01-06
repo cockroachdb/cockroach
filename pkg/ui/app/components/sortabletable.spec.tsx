@@ -36,9 +36,8 @@ describe("<SortableTable>", () => {
     it("renders the expected table structure.", () => {
       let wrapper = makeTable(1);
       assert.lengthOf(wrapper.find("table"), 1, "one table");
-      assert.lengthOf(wrapper.find("thead").find("tr"), 2, "two header rows");
-      assert.lengthOf(wrapper.find("tr.column"), 1, "column header row");
-      assert.lengthOf(wrapper.find("tr.rollup"), 1, "rollup header row");
+      assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
+      assert.lengthOf(wrapper.find("tr.sort-table__row--header"), 1, "column header row");
       assert.lengthOf(wrapper.find("tbody"), 1, "tbody element");
     });
 
@@ -48,10 +47,10 @@ describe("<SortableTable>", () => {
 
       // Verify header structure.
       assert.equal(wrapper.find("tbody").find("tr").length, rowCount, "correct number of rows");
-      let headers = wrapper.find("tr.column");
+      let headers = wrapper.find("tr.sort-table__row--header");
       _.each(columns, (c, index) => {
         let header = headers.childAt(index);
-        assert.isTrue(header.is(".column"), "header is correct class.");
+        assert.isTrue(header.is(".sort-table__cell"), "header is correct class.");
         assert.equal(header.text(), c.title, "header has correct title.");
       });
 
@@ -66,25 +65,28 @@ describe("<SortableTable>", () => {
       });
 
       // Nothing is sorted.
-      assert.lengthOf(wrapper.find("th.sorted"), 0, "expected zero sorted columns.");
+      assert.lengthOf(wrapper.find("th.sort-table__cell--ascending"), 0, "expected zero sorted columns.");
+      assert.lengthOf(wrapper.find("th.sort-table__cell--descending"), 0, "expected zero sorted columns.");
     });
 
     it("renders sorted column correctly.", () => {
       // ascending = false.
       let wrapper = makeTable(1, { sortKey: 1, ascending: false });
 
-      let sortHeader = wrapper.find("th.sorted");
-      assert.lengthOf(sortHeader, 1, "only a single column is sorted");
-      assert.isFalse(sortHeader.is(".ascending"), "sorted column should not be ascending");
+      let sortHeader = wrapper.find("th.sort-table__cell--descending");
+      assert.lengthOf(sortHeader, 1, "only a single column is sorted descending.");
       assert.equal(sortHeader.text(), columns[0].title, "first column should be sorted.");
+      sortHeader = wrapper.find("th.sort-table__cell--ascending");
+      assert.lengthOf(sortHeader, 0, "no columns are sorted ascending.");
 
       // ascending = true
       wrapper = makeTable(1, { sortKey: 2, ascending: true });
 
-      sortHeader = wrapper.find("th.sorted");
-      assert.lengthOf(sortHeader, 1, "only a single column is sorted");
-      assert.isTrue(sortHeader.is(".ascending"), "sorted column should be marked as ascending");
+      sortHeader = wrapper.find("th.sort-table__cell--ascending");
+      assert.lengthOf(sortHeader, 1, "only a single column is sorted ascending.");
       assert.equal(sortHeader.text(), columns[1].title, "second column should be sorted.");
+      sortHeader = wrapper.find("th.sort-table__cell--descending");
+      assert.lengthOf(sortHeader, 0, "no columns are sorted descending.");
     });
   });
 
@@ -92,7 +94,7 @@ describe("<SortableTable>", () => {
     it("sorts descending on initial click.", () => {
       let spy = sinon.spy();
       let wrapper = makeTable(1, undefined, spy);
-      wrapper.find("th.column").first().simulate("click");
+      wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
       assert.isTrue(spy.calledWith({
         sortKey: 1,
@@ -105,7 +107,7 @@ describe("<SortableTable>", () => {
       let spy = sinon.spy();
       let wrapper = makeTable(1, {sortKey: 2, ascending: true}, spy);
 
-      wrapper.find("th.column").first().simulate("click");
+      wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
       assert.isTrue(spy.calledWith({
         sortKey: 1,
@@ -117,7 +119,7 @@ describe("<SortableTable>", () => {
       let spy = sinon.spy();
       let wrapper = makeTable(1, {sortKey: 1, ascending: false}, spy);
 
-      wrapper.find("th.column").first().simulate("click");
+      wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
       assert.isTrue( spy.calledWith({
         sortKey: 1,
@@ -129,7 +131,7 @@ describe("<SortableTable>", () => {
       let spy = sinon.spy();
       let wrapper = makeTable(1, {sortKey: 1, ascending: true}, spy);
 
-      wrapper.find("th.column").first().simulate("click");
+      wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
       assert.isTrue(spy.calledOnce);
       assert.isTrue( spy.calledWith({
         sortKey: null,
@@ -142,7 +144,7 @@ describe("<SortableTable>", () => {
       let spy = sinon.spy();
       let wrapper = makeTable(1, {sortKey: 1, ascending: true}, spy);
 
-      wrapper.find("th.column").last().simulate("click");
+      wrapper.find("thead th.sort-table__cell").last().simulate("click");
       assert.isTrue(spy.notCalled);
     });
   });

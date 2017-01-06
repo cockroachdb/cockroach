@@ -121,7 +121,7 @@ func TestSplitFilter(t *testing.T) {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
 			sel := makeSelectNode(t)
 			// A function that "converts" only vars in the list.
-			conv := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
+			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
 				iv := expr.(*parser.IndexedVar)
 				colName := iv.String()
 				for _, col := range d.vars {

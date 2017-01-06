@@ -39,6 +39,9 @@ import (
 
 func TestFreezeCluster(t *testing.T) {
 	t.Skip("#7957")
+
+	s := log.Scope(t, "")
+	defer s.Close(t)
 	runTestOnConfigs(t, testFreezeClusterInner)
 }
 

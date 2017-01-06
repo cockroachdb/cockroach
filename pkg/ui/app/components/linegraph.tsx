@@ -103,8 +103,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    let { title, subtitle, tooltip } = this.props;
-    return <Visualization title={title} subtitle={subtitle} tooltip={tooltip}>
+    let { title, subtitle, tooltip, data } = this.props;
+    return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">
         <svg className="graph" ref={(svg) => this.svgEl = svg}/>
       </div>

@@ -178,6 +178,7 @@ var _ planNode = &dropViewNode{}
 var _ planNode = &emptyNode{}
 var _ planNode = &explainDebugNode{}
 var _ planNode = &explainTraceNode{}
+var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &indexJoinNode{}
 var _ planNode = &insertNode{}
@@ -185,7 +186,7 @@ var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &scanNode{}
-var _ planNode = &selectNode{}
+var _ planNode = &renderNode{}
 var _ planNode = &selectTopNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
@@ -206,7 +207,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	}
 
 	needed := allColumns(plan)
-	if err := p.optimizePlan(plan, needed); err != nil {
+	plan, err = p.optimizePlan(plan, needed)
+	if err != nil {
 		return nil, err
 	}
 

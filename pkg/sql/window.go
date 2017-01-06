@@ -29,7 +29,7 @@ import (
 )
 
 // window constructs a windowNode according to window function applications. This may
-// adjust the render targets in the selectNode as necessary. The use of window functions
+// adjust the render targets in the renderNode as necessary. The use of window functions
 // will run with a space complexity of O(NW) (N = number of rows, W = number of windows)
 // and a time complexity of O(NW) (no ordering), O(W*NlogN) (with ordering), and
 // O(W*N^2) (with constant or variable sized window-frames, which are not yet supported).
@@ -62,10 +62,10 @@ import (
 //                                                           ^^^^^^^^^^^^^^^^^
 //     Ex. overridden: SELECT avg(x) OVER (w PARTITION BY z) FROM y WINDOW w AS (ORDER BY z)
 //                                                                         ^^^^^^^^^^^^^^^^^
-func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, error) {
-	// Determine if a window function is being applied. We use the selectNode's
+func (p *planner) window(n *parser.SelectClause, s *renderNode) (*windowNode, error) {
+	// Determine if a window function is being applied. We use the renderNode's
 	// renders to determine this because window functions may be added to the
-	// selectNode by an ORDER BY clause.
+	// renderNode by an ORDER BY clause.
 	// For instance: SELECT x FROM y ORDER BY avg(x) OVER ().
 	if containsWindowFn := p.parser.WindowFuncInExprs(s.render); !containsWindowFn {
 		return nil, nil
@@ -103,8 +103,8 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 
 // extractWindowFunctions loops over the render expressions and extracts any window functions.
 // While looping over the renders, each window function will be replaced by a separate render
-// for each of its (possibly 0) arguments in the selectNode.
-func (n *windowNode) extractWindowFunctions(s *selectNode) error {
+// for each of its (possibly 0) arguments in the renderNode.
+func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 	visitor := extractWindowFuncsVisitor{
 		n:              n,
 		aggregatesSeen: make(map[*parser.FuncExpr]struct{}),
@@ -126,7 +126,7 @@ func (n *windowNode) extractWindowFunctions(s *selectNode) error {
 			newColumns = append(newColumns, oldColumns[i])
 		} else {
 			// One or more window functions in render. Create a new render in
-			// selectNode for each window function argument.
+			// renderNode for each window function argument.
 			n.windowRender[i] = typedExpr
 			prevWindowCount := len(n.funcs) - numFuncsAdded
 			for i, funcHolder := range n.funcs[prevWindowCount:] {
@@ -151,7 +151,7 @@ func (n *windowNode) extractWindowFunctions(s *selectNode) error {
 // function application by combining specific window definition from a
 // given window function application with referenced window specifications
 // on the SelectClause.
-func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *selectNode) error {
+func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *renderNode) error {
 	// Process each named window specification on the select clause.
 	namedWindowSpecs := make(map[string]*parser.WindowDef, len(sc.Window))
 	for _, windowDef := range sc.Window {
@@ -170,7 +170,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 			return err
 		}
 
-		// TODO(nvanbenschoten) below we add renders to the selectNode for each
+		// TODO(nvanbenschoten) below we add renders to the renderNode for each
 		// partition and order expression. We should handle cases where the expression
 		// is already referenced by the query like sortNode does.
 
@@ -280,7 +280,7 @@ func constructWindowDef(
 // There is one complication here: IndexedVars above the windowing level need to be
 // fixed. Because window function evaluation requires completion of any wrapped plan
 // nodes, if we did nothing here, all IndexedVars would be pointing to their values in
-// the last row of the underlying selectNode. Clearly, we cannot use the selectNode as
+// the last row of the underlying renderNode. Clearly, we cannot use the renderNode as
 // the IndexedVarContainer for IndexedVars above the windowing level. To work around
 // this, we perform four steps:
 // 1. We add renders for each column referenced by an IndexedVar above the windowing
@@ -292,7 +292,7 @@ func constructWindowDef(
 // 4. When evaluating windowRenders for each row that contain these new IndexedVars,
 //    the windowNode provides the buffered column value for that row through its
 //    IndexedVarContainer interface.
-func (n *windowNode) replaceIndexedVars(s *selectNode) {
+func (n *windowNode) replaceIndexedVars(s *renderNode) {
 	ivarHelper := parser.MakeIndexedVarHelper(n, s.ivarHelper.NumVars())
 	n.ivarIdxMap = make(map[int]int)
 	n.ivarSourceInfo = s.sourceInfo
@@ -302,13 +302,13 @@ func (n *windowNode) replaceIndexedVars(s *selectNode) {
 		if render == nil {
 			continue
 		}
-		replaceIdxVars := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
+		replaceIdxVars := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
 			iv, ok := expr.(*parser.IndexedVar)
 			if !ok {
 				return true, expr
 			}
 			if _, ok := n.ivarIdxMap[iv.Idx]; !ok {
-				// We add a new render to the wrapped selectNode for each new IndexedVar we
+				// We add a new render to the wrapped renderNode for each new IndexedVar we
 				// see. We also register this mapping in the ivarIdxMap.
 				s.addRenderColumn(iv, ResultColumn{Name: iv.String(), Typ: iv.ResolvedType()})
 
@@ -340,7 +340,7 @@ type windowNode struct {
 	//     applications, and were added to the wrapped node from window definitions.
 	//     (see constructWindowDefinitions)
 	// - wrappedIndexedVarVals: these values are used to buffer the IndexedVar values
-	//     for each row. Unlike the selectNode, which can stream values for each IndexedVar,
+	//     for each row. Unlike the renderNode, which can stream values for each IndexedVar,
 	//     we need to buffer all values here while we compute window function results. We
 	//     then index into these values in IndexedVarContainer.IndexedVarEval.
 	//     (see replaceIndexedVars)
@@ -363,7 +363,7 @@ type windowNode struct {
 	windowValues [][]parser.Datum
 	curRowIdx    int
 
-	// ivarIdxMap maps selectNode ivarIdx values to windowNode ivarIdx values.
+	// ivarIdxMap maps renderNode ivarIdx values to windowNode ivarIdx values.
 	ivarIdxMap     map[int]int
 	ivarSourceInfo multiSourceInfo
 

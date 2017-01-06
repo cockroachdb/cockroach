@@ -76,8 +76,6 @@ func (p *planner) makeExplainPlanNode(
 		// Type is the node type.
 		{Name: "Type", Typ: parser.TypeString},
 		// Field is the part of the node that a row of output pertains to.
-		// For example a select node may have separate "render" and
-		// "filter" fields.
 		{Name: "Field", Typ: parser.TypeString},
 		// Description contains details about the field.
 		{Name: "Description", Typ: parser.TypeString},
@@ -146,14 +144,19 @@ func planToString(plan planNode) string {
 		showTypes:     true,
 		showExprs:     true,
 		showSelectTop: true,
+		fmtFlags:      parser.FmtExpr(true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field
 			}
-			fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
-				formatColumns(plan.Columns(), true),
-				plan.Ordering().AsString(plan.Columns()),
-			)
+			if plan == nil {
+				fmt.Fprintf(&buf, "%d %s%s %s\n", level, name, field, description)
+			} else {
+				fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
+					formatColumns(plan.Columns(), true),
+					plan.Ordering().AsString(plan.Columns()),
+				)
+			}
 		},
 	}
 	v := planVisitor{p: makePlanner("planToString"), observer: &e}
@@ -182,7 +185,7 @@ func (e *explainer) enterNode(name string, plan planNode) bool {
 	if !e.showSelectTop && name == "select" {
 		return true
 	}
-	if !e.showExprs && name == "render/filter" {
+	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
 		return true
 	}
 
@@ -209,7 +212,7 @@ func (e *explainer) leaveNode(name string) {
 	if !e.showSelectTop && name == "select" {
 		return
 	}
-	if !e.showExprs && name == "render/filter" {
+	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
 		return
 	}
 	e.level--

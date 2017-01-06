@@ -951,12 +951,6 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	)
 	defer stopper.Stop()
 
-	// TODO(peter): Remove when lease rebalancing is the default.
-	defer func(v bool) {
-		EnableLeaseRebalancing = v
-	}(EnableLeaseRebalancing)
-	EnableLeaseRebalancing = true
-
 	// 3 stores where the lease count for each store is equal to 10x the store
 	// ID.
 	var stores []*roachpb.StoreDescriptor
@@ -1006,7 +1000,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 }
 
-func TestAllocatorShouldTransferLease(t *testing.T) {
+func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, a, _ := createTestAllocator(
 		/* deterministic */ true,
@@ -1014,11 +1008,53 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	)
 	defer stopper.Stop()
 
-	// TODO(peter): Remove when lease rebalancing is the default.
-	defer func(v bool) {
-		EnableLeaseRebalancing = v
-	}(EnableLeaseRebalancing)
-	EnableLeaseRebalancing = true
+	// 3 nodes and 6 stores where the lease count for the first store on each
+	// node is equal to 10x the node ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 6; i++ {
+		node := 1 + (i-1)/2
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(node)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * node * (i % 2))},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	existing := []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1},
+		{NodeID: 2, StoreID: 3},
+		{NodeID: 3, StoreID: 5},
+	}
+
+	testCases := []struct {
+		leaseholder roachpb.StoreID
+		check       bool
+		expected    roachpb.StoreID
+	}{
+		{leaseholder: 1, check: false, expected: 0},
+		{leaseholder: 3, check: false, expected: 1},
+		{leaseholder: 5, check: false, expected: 1},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			target := a.TransferLeaseTarget(config.Constraints{},
+				existing, c.leaseholder, 0, c.check)
+			if c.expected != target.StoreID {
+				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
+			}
+		})
+	}
+}
+
+func TestAllocatorShouldTransferLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator(
+		/* deterministic */ true,
+		/* useRuleSolver */ false,
+	)
+	defer stopper.Stop()
 
 	// 4 stores where the lease count for each store is equal to 10x the store
 	// ID.

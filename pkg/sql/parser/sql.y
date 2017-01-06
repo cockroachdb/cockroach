@@ -2908,6 +2908,29 @@ table_ref:
     $$.val = &AliasedTableExpr{Expr: $2.tblExpr(), Ordinality: $4.bool(), As: $5.aliasClause() }
   }
 
+// The following syntax is a CockroachDB extension: SELECT ... FROM [ EXPLAIN .... ] WHERE ...
+// EXPLAIN within square brackets can be used as a table expression (data source).
+// We use square brackets for two reasons:
+// - the grammar would be terribly ambiguous if we used simple
+//   parentheses or no parentheses at all.
+// - it carries visual semantic information, by marking the table
+//   expression as radically different from the other things. This is
+//   useful because the statement after EXPLAIN never runs, so the
+//   entire bracketed EXPLAIN data source can be seen as a way to
+//   "escape" the enclosed statement. And if a user does not know this
+//   and encounters this syntax, they will know from the unusual
+//   choice that something rather different is going on and may be
+//   pushed by the unusual syntax to investigate further in the docs.
+
+| '[' EXPLAIN  explainable_stmt ']' opt_ordinality opt_alias_clause
+  {
+    $$.val = &AliasedTableExpr{Expr: &Explain{ Statement: $3.stmt(), Enclosed: true }, Ordinality: $5.bool(), As: $6.aliasClause() }
+  }
+| '[' EXPLAIN '(' explain_option_list ')' explainable_stmt ']' opt_ordinality opt_alias_clause
+  {
+    $$.val = &AliasedTableExpr{Expr: &Explain{ Options: $4.strs(), Statement: $6.stmt(), Enclosed: true }, Ordinality: $8.bool(), As: $9.aliasClause() }
+  }
+
 opt_ordinality:
   WITH_LA ORDINALITY
   {

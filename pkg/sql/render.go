@@ -21,15 +21,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// selectNode encapsulates the core logic of a select statement: retrieving filtered results from
-// the sources. Grouping, sorting, distinct and limits are implemented on top of this node (as
-// wrappers), though these are taken into consideration at the selectNode level for optimization
-// (e.g. index selection).
-type selectNode struct {
+// renderNode encapsulates the render logic of a select statement:
+// expressing new values using expressions over source values.
+type renderNode struct {
 	planner *planner
 
 	// top refers to the surrounding selectTopNode.
@@ -55,9 +52,9 @@ type selectNode struct {
 	// populated by addOrMergeRenders()
 	// as invoked initially by initTargets() and initWhere().
 	// sortNode peeks into the render array defined by initTargets() as an optimization.
-	// sortNode adds extra selectNode renders for sort columns not requested as select targets.
+	// sortNode adds extra renderNode renders for sort columns not requested as select targets.
 	// groupNode copies/extends the render array defined by initTargets() and
-	// will add extra selectNode renders for the aggregation sources.
+	// will add extra renderNode renders for the aggregation sources.
 	// windowNode also adds additional renders for the window functions.
 	render  []parser.TypedExpr
 	columns ResultColumns
@@ -74,19 +71,13 @@ type selectNode struct {
 	// and the other initializations that may add render columns.
 	numOriginalCols int
 
-	// Filtering expression for rows.
-	// populated initially by initWhere().
-	// modified by index selection (split between scan filter and post-indexjoin filter).
-	filter parser.TypedExpr
-
 	// ordering indicates the order of returned rows.
 	// initially suggested by the GROUP BY and ORDER BY clauses;
 	// modified by index selection.
 	ordering orderingInfo
 
-	// support attributes for EXPLAIN(DEBUG)
-	explain   explainMode
-	debugVals debugValues
+	// explain supports EXPLAIN(DEBUG).
+	explain explainMode
 
 	// The current source row, with one value per source column.
 	// populated by Next(), used by renderRow().
@@ -104,19 +95,19 @@ type selectNode struct {
 	noCopy util.NoCopy
 }
 
-func (s *selectNode) Columns() ResultColumns {
+func (s *renderNode) Columns() ResultColumns {
 	return s.columns
 }
 
-func (s *selectNode) Ordering() orderingInfo {
+func (s *renderNode) Ordering() orderingInfo {
 	return s.ordering
 }
 
-func (s *selectNode) Values() parser.DTuple {
+func (s *renderNode) Values() parser.DTuple {
 	return s.row
 }
 
-func (s *selectNode) MarkDebug(mode explainMode) {
+func (s *renderNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
 		panic(fmt.Sprintf("unknown debug mode %d", mode))
 	}
@@ -124,14 +115,11 @@ func (s *selectNode) MarkDebug(mode explainMode) {
 	s.source.plan.MarkDebug(mode)
 }
 
-func (s *selectNode) DebugValues() debugValues {
-	if s.explain != explainDebug {
-		panic(fmt.Sprintf("node not in debug mode (mode %d)", s.explain))
-	}
-	return s.debugVals
+func (s *renderNode) DebugValues() debugValues {
+	return s.source.plan.DebugValues()
 }
 
-func (s *selectNode) Start() error {
+func (s *renderNode) Start() error {
 	if err := s.source.plan.Start(); err != nil {
 		return err
 	}
@@ -141,62 +129,47 @@ func (s *selectNode) Start() error {
 			return err
 		}
 	}
-	return s.planner.startSubqueryPlans(s.filter)
+
+	return nil
 }
 
-func (s *selectNode) Next() (bool, error) {
-	for {
-		if next, err := s.source.plan.Next(); !next {
-			return false, err
-		}
-
-		if s.explain == explainDebug {
-			s.debugVals = s.source.plan.DebugValues()
-
-			if s.debugVals.output != debugValueRow {
-				// Let the debug values pass through.
-				return true, nil
-			}
-		}
-		row := s.source.plan.Values()
-		s.curSourceRow = row
-		passesFilter, err := sqlbase.RunFilter(s.filter, &s.planner.evalCtx)
-		if err != nil {
-			return false, err
-		}
-
-		if passesFilter {
-			err := s.renderRow()
-			return err == nil, err
-		} else if s.explain == explainDebug {
-			// Mark the row as filtered out.
-			s.debugVals.output = debugValueFiltered
-			return true, nil
-		}
-		// Row was filtered out; grab the next row.
+func (s *renderNode) Next() (bool, error) {
+	if next, err := s.source.plan.Next(); !next {
+		return false, err
 	}
+
+	if s.explain == explainDebug && s.source.plan.DebugValues().output != debugValueRow {
+		// Pass through non-row debug values.
+		return true, nil
+	}
+
+	row := s.source.plan.Values()
+	s.curSourceRow = row
+
+	err := s.renderRow()
+	return err == nil, err
 }
 
-func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
-	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
+func (s *renderNode) SetLimitHint(numRows int64, soft bool) {
+	s.source.plan.SetLimitHint(numRows, soft)
 }
 
-func (s *selectNode) Close() {
+func (s *renderNode) Close() {
 	s.source.plan.Close()
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (s *selectNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+func (s *renderNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
 	return s.curSourceRow[idx].Eval(ctx)
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (s *selectNode) IndexedVarResolvedType(idx int) parser.Type {
+func (s *renderNode) IndexedVarResolvedType(idx int) parser.Type {
 	return s.sourceInfo[0].sourceColumns[idx].Typ
 }
 
 // IndexedVarString implements the parser.IndexedVarContainer interface.
-func (s *selectNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+func (s *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
 	s.sourceInfo[0].FormatVar(buf, f, idx)
 }
 
@@ -275,9 +248,14 @@ func (p *planner) SelectClause(
 	desiredTypes []parser.Type,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
-	s := &selectNode{planner: p}
+	s := &renderNode{planner: p}
 
 	if err := s.initFrom(parsed, scanVisibility); err != nil {
+		return nil, err
+	}
+
+	where, err := s.initWhere(parsed.Where)
+	if err != nil {
 		return nil, err
 	}
 
@@ -287,11 +265,7 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	if err := s.initWhere(parsed.Where); err != nil {
-		return nil, err
-	}
-
-	// NB: orderBy, window, and groupBy are passed and can modify the selectNode,
+	// NB: orderBy, window, and groupBy are passed and can modify the renderNode,
 	// but must do so in that order.
 	sort, err := p.orderBy(orderBy, s)
 	if err != nil {
@@ -306,9 +280,9 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	if s.filter != nil && group != nil {
+	if where != nil && where.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		s.filter = group.isNotNullFilter(s.filter)
+		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter))
 	}
 
 	limitPlan, err := p.Limit(limit)
@@ -333,7 +307,7 @@ func (p *planner) SelectClause(
 }
 
 // initFrom initializes the table node, given the parsed select expression
-func (s *selectNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVisibility) error {
+func (s *renderNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVisibility) error {
 	// AS OF expressions should be handled by the executor.
 	if parsed.From.AsOf.Expr != nil && !s.planner.avoidCachedDescriptors {
 		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
@@ -347,7 +321,7 @@ func (s *selectNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVi
 	return nil
 }
 
-func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Type) error {
+func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Type) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
@@ -374,27 +348,35 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 	return nil
 }
 
-func (s *selectNode) initWhere(where *parser.Where) error {
+func (s *renderNode) initWhere(where *parser.Where) (*filterNode, error) {
 	if where == nil {
-		return nil
+		return nil, nil
 	}
 
+	f := &filterNode{p: s.planner, source: s.source}
+	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(s.sourceInfo[0].sourceColumns))
+
 	var err error
-	s.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, s.ivarHelper,
+	f.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, f.ivarHelper,
 		parser.TypeBool, true, "WHERE")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Make sure there are no aggregation/window functions in the filter
 	// (after subqueries have been expanded).
 	if err := s.planner.parser.AssertNoAggregationOrWindowing(
-		s.filter, "WHERE", s.planner.session.SearchPath,
+		f.filter, "WHERE", s.planner.session.SearchPath,
 	); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	// Insert the newly created filterNode between the renderNode and
+	// its original FROM source.
+	f.source = s.source
+	s.source.plan = f
+
+	return f, nil
 }
 
 // getRenderColName returns the output column name for a render expression.
@@ -418,7 +400,7 @@ func getRenderColName(target parser.SelectExpr) string {
 
 // appendRenderColumn adds a new render expression at the end of the current list.
 // The expression must be normalized already.
-func (s *selectNode) addRenderColumn(expr parser.TypedExpr, col ResultColumn) {
+func (s *renderNode) addRenderColumn(expr parser.TypedExpr, col ResultColumn) {
 	s.render = append(s.render, expr)
 	s.columns = append(s.columns, col)
 }
@@ -426,7 +408,7 @@ func (s *selectNode) addRenderColumn(expr parser.TypedExpr, col ResultColumn) {
 // resetRenderColumns resets all the render expressions. This is used e.g. by
 // aggregation and windowing (see group.go / window.go). The method also
 // asserts that both the render and columns array have the same size.
-func (s *selectNode) resetRenderColumns(exprs []parser.TypedExpr, cols ResultColumns) {
+func (s *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols ResultColumns) {
 	if len(exprs) != len(cols) {
 		panic(fmt.Sprintf("resetRenderColumns used with arrays of different sizes: %d != %d", len(exprs), len(cols)))
 	}
@@ -435,7 +417,7 @@ func (s *selectNode) resetRenderColumns(exprs []parser.TypedExpr, cols ResultCol
 }
 
 // renderRow renders the row by evaluating the render expressions.
-func (s *selectNode) renderRow() error {
+func (s *renderNode) renderRow() error {
 	if s.row == nil {
 		s.row = make([]parser.Datum, len(s.render))
 	}
@@ -450,7 +432,7 @@ func (s *selectNode) renderRow() error {
 }
 
 // Searches for a render target that matches the given column reference.
-func (s *selectNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
+func (s *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 	for i, r := range s.render {
 		if ivar, ok := r.(*parser.IndexedVar); ok && ivar.Idx == colIdx {
 			return i, true
@@ -459,7 +441,7 @@ func (s *selectNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 	return invalidColIdx, false
 }
 
-// Computes ordering information for the select node, given ordering information for the "from"
+// Computes ordering information for the render node, given ordering information for the "from"
 // node.
 //
 //    SELECT a, b FROM t@abc ...
@@ -480,7 +462,7 @@ func (s *selectNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 //         SELECT a, c FROM t@abc ORDER by a,b,c
 //      we internally add b as a render target. The same holds for any targets required for
 //      grouping.
-func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
+func (s *renderNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	var ordering orderingInfo
 
 	// See if any of the "exact match" columns have render targets. We can ignore any columns that

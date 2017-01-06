@@ -333,6 +333,16 @@ func (p *planner) getDataSource(
 		}
 		return p.makeJoin(t.Join, left, right, t.Cond)
 
+	case *parser.Explain:
+		plan, err := p.Explain(t, false)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		return planDataSource{
+			info: newSourceInfoForSingleTable(anonymousTable, plan.Columns()),
+			plan: plan,
+		}, nil
+
 	case *parser.ParenTableExpr:
 		return p.getDataSource(t.Expr, hints, scanVisibility)
 

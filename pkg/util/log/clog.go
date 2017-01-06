@@ -723,7 +723,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if s >= l.stderrThreshold.get() {
 		l.outputToStderr(entry, stacks)
 	}
-	if !l.toStderr && logDir.isSet() {
+	if logDir.isSet() {
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
 				// Make sure the message appears somewhere.
@@ -808,7 +808,7 @@ func (l *loggingT) getTermColorProfile() *colorProfile {
 			if (fi.Mode() & os.ModeCharDevice) != 0 {
 				term := os.Getenv("TERM")
 				switch term {
-				case "ansi", "xterm-color":
+				case "ansi", "xterm-color", "screen":
 					l.colorProfile = colorProfile8
 				case "xterm-256color", "screen-256color":
 					l.colorProfile = colorProfile256

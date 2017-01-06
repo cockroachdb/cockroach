@@ -36,7 +36,6 @@ export default class extends React.Component<{}, {}> {
     return <nav className="navigation-bar">
       <ul className="navigation-bar__list">
         <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster" />
-        <IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
         <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
         <IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
       </ul>
