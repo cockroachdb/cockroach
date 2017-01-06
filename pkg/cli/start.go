@@ -120,22 +120,22 @@ func initInsecure() error {
 	return nil
 }
 
-func initMemProfile(dir string) {
+func initMemProfile(ctx context.Context, dir string) {
 	memProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_MEMPROF_INTERVAL", -1)
 	if memProfileInterval < 0 {
 		return
 	}
 	if min := time.Second; memProfileInterval < min {
-		log.Infof(context.TODO(), "fixing excessively short memory profiling interval: %s -> %s",
+		log.Infof(ctx, "fixing excessively short memory profiling interval: %s -> %s",
 			memProfileInterval, min)
 		memProfileInterval = min
 	}
 
 	if jemallocHeapDump != nil {
-		log.Infof(context.TODO(), "writing go and jemalloc memory profiles to %s every %s", dir, memProfileInterval)
+		log.Infof(ctx, "writing go and jemalloc memory profiles to %s every %s", dir, memProfileInterval)
 	} else {
-		log.Infof(context.TODO(), "writing go only memory profiles to %s every %s", dir, memProfileInterval)
-		log.Infof(context.TODO(), `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
+		log.Infof(ctx, "writing go only memory profiles to %s every %s", dir, memProfileInterval)
+		log.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
 	}
 
 	go func() {
@@ -153,7 +153,7 @@ func initMemProfile(dir string) {
 				if jemallocHeapDump != nil {
 					jepath := filepath.Join(dir, "jeprof."+suffix)
 					if err := jemallocHeapDump(jepath); err != nil {
-						log.Warningf(context.TODO(), "error writing jemalloc heap %s: %s", jepath, err)
+						log.Warningf(ctx, "error writing jemalloc heap %s: %s", jepath, err)
 					}
 				}
 
@@ -161,12 +161,12 @@ func initMemProfile(dir string) {
 				// Try writing a go heap profile.
 				f, err := os.Create(path)
 				if err != nil {
-					log.Warningf(context.TODO(), "error creating go heap file %s", err)
+					log.Warningf(ctx, "error creating go heap file %s", err)
 					return
 				}
 				defer f.Close()
 				if err = pprof.WriteHeapProfile(f); err != nil {
-					log.Warningf(context.TODO(), "error writing go heap %s: %s", path, err)
+					log.Warningf(ctx, "error writing go heap %s: %s", path, err)
 					return
 				}
 			}()
@@ -174,13 +174,13 @@ func initMemProfile(dir string) {
 	}()
 }
 
-func initCPUProfile(dir string) {
+func initCPUProfile(ctx context.Context, dir string) {
 	cpuProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_CPUPROF_INTERVAL", -1)
 	if cpuProfileInterval < 0 {
 		return
 	}
 	if min := time.Second; cpuProfileInterval < min {
-		log.Infof(context.TODO(), "fixing excessively short cpu profiling interval: %s -> %s",
+		log.Infof(ctx, "fixing excessively short cpu profiling interval: %s -> %s",
 			cpuProfileInterval, min)
 		cpuProfileInterval = min
 	}
@@ -203,7 +203,7 @@ func initCPUProfile(dir string) {
 				suffix := timeutil.Now().Add(cpuProfileInterval).Format(format)
 				f, err := os.Create(filepath.Join(dir, "cpuprof."+suffix))
 				if err != nil {
-					log.Warningf(context.TODO(), "error creating go cpu file %s", err)
+					log.Warningf(ctx, "error creating go cpu file %s", err)
 					return
 				}
 
@@ -216,7 +216,7 @@ func initCPUProfile(dir string) {
 
 				// Start the new profile.
 				if err := pprof.StartCPUProfile(f); err != nil {
-					log.Warningf(context.TODO(), "unable to start cpu profile: %v", err)
+					log.Warningf(ctx, "unable to start cpu profile: %v", err)
 					f.Close()
 					return
 				}
@@ -315,8 +315,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	info := build.GetInfo()
 	log.Infof(startCtx, info.Short())
 
-	initMemProfile(f.Value.String())
-	initCPUProfile(f.Value.String())
+	initMemProfile(startCtx, f.Value.String())
+	initCPUProfile(startCtx, f.Value.String())
 	initBlockProfile()
 
 	// Default user for servers.
@@ -416,6 +416,9 @@ func runStart(_ *cobra.Command, args []string) error {
 	// non-unix platforms.
 	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
 
+	shutdownSpan := tracer.StartSpan("server shutdown")
+	defer shutdownSpan.Finish()
+	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
 	var returnErr error
 
 	// Block until one of the signals above is received or the stopper
@@ -425,7 +428,7 @@ func runStart(_ *cobra.Command, args []string) error {
 		return err
 	case <-stopper.ShouldStop():
 	case sig := <-signalCh:
-		log.Infof(context.TODO(), "received signal '%s'", sig)
+		log.Infof(shutdownCtx, "received signal '%s'", sig)
 		if sig == os.Interrupt {
 			// Graceful shutdown after an interrupt should cause the process
 			// to terminate with a non-zero exit code; however SIGTERM is
@@ -442,7 +445,7 @@ func runStart(_ *cobra.Command, args []string) error {
 			serverStatusMu.Unlock()
 			if needToDrain {
 				if _, err := s.Drain(server.GracefulDrainModes); err != nil {
-					log.Warning(context.TODO(), err)
+					log.Warning(shutdownCtx, err)
 				}
 			}
 			stopper.Stop()
@@ -450,7 +453,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	}
 
 	const msgDrain = "initiating graceful shutdown of server"
-	log.Info(context.TODO(), msgDrain)
+	log.Info(shutdownCtx, msgDrain)
 	fmt.Fprintln(os.Stdout, msgDrain)
 
 	go func() {
@@ -460,9 +463,9 @@ func runStart(_ *cobra.Command, args []string) error {
 			select {
 			case <-ticker.C:
 				if log.V(1) {
-					log.Infof(context.TODO(), "running tasks:\n%s", stopper.RunningTasks())
+					log.Infof(shutdownCtx, "running tasks:\n%s", stopper.RunningTasks())
 				}
-				log.Infof(context.TODO(), "%d running tasks", stopper.NumTasks())
+				log.Infof(shutdownCtx, "%d running tasks", stopper.NumTasks())
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -472,7 +475,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	select {
 	case sig := <-signalCh:
 		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
-		log.Errorf(context.TODO(), "%v", returnErr)
+		log.Errorf(shutdownCtx, "%v", returnErr)
 		// This new signal is not welcome, as it interferes with the
 		// graceful shutdown process.  On Unix, a signal that was not
 		// handled gracefully by the application should be visible to
@@ -483,11 +486,11 @@ func runStart(_ *cobra.Command, args []string) error {
 		// NB: we do not return here to go through log.Flush below.
 	case <-time.After(time.Minute):
 		returnErr = errors.New("time limit reached, initiating hard shutdown")
-		log.Errorf(context.TODO(), "%v", returnErr)
+		log.Errorf(shutdownCtx, "%v", returnErr)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
-		log.Infof(context.TODO(), msgDone)
+		log.Infof(shutdownCtx, msgDone)
 		fmt.Fprintln(os.Stdout, msgDone)
 	}
 	log.Flush()
