@@ -320,19 +320,7 @@ func (n *groupNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *groupNode) Start() error {
-	if err := n.plan.Start(); err != nil {
-		return err
-	}
-
-	for _, e := range n.render {
-		if err := n.planner.startSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-
-	return n.planner.startSubqueryPlans(n.having)
-}
+func (n *groupNode) Start() error { return n.plan.Start() }
 
 func (n *groupNode) Next() (bool, error) {
 	var scratch []byte

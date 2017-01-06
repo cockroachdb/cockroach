@@ -681,7 +681,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return err
 		}
 
-		if err := rows.Start(); err != nil {
+		if err := planner.startPlan(rows); err != nil {
 			return err
 		}
 

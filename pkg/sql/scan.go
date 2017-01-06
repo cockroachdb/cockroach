@@ -142,13 +142,8 @@ func (n *scanNode) disableBatchLimit() {
 }
 
 func (n *scanNode) Start() error {
-	err := n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
+	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
 		n.valNeededForCol)
-	if err != nil {
-		return err
-	}
-
-	return n.p.startSubqueryPlans(n.filter)
 }
 
 func (n *scanNode) Close() {}

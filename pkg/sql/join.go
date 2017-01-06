@@ -291,10 +291,6 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 
 // Start implements the planNode interface.
 func (n *joinNode) Start() error {
-	if err := n.planner.startSubqueryPlans(n.pred.onCond); err != nil {
-		return err
-	}
-
 	if err := n.left.plan.Start(); err != nil {
 		return err
 	}

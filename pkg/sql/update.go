@@ -94,11 +94,7 @@ func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
 
 	r.tw = tw
 
-	if err := r.tw.start(); err != nil {
-		return err
-	}
-
-	return r.rows.Start()
+	return en.p.startPlan(r.rows)
 }
 
 type updateNode struct {
@@ -271,14 +267,9 @@ func (p *planner) Update(
 }
 
 func (u *updateNode) Start() error {
-	if err := u.rh.startPlans(); err != nil {
-		return err
-	}
-
 	if err := u.run.startEditNode(&u.editNodeBase, &u.tw); err != nil {
 		return err
 	}
-
 	return u.run.tw.init(u.p.txn)
 }
 

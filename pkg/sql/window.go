@@ -406,19 +406,7 @@ func (n *windowNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *windowNode) Start() error {
-	if err := n.plan.Start(); err != nil {
-		return err
-	}
-
-	for _, e := range n.windowRender {
-		if err := n.planner.startSubqueryPlans(e); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
+func (n *windowNode) Start() error { return n.plan.Start() }
 
 func (n *windowNode) Next() (bool, error) {
 	for !n.populated {

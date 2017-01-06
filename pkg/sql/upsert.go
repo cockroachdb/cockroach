@@ -157,15 +157,6 @@ func (uh *upsertHelper) walkExprs(walk func(desc string, index int, expr parser.
 	}
 }
 
-func (uh *upsertHelper) start() error {
-	for _, evalExpr := range uh.evalExprs {
-		if err := uh.p.startSubqueryPlans(evalExpr); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // eval returns the values for the update case of an upsert, given the row
 // that would have been inserted and the existing (conflicting) values.
 func (uh *upsertHelper) eval(

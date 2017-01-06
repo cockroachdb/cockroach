@@ -1234,8 +1234,8 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
-func (e *Executor) execClassic(plan planNode, result *Result) error {
-	if err := plan.Start(); err != nil {
+func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
+	if err := planMaker.startPlan(plan); err != nil {
 		return err
 	}
 
@@ -1342,7 +1342,7 @@ func (e *Executor) execStmt(
 		}
 		err = e.execDistSQL(planMaker, plan, &result)
 	} else {
-		err = e.execClassic(plan, &result)
+		err = e.execClassic(planMaker, plan, &result)
 	}
 	return result, err
 }
