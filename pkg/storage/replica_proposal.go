@@ -97,9 +97,11 @@ type ProposalData struct {
 // invoked here in order to allow the original client to be cancelled
 // and possibly no longer listening to this done channel, and so can't
 // be counted on to invoke endCmds itself.
-func (proposal *ProposalData) finish(pr proposalResult) {
+// replica.mu needs to be held for the replica that's waiting for the
+// application of this proposal.
+func (proposal *ProposalData) finishLocked(pr proposalResult) {
 	if proposal.endCmds != nil {
-		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
+		proposal.endCmds.doneLocked(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
 	}
 	proposal.doneCh <- pr
