@@ -17,9 +17,13 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"strings"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -150,6 +154,81 @@ func (p *planner) validateCheckExpr(
 	if next {
 		return errors.Errorf("validation of CHECK %q failed on row: %s",
 			expr.String(), labeledRowValues(tableDesc.Columns, rows.Values()))
+	}
+	return nil
+}
+
+func (p *planner) validateForeignKey(
+	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
+) error {
+	targetTable, err := sqlbase.GetTableDescFromID(p.txn, srcIdx.ForeignKey.Table)
+	if err != nil {
+		return err
+	}
+	targetIdx, err := targetTable.FindIndexByID(srcIdx.ForeignKey.Index)
+	if err != nil {
+		return err
+	}
+
+	srcName, err := p.getQualifiedTableName(srcTable)
+	if err != nil {
+		return err
+	}
+
+	targetName, err := p.getQualifiedTableName(targetTable)
+	if err != nil {
+		return err
+	}
+
+	escape := func(s string) string {
+		return parser.Name(s).String()
+	}
+
+	prefix := len(srcIdx.ColumnNames)
+	if p := len(targetIdx.ColumnNames); p < prefix {
+		prefix = p
+	}
+
+	srcCols, targetCols := make([]string, prefix), make([]string, prefix)
+	join, where := make([]string, prefix), make([]string, prefix)
+
+	for i := 0; i < prefix; i++ {
+		srcCols[i] = fmt.Sprintf("s.%s", escape(srcIdx.ColumnNames[i]))
+		targetCols[i] = fmt.Sprintf("t.%s", escape(targetIdx.ColumnNames[i]))
+		join[i] = fmt.Sprintf("(%s = %s OR (%s IS NULL AND %s IS NULL))",
+			srcCols[i], targetCols[i], srcCols[i], targetCols[i])
+		where[i] = fmt.Sprintf("(%s IS NOT NULL AND %s IS NULL)", srcCols[i], targetCols[i])
+	}
+
+	query := fmt.Sprintf(
+		`SELECT %s FROM %s@%s AS s LEFT OUTER JOIN %s@%s AS t ON %s WHERE %s LIMIT 1`,
+		strings.Join(srcCols, ", "),
+		srcName, escape(srcIdx.Name), targetName, escape(targetIdx.Name),
+		strings.Join(join, " AND "),
+		strings.Join(where, " OR "),
+	)
+
+	log.Infof(ctx, "Validating FK %q (%q [%v] -> %q [%v]) with query %q",
+		srcIdx.ForeignKey.Name,
+		srcTable.Name, srcCols, targetTable.Name, targetCols,
+		query,
+	)
+
+	values, err := p.queryRows(query)
+	if err != nil {
+		return err
+	}
+
+	if len(values) > 0 {
+		var pairs bytes.Buffer
+		for i := range values[0] {
+			if i > 0 {
+				pairs.WriteString(", ")
+			}
+			pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[0][i]))
+		}
+		return errors.Errorf("foreign key violation: %q row %s has no match in %q",
+			srcTable.Name, pairs.String(), targetTable.Name)
 	}
 	return nil
 }

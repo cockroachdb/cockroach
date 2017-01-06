@@ -184,8 +184,15 @@ delivery  fk_item_ref_products   FOREIGN KEY (UNVALIDATED)  item             pro
 delivery  fk_order_ref_orders    FOREIGN KEY                order, shipment  orders.[id shipment]
 delivery  primary                PRIMARY KEY                rowid            NULL
 
-statement error validating FOREIGN KEY constraint "fk_scanned_ref_products" unsupported
-ALTER TABLE scans VALIDATE CONSTRAINT fk_scanned_ref_products
+statement error foreign key violation: "delivery" row item='885155001450' has no match in "products"
+ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
+
+query TTTTT
+SHOW CONSTRAINTS FROM delivery
+----
+delivery  fk_item_ref_products   FOREIGN KEY (UNVALIDATED)  item             products.[upc]
+delivery  fk_order_ref_orders    FOREIGN KEY                order, shipment  orders.[id shipment]
+delivery  primary                PRIMARY KEY                rowid            NULL
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
@@ -193,6 +200,50 @@ UPDATE products SET upc = '885155001450' WHERE sku = '780'
 # Changing referenced non-pk index fails once again with constraint re-added.
 statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
 UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
+
+query TTTTT
+SHOW CONSTRAINTS FROM delivery
+----
+delivery  fk_item_ref_products   FOREIGN KEY        item             products.[upc]
+delivery  fk_order_ref_orders    FOREIGN KEY        order, shipment  orders.[id shipment]
+delivery  primary                PRIMARY KEY        rowid            NULL
+
+statement ok
+ALTER TABLE "user content"."customer reviews"
+  DROP CONSTRAINT orderfk
+
+statement ok
+INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (3, '780', 'i ordered 100 of them', 9);
+
+statement ok
+ALTER TABLE "user content"."customer reviews"
+  ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)
+
+statement error missing value for column "shipment" in multi-part foreign key
+INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (4, '780', 'i ordered 101 of them', 9);
+
+statement error foreign key violation: value \[9 1\] not found in orders@primary \[id shipment\]
+INSERT INTO "user content"."customer reviews" (id, product, body, "order", shipment) VALUES (4, '780', 'i ordered 101 of them', 9, 1);
+
+statement error foreign key violation: value \[1 9\] not found in orders@primary \[id shipment\]
+INSERT INTO "user content"."customer reviews" (id, product, body, shipment, "order") VALUES (4, '780', 'i ordered 101 of them', 9, 1);
+
+statement error foreign key violation: "customer reviews" row order=9, shipment=NULL has no match in "orders"
+ALTER TABLE "user content"."customer reviews"
+  VALIDATE CONSTRAINT orderfk2
+
+statement ok
+DELETE FROM "user content"."customer reviews" WHERE "order" = 9
+
+statement ok
+ALTER TABLE "user content"."customer reviews"
+  VALIDATE CONSTRAINT orderfk2
+
+statement ok
+ALTER TABLE delivery DROP CONSTRAINT fk_order_ref_orders
 
 statement ok
 TRUNCATE orders, "user content"."customer reviews"
