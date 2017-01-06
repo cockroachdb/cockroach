@@ -366,10 +366,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	query := makeQuery(`SHOW TRANSACTION STATUS`)
 	rows, err := query(c.conn)
 	if err != nil {
-<<<<<<< HEAD
 		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
-=======
->>>>>>> 8ebfd1097c078e53e52165c74bd51dc3ae7ca13f
 		return c.refreshDatabaseName(" ?", nextState)
 	}
 
