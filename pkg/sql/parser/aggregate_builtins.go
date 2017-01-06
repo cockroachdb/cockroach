@@ -217,6 +217,12 @@ type identAggregate struct {
 	val Datum
 }
 
+// IsIdentAggregate returns true for identAggregate.
+func IsIdentAggregate(f AggregateFunc) bool {
+	_, ok := f.(*identAggregate)
+	return ok
+}
+
 // NewIdentAggregate returns an identAggregate (see comment on struct).
 func NewIdentAggregate() AggregateFunc {
 	return &identAggregate{}
@@ -229,6 +235,9 @@ func (a *identAggregate) Add(datum Datum) {
 
 // Result returns the value most recently passed to Add.
 func (a *identAggregate) Result() Datum {
+	// It is significant that identAggregate returns nil, and not DNull,
+	// if no result was known via Add(). See
+	// sql.(*aggregateFuncHolder).Eval() for details.
 	return a.val
 }
 
