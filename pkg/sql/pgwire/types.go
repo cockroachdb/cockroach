@@ -385,7 +385,12 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 // we don't support but Postgres does, add them here. Then create an integration
 // test for the driver and add a case to TestParseTs.
 func parseTs(str string) (time.Time, error) {
-	// RFC3339Nano is sent by github.com/lib/pq (go).
+	// See https://github.com/lib/pq/blob/8df6253/encode.go#L480.
+	if ts, err := time.Parse("2006-01-02 15:04:05.999999999Z07:00", str); err == nil {
+		return ts, nil
+	}
+
+	// See https://github.com/cockroachdb/pq/blob/44a6473/encode.go#L470.
 	if ts, err := time.Parse(time.RFC3339Nano, str); err == nil {
 		return ts, nil
 	}
