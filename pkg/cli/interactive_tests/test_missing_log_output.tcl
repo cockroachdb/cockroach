@@ -32,7 +32,7 @@ eexpect ":/# "
 
 # Check that --alsologtostderr can override the threshold
 # regardless of what --logtostderr has set.
-send "echo marker; $argv start --alsologtostderr=ERROR\r"
+send "echo marker; $argv start --alsologtostderr=FATAL\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
@@ -41,7 +41,7 @@ sleep 1
 send "\003"
 eexpect ":/# "
 
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr\r"
+send "echo marker; $argv start --alsologtostderr=FATAL --logtostderr\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
@@ -50,7 +50,7 @@ sleep 1
 send "\003"
 eexpect ":/# "
 
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false\r"
+send "echo marker; $argv start --alsologtostderr=FATAL --logtostderr=false\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
