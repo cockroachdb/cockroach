@@ -3149,6 +3149,10 @@ func (r *Replica) ChangeReplicas(
 			return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
 		}
 
+		if repDesc.ReplicaID != 0 {
+			return errors.Errorf("must not specify a ReplicaID (%d) for new Replica", repDesc.ReplicaID)
+		}
+
 		// Prohibit premature raft log truncation. We set the pending index to 1
 		// here until we determine what it is below. This removes a small window of
 		// opportunity for the raft log to get truncated after the snapshot is
@@ -3180,56 +3184,7 @@ func (r *Replica) ChangeReplicas(
 		// operation is processed. This is important to allow other ranges to make
 		// progress which might be required for this ChangeReplicas operation to
 		// complete. See #10409.
-		if err := func() error {
-			snap, err := r.GetSnapshot(ctx, snapTypePreemptive)
-			if err != nil {
-				return errors.Wrapf(err, "%s: change replicas failed to generate snapshot", r)
-			}
-			defer r.CloseOutSnap()
-			log.Event(ctx, "generated snapshot")
-
-			fromRepDesc, err := r.GetReplicaDescriptor()
-			if err != nil {
-				return errors.Wrapf(err, "%s: change replicas failed", r)
-			}
-
-			if repDesc.ReplicaID != 0 {
-				return errors.Errorf(
-					"must not specify a ReplicaID (%d) for new Replica",
-					repDesc.ReplicaID,
-				)
-			}
-
-			if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
-				return err
-			}
-
-			req := SnapshotRequest_Header{
-				State: snap.State,
-				RaftMessageRequest: RaftMessageRequest{
-					RangeID:     r.RangeID,
-					FromReplica: fromRepDesc,
-					ToReplica:   repDesc,
-					Message: raftpb.Message{
-						Type:     raftpb.MsgSnap,
-						To:       0, // special cased ReplicaID for preemptive snapshots
-						From:     uint64(fromRepDesc.ReplicaID),
-						Term:     snap.RaftSnap.Metadata.Term,
-						Snapshot: snap.RaftSnap,
-					},
-				},
-				RangeSize: r.GetMVCCStats().Total(),
-				// Recipients can choose to decline preemptive snapshots.
-				CanDecline: true,
-			}
-			if err := r.store.cfg.Transport.SendSnapshot(
-				ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
-				return &preemptiveSnapshotError{
-					errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r),
-				}
-			}
-			return nil
-		}(); err != nil {
+		if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive); err != nil {
 			return err
 		}
 
@@ -3319,6 +3274,59 @@ func (r *Replica) ChangeReplicas(
 		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 	}
 	log.Event(ctx, "txn complete")
+	return nil
+}
+
+func (r *Replica) sendSnapshot(
+	ctx context.Context, repDesc roachpb.ReplicaDescriptor, snapType string,
+) error {
+	if err := r.store.AcquireRaftSnapshot(ctx); err != nil {
+		return err
+	}
+	defer r.store.ReleaseRaftSnapshot()
+
+	snap, err := r.GetSnapshot(ctx, snapTypePreemptive)
+	if err != nil {
+		return errors.Wrapf(err, "%s: change replicas failed to generate snapshot", r)
+	}
+	defer snap.Close()
+	log.Event(ctx, "generated snapshot")
+
+	fromRepDesc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return errors.Wrapf(err, "%s: change replicas failed", r)
+	}
+
+	if snapType == snapTypePreemptive {
+		if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
+			return err
+		}
+	}
+
+	req := SnapshotRequest_Header{
+		State: snap.State,
+		RaftMessageRequest: RaftMessageRequest{
+			RangeID:     r.RangeID,
+			FromReplica: fromRepDesc,
+			ToReplica:   repDesc,
+			Message: raftpb.Message{
+				Type:     raftpb.MsgSnap,
+				To:       uint64(repDesc.ReplicaID),
+				From:     uint64(fromRepDesc.ReplicaID),
+				Term:     snap.RaftSnap.Metadata.Term,
+				Snapshot: snap.RaftSnap,
+			},
+		},
+		RangeSize: r.GetMVCCStats().Total(),
+		// Recipients can choose to decline snapshots.
+		CanDecline: true,
+	}
+	if err := r.store.cfg.Transport.SendSnapshot(
+		ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
+		return &preemptiveSnapshotError{
+			errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r),
+		}
+	}
 	return nil
 }
 

@@ -487,7 +487,7 @@ func TestPreemptiveSnapshotReleasedAfterApply(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
-			if !mtc.stores[filterArgs.Sid-1].AcquireRaftSnapshot() {
+			if !mtc.stores[filterArgs.Sid-1].MaybeAcquireRaftSnapshot() {
 				// We couldn't acquire the store snapshot which means the preemptive
 				// snapshot was not released. Return an error in order to fail the
 				// test.

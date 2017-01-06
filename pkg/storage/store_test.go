@@ -2175,17 +2175,17 @@ func TestStoreNoConcurrentRaftSnapshots(t *testing.T) {
 	defer stopper.Stop()
 	store := createTestStoreWithConfig(t, stopper, &cfg)
 
-	if !store.AcquireRaftSnapshot() {
+	if !store.MaybeAcquireRaftSnapshot() {
 		t.Fatal("expected true")
 	}
 
-	if store.AcquireRaftSnapshot() {
+	if store.MaybeAcquireRaftSnapshot() {
 		t.Fatalf("expected false")
 	}
 
 	store.ReleaseRaftSnapshot()
 
-	if !store.AcquireRaftSnapshot() {
+	if !store.MaybeAcquireRaftSnapshot() {
 		t.Fatal("expected true")
 	}
 	store.ReleaseRaftSnapshot()
