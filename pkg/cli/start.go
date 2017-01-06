@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -257,7 +258,8 @@ func runStart(_ *cobra.Command, args []string) error {
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt)
-	// TODO(spencer): move this behind a build tag.
+	// TODO(spencer): Move this behind a build tag for portability to
+	// non-unix platforms.
 	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
 
 	tracer := tracing.NewTracer()
@@ -329,69 +331,101 @@ func runStart(_ *cobra.Command, args []string) error {
 	stopper := initBacktrace(logDir)
 	log.Event(startCtx, "initialized profiles")
 
-	if err := serverCfg.InitNode(); err != nil {
-		return fmt.Errorf("failed to initialize node: %s", err)
+	// Run the rest of the startup process in the background to avoid preventing
+	// proper handling of signals if we get stuck on something during
+	// initialization (#10138).
+	var serverStatusMu struct {
+		syncutil.Mutex
+		// Used to synchronize server startup with server shutdown if something
+		// interrupts the process during initialization (it isn't safe to try to
+		// drain a server that doesn't exist, or to start a server after draining
+		// has begun).
+		created, draining bool
 	}
+	var s *server.Server
+	errChan := make(chan error, 1)
+	go func() {
+		if err := func() error {
+			if err := serverCfg.InitNode(); err != nil {
+				return errors.Wrap(err, "failed to initialize node")
+			}
 
-	log.Info(startCtx, "starting cockroach node")
-	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
-		log.Infof(startCtx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
-	}
-	s, err := server.NewServer(serverCfg, stopper)
-	if err != nil {
-		return fmt.Errorf("failed to start Cockroach server: %s", err)
-	}
+			log.Info(startCtx, "starting cockroach node")
+			if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
+				log.Infof(startCtx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
+			}
 
-	if err := s.Start(startCtx); err != nil {
-		return fmt.Errorf("cockroach server exited with error: %s", err)
-	}
-	sp.Finish()
+			var err error
+			s, err = server.NewServer(serverCfg, stopper)
+			if err != nil {
+				return errors.Wrap(err, "failed to start Cockroach server")
+			}
 
-	// We don't do this in (*server.Server).Start() because we don't want it
-	// in tests.
-	if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
-		s.PeriodicallyCheckForUpdates()
-	}
+			serverStatusMu.Lock()
+			serverStatusMu.created = true
+			draining := serverStatusMu.draining
+			serverStatusMu.Unlock()
+			if draining {
+				return nil
+			}
 
-	pgURL, err := serverCfg.PGURL(url.User(connUser))
-	if err != nil {
-		return err
-	}
+			if err := s.Start(startCtx); err != nil {
+				return errors.Wrap(err, "cockroach server exited with error")
+			}
+			sp.Finish()
 
-	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-	fmt.Fprintf(tw, "CockroachDB node starting at %s\n", timeutil.Now())
-	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
-	fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
-	fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
-	if len(serverCfg.SocketFile) != 0 {
-		fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
-	}
-	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-	for i, spec := range serverCfg.Stores.Specs {
-		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
-	}
-	initialBoot := s.InitialBoot()
-	nodeID := s.NodeID()
-	if initialBoot {
-		if nodeID == server.FirstNodeID {
-			fmt.Fprintf(tw, "status:\tinitialized new cluster\n")
-		} else {
-			fmt.Fprintf(tw, "status:\tinitialized new node, joined pre-existing cluster\n")
+			// We don't do this in (*server.Server).Start() because we don't want it
+			// in tests.
+			if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
+				s.PeriodicallyCheckForUpdates()
+			}
+
+			pgURL, err := serverCfg.PGURL(url.User(connUser))
+			if err != nil {
+				return err
+			}
+
+			tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
+			fmt.Fprintf(tw, "CockroachDB node starting at %s\n", timeutil.Now())
+			fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
+			fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
+			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+			if len(serverCfg.SocketFile) != 0 {
+				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
+			}
+			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
+			for i, spec := range serverCfg.Stores.Specs {
+				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
+			}
+			initialBoot := s.InitialBoot()
+			nodeID := s.NodeID()
+			if initialBoot {
+				if nodeID == server.FirstNodeID {
+					fmt.Fprintf(tw, "status:\tinitialized new cluster\n")
+				} else {
+					fmt.Fprintf(tw, "status:\tinitialized new node, joined pre-existing cluster\n")
+				}
+			} else {
+				fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
+			}
+			fmt.Fprintf(tw, "clusterID:\t%s\n", s.ClusterID())
+			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
+			return tw.Flush()
+		}(); err != nil {
+			errChan <- err
 		}
-	} else {
-		fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
-	}
-	fmt.Fprintf(tw, "clusterID:\t%s\n", s.ClusterID())
-	fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
-	if err := tw.Flush(); err != nil {
-		return err
-	}
+	}()
 
+	shutdownSpan := tracer.StartSpan("server shutdown")
+	defer shutdownSpan.Finish()
+	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
 	var returnErr error
 
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via the quit endpoint).
 	select {
+	case err := <-errChan:
+		return err
 	case <-stopper.ShouldStop():
 	case sig := <-signalCh:
 		log.Infof(context.TODO(), "received signal '%s'", sig)
@@ -405,10 +439,16 @@ func runStart(_ *cobra.Command, args []string) error {
 			fmt.Fprintln(os.Stdout, msgDouble)
 		}
 		go func() {
-			if _, err := s.Drain(server.GracefulDrainModes); err != nil {
-				log.Warning(context.TODO(), err)
+			serverStatusMu.Lock()
+			serverStatusMu.draining = true
+			needToDrain := serverStatusMu.created
+			serverStatusMu.Unlock()
+			if needToDrain {
+				if _, err := s.Drain(server.GracefulDrainModes); err != nil {
+					log.Warning(context.TODO(), err)
+				}
 			}
-			s.Stop()
+			stopper.Stop()
 		}()
 	}
 
@@ -446,7 +486,7 @@ func runStart(_ *cobra.Command, args []string) error {
 		// NB: we do not return here to go through log.Flush below.
 	case <-time.After(time.Minute):
 		returnErr = errors.New("time limit reached, initiating hard shutdown")
-		log.Errorf(context.TODO(), "%v", err)
+		log.Errorf(context.TODO(), "%v", returnErr)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
