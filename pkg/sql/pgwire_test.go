@@ -618,8 +618,8 @@ func TestPGPreparedQuery(t *testing.T) {
 					if err.Error() != expectedErr {
 						t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, expectedErr, err)
 					}
-					continue
 				}
+				continue
 			}
 			defer rows.Close()
 

@@ -1,8 +1,8 @@
-hash: ea0819df5ca9b41129f8364ffe7d66b59cc3d5f8d2a403b8929191ef34de707e
-updated: 2016-12-20T11:52:55.211241248-05:00
+hash: 11665188dd657f4b479ce3c7698b6bb3e2636f0b25570883d67a85bc7520b8d1
+updated: 2017-01-09T11:24:29.408700952-05:00
 imports:
 - name: cloud.google.com/go
-  version: 3c4c8cc11d151d76587802cb55dd7b80beca832b
+  version: c96c4486674a140772b9788370fa29898577bc0c
   subpackages:
   - compute/metadata
   - internal
@@ -32,7 +32,7 @@ imports:
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/c-jemalloc
-  version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
+  version: 5135b33df2bc67c42a91f6183072bba8a6c30d51
 - name: github.com/cockroachdb/c-protobuf
   version: 070b64667a22925d971878b61e4f0c1df31e8599
   subpackages:
@@ -42,7 +42,7 @@ imports:
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
-  version: b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
+  version: 63df2d8aba63451ac147193c87f3681e2c12393f
 - name: github.com/cockroachdb/cockroach-go
   version: ba57380fe1f490388284806affe325d081e62be6
   subpackages:
@@ -56,7 +56,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: 24601ca24b46f5d700746c5902ee62aca6b1b805
+  version: f99c76cb4791430a25aaea2e7e44e460a332f261
   subpackages:
   - raft
   - raft/raftpb
@@ -65,9 +65,8 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 2d500932f2c7f032d2abc51f2ef940871d541319
+  version: 7dba427612198a11b161a27f9d40bb2dca1ccd20
   subpackages:
-  - digest
   - reference
 - name: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
@@ -96,7 +95,7 @@ imports:
   - pkg/term/windows
   - pkg/tlsconfig
 - name: github.com/docker/go-connections
-  version: 4ccf312bf1d35e5dbda654e57a9be4c3f3cd0366
+  version: eb315e36415380e7c2fdee175262560ff42359da
   subpackages:
   - nat
   - sockets
@@ -104,9 +103,9 @@ imports:
 - name: github.com/docker/go-units
   version: e30f1e79f3cd72542f2026ceec18d3bd67ab859c
 - name: github.com/dustin/go-humanize
-  version: ef638b6c2e62b857442c6443dace9366a48c0ee2
+  version: 904a49491cd5fb5cba832fac98e7e87d56b690a4
 - name: github.com/elastic/gosigar
-  version: 77904081ae782b3d34334a142e1d98c4f9d88336
+  version: 171a3c9e31dde9688c154ba94be6cd5d8a78bf64
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
@@ -118,7 +117,7 @@ imports:
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
-  version: 06ec6c31ff1bac6ed4e205a547a3d72934813ef3
+  version: f9114dace7bd920b32f943b3c73fafbcbab2bf31
   subpackages:
   - gogoproto
   - jsonpb
@@ -154,7 +153,7 @@ imports:
   subpackages:
   - golint
 - name: github.com/golang/protobuf
-  version: 4bd1920723d7b7c925de087aa32e2187708897f7
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
   - jsonpb
   - proto
@@ -165,7 +164,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 7edde482875504b49769ad097eab7c572547ff21
+  version: dcda0b96bd591fbeb40dcaddec3fb40a7fcaca34
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -175,7 +174,7 @@ imports:
 - name: github.com/googleapis/gax-go
   version: da06d194a00e19ce00d9011a13931c3f6f6887c7
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: 84398b94e188ee336f307779b57b3aa91af7063c
+  version: 6193f51e51b0bfea774a33f535bc10e983832710
   subpackages:
   - protoc-gen-grpc-gateway
   - protoc-gen-grpc-gateway/descriptor
@@ -211,11 +210,11 @@ imports:
 - name: github.com/leekchan/timeutil
   version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
-  version: 5bf161122cd640c2a5a2c1d7fa49ea9befff31dd
+  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: 0d48cd619841b1e1a3cdd20cd6ac97774c0002ce
+  version: 70a2e8ae52bb7cc978ffd05d64d50b82b06bdfe9
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -246,17 +245,15 @@ imports:
 - name: github.com/montanaflynn/stats
   version: f8cd06f93c6c1b06028caafb88b540fc820f77c1
 - name: github.com/olekukonko/tablewriter
-  version: bdcc175572fd7abece6c831e643891b9331bc9e7
-- name: github.com/opencontainers/runc
-  version: 9a1e53eafc0ebef4712b442a0aa53a1a7016a23d
-  subpackages:
-  - libcontainer/user
+  version: 44e365d423f4f06769182abfeeae2b91be9d529b
+- name: github.com/opencontainers/go-digest
+  version: a6d0ee40d4207ea02364bd3b9e8e77b9159ba1eb
 - name: github.com/opentracing/basictracer-go
   version: 1b32af207119a14b1b231d451df3ed04a72efebf
   subpackages:
   - wire
 - name: github.com/opentracing/opentracing-go
-  version: ac5446f53f2c0fc68dc16dc5f426eae1cd288b34
+  version: 5e5abf838007b08f96ae057bc182636a178da0b9
   subpackages:
   - ext
   - log
@@ -271,7 +268,7 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: ad540c5ab198ab0c5172f5c6b602a49ab911b5ef
+  version: dd2f054febf4a6c00f2343686efb775948a8bff4
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -295,7 +292,7 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: 881bee4e20a5d11a6a88a5667c6f292072ac1963
+  version: 9b48ece7fc373043054858f8c0d362665e866004
 - name: github.com/spf13/cobra
   version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
   subpackages:
@@ -313,13 +310,13 @@ imports:
 - name: github.com/wadey/gocovmerge
   version: b5bfa59ec0adc420475f97f89b58045c721d761c
 - name: golang.org/x/crypto
-  version: 1351f936d976c60a0a48d728281922cf63eafb8d
+  version: c3b1d0d6d8690eaebe3064711b026770cc37efa3
   subpackages:
   - bcrypt
   - blowfish
   - ssh/terminal
 - name: golang.org/x/net
-  version: 45e771701b814666a7eb299e6c7a57d0b1799e91
+  version: da2b4fa28524a3baf148c1b94df4440267063c88
   subpackages:
   - context
   - context/ctxhttp
@@ -343,17 +340,19 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: a49bea13b776691cb1b49873e5d8df96ec74831a
+  version: 44f4f658a783b0cee41fe0a23b8fc91d9c120558
   subpackages:
   - collate
   - internal/colltab
   - internal/tag
   - language
+  - secure/bidirule
   - transform
+  - unicode/bidi
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: dd796641777bce15ee87fb6bea64943b648bdcf3
+  version: 354f9f8b43608012e8192f2e8d9e13c615df5c34
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -366,7 +365,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 55146ba61254fdb1c26d65ff3c04bc1611ad73fb
+  version: 025e50fdada431a9bc9ef7f06b4d504cd26bfa11
   subpackages:
   - gensupport
   - googleapi
@@ -378,7 +377,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: 08a149cfaee099e6ce4be01c0113a78c85ee1dee
+  version: 8758a385849434ba5eac8aeedcf5192c5a0f5f10
   subpackages:
   - internal
   - internal/app_identity
@@ -392,7 +391,7 @@ imports:
   - socket
   - urlfetch
 - name: google.golang.org/grpc
-  version: 777daa17ff9b5daef1cfdf915088a2ada3332bf0
+  version: 85497e2c516cd289bce5551b840ee27c2a0d6878
   subpackages:
   - codes
   - credentials
@@ -402,6 +401,8 @@ imports:
   - metadata
   - naming
   - peer
+  - stats
+  - tap
   - transport
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
@@ -416,16 +417,16 @@ imports:
 - name: honnef.co/go/ssa
   version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
-  version: ddba5f9afa5fd21ac1a8e858ab790ad4ff4c413d
+  version: 34cb9e1c04508c1fc4d12a65943aa17531909373
   subpackages:
   - pure
   - vrp
 - name: honnef.co/go/unused
-  version: b39d4e986c431b606f79b534e687ff12db6e0a1c
+  version: 33bc4cfe5599e665ab0117ca65e59f254aa6810d
 testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-sql-driver/mysql
-  version: a0583e0143b1624142adab07e0e97fe106d99561
+  version: 2e00b5cd70399450106cec6431c2e2ce3cae5034
 - name: github.com/termie/go-shutil
   version: bcacb06fecaeec8dc42af03c87c6949f4a05c74c
