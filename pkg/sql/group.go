@@ -757,7 +757,20 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 		found = a.create()
 	}
 
-	return found.Result(), nil
+	result := found.Result()
+
+	if result == nil {
+		if parser.IsIdentAggregate(found) {
+			// Identity functions return their argument, even if no
+			// aggregation inputs were seen.
+			return a.arg.Eval(ctx)
+		}
+		// Otherwise, we can't be here: all aggregation functions
+		// should return a valid value or DNull if there are no rows.
+		panic("aggregation function returned nil")
+	}
+
+	return result, nil
 }
 
 func (a *aggregateFuncHolder) ResolvedType() parser.Type {
