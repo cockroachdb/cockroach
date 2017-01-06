@@ -4,7 +4,7 @@ Is this a question, feature request, or bug report?
 
 Have you checked out our community forum at https://forum.cockroachlabs.com/? Please consider asking your question there, as it might benefit other members of our community.
 
-Prefer live chat? Message our engineers on our Gitter channel at https://gitter.im/cockroachdb/cockroach 
+Prefer live chat? Message our engineers on our Gitter channel at https://gitter.im/cockroachdb/cockroach. 
 
 **FEATURE REQUEST**
 
