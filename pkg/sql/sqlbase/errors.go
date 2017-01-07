@@ -19,13 +19,12 @@
 package sqlbase
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/pkg/errors"
 )
 
 // Cockroach error extensions:
@@ -36,459 +35,174 @@ const (
 	CodeRangeUnavailable string = "XXC00"
 )
 
-// SrcCtx contains contextual information about the source of an error.
-type SrcCtx struct {
-	File     string
-	Line     int
-	Function string
-}
-
-// MakeSrcCtx creates a SrcCtx value with contextual information about the
-// caller at the requested depth.
-func MakeSrcCtx(depth int) SrcCtx {
-	f, l, fun := caller.Lookup(depth + 1)
-	return SrcCtx{File: f, Line: l, Function: fun}
-}
-
-type errData struct {
-	detail string
-	hint   string
-}
-
-// Detail returns the detail of PostgreSQL structured error.
-func (e errData) Detail() string {
-	return e.detail
-}
-
-// Hint returns the hint of PostgreSQL structured error.
-func (e errData) Hint() string {
-	return e.hint
-}
-
-// ErrorWithPGCode represents errors that carries an error code to the user.
-// pgwire recognizes this interfaces and extracts the code.
-type ErrorWithPGCode interface {
-	error
-	Code() string
-	Detail() string
-	Hint() string
-	SrcContext() SrcCtx
-}
-
-var _ ErrorWithPGCode = &ErrRetry{}
-var _ ErrorWithPGCode = &ErrTransactionAborted{}
-var _ ErrorWithPGCode = &ErrTransactionCommitted{}
-var _ ErrorWithPGCode = &ErrNonNullViolation{}
-var _ ErrorWithPGCode = &ErrUniquenessConstraintViolation{}
-var _ ErrorWithPGCode = &ErrUndefinedDatabase{}
-var _ ErrorWithPGCode = &ErrUndefinedTable{}
-var _ ErrorWithPGCode = &ErrDatabaseAlreadyExists{}
-var _ ErrorWithPGCode = &ErrRelationAlreadyExists{}
-var _ ErrorWithPGCode = &ErrWrongObjectType{}
-var _ ErrorWithPGCode = &ErrSyntax{}
-var _ ErrorWithPGCode = &ErrDependentObject{}
-
 const (
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
 		"until end of transaction block"
 	txnCommittedMsg = "current transaction is committed, commands ignored " +
 		"until end of transaction block"
-	txnRetryMsgPrefix = "restart transaction:"
+	txnRetryMsgPrefix = "restart transaction"
 )
 
-// NewRetryError creates a ErrRetry.
+// NewRetryError creates an error signifying that the transaction can be retried.
+// It signals to the user that the SQL txn entered the RESTART_WAIT state after a
+// serialization error, and that a ROLLBACK TO SAVEPOINT COCKROACH_RESTART statement
+// should be issued.
 func NewRetryError(cause error) error {
-	return &ErrRetry{errData: errData{}, ctx: MakeSrcCtx(1), msg: fmt.Sprintf("%s %v", txnRetryMsgPrefix, cause)}
+	err := errors.WithMessage(cause, txnRetryMsgPrefix)
+	err = pgerror.WithPGCode(err, pgerror.CodeSerializationFailureError)
+	return pgerror.WithSourceContext(err, 1)
 }
 
-// ErrRetry means that the transaction can be retried. It signals to the user
-// that the SQL txn entered the RESTART_WAIT state after a serialization error,
-// and that a ROLLBACK TO SAVEPOINT COCKROACH_RESTART statement should be issued.
-type ErrRetry struct {
-	errData
-	ctx SrcCtx
-	msg string
-}
+var txnAbortedErrTemplate = pgerror.WithPGCode(
+	errors.Errorf(txnAbortedMsg),
+	pgerror.CodeInFailedSQLTransactionError,
+)
 
-func (e *ErrRetry) Error() string {
-	return e.msg
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrRetry) Code() string {
-	return pgerror.CodeSerializationFailureError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrRetry) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewTransactionAbortedError creates a new ErrTransactionAborted.
+// NewTransactionAbortedError creates an error for trying to run a command in
+// the context of transaction that's already aborted.
 func NewTransactionAbortedError(customMsg string) error {
-	return &ErrTransactionAborted{errData: errData{}, ctx: MakeSrcCtx(1), CustomMsg: customMsg}
-}
-
-// ErrTransactionAborted represents an error for trying to run a command in the
-// context of transaction that's already aborted.
-type ErrTransactionAborted struct {
-	errData
-	ctx       SrcCtx
-	CustomMsg string
-}
-
-func (e *ErrTransactionAborted) Error() string {
-	msg := txnAbortedMsg
-	if e.CustomMsg != "" {
-		msg += "; " + e.CustomMsg
+	err := txnAbortedErrTemplate
+	if customMsg != "" {
+		err = errors.WithMessage(txnAbortedErrTemplate, customMsg)
 	}
-	return msg
+	return pgerror.WithSourceContext(err, 1)
 }
 
-// Code implements the ErrorWithPGCode interface.
-func (*ErrTransactionAborted) Code() string {
-	return pgerror.CodeInFailedSQLTransactionError
-}
+var txnCommittedErrTemplate = pgerror.WithPGCode(
+	errors.Errorf(txnCommittedMsg),
+	pgerror.CodeInvalidTransactionStateError,
+)
 
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrTransactionAborted) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewTransactionCommittedError creates a new ErrTransactionCommitted.
+// NewTransactionCommittedError creates an error that signals that the SQL txn
+// is in the COMMIT_WAIT state and that only a COMMIT statement will be accepted.
 func NewTransactionCommittedError() error {
-	return &ErrTransactionCommitted{errData: errData{}, ctx: MakeSrcCtx(1)}
+	return pgerror.WithSourceContext(txnCommittedErrTemplate, 1)
 }
 
-// ErrTransactionCommitted signals that the SQL txn is in the COMMIT_WAIT state
-// and that only a COMMIT statement will be accepted.
-type ErrTransactionCommitted struct {
-	errData
-	ctx SrcCtx
-}
-
-func (*ErrTransactionCommitted) Error() string {
-	return txnCommittedMsg
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrTransactionCommitted) Code() string {
-	return pgerror.CodeInvalidTransactionStateError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrTransactionCommitted) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewNonNullViolationError creates a new ErrNonNullViolation.
+// NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
-	return &ErrNonNullViolation{errData: errData{}, ctx: MakeSrcCtx(1), columnName: columnName}
+	err := errors.Errorf("null value in column %q violates not-null constraint", columnName)
+	err = pgerror.WithPGCode(err, pgerror.CodeNotNullViolationError)
+	return pgerror.WithSourceContext(err, 1)
 }
 
-// ErrNonNullViolation represents a violation of a non-NULL constraint.
-type ErrNonNullViolation struct {
-	errData
-	ctx        SrcCtx
-	columnName string
-}
-
-func (e *ErrNonNullViolation) Error() string {
-	return fmt.Sprintf("null value in column %q violates not-null constraint", e.columnName)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrNonNullViolation) Code() string {
-	return pgerror.CodeNotNullViolationError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrNonNullViolation) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewUniquenessConstraintViolationError creates a new
-// ErrUniquenessConstrainViolation.
+// NewUniquenessConstraintViolationError creates an error that represents a
+// violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser.Datum) error {
-	return &ErrUniquenessConstraintViolation{
-		errData: errData{detail: fmt.Sprintf("key %s already exists.", index.Name)},
-		ctx:     MakeSrcCtx(1),
-		index:   index,
-		vals:    vals,
-	}
-}
-
-// ErrUniquenessConstraintViolation represents a violation of a UNIQUE constraint.
-type ErrUniquenessConstraintViolation struct {
-	errData
-	ctx   SrcCtx
-	index *IndexDescriptor
-	vals  []parser.Datum
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrUniquenessConstraintViolation) Code() string {
-	return pgerror.CodeUniqueViolationError
-}
-
-func (e *ErrUniquenessConstraintViolation) Error() string {
-	valStrs := make([]string, 0, len(e.vals))
-	for _, val := range e.vals {
+	valStrs := make([]string, 0, len(vals))
+	for _, val := range vals {
 		valStrs = append(valStrs, val.String())
 	}
 
-	return fmt.Sprintf("duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(e.index.ColumnNames, ","),
+	err := errors.Errorf("duplicate key value (%s)=(%s) violates unique constraint %q",
+		strings.Join(index.ColumnNames, ","),
 		strings.Join(valStrs, ","),
-		e.index.Name)
+		index.Name)
+
+	err = pgerror.WithPGCode(err, pgerror.CodeUniqueViolationError)
+	return pgerror.WithSourceContext(err, 1)
 }
 
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrUniquenessConstraintViolation) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewUndefinedDatabaseError creates a new ErrUndefinedDatabase.
-func NewUndefinedDatabaseError(name string) error {
-	return &ErrUndefinedDatabase{errData: errData{}, ctx: MakeSrcCtx(1), name: name}
-}
-
-// ErrUndefinedDatabase represents a missing database error.
-type ErrUndefinedDatabase struct {
-	errData
-	ctx  SrcCtx
-	name string
-}
-
-func (e *ErrUndefinedDatabase) Error() string {
-	return fmt.Sprintf("database %q does not exist", e.name)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrUndefinedDatabase) Code() string {
-	// Postgres will return an UndefinedTable error on queries that go to a "relation"
-	// that does not exist (a query to a non-existent table or database), but will
-	// return an InvalidCatalogName error when connecting to a database that does
-	// not exist. We've chosen to return this code for all cases where the error cause
-	// is a missing database.
-	return pgerror.CodeInvalidCatalogNameError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrUndefinedDatabase) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewUndefinedTableError creates a new ErrUndefinedTable.
-func NewUndefinedTableError(name string) error {
-	return &ErrUndefinedTable{errData: errData{}, ctx: MakeSrcCtx(1), objType: "table", name: name}
-}
-
-// NewUndefinedViewError creates a new ErrUndefinedTable, which is also used
-// for views (sharing the same postgres error code).
-func NewUndefinedViewError(name string) error {
-	return &ErrUndefinedTable{errData: errData{}, ctx: MakeSrcCtx(1), objType: "view", name: name}
-}
-
-// ErrUndefinedTable represents a missing database table.
-type ErrUndefinedTable struct {
-	errData
-	ctx     SrcCtx
-	objType string
-	name    string
-}
-
-func (e *ErrUndefinedTable) Error() string {
-	return fmt.Sprintf("%s %q does not exist", e.objType, e.name)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrUndefinedTable) Code() string {
-	return pgerror.CodeUndefinedTableError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrUndefinedTable) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewDatabaseAlreadyExistsError creates a new ErrDatabaseAlreadyExists.
-func NewDatabaseAlreadyExistsError(name string) error {
-	return &ErrDatabaseAlreadyExists{errData: errData{}, ctx: MakeSrcCtx(1), name: name}
-}
-
-// ErrDatabaseAlreadyExists represents a missing database error.
-type ErrDatabaseAlreadyExists struct {
-	errData
-	ctx  SrcCtx
-	name string
-}
-
-func (e *ErrDatabaseAlreadyExists) Error() string {
-	return fmt.Sprintf("database %q already exists", e.name)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrDatabaseAlreadyExists) Code() string {
-	return pgerror.CodeDuplicateDatabaseError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrDatabaseAlreadyExists) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewRelationAlreadyExistsError creates a new ErrRelationAlreadyExists.
-func NewRelationAlreadyExistsError(name string) error {
-	return &ErrRelationAlreadyExists{errData: errData{}, ctx: MakeSrcCtx(1), name: name}
-}
-
-// ErrRelationAlreadyExists represents a missing database error.
-type ErrRelationAlreadyExists struct {
-	errData
-	ctx  SrcCtx
-	name string
-}
-
-func (e *ErrRelationAlreadyExists) Error() string {
-	return fmt.Sprintf("relation %q already exists", e.name)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrRelationAlreadyExists) Code() string {
-	return pgerror.CodeDuplicateRelationError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrRelationAlreadyExists) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewWrongObjectTypeError creates a new ErrWrongObjectType.
-func NewWrongObjectTypeError(name, desiredObjType string) error {
-	return &ErrWrongObjectType{errData: errData{}, ctx: MakeSrcCtx(1), name: name, desiredObjType: desiredObjType}
-}
-
-// ErrWrongObjectType represents a wrong object type error.
-type ErrWrongObjectType struct {
-	errData
-	ctx            SrcCtx
-	name           string
-	desiredObjType string
-}
-
-func (e *ErrWrongObjectType) Error() string {
-	return fmt.Sprintf("%q is not a %s", e.name, e.desiredObjType)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrWrongObjectType) Code() string {
-	return pgerror.CodeWrongObjectTypeError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrWrongObjectType) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewSyntaxError creates a new ErrSyntax.
-func NewSyntaxError(msg string) error {
-	return &ErrSyntax{errData: errData{}, ctx: MakeSrcCtx(1), msg: msg}
-}
-
-// ErrSyntax represents a syntax error.
-type ErrSyntax struct {
-	errData
-	ctx SrcCtx
-	msg string
-}
-
-func (e *ErrSyntax) Error() string {
-	return e.msg
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrSyntax) Code() string {
-	return pgerror.CodeSyntaxError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrSyntax) SrcContext() SrcCtx {
-	return e.ctx
-}
-
-// NewDependentObjectError creates a new ErrDependentObject.
-func NewDependentObjectError(msg string, hint string) error {
-	return &ErrDependentObject{errData: errData{hint: hint}, ctx: MakeSrcCtx(1), msg: msg}
-}
-
-// ErrDependentObject represents a dependent object error.
-type ErrDependentObject struct {
-	errData
-	ctx SrcCtx
-	msg string
-}
-
-func (e *ErrDependentObject) Error() string {
-	return e.msg
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*ErrDependentObject) Code() string {
-	return pgerror.CodeDependentObjectsStillExistError
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *ErrDependentObject) SrcContext() SrcCtx {
-	return e.ctx
+// IsUniquenessConstraintViolationError returns true if the error is for a
+// uniqueness constraint violation.
+func IsUniquenessConstraintViolationError(err error) bool {
+	return errHasCode(err, pgerror.CodeUniqueViolationError)
 }
 
 // IsIntegrityConstraintError returns true if the error is some kind of SQL
 // constraint violation.
 func IsIntegrityConstraintError(err error) bool {
-	switch err.(type) {
-	case *ErrNonNullViolation, *ErrUniquenessConstraintViolation:
-		return true
-	default:
-		return false
-	}
+	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
+		errHasCode(err, pgerror.CodeUniqueViolationError)
 }
 
-// RangeUnavailableError represents an attempt to access a range that is
-// temporarily unavailable.
-type RangeUnavailableError struct {
-	errData
-	ctx     SrcCtx
-	rangeID roachpb.RangeID
-	nodeIDs []roachpb.NodeID
-	origErr error
+// NewUndefinedDatabaseError creates an error that represents a missing database.
+func NewUndefinedDatabaseError(name string) error {
+	err := errors.Errorf("database %q does not exist", name)
+
+	// Postgres will return an UndefinedTable error on queries that go to a "relation"
+	// that does not exist (a query to a non-existent table or database), but will
+	// return an InvalidCatalogName error when connecting to a database that does
+	// not exist. We've chosen to return this code for all cases where the error cause
+	// is a missing database.
+	err = pgerror.WithPGCode(err, pgerror.CodeInvalidCatalogNameError)
+
+	return pgerror.WithSourceContext(err, 1)
 }
 
-// NewRangeUnavailableError creates a new RangeUnavailableError.
+// IsUndefinedDatabaseError returns true if the error is an for an undefined database.
+func IsUndefinedDatabaseError(err error) bool {
+	return errHasCode(err, pgerror.CodeInvalidCatalogNameError)
+}
+
+// NewUndefinedTableError creates an error that represents a missing database table.
+func NewUndefinedTableError(name string) error {
+	err := errors.Errorf("table %q does not exist", name)
+	err = pgerror.WithPGCode(err, pgerror.CodeUndefinedTableError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// NewUndefinedViewError creates an error that represents a missing database view.
+func NewUndefinedViewError(name string) error {
+	err := errors.Errorf("view %q does not exist", name)
+	err = pgerror.WithPGCode(err, pgerror.CodeUndefinedTableError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// IsUndefinedTableError returns true if the error is an for an undefined table.
+func IsUndefinedTableError(err error) bool {
+	return errHasCode(err, pgerror.CodeUndefinedTableError)
+}
+
+// NewDatabaseAlreadyExistsError creates an error for a preexisting database.
+func NewDatabaseAlreadyExistsError(name string) error {
+	err := errors.Errorf("database %q already exists", name)
+	err = pgerror.WithPGCode(err, pgerror.CodeDuplicateDatabaseError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// NewRelationAlreadyExistsError creates an error for a preexisting relation.
+func NewRelationAlreadyExistsError(name string) error {
+	err := errors.Errorf("relation %q already exists", name)
+	err = pgerror.WithPGCode(err, pgerror.CodeDuplicateRelationError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// NewWrongObjectTypeError creates a wrong object type error.
+func NewWrongObjectTypeError(name, desiredObjType string) error {
+	err := errors.Errorf("%q is not a %s", name, desiredObjType)
+	err = pgerror.WithPGCode(err, pgerror.CodeWrongObjectTypeError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// NewSyntaxError creates a syntax error.
+func NewSyntaxError(msg string) error {
+	err := errors.Errorf(msg)
+	err = pgerror.WithPGCode(err, pgerror.CodeSyntaxError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// NewDependentObjectError creates a dependent object error.
+func NewDependentObjectError(msg string) error {
+	err := errors.Errorf(msg)
+	err = pgerror.WithPGCode(err, pgerror.CodeDependentObjectsStillExistError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// NewRangeUnavailableError creates an error for an attempt to access a range
+// that is temporarily unavailable.
 func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
-	err := &RangeUnavailableError{
-		errData: errData{},
-		ctx:     MakeSrcCtx(1),
-		rangeID: rangeID,
-		nodeIDs: nodeIDs,
-		origErr: origErr,
+	err := errors.Errorf("key range id:%d is unavailable; missing nodes: %s. Original error: %v",
+		rangeID, nodeIDs, origErr)
+	err = pgerror.WithPGCode(err, CodeRangeUnavailable)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+func errHasCode(err error, code string) bool {
+	if c, ok := pgerror.PGCode(err); ok {
+		return c == code
 	}
-	return err
-}
-
-func (e *RangeUnavailableError) Error() string {
-	return fmt.Sprintf("key range id:%d is unavailable; missing nodes: %s. Original error: %v",
-		e.rangeID, e.nodeIDs, e.origErr)
-}
-
-// Code implements the ErrorWithPGCode interface.
-func (*RangeUnavailableError) Code() string {
-	return CodeRangeUnavailable
-}
-
-// SrcContext implements the ErrorWithPGCode interface.
-func (e *RangeUnavailableError) SrcContext() SrcCtx {
-	return e.ctx
+	return false
 }
