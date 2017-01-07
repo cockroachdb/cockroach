@@ -51,10 +51,17 @@ type cliTest struct {
 	*server.TestServer
 	certsDir    string
 	cleanupFunc func() error
+
+	// t is the testing.T instance used for this test.
+	// Example_xxx tests may have this set to nil.
+	t *testing.T
+	// logScope binds the lifetime of the log files to this test, when t
+	// is not nil
+	logScope log.TestLogScope
 }
 
 func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
-	c := cliTest{}
+	c := cliTest{t: t}
 
 	certsDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
@@ -68,8 +75,15 @@ func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
 	baseCfg.InitDefaults()
 	cliCtx.InitCLIDefaults()
 
+	if t != nil {
+		c.logScope = log.Scope(t, "")
+	}
+
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: insecure})
 	if err != nil {
+		if t != nil {
+			c.logScope.Close(t)
+		}
 		return cliTest{}, err
 	}
 	c.TestServer = s.(*server.TestServer)
@@ -113,6 +127,10 @@ func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
 // It also stops the test server is runStopper is true.
 // The log files are removed if the test has succeeded.
 func (c cliTest) stop(runStopper bool) {
+	if c.t != nil {
+		defer c.logScope.Close(c.t)
+	}
+
 	// Restore stderr.
 	osStderr = os.Stderr
 
