@@ -34,13 +34,13 @@ resulting image `cockroachdb/cockroach` can be run via `docker run` in the
 usual fashion.
 
 #  Dependencies
-A snapshot of cockroachdb's dependencies is maintained at https://github.com/cockroachdb/vendored
-and checked out as a submodule at `./vendor`.
+A snapshot of CockroachDB's dependencies is maintained at https://github.com/cockroachdb/vendored
+and checked out as a sub-module at `./vendor`.
 
 ## Updating Dependencies
 This snapshot was built and is managed using `glide`.
 
-The [docs](https://github.com/Masterminds/glide) have detailed instructgions, but in brief:
+The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
 * run `./scripts/glide.sh` in `cockroachdb/cockroach`.
 * add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
 	- Note: if you are adding a non-import dependency (e.g. a binary tool to be used in development),
@@ -60,14 +60,15 @@ can and perhaps should pin the other library.
 
 You can also, if you *really* want to, just change the resolution of a single dependency, by editing
 its resolved version in glide.lock, then re-generating `vendor` from the edited resolution with
-`sciprts/glide.sh install`. This is not recommended, as it circumvents the normal resolution logic.
+`scripts/glide.sh install`. This is not recommended, as it circumvents the normal resolution logic.
 
-## Working with Submodules
-Since dependendies are stored in their own repository, and `cockroachdb/cockroach` depends on it,
+## Working with Sub-modules
+
+Since dependencies are stored in their own repository, and `cockroachdb/cockroach` depends on it,
 changing a dependency requires pushing two things, in order: first the changes to the `vendored`
 repository, then the reference to those changes to the main repository.
 
-After adding or updating dependencies (and running all tests), switch into the `vendor` submodule
+After adding or updating dependencies (and running all tests), switch into the `vendor` sub-module
 and commit changes (or use `git -C`). The commit must be available on `github.com/cockroachdb/vendored`
 *before* submitting a pull request to `cockroachdb/cockroach` that references it.
 * Organization members can push new refs directly.
@@ -80,7 +81,7 @@ request.
 
 ## Repository Name
 We only want the vendor directory used by builds when it is explicitly checked out *and managed* as a
-submodule at `./vendor`.
+sub-module at `./vendor`.
 
 If a go build fails to find a dependency in `./vendor`, it will continue searching anything named
 "vendor" in parent directories. Thus the vendor repository is _not_ named "vendor", to minimize the risk
