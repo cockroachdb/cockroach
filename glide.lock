@@ -297,7 +297,7 @@ imports:
 - name: github.com/Sirupsen/logrus
   version: 881bee4e20a5d11a6a88a5667c6f292072ac1963
 - name: github.com/spf13/cobra
-  version: b62566898a99f2db9c68ed0026aa0a052e59678d
+  version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
   subpackages:
   - doc
 - name: github.com/spf13/pflag
