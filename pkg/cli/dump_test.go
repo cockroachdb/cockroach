@@ -115,7 +115,7 @@ CREATE TABLE t (
 	FAMILY fam_3_e (e)
 );
 
-INSERT INTO t(i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
+INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3.4, 4.5, 's'),
 	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
@@ -128,12 +128,84 @@ INSERT INTO t(i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	}
 }
 
+func TestDumpMultipleTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c, err := newCLITest(t, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.stop(true)
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
+	c.RunWithArgs([]string{"sql", "-e", "create table t.g (x int, y int); insert into t.g values (3, 4)"})
+
+	out, err := c.RunWithCapture("dump t f g")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := `dump t f g
+CREATE TABLE f (
+	x INT NULL,
+	y INT NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+CREATE TABLE g (
+	x INT NULL,
+	y INT NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+INSERT INTO f (x, y) VALUES
+	(42, 69);
+
+INSERT INTO g (x, y) VALUES
+	(3, 4);
+`
+	if string(out) != expected {
+		t.Fatalf("expected %s\ngot: %s", expected, out)
+	}
+
+	out, err = c.RunWithCapture("dump t")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = `dump t
+CREATE TABLE f (
+	x INT NULL,
+	y INT NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+CREATE TABLE g (
+	x INT NULL,
+	y INT NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+INSERT INTO f (x, y) VALUES
+	(42, 69);
+
+INSERT INTO g (x, y) VALUES
+	(3, 4);
+`
+	if string(out) != expected {
+		t.Fatalf("expected %s\ngot: %s", expected, out)
+	}
+}
+
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, ts, err := getDumpMetadata(conn, []string{dbName, tName})
+	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName})
 	if err != nil {
 		return err
 	}
-	return DumpTable(w, conn, ts, mds[0])
+	if err := dumpCreateTable(w, mds[0]); err != nil {
+		return err
+	}
+	return dumpTableData(w, conn, ts, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {
