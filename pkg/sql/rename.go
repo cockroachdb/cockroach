@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -91,12 +92,12 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 					log.Warningf(p.ctx(), "Unable to retrieve fully-qualified name of view %d: %v",
 						viewDesc.ID, err)
 					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
-					return nil, sqlbase.NewDependentObjectError(msg, "")
+					return nil, sqlbase.NewDependentObjectError(msg)
 				}
 			}
 			msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
 			hint := fmt.Sprintf("you can drop %s instead.", viewName)
-			return nil, sqlbase.NewDependentObjectError(msg, hint)
+			return nil, pgerror.WithHint(sqlbase.NewDependentObjectError(msg), hint)
 		}
 	}
 
@@ -455,11 +456,11 @@ func (p *planner) dependentViewRenameError(
 			log.Warningf(p.ctx(), "unable to retrieve name of view %d: %v", viewID, err)
 			msg := fmt.Sprintf("cannot rename %s %q because a view depends on it",
 				typeName, objName)
-			return sqlbase.NewDependentObjectError(msg, "")
+			return sqlbase.NewDependentObjectError(msg)
 		}
 	}
 	msg := fmt.Sprintf("cannot rename %s %q because view %q depends on it",
 		typeName, objName, viewName)
 	hint := fmt.Sprintf("you can drop %s instead.", viewName)
-	return sqlbase.NewDependentObjectError(msg, hint)
+	return pgerror.WithHint(sqlbase.NewDependentObjectError(msg), hint)
 }
