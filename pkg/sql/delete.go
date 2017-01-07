@@ -103,7 +103,7 @@ func (p *planner) Delete(
 }
 
 func (d *deleteNode) Start() error {
-	if err := d.run.startEditNode(); err != nil {
+	if err := d.run.startEditNode(&d.editNodeBase, &d.tw); err != nil {
 		return err
 	}
 
@@ -127,10 +127,6 @@ func (d *deleteNode) Start() error {
 			err := d.fastDelete(scan)
 			return err
 		}
-	}
-
-	if err := d.rh.startPlans(); err != nil {
-		return err
 	}
 
 	return d.run.tw.init(d.p.txn)

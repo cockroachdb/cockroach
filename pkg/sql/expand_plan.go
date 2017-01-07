@@ -40,16 +40,13 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
 
 	case *updateNode:
-		// TODO(knz) eliminate this once #12599 is fixed.
-		err = n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
+		n.run.rows, err = p.expandPlan(n.run.rows)
 
 	case *insertNode:
-		// TODO(knz) eliminate this once #12599 is fixed.
-		err = n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
+		n.run.rows, err = p.expandPlan(n.run.rows)
 
 	case *deleteNode:
-		// TODO(knz) eliminate this once #12599 is fixed.
-		err = n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
+		n.run.rows, err = p.expandPlan(n.run.rows)
 
 	case *createViewNode:
 		n.sourcePlan, err = p.expandPlan(n.sourcePlan)

@@ -274,11 +274,7 @@ func (n *insertNode) Start() error {
 		}
 	}
 
-	if err := n.rh.startPlans(); err != nil {
-		return err
-	}
-
-	if err := n.run.startEditNode(); err != nil {
+	if err := n.run.startEditNode(&n.editNodeBase, n.tw); err != nil {
 		return err
 	}
 

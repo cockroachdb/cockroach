@@ -86,29 +86,15 @@ func (r *editNodeRun) initEditNode(
 	return nil
 }
 
-func (r *editNodeRun) expandEditNodePlan(en *editNodeBase, tw tableWriter) error {
+func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}
 
-	if err := tw.expand(); err != nil {
-		return err
-	}
-
 	r.tw = tw
 
-	var err error
-	r.rows, err = en.p.expandPlan(r.rows)
-	return err
-}
-
-func (r *editNodeRun) startEditNode() error {
-	if err := r.tw.start(); err != nil {
-		return err
-	}
-
-	return r.rows.Start()
+	return en.p.startPlan(r.rows)
 }
 
 type updateNode struct {
@@ -281,14 +267,9 @@ func (p *planner) Update(
 }
 
 func (u *updateNode) Start() error {
-	if err := u.rh.startPlans(); err != nil {
+	if err := u.run.startEditNode(&u.editNodeBase, &u.tw); err != nil {
 		return err
 	}
-
-	if err := u.run.startEditNode(); err != nil {
-		return err
-	}
-
 	return u.run.tw.init(u.p.txn)
 }
 

@@ -131,8 +131,7 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 	}
 
 	e.err = nil
-	visitPlan := planVisitor{p: p, observer: e}
-	visitPlan.visit(plan)
+	_ = walkPlan(plan, e)
 	return e.err
 }
 
@@ -159,8 +158,7 @@ func planToString(plan planNode) string {
 			}
 		},
 	}
-	v := planVisitor{p: makePlanner("planToString"), observer: &e}
-	v.visit(plan)
+	_ = walkPlan(plan, &e)
 	return buf.String()
 }
 
@@ -217,6 +215,9 @@ func (e *explainer) leaveNode(name string) {
 	}
 	e.level--
 }
+
+// subqueryNode implements the planObserver interface.
+func (e *explainer) subqueryNode(sq *subquery) error { return nil }
 
 // formatColumns converts a column signature for a data source /
 // planNode to a string. The column types are printed iff the 2nd

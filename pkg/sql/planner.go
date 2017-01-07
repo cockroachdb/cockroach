@@ -72,10 +72,9 @@ type planner struct {
 	copyFrom *copyNode
 
 	// Avoid allocations by embedding commonly used visitors.
-	subqueryVisitor             subqueryVisitor
-	subqueryPlanVisitor         subqueryPlanVisitor
-	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
-	nameResolutionVisitor       nameResolutionVisitor
+	subqueryVisitor       subqueryVisitor
+	subqueryPlanVisitor   subqueryPlanVisitor
+	nameResolutionVisitor nameResolutionVisitor
 
 	execCfg *ExecutorConfig
 
@@ -319,7 +318,7 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, e
 		return nil, err
 	}
 	defer plan.Close()
-	if err := plan.Start(); err != nil {
+	if err := p.startPlan(plan); err != nil {
 		return nil, err
 	}
 	if next, err := plan.Next(); err != nil || !next {
@@ -359,7 +358,7 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 		return 0, err
 	}
 	defer plan.Close()
-	if err := plan.Start(); err != nil {
+	if err := p.startPlan(plan); err != nil {
 		return 0, err
 	}
 	return countRowsAffected(plan)

@@ -87,10 +87,6 @@ func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, string, error) {
 }
 
 func (n *valueGenerator) Start() error {
-	if err := n.p.startSubqueryPlans(n.expr); err != nil {
-		return err
-	}
-
 	expr, err := n.expr.Eval(&n.p.evalCtx)
 	if err != nil {
 		return err

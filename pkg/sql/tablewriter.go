@@ -31,16 +31,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// expressionCarrier handles expanding and starting sub-query plans
-// contained in Expr objects.
+// expressionCarrier handles visiting sub-expressions.
 type expressionCarrier interface {
-	// expand the sub-plans contained by expressions
-	// held by this object, if any.
-	expand() error
-
-	// start the sub-plans contained by expressions
-	// held by this object, if any.
-	start() error
+	// walkExprs explores all sub-expressions held by this object, if
+	// any.
+	walkExprs(func(desc string, index int, expr parser.TypedExpr))
 }
 
 // tableWriter handles writing kvs and forming table rows.
@@ -87,13 +82,7 @@ type tableInserter struct {
 	b   *client.Batch
 }
 
-func (ti *tableInserter) expand() error {
-	return nil
-}
-
-func (ti *tableInserter) start() error {
-	return nil
-}
+func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
 
 func (ti *tableInserter) init(txn *client.Txn) error {
 	ti.txn = txn
@@ -132,13 +121,7 @@ type tableUpdater struct {
 	b   *client.Batch
 }
 
-func (tu *tableUpdater) expand() error {
-	return nil
-}
-
-func (tu *tableUpdater) start() error {
-	return nil
-}
+func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
 
 func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
@@ -231,18 +214,10 @@ type tableUpserter struct {
 	indexKeyPrefix []byte
 }
 
-func (tu *tableUpserter) expand() error {
+func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr parser.TypedExpr)) {
 	if tu.evaler != nil {
-		return tu.evaler.expand()
+		tu.evaler.walkExprs(walk)
 	}
-	return nil
-}
-
-func (tu *tableUpserter) start() error {
-	if tu.evaler != nil {
-		return tu.evaler.start()
-	}
-	return nil
 }
 
 func (tu *tableUpserter) init(txn *client.Txn) error {
@@ -491,13 +466,7 @@ type tableDeleter struct {
 	b   *client.Batch
 }
 
-func (td *tableDeleter) expand() error {
-	return nil
-}
-
-func (td *tableDeleter) start() error {
-	return nil
-}
+func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
 
 func (td *tableDeleter) init(txn *client.Txn) error {
 	td.txn = txn
