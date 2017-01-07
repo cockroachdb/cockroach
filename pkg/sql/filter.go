@@ -58,12 +58,7 @@ func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl parser.FmtFlags, idx
 }
 
 // Start implements the planNode interface.
-func (f *filterNode) Start() error {
-	if err := f.p.startSubqueryPlans(f.filter); err != nil {
-		return err
-	}
-	return f.source.plan.Start()
-}
+func (f *filterNode) Start() error { return f.source.plan.Start() }
 
 // Next implements the planNode interface.
 func (f *filterNode) Next() (bool, error) {

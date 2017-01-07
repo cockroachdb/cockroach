@@ -34,49 +34,31 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	plan = newPlan
 
 	// We now propagate the needed columns again. This will ensure that
 	// the needed columns are properly computed for newly expanded nodes.
-	setNeededColumns(plan, needed)
+	setNeededColumns(newPlan, needed)
 
 	// Now do the same work for all sub-queries.
 	i := subqueryInitializer{p: p}
-	v := planVisitor{p: p, observer: &i}
-	v.visit(plan)
-	return plan, i.err
+	if err := walkPlan(newPlan, &i); err != nil {
+		return plan, err
+	}
+	return newPlan, nil
 }
 
 // subqueryInitializer ensures that initNeededColumns() and
 // optimizeFilters() is called on the planNodes of all sub-query
 // expressions.
 type subqueryInitializer struct {
-	p   *planner
-	err error
+	p *planner
 }
 
 var _ planObserver = &subqueryInitializer{}
-var _ parser.Visitor = &subqueryInitializer{}
 
-// expr implements the planObserver interface.
-func (i *subqueryInitializer) expr(_, _ string, _ int, expr parser.Expr) {
-	if expr == nil || i.err != nil {
-		return
-	}
-	parser.WalkExprConst(i, expr)
-}
-
-func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool { return true }
-func (i *subqueryInitializer) leaveNode(_ string)                  {}
-func (i *subqueryInitializer) attr(_, _, _ string)                 {}
-
-// VisitPre implements the parser.Visitor interface.
-func (i *subqueryInitializer) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if i.err != nil {
-		return false, expr
-	}
-
-	if sq, ok := expr.(*subquery); ok && sq.plan != nil && !sq.expanded {
+// subqueryNode implements the planObserver interface.
+func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
+	if sq.plan != nil && !sq.expanded {
 		needed := make([]bool, len(sq.plan.Columns()))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.
@@ -87,13 +69,14 @@ func (i *subqueryInitializer) VisitPre(expr parser.Expr) (recurse bool, newExpr 
 		var err error
 		sq.plan, err = i.p.optimizePlan(sq.plan, needed)
 		if err != nil {
-			i.err = err
+			return err
 		}
 		sq.expanded = true
-		return false, expr
 	}
-	return true, expr
+	return nil
 }
 
-// VisitPost implements the parser.Visitor interface.
-func (i *subqueryInitializer) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool    { return true }
+func (i *subqueryInitializer) expr(_, _ string, _ int, _ parser.Expr) {}
+func (i *subqueryInitializer) leaveNode(_ string)                     {}
+func (i *subqueryInitializer) attr(_, _, _ string)                    {}

@@ -133,10 +133,6 @@ func (n *valuesNode) Start() error {
 			if n.columns[i].omitted {
 				row[i] = parser.DNull
 			} else {
-				if err := n.p.startSubqueryPlans(typedExpr); err != nil {
-					return err
-				}
-
 				var err error
 				row[i], err = typedExpr.Eval(&n.p.evalCtx)
 				if err != nil {

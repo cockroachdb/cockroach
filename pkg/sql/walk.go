@@ -44,19 +44,37 @@ type planObserver interface {
 
 	// leaveNode is invoked upon leaving a tree node.
 	leaveNode(nodeName string)
+
+	// subqueryNode is invoked for each sub-query node. It can return
+	// an error to stop the recursion entirely.
+	subqueryNode(sq *subquery) error
 }
 
-// planVisitor is the support structure for visit().
-type planVisitor struct {
-	p        *planner
-	observer planObserver
-	nodeName string
-}
-
-// visit performs a depth-first traversal of the plan given as
+// walkPlan performs a depth-first traversal of the plan given as
 // argument, informing the planObserver of the node details at each
 // level.
+func walkPlan(plan planNode, observer planObserver) error {
+	v := planVisitor{observer: observer}
+	v.visit(plan)
+	return v.err
+}
+
+// planVisitor is the support structure for walkPlan().
+type planVisitor struct {
+	observer planObserver
+	nodeName string
+
+	// subplans is a temporary accumulator array used when collecting
+	// sub-query plans at each planNode.
+	subplans []planNode
+	err      error
+}
+
+// visit is the recursive function that supports walkPlan().
 func (v *planVisitor) visit(plan planNode) {
+	if v.err != nil {
+		return
+	}
 	if plan == nil {
 		return
 	}
@@ -290,6 +308,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = lv.expr("returning", i, rexpr, subplans)
 		}
+		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+			subplans = lv.expr(d, i, e, subplans)
+		})
 		lv.subqueries(subplans)
 		lv.visit(n.run.rows)
 
@@ -309,6 +330,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = lv.expr("returning", i, rexpr, subplans)
 		}
+		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+			subplans = lv.expr(d, i, e, subplans)
+		})
 		lv.subqueries(subplans)
 		lv.visit(n.run.rows)
 
@@ -318,6 +342,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = lv.expr("returning", i, rexpr, subplans)
 		}
+		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+			subplans = lv.expr(d, i, e, subplans)
+		})
 		lv.subqueries(subplans)
 		lv.visit(n.run.rows)
 
@@ -357,7 +384,7 @@ func (v *planVisitor) attr(name, value string) {
 // subqueries informs the observer that the following sub-plans are
 // for sub-queries.
 func (v *planVisitor) subqueries(subplans []planNode) {
-	if len(subplans) == 0 {
+	if len(subplans) == 0 || v.err != nil {
 		return
 	}
 	v.attr("subqueries", strconv.Itoa(len(subplans)))
@@ -371,10 +398,49 @@ func (v *planVisitor) subqueries(subplans []planNode) {
 func (v *planVisitor) expr(
 	fieldName string, n int, expr parser.Expr, subplans []planNode,
 ) []planNode {
+	if v.err != nil {
+		return subplans
+	}
+
 	v.observer.expr(v.nodeName, fieldName, n, expr)
-	subplans = v.p.collectSubqueryPlans(expr, subplans)
+
+	if expr != nil {
+		// Note: the recursion through WalkExprConst does nothing else
+		// than calling observer.subqueryNode() and collect subplans in
+		// v.subplans, in particular it does not recurse into the
+		// collected subplans (this recursion is performed by visit() only
+		// after all the subplans have been collected). Therefore, there
+		// is no risk that v.subplans will be clobbered by a recursion
+		// into visit().
+		v.subplans = subplans
+		parser.WalkExprConst(v, expr)
+		subplans = v.subplans
+		v.subplans = nil
+	}
 	return subplans
 }
+
+// planVisitor is also an Expr visitor whose task is to collect
+// sub-query plans for the surrounding planNode.
+var _ parser.Visitor = &planVisitor{}
+
+func (v *planVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	if sq, ok := expr.(*subquery); ok {
+		if err := v.observer.subqueryNode(sq); err != nil {
+			v.err = err
+			return false, expr
+		}
+		if sq.plan != nil {
+			v.subplans = append(v.subplans, sq.plan)
+		}
+		return false, expr
+	}
+	return true, expr
+}
+func (v *planVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 // nodeName returns the name of the given planNode as string.  The
 // node's current state is taken into account, e.g. sortNode has

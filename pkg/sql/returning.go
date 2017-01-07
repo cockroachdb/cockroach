@@ -102,15 +102,6 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 	return resRow, nil
 }
 
-func (rh *returningHelper) startPlans() error {
-	for _, expr := range rh.exprs {
-		if err := rh.p.startSubqueryPlans(expr); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
 func (rh *returningHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
 	return rh.curSourceRow[idx].Eval(ctx)
