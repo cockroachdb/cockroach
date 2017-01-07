@@ -42,7 +42,7 @@ If you plan on working on the UI, check out [the ui readme](pkg/ui).
 
 To add or update a go dependency:
 
-- see `vendor/README.md` for details on adding or updating dependencies
+- see `build/README.md` for details on adding or updating dependencies
 - run `go generate ./pkg/...` to update generated files.
 - create a PR with all the changes
 
@@ -156,6 +156,6 @@ make acceptance TESTS='TestPut$$' TESTFLAGS='-v -d 1200s -l .' TESTTIMEOUT=1210s
 ```
 
 runs the `Put` acceptance test for 20 minutes with logging (useful to look at
-the stacktrace in case of a node dying). When it starts, all the relevant
+the stack trace in case of a node dying). When it starts, all the relevant
 commands for `pprof`, `trace` and logs are logged to allow for convenient
 inspection of the cluster.
