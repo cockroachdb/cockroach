@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"io"
 	"net/url"
 	"reflect"
 	"strings"
@@ -114,7 +115,7 @@ CREATE TABLE t (
 	FAMILY fam_3_e (e)
 );
 
-INSERT INTO t VALUES
+INSERT INTO t(i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3.4, 4.5, 's'),
 	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
@@ -125,6 +126,14 @@ INSERT INTO t VALUES
 	if string(out) != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
+}
+
+func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
+	mds, ts, err := getDumpMetadata(conn, []string{dbName, tName})
+	if err != nil {
+		return err
+	}
+	return DumpTable(w, conn, ts, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {
@@ -157,7 +166,7 @@ func TestDumpBytes(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	if err := DumpTable(&b, conn, "d", "t"); err != nil {
+	if err := dumpSingleTable(&b, conn, "d", "t"); err != nil {
 		t.Fatal(err)
 	}
 	dump := b.String()
@@ -172,7 +181,7 @@ func TestDumpBytes(t *testing.T) {
 	if err := conn.Exec(dump, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := DumpTable(&b, conn, "o", "t"); err != nil {
+	if err := dumpSingleTable(&b, conn, "o", "t"); err != nil {
 		t.Fatal(err)
 	}
 	dump2 := b.String()
@@ -322,7 +331,7 @@ func TestDumpRandom(t *testing.T) {
 		check("d.t")
 
 		var buf bytes.Buffer
-		if err := DumpTable(&buf, conn, "d", "t"); err != nil {
+		if err := dumpSingleTable(&buf, conn, "d", "t"); err != nil {
 			t.Fatal(err)
 		}
 		dump := buf.String()
@@ -340,7 +349,7 @@ func TestDumpRandom(t *testing.T) {
 
 		check("o.t")
 
-		if err := DumpTable(&buf, conn, "o", "t"); err != nil {
+		if err := dumpSingleTable(&buf, conn, "o", "t"); err != nil {
 			t.Fatal(err)
 		}
 		dump2 := buf.String()
