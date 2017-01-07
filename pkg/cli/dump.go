@@ -32,17 +32,18 @@ import (
 
 // dumpCmd dumps SQL tables.
 var dumpCmd = &cobra.Command{
-	Use:   "dump [options] <database> <table>",
+	Use:   "dump [options] <database> [<table> [<table>...]]",
 	Short: "dump sql tables\n",
 	Long: `
-Dump SQL tables of a cockroach database.
+Dump SQL tables of a cockroach database. If the table name
+is omitted, dump all tables in the database.
 `,
 	RunE:         MaybeDecorateGRPCError(runDump),
 	SilenceUsage: true,
 }
 
 func runDump(cmd *cobra.Command, args []string) error {
-	if len(args) != 2 {
+	if len(args) < 1 {
 		return usageAndError(cmd)
 	}
 
@@ -52,13 +53,31 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	mds, ts, err := getDumpMetadata(conn, args)
+	dbName := args[0]
+	var tableNames []string
+	if len(args) > 1 {
+		tableNames = args[1:]
+	}
+
+	mds, ts, err := getDumpMetadata(conn, dbName, tableNames)
 	if err != nil {
 		return err
 	}
 
+	// TODO(knz/mjibson) dump foreign key constraints and dump in
+	// topological order to ensure key relationships can be verified
+	// during load.
+
+	for i, md := range mds {
+		if i > 0 {
+			fmt.Println()
+		}
+		if err := dumpCreateTable(os.Stdout, md); err != nil {
+			return err
+		}
+	}
 	for _, md := range mds {
-		if err := DumpTable(os.Stdout, conn, ts, md); err != nil {
+		if err := dumpTableData(os.Stdout, conn, ts, md); err != nil {
 			return err
 		}
 	}
@@ -80,14 +99,8 @@ type tableMetadata struct {
 // It also retrieves the cluster timestamp at which the metadata was
 // retrieved.
 func getDumpMetadata(
-	conn *sqlConn, args []string,
+	conn *sqlConn, origDBName string, tableNames []string,
 ) (mds []tableMetadata, clusterTS string, err error) {
-	// For now we support only a single table.
-	origDBName, origTableName := args[0], args[1]
-
-	dbName := parser.Name(origDBName)
-	tableName := parser.Name(origTableName)
-
 	// Fetch all table metadata in a transaction and its time to guarantee it
 	// doesn't change between the various SHOW statements.
 	if err := conn.Exec("BEGIN", nil); err != nil {
@@ -100,16 +113,59 @@ func getDumpMetadata(
 	}
 	clusterTS = string(vals[0].([]byte))
 
-	md, err := getMetadataForTable(conn, dbName, tableName)
-	if err != nil {
-		return nil, "", err
+	dbName := parser.Name(origDBName)
+	if tableNames == nil {
+		tableNames, err = getTableNames(conn, dbName)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	mds = make([]tableMetadata, len(tableNames))
+	for i, origTableName := range tableNames {
+		tableName := parser.Name(origTableName)
+
+		md, err := getMetadataForTable(conn, dbName, tableName)
+		if err != nil {
+			return nil, "", err
+		}
+		mds[i] = md
 	}
 
 	if err := conn.Exec("COMMIT", nil); err != nil {
 		return nil, "", err
 	}
 
-	return []tableMetadata{md}, clusterTS, nil
+	return mds, clusterTS, nil
+}
+
+// getTableNames retrieves all tables names in the given database.
+func getTableNames(conn *sqlConn, dbName parser.Name) (tableNames []string, err error) {
+	rows, err := conn.Query(fmt.Sprintf("SHOW TABLES FROM %s", dbName), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	vals := make([]driver.Value, 1)
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		nameI := vals[0]
+		name, ok := nameI.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected value: %T", nameI)
+		}
+		tableNames = append(tableNames, name)
+	}
+
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	return tableNames, nil
 }
 
 func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMetadata, error) {
@@ -215,11 +271,22 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 	}, nil
 }
 
+// dumpCreateTable dumps the CREATE statement of the specified table to w.
+func dumpCreateTable(w io.Writer, md tableMetadata) error {
+	if _, err := w.Write([]byte(md.createStmt)); err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte(";\n")); err != nil {
+		return err
+	}
+	return nil
+}
+
 // limit determines how many rows to dump at a time (in each SELECT statement).
 const limit = 100
 
-// DumpTable dumps the specified table to w.
-func DumpTable(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
+// dumpTableData dumps the data of the specified table to w.
+func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
 	// Build the SELECT query.
 	var sbuf bytes.Buffer
 	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME %s",
@@ -237,13 +304,6 @@ func DumpTable(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) e
 	// No WHERE clause first time, so add a place to inject it.
 	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
 	bs := sbuf.String()
-
-	if _, err := w.Write([]byte(md.createStmt)); err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte(";\n")); err != nil {
-		return err
-	}
 
 	// pk holds the last values of the fetched primary keys
 	var pk []driver.Value
@@ -336,7 +396,7 @@ func DumpTable(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) e
 		if i == 0 {
 			break
 		}
-		fmt.Fprintf(w, "\nINSERT INTO %s(%s) VALUES", md.name.TableName, md.columnNames)
+		fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
 		for idx, values := range inserts {
 			if idx > 0 {
 				fmt.Fprint(w, ",")
