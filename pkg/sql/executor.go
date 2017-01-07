@@ -932,7 +932,7 @@ func (e *Executor) execStmtInAbortedTxn(
 			return Result{}, nil
 		}
 		err := sqlbase.NewTransactionAbortedError(fmt.Sprintf(
-			"SAVEPOINT %s has not been used or a non-retriable error was encountered.",
+			"SAVEPOINT %s has not been used or a non-retriable error was encountered",
 			parser.RestartSavepointName))
 		return Result{Err: err}, err
 	default:
