@@ -719,6 +719,59 @@ func Example_sql() {
 	// 2
 }
 
+func Example_dump_multitable() {
+	c, err := newCLITest(nil, false)
+	if err != nil {
+		panic(err)
+	}
+	defer c.stop(true)
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
+	c.RunWithArgs([]string{"sql", "-e", "create table t.g (x int, y int); insert into t.g values (3, 4)"})
+	c.RunWithArgs([]string{"dump", "t", "f", "g"})
+	c.RunWithArgs([]string{"dump", "t"})
+
+	// Output:
+	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
+	// INSERT 1
+	// sql -e create table t.g (x int, y int); insert into t.g values (3, 4)
+	// INSERT 1
+	// dump t f g
+	// CREATE TABLE f (
+	// 	x INT NULL,
+	// 	y INT NULL,
+	// 	FAMILY "primary" (x, y, rowid)
+	// );
+	// CREATE TABLE g (
+	// 	x INT NULL,
+	// 	y INT NULL,
+	// 	FAMILY "primary" (x, y, rowid)
+	// );
+	//
+	// INSERT INTO f(x, y) VALUES
+	// 	(42, 69);
+	//
+	// INSERT INTO g(x, y) VALUES
+	// 	(3, 4);
+	// dump t
+	// CREATE TABLE f (
+	// 	x INT NULL,
+	// 	y INT NULL,
+	// 	FAMILY "primary" (x, y, rowid)
+	// );
+	// CREATE TABLE g (
+	// 	x INT NULL,
+	// 	y INT NULL,
+	// 	FAMILY "primary" (x, y, rowid)
+	// );
+	//
+	// INSERT INTO f(x, y) VALUES
+	// 	(42, 69);
+	//
+	// INSERT INTO g(x, y) VALUES
+	// 	(3, 4);
+}
+
 func Example_sql_escape() {
 	c, err := newCLITest(nil, false)
 	if err != nil {

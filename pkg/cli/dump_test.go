@@ -129,11 +129,14 @@ INSERT INTO t(i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, ts, err := getDumpMetadata(conn, []string{dbName, tName})
+	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName})
 	if err != nil {
 		return err
 	}
-	return DumpTable(w, conn, ts, mds[0])
+	if err := dumpCreateTable(w, mds[0]); err != nil {
+		return err
+	}
+	return dumpTableData(w, conn, ts, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {
