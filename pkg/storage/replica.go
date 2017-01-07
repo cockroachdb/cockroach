@@ -706,7 +706,9 @@ func (r *Replica) String() string {
 func (r *Replica) destroyDataRaftMuLocked(
 	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
 ) error {
-	batch := r.store.Engine().NewBatch()
+	// Use a more efficient write-only batch because we don't need to do any
+	// reads from the batch.
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
 	iter := r.store.Engine().NewIterator(false)
