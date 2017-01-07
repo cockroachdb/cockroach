@@ -142,25 +142,20 @@ func (t *Tree) parseProduction(p *ProductionNode) {
 	t.expect(itemNL, context)
 	expectExpr := true
 	for {
-		switch token := t.next(); token.typ {
-		case itemComment:
-			if t.peek().typ == itemNL {
-				t.next()
-			}
-		case itemNL:
-			if !expectExpr {
-				return
-			}
+		token := t.next()
+		switch token.typ {
+		case itemComment, itemNL:
+			// ignore
 		case itemPipe:
 			if expectExpr {
 				t.unexpected(token, context)
 			}
 			expectExpr = true
 		default:
-			if !expectExpr {
-				t.unexpected(token, context)
-			}
 			t.backup()
+			if !expectExpr {
+				return
+			}
 			e := newExpression(token.pos)
 			t.parseExpression(e)
 			p.Expressions = append(p.Expressions, e)
