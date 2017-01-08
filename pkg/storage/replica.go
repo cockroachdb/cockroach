@@ -1540,7 +1540,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 
 		r.cmdQMu.Lock()
 		chans := r.cmdQMu.global.getWait(readOnly, spansGlobal...)
-		chans = append(chans, r.cmdQMu.global.getWait(readOnly, spansLocal...)...)
+		chans = append(chans, r.cmdQMu.local.getWait(readOnly, spansLocal...)...)
 		cmdGlobal = r.cmdQMu.global.add(readOnly, spansGlobal...)
 		cmdLocal = r.cmdQMu.local.add(readOnly, spansLocal...)
 		r.cmdQMu.Unlock()

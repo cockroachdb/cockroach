@@ -1995,161 +1995,170 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 	for _, test := range testCases {
 		for _, addNoop := range []bool{false, true} {
-			readWriteLabels := map[bool]string{true: "read", false: "write"}
-			testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
-				readWriteLabels[test.cmd2Read])
-			if addNoop {
-				testName += "-noop"
-			}
-			key1 := roachpb.Key(fmt.Sprintf("key1-%s", testName))
-			key2 := roachpb.Key(fmt.Sprintf("key2-%s", testName))
-			t.Run(testName,
-				func(t *testing.T) {
-					// Intercept commands matching a specific priority and block them.
-					const blockingPriority = 42
-					blockingStart := make(chan struct{})
-					blockingDone := make(chan struct{})
+			for _, localKey := range []bool{false, true} {
+				readWriteLabels := map[bool]string{true: "read", false: "write"}
+				testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
+					readWriteLabels[test.cmd2Read])
+				if addNoop {
+					testName += "-noop"
+				}
+				if localKey {
+					testName += "-local"
+				}
+				key1 := roachpb.Key(fmt.Sprintf("key1-%s", testName))
+				key2 := roachpb.Key(fmt.Sprintf("key2-%s", testName))
+				if localKey {
+					key1 = keys.MakeRangeKeyPrefix(roachpb.RKey(key1))
+					key2 = keys.MakeRangeKeyPrefix(roachpb.RKey(key2))
+				}
+				t.Run(testName,
+					func(t *testing.T) {
+						// Intercept commands matching a specific priority and block them.
+						const blockingPriority = 42
+						blockingStart := make(chan struct{})
+						blockingDone := make(chan struct{})
 
-					tc := testContext{}
-					tsc := TestStoreConfig(nil)
-					tsc.TestingKnobs.TestingCommandFilter =
-						func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-							if filterArgs.Hdr.UserPriority == blockingPriority {
-								blockingStart <- struct{}{}
-								<-blockingDone
+						tc := testContext{}
+						tsc := TestStoreConfig(nil)
+						tsc.TestingKnobs.TestingCommandFilter =
+							func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+								if filterArgs.Hdr.UserPriority == blockingPriority {
+									blockingStart <- struct{}{}
+									<-blockingDone
+								}
+								return nil
 							}
-							return nil
+						stopper := stop.NewStopper()
+						defer stopper.Stop()
+						tc.StartWithStoreConfig(t, stopper, tsc)
+
+						defer close(blockingDone) // make sure teardown can happen
+
+						sendWithHeader := func(header roachpb.Header, args roachpb.Request) *roachpb.Error {
+							ba := roachpb.BatchRequest{}
+							ba.Header = header
+							ba.Add(args)
+
+							if addNoop {
+								ba.Add(&roachpb.NoopRequest{})
+							}
+
+							_, pErr := tc.Sender().Send(context.Background(), ba)
+							return pErr
 						}
-					stopper := stop.NewStopper()
-					defer stopper.Stop()
-					tc.StartWithStoreConfig(t, stopper, tsc)
 
-					defer close(blockingDone) // make sure teardown can happen
-
-					sendWithHeader := func(header roachpb.Header, args roachpb.Request) *roachpb.Error {
-						ba := roachpb.BatchRequest{}
-						ba.Header = header
-						ba.Add(args)
-
-						if addNoop {
-							ba.Add(&roachpb.NoopRequest{})
-						}
-
-						_, pErr := tc.Sender().Send(context.Background(), ba)
-						return pErr
-					}
-
-					// Asynchronously put a value to the range with blocking enabled.
-					cmd1Done := make(chan *roachpb.Error, 1)
-					if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-						args := readOrWriteArgs(key1, test.cmd1Read)
-
-						pErr := sendWithHeader(roachpb.Header{
-							UserPriority: blockingPriority,
-						}, args)
-
-						cmd1Done <- pErr
-					}); err != nil {
-						t.Fatal(err)
-					}
-					// Wait for cmd1 to get into the command queue.
-					select {
-					case <-blockingStart:
-					case <-time.After(tooLong):
-						t.Fatalf("waited %s for cmd1 to enter command queue", tooLong)
-					}
-
-					// First, try a command for same key as cmd1 to verify whether it blocks.
-					cmd2Done := make(chan *roachpb.Error, 1)
-					if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-						args := readOrWriteArgs(key1, test.cmd2Read)
-
-						pErr := sendWithHeader(roachpb.Header{}, args)
-
-						cmd2Done <- pErr
-					}); err != nil {
-						t.Fatal(err)
-					}
-
-					// Next, try read for a non-impacted key--should go through immediately.
-					cmd3Done := make(chan *roachpb.Error, 1)
-					if !propEvalKV {
+						// Asynchronously put a value to the range with blocking enabled.
+						cmd1Done := make(chan *roachpb.Error, 1)
 						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-							args := readOrWriteArgs(key2, true)
+							args := readOrWriteArgs(key1, test.cmd1Read)
 
-							pErr := sendWithHeader(roachpb.Header{}, args)
+							pErr := sendWithHeader(roachpb.Header{
+								UserPriority: blockingPriority,
+							}, args)
 
-							cmd3Done <- pErr
+							cmd1Done <- pErr
 						}); err != nil {
 							t.Fatal(err)
 						}
-					} else {
-						close(cmd3Done)
-					}
-
-					// Verify that cmd3 finishes quickly no matter what cmds 1 and 2 were.
-					select {
-					case pErr := <-cmd3Done:
-						if pErr != nil {
-							t.Fatalf("cmd3 failed: %s", pErr)
-						}
-						// success.
-					case pErr := <-cmd1Done:
-						t.Fatalf("should not have been able execute cmd1 while blocked (pErr: %v)", pErr)
-					case <-time.After(tooLong):
-						t.Fatalf("waited %s for cmd3 of key2", tooLong)
-					}
-
-					if test.expWait {
-						// Ensure that cmd2 didn't finish while cmd1 is still blocked.
+						// Wait for cmd1 to get into the command queue.
 						select {
-						case pErr := <-cmd2Done:
-							t.Fatalf("should not have been able to execute cmd2 (pErr: %v)", pErr)
+						case <-blockingStart:
+						case <-time.After(tooLong):
+							t.Fatalf("waited %s for cmd1 to enter command queue", tooLong)
+						}
+
+						// First, try a command for same key as cmd1 to verify whether it blocks.
+						cmd2Done := make(chan *roachpb.Error, 1)
+						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+							args := readOrWriteArgs(key1, test.cmd2Read)
+
+							pErr := sendWithHeader(roachpb.Header{}, args)
+
+							cmd2Done <- pErr
+						}); err != nil {
+							t.Fatal(err)
+						}
+
+						// Next, try read for a non-impacted key--should go through immediately.
+						cmd3Done := make(chan *roachpb.Error, 1)
+						if !propEvalKV {
+							if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+								args := readOrWriteArgs(key2, true)
+
+								pErr := sendWithHeader(roachpb.Header{}, args)
+
+								cmd3Done <- pErr
+							}); err != nil {
+								t.Fatal(err)
+							}
+						} else {
+							close(cmd3Done)
+						}
+
+						// Verify that cmd3 finishes quickly no matter what cmds 1 and 2 were.
+						select {
+						case pErr := <-cmd3Done:
+							if pErr != nil {
+								t.Fatalf("cmd3 failed: %s", pErr)
+							}
+							// success.
 						case pErr := <-cmd1Done:
 							t.Fatalf("should not have been able execute cmd1 while blocked (pErr: %v)", pErr)
-						default:
-							// success
+						case <-time.After(tooLong):
+							t.Fatalf("waited %s for cmd3 of key2", tooLong)
 						}
-					} else {
-						// Ensure that cmd2 finished if we didn't expect to have to wait.
-						select {
-						case pErr := <-cmd2Done:
-							if pErr != nil {
-								t.Fatalf("cmd2 failed: %s", pErr)
+
+						if test.expWait {
+							// Ensure that cmd2 didn't finish while cmd1 is still blocked.
+							select {
+							case pErr := <-cmd2Done:
+								t.Fatalf("should not have been able to execute cmd2 (pErr: %v)", pErr)
+							case pErr := <-cmd1Done:
+								t.Fatalf("should not have been able execute cmd1 while blocked (pErr: %v)", pErr)
+							default:
+								// success
 							}
-							// success.
+						} else {
+							// Ensure that cmd2 finished if we didn't expect to have to wait.
+							select {
+							case pErr := <-cmd2Done:
+								if pErr != nil {
+									t.Fatalf("cmd2 failed: %s", pErr)
+								}
+								// success.
+							case pErr := <-cmd1Done:
+								t.Fatalf("should not have been able to execute cmd1 while blocked (pErr: %v)", pErr)
+							case <-time.After(tooLong):
+								t.Fatalf("waited %s for cmd2 of key1", tooLong)
+							}
+						}
+
+						// Wait for cmd1 to finish.
+						blockingDone <- struct{}{}
+						select {
 						case pErr := <-cmd1Done:
-							t.Fatalf("should not have been able to execute cmd1 while blocked (pErr: %v)", pErr)
-						case <-time.After(tooLong):
-							t.Fatalf("waited %s for cmd2 of key1", tooLong)
-						}
-					}
-
-					// Wait for cmd1 to finish.
-					blockingDone <- struct{}{}
-					select {
-					case pErr := <-cmd1Done:
-						if pErr != nil {
-							t.Fatalf("cmd1 failed: %s", pErr)
-						}
-						// success.
-					case <-time.After(tooLong):
-						t.Fatalf("waited %s for cmd1 of key1", tooLong)
-					}
-
-					// Wait for cmd2 now if it didn't finish above.
-					if test.expWait {
-						select {
-						case pErr := <-cmd2Done:
 							if pErr != nil {
-								t.Fatalf("cmd2 failed: %s", pErr)
+								t.Fatalf("cmd1 failed: %s", pErr)
 							}
 							// success.
 						case <-time.After(tooLong):
-							t.Fatalf("waited %s for cmd2 of key1", tooLong)
+							t.Fatalf("waited %s for cmd1 of key1", tooLong)
 						}
-					}
-				})
+
+						// Wait for cmd2 now if it didn't finish above.
+						if test.expWait {
+							select {
+							case pErr := <-cmd2Done:
+								if pErr != nil {
+									t.Fatalf("cmd2 failed: %s", pErr)
+								}
+								// success.
+							case <-time.After(tooLong):
+								t.Fatalf("waited %s for cmd2 of key1", tooLong)
+							}
+						}
+					})
+			}
 		}
 	}
 }
