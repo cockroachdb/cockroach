@@ -1,18 +1,12 @@
 package: github.com/cockroachdb/cockroach
 import:
-# TODO(tamird): remove when we upgrade to 4.3.1 or beyond.
-- package: github.com/cockroachdb/c-jemalloc
-  version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
 # https://github.com/docker/docker/issues/29362
 - package: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
-# force etcd to a more recent version. not doing this causes glide to
-# choose an old version.
-- package: github.com/coreos/etcd
-  version: 24601ca24b46f5d700746c5902ee62aca6b1b805
 # etcd pins this via glide, so we must pin harder.
 - package: golang.org/x/net
-  version: 45e771701b814666a7eb299e6c7a57d0b1799e91
+  version: da2b4fa28524a3baf148c1b94df4440267063c88
 # used by a long-lived branch. TODO(dt): remove when merged.
 - package: cloud.google.com/go
-- package: google.golang.org/api
+  subpackages:
+  - storage
