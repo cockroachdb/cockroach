@@ -895,7 +895,7 @@ func TestTableMutationQueue(t *testing.T) {
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -946,7 +946,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		// Third.
 		{"idx_g", 3, sqlbase.DescriptorMutation_DELETE_ONLY},
 		// Drop mutations start off in the WRITE_ONLY state.
-		{"v", 4, sqlbase.DescriptorMutation_WRITE_ONLY},
+		{"test_v_key", 4, sqlbase.DescriptorMutation_WRITE_ONLY},
+		{"v", 5, sqlbase.DescriptorMutation_WRITE_ONLY},
 	}
 
 	if len(tableDesc.Mutations) != len(expected) {

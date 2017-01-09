@@ -210,11 +210,60 @@ func (n *alterTableNode) Start() error {
 				if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
 					return fmt.Errorf("column %q is referenced by the primary key", col.Name)
 				}
-				// TODO(#10122): Should we drop dependent indexes if CASCADE was
-				// specified?
 				for _, idx := range n.tableDesc.AllNonDropIndexes() {
-					if idx.ContainsColumnID(col.ID) {
-						return fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+					// We automatically drop indexes on that column that only
+					// index that column (and no other columns). If CASCADE is
+					// specified, we also drop other indices that refer to this
+					// column.  The criteria to determine whether an index "only
+					// indexes that column":
+					//
+					// Assume a table created with CREATE TABLE foo (a INT, b INT).
+					//
+					// INDEX i1 ON foo(a) -> i1 deleted
+					// INDEX i2 ON foo(a) STORING(b) -> i2 deleted
+					// INDEX i3 ON foo(a, b) -> i3 not deleted unless CASCADE is specified.
+					// INDEX i4 ON foo(b) STORING(a) -> i4 not deleted unless CASCADE is specified.
+
+					// containsThisColumn becomes true if the index is defined
+					// over the column being dropped.
+					containsThisColumn := false
+					// containsOnlyThisColumn becomes false if the index also
+					// includes non-PK columns other than the one being dropped.
+					containsOnlyThisColumn := true
+
+					// Analyze the index.
+					for _, id := range idx.ColumnIDs {
+						if id == col.ID {
+							containsThisColumn = true
+						} else {
+							containsOnlyThisColumn = false
+						}
+					}
+					for _, id := range idx.ExtraColumnIDs {
+						if n.tableDesc.PrimaryIndex.ContainsColumnID(id) {
+							// All secondary indices necessary contain the PK
+							// columns, too. (See the comments on the definition of
+							// IndexDescriptor). The presence of a PK column in the
+							// secondary index should thus not be seen as a
+							// sufficient reason to reject the DROP.
+							continue
+						}
+						if id == col.ID {
+							containsThisColumn = true
+						}
+					}
+
+					// Perform the DROP.
+					if containsThisColumn {
+						if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
+							if err := n.p.dropIndexByName(
+								parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
+							); err != nil {
+								return err
+							}
+						} else {
+							return fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+						}
 					}
 				}
 				n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
