@@ -119,7 +119,7 @@ func benchmarkWriteFloat(b *testing.B, format formatCode) {
 func benchmarkWriteDecimal(b *testing.B, format formatCode) {
 	dec := new(parser.DDecimal)
 	s := "-1728718718271827121233.1212121212"
-	if _, ok := dec.SetString(s); !ok {
+	if _, err := dec.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", format)
 	}
 	benchmarkWriteType(b, dec, formatText)
@@ -263,7 +263,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 
 	expected := new(parser.DDecimal)
 	s := "-1728718718271827121233.1212121212"
-	if _, ok := expected.SetString(s); !ok {
+	if _, err := expected.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", s)
 	}
 	wbuf.writeBinaryDatum(expected, nil)
