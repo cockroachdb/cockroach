@@ -54,12 +54,106 @@ var varNames = func() []string {
 }()
 
 const (
-	checkSchema = `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME=$1 LIMIT 1`
-	checkTable  = `SELECT TABLE_SCHEMA FROM information_schema.tables WHERE TABLE_SCHEMA=$1
-					AND TABLE_NAME=$2 LIMIT 1`
-	checkTablePrivilege = `SELECT TABLE_NAME FROM information_schema.table_privileges
-							WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2 AND GRANTEE=$3 LIMIT 1`
+	checkSchemaQuery = `
+		SELECT SCHEMA_NAME
+		FROM information_schema.schemata
+		WHERE SCHEMA_NAME=$1
+		LIMIT 1`
+	checkTableQuery = `
+		SELECT TABLE_SCHEMA
+		FROM information_schema.tables
+		WHERE
+			TABLE_SCHEMA=$1 AND
+			TABLE_NAME=$2
+		LIMIT 1`
+	checkTablePrivilegesQuery = `
+		SELECT TABLE_NAME
+		FROM information_schema.table_privileges
+		WHERE
+			TABLE_SCHEMA=$1 AND
+			TABLE_NAME=$2 AND
+			GRANTEE=$3
+		LIMIT 1`
 )
+
+// checkDBExists checks if the database exists by using the security.RootUser.
+func checkDBExists(p *planner, db string) error {
+	values, err := p.queryRowsAsRoot(checkSchemaQuery, db)
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return sqlbase.NewUndefinedDatabaseError(db)
+	}
+	return nil
+}
+
+// checkTableExists checks if the table exists by using the security.RootUser.
+func checkTableExists(p *planner, tn *parser.TableName) error {
+	values, err := p.queryRowsAsRoot(checkTableQuery, tn.Database(), tn.Table())
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return sqlbase.NewUndefinedTableError(tn.String())
+	}
+	return nil
+}
+
+// checkTablePrivileges checks if the user has been granted privileges to
+// see the specified table.
+func checkTablePrivileges(p *planner, tn *parser.TableName) error {
+	// Skip the checking if the table is a virtual table.
+	if virDesc, err := p.session.virtualSchemas.getVirtualTableDesc(tn); err != nil {
+		return err
+	} else if virDesc != nil {
+		return nil
+	}
+
+	values, err := p.queryRowsAsRoot(checkTablePrivilegesQuery, tn.Database(), tn.Table(), p.session.User)
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return fmt.Errorf("user %s has no privileges on table %s", p.session.User, tn.String())
+	}
+	return nil
+}
+
+// runInDB runs the closure with the provided database set to the session's current
+// database, and resets the session's database afterwards. This is necessary to get
+// visibility into information_schema if the current user isn't root.
+func runInDB(p *planner, tempDB string, f func() error) error {
+	origDatabase := p.evalCtx.Database
+	p.evalCtx.Database = tempDB
+	err := f()
+	p.evalCtx.Database = origDatabase
+	return err
+}
+
+// queryInfoSchema queries the information_schema with the provided SQL query and
+// uses the results to populate a valuesNode.
+func queryInfoSchema(
+	p *planner, columns ResultColumns, db string, sql string, args ...interface{},
+) (*valuesNode, error) {
+	v := p.newContainerValuesNode(columns, 0)
+	if err := runInDB(p, db, func() error {
+		rows, err := p.queryRows(sql, args...)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if _, err := v.rows.AddRow(r); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		v.rows.Close()
+		return nil, err
+	}
+	return v, nil
+}
 
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
@@ -134,68 +228,32 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		name:    "SHOW COLUMNS FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			const getColumns = `SELECT COLUMN_NAME AS "Field", DATA_TYPE AS "Type", (IS_NULLABLE!='NO') AS "Null",` +
-				` COLUMN_DEFAULT AS "Default" FROM information_schema.columns WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2` +
-				` ORDER BY ORDINAL_POSITION`
-			{
-				// Check if the database exists by using the security.RootUser.
-				values, err := p.queryRowsAsRoot(checkSchema, tn.Database())
-				if err != nil {
-					return nil, err
-				}
-				if len(values) == 0 {
-					return nil, sqlbase.NewUndefinedDatabaseError(tn.Database())
-				}
-			}
+			const getColumnsQuery = `
+				SELECT
+					COLUMN_NAME AS "Field", 
+					DATA_TYPE AS "Type", 
+					(IS_NULLABLE != 'NO') AS "Null",
+					COLUMN_DEFAULT AS "Default"
+				FROM information_schema.columns
+				WHERE 
+					TABLE_SCHEMA=$1 AND 
+					TABLE_NAME=$2
+				ORDER BY ORDINAL_POSITION`
 
-			{
-				// Check if the table exists by using the security.RootUser.
-				values, err := p.queryRowsAsRoot(checkTable, tn.Database(), tn.Table())
-				if err != nil {
-					return nil, err
-				}
-				if len(values) == 0 {
-					return nil, sqlbase.NewUndefinedTableError(tn.String())
-				}
-			}
-
-			// Check if the user has been granted.
-			// Skip the checking if the table is a virtual table.
-			{
-				virDesc, err := p.session.virtualSchemas.getVirtualTableDesc(tn)
-				if err != nil {
-					return nil, err
-				}
-
-				if virDesc == nil {
-					values, err := p.queryRowsAsRoot(checkTablePrivilege, tn.Database(), tn.Table(), p.session.User)
-					if err != nil {
-						return nil, err
-					}
-					if len(values) == 0 {
-						return nil, fmt.Errorf("user %s has no privileges on table %s", p.session.User, tn.String())
-					}
-				}
-			}
-			// Temporarily set the current database to get visibility into
-			// information_schema if the current user isn't root.
-			origDatabase := p.evalCtx.Database
-			p.evalCtx.Database = tn.Database()
-			defer func() { p.evalCtx.Database = origDatabase }()
-
-			// Get columns of table from information_schema.columns.
-			rows, err := p.queryRows(getColumns, tn.Database(), tn.Table())
-			if err != nil {
+			db := tn.Database()
+			if err := checkDBExists(p, db); err != nil {
 				return nil, err
 			}
-			v := p.newContainerValuesNode(columns, 0)
-			for _, r := range rows {
-				if _, err := v.rows.AddRow(r); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
+
+			if err := checkTableExists(p, tn); err != nil {
+				return nil, err
 			}
-			return v, nil
+
+			if err := checkTablePrivileges(p, tn); err != nil {
+				return nil, err
+			}
+
+			return queryInfoSchema(p, columns, db, getColumnsQuery, tn.Database(), tn.Table())
 		},
 	}, nil
 }
@@ -463,18 +521,6 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
-			// Check if the target exists.
-			checkFn := func(sql string, args ...interface{}) (bool, error) {
-				values, err := p.queryRowsAsRoot(sql, args...)
-				if err != nil {
-					return false, err
-				}
-
-				if len(values) > 0 {
-					return true, nil
-				}
-				return false, nil
-			}
 
 			queryFn := func(sql string, args ...interface{}) error {
 				rows, err := p.queryRows(sql, args...)
@@ -497,15 +543,11 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 				var paramHolders []string
 				paramSeq := 1
 				for _, db := range n.Targets.Databases.ToStrings() {
-					exists, err := checkFn(checkSchema, db)
-					if err != nil {
+					if err := checkDBExists(p, db); err != nil {
 						v.rows.Close()
 						return nil, err
 					}
-					if !exists {
-						v.rows.Close()
-						return nil, sqlbase.NewUndefinedDatabaseError(db)
-					}
+
 					paramHolders = append(paramHolders, fmt.Sprintf("$%d", paramSeq))
 					paramSeq++
 					params = append(params, db)
@@ -547,15 +589,11 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 						return nil, err
 					}
 					for i := range tables {
-						exists, err := checkFn(checkTable, tables[i].Database(), tables[i].Table())
-						if err != nil {
+						if err := checkTableExists(p, &tables[i]); err != nil {
 							v.rows.Close()
 							return nil, err
 						}
-						if !exists {
-							v.rows.Close()
-							return nil, sqlbase.NewUndefinedTableError(tables[i].String())
-						}
+
 						paramHolders = append(paramHolders, fmt.Sprintf("($%d,$%d)",
 							paramSeq, paramSeq+1))
 						params = append(params, tables[i].Database(), tables[i].Table())
@@ -760,38 +798,17 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 		name:    "SHOW TABLES FROM " + name,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			{
-				// Check if the database exists by using the security.RootUser.
-				values, err := p.queryRowsAsRoot(checkSchema, name)
-				if err != nil {
-					return nil, err
-				}
-				if len(values) == 0 {
-					return nil, sqlbase.NewUndefinedDatabaseError(name)
-				}
-			}
-			// Temporarily set the current database to get visibility into
-			// information_schema if the current user isn't root.
-			origDatabase := p.evalCtx.Database
-			p.evalCtx.Database = name
-			defer func() { p.evalCtx.Database = origDatabase }()
+			const getTablesQuery = `
+				SELECT TABLE_NAME
+				FROM information_schema.tables
+				WHERE tables.TABLE_SCHEMA=$1
+				ORDER BY tables.TABLE_NAME`
 
-			// Get the tables of database from information_schema.tables.
-			const getTables = `SELECT TABLE_NAME FROM information_schema.tables
-							WHERE tables.TABLE_SCHEMA=$1 ORDER BY tables.TABLE_NAME`
-			rows, err := p.queryRows(getTables, name)
-			if err != nil {
+			if err := checkDBExists(p, name); err != nil {
 				return nil, err
 			}
 
-			v := p.newContainerValuesNode(columns, 0)
-			for _, r := range rows {
-				if _, err := v.rows.AddRow(r); err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-			}
-			return v, nil
+			return queryInfoSchema(p, columns, name, getTablesQuery, name)
 		},
 	}, nil
 }
