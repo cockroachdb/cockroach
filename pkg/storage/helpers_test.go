@@ -166,15 +166,6 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
-func (s *Store) MaybeAcquireRaftSnapshot() bool {
-	select {
-	case s.snapshotSem <- struct{}{}:
-		return true
-	default:
-		return false
-	}
-}
-
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {

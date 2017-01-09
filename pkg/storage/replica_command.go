@@ -3277,14 +3277,16 @@ func (r *Replica) ChangeReplicas(
 	return nil
 }
 
+// sendSnapshot sends a snapshot of the replica state to the specified
+// replica. This is used for both preemptive snapshots that are performed
+// before adding a replica to a range, and for Raft-initiated snapshots that
+// are used to bring a replica up to date that has fallen too far
+// behind. Currently only invoked from replicateQueue and raftSnapshotQueue. Be
+// careful about adding additional calls as generating a snapshot is moderately
+// expensive.
 func (r *Replica) sendSnapshot(
 	ctx context.Context, repDesc roachpb.ReplicaDescriptor, snapType string,
 ) error {
-	if err := r.store.AcquireRaftSnapshot(ctx); err != nil {
-		return err
-	}
-	defer r.store.ReleaseRaftSnapshot()
-
 	snap, err := r.GetSnapshot(ctx, snapType)
 	if err != nil {
 		return errors.Wrapf(err, "%s: change replicas failed to generate snapshot", r)
