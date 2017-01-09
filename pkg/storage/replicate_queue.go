@@ -112,18 +112,23 @@ func newReplicateQueue(
 		},
 	)
 
+	updateFn := func() {
+		select {
+		case rq.updateChan <- struct{}{}:
+		default:
+		}
+	}
+
+	// Register a gossip and node liveness callbacks to signal queue
+	// that replicas in purgatory might be retried.
 	if g != nil { // gossip is nil for some unittests
-		// Register a gossip callback to signal queue that replicas in
-		// purgatory might be retried due to new store gossip.
-		pattern := gossip.MakeOrPattern(
-			gossip.MakePrefixPattern(gossip.KeyStorePrefix),
-			gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix),
-		)
-		g.RegisterCallback(pattern, func(_ string, _ roachpb.Value) {
-			select {
-			case rq.updateChan <- struct{}{}:
-			default:
-			}
+		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) {
+			updateFn()
+		})
+	}
+	if nl := store.cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
+		nl.RegisterCallback(func(_ roachpb.NodeID) {
+			updateFn()
 		})
 	}
 
