@@ -295,13 +295,36 @@ func (n *alterTableNode) Start() error {
 					}
 				}
 				if !found {
-					panic("constrint returned by GetConstraintInfo not found")
+					panic("constraint returned by GetConstraintInfo not found")
 				}
 				ck := n.tableDesc.Checks[idx]
 				if err := n.p.validateCheckExpr(ck.Expr, &n.n.Table, n.tableDesc); err != nil {
 					return err
 				}
 				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
+				descriptorChanged = true
+
+			case sqlbase.ConstraintTypeFK:
+				found := false
+				var id sqlbase.IndexID
+				for _, idx := range n.tableDesc.AllNonDropIndexes() {
+					if idx.ForeignKey.IsSet() && idx.ForeignKey.Name == name {
+						found = true
+						id = idx.ID
+						break
+					}
+				}
+				if !found {
+					panic("constraint returned by GetConstraintInfo not found")
+				}
+				idx, err := n.tableDesc.FindIndexByID(id)
+				if err != nil {
+					panic(err)
+				}
+				if err := n.p.validateForeignKey(n.p.ctx(), n.tableDesc, idx); err != nil {
+					return err
+				}
+				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
 				descriptorChanged = true
 
 			default:
