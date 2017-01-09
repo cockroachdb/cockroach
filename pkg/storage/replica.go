@@ -4594,10 +4594,12 @@ func calcGoodReplicas(
 			if !leader {
 				goodReplicas++
 			} else if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
-				// TODO(peter): Put more thought into this value. A single range
-				// can process thousands of ops/sec, so a replica that is 100 Raft
-				// log entries behind is fairly current.
-				const behindThreshold = 100
+				// A single range can process thousands of ops/sec, so a replica that
+				// is 10 Raft log entries behind is fairly current. Setting this value
+				// to 0 makes the under-replicated metric overly sensitive. Setting
+				// this value too high and the metric doesn't show all of the
+				// under-replicated replicas.
+				const behindThreshold = 10
 				// TODO(peter): progress.Match will be 0 if this node recently
 				// became the leader. Presume such replicas are up to date until we
 				// hear otherwise. This is a bit of a hack.
