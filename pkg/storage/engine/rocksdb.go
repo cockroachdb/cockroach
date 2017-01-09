@@ -455,6 +455,12 @@ func (r *RocksDB) Clear(key MVCCKey) error {
 	return dbClear(r.rdb, key)
 }
 
+// ClearRange removes a set of entries, from start (inclusive) to end
+// (exclusive).
+func (r *RocksDB) ClearRange(iter Iterator, start, end MVCCKey) error {
+	return dbClearRange(r.rdb, iter, start, end)
+}
+
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
 func (r *RocksDB) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
@@ -763,6 +769,12 @@ func (r *distinctBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
+func (r *distinctBatch) ClearRange(iter Iterator, start, end MVCCKey) error {
+	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	return dbClearRange(r.batch, iter, start, end)
+}
+
 func (r *distinctBatch) close() {
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
 		i.destroy()
@@ -974,6 +986,15 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
+func (r *rocksDBBatch) ClearRange(iter Iterator, start, end MVCCKey) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	return dbClearRange(r.batch, iter, start, end)
+}
+
 // NewIterator returns an iterator over the batch and underlying engine. Note
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
@@ -1075,6 +1096,10 @@ func (r *rocksDBBatch) flushMutations() {
 	r.normalIter.iter.reseek = true
 }
 
+type dbIteratorGetter interface {
+	getIter() *C.DBIterator
+}
+
 type rocksDBIterator struct {
 	engine Reader
 	iter   *C.DBIterator
@@ -1104,6 +1129,10 @@ func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Reader) Iterator {
 	r := iterPool.Get().(*rocksDBIterator)
 	r.init(rdb, prefix, engine)
 	return r
+}
+
+func (r *rocksDBIterator) getIter() *C.DBIterator {
+	return r.iter
 }
 
 func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader) {
@@ -1442,6 +1471,14 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 		return emptyKeyError()
 	}
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
+}
+
+func dbClearRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
+	getter, ok := iter.(dbIteratorGetter)
+	if !ok {
+		return errors.Errorf("%T is not a RocksDB iterator", iter)
+	}
+	return statusToError(C.DBDeleteRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
 }
 
 func dbIterate(
