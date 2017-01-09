@@ -3738,6 +3738,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		rangeCount                int64
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
+		behindCount               int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -3776,6 +3777,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				underreplicatedRangeCount++
 			}
 		}
+		behindCount += metrics.behindCount
 		return true // more
 	})
 
@@ -3789,6 +3791,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
+	s.metrics.RaftLogBehindCount.Update(behindCount)
 
 	return nil
 }

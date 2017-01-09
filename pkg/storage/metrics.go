@@ -199,6 +199,10 @@ var (
 		Help: "Number of pending heartbeats and responses waiting to be coalesced",
 	}
 
+	// Raft log metrics.
+	metaRaftLogBehindCount = metric.Metadata{Name: "raftlog.behind",
+		Help: "Number of Raft log entries followers are behind"}
+
 	// Replica queue metrics.
 	metaGCQueueSuccesses = metric.Metadata{Name: "queue.gc.process.success",
 		Help: "Number of replicas successfully processed by the GC queue"}
@@ -422,6 +426,9 @@ type StoreMetrics struct {
 	RaftRcvdMsgTimeoutNow     *metric.Counter
 	RaftRcvdMsgDropped        *metric.Counter
 
+	// Raft log metrics.
+	RaftLogBehindCount *metric.Gauge
+
 	// A map for conveniently finding the appropriate metric. The individual
 	// metric references must exist as AddMetricStruct adds them by reflection
 	// on this struct and does not process map types.
@@ -606,6 +613,9 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		// This Gauge measures the number of heartbeats queued up just before
 		// the queue is cleared, to avoid flapping wildly.
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
+
+		// Raft log metrics.
+		RaftLogBehindCount: metric.NewGauge(metaRaftLogBehindCount),
 
 		// Replica queue metrics.
 		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),
