@@ -17,7 +17,7 @@ export function ComputePrefixExponent(value: number, prefixMultiple: number, pre
   let maxUnits = Math.abs(value);
   let prefixScale: number;
   for (prefixScale = 0;
-       maxUnits >= prefixMultiple && prefixScale < prefixList.length;
+       maxUnits >= prefixMultiple && prefixScale < (prefixList.length - 1);
        prefixScale++) {
     maxUnits /= prefixMultiple;
   }

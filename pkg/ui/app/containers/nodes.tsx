@@ -26,10 +26,12 @@ interface ClusterOverviewState {
 }
 
 let dashboards = [
-  { value: "activity", label: "Activity" },
-  { value: "queries", label: "SQL Queries" },
-  { value: "resources", label: "System Resources" },
-  { value: "internals", label: "Advanced Internals" },
+  { value: "runtime", label: "Runtime" },
+  { value: "sql", label: "SQL" },
+  { value: "storage", label: "Storage" },
+  { value: "replication", label: "Replication" },
+  { value: "queues", label: "Queues" },
+  { value: "requests", label: "Slow Requests" },
 ];
 
 /**
