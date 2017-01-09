@@ -1552,3 +1552,64 @@ CREATE TABLE t.test (
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 }
+
+// Test an UPDATE using a secondary index in the middle of a column backfill.
+func TestUpdateUsingSecondaryIndexDuringColumnBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	backfillNotification := make(chan bool)
+	continueBackfillNotification := make(chan bool)
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if backfillNotification != nil {
+					// Close channel to notify that the schema change has
+					// been queued and the backfill has started.
+					close(backfillNotification)
+					backfillNotification = nil
+					<-continueBackfillNotification
+				}
+				return nil
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+    k INT NOT NULL,
+    v INT NOT NULL,
+    length INT NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (k),
+    INDEX v_idx (v),
+    FAMILY "primary" (k, v, length)
+);
+INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run the column schema change in a separate goroutine.
+	notification := backfillNotification
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id int NOT NULL DEFAULT 0;`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-notification
+
+	// UPDATE the row using the secondary index.
+	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27000 WHERE v = 1`); err != nil {
+		t.Error(err)
+	}
+	close(continueBackfillNotification)
+
+	wg.Wait()
+}

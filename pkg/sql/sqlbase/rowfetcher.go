@@ -533,9 +533,8 @@ func (rf *RowFetcher) finalizeRow() {
 	// Fill in any missing values with NULLs
 	for i, col := range rf.cols {
 		if rf.valNeededForCol[i] && rf.row[i].IsUnset() {
-			if !col.Nullable {
-				panic("Non-nullable column with no value!")
-			}
+			// Even if the column is non-nullable it can be null in the
+			// middle of a schema change adding that column.
 			rf.row[i] = EncDatum{
 				Type:  col.Type,
 				Datum: parser.DNull,

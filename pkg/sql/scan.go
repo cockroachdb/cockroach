@@ -83,7 +83,7 @@ type scanNode struct {
 	limitHint          int64
 	limitSoft          bool
 	disableBatchLimits bool
-
+	scanVisibility     scanVisibility
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -273,6 +273,7 @@ func (n *scanNode) initTable(
 
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(scanVisibility scanVisibility) {
+	n.scanVisibility = scanVisibility
 	n.index = &n.desc.PrimaryIndex
 	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
 	switch scanVisibility {
