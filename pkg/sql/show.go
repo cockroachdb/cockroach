@@ -168,7 +168,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 				}
 
 				if virDesc == nil {
-					values, err := p.QueryRow(checkTablePrivilege, tn.Database(), tn.Table(), p.session.User)
+					values, err := p.queryRowsAsRoot(checkTablePrivilege, tn.Database(), tn.Table(), p.session.User)
 					if err != nil {
 						return nil, err
 					}
