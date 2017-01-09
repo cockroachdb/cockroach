@@ -38,6 +38,8 @@ type evaluator struct {
 	rowAlloc sqlbase.EncDatumRowAlloc
 }
 
+var _ processor = &evaluator{}
+
 func newEvaluator(
 	flowCtx *FlowCtx, spec *EvaluatorSpec, input RowSource, output RowReceiver,
 ) (*evaluator, error) {

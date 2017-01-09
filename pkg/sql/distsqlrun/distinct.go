@@ -35,6 +35,8 @@ type distinct struct {
 	datumAlloc   sqlbase.DatumAlloc
 }
 
+var _ processor = &distinct{}
+
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, output RowReceiver,
 ) (*distinct, error) {
