@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -237,7 +236,9 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 			bigI big.Int
 		}{
 			pgNum: pgNumeric{
-				dscale: int16(v.Scale()),
+				// Since we use 2000 as the exponent limits in parser.DecimalCtx, this
+				// conversion should not overflow.
+				dscale: int16(-v.Exponent),
 			},
 		}
 
@@ -252,7 +253,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		}
 
 		// Mostly cribbed from libpqtypes' str2num.
-		digits := strings.TrimLeftFunc(alloc.bigI.Abs(v.UnscaledBig()).String(), isZero)
+		digits := strings.TrimLeftFunc(alloc.bigI.Abs(&v.Coeff).String(), isZero)
 		dweight := len(digits) - int(alloc.pgNum.dscale) - 1
 		digits = strings.TrimRightFunc(digits, isZero)
 
@@ -549,9 +550,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		switch code {
 		case formatText:
 			dd := &parser.DDecimal{}
-			if _, ok := dd.SetString(string(b)); !ok {
+			dec, res, err := parser.HighPrecisionCtx.NewFromString(string(b))
+			if res != 0 || err != nil {
 				return nil, errors.Errorf("could not parse string %q as decimal", b)
 			}
+			dd.Decimal = *dec
 			d = dd
 		case formatBinary:
 			r := bytes.NewReader(b)
@@ -612,16 +615,16 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
 				decString := string(decDigits)
-				if _, ok := alloc.dd.UnscaledBig().SetString(decString, 10); !ok {
+				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, errors.Errorf("could not parse string %q as decimal", decString)
 				}
-				alloc.dd.SetScale(inf.Scale(dscale))
+				alloc.dd.SetExponent(-int32(dscale))
 			}
 
 			switch alloc.pgNum.sign {
 			case pgNumericPos:
 			case pgNumericNeg:
-				alloc.dd.Neg(&alloc.dd.Dec)
+				alloc.dd.Neg(&alloc.dd.Decimal)
 			default:
 				return d, errors.Errorf("unsupported numeric sign: %d", alloc.pgNum.sign)
 			}

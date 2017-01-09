@@ -34,24 +34,20 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
+	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/lib/pq/oid"
 )
 
 var (
 	errEmptyInputString = errors.New("the input string must not be empty")
 	errAbsOfMinInt64    = errors.New("abs of min integer value (-9223372036854775808) not defined")
-	errRoundTooLow      = errors.New("rounding would extend value by more than 2000 decimal digits")
-	errArgTooBig        = errors.New("argument value is too large")
 	errSqrtOfNegNumber  = errors.New("cannot take square root of a negative number")
 	errLogOfNegNumber   = errors.New("cannot take logarithm of a negative number")
 	errLogOfZero        = errors.New("cannot take logarithm of zero")
@@ -1048,7 +1044,7 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Abs(x))), nil
 		}, "Calculates the absolute value of `val`."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			dd := &DDecimal{}
 			dd.Abs(x)
 			return dd, nil
@@ -1098,10 +1094,10 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Cbrt(x))), nil
 		}, "Calculates the cube root (&#8731;) of `val`."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			dd := &DDecimal{}
-			decimal.Cbrt(&dd.Dec, x, decimal.Precision)
-			return dd, nil
+			_, err := DecimalCtx.Cbrt(&dd.Decimal, x)
+			return dd, err
 		}, "Calculates the cube root (&#8731;) of `val`."),
 	},
 
@@ -1130,13 +1126,13 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin2("x", "y", func(x, y float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Trunc(x / y))), nil
 		}, "Calculates the integer quotient of `x`/`y`."),
-		decimalBuiltin2("x", "y", func(x, y *inf.Dec) (Datum, error) {
+		decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (Datum, error) {
 			if y.Sign() == 0 {
 				return nil, errDivByZero
 			}
 			dd := &DDecimal{}
-			dd.QuoRound(x, y, 0, inf.RoundDown)
-			return dd, nil
+			_, err := HighPrecisionCtx.QuoInteger(&dd.Decimal, x, y)
+			return dd, err
 		}, "Calculates the integer quotient of `x`/`y`."),
 		{
 			Types:      ArgTypes{{"x", TypeInt}, {"y", TypeInt}},
@@ -1157,8 +1153,10 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Exp(x))), nil
 		}, "Calculates *e* ^ `val`."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
-			return expDecimal(x)
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
+			dd := &DDecimal{}
+			_, err := DecimalCtx.Exp(&dd.Decimal, x)
+			return dd, err
 		}, "Calculates *e* ^ `val`."),
 	},
 
@@ -1166,10 +1164,10 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Floor(x))), nil
 		}, "Calculates the largest integer not greater than `val`."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			dd := &DDecimal{}
-			dd.Round(x, 0, inf.RoundFloor)
-			return dd, nil
+			_, err := ExactCtx.Floor(&dd.Decimal, x)
+			return dd, err
 		}, "Calculates the largest integer not greater than `val`."),
 	},
 
@@ -1177,27 +1175,27 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Log(x))), nil
 		}, "Calculates the natural log of `val`."),
-		decimalLogFn(decimal.Log, "Calculates the natural log of `val`."),
+		decimalLogFn(DecimalCtx.Ln, "Calculates the natural log of `val`."),
 	},
 
 	"log": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Log10(x))), nil
 		}, "Calculates the base 10 log of `val`."),
-		decimalLogFn(decimal.Log10, "Calculates the base 10 log of `val`."),
+		decimalLogFn(DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
 	},
 
 	"mod": {
 		floatBuiltin2("x", "y", func(x, y float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Mod(x, y))), nil
 		}, "Calculates `x`%`y`."),
-		decimalBuiltin2("x", "y", func(x, y *inf.Dec) (Datum, error) {
+		decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (Datum, error) {
 			if y.Sign() == 0 {
 				return nil, errZeroModulus
 			}
 			dd := &DDecimal{}
-			decimal.Mod(&dd.Dec, x, y)
-			return dd, nil
+			_, err := HighPrecisionCtx.Rem(&dd.Decimal, x, y)
+			return dd, err
 		}, "Calculates `x`%`y`."),
 		Builtin{
 			Types:      ArgTypes{{"x", TypeInt}, {"y", TypeInt}},
@@ -1237,10 +1235,10 @@ var Builtins = map[string][]Builtin{
 	"round": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return round(x, 0)
-		}, "Rounds `val` to the nearest integer."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		}, "Rounds `val` to the nearest integer using half to even (banker's) rounding."),
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			return roundDecimal(x, 0)
-		}, "Rounds `val` to the nearest integer."),
+		}, "Rounds `val` to the nearest integer using half away from zero rounding."),
 		Builtin{
 			Types:      ArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
 			ReturnType: fixedReturnType(TypeFloat),
@@ -1248,17 +1246,19 @@ var Builtins = map[string][]Builtin{
 				return round(float64(*args[0].(*DFloat)), int64(MustBeDInt(args[1])))
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
-				" in `input`.",
+				" in `input` using half to even (banker's) rounding.",
 		},
 		Builtin{
 			Types:      ArgTypes{{"input", TypeDecimal}, {"decimal_accuracy", TypeInt}},
 			ReturnType: fixedReturnType(TypeDecimal),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				scale := int64(MustBeDInt(args[1]))
-				return roundDecimal(&args[0].(*DDecimal).Dec, scale)
+				// TODO(mjibson): make sure this fits in an int32.
+				scale := int32(MustBeDInt(args[1]))
+				return roundDecimal(&args[0].(*DDecimal).Decimal, scale)
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
-				" in `input`.",
+				" in `input using half away from zero rounding. If `decimal_accuracy` " +
+				"is not in the range -2^31...(2^31-1), the results are undefined.",
 		},
 	},
 
@@ -1279,9 +1279,9 @@ var Builtins = map[string][]Builtin{
 			return NewDFloat(1), nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			d := &DDecimal{}
-			d.Dec.SetUnscaled(int64(x.Sign()))
+			d.Decimal.SetCoefficient(int64(x.Sign()))
 			return d, nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
@@ -1305,18 +1305,19 @@ var Builtins = map[string][]Builtin{
 
 	"sqrt": {
 		floatBuiltin1(func(x float64) (Datum, error) {
+			// TODO(mjibson): see #13642
 			if x < 0 {
 				return nil, errSqrtOfNegNumber
 			}
 			return NewDFloat(DFloat(math.Sqrt(x))), nil
 		}, "Calculates the square root of `val`."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			if x.Sign() < 0 {
 				return nil, errSqrtOfNegNumber
 			}
 			dd := &DDecimal{}
-			decimal.Sqrt(&dd.Dec, x, decimal.Precision)
-			return dd, nil
+			_, err := DecimalCtx.Sqrt(&dd.Decimal, x)
+			return dd, err
 		}, "Calculates the square root of `val`."),
 	},
 
@@ -1330,9 +1331,11 @@ var Builtins = map[string][]Builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Trunc(x))), nil
 		}, "Truncates the decimal values of `val`."),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
+			// TODO(mjibson): see cockroachdb/apd#24
 			dd := &DDecimal{}
-			dd.Round(x, 0, inf.RoundDown)
+			frac := new(apd.Decimal)
+			x.Modf(&dd.Decimal, frac)
 			return dd, nil
 		}, "Truncates the decimal values of `val`."),
 	},
@@ -1812,10 +1815,10 @@ var ceilImpl = []Builtin{
 	floatBuiltin1(func(x float64) (Datum, error) {
 		return NewDFloat(DFloat(math.Ceil(x))), nil
 	}, "Calculates the smallest integer greater than `val`."),
-	decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+	decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 		dd := &DDecimal{}
-		dd.Round(x, 0, inf.RoundCeil)
-		return dd, nil
+		_, err := ExactCtx.Ceil(&dd.Decimal, x)
+		return dd, err
 	}, "Calculates the smallest integer greater than `val`."),
 }
 
@@ -1847,9 +1850,9 @@ var powImpls = []Builtin{
 	floatBuiltin2("x", "y", func(x, y float64) (Datum, error) {
 		return NewDFloat(DFloat(math.Pow(x, y))), nil
 	}, "Calculates `x`^`y`."),
-	decimalBuiltin2("x", "y", func(x, y *inf.Dec) (Datum, error) {
+	decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (Datum, error) {
 		dd := &DDecimal{}
-		_, err := decimal.Pow(&dd.Dec, x, y, decimal.Precision)
+		_, err := DecimalCtx.Pow(&dd.Decimal, x, y)
 		return dd, err
 	}, "Calculates `x`^`y`."),
 	{
@@ -1867,8 +1870,11 @@ var powImpls = []Builtin{
 	},
 }
 
-func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error), info string) Builtin {
-	return decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+func decimalLogFn(
+	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,
+) Builtin {
+	return decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
+		// TODO(mjibson): see #13642
 		switch x.Sign() {
 		case -1:
 			return nil, errLogOfNegNumber
@@ -1876,7 +1882,7 @@ func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error), i
 			return nil, errLogOfZero
 		}
 		dd := &DDecimal{}
-		_, err := logFn(&dd.Dec, x, decimal.Precision)
+		_, err := logFn(&dd.Decimal, x)
 		return dd, err
 	}, info)
 }
@@ -1904,25 +1910,27 @@ func floatBuiltin2(a, b string, f func(float64, float64) (Datum, error), info st
 	}
 }
 
-func decimalBuiltin1(f func(*inf.Dec) (Datum, error), info string) Builtin {
+func decimalBuiltin1(f func(*apd.Decimal) (Datum, error), info string) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{"val", TypeDecimal}},
 		ReturnType: fixedReturnType(TypeDecimal),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			dec := &args[0].(*DDecimal).Dec
+			dec := &args[0].(*DDecimal).Decimal
 			return f(dec)
 		},
 		Info: info,
 	}
 }
 
-func decimalBuiltin2(a, b string, f func(*inf.Dec, *inf.Dec) (Datum, error), info string) Builtin {
+func decimalBuiltin2(
+	a, b string, f func(*apd.Decimal, *apd.Decimal) (Datum, error), info string,
+) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{a, TypeDecimal}, {b, TypeDecimal}},
 		ReturnType: fixedReturnType(TypeDecimal),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			dec1 := &args[0].(*DDecimal).Dec
-			dec2 := &args[1].(*DDecimal).Dec
+			dec1 := &args[0].(*DDecimal).Decimal
+			dec2 := &args[1].(*DDecimal).Decimal
 			return f(dec1, dec2)
 		},
 		Info: info,
@@ -2198,52 +2206,10 @@ func round(x float64, n int64) (Datum, error) {
 	return NewDFloat(DFloat(v / pow)), nil
 }
 
-const (
-	scaleRatio = math.Ln2 / math.Ln10
-)
-
-func roundDecimal(x *inf.Dec, n int64) (Datum, error) {
-	curScale := int64(x.Scale())
-
-	if n > curScale+2000 {
-		// If we let `val` value grow too many decimals, the server
-		// could explode (#8633).
-		return nil, errRoundTooLow
-	}
-
+func roundDecimal(x *apd.Decimal, n int32) (Datum, error) {
 	dd := &DDecimal{}
-
-	// We use WordLen(Bits())*8 instead of UnscaledBig().BitLen() here
-	// as this is faster and we do not need an exact value for the
-	// optimization below.
-	upperCurDigits := encoding.WordLen(x.UnscaledBig().Bits()) * 8
-	upperDigitsLeft := float64(curScale) - float64(upperCurDigits)*scaleRatio
-	if n < int64(upperDigitsLeft)-1 {
-		// This is an optimization. When the rounding scale is definitely
-		// larger than the number, the result is 0, so we avoid
-		// spending a lot of time in the division for nothing.
-		return dd, nil
-	}
-	dd.Round(x, inf.Scale(n), inf.RoundHalfEven)
-	return dd, nil
-}
-
-func expDecimal(x *inf.Dec) (Datum, error) {
-	// The computation of Exp is separated in `val` module by
-	// computing the exponents on the left and right of `val`
-	// separator. The computation on the right is bounded by
-	// decimal.Precision already; however if the value is too large on
-	// the left `val` value can grow too large in memory and slow
-	// down / crash the entire server. So we prevent this from happening
-	// and limit the argument to be ~1000 or less.
-	curDigits := x.UnscaledBig().BitLen()
-	binDigitsLeft := curDigits - int(float64(x.Scale())/scaleRatio)
-	if binDigitsLeft > 10 /* 1024 */ {
-		return nil, errArgTooBig
-	}
-	dd := &DDecimal{}
-	decimal.Exp(&dd.Dec, x, decimal.Precision)
-	return dd, nil
+	_, err := HighPrecisionCtx.Quantize(&dd.Decimal, x, apd.New(0, -n))
+	return dd, err
 }
 
 // Pick the greatest (or least value) from a tuple.
