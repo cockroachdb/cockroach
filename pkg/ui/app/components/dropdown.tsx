@@ -24,6 +24,12 @@ interface DropdownOwnProps {
   onArrowClick?: (direction: ArrowDirection) => void;
   // Disable any arrows in the arrow direction array.
   disabledArrows?: ArrowDirection[];
+  // Highlight the relevant arrow.
+  highlightedArrow?: ArrowDirection;
+}
+
+class DropdownState {
+
 }
 
 /**
@@ -39,7 +45,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     return <div className={className}>
       {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
       <span
-        className="dropdown__side-arrow"
+        className={"dropdown__side-arrow" + (this.props.highlightedArrow === ArrowDirection.LEFT ? " dropdown__side-arrow--highlight" : "")}
         disabled={_.includes(disabledArrows, ArrowDirection.LEFT)}
         dangerouslySetInnerHTML={trustIcon(leftArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
@@ -47,7 +53,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
       <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
       <span
-        className="dropdown__side-arrow"
+        className={"dropdown__side-arrow" + (this.props.highlightedArrow === ArrowDirection.RIGHT ? " dropdown__side-arrow--highlight" : "")}
         disabled={_.includes(disabledArrows, ArrowDirection.RIGHT)}
         dangerouslySetInnerHTML={trustIcon(rightArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}>
