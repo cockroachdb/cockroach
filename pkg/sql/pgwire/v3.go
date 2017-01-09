@@ -86,6 +86,8 @@ const (
 	serverErrFieldSeverity    serverErrFieldType = 'S'
 	serverErrFieldSQLState    serverErrFieldType = 'C'
 	serverErrFieldMsgPrimary  serverErrFieldType = 'M'
+	serverErrFileldDetail     serverErrFieldType = 'D'
+	serverErrFileldHint       serverErrFieldType = 'H'
 	serverErrFieldSrcFile     serverErrFieldType = 'F'
 	serverErrFieldSrcLine     serverErrFieldType = 'L'
 	serverErrFieldSrcFunction serverErrFieldType = 'R'
@@ -425,7 +427,7 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 			// The spec says to drop any extra of these messages.
 
 		default:
-			err = c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
+			err = c.sendErrorWithCode(pgerror.CodeProtocolViolationError, "", "", sqlbase.MakeSrcCtx(0),
 				fmt.Sprintf("unrecognized client message type %s", typ))
 		}
 		if err != nil {
@@ -812,7 +814,7 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 
 func (c *v3Conn) sendError(err error) error {
 	if sqlErr, ok := err.(sqlbase.ErrorWithPGCode); ok {
-		return c.sendErrorWithCode(sqlErr.Code(), sqlErr.SrcContext(), err.Error())
+		return c.sendErrorWithCode(sqlErr.Code(), sqlErr.Detail(), sqlErr.Hint(), sqlErr.SrcContext(), err.Error())
 	}
 	return c.sendInternalError(err.Error())
 }
@@ -820,12 +822,14 @@ func (c *v3Conn) sendError(err error) error {
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendErrorWithCode(pgerror.CodeInternalError, sqlbase.MakeSrcCtx(1), errToSend)
+	return c.sendErrorWithCode(pgerror.CodeInternalError, "", "", sqlbase.MakeSrcCtx(1), errToSend)
 }
 
 // errCode is a postgres error code, plus our extensions.
 // See http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToSend string) error {
+func (c *v3Conn) sendErrorWithCode(
+	errCode, detail, hint string, errCtx sqlbase.SrcCtx, errToSend string,
+) error {
 	if c.doingExtendedQueryMessage {
 		c.ignoreTillSync = true
 	}
@@ -834,6 +838,16 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToS
 
 	c.writeBuf.putErrFieldMsg(serverErrFieldSeverity)
 	c.writeBuf.writeTerminatedString("ERROR")
+
+	if detail != "" {
+		c.writeBuf.putErrFieldMsg(serverErrFileldDetail)
+		c.writeBuf.writeTerminatedString(detail)
+	}
+
+	if hint != "" {
+		c.writeBuf.putErrFieldMsg(serverErrFileldHint)
+		c.writeBuf.writeTerminatedString(hint)
+	}
 
 	c.writeBuf.putErrFieldMsg(serverErrFieldSQLState)
 	c.writeBuf.writeTerminatedString(errCode)
@@ -1047,7 +1061,7 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) (int64, error) {
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 
 		default:
-			return rows, c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
+			return rows, c.sendErrorWithCode(pgerror.CodeProtocolViolationError, "", "", sqlbase.MakeSrcCtx(0),
 				fmt.Sprintf("unrecognized client message type %s", typ))
 		}
 		for _, res := range sr.ResultList {

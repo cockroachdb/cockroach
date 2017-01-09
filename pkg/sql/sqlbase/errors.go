@@ -50,11 +50,28 @@ func MakeSrcCtx(depth int) SrcCtx {
 	return SrcCtx{File: f, Line: l, Function: fun}
 }
 
+type errData struct {
+	detail string
+	hint   string
+}
+
+// Detail returns the detail of PostgreSQL structured error.
+func (e errData) Detail() string {
+	return e.detail
+}
+
+// Hint returns the hint of PostgreSQL structured error.
+func (e errData) Hint() string {
+	return e.hint
+}
+
 // ErrorWithPGCode represents errors that carries an error code to the user.
 // pgwire recognizes this interfaces and extracts the code.
 type ErrorWithPGCode interface {
 	error
 	Code() string
+	Detail() string
+	Hint() string
 	SrcContext() SrcCtx
 }
 
@@ -81,13 +98,14 @@ const (
 
 // NewRetryError creates a ErrRetry.
 func NewRetryError(cause error) error {
-	return &ErrRetry{ctx: MakeSrcCtx(1), msg: fmt.Sprintf("%s %v", txnRetryMsgPrefix, cause)}
+	return &ErrRetry{errData: errData{}, ctx: MakeSrcCtx(1), msg: fmt.Sprintf("%s %v", txnRetryMsgPrefix, cause)}
 }
 
 // ErrRetry means that the transaction can be retried. It signals to the user
 // that the SQL txn entered the RESTART_WAIT state after a serialization error,
 // and that a ROLLBACK TO SAVEPOINT COCKROACH_RESTART statement should be issued.
 type ErrRetry struct {
+	errData
 	ctx SrcCtx
 	msg string
 }
@@ -108,12 +126,13 @@ func (e *ErrRetry) SrcContext() SrcCtx {
 
 // NewTransactionAbortedError creates a new ErrTransactionAborted.
 func NewTransactionAbortedError(customMsg string) error {
-	return &ErrTransactionAborted{ctx: MakeSrcCtx(1), CustomMsg: customMsg}
+	return &ErrTransactionAborted{errData: errData{}, ctx: MakeSrcCtx(1), CustomMsg: customMsg}
 }
 
 // ErrTransactionAborted represents an error for trying to run a command in the
 // context of transaction that's already aborted.
 type ErrTransactionAborted struct {
+	errData
 	ctx       SrcCtx
 	CustomMsg string
 }
@@ -138,12 +157,13 @@ func (e *ErrTransactionAborted) SrcContext() SrcCtx {
 
 // NewTransactionCommittedError creates a new ErrTransactionCommitted.
 func NewTransactionCommittedError() error {
-	return &ErrTransactionCommitted{ctx: MakeSrcCtx(1)}
+	return &ErrTransactionCommitted{errData: errData{}, ctx: MakeSrcCtx(1)}
 }
 
 // ErrTransactionCommitted signals that the SQL txn is in the COMMIT_WAIT state
 // and that only a COMMIT statement will be accepted.
 type ErrTransactionCommitted struct {
+	errData
 	ctx SrcCtx
 }
 
@@ -163,11 +183,12 @@ func (e *ErrTransactionCommitted) SrcContext() SrcCtx {
 
 // NewNonNullViolationError creates a new ErrNonNullViolation.
 func NewNonNullViolationError(columnName string) error {
-	return &ErrNonNullViolation{ctx: MakeSrcCtx(1), columnName: columnName}
+	return &ErrNonNullViolation{errData: errData{}, ctx: MakeSrcCtx(1), columnName: columnName}
 }
 
 // ErrNonNullViolation represents a violation of a non-NULL constraint.
 type ErrNonNullViolation struct {
+	errData
 	ctx        SrcCtx
 	columnName string
 }
@@ -190,14 +211,16 @@ func (e *ErrNonNullViolation) SrcContext() SrcCtx {
 // ErrUniquenessConstrainViolation.
 func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser.Datum) error {
 	return &ErrUniquenessConstraintViolation{
-		ctx:   MakeSrcCtx(1),
-		index: index,
-		vals:  vals,
+		errData: errData{detail: fmt.Sprintf("key %s already exists.", index.Name)},
+		ctx:     MakeSrcCtx(1),
+		index:   index,
+		vals:    vals,
 	}
 }
 
 // ErrUniquenessConstraintViolation represents a violation of a UNIQUE constraint.
 type ErrUniquenessConstraintViolation struct {
+	errData
 	ctx   SrcCtx
 	index *IndexDescriptor
 	vals  []parser.Datum
@@ -227,11 +250,12 @@ func (e *ErrUniquenessConstraintViolation) SrcContext() SrcCtx {
 
 // NewUndefinedDatabaseError creates a new ErrUndefinedDatabase.
 func NewUndefinedDatabaseError(name string) error {
-	return &ErrUndefinedDatabase{ctx: MakeSrcCtx(1), name: name}
+	return &ErrUndefinedDatabase{errData: errData{}, ctx: MakeSrcCtx(1), name: name}
 }
 
 // ErrUndefinedDatabase represents a missing database error.
 type ErrUndefinedDatabase struct {
+	errData
 	ctx  SrcCtx
 	name string
 }
@@ -257,17 +281,18 @@ func (e *ErrUndefinedDatabase) SrcContext() SrcCtx {
 
 // NewUndefinedTableError creates a new ErrUndefinedTable.
 func NewUndefinedTableError(name string) error {
-	return &ErrUndefinedTable{ctx: MakeSrcCtx(1), objType: "table", name: name}
+	return &ErrUndefinedTable{errData: errData{}, ctx: MakeSrcCtx(1), objType: "table", name: name}
 }
 
 // NewUndefinedViewError creates a new ErrUndefinedTable, which is also used
 // for views (sharing the same postgres error code).
 func NewUndefinedViewError(name string) error {
-	return &ErrUndefinedTable{ctx: MakeSrcCtx(1), objType: "view", name: name}
+	return &ErrUndefinedTable{errData: errData{}, ctx: MakeSrcCtx(1), objType: "view", name: name}
 }
 
 // ErrUndefinedTable represents a missing database table.
 type ErrUndefinedTable struct {
+	errData
 	ctx     SrcCtx
 	objType string
 	name    string
@@ -289,11 +314,12 @@ func (e *ErrUndefinedTable) SrcContext() SrcCtx {
 
 // NewDatabaseAlreadyExistsError creates a new ErrDatabaseAlreadyExists.
 func NewDatabaseAlreadyExistsError(name string) error {
-	return &ErrDatabaseAlreadyExists{ctx: MakeSrcCtx(1), name: name}
+	return &ErrDatabaseAlreadyExists{errData: errData{}, ctx: MakeSrcCtx(1), name: name}
 }
 
 // ErrDatabaseAlreadyExists represents a missing database error.
 type ErrDatabaseAlreadyExists struct {
+	errData
 	ctx  SrcCtx
 	name string
 }
@@ -314,11 +340,12 @@ func (e *ErrDatabaseAlreadyExists) SrcContext() SrcCtx {
 
 // NewRelationAlreadyExistsError creates a new ErrRelationAlreadyExists.
 func NewRelationAlreadyExistsError(name string) error {
-	return &ErrRelationAlreadyExists{ctx: MakeSrcCtx(1), name: name}
+	return &ErrRelationAlreadyExists{errData: errData{}, ctx: MakeSrcCtx(1), name: name}
 }
 
 // ErrRelationAlreadyExists represents a missing database error.
 type ErrRelationAlreadyExists struct {
+	errData
 	ctx  SrcCtx
 	name string
 }
@@ -339,11 +366,12 @@ func (e *ErrRelationAlreadyExists) SrcContext() SrcCtx {
 
 // NewWrongObjectTypeError creates a new ErrWrongObjectType.
 func NewWrongObjectTypeError(name, desiredObjType string) error {
-	return &ErrWrongObjectType{ctx: MakeSrcCtx(1), name: name, desiredObjType: desiredObjType}
+	return &ErrWrongObjectType{errData: errData{}, ctx: MakeSrcCtx(1), name: name, desiredObjType: desiredObjType}
 }
 
 // ErrWrongObjectType represents a wrong object type error.
 type ErrWrongObjectType struct {
+	errData
 	ctx            SrcCtx
 	name           string
 	desiredObjType string
@@ -365,11 +393,12 @@ func (e *ErrWrongObjectType) SrcContext() SrcCtx {
 
 // NewSyntaxError creates a new ErrSyntax.
 func NewSyntaxError(msg string) error {
-	return &ErrSyntax{ctx: MakeSrcCtx(1), msg: msg}
+	return &ErrSyntax{errData: errData{}, ctx: MakeSrcCtx(1), msg: msg}
 }
 
 // ErrSyntax represents a syntax error.
 type ErrSyntax struct {
+	errData
 	ctx SrcCtx
 	msg string
 }
@@ -389,12 +418,13 @@ func (e *ErrSyntax) SrcContext() SrcCtx {
 }
 
 // NewDependentObjectError creates a new ErrDependentObject.
-func NewDependentObjectError(format string, args ...interface{}) error {
-	return &ErrDependentObject{ctx: MakeSrcCtx(1), msg: fmt.Sprintf(format, args...)}
+func NewDependentObjectError(msg string, hint string) error {
+	return &ErrDependentObject{errData: errData{hint: hint}, ctx: MakeSrcCtx(1), msg: msg}
 }
 
 // ErrDependentObject represents a dependent object error.
 type ErrDependentObject struct {
+	errData
 	ctx SrcCtx
 	msg string
 }
@@ -427,6 +457,7 @@ func IsIntegrityConstraintError(err error) bool {
 // RangeUnavailableError represents an attempt to access a range that is
 // temporarily unavailable.
 type RangeUnavailableError struct {
+	errData
 	ctx     SrcCtx
 	rangeID roachpb.RangeID
 	nodeIDs []roachpb.NodeID
@@ -438,6 +469,7 @@ func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
 	err := &RangeUnavailableError{
+		errData: errData{},
 		ctx:     MakeSrcCtx(1),
 		rangeID: rangeID,
 		nodeIDs: nodeIDs,

@@ -426,6 +426,10 @@ func (m *multiTestContext) kvTransportFactory(
 	return t, nil
 }
 
+func (t *multiTestContextKVTransport) String() string {
+	return fmt.Sprintf("%T: replicas=%v, idx=%d", t, t.replicas, t.idx)
+}
+
 func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
@@ -989,6 +993,8 @@ func (m *multiTestContext) changeReplicasLocked(
 			// and call ChangeReplicas on that replica, instead of calling
 			// it on an arbitrary replica and catching this failure.
 			continue
+		} else if storage.IsPreemptiveSnapshotError(err) {
+			continue
 		} else {
 			return 0, err
 		}
@@ -1093,7 +1099,7 @@ func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, source int, de
 	if err != nil {
 		m.t.Fatal(err)
 	}
-	if err := sourceRepl.AdminTransferLease(m.idents[dest].StoreID); err != nil {
+	if err := sourceRepl.AdminTransferLease(context.Background(), m.idents[dest].StoreID); err != nil {
 		m.t.Fatal(err)
 	}
 }

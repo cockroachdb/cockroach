@@ -1719,31 +1719,45 @@ func TestFilterBehindReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
+		commit   uint64
 		progress []uint64
 		expected []uint64
 	}{
-		{[]uint64{1}, []uint64{1}},
-		{[]uint64{2}, []uint64{2}},
-		{[]uint64{1, 2}, []uint64{1, 2}},
-		{[]uint64{3, 2}, []uint64{3, 2}},
-		{[]uint64{1, 2, 3}, []uint64{2, 3}},
-		{[]uint64{4, 3, 2}, []uint64{4, 3}},
-		{[]uint64{1, 1, 1}, []uint64{1, 1, 1}},
-		{[]uint64{1, 1, 2}, []uint64{1, 1, 2}},
-		{[]uint64{1, 2, 2}, []uint64{2, 2}},
-		{[]uint64{1, 2, 3, 4}, []uint64{2, 3, 4}},
-		{[]uint64{5, 4, 3, 2}, []uint64{5, 4, 3}},
-		{[]uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
-		{[]uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
+		{0, []uint64{0}, nil},
+		{1, []uint64{1}, []uint64{1}},
+		{2, []uint64{2}, []uint64{2}},
+		{1, []uint64{0, 1}, []uint64{1}},
+		{1, []uint64{1, 2}, []uint64{1, 2}},
+		{2, []uint64{3, 2}, []uint64{3, 2}},
+		{1, []uint64{0, 0, 1}, []uint64{1}},
+		{1, []uint64{0, 1, 2}, []uint64{1, 2}},
+		{2, []uint64{1, 2, 3}, []uint64{2, 3}},
+		{3, []uint64{4, 3, 2}, []uint64{4, 3}},
+		{1, []uint64{1, 1, 1}, []uint64{1, 1, 1}},
+		{1, []uint64{1, 1, 2}, []uint64{1, 1, 2}},
+		{2, []uint64{1, 2, 2}, []uint64{2, 2}},
+		{2, []uint64{0, 1, 2, 3}, []uint64{2, 3}},
+		{2, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}},
+		{3, []uint64{5, 4, 3, 2}, []uint64{5, 4, 3}},
+		{3, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
+		{4, []uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
 				Progress: make(map[uint64]raft.Progress),
 			}
+			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
-				status.Progress[uint64(j)] = raft.Progress{Match: v}
+				p := raft.Progress{
+					Match: v,
+					State: raft.ProgressStateReplicate,
+				}
+				if v == 0 {
+					p.State = raft.ProgressStateProbe
+				}
+				status.Progress[uint64(j)] = p
 				replicas = append(replicas, roachpb.ReplicaDescriptor{
 					ReplicaID: roachpb.ReplicaID(j),
 					StoreID:   roachpb.StoreID(v),

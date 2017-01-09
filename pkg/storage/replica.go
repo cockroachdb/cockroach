@@ -421,13 +421,6 @@ type Replica struct {
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
-
-		// When closed, indicates that this replica has finished sending
-		// an outgoing snapshot. Nothing is sent on this channel.
-		outSnapDone chan struct{}
-
-		// The pending outgoing snapshot if there is one.
-		outSnap OutgoingSnapshot
 	}
 
 	unreachablesMu struct {
@@ -553,12 +546,6 @@ func (r *Replica) withRaftGroup(
 
 var _ client.Sender = &Replica{}
 
-var initialOutSnapDone = func() chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}()
-
 func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
@@ -597,7 +584,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.mu.TimedMutex = syncutil.MakeTimedMutex(replicaMuLogger)
-	r.mu.outSnapDone = initialOutSnapDone
 
 	cmdQMuLogger := syncutil.ThresholdLogger(
 		r.AnnotateCtx(context.Background()),
@@ -878,7 +864,7 @@ func (r *Replica) isLeaseValidLocked(lease *roachpb.Lease, ts hlc.Timestamp) boo
 // its output should be completely determined by its parameters.
 func newNotLeaseHolderError(
 	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
-) error {
+) *roachpb.NotLeaseHolderError {
 	err := &roachpb.NotLeaseHolderError{
 		RangeID: rangeDesc.RangeID,
 	}
@@ -942,7 +928,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// TODO(a-robinson/#12680): Make occurrences of this more visible.
 						log.Errorf(ctx, "lease owned by replica %+v that no longer exists",
 							status.lease.Replica)
-						return r.requestLeaseLocked(status), nil
+						return r.requestLeaseLocked(ctx, status), nil
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
@@ -977,7 +963,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						}
 						// We had an active lease to begin with, but we want to trigger
 						// a lease extension.
-						llChan := r.requestLeaseLocked(status)
+						llChan := r.requestLeaseLocked(ctx, status)
 						// If the lease is in stasis, we can't serve requests until we've
 						// renewed the lease, so we return the channel to block on renewal.
 						// Otherwise, we don't need to wait for the extension and simply
@@ -991,7 +977,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			case leaseExpired:
 				// No active lease: Request renewal if a renewal is not already pending.
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-				return r.requestLeaseLocked(status), nil
+				return r.requestLeaseLocked(ctx, status), nil
 
 			case leaseProscribed:
 				// Lease proposed timestamp is earlier than the min proposed
@@ -999,7 +985,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// owns the lease, re-request. Otherwise, redirect.
 				if status.lease.OwnedBy(r.store.StoreID()) {
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-					return r.requestLeaseLocked(status), nil
+					return r.requestLeaseLocked(ctx, status), nil
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
@@ -1024,12 +1010,27 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				select {
 				case pErr = <-llChan:
 					if pErr != nil {
-						// Getting a LeaseRejectedError back either means that someone else
-						// got there first or that the lease request was somehow invalid due
-						// to a concurrent change. That concurrent change could have been
-						// that this replica was removed, so check for that case before
-						// falling back to a NotLeaseHolderError.
-						if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
+						switch tErr := pErr.GetDetail().(type) {
+						case *roachpb.AmbiguousResultError:
+							// This can happen if the RequestLease command we sent has been
+							// applied locally through a snapshot: the RequestLeaseRequest
+							// cannot be reproposed so we get this ambiguity.
+							// We'll just loop around.
+							return nil
+						case *roachpb.LeaseRejectedError:
+							if tErr.Existing.OwnedBy(r.store.StoreID()) {
+								// The RequestLease command we sent was rejected because another
+								// lease was applied in the meantime, but we own that other
+								// lease. So, loop until the current node becomes aware that
+								// it's the leaseholder.
+								return nil
+							}
+
+							// Getting a LeaseRejectedError back means someone else got there
+							// first, or the lease request was somehow invalid due to a
+							// to a concurrent change. That concurrent change could have been
+							// that this replica was removed, so check for that case before
+							// falling back to a NotLeaseHolderError.
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
@@ -1769,7 +1770,7 @@ func (r *Replica) addAdminCmd(
 		reply, pErr = r.AdminMerge(ctx, *tArgs)
 		resp = &reply
 	case *roachpb.AdminTransferLeaseRequest:
-		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
+		pErr = roachpb.NewError(r.AdminTransferLease(ctx, tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
@@ -2474,29 +2475,6 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	}
 }
 
-func (r *Replica) maybeAbandonSnapshot(ctx context.Context) {
-	r.mu.Lock()
-	doneChan := r.mu.outSnapDone
-	claimed := r.mu.outSnap.claimed
-	snapUUID := r.mu.outSnap.SnapUUID
-	r.mu.Unlock()
-
-	if !claimed && snapUUID != (uuid.UUID{}) {
-		// There is an unclaimed but valid snapshot. If it is not currently being
-		// generated (i.e. doneChan is closed) then close it.
-		select {
-		// We can read from this without the replica lock because we're holding the
-		// raft lock, which protects modification of the snapshot data.
-		case <-doneChan:
-		default:
-			// If we're blocking on outSnapDone but not sending a snapshot, we
-			// have a leaked/abandoned snapshot and need to clean it up.
-			log.Warningf(ctx, "abandoning unsent snapshot %s", snapUUID)
-			r.CloseOutSnap()
-		}
-	}
-}
-
 type handleRaftReadyStats struct {
 	processed int
 }
@@ -2942,14 +2920,6 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		}
 		return false
 	}
-	select {
-	case <-r.mu.outSnapDone:
-	default:
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: replica %d has an in-progress snapshot", r.mu.replicaID)
-		}
-		return false
-	}
 
 	r.quiesceLocked()
 	for id := range status.Progress {
@@ -3028,7 +2998,18 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
+		if p.command.MaxLeaseIndex == 0 {
+			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
+			// apply twice. We also don't want to ask the proposer to retry these
+			// special commands.
+			delete(r.mu.proposals, idKey)
+			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
+				"without MaxLeaseIndex: %v", reason, p.command)
+			p.finish(proposalResult{Err: roachpb.NewError(
+				roachpb.NewAmbiguousResultError(
+					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
+						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
+		} else if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 			// The command's designated lease index range was filled up, so send it
 			// back to the proposer for a retry.
 			//
@@ -3131,20 +3112,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
-	snap := &r.mu.outSnap
-	snap.claimed = true
 	r.mu.Unlock()
-
-	hasSnapshot := !raft.IsEmptySnap(msg.Snapshot)
-
-	var beganStreaming bool
-	if hasSnapshot {
-		defer func() {
-			if !beganStreaming {
-				r.CloseOutSnap()
-			}
-		}()
-	}
 
 	if fromErr != nil {
 		log.Warningf(ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
@@ -3157,43 +3125,10 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
-	if hasSnapshot {
-		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
-		if err != nil {
-			log.Fatalf(ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
-		}
-		if msgUUID != snap.SnapUUID {
-			log.Fatalf(ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
-				msgUUID.Short(), snap.SnapUUID.Short())
-		}
-		// Asynchronously stream the snapshot to the recipient.
-		if err := r.store.Stopper().RunTask(func() {
-			beganStreaming = true
-			r.store.Stopper().RunWorker(func() {
-				defer r.CloseOutSnap()
-				if err := r.store.cfg.Transport.SendSnapshot(
-					ctx,
-					r.store.allocator.storePool,
-					SnapshotRequest_Header{
-						State: snap.State,
-						RaftMessageRequest: RaftMessageRequest{
-							RangeID:     r.RangeID,
-							FromReplica: fromReplica,
-							ToReplica:   toReplica,
-							Message:     msg,
-							Quiesce:     false,
-						},
-						RangeSize:  r.GetMVCCStats().Total(),
-						CanDecline: false,
-					}, snap, r.store.Engine().NewBatch); err != nil {
-					log.Warningf(ctx, "failed to send snapshot: %s", err)
-				}
-				// Report the snapshot status to Raft, which expects us to do this once
-				// we finish attempting to send the snapshot.
-				r.reportSnapshotStatus(msg.To, err)
-			})
-		}); err != nil {
-			log.Warningf(ctx, "failed to send snapshot: %s", err)
+	// Raft-initiated snapshots are handled by the Raft snapshot queue.
+	if msg.Type == raftpb.MsgSnap {
+		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
+			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
 		}
 		return
 	}
@@ -3299,14 +3234,28 @@ func (r *Replica) processRaftCommand(
 	// TODO(bdarnell): the isConsistencyRelated field is insufficiently tested;
 	// no tests fail if it is always set to false.
 	var isLeaseRequest, isFreeze, isConsistencyRelated bool
+	var requestedLease roachpb.Lease
 	var ts hlc.Timestamp
 	if raftCmd.ReplicatedEvalResult != nil {
 		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
+		if isLeaseRequest {
+			if raftCmd.ReplicatedEvalResult.State.Lease == nil {
+				log.Fatalf(ctx, "isLeaseRequest but no lease. eval state: %v", raftCmd.ReplicatedEvalResult.State)
+			}
+			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
+		}
 		isFreeze = raftCmd.ReplicatedEvalResult.IsFreeze
 		isConsistencyRelated = raftCmd.ReplicatedEvalResult.IsConsistencyRelated
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
 	} else if idKey != "" {
 		isLeaseRequest = raftCmd.BatchRequest.IsLeaseRequest()
+		if isLeaseRequest {
+			rl, ok := raftCmd.BatchRequest.GetArg(roachpb.RequestLease)
+			if !ok {
+				log.Fatalf(ctx, "isLeaseRequest but no lease: %s", raftCmd.BatchRequest)
+			}
+			requestedLease = rl.(*roachpb.RequestLeaseRequest).Lease
+		}
 		isFreeze = raftCmd.BatchRequest.IsFreeze()
 		ts = raftCmd.BatchRequest.Timestamp
 		isConsistencyRelated = raftCmd.BatchRequest.IsConsistencyRelated()
@@ -3368,8 +3317,23 @@ func (r *Replica) processRaftCommand(
 			"command %s proposed from replica %+v: %s",
 			raftCmd.BatchRequest, raftCmd.OriginReplica, err,
 		)
-		forcedErr = roachpb.NewError(newNotLeaseHolderError(
-			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
+		if !isLeaseRequest {
+			// We return a NotLeaseHolderError so that the DistSender retries.
+			nlhe := newNotLeaseHolderError(
+				r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc)
+			nlhe.CustomMsg = fmt.Sprintf(
+				"stale proposal: command was proposed under lease %s but is being applied "+
+					"under lease: %s", raftCmd.OriginLease, r.mu.state.Lease)
+			forcedErr = roachpb.NewError(nlhe)
+		} else {
+			// For lease requests we return a special error that
+			// replica.RedirectOnOrAcquireLease() understands. Note that these
+			// requests don't go through the DistSender.
+			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+				Existing:  *r.mu.state.Lease,
+				Requested: requestedLease,
+			})
+		}
 	} else if isLeaseRequest {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by
@@ -4253,6 +4217,10 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
 	); err != nil {
 		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
+	}
+
+	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
+		return nil
 	}
 
 	hasLease, pErr := r.getLeaseForGossip(ctx)

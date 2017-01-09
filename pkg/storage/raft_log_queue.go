@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -44,6 +45,9 @@ const (
 	// progressed past and thus is no longer needed and can be truncated.
 	RaftLogQueueStaleThreshold = 100
 )
+
+// raftLogMaxSize limits the maximum size of the Raft log.
+var raftLogMaxSize = envutil.EnvOrDefaultInt64("COCKROACH_RAFT_LOG_MAX_SIZE", 1<<20 /* 1 MB */)
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs
 // truncated by removing unneeded entries.
@@ -103,6 +107,9 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 	targetSize := r.mu.state.Stats.Total()
 	if targetSize > r.mu.maxBytes {
 		targetSize = r.mu.maxBytes
+	}
+	if targetSize > raftLogMaxSize {
+		targetSize = raftLogMaxSize
 	}
 	firstIndex, err := r.FirstIndex()
 	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
@@ -173,7 +180,14 @@ func computeTruncatableIndex(
 // getQuorumIndex returns the index which a quorum of the nodes have
 // committed. The pendingSnapshotIndex indicates the index of a pending
 // snapshot which is considered part of the Raft group even though it hasn't
-// been added yet.
+// been added yet. Note that getQuorumIndex may return 0 if the progress map
+// doesn't contain information for a sufficient number of followers (e.g. the
+// local replica has only recently become the leader). In general, the value
+// returned by getQuorumIndex may be smaller than raftStatus.Commit which is
+// the log index that has been committed by a quorum of replicas where that
+// quorum was determined at the time the index was written. If you're thinking
+// of using getQuorumIndex for some purpose, consider that raftStatus.Commit
+// might be more appropriate (e.g. determining if a replica is up to date).
 func getQuorumIndex(raftStatus *raft.Status, pendingSnapshotIndex uint64) uint64 {
 	match := make([]uint64, 0, len(raftStatus.Progress)+1)
 	for _, progress := range raftStatus.Progress {

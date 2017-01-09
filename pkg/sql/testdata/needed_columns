@@ -141,7 +141,7 @@ EXPLAIN (METADATA) DELETE FROM kv WHERE k = 3
 2            table   kv@primary
 2            spans   /3-/4
 
-# Ensure that propagations through a select node removes the renders
+# Ensure that propagations through a render node removes the renders
 # and properly propagates the remaining needed columns.
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT 1 AS x, y FROM (SELECT 2 AS y))

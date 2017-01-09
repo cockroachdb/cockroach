@@ -684,7 +684,7 @@ func (n *createTableNode) Start() error {
 		if err != nil {
 			return err
 		}
-		if err = insertPlan.Start(); err != nil {
+		if err = n.p.startPlan(insertPlan); err != nil {
 			return err
 		}
 		// This loop is done here instead of in the Next method
@@ -1512,8 +1512,7 @@ func (p *planner) populateViewBackrefs(
 	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
 	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
-	v := planVisitor{p: p, observer: b}
-	v.visit(plan)
+	_ = walkPlan(plan, b)
 }
 
 type backrefCollector struct {
@@ -1530,7 +1529,7 @@ func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
 	// the tree, but it's actually faster than a string comparison on the name
 	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
 	// with go 1.7.1.
-	if sel, ok := plan.(*selectNode); ok {
+	if sel, ok := plan.(*renderNode); ok {
 		// If this is a view, we don't want to resolve the underlying scan(s).
 		// We instead prefer to track the dependency on the view itself rather
 		// than on its indirect dependencies.
@@ -1578,6 +1577,7 @@ func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
 func (b *backrefCollector) attr(_, _, _ string)                    {}
 func (b *backrefCollector) expr(_, _ string, _ int, _ parser.Expr) {}
 func (b *backrefCollector) leaveNode(_ string)                     {}
+func (b *backrefCollector) subqueryNode(_ *subquery) error         { return nil }
 
 func populateViewBackrefFromViewDesc(
 	dependency *sqlbase.TableDescriptor,
@@ -1593,12 +1593,11 @@ func populateViewBackrefFromViewDesc(
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
 }
 
-// planContainsStar returns true if one of the select nodes in the
+// planContainsStar returns true if one of the render nodes in the
 // plan contains a star expansion.
 func (p *planner) planContainsStar(plan planNode) bool {
 	s := &starDetector{}
-	v := planVisitor{p: p, observer: s}
-	v.visit(plan)
+	_ = walkPlan(plan, s)
 	return s.foundStar
 }
 
@@ -1614,7 +1613,7 @@ func (s *starDetector) enterNode(_ string, plan planNode) bool {
 	if s.foundStar {
 		return false
 	}
-	if sel, ok := plan.(*selectNode); ok {
+	if sel, ok := plan.(*renderNode); ok {
 		if sel.isStar {
 			s.foundStar = true
 			return false
@@ -1625,3 +1624,4 @@ func (s *starDetector) enterNode(_ string, plan planNode) bool {
 func (s *starDetector) attr(_, _, _ string)                    {}
 func (s *starDetector) expr(_, _ string, _ int, _ parser.Expr) {}
 func (s *starDetector) leaveNode(_ string)                     {}
+func (s *starDetector) subqueryNode(_ *subquery) error         { return nil }

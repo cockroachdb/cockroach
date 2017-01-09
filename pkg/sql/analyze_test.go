@@ -52,7 +52,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 	}
 }
 
-func makeSelectNode(t *testing.T) *selectNode {
+func makeSelectNode(t *testing.T) *renderNode {
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(desc)
 	if err := desc.AllocateIDs(); err != nil {
@@ -64,7 +64,7 @@ func makeSelectNode(t *testing.T) *selectNode {
 	return sel
 }
 
-func parseAndNormalizeExpr(t *testing.T, sql string, sel *selectNode) parser.TypedExpr {
+func parseAndNormalizeExpr(t *testing.T, sql string, sel *renderNode) parser.TypedExpr {
 	expr, err := parser.ParseExprTraditional(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
@@ -86,7 +86,7 @@ func parseAndNormalizeExpr(t *testing.T, sql string, sel *selectNode) parser.Typ
 	return typedExpr
 }
 
-func checkEquivExpr(a, b parser.TypedExpr, sel *selectNode) error {
+func checkEquivExpr(a, b parser.TypedExpr, sel *renderNode) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.

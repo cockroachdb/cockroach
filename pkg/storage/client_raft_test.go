@@ -487,7 +487,7 @@ func TestPreemptiveSnapshotReleasedAfterApply(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
-			if !mtc.stores[filterArgs.Sid-1].AcquireRaftSnapshot() {
+			if !mtc.stores[filterArgs.Sid-1].MaybeAcquireRaftSnapshot() {
 				// We couldn't acquire the store snapshot which means the preemptive
 				// snapshot was not released. Return an error in order to fail the
 				// test.
@@ -1957,16 +1957,23 @@ func TestRemovePlaceholderRace(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
-			if err := repl.ChangeReplicas(
-				ctx,
-				action,
-				roachpb.ReplicaDescriptor{
-					NodeID:  mtc.stores[1].Ident.NodeID,
-					StoreID: mtc.stores[1].Ident.StoreID,
-				},
-				repl.Desc(),
-			); err != nil {
-				t.Fatal(err)
+			for {
+				if err := repl.ChangeReplicas(
+					ctx,
+					action,
+					roachpb.ReplicaDescriptor{
+						NodeID:  mtc.stores[1].Ident.NodeID,
+						StoreID: mtc.stores[1].Ident.StoreID,
+					},
+					repl.Desc(),
+				); err != nil {
+					if storage.IsPreemptiveSnapshotError(err) {
+						continue
+					} else {
+						t.Fatal(err)
+					}
+				}
+				break
 			}
 		}
 	}

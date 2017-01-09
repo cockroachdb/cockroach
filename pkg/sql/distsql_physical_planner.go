@@ -147,7 +147,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 		// (normally, all filters are pushed down to scanNodes).
 		return false, errors.Errorf("filter not supported as separate node")
 
-	case *selectNode:
+	case *renderNode:
 		for i, e := range n.render {
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
@@ -671,10 +671,10 @@ func (dsp *distSQLPlanner) addNoGroupingStage(p *physicalPlan, core distsqlrun.P
 
 // selectRenders takes a physicalPlan that produces the results corresponding to
 // the select data source (a n.source) and updates it to produce results
-// corresponding to the select node itself. An evaluator stage is added if the
-// select node has any expressions which are not just simple column references.
+// corresponding to the render node itself. An evaluator stage is added if the
+// render node has any expressions which are not just simple column references.
 func (dsp *distSQLPlanner) selectRenders(
-	planCtx *planningCtx, p *physicalPlan, n *selectNode,
+	planCtx *planningCtx, p *physicalPlan, n *renderNode,
 ) error {
 	// First check if we need an Evaluator, or we are just returning values.
 	needEval := false
@@ -687,7 +687,7 @@ func (dsp *distSQLPlanner) selectRenders(
 	}
 	if !needEval {
 		// We don't need an evaluator stage. However, we do need to update
-		// p.planToStreamColMap to make the plan correspond to the selectNode
+		// p.planToStreamColMap to make the plan correspond to the renderNode
 		// (rather than n.source).
 		planToStreamColMap := makePlanToStreamColMap(len(n.render))
 		for i, e := range n.render {
@@ -714,7 +714,7 @@ func (dsp *distSQLPlanner) selectRenders(
 
 	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
-	// programmed to produce the columns in selectNode.render order.
+	// programmed to produce the columns in renderNode.render order.
 	p.planToStreamColMap = p.planToStreamColMap[:0]
 	for i := range n.render {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
@@ -1141,7 +1141,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 	case *joinNode:
 		return dsp.createPlanForJoin(planCtx, n)
 
-	case *selectNode:
+	case *renderNode:
 		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
 		if err != nil {
 			return physicalPlan{}, err

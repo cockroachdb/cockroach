@@ -107,9 +107,6 @@ func (n *splitNode) Start() error {
 	values := make([]parser.Datum, len(n.exprs))
 	colMap := make(map[sqlbase.ColumnID]int)
 	for i, e := range n.exprs {
-		if err := n.p.startSubqueryPlans(e); err != nil {
-			return err
-		}
 		val, err := e.Eval(&n.p.evalCtx)
 		if err != nil {
 			return err

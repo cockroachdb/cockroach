@@ -112,7 +112,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 		setNeededColumns(n.source.plan, sourceNeeded)
 
-	case *selectNode:
+	case *renderNode:
 		// Optimization: remove all the render expressions that are not
 		// needed. While doing so, some indexed vars may disappear
 		// entirely, which may enable omission of more columns from the

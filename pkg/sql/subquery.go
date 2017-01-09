@@ -108,14 +108,15 @@ func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 	return s.result, s.err
 }
 
-func (s *subquery) doEval() (parser.Datum, error) {
-	var result parser.Datum
+func (s *subquery) doEval() (result parser.Datum, err error) {
+	// After evaluation, there is no plan remaining.
+	defer func() { s.plan.Close(); s.plan = nil }()
+
 	switch s.execMode {
 	case execModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
 		next, err := s.plan.Next()
-		s.plan.Close()
 		if s.err = err; err != nil {
 			return result, err
 		}
@@ -148,7 +149,6 @@ func (s *subquery) doEval() (parser.Datum, error) {
 				rows = append(rows, &valuesCopy)
 			}
 		}
-		s.plan.Close()
 		if s.err = err; err != nil {
 			return result, err
 		}
@@ -161,12 +161,9 @@ func (s *subquery) doEval() (parser.Datum, error) {
 		result = parser.DNull
 		hasRow, err := s.plan.Next()
 		if s.err = err; err != nil {
-			s.plan.Close()
 			return result, err
 		}
-		if !hasRow {
-			s.plan.Close()
-		} else {
+		if hasRow {
 			values := s.plan.Values()
 			switch len(values) {
 			case 1:
@@ -177,7 +174,6 @@ func (s *subquery) doEval() (parser.Datum, error) {
 				result = &valuesCopy
 			}
 			another, err := s.plan.Next()
-			s.plan.Close()
 			if s.err = err; err != nil {
 				return result, err
 			}
@@ -193,102 +189,50 @@ func (s *subquery) doEval() (parser.Datum, error) {
 
 // subqueryPlanVisitor is responsible for acting on the query plan
 // that implements the sub-query, after it has been populated by
-// subqueryVisitor.  This visitor supports both expanding, starting
+// subqueryVisitor. This visitor supports both starting
 // and evaluating the sub-plans in one recursion.
 type subqueryPlanVisitor struct {
-	p        *planner
-	doExpand bool
-	doStart  bool
-	doEval   bool
-	err      error
+	p *planner
 }
 
-var _ parser.Visitor = &subqueryPlanVisitor{}
+var _ planObserver = &subqueryPlanVisitor{}
 
-func (v *subqueryPlanVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if v.err != nil {
-		return false, expr
+func (v *subqueryPlanVisitor) subqueryNode(sq *subquery) error {
+	if !sq.expanded {
+		panic("subquery was not expanded properly")
 	}
-	if sq, ok := expr.(*subquery); ok {
-		if v.doExpand && !sq.expanded {
-			sq.plan, v.err = v.p.optimizePlan(sq.plan, allColumns(sq.plan))
-			sq.expanded = true
+	if !sq.started {
+		if err := v.p.startPlan(sq.plan); err != nil {
+			return err
 		}
-		if v.err == nil && v.doStart && !sq.started {
-			if !sq.expanded {
-				panic("subquery was not expanded properly")
-			}
-			v.err = sq.plan.Start()
-			sq.started = true
+		sq.started = true
+		res, err := sq.doEval()
+		if err != nil {
+			return err
 		}
-		if v.err == nil && v.doEval && sq.result == nil {
-			if !sq.expanded || !sq.started {
-				panic("subquery was not expanded or prepared properly")
-			}
-			sq.result, sq.err = sq.doEval()
-			if sq.err != nil {
-				v.err = sq.err
-			}
-		}
-		return false, expr
+		sq.result = res
 	}
-	return true, expr
+	return nil
 }
 
-func (v *subqueryPlanVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
-
-func (p *planner) expandSubqueryPlans(expr parser.Expr) error {
-	if expr == nil {
-		return nil
+func (v *subqueryPlanVisitor) enterNode(_ string, n planNode) bool {
+	if _, ok := n.(*explainPlanNode); ok {
+		// EXPLAIN doesn't start/substitute sub-queries.
+		return false
 	}
-	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p, doExpand: true}
-	_, _ = parser.WalkExpr(&p.subqueryPlanVisitor, expr)
-	return p.subqueryPlanVisitor.err
+	return true
 }
 
-func (p *planner) startSubqueryPlans(expr parser.Expr) error {
-	if expr == nil {
-		return nil
-	}
+func (v *subqueryPlanVisitor) attr(_, _, _ string)                    {}
+func (v *subqueryPlanVisitor) expr(_, _ string, _ int, _ parser.Expr) {}
+func (v *subqueryPlanVisitor) leaveNode(_ string)                     {}
+
+func (p *planner) startSubqueryPlans(plan planNode) error {
 	// We also run and pre-evaluate the subqueries during start,
 	// so as to avoid re-running the sub-query for every row
 	// in the results of the surrounding planNode.
-	p.subqueryPlanVisitor = subqueryPlanVisitor{doStart: true, doEval: true}
-	_, _ = parser.WalkExpr(&p.subqueryPlanVisitor, expr)
-	return p.subqueryPlanVisitor.err
-}
-
-// collectSubqueryPlansVisitor gathers all the planNodes implementing
-// sub-queries in a given expression. This is used by EXPLAIN to show
-// the sub-plans.
-type collectSubqueryPlansVisitor struct {
-	plans []planNode
-}
-
-var _ parser.Visitor = &collectSubqueryPlansVisitor{}
-
-func (v *collectSubqueryPlansVisitor) VisitPre(
-	expr parser.Expr,
-) (recurse bool, newExpr parser.Expr) {
-	if sq, ok := expr.(*subquery); ok {
-		if sq.plan == nil {
-			panic("cannot collect the sub-plans before they were expanded")
-		}
-		v.plans = append(v.plans, sq.plan)
-		return false, expr
-	}
-	return true, expr
-}
-
-func (v *collectSubqueryPlansVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
-
-func (p *planner) collectSubqueryPlans(expr parser.Expr, result []planNode) []planNode {
-	if expr == nil {
-		return result
-	}
-	p.collectSubqueryPlansVisitor = collectSubqueryPlansVisitor{plans: result}
-	_, _ = parser.WalkExpr(&p.collectSubqueryPlansVisitor, expr)
-	return p.collectSubqueryPlansVisitor.plans
+	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p}
+	return walkPlan(plan, &p.subqueryPlanVisitor)
 }
 
 // subqueryVisitor replaces parser.Subquery syntax nodes by a

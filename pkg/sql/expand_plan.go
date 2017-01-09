@@ -40,16 +40,13 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
 
 	case *updateNode:
-		// TODO(knz) eliminate this once #12599 is fixed.
-		err = n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
+		n.run.rows, err = p.expandPlan(n.run.rows)
 
 	case *insertNode:
-		// TODO(knz) eliminate this once #12599 is fixed.
-		err = n.run.expandEditNodePlan(&n.editNodeBase, n.tw)
+		n.run.rows, err = p.expandPlan(n.run.rows)
 
 	case *deleteNode:
-		// TODO(knz) eliminate this once #12599 is fixed.
-		err = n.run.expandEditNodePlan(&n.editNodeBase, &n.tw)
+		n.run.rows, err = p.expandPlan(n.run.rows)
 
 	case *createViewNode:
 		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
@@ -141,7 +138,7 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 	case *limitNode, *sortNode, *windowNode, *groupNode, *distinctNode:
 		panic(fmt.Sprintf("expandPlan for %T must be handled by selectTopNode", plan))
 
-	case *selectNode:
+	case *renderNode:
 		plan, err = p.expandSelectNode(n)
 
 	case *selectTopNode:
@@ -264,7 +261,7 @@ func (p *planner) expandSelectTopNode(n *selectTopNode) (planNode, error) {
 	return n.plan, nil
 }
 
-func (p *planner) expandSelectNode(s *selectNode) (planNode, error) {
+func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 	// Get the ordering for index selection (if any).
 	var ordering sqlbase.ColumnOrdering
 	var grouping bool
@@ -334,12 +331,12 @@ func (p *planner) expandSelectNode(s *selectNode) (planNode, error) {
 
 	sourceCols := s.source.plan.Columns()
 	if len(s.columns) == len(sourceCols) && s.source.info.viewDesc == nil {
-		// 1) we don't drop selectNodes which also interface to a view, because
+		// 1) we don't drop renderNodes which also interface to a view, because
 		// CREATE VIEW needs it.
 		// TODO(knz) make this optimization conditional on a flag, which can
 		// be set to false by CREATE VIEW.
 		//
-		// 2) we don't drop selectNodes which have a different number of
+		// 2) we don't drop renderNodes which have a different number of
 		// columns than their sources, because some nodes currently assume
 		// the number of source columns doesn't change between
 		// instantiation and Start() (e.g. groupNode).

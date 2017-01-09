@@ -59,7 +59,7 @@ import (
 // TypedExpr and VariableExpr so it can be used in expression trees
 // directly.  During parsing a name in expressions always begins as an
 // UnresolvedName instance.  During either IndexedVar substitution, type
-// checking or render target expansion (select node) this is
+// checking or render target expansion (render node) this is
 // normalized and replaced by either *ColumnItem, UnqualifiedStar or
 // AllColumnsSelector using the NormalizeVarName() method.
 //

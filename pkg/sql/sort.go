@@ -52,7 +52,7 @@ type sortNode struct {
 // However, for a SELECT, we can also sort by the pre-alias column name (SELECT
 // a AS b ORDER BY b) as well as expressions (SELECT a, b, ORDER BY a+b). In
 // this case, construction of the sortNode might adjust the number of render
-// targets in the selectNode if any ordering expressions are specified.
+// targets in the renderNode if any ordering expressions are specified.
 //
 // TODO(dan): SQL also allows sorting a VALUES or UNION by an expression.
 // Support this. It will reduce some of the special casing below, but requires a
@@ -62,9 +62,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		return nil, nil
 	}
 
-	// Multiple tests below use selectNode as a special case.
+	// Multiple tests below use renderNode as a special case.
 	// So factor the cast.
-	s, _ := n.(*selectNode)
+	s, _ := n.(*renderNode)
 
 	// We grab a copy of columns here because we might add new render targets
 	// below. This is the set of columns requested by the query.
@@ -139,7 +139,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 						if index != -1 {
 							// There is more than one render alias that matches the ORDER BY
 							// clause. Here, SQL92 is specific as to what should be done:
-							// if the underlying expression is known (we're on a selectNode)
+							// if the underlying expression is known (we're on a renderNode)
 							// and it is equivalent, then just accept that and ignore the ambiguity.
 							// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
 							// reject with an ambituity error.
@@ -187,9 +187,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 
 		// Finally, if we haven't found anything so far, we really
 		// need a new render.
-		// TODO(knz/dan) currently this is only possible for selectNode.
+		// TODO(knz/dan) currently this is only possible for renderNode.
 		// If we are dealing with a UNION or something else we would need
-		// to fabricate an intermediate selectNode to add the new render.
+		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
 			cols, exprs, hasStar, err := p.computeRender(parser.SelectExpr{Expr: expr}, parser.TypeAny,
 				s.source.info, s.ivarHelper, true)
