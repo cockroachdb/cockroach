@@ -2167,30 +2167,6 @@ func TestStoreChangeFrozen(t *testing.T) {
 	}
 }
 
-func TestStoreNoConcurrentRaftSnapshots(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	cfg := TestStoreConfig(nil)
-	cfg.concurrentSnapshotLimit = 1
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	store := createTestStoreWithConfig(t, stopper, &cfg)
-
-	if !store.MaybeAcquireRaftSnapshot() {
-		t.Fatal("expected true")
-	}
-
-	if store.MaybeAcquireRaftSnapshot() {
-		t.Fatalf("expected false")
-	}
-
-	store.ReleaseRaftSnapshot()
-
-	if !store.MaybeAcquireRaftSnapshot() {
-		t.Fatal("expected true")
-	}
-	store.ReleaseRaftSnapshot()
-}
-
 func TestStoreGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
