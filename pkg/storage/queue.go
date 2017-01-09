@@ -43,6 +43,8 @@ const (
 	// The timeout prevents a queue from getting stuck on a replica.
 	// For example, a replica whose range is not reachable for quorum.
 	defaultProcessTimeout = 1 * time.Minute
+	// defaultQueueMaxSize is the default max size for a queue.
+	defaultQueueMaxSize = 10000
 )
 
 // a purgatoryError indicates a replica processing failure which indicates

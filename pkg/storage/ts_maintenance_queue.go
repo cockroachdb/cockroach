@@ -33,8 +33,7 @@ import (
 const (
 	// TimeSeriesMaintenanceInterval is the minimum interval between two
 	// time series maintenance runs on a replica.
-	TimeSeriesMaintenanceInterval     = 24 * time.Hour // daily
-	timeSeriesMaintenanceQueueMaxSize = 100
+	TimeSeriesMaintenanceInterval = 24 * time.Hour // daily
 )
 
 // TimeSeriesDataStore is an interface defined in the storage package that can
@@ -93,7 +92,7 @@ func newTimeSeriesMaintenanceQueue(
 	q.baseQueue = newBaseQueue(
 		"timeSeriesMaintenance", q, store, g,
 		queueConfig{
-			maxSize:              timeSeriesMaintenanceQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
