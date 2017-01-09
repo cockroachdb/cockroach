@@ -41,8 +41,6 @@ import (
 )
 
 const (
-	// gcQueueMaxSize is the max size of the gc queue.
-	gcQueueMaxSize = 100
 	// gcQueueTimerDuration is the duration between GCs of queued replicas.
 	gcQueueTimerDuration = 1 * time.Second
 	// gcByteCountNormalization is the count of GC'able bytes which
@@ -101,7 +99,7 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq.baseQueue = newBaseQueue(
 		"gc", gcq, store, gossip,
 		queueConfig{
-			maxSize:              gcQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: false,
 			successes:            store.metrics.GCQueueSuccesses,

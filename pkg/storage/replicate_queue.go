@@ -34,9 +34,6 @@ import (
 )
 
 const (
-	// replicateQueueMaxSize is the max size of the replicate queue.
-	replicateQueueMaxSize = 100
-
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
@@ -104,7 +101,7 @@ func newReplicateQueue(
 	rq.baseQueue = newBaseQueue(
 		"replicate", rq, store, g,
 		queueConfig{
-			maxSize:              replicateQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
 			successes:            store.metrics.ReplicateQueueSuccesses,
