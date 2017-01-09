@@ -31,9 +31,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// KeyValue represents a single key/value pair and corresponding
-// timestamp. This is similar to roachpb.KeyValue except that the value may be
-// nil.
+// KeyValue represents a single key/value pair. This is similar to
+// roachpb.KeyValue except that the value may be nil.
 type KeyValue struct {
 	Key   roachpb.Key
 	Value *roachpb.Value // Timestamp will always be zero
@@ -79,7 +78,7 @@ func (kv *KeyValue) PrettyValue() string {
 		}
 		return fmt.Sprintf("%s", v)
 	}
-	return fmt.Sprintf("%q", kv.Value.RawBytes)
+	return fmt.Sprintf("%x", kv.Value.RawBytes)
 }
 
 // ValueBytes returns the value as a byte slice. This method will panic if the
