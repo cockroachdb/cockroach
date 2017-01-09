@@ -29,9 +29,6 @@ import (
 )
 
 const (
-	// raftSnapshotQueueMaxSize is the max size of the Raft snapshot queue.
-	raftSnapshotQueueMaxSize = 100
-
 	// raftSnapshotQueueTimerDuration is the duration between Raft snapshot of
 	// queued replicas.
 	raftSnapshotQueueTimerDuration = 0 // zero duration to process Raft snapshots greedily
@@ -54,7 +51,7 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip, clock *hlc.Clock) *raf
 	rq.baseQueue = newBaseQueue(
 		"raftsnapshot", rq, store, g,
 		queueConfig{
-			maxSize: raftSnapshotQueueMaxSize,
+			maxSize: defaultQueueMaxSize,
 			// The Raft leader (which sends Raft snapshots) may not be the
 			// leaseholder. Operating on a replica without holding the lease is the
 			// reason Raft snapshots cannot be performed by the replicateQueue.

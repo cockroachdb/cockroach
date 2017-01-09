@@ -34,9 +34,6 @@ import (
 )
 
 const (
-	// replicaGCQueueMaxSize is the max size of the gc queue.
-	replicaGCQueueMaxSize = 100
-
 	// replicaGCQueueTimerDuration is the duration between GCs of queued replicas.
 	replicaGCQueueTimerDuration = 50 * time.Millisecond
 
@@ -97,7 +94,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 	rgcq.baseQueue = newBaseQueue(
 		"replicaGC", rgcq, store, gossip,
 		queueConfig{
-			maxSize:              replicaGCQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.ReplicaGCQueueSuccesses,
