@@ -31,8 +31,6 @@ import (
 )
 
 const (
-	// splitQueueMaxSize is the max size of the split queue.
-	splitQueueMaxSize = 100
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
 	splitQueueTimerDuration = 0 // zero duration to process splits greedily.
 )
@@ -52,7 +50,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 	sq.baseQueue = newBaseQueue(
 		"split", sq, store, gossip,
 		queueConfig{
-			maxSize:              splitQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,

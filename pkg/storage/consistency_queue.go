@@ -28,10 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-const (
-	consistencyQueueSize = 100
-)
-
 type consistencyQueue struct {
 	*baseQueue
 	interval       time.Duration
@@ -47,7 +43,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 	q.baseQueue = newBaseQueue(
 		"replica consistency checker", q, store, gossip,
 		queueConfig{
-			maxSize:              consistencyQueueSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.ConsistencyQueueSuccesses,

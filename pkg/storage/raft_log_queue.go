@@ -34,8 +34,6 @@ import (
 )
 
 const (
-	// raftLogQueueMaxSize is the max size of the queue.
-	raftLogQueueMaxSize = 100
 	// RaftLogQueueTimerDuration is the duration between truncations. This needs
 	// to be relatively short so that truncations can keep up with raft log entry
 	// creation.
@@ -64,7 +62,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 	rlq.baseQueue = newBaseQueue(
 		"raftlog", rlq, store, gossip,
 		queueConfig{
-			maxSize:              raftLogQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           false,
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.RaftLogQueueSuccesses,
