@@ -411,7 +411,10 @@ type Store struct {
 	}
 
 	// Semaphore to limit concurrent snapshots.
-	snapshotSem      chan struct{}
+	snapshotSem chan struct{}
+
+	// Semaphore to limit concurrent snapshot application and replica data
+	// destruction.
 	snapshotApplySem chan struct{}
 
 	// drainLeases holds a bool which indicates whether Replicas should be
@@ -2068,6 +2071,21 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 func (s *Store) RemoveReplica(
 	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, destroy bool,
 ) error {
+	if destroy {
+		// Destroying replica state is moderately expensive, so we serialize such
+		// operations with applying snapshots.
+		select {
+		case s.snapshotApplySem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.stopper.ShouldStop():
+			return errors.Errorf("stopped")
+		}
+		defer func() {
+			<-s.snapshotApplySem
+		}()
+	}
+
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	return s.removeReplicaImpl(ctx, rep, consistentDesc, destroy)
