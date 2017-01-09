@@ -266,115 +266,131 @@ func (n *dropIndexNode) Start() error {
 			// must have it here too.
 			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.tn))
 		}
-		status, i, err := tableDesc.FindIndexByName(index.idxName)
-		if err != nil {
-			if n.n.IfExists {
-				// Noop.
-				continue
-			}
-			// Index does not exist, but we want it to: error out.
+
+		if err := n.p.dropIndexByName(
+			index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String()); err != nil {
 			return err
 		}
-		// Queue the mutation.
-		var droppedViews []string
-		switch status {
-		case sqlbase.DescriptorActive:
-			idx := tableDesc.Indexes[i]
+	}
+	return nil
+}
 
-			if idx.ForeignKey.IsSet() {
-				if n.n.DropBehavior != parser.DropCascade {
-					return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
-				}
-				if err := n.p.removeFKBackReference(tableDesc, idx); err != nil {
-					return err
-				}
-			}
-			if len(idx.Interleave.Ancestors) > 0 {
-				if err := n.p.removeInterleaveBackReference(tableDesc, idx); err != nil {
-					return err
-				}
-			}
+func (p *planner) dropIndexByName(
+	idxName parser.Name,
+	tableDesc *sqlbase.TableDescriptor,
+	ifExists bool,
+	behavior parser.DropBehavior,
+	stmt string,
+) error {
+	status, i, err := tableDesc.FindIndexByName(idxName)
+	if err != nil {
+		if ifExists {
+			// Noop.
+			return nil
+		}
+		// Index does not exist, but we want it to: error out.
+		return err
+	}
+	// Queue the mutation.
+	var droppedViews []string
+	switch status {
+	case sqlbase.DescriptorActive:
+		idx := tableDesc.Indexes[i]
 
-			for _, ref := range idx.ReferencedBy {
-				fetched, err := n.p.canRemoveFK(idx.Name, ref, n.n.DropBehavior)
+		if idx.ForeignKey.IsSet() {
+			if behavior != parser.DropCascade {
+				return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+			}
+			if err := p.removeFKBackReference(tableDesc, idx); err != nil {
+				return err
+			}
+		}
+		if len(idx.Interleave.Ancestors) > 0 {
+			if err := p.removeInterleaveBackReference(tableDesc, idx); err != nil {
+				return err
+			}
+		}
+
+		for _, ref := range idx.ReferencedBy {
+			fetched, err := p.canRemoveFK(idx.Name, ref, behavior)
+			if err != nil {
+				return err
+			}
+			if err := p.removeFK(ref, fetched); err != nil {
+				return err
+			}
+		}
+		for _, ref := range idx.InterleavedBy {
+			if err := p.removeInterleave(ref); err != nil {
+				return err
+			}
+		}
+
+		for _, tableRef := range tableDesc.DependedOnBy {
+			if tableRef.IndexID == idx.ID {
+				// Ensure that we have DROP privilege on all dependent views
+				err := p.canRemoveDependentViewGeneric(
+					"index", idx.Name, tableDesc.ParentID, tableRef, behavior)
 				if err != nil {
 					return err
 				}
-				if err := n.p.removeFK(ref, fetched); err != nil {
+				viewDesc, err := p.getViewDescForCascade(
+					"index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior)
+				if err != nil {
 					return err
 				}
-			}
-			for _, ref := range idx.InterleavedBy {
-				if err := n.p.removeInterleave(ref); err != nil {
+				cascadedViews, err := p.removeDependentView(tableDesc, viewDesc)
+				if err != nil {
 					return err
 				}
-			}
-
-			for _, tableRef := range tableDesc.DependedOnBy {
-				if tableRef.IndexID == idx.ID {
-					// Ensure that we have DROP privilege on all dependent views
-					err := n.p.canRemoveDependentViewGeneric(
-						"index", idx.Name, tableDesc.ParentID, tableRef, n.n.DropBehavior)
-					if err != nil {
-						return err
-					}
-					viewDesc, err := n.p.getViewDescForCascade(
-						"index", idx.Name, tableDesc.ParentID, tableRef.ID, n.n.DropBehavior)
-					if err != nil {
-						return err
-					}
-					cascadedViews, err := n.p.removeDependentView(tableDesc, viewDesc)
-					if err != nil {
-						return err
-					}
-					droppedViews = append(droppedViews, viewDesc.Name)
-					droppedViews = append(droppedViews, cascadedViews...)
-				}
-			}
-
-			tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
-			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
-
-		case sqlbase.DescriptorIncomplete:
-			switch tableDesc.Mutations[i].Direction {
-			case sqlbase.DescriptorMutation_ADD:
-				return fmt.Errorf("index %q in the middle of being added, try again later", index.idxName)
-
-			case sqlbase.DescriptorMutation_DROP:
-				continue
+				droppedViews = append(droppedViews, viewDesc.Name)
+				droppedViews = append(droppedViews, cascadedViews...)
 			}
 		}
-		mutationID, err := tableDesc.FinalizeMutation()
-		if err != nil {
-			return err
+
+		tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
+		tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+
+	case sqlbase.DescriptorIncomplete:
+		switch tableDesc.Mutations[i].Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+
+		case sqlbase.DescriptorMutation_DROP:
+			return nil
 		}
-		if err := tableDesc.Validate(n.p.txn); err != nil {
-			return err
-		}
-		if err := n.p.writeTableDesc(tableDesc); err != nil {
-			return err
-		}
-		// Record index drop in the event log. This is an auditable log event
-		// and is recorded in the same transaction as the table descriptor
-		// update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
-			EventLogDropIndex,
-			int32(tableDesc.ID),
-			int32(n.p.evalCtx.NodeID),
-			struct {
-				TableName           string
-				IndexName           string
-				Statement           string
-				User                string
-				MutationID          uint32
-				CascadeDroppedViews []string
-			}{tableDesc.Name, string(index.idxName), n.n.String(), n.p.session.User, uint32(mutationID),
-				droppedViews},
-		); err != nil {
-			return err
-		}
-		n.p.notifySchemaChange(tableDesc.ID, mutationID)
 	}
+	mutationID, err := tableDesc.FinalizeMutation()
+	if err != nil {
+		return err
+	}
+	if err := tableDesc.Validate(p.txn); err != nil {
+		return err
+	}
+	if err := p.writeTableDesc(tableDesc); err != nil {
+		return err
+	}
+	// Record index drop in the event log. This is an auditable log event
+	// and is recorded in the same transaction as the table descriptor
+	// update.
+	if err := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
+		EventLogDropIndex,
+		int32(tableDesc.ID),
+		int32(p.evalCtx.NodeID),
+		struct {
+			TableName           string
+			IndexName           string
+			Statement           string
+			User                string
+			MutationID          uint32
+			CascadeDroppedViews []string
+		}{tableDesc.Name, string(idxName), stmt, p.session.User, uint32(mutationID),
+			droppedViews},
+	); err != nil {
+		return err
+	}
+	p.notifySchemaChange(tableDesc.ID, mutationID)
+
 	return nil
 }
 
