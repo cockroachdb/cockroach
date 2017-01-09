@@ -395,7 +395,7 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 		if _, k, err = encoding.DecodeBytesAscending(k, nil); err != nil {
 			return nil, err
 		}
-		if !bytes.HasPrefix(k, localPrefix) {
+		if !IsLocal(k) {
 			break
 		}
 	}
@@ -423,7 +423,7 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	if err != nil {
 		return rk, err
 	}
-	if bytes.HasPrefix(k, localPrefix) {
+	if IsLocal(k) {
 		// The upper bound for a range-local key that addresses to key k
 		// is the key directly after k.
 		rk = rk.Next()
