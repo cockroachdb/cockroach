@@ -40,7 +40,7 @@ type dropDatabaseNode struct {
 }
 
 // DropDatabase drops a database.
-// Privileges: DROP on database.
+// Privileges: DROP on database and DROP on all tables in the database.
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
 // TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
