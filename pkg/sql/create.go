@@ -831,7 +831,7 @@ func resolveFK(
 
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = fmt.Sprintf("fk_%s_ref_%s", d.FromCols[0], target.Name)
+		constraintName = fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name)
 	}
 
 	var targetIdx *sqlbase.IndexDescriptor
