@@ -1565,9 +1565,9 @@ func (c *ColumnType) SQLString() string {
 			panic("locale is required for COLLATEDSTRING")
 		}
 		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d) COLLATE %s", c.Kind.String(), c.Width, *c.Locale)
+			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
 		}
-		return fmt.Sprintf("%s COLLATE %s", c.Kind.String(), *c.Locale)
+		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
 	case ColumnType_INT_ARRAY:
 		return "INT[]"
 	}
