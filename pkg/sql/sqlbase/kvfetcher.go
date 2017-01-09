@@ -90,6 +90,9 @@ type kvFetcher struct {
 	useBatchLimit   bool
 	firstBatchLimit int64
 
+	// Fields used to avoid allocations.
+	batch client.Batch
+
 	batchIdx     int
 	fetchEnd     bool
 	kvs          []client.KeyValue
@@ -187,7 +190,8 @@ func makeKVFetcher(
 func (f *kvFetcher) fetch() error {
 	batchSize := f.getBatchSize()
 
-	b := &client.Batch{}
+	b := &f.batch
+	*b = client.Batch{}
 	b.Header.MaxSpanRequestKeys = batchSize
 
 	for _, span := range f.spans {
