@@ -287,6 +287,12 @@ func (p *planner) resetForBatch(e *Executor) {
 // query initializes a planNode from a SQL statement string. Close() must be
 // called on the returned planNode after use.
 func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
+	if log.V(2) {
+		log.Infof(p.ctx(), "internal query: %s", sql)
+		if len(args) > 0 {
+			log.Infof(p.ctx(), "placeholders: %q", args)
+		}
+	}
 	stmt, err := parser.ParseOneTraditional(sql)
 	if err != nil {
 		return nil, err
