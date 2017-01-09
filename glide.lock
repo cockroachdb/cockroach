@@ -31,6 +31,8 @@ imports:
   version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
   subpackages:
   - cmd/misspell
+- name: github.com/cockroachdb/apd
+  version: 3270724b9fe5c7f4644a2249be67ebfa6aa1748f
 - name: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - name: github.com/cockroachdb/c-protobuf

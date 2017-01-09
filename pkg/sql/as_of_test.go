@@ -21,10 +21,11 @@ import (
 	"fmt"
 	"testing"
 
-	inf "gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	csql "github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -220,13 +221,16 @@ func TestAsOfRetry(t *testing.T) {
 	if err := sqlDB.QueryRow("UPDATE d.t SET a = $1 RETURNING cluster_logical_timestamp()", val2).Scan(&tsVal2); err != nil {
 		t.Fatal(err)
 	}
-	walltime := new(inf.Dec)
-	if _, ok := walltime.SetString(tsVal2); !ok {
+	walltime := new(apd.Decimal)
+	if _, err := walltime.SetString(tsVal2); err != nil {
 		t.Fatalf("couldn't set decimal: %s", tsVal2)
 	}
-	oneTick := inf.NewDec(1, 0)
+	oneTick := apd.New(1, 0)
 	// Set tsVal1 to 1ns before tsVal2.
-	tsVal1 := walltime.Sub(walltime, oneTick).String()
+	if _, err := parser.ExactCtx.Sub(walltime, walltime, oneTick); err != nil {
+		t.Fatal(err)
+	}
+	tsVal1 := walltime.ToStandard()
 
 	// Set up error injection that causes retries.
 	magicVals := createFilterVals(nil, nil)

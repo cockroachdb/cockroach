@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -246,11 +246,12 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		offset = int64(float64(*v) * 60.0 * 60.0)
 
 	case *parser.DDecimal:
-		sixty := inf.NewDec(60, 0)
-		sixty.Mul(sixty, sixty).Mul(sixty, &v.Dec)
-		sixty.Round(sixty, 0, inf.RoundDown)
-		var ok bool
-		if offset, ok = sixty.Unscaled(); !ok {
+		sixty := apd.New(60, 0)
+		ed := apd.MakeErrDecimal(parser.ExactCtx)
+		ed.Mul(sixty, sixty, sixty)
+		ed.Mul(sixty, sixty, &v.Decimal)
+		offset = ed.Int64(sixty)
+		if ed.Err() != nil {
 			return nil, fmt.Errorf("time zone value %s would overflow an int64", sixty)
 		}
 

@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/gogo/protobuf/proto"
-	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
@@ -283,7 +283,7 @@ func TestSetGetChecked(t *testing.T) {
 		t.Errorf("set %d on a value and extracted it, expected %d back, but got %d", i, i, r)
 	}
 
-	dec := inf.NewDec(11, 1)
+	dec := apd.New(11, -1)
 	if err := v.SetDecimal(dec); err != nil {
 		t.Fatal(err)
 	}
@@ -829,7 +829,7 @@ func BenchmarkValueSetTime(b *testing.B) {
 
 func BenchmarkValueSetDecimal(b *testing.B) {
 	v := Value{}
-	dec := inf.NewDec(11, 1)
+	dec := apd.New(11, -1)
 
 	for i := 0; i < b.N; i++ {
 		if err := v.SetDecimal(dec); err != nil {
@@ -923,7 +923,7 @@ func BenchmarkValueGetTime(b *testing.B) {
 
 func BenchmarkValueGetDecimal(b *testing.B) {
 	v := Value{}
-	dec := inf.NewDec(11, 1)
+	dec := apd.New(11, -1)
 	if err := v.SetDecimal(dec); err != nil {
 		b.Fatal(err)
 	}
@@ -961,7 +961,7 @@ func TestValuePrettyPrint(t *testing.T) {
 	timeValue.SetTime(time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC))
 
 	var decimalValue Value
-	_ = decimalValue.SetDecimal(inf.NewDec(628, 2))
+	_ = decimalValue.SetDecimal(apd.New(628, -2))
 
 	var durationValue Value
 	_ = durationValue.SetDuration(duration.Duration{Months: 1, Days: 2, Nanos: 3})

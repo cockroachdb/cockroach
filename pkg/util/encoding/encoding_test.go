@@ -24,12 +24,12 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 func testBasicEncodeDecode32(
@@ -856,8 +856,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeUvarintDescending(nil, 0), Int},
 		{EncodeFloatAscending(nil, 0), Float},
 		{EncodeFloatDescending(nil, 0), Float},
-		{EncodeDecimalAscending(nil, inf.NewDec(0, 0)), Decimal},
-		{EncodeDecimalDescending(nil, inf.NewDec(0, 0)), Decimal},
+		{EncodeDecimalAscending(nil, apd.New(0, 0)), Decimal},
+		{EncodeDecimalDescending(nil, apd.New(0, 0)), Decimal},
 		{EncodeBytesAscending(nil, []byte("")), Bytes},
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
 		{EncodeTimeAscending(nil, timeutil.Now()), Time},
@@ -881,10 +881,10 @@ func (rd randData) bool() bool {
 	return rd.Intn(2) == 1
 }
 
-func (rd randData) decimal() *inf.Dec {
-	d := &inf.Dec{}
-	d.SetScale(inf.Scale(rd.Intn(40) - 20))
-	d.SetUnscaled(rd.Int63())
+func (rd randData) decimal() *apd.Decimal {
+	d := &apd.Decimal{}
+	d.Exponent = int32(rd.Intn(40) - 20)
+	d.SetCoefficient(rd.Int63())
 	return d
 }
 
@@ -1331,7 +1331,7 @@ func TestValueEncodeDecodeBytes(t *testing.T) {
 func TestValueEncodeDecodeDecimal(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	rd := randData{rng}
-	tests := make([]*inf.Dec, 1000)
+	tests := make([]*apd.Decimal, 1000)
 	for i := range tests {
 		tests[i] = rd.decimal()
 	}
@@ -1727,7 +1727,7 @@ func TestValueEncodingRand(t *testing.T) {
 				t.Fatalf("seed %d: %s got %x expected %x", seed, typ, decoded.([]byte), value.([]byte))
 			}
 		case Decimal:
-			if decoded.(*inf.Dec).Cmp(value.(*inf.Dec)) != 0 {
+			if decoded.(*apd.Decimal).Cmp(value.(*apd.Decimal)) != 0 {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
 		default:
@@ -1787,7 +1787,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeBoolValue(nil, NoColumnID, false), "false"},
 		{EncodeIntValue(nil, NoColumnID, 7), "7"},
 		{EncodeFloatValue(nil, NoColumnID, 6.28), "6.28"},
-		{EncodeDecimalValue(nil, NoColumnID, inf.NewDec(628, 2)), "6.28"},
+		{EncodeDecimalValue(nil, NoColumnID, apd.New(628, -2)), "6.28"},
 		{EncodeTimeValue(nil, NoColumnID,
 			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
 		{EncodeDurationValue(nil, NoColumnID,
@@ -1977,7 +1977,7 @@ func BenchmarkEncodeDecimalValue(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	rd := randData{rng}
 
-	vals := make([]*inf.Dec, 10000)
+	vals := make([]*apd.Decimal, 10000)
 	for i := range vals {
 		vals[i] = rd.decimal()
 	}

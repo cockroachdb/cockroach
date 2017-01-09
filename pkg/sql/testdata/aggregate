@@ -472,22 +472,22 @@ SELECT array_agg(s) FROM kv WHERE s IS NULL
 query RRRR
 SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 ----
-5.0000000000000000 2.8000000000000000 30 14
+5 2.8 30 14
 
 query RRRR
 SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
-5.0000000000000000 2.8000000000000000 30 14
+5 2.8 30 14
 
 query RRRR
 SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
 ----
-5.0000000000000000 3.0000000000000000 30 6
+5 3 30 6
 
 query R
 SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
-14.00000000000000000
+14.0
 
 query ITTT
 EXPLAIN(EXPRS) SELECT COUNT(k) FROM kv
@@ -538,7 +538,7 @@ two 2 true 5
 query RRRR
 SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
 ----
-1.75 3.5 3.0500000000000000 6.1
+1.75 3.5 3.05 6.1
 
 # Verify summing of intervals
 statement ok
@@ -759,20 +759,20 @@ EXPLAIN(EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 query RRR
 SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
 ----
-9.0000000000000000 4.5000000000000000 6.333333333333333
+9.00 4.5 6.333333333333333
 
 query ITTT
 EXPLAIN (DEBUG) SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
 ----
-0 /xyz/primary/1    NULL                                                          PARTIAL
-0 /xyz/primary/1/y  2                                                             PARTIAL
-0 /xyz/primary/1/z  3.0                                                           BUFFERED
-1 /xyz/primary/4    NULL                                                          PARTIAL
-1 /xyz/primary/4/y  5                                                             PARTIAL
-1 /xyz/primary/4/z  6.0                                                           BUFFERED
-2 /xyz/primary/7    NULL                                                          PARTIAL
-2 /xyz/primary/7/z  8.0                                                           BUFFERED
-0 0                 (9.0000000000000000,  4.5000000000000000,  6.333333333333333) ROW
+0  /xyz/primary/1    NULL                            PARTIAL
+0  /xyz/primary/1/y  2                               PARTIAL
+0  /xyz/primary/1/z  3.0                             BUFFERED
+1  /xyz/primary/4    NULL                            PARTIAL
+1  /xyz/primary/4/y  5                               PARTIAL
+1  /xyz/primary/4/z  6.0                             BUFFERED
+2  /xyz/primary/7    NULL                            PARTIAL
+2  /xyz/primary/7/z  8.0                             BUFFERED
+0  0                 (9.00, 4.5, 6.333333333333333)  ROW
 
 query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 10
@@ -799,7 +799,7 @@ EXPLAIN(EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 query RRR
 SELECT STDDEV(x), STDDEV(y::decimal), STDDEV(z) FROM xyz
 ----
-3.0000000000000000 2.1213203435596426 2.516611478423583
+3  2.121320343559643  2.516611478423583
 
 query R
 SELECT STDDEV(x) FROM xyz WHERE x = 1

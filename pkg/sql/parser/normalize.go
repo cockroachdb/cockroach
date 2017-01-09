@@ -692,8 +692,7 @@ var DecimalZero DDecimal
 var DecimalOne DDecimal
 
 func init() {
-	DecimalOne.Dec.SetUnscaled(1).SetScale(0)
-	DecimalZero.Dec.SetUnscaled(0).SetScale(0)
+	DecimalOne.SetCoefficient(1)
 }
 
 // IsNumericZero returns true if the datum is a number and equal to
@@ -702,7 +701,7 @@ func IsNumericZero(expr TypedExpr) bool {
 	if d, ok := expr.(Datum); ok {
 		switch t := UnwrapDatum(d).(type) {
 		case *DDecimal:
-			return t.Dec.Cmp(&DecimalZero.Dec) == 0
+			return t.Decimal.Sign() == 0
 		case *DFloat:
 			return *t == 0
 		case *DInt:
@@ -718,7 +717,7 @@ func IsNumericOne(expr TypedExpr) bool {
 	if d, ok := expr.(Datum); ok {
 		switch t := UnwrapDatum(d).(type) {
 		case *DDecimal:
-			return t.Dec.Cmp(&DecimalOne.Dec) == 0
+			return t.Decimal.Cmp(&DecimalOne.Decimal) == 0
 		case *DFloat:
 			return *t == 1.0
 		case *DInt:

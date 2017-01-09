@@ -19,9 +19,8 @@ import (
 	"fmt"
 	"math"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -301,8 +300,13 @@ func (a *avgAggregate) Result() Datum {
 	case *DFloat:
 		return NewDFloat(*t / DFloat(a.count))
 	case *DDecimal:
-		count := inf.NewDec(int64(a.count), 0)
-		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
+		count := apd.New(int64(a.count), 0)
+		_, err := DecimalCtx.Quo(&t.Decimal, &t.Decimal, count)
+		if err != nil {
+			// TODO(mjibson): allow this function to return an error in case of
+			// div-by-zero.
+			panic(err)
+		}
 		return t
 	default:
 		panic(fmt.Sprintf("unexpected SUM result type: %s", t))
@@ -516,7 +520,7 @@ type intSumAggregate struct {
 	// below.
 	intSum      int64
 	decSum      DDecimal
-	tmpDec      inf.Dec
+	tmpDec      apd.Decimal
 	large       bool
 	seenNonNull bool
 }
@@ -543,12 +547,13 @@ func (a *intSumAggregate) Add(datum Datum) {
 			// And overflow was detected; go to large integers, but keep the
 			// sum computed so far.
 			a.large = true
-			a.decSum.SetUnscaled(a.intSum)
+			a.decSum.SetCoefficient(a.intSum)
 		}
 
 		if a.large {
-			a.tmpDec.SetUnscaled(t)
-			a.decSum.Add(&a.decSum.Dec, &a.tmpDec)
+			a.tmpDec.SetCoefficient(t)
+			// TODO(mjibson): handle this error
+			_, _ = ExactCtx.Add(&a.decSum.Decimal, &a.decSum.Decimal, &a.tmpDec)
 		} else {
 			a.intSum += t
 		}
@@ -563,15 +568,15 @@ func (a *intSumAggregate) Result() Datum {
 	}
 	dd := &DDecimal{}
 	if a.large {
-		dd.Set(&a.decSum.Dec)
+		dd.Set(&a.decSum.Decimal)
 	} else {
-		dd.SetUnscaled(a.intSum)
+		dd.SetCoefficient(a.intSum)
 	}
 	return dd
 }
 
 type decimalSumAggregate struct {
-	sum        inf.Dec
+	sum        apd.Decimal
 	sawNonNull bool
 }
 
@@ -585,7 +590,8 @@ func (a *decimalSumAggregate) Add(datum Datum) {
 		return
 	}
 	t := datum.(*DDecimal)
-	a.sum.Add(&a.sum, &t.Dec)
+	// TODO(mjibson): handle this error
+	_, _ = ExactCtx.Add(&a.sum, &a.sum, &t.Decimal)
 	a.sawNonNull = true
 }
 
@@ -655,7 +661,7 @@ func (a *intervalSumAggregate) Result() Datum {
 
 type intVarianceAggregate struct {
 	agg decimalVarianceAggregate
-	// Used for passing int64s as *inf.Dec values.
+	// Used for passing int64s as *apd.Decimal values.
 	tmpDec DDecimal
 }
 
@@ -668,7 +674,7 @@ func (a *intVarianceAggregate) Add(datum Datum) {
 		return
 	}
 
-	a.tmpDec.SetUnscaled(int64(MustBeDInt(datum)))
+	a.tmpDec.SetCoefficient(int64(MustBeDInt(datum)))
 	a.agg.Add(&a.tmpDec)
 }
 
@@ -710,13 +716,13 @@ func (a *floatVarianceAggregate) Result() Datum {
 
 type decimalVarianceAggregate struct {
 	// Variables used across iterations.
-	count   inf.Dec
-	mean    inf.Dec
-	sqrDiff inf.Dec
+	count   apd.Decimal
+	mean    apd.Decimal
+	sqrDiff apd.Decimal
 
 	// Variables used as scratch space within iterations.
-	delta inf.Dec
-	tmp   inf.Dec
+	delta apd.Decimal
+	tmp   apd.Decimal
 }
 
 func newDecimalVarianceAggregate(_ []Type) AggregateFunc {
@@ -725,34 +731,38 @@ func newDecimalVarianceAggregate(_ []Type) AggregateFunc {
 
 // Read-only constants used for compuation.
 var (
-	decimalOne = inf.NewDec(1, 0)
-	decimalTwo = inf.NewDec(2, 0)
+	decimalOne = apd.New(1, 0)
+	decimalTwo = apd.New(2, 0)
 )
 
 func (a *decimalVarianceAggregate) Add(datum Datum) {
 	if datum == DNull {
 		return
 	}
-	d := &datum.(*DDecimal).Dec
+	d := &datum.(*DDecimal).Decimal
 
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
-	a.count.Add(&a.count, decimalOne)
-	a.delta.Sub(d, &a.mean)
-	a.tmp.QuoRound(&a.delta, &a.count, decimal.Precision, inf.RoundHalfUp)
-	a.mean.Add(&a.mean, &a.tmp)
-	a.tmp.Sub(d, &a.mean)
-	a.sqrDiff.Add(&a.sqrDiff, a.delta.Mul(&a.delta, &a.tmp))
+	ed := apd.MakeErrDecimal(DecimalCtx)
+	ed.Add(&a.count, &a.count, decimalOne)
+	ed.Sub(&a.delta, d, &a.mean)
+	ed.Quo(&a.tmp, &a.delta, &a.count)
+	ed.Add(&a.mean, &a.mean, &a.tmp)
+	ed.Sub(&a.tmp, d, &a.mean)
+	ed.Add(&a.sqrDiff, &a.sqrDiff, ed.Mul(&a.delta, &a.delta, &a.tmp))
+	// TODO(mjibson): check for and handle ed.Err().
 }
 
 func (a *decimalVarianceAggregate) Result() Datum {
 	if a.count.Cmp(decimalTwo) < 0 {
 		return DNull
 	}
-	a.tmp.Sub(&a.count, decimalOne)
+	ed := apd.MakeErrDecimal(DecimalCtx)
+	ed.Sub(&a.tmp, &a.count, decimalOne)
 	dd := &DDecimal{}
-	dd.QuoRound(&a.sqrDiff, &a.tmp, decimal.Precision, inf.RoundHalfUp)
+	ed.Quo(&dd.Decimal, &a.sqrDiff, &a.tmp)
+	// TODO(mjibson): check for and handle ed.Err().
 	return dd
 }
 
@@ -785,7 +795,8 @@ func (a *stdDevAggregate) Result() Datum {
 	case *DFloat:
 		return NewDFloat(DFloat(math.Sqrt(float64(*t))))
 	case *DDecimal:
-		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
+		// TODO(mjibson): handle this error.
+		_, _ = DecimalCtx.Sqrt(&t.Decimal, &t.Decimal)
 		return t
 	}
 	panic(fmt.Sprintf("unexpected variance result type: %s", variance.ResolvedType()))
