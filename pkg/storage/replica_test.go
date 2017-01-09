@@ -7018,7 +7018,7 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		// The commit index is set so that a progress.Match value of 1 is behind
 		// and 2 is ok.
-		status.HardState.Commit = 102
+		status.HardState.Commit = 12
 		if lead == 1 {
 			status.SoftState.RaftState = raft.StateLeader
 		} else {
@@ -7061,6 +7061,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: false,
+				behindCount:     10,
 			}},
 		// The leader of a 2-replica range is up (only 1 replica present).
 		{2, 1, desc(1), status(1, progress(2)), live(1),
@@ -7069,6 +7070,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: true,
+				behindCount:     10,
 			}},
 		// The leader of a 2-replica range is up.
 		{2, 1, desc(1, 2), status(1, progress(2)), live(1),
@@ -7077,6 +7079,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     true,
 				underreplicated: true,
+				behindCount:     10,
 			}},
 		// Both replicas of a 2-replica range are up to date.
 		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2),
@@ -7085,6 +7088,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: false,
+				behindCount:     20,
 			}},
 		// Both replicas of a 2-replica range are up to date (local replica is not leader)
 		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2),
@@ -7093,6 +7097,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    false,
 				unavailable:     false,
 				underreplicated: false,
+				behindCount:     0,
 			}},
 		// Both replicas of a 2-replica range are live, but follower is behind.
 		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2),
@@ -7101,6 +7106,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     true,
 				underreplicated: true,
+				behindCount:     21,
 			}},
 		// Both replicas of a 2-replica range are up to date, but follower is dead.
 		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1),
@@ -7109,6 +7115,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     true,
 				underreplicated: true,
+				behindCount:     20,
 			}},
 		// The leader of a 3-replica range is up.
 		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1),
@@ -7117,6 +7124,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     true,
 				underreplicated: true,
+				behindCount:     11,
 			}},
 		// All replicas of a 3-replica range are up to date.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3),
@@ -7125,6 +7133,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: false,
+				behindCount:     30,
 			}},
 		// All replicas of a 3-replica range are up to date (match = 0 is
 		// considered up to date).
@@ -7134,38 +7143,43 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: false,
+				behindCount:     20,
 			}},
-		// All replica of a 3-replica range are live but one replica is behind.
+		// All replicas of a 3-replica range are live but one replica is behind.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3),
 			replicaMetrics{
 				leader:          true,
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: true,
+				behindCount:     31,
 			}},
-		// All replica of a 3-replica range are live but two replicas are behind.
+		// All replicas of a 3-replica range are live but two replicas are behind.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3),
 			replicaMetrics{
 				leader:          true,
 				rangeCounter:    true,
 				unavailable:     true,
 				underreplicated: true,
+				behindCount:     32,
 			}},
-		// All replica of a 3-replica range are up to date, but one replica is dead.
+		// All replicas of a 3-replica range are up to date, but one replica is dead.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2),
 			replicaMetrics{
 				leader:          true,
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: true,
+				behindCount:     30,
 			}},
-		// All replica of a 3-replica range are up to date, but two replicas are dead.
+		// All replicas of a 3-replica range are up to date, but two replicas are dead.
 		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1),
 			replicaMetrics{
 				leader:          true,
 				rangeCounter:    true,
 				unavailable:     true,
 				underreplicated: true,
+				behindCount:     30,
 			}},
 		// Range has no leader, local replica is the range counter.
 		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),

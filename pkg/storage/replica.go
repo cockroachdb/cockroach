@@ -4495,6 +4495,7 @@ type replicaMetrics struct {
 	rangeCounter    bool
 	unavailable     bool
 	underreplicated bool
+	behindCount     int64
 }
 
 func (r *Replica) metrics(
@@ -4568,7 +4569,8 @@ func calcReplicaMetrics(
 	}
 
 	if m.rangeCounter {
-		goodReplicas := calcGoodReplicas(raftStatus, desc, livenessMap)
+		var goodReplicas int
+		goodReplicas, m.behindCount = calcGoodReplicas(raftStatus, desc, livenessMap)
 		if goodReplicas < computeQuorum(len(desc.Replicas)) {
 			m.unavailable = true
 		}
@@ -4582,18 +4584,27 @@ func calcReplicaMetrics(
 	return m
 }
 
-// calcGoodReplicas returns a count of the replicas which are on a live node
-// and, if there is a leader, which are not too far behind.
+// calcGoodReplicas returns a count of the "good" replicas and a count of the
+// number of log entries the replicas are behind. The log entry count is only
+// returned if the local replica is the leader. A "good" replica must be on a
+// live node and, if there is a leader, not too far behind.
 func calcGoodReplicas(
 	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
-) int {
+) (int, int64) {
 	leader := isRaftLeader(raftStatus)
 	var goodReplicas int
+	var behindCount int64
 	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
-			if !leader {
+		live := livenessMap[rd.NodeID]
+		if !leader {
+			if live {
 				goodReplicas++
-			} else if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
+			}
+			continue
+		}
+
+		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
+			if live {
 				// A single range can process thousands of ops/sec, so a replica that
 				// is 10 Raft log entries behind is fairly current. Setting this value
 				// to 0 makes the under-replicated metric overly sensitive. Setting
@@ -4608,7 +4619,11 @@ func calcGoodReplicas(
 					goodReplicas++
 				}
 			}
+			if progress.Match > 0 &&
+				progress.Match < raftStatus.Commit {
+				behindCount += int64(raftStatus.Commit) - int64(progress.Match)
+			}
 		}
 	}
-	return goodReplicas
+	return goodReplicas, behindCount
 }
