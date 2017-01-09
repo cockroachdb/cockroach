@@ -457,7 +457,7 @@ SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 query RRR
 SELECT cbrt(-1.0::float), cbrt(27.0::float), cbrt(19.3::decimal)
 ----
--1 3 2.6823725926296730
+-1 3 2.682372592629673
 
 query RRRRR
 SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
@@ -493,10 +493,10 @@ SELECT div(1::int, 0::int)
 query RRR
 SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
 ----
-0.36787944117144233 2.718281828459045 7.3890560989306502
+0.36787944117144233 2.718281828459045 7.389056098930650
 
-query error argument value is too large
-SELECT exp(2000::decimal)
+query error exp\(\): overflow
+SELECT exp(1e2000::decimal)
 
 query RRR
 SELECT floor(-1.5::float), floor(1.5::float), floor(9.123456789::decimal)
@@ -517,7 +517,7 @@ SELECT ln(0::decimal)
 query RR
 SELECT log(10.0::float), log(100.000::decimal)
 ----
-1 2.0000000000000000
+1 2.000000000000000
 
 query error cannot take logarithm of a negative number
 SELECT log(-100.000::decimal)
@@ -619,17 +619,17 @@ SELECT pow(0::int, 3::int), pow(0::int, -3::int), pow(3::int, 0::int), pow(-3::i
 query RRR
 SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)
 ----
-9 9 25.0000000000000000
+9 9 25.00000000000000
 
 query R
 SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
 ----
-9.8696044010893571
+9.869604401089357
 
-statement error zero raised to a negative power is undefined
+statement error invalid operation
 SELECT power(0::decimal, -1)
 
-statement error a negative number raised to a non-integer power yields a complex result
+statement error invalid operation
 SELECT power(-1, -.1)
 
 query RR
@@ -659,10 +659,12 @@ SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::fl
 -2 -2 -0 0 2 2
 
 # round up for decimals
+# These results are indeed different than floats. Compare with postgres.
+# Float rounding uses banker, decimal rounding uses half away from zero.
 query RRRR
 SELECT round(-2.5::decimal, 0), round(-1.5::decimal, 0), round(1.5::decimal, 0), round(2.5::decimal, 0)
 ----
--2 -2 2 2
+-3 -2 2 3
 
 query RRRRR
 SELECT round(-2.5::decimal, 3), round(-1.5::decimal, 3), round(0.0::decimal, 3), round(1.5::decimal, 3), round(2.5::decimal, 3)
@@ -672,7 +674,7 @@ SELECT round(-2.5::decimal, 3), round(-1.5::decimal, 3), round(0.0::decimal, 3),
 query RRRRR
 SELECT round(-2.5::decimal), round(-1.5::decimal), round(0.0::decimal), round(1.5::decimal), round(2.5::decimal)
 ----
--2 -2 0 2 2
+-3 -2 0 2 3
 
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
@@ -713,11 +715,11 @@ SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::floa
 120 100 0 0
 
 query RRRR
-SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -2438602134409251682)
+SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -200)
 ----
-120 100 0 0
+120  100  0000  000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 
-query error rounding would extend value by more than 2000 decimal digits
+query error invalid operation
 SELECT round(1::decimal, 3000)
 
 query III
@@ -738,7 +740,7 @@ SELECT sin(-1.0), sin(0.0), sin(1.0)
 query RR
 SELECT sqrt(4.0::float), sqrt(9.0::decimal)
 ----
-2 3.0000000000000000
+2 3
 
 query error cannot take square root of a negative number
 SELECT sqrt(-1.0::float)
@@ -1314,7 +1316,7 @@ select TO_IP('asdf')
 query R
 select ln(4.0786335175292462e+34::decimal)
 ----
-79.6936551719404616
+79.69365517194046
 
 query TTTTTT
 SELECT TO_UUID('63616665-6630-3064-6465-616462656566'),
