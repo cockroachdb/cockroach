@@ -196,6 +196,14 @@ CREATE TABLE t (
   a STRING COLLATE en
 );
 
+query TT
+SHOW CREATE TABLE t;
+----
+t  CREATE TABLE t (
+     a STRING COLLATE en NULL,
+     FAMILY "primary" (a, rowid)
+   )
+
 statement ok
 ----
 INSERT INTO t VALUES
