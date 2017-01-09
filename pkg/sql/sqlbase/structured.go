@@ -202,15 +202,14 @@ func (desc *IndexDescriptor) FillColumns(elems parser.IndexElemList) error {
 }
 
 // ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs or the implicit "extra" column
-// IDs.
+// column ID either in its explicit column IDs or the extra column IDs.
 func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 	for _, id := range desc.ColumnIDs {
 		if id == colID {
 			return true
 		}
 	}
-	for _, id := range desc.ImplicitColumnIDs {
+	for _, id := range desc.ExtraColumnIDs {
 		if id == colID {
 			return true
 		}
@@ -218,9 +217,9 @@ func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 	return false
 }
 
-// FullColumnIDs returns the index column IDs including any implicit column IDs
-// for non-unique indexes. It also returns the direction with which each column
-// was encoded.
+// FullColumnIDs returns the index column IDs including any extra (implicit or
+// stored) column IDs for non-unique indexes. It also returns the direction with
+// which each column was encoded.
 func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) {
 	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
 	for _, dir := range desc.ColumnDirections {
@@ -236,9 +235,9 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	// Non-unique indexes have some of the primary-key columns appended to
 	// their key.
 	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
-	columnIDs = append(columnIDs, desc.ImplicitColumnIDs...)
-	for range desc.ImplicitColumnIDs {
-		// Implicit columns are encoded ascendingly.
+	columnIDs = append(columnIDs, desc.ExtraColumnIDs...)
+	for range desc.ExtraColumnIDs {
+		// Extra columns are encoded ascendingly.
 		dirs = append(dirs, encoding.Ascending)
 	}
 	return columnIDs, dirs
@@ -528,16 +527,16 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 			}
 		}
 		if index != &desc.PrimaryIndex {
-			// Need to clear ImplicitColumnIDs because it is used by
+			// Need to clear ExtraColumnIDs because it is used by
 			// ContainsColumnID.
-			index.ImplicitColumnIDs = nil
-			var implicitColumnIDs []ColumnID
+			index.ExtraColumnIDs = nil
+			var extraColumnIDs []ColumnID
 			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
 				if !index.ContainsColumnID(primaryColID) {
-					implicitColumnIDs = append(implicitColumnIDs, primaryColID)
+					extraColumnIDs = append(extraColumnIDs, primaryColID)
 				}
 			}
-			index.ImplicitColumnIDs = implicitColumnIDs
+			index.ExtraColumnIDs = extraColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
 				status, i, err := desc.FindColumnByNormalizedName(parser.ReNormalizeName(colName))
@@ -556,7 +555,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 				if index.ContainsColumnID(col.ID) {
 					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
-				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
+				index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
 			}
 		}
 	}

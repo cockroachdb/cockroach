@@ -75,12 +75,12 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 			Interleave:       makeInterleave(1, test.primaryInterleaves),
 		},
 		Indexes: []IndexDescriptor{{
-			ID:                2,
-			ColumnIDs:         secondaryColumnIDs,
-			ImplicitColumnIDs: primaryColumnIDs,
-			Unique:            true,
-			ColumnDirections:  make([]IndexDescriptor_Direction, len(secondaryColumnIDs)),
-			Interleave:        makeInterleave(2, test.secondaryInterleaves),
+			ID:               2,
+			ColumnIDs:        secondaryColumnIDs,
+			ExtraColumnIDs:   primaryColumnIDs,
+			Unique:           true,
+			ColumnDirections: make([]IndexDescriptor_Direction, len(secondaryColumnIDs)),
+			Interleave:       makeInterleave(2, test.secondaryInterleaves),
 		}},
 	}
 
