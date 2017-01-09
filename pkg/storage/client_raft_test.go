@@ -478,31 +478,6 @@ func TestFailedReplicaChange(t *testing.T) {
 	})
 }
 
-// Test that the preemptive snapshot has been released before the associated
-// transaction for ChangeReplicas operation is run.
-func TestPreemptiveSnapshotReleasedAfterApply(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var mtc *multiTestContext
-	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-		if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
-			if !mtc.stores[filterArgs.Sid-1].MaybeAcquireRaftSnapshot() {
-				// We couldn't acquire the store snapshot which means the preemptive
-				// snapshot was not released. Return an error in order to fail the
-				// test.
-				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
-			}
-		}
-		return nil
-	}
-	mtc = &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 2)
-
-	mtc.replicateRange(1, 1)
-}
-
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()

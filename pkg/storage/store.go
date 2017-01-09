@@ -410,9 +410,6 @@ type Store struct {
 		at time.Time
 	}
 
-	// Semaphore to limit concurrent snapshots.
-	snapshotSem chan struct{}
-
 	// Semaphore to limit concurrent snapshot application and replica data
 	// destruction.
 	snapshotApplySem chan struct{}
@@ -635,12 +632,6 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// concurrentSnapshotLimit is the maximum number of snapshots that are
-	// permitted to proceed concurrently. Snapshots count against this limit from
-	// the start of their generation until they are either discarded or sent on
-	// the wire.
-	concurrentSnapshotLimit int
-
 	// concurrentSnapshotApplyLimit is the maximum number of snapshots that are
 	// permitted to be applied concurrently.
 	concurrentSnapshotApplyLimit int
@@ -798,11 +789,6 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if sc.concurrentSnapshotLimit == 0 {
-		// NB: setting this value higher than 1 is likely to degrade client
-		// throughput.
-		sc.concurrentSnapshotLimit = envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_LIMIT", 1)
-	}
 	if sc.concurrentSnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
 		// throughput.
@@ -880,7 +866,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
-	s.snapshotSem = make(chan struct{}, cfg.concurrentSnapshotLimit)
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
@@ -2203,22 +2188,6 @@ func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Re
 // NewSnapshot creates a new snapshot engine.
 func (s *Store) NewSnapshot() engine.Reader {
 	return s.engine.NewSnapshot()
-}
-
-// AcquireRaftSnapshot returns true if a new raft snapshot can start. If no
-// error is returned, the caller MUST call ReleaseRaftSnapshot.
-func (s *Store) AcquireRaftSnapshot(ctx context.Context) error {
-	select {
-	case s.snapshotSem <- struct{}{}:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-// ReleaseRaftSnapshot decrements the count of active snapshots.
-func (s *Store) ReleaseRaftSnapshot() {
-	<-s.snapshotSem
 }
 
 // Attrs returns the attributes of the underlying store.
