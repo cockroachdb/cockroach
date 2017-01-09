@@ -993,6 +993,8 @@ func (m *multiTestContext) changeReplicasLocked(
 			// and call ChangeReplicas on that replica, instead of calling
 			// it on an arbitrary replica and catching this failure.
 			continue
+		} else if storage.IsPreemptiveSnapshotError(err) {
+			continue
 		} else {
 			return 0, err
 		}

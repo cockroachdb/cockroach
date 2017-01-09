@@ -1957,16 +1957,23 @@ func TestRemovePlaceholderRace(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
-			if err := repl.ChangeReplicas(
-				ctx,
-				action,
-				roachpb.ReplicaDescriptor{
-					NodeID:  mtc.stores[1].Ident.NodeID,
-					StoreID: mtc.stores[1].Ident.StoreID,
-				},
-				repl.Desc(),
-			); err != nil {
-				t.Fatal(err)
+			for {
+				if err := repl.ChangeReplicas(
+					ctx,
+					action,
+					roachpb.ReplicaDescriptor{
+						NodeID:  mtc.stores[1].Ident.NodeID,
+						StoreID: mtc.stores[1].Ident.StoreID,
+					},
+					repl.Desc(),
+				); err != nil {
+					if storage.IsPreemptiveSnapshotError(err) {
+						continue
+					} else {
+						t.Fatal(err)
+					}
+				}
+				break
 			}
 		}
 	}
