@@ -46,8 +46,12 @@ import (
 
 // Context defaults.
 const (
+	// On Azure, clock offsets between 250ms and 500ms are common. On
+	// AWS and GCE, clock offsets generally stay below 250ms.
+	// See comments on Config.MaxOffset for more on this setting.
+	defaultMaxOffset = 500 * time.Millisecond
+
 	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultMaxOffset                = 250 * time.Millisecond
 	defaultCacheSize                = 512 << 20 // 512 MB
 	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
 	defaultScanInterval             = 10 * time.Minute
@@ -118,7 +122,12 @@ type Config struct {
 	// Environment Variable: COCKROACH_LINEARIZABLE
 	Linearizable bool
 
-	// Maximum clock offset for the cluster.
+	// Maximum allowed clock offset for the cluster. If observed clock
+	// offsets exceed this limit, inconsistency may result, and servers
+	// will panic to minimize the likelihood of inconsistent data.
+	// Increasing this value will increase time to recovery after
+	// failures, and increase the frequency and impact of
+	// ReadWithinUncertaintyIntervalError.
 	// Environment Variable: COCKROACH_MAX_OFFSET
 	MaxOffset time.Duration
 
