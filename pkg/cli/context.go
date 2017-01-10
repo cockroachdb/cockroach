@@ -64,6 +64,53 @@ type sqlContext struct {
 	execStmts statementsValue
 }
 
+type dumpContext struct {
+	// Embed the cli context.
+	*cliContext
+
+	// dumpMode determines which part of the database should be dumped.
+	dumpMode dumpMode
+}
+
+type dumpMode int
+
+const (
+	dumpBoth dumpMode = iota
+	dumpSchemaOnly
+	dumpDataOnly
+)
+
+// Type implements the pflag.Value interface.
+func (m *dumpMode) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (m *dumpMode) String() string {
+	switch *m {
+	case dumpBoth:
+		return "both"
+	case dumpSchemaOnly:
+		return "schema"
+	case dumpDataOnly:
+		return "data"
+	}
+	return ""
+}
+
+// Set implements the pflag.Value interface.
+func (m *dumpMode) Set(s string) error {
+	switch s {
+	case "both":
+		*m = dumpBoth
+	case "schema":
+		*m = dumpSchemaOnly
+	case "data":
+		*m = dumpDataOnly
+	default:
+		return fmt.Errorf("invalid value for --dump-mode: %s", s)
+	}
+	return nil
+}
+
 type keyType int
 
 //go:generate stringer -type=keyType

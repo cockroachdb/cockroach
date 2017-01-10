@@ -52,6 +52,7 @@ var serverCfg = server.MakeConfig()
 var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
+var dumpCtx = dumpContext{cliContext: &cliCtx}
 var debugCtx = debugContext{
 	startKey:   engine.NilKey,
 	endKey:     engine.MVCCKeyMax,
@@ -362,6 +363,7 @@ func init() {
 	boolFlag(zf, &zoneDisableReplication, cliflags.ZoneDisableReplication, false)
 
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
+	varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
 
 	boolFlag(freezeClusterCmd.PersistentFlags(), &undoFreezeCluster, cliflags.UndoFreezeCluster, false)
 

@@ -126,6 +126,65 @@ INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	if string(out) != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
+
+}
+
+func TestDumpFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c, err := newCLITest(t, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.stop(true)
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
+
+	out, err := c.RunWithCapture("dump t f --dump-mode=both")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := `dump t f g
+CREATE TABLE f (
+	x INT NULL,
+	y INT NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+
+INSERT INTO f (x, y) VALUES
+	(42, 69);
+`
+	if string(out) != expected {
+		t.Fatalf("expected %s\ngot: %s", expected, out)
+	}
+
+	out, err = c.RunWithCapture("dump t f --dump-mode=schema")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := `dump t f g
+CREATE TABLE f (
+	x INT NULL,
+	y INT NULL,
+	FAMILY "primary" (x, y, rowid)
+);
+`
+	if string(out) != expected {
+		t.Fatalf("expected %s\ngot: %s", expected, out)
+	}
+
+	out, err = c.RunWithCapture("dump t f --dump-mode=data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := `dump t f g
+
+INSERT INTO f (x, y) VALUES
+	(42, 69);
+`
+	if string(out) != expected {
+		t.Fatalf("expected %s\ngot: %s", expected, out)
+	}
 }
 
 func TestDumpMultipleTables(t *testing.T) {
