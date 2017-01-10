@@ -233,3 +233,48 @@ b
 B
 x
 ü
+
+query T
+SELECT 'a' COLLATE en::STRING || 'b'
+----
+ab
+
+query B
+SELECT 't' COLLATE en::BOOLEAN
+----
+true
+
+query I
+SELECT '42' COLLATE en::INTEGER
+----
+42
+
+query R
+SELECT '42.0' COLLATE en::FLOAT
+----
+42
+
+query R
+SELECT '42.0' COLLATE en::DECIMAL
+----
+42.0
+
+query T
+SELECT 'a' COLLATE en::BYTES
+----
+a
+
+query T
+SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP
+----
+2017-01-10 16:05:50.734049 +0000 +0000
+
+query T
+SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP WITH TIME ZONE
+----
+2017-01-10 16:05:50.734049 +0000 +0000
+
+query T
+SELECT '40 days' COLLATE en::INTERVAL
+----
+0m40d0ns
