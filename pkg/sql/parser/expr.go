@@ -1078,20 +1078,20 @@ func (node *CastExpr) castType() Type {
 }
 
 var (
-	boolCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	intCastTypes  = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	boolCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString}
+	intCastTypes  = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
-	floatCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	floatCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
-	decimalCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	decimalCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
-	stringCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	stringCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString,
 		TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeDate}
-	bytesCastTypes     = []Type{TypeNull, TypeString, TypeBytes}
-	dateCastTypes      = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
-	timestampCastTypes = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
-	intervalCastTypes  = []Type{TypeNull, TypeString, TypeInt, TypeInterval}
-	oidCastTypes       = []Type{TypeNull, TypeString, TypeInt}
+	bytesCastTypes     = []Type{TypeNull, TypeString, TypeCollatedString, TypeBytes}
+	dateCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
+	timestampCastTypes = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
+	intervalCastTypes  = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeInterval}
+	oidCastTypes       = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1117,8 +1117,14 @@ func validCastTypes(t Type) []Type {
 		return intervalCastTypes
 	case TypePGOID:
 		return oidCastTypes
+	default:
+		// TODO(eisen): currently dead -- there is no syntax yet for casting
+		// directly to collated string.
+		if t.FamilyEqual(TypeCollatedString) {
+			return stringCastTypes
+		}
+		return nil
 	}
-	return nil
 }
 
 // IndirectionExpr represents a subscript expression.
