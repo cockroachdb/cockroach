@@ -104,7 +104,7 @@ func (p *planner) ValuesClause(
 				v.columns = append(v.columns, ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ == parser.TypeNull {
 				v.columns[i].Typ = typ
-			} else if typ != parser.TypeNull && !typ.Equal(v.columns[i].Typ) {
+			} else if typ != parser.TypeNull && !typ.Equivalent(v.columns[i].Typ) {
 				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
 			}
 

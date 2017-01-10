@@ -27,10 +27,11 @@ import (
 // Type represents a SQL type.
 type Type interface {
 	fmt.Stringer
-	// Equal returns whether the receiver and the other type are the same. Prefer
-	// == for determining equality with a TypeXxx constant except TypeTuple and
-	// TypePlaceholder.
-	Equal(other Type) bool
+	// Equivalent returns whether the receiver and the other type are equivalent.
+	// We say that two type patterns are "equivalent" when they are structurally
+	// equivalent given that a wildcard is equivalent to any type. When neither
+	// Type is ambiguous (see IsAmbiguous), equivalency is the same as type equality.
+	Equivalent(other Type) bool
 	// FamilyEqual returns whether the receiver and the other type have the same
 	// constructor.
 	FamilyEqual(other Type) bool
@@ -137,7 +138,7 @@ var OidToType = map[oid.Oid]Type{
 type tNull struct{}
 
 func (tNull) String() string              { return "NULL" }
-func (tNull) Equal(other Type) bool       { return other == TypeNull || other == TypeAny }
+func (tNull) Equivalent(other Type) bool  { return other == TypeNull || other == TypeAny }
 func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
 func (tNull) Size() (uintptr, bool)       { return unsafe.Sizeof(dNull{}), fixedSize }
 func (tNull) Oid() oid.Oid                { return oid.T_unknown }
@@ -146,7 +147,7 @@ func (tNull) IsAmbiguous() bool           { return true }
 type tBool struct{}
 
 func (tBool) String() string              { return "bool" }
-func (tBool) Equal(other Type) bool       { return other == TypeBool || other == TypeAny }
+func (tBool) Equivalent(other Type) bool  { return other == TypeBool || other == TypeAny }
 func (tBool) FamilyEqual(other Type) bool { return other == TypeBool }
 func (tBool) Size() (uintptr, bool)       { return unsafe.Sizeof(DBool(false)), fixedSize }
 func (tBool) Oid() oid.Oid                { return oid.T_bool }
@@ -155,7 +156,7 @@ func (tBool) IsAmbiguous() bool           { return false }
 type tInt struct{}
 
 func (tInt) String() string              { return "int" }
-func (tInt) Equal(other Type) bool       { return other == TypeInt || other == TypeAny }
+func (tInt) Equivalent(other Type) bool  { return other == TypeInt || other == TypeAny }
 func (tInt) FamilyEqual(other Type) bool { return other == TypeInt }
 func (tInt) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
 func (tInt) Oid() oid.Oid                { return oid.T_int8 }
@@ -164,7 +165,7 @@ func (tInt) IsAmbiguous() bool           { return false }
 type tFloat struct{}
 
 func (tFloat) String() string              { return "float" }
-func (tFloat) Equal(other Type) bool       { return other == TypeFloat || other == TypeAny }
+func (tFloat) Equivalent(other Type) bool  { return other == TypeFloat || other == TypeAny }
 func (tFloat) FamilyEqual(other Type) bool { return other == TypeFloat }
 func (tFloat) Size() (uintptr, bool)       { return unsafe.Sizeof(DFloat(0.0)), fixedSize }
 func (tFloat) Oid() oid.Oid                { return oid.T_float8 }
@@ -173,7 +174,7 @@ func (tFloat) IsAmbiguous() bool           { return false }
 type tDecimal struct{}
 
 func (tDecimal) String() string              { return "decimal" }
-func (tDecimal) Equal(other Type) bool       { return other == TypeDecimal || other == TypeAny }
+func (tDecimal) Equivalent(other Type) bool  { return other == TypeDecimal || other == TypeAny }
 func (tDecimal) FamilyEqual(other Type) bool { return other == TypeDecimal }
 func (tDecimal) Size() (uintptr, bool)       { return unsafe.Sizeof(DDecimal{}), variableSize }
 func (tDecimal) Oid() oid.Oid                { return oid.T_numeric }
@@ -182,7 +183,7 @@ func (tDecimal) IsAmbiguous() bool           { return false }
 type tString struct{}
 
 func (tString) String() string              { return "string" }
-func (tString) Equal(other Type) bool       { return other == TypeString || other == TypeAny }
+func (tString) Equivalent(other Type) bool  { return other == TypeString || other == TypeAny }
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
 func (tString) Oid() oid.Oid                { return oid.T_text }
@@ -198,8 +199,8 @@ func (t TCollatedString) String() string {
 	return fmt.Sprintf("collatedstring{%s}", t.Locale)
 }
 
-// Equal implements the Type interface.
-func (t TCollatedString) Equal(other Type) bool {
+// Equivalent implements the Type interface.
+func (t TCollatedString) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -232,7 +233,7 @@ func (t TCollatedString) IsAmbiguous() bool {
 type tBytes struct{}
 
 func (tBytes) String() string              { return "bytes" }
-func (tBytes) Equal(other Type) bool       { return other == TypeBytes || other == TypeAny }
+func (tBytes) Equivalent(other Type) bool  { return other == TypeBytes || other == TypeAny }
 func (tBytes) FamilyEqual(other Type) bool { return other == TypeBytes }
 func (tBytes) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }
 func (tBytes) Oid() oid.Oid                { return oid.T_bytea }
@@ -241,7 +242,7 @@ func (tBytes) IsAmbiguous() bool           { return false }
 type tDate struct{}
 
 func (tDate) String() string              { return "date" }
-func (tDate) Equal(other Type) bool       { return other == TypeDate || other == TypeAny }
+func (tDate) Equivalent(other Type) bool  { return other == TypeDate || other == TypeAny }
 func (tDate) FamilyEqual(other Type) bool { return other == TypeDate }
 func (tDate) Size() (uintptr, bool)       { return unsafe.Sizeof(DDate(0)), fixedSize }
 func (tDate) Oid() oid.Oid                { return oid.T_date }
@@ -250,7 +251,7 @@ func (tDate) IsAmbiguous() bool           { return false }
 type tTimestamp struct{}
 
 func (tTimestamp) String() string              { return "timestamp" }
-func (tTimestamp) Equal(other Type) bool       { return other == TypeTimestamp || other == TypeAny }
+func (tTimestamp) Equivalent(other Type) bool  { return other == TypeTimestamp || other == TypeAny }
 func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
 func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
 func (tTimestamp) Oid() oid.Oid                { return oid.T_timestamp }
@@ -259,7 +260,7 @@ func (tTimestamp) IsAmbiguous() bool           { return false }
 type tTimestampTZ struct{}
 
 func (tTimestampTZ) String() string              { return "timestamptz" }
-func (tTimestampTZ) Equal(other Type) bool       { return other == TypeTimestampTZ || other == TypeAny }
+func (tTimestampTZ) Equivalent(other Type) bool  { return other == TypeTimestampTZ || other == TypeAny }
 func (tTimestampTZ) FamilyEqual(other Type) bool { return other == TypeTimestampTZ }
 func (tTimestampTZ) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampTZ{}), fixedSize }
 func (tTimestampTZ) Oid() oid.Oid                { return oid.T_timestamptz }
@@ -268,7 +269,7 @@ func (tTimestampTZ) IsAmbiguous() bool           { return false }
 type tInterval struct{}
 
 func (tInterval) String() string              { return "interval" }
-func (tInterval) Equal(other Type) bool       { return other == TypeInterval || other == TypeAny }
+func (tInterval) Equivalent(other Type) bool  { return other == TypeInterval || other == TypeAny }
 func (tInterval) FamilyEqual(other Type) bool { return other == TypeInterval }
 func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}), fixedSize }
 func (tInterval) Oid() oid.Oid                { return oid.T_interval }
@@ -294,8 +295,8 @@ func (t TTuple) String() string {
 	return buf.String()
 }
 
-// Equal implements the Type interface.
-func (t TTuple) Equal(other Type) bool {
+// Equivalent implements the Type interface.
+func (t TTuple) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -304,7 +305,7 @@ func (t TTuple) Equal(other Type) bool {
 		return false
 	}
 	for i, typ := range t {
-		if !typ.Equal(u[i]) {
+		if !typ.Equivalent(u[i]) {
 			return false
 		}
 	}
@@ -350,8 +351,8 @@ type TPlaceholder struct {
 // String implements the fmt.Stringer interface.
 func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%s}", t.Name) }
 
-// Equal implements the Type interface.
-func (t TPlaceholder) Equal(other Type) bool {
+// Equivalent implements the Type interface.
+func (t TPlaceholder) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -380,12 +381,12 @@ type tArray struct{ Typ Type }
 func (a tArray) String() string { return a.Typ.String() + "[]" }
 
 // Equal implements the Type interface.
-func (a tArray) Equal(other Type) bool {
+func (a tArray) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
 	if u, ok := other.(tArray); ok {
-		return a.Typ.Equal(u.Typ)
+		return a.Typ.Equivalent(u.Typ)
 	}
 	return false
 }
@@ -424,10 +425,10 @@ type TTable struct{ Cols TTuple }
 
 func (a TTable) String() string { return "setof " + a.Cols.String() }
 
-// Equal implements the Type interface.
-func (a TTable) Equal(other Type) bool {
+// Equivalent implements the Type interface.
+func (a TTable) Equivalent(other Type) bool {
 	if u, ok := other.(TTable); ok {
-		return a.Cols.Equal(u.Cols)
+		return a.Cols.Equivalent(u.Cols)
 	}
 	return false
 }
@@ -457,7 +458,7 @@ func (a TTable) IsAmbiguous() bool {
 type tAny struct{}
 
 func (tAny) String() string              { return "anyelement" }
-func (tAny) Equal(other Type) bool       { return true }
+func (tAny) Equivalent(other Type) bool  { return true }
 func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
 func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
 func (tAny) Oid() oid.Oid                { return oid.T_anyelement }

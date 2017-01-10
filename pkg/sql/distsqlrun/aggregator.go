@@ -40,7 +40,7 @@ func GetAggregateInfo(
 	builtins := parser.Aggregates[strings.ToLower(fn.String())]
 	for _, b := range builtins {
 		for _, t := range b.Types.Types() {
-			if inputDatumType.Equal(t) {
+			if inputDatumType.Equivalent(t) {
 				// Found!
 				return b.AggregateFunc, sqlbase.DatumTypeToColumnType(b.ReturnType), nil
 			}

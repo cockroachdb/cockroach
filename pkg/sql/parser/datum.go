@@ -1730,7 +1730,7 @@ var errNonHomogeneousArray = errors.New("multidimensional arrays must have array
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.
 func (d *DArray) Append(v Datum) error {
-	if v != DNull && !d.ParamTyp.Equal(v.ResolvedType()) {
+	if v != DNull && !d.ParamTyp.Equivalent(v.ResolvedType()) {
 		return errors.Errorf("cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
 	}
