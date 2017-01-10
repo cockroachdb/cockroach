@@ -282,7 +282,7 @@ func (s *server) gossipReceiver(
 				}
 			}
 		} else {
-			log.Info(ctx, "received gossip from unknown node")
+			log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
 		}
 
 		bytesReceived := int64(args.Size())
