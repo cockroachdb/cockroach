@@ -329,8 +329,9 @@ function ComputeTimeAxisDomain(
     return tickDateFormatter(new Date(n));
   };
 
-  let guideDateFormatter = d3.time.format.utc("%m/%d/%y %H:%M:%S");
-  axisDomain.guideFormat = (n: number) => guideDateFormatter(new Date(n));
+  axisDomain.guideFormat = (num) => {
+    return moment(num).utc().format("HH:mm:ss [<span class=\"legend-subtext\">on</span>] MMM Do, YYYY");
+  };
   return axisDomain;
 }
 
@@ -387,10 +388,18 @@ function ProcessDataPoints(
       }
       xAxisRange.addPoints(_.map([timeInfo.start.toNumber(), timeInfo.end.toNumber()], NanoToMilli));
 
-      let datapoints = _.clone(result.datapoints);
+      // Drop any returned points at the beginning that have a lower timestamp
+      // than the explicitly queried domain. This works around a bug in NVD3
+      // which causes the interactive guideline to highlight the wrong points.
+      // https://github.com/novus/nvd3/issues/1913
+      let datapoints = _.dropWhile(result.datapoints, (dp) => {
+        return NanoToMilli(dp.timestamp_nanos.toNumber()) < xAxisRange.min;
+      });
+
+      // Fill in null values for series where a value is missing. This 
+      // correction is needed for stackedAreaCharts to to display correctly.
       let seenTimestamps: SeenTimestamps = _.clone(timestamps);
       _.each(datapoints, (d) => seenTimestamps[d.timestamp_nanos.toNumber()] = true);
-
       _.each(seenTimestamps, (seen, ts) => {
         if (!seen) {
           datapoints.push(new protos.cockroach.ts.tspb.TimeSeriesDatapoint({
@@ -501,6 +510,10 @@ export function ConfigureLineChart(
       .datum(formattedData)
       .transition().duration(500)
       .call(chart);
+
+    // Reduce radius of circles in the legend, if present. This is done through
+    // d3 because it is not exposed as an option by NVD3.
+    d3.select(svgEl).selectAll("circle").attr("r", 3);
   } catch (e) {
     console.log("Error rendering graph: ", e);
   }
