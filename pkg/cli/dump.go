@@ -68,17 +68,21 @@ func runDump(cmd *cobra.Command, args []string) error {
 	// topological order to ensure key relationships can be verified
 	// during load.
 
-	for i, md := range mds {
-		if i > 0 {
-			fmt.Println()
-		}
-		if err := dumpCreateTable(os.Stdout, md); err != nil {
-			return err
+	if dumpCtx.dumpMode != dumpDataOnly {
+		for i, md := range mds {
+			if i > 0 {
+				fmt.Println()
+			}
+			if err := dumpCreateTable(os.Stdout, md); err != nil {
+				return err
+			}
 		}
 	}
-	for _, md := range mds {
-		if err := dumpTableData(os.Stdout, conn, ts, md); err != nil {
-			return err
+	if dumpCtx.dumpMode != dumpSchemaOnly {
+		for _, md := range mds {
+			if err := dumpTableData(os.Stdout, conn, ts, md); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
