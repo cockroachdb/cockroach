@@ -175,6 +175,7 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 		ambient.AddLogTag("hb", nil)
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
+		incrementEpoch := true
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				ctx, sp := ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
@@ -185,11 +186,12 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 					if err != nil && err != ErrNoLivenessRecord {
 						log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 					}
-					if err := nl.Heartbeat(ctx, liveness); err != nil {
+					if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 						if err == errSkippedHeartbeat {
 							continue
 						}
-						log.Errorf(ctx, "failed liveness heartbeat: %v", err)
+					} else {
+						incrementEpoch = false // don't increment epoch after first heartbeat
 					}
 					break
 				}
@@ -217,6 +219,12 @@ var errNodeAlreadyLive = errors.New("node already live")
 // method does a conditional put on the node liveness record, and if
 // successful, stores the updated liveness record in the nodes map.
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error {
+	return nl.heartbeatInternal(ctx, liveness, false /* increment epoch */)
+}
+
+func (nl *NodeLiveness) heartbeatInternal(
+	ctx context.Context, liveness *Liveness, incrementEpoch bool,
+) error {
 	defer func(start time.Time) {
 		if dur := timeutil.Now().Sub(start); dur > time.Second {
 			log.Warningf(ctx, "slow heartbeat took %0.1fs", dur.Seconds())
@@ -242,6 +250,9 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 		}
 	} else {
 		newLiveness = *liveness
+		if incrementEpoch {
+			newLiveness.Epoch++
+		}
 	}
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
@@ -256,7 +267,7 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 		// considered live, treat the heartbeat as a success. This can
 		// happen when the periodic heartbeater races with a concurrent
 		// lease acquisition.
-		if actual.isLive(nl.clock.Now(), nl.clock.MaxOffset()) {
+		if actual.isLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
 		// Otherwise, return error.

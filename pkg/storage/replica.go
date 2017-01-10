@@ -71,11 +71,6 @@ const (
 
 	// configGossipTTL is the time-to-live for configuration maps.
 	configGossipTTL = 0 // does not expire
-	// configGossipInterval is the interval at which range lease holders gossip
-	// their config maps. Even if config maps do not expire, we still
-	// need a periodic gossip to safeguard against failure of a lease holder
-	// to gossip after performing an update to the map.
-	configGossipInterval = 1 * time.Minute
 	// optimizePutThreshold is the minimum length of a contiguous run
 	// of batched puts or conditional puts, after which the constituent
 	// put operations will possibly be optimized by determining whether
@@ -607,14 +602,7 @@ func NewReplica(
 	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
 	r := newReplica(desc.RangeID, store)
-
-	if err := r.init(desc, store.Clock(), replicaID); err != nil {
-		return nil, err
-	}
-
-	r.maybeGossipSystemConfig()
-	r.maybeGossipNodeLiveness(keys.NodeLivenessSpan)
-	return r, nil
+	return r, r.init(desc, store.Clock(), replicaID)
 }
 
 func (r *Replica) init(
@@ -2565,7 +2553,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
 			if err := r.store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
-				return errors.Wrapf(err, "could not processRangeDescriptorUpdate after applySnapshot")
+				return errors.Wrap(err, "could not processRangeDescriptorUpdate after applySnapshot")
 			}
 			return nil
 		}(); err != nil {
@@ -4277,25 +4265,22 @@ func (r *Replica) shouldGossip() bool {
 //
 // maybeGossipSystemConfig must only be called from Raft commands
 // (which provide the necessary serialization to avoid data races).
-func (r *Replica) maybeGossipSystemConfig() {
+func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	if r.store.Gossip() == nil || !r.IsInitialized() {
-		return
+		return nil
 	}
 
 	if !r.ContainsKey(keys.SystemConfigSpan.Key) || !r.shouldGossip() {
-		return
+		return nil
 	}
-
-	ctx := r.AnnotateCtx(context.TODO())
 
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	kvs, hash, err := r.loadSystemConfigSpan()
 	if err != nil {
-		log.Errorf(ctx, "could not load SystemConfig span: %s", err)
-		return
+		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 	if bytes.Equal(r.systemDBHash, hash) {
-		return
+		return nil
 	}
 
 	if log.V(2) {
@@ -4305,12 +4290,12 @@ func (r *Replica) maybeGossipSystemConfig() {
 
 	cfg := &config.SystemConfig{Values: kvs}
 	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
-		log.Errorf(ctx, "failed to gossip system config: %s", err)
-		return
+		return errors.Wrap(err, "failed to gossip system config")
 	}
 
 	// Successfully gossiped. Update tracking hash.
 	r.systemDBHash = hash
+	return nil
 }
 
 // maybeGossipNodeLiveness gossips information for all node liveness
@@ -4319,16 +4304,14 @@ func (r *Replica) maybeGossipSystemConfig() {
 // node liveness records. After scanning the records, it checks
 // against what's already in gossip and only gossips records which
 // are out of date.
-func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
+func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span) error {
 	if r.store.Gossip() == nil || !r.IsInitialized() {
-		return
+		return nil
 	}
 
 	if !r.ContainsKeyRange(span.Key, span.EndKey) || !r.shouldGossip() {
-		return
+		return nil
 	}
-
-	ctx := r.AnnotateCtx(context.TODO())
 
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
@@ -4337,12 +4320,10 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 	br, result, pErr :=
 		r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
-		log.Errorf(ctx, "couldn't scan node liveness records in span %s: %s", span, pErr.GoError())
-		return
+		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
 	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
-		log.Errorf(ctx, "unexpected intents on node liveness span %s: %+v", span, *result.Local.intents)
-		return
+		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, *result.Local.intents)
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
@@ -4364,6 +4345,7 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 			continue
 		}
 	}
+	return nil
 }
 
 // NewReplicaCorruptionError creates a new error indicating a corrupt replica,
