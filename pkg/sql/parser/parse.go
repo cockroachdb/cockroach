@@ -104,7 +104,7 @@ func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Type, op string) 
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equal(required) || typ == TypeNull) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == TypeNull) {
 		return typedExpr, fmt.Errorf("argument of %s must be type %s, not type %s", op, required, typ)
 	}
 	return typedExpr, nil

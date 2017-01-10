@@ -121,7 +121,7 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 // SetType assignes a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ Type) error {
-	if t, ok := p.Types[name]; ok && !typ.Equal(t) {
+	if t, ok := p.Types[name]; ok && !typ.Equivalent(t) {
 		return fmt.Errorf("placeholder %s already has type %s, cannot assign %s", name, t, typ)
 	}
 	p.Types[name] = typ
