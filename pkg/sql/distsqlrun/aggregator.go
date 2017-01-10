@@ -73,6 +73,8 @@ type aggregator struct {
 	buckets   map[string]struct{} // The set of bucket keys.
 }
 
+var _ processor = &aggregator{}
+
 func newAggregator(
 	ctx *FlowCtx, spec *AggregatorSpec, input RowSource, output RowReceiver,
 ) (*aggregator, error) {
