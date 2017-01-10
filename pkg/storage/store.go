@@ -94,6 +94,12 @@ const (
 	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
 
 	defaultStoreMutexWarnThreshold = 100 * time.Millisecond
+
+	// systemDataGossipInterval is the interval at which range lease
+	// holders verify that the most recent system data is gossiped.
+	// This protects against range lease holder failures missing a
+	// gossip update.
+	systemDataGossipInterval = 1 * time.Minute
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -1268,9 +1274,18 @@ func (s *Store) startGossip() {
 			interval:    sentinelGossipInterval,
 		},
 		{
-			fn:          s.maybeGossipSystemData,
+			fn: func(ctx context.Context) error {
+				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan)
+			},
 			description: "system config",
-			interval:    configGossipInterval,
+			interval:    systemDataGossipInterval,
+		},
+		{
+			fn: func(ctx context.Context) error {
+				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan)
+			},
+			description: "node liveness",
+			interval:    systemDataGossipInterval,
 		},
 	}
 
@@ -1327,27 +1342,26 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 	return nil
 }
 
-// maybeGossipSystemData looks for the ranges containing system data
-// and acquires the range lease for them which in turn will trigger
-// Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
-func (s *Store) maybeGossipSystemData(ctx context.Context) error {
+// maybeGossipSystemData looks for the range containing the specified
+// span and acquires the range lease, which in turn triggers a system
+// data gossip function (e.g. Replica.maybeGossipSystemConfig or
+// Replica.maybeGossipNodeLiveness).
+func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) error {
 	if s.cfg.TestingKnobs.DisablePeriodicGossips {
 		return nil
 	}
 
-	for _, span := range keys.GossipedSystemSpans {
-		repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
-		if repl == nil {
-			// This store has no range with this configuration.
-			continue
-		}
-		// Wake up the replica. If it acquires a fresh lease, it will
-		// gossip. If an unexpected error occurs (i.e. nobody else seems to
-		// have an active lease but we still failed to obtain it), return
-		// that error.
-		if _, pErr := repl.getLeaseForGossip(ctx); pErr != nil {
-			return pErr.GoError()
-		}
+	repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
+	if repl == nil {
+		// This store has no range with this configuration.
+		return nil
+	}
+	// Wake up the replica. If it acquires a fresh lease, gossip the
+	// gossip. If an unexpected error occurs (i.e. nobody else seems to
+	// have an active lease but we still failed to obtain it), return
+	// that error.
+	if _, pErr := repl.getLeaseForGossip(ctx); pErr != nil {
+		return pErr.GoError()
 	}
 	return nil
 }

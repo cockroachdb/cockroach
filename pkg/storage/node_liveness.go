@@ -175,7 +175,7 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 		ambient.AddLogTag("hb", nil)
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
-		for {
+		for i := 0; ; i++ {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				ctx, sp := ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
 				ctx, cancel := context.WithTimeout(ctx, nl.heartbeatInterval)
@@ -190,6 +190,17 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 							continue
 						}
 						log.Errorf(ctx, "failed liveness heartbeat: %v", err)
+					}
+					// On first heartbeat, increment the epoch. This ensures that all
+					// leases previously held by replicas on this node are renewed.
+					if i == 0 {
+						nl.mu.Lock()
+						liveness := nl.mu.self // copy
+						nl.mu.Unlock()
+						if err := nl.IncrementEpoch(ctx, &liveness); err != nil {
+							log.Errorf(ctx, "failed initial liveness epoch increment: %v", err)
+							continue
+						}
 					}
 					break
 				}

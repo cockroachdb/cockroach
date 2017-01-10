@@ -1756,11 +1756,6 @@ func (r *Replica) applyNewLeaseLocked(
 	} else {
 		*pd.Local.leaseMetricsResult = leaseRequestSuccess
 	}
-	// TODO(tschottdorf): having traced the origin of this call back to
-	// rev 6281926, it seems that we should only be doing this when the
-	// lease holder has changed. However, it's likely not a big deal to
-	// do it always.
-	pd.Local.maybeGossipSystemConfig = true
 	return pd, nil
 }
 
