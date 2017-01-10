@@ -291,18 +291,18 @@ CREATE TABLE information_schema.statistics (
 				appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
 					direction string, isStored bool) error {
 					return addRow(
-						defString,                                    // table_catalog
-						parser.NewDString(db.GetName()),              // table_schema
-						parser.NewDString(table.GetName()),           // table_name
-						parser.MakeDBool(parser.DBool(index.Unique)), // non_unique
-						parser.NewDString(db.GetName()),              // index_schema
-						parser.NewDString(index.Name),                // index_name
-						parser.NewDInt(parser.DInt(sequence)),        // seq_in_index
-						parser.NewDString(colName),                   // column_name
-						parser.DNull,                                 // collation
-						parser.DNull,                                 // cardinality
-						parser.NewDString(direction),                 // direction
-						parser.MakeDBool(parser.DBool(isStored)),     // storing
+						defString,                                     // table_catalog
+						parser.NewDString(db.GetName()),               // table_schema
+						parser.NewDString(table.GetName()),            // table_name
+						parser.MakeDBool(parser.DBool(!index.Unique)), // non_unique
+						parser.NewDString(db.GetName()),               // index_schema
+						parser.NewDString(index.Name),                 // index_name
+						parser.NewDInt(parser.DInt(sequence)),         // seq_in_index
+						parser.NewDString(colName),                    // column_name
+						parser.DNull,                                  // collation
+						parser.DNull,                                  // cardinality
+						parser.NewDString(direction),                  // direction
+						parser.MakeDBool(parser.DBool(isStored)),      // storing
 					)
 				}
 
