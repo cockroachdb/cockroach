@@ -255,7 +255,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
 		} else {
-			if !typ.Equal(test.expectedType) {
+			if !typ.Equivalent(test.expectedType) {
 				t.Errorf("%d: expected type %s when type checking %s, found %s",
 					idx, test.expectedType, buildExprs(exprs), typ)
 			}

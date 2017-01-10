@@ -441,7 +441,7 @@ func (node *ComparisonExpr) IsMixedTypeComparison() bool {
 }
 
 func sameTypeOrNull(left, right Type) bool {
-	return left == TypeNull || right == TypeNull || left.Equal(right)
+	return left == TypeNull || right == TypeNull || left.Equivalent(right)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.

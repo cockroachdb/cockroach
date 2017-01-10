@@ -220,7 +220,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 
 	castFrom := typedSubExpr.ResolvedType()
 	for _, t := range validCastTypes(returnType) {
-		if castFrom.Equal(t) {
+		if castFrom.Equivalent(t) {
 			expr.Expr = typedSubExpr
 			expr.typ = returnType
 			return expr, nil
@@ -805,7 +805,7 @@ func typeCheckAndRequire(ctx *SemaContext, expr Expr, required Type, op string) 
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ == TypeNull || typ.Equal(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ == TypeNull || typ.Equivalent(required)) {
 		return nil, fmt.Errorf("incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -983,7 +983,8 @@ func typeCheckComparisonOp(
 		}
 	}
 
-	if fn == nil || (leftReturn.FamilyEqual(TypeCollatedString) && !leftReturn.Equal(rightReturn)) {
+	if fn == nil ||
+		(leftReturn.FamilyEqual(TypeCollatedString) && !leftReturn.Equivalent(rightReturn)) {
 		return nil, nil, CmpOp{},
 			fmt.Errorf(unsupportedCompErrFmtWithTypes, leftReturn, op, rightReturn)
 	}
@@ -1152,7 +1153,7 @@ func typeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equal(firstValidType) || typ == TypeNull) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == TypeNull) {
 				return nil, nil, unexpectedTypeError{resExpr.e, firstValidType, typ}
 			}
 			typedExprs[resExpr.i] = typedExpr
@@ -1269,7 +1270,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 		if arg, ok := t.Expr.(*Placeholder); ok {
 			assertType := t.annotationType()
 			if state, ok := v.placeholders[arg.Name]; ok && state.sawAssertion {
-				if state.shouldAnnotate && !assertType.Equal(state.typ) {
+				if state.shouldAnnotate && !assertType.Equivalent(state.typ) {
 					state.shouldAnnotate = false
 					v.placeholders[arg.Name] = state
 				}
@@ -1292,7 +1293,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 					return false, expr
 				}
 
-				if state.shouldAnnotate && !castType.Equal(state.typ) {
+				if state.shouldAnnotate && !castType.Equivalent(state.typ) {
 					state.shouldAnnotate = false
 					v.placeholders[arg.Name] = state
 				}

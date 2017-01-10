@@ -79,7 +79,7 @@ func (a ArgTypes) matchAt(typ Type, i int) bool {
 	if typ.FamilyEqual(TypeTuple) {
 		typ = TypeTuple
 	}
-	return i < len(a) && a[i].Equal(typ)
+	return i < len(a) && a[i].Equivalent(typ)
 }
 
 func (a ArgTypes) matchLen(l int) bool {
@@ -136,7 +136,7 @@ func (a NamedArgTypes) matchAt(typ Type, i int) bool {
 	if typ.FamilyEqual(TypeTuple) {
 		typ = TypeTuple
 	}
-	return i < len(a) && a[i].Typ.Equal(typ)
+	return i < len(a) && a[i].Typ.Equivalent(typ)
 }
 
 func (a NamedArgTypes) matchLen(l int) bool {
@@ -225,7 +225,7 @@ func (v VariadicType) match(types ArgTypes) bool {
 }
 
 func (v VariadicType) matchAt(typ Type, i int) bool {
-	return typ == TypeNull || typ.Equal(v.Typ)
+	return typ == TypeNull || typ.Equivalent(v.Typ)
 }
 
 func (v VariadicType) matchLen(l int) bool {
@@ -394,7 +394,7 @@ func typeCheckOverloadedExprs(
 				typ, err := expr.e.TypeCheck(ctx, des)
 				if err != nil {
 					return true, nil, fmt.Errorf("error type checking constant value: %v", err)
-				} else if des != nil && !typ.ResolvedType().Equal(des) {
+				} else if des != nil && !typ.ResolvedType().Equivalent(des) {
 					panic(fmt.Errorf("desired constant value type %s but set type %s", des, typ.ResolvedType()))
 				}
 				typedExprs[expr.i] = typ
@@ -424,7 +424,7 @@ func typeCheckOverloadedExprs(
 	// The first heuristic is to prefer candidates that return the desired type.
 	if desired != TypeAny {
 		filterOverloads(func(o overloadImpl) bool {
-			return o.returnType().Equal(desired)
+			return o.returnType().Equivalent(desired)
 		})
 		if ok, fn, err := checkReturn(); ok {
 			return typedExprs, fn, err
@@ -435,7 +435,7 @@ func typeCheckOverloadedExprs(
 	if len(resolvableExprs) > 0 {
 		homogeneousTyp = typedExprs[resolvableExprs[0].i].ResolvedType()
 		for _, resExprs := range resolvableExprs[1:] {
-			if !homogeneousTyp.Equal(typedExprs[resExprs.i].ResolvedType()) {
+			if !homogeneousTyp.Equivalent(typedExprs[resExprs.i].ResolvedType()) {
 				homogeneousTyp = nil
 				break
 			}
@@ -460,7 +460,7 @@ func typeCheckOverloadedExprs(
 			if all {
 				for _, expr := range constExprs {
 					filterOverloads(func(o overloadImpl) bool {
-						return o.params().getAt(expr.i).Equal(homogeneousTyp)
+						return o.params().getAt(expr.i).Equivalent(homogeneousTyp)
 					})
 				}
 			}
@@ -479,7 +479,7 @@ func typeCheckOverloadedExprs(
 			natural := naturalConstantType(expr.e.(Constant))
 			if natural != nil {
 				filterOverloads(func(o overloadImpl) bool {
-					return o.params().getAt(expr.i).Equal(natural)
+					return o.params().getAt(expr.i).Equivalent(natural)
 				})
 			}
 		}
@@ -496,14 +496,14 @@ func typeCheckOverloadedExprs(
 		bestConstType = commonNumericConstantType(constExprs)
 		for _, expr := range constExprs {
 			filterOverloads(func(o overloadImpl) bool {
-				return o.params().getAt(expr.i).Equal(bestConstType)
+				return o.params().getAt(expr.i).Equivalent(bestConstType)
 			})
 		}
 		if ok, fn, err := checkReturn(); ok {
 			return typedExprs, fn, err
 		}
 		if homogeneousTyp != nil {
-			if !homogeneousTyp.Equal(bestConstType) {
+			if !homogeneousTyp.Equivalent(bestConstType) {
 				homogeneousTyp = nil
 			}
 		} else {
@@ -517,7 +517,7 @@ func typeCheckOverloadedExprs(
 	if homogeneousTyp != nil && len(placeholderExprs) > 0 {
 		for _, expr := range placeholderExprs {
 			filterOverloads(func(o overloadImpl) bool {
-				return o.params().getAt(expr.i).Equal(homogeneousTyp)
+				return o.params().getAt(expr.i).Equivalent(homogeneousTyp)
 			})
 		}
 		if ok, fn, err := checkReturn(); ok {
