@@ -481,6 +481,32 @@ func TestBackupRestoreBank(t *testing.T) {
 	}
 }
 
+func TestBackupAsOfSystemTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+
+	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	var ts string
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
+	sqlDB.Exec(`TRUNCATE bench.bank`)
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' AS OF SYSTEM TIME %s`, dir, ts))
+
+	var rowCount int64
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+	if rowCount != 0 {
+		t.Fatalf("expected 0 rows but found %d", rowCount)
+	}
+	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+	if rowCount != numAccounts {
+		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+	}
+}
+
 func TestPresplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
