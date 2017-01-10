@@ -30,8 +30,12 @@ func TestDockerC(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7", 1)})
-	testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10", 1)})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
+	})
 }
 
 const c = `
@@ -42,6 +46,136 @@ cat > main.c << 'EOF'
 #include <limits.h>
 #include <string.h>
 #include <sys/param.h>
+
+int intervalEqual(PGinterval left, PGinterval right) {
+	if (left.years != right.years) {
+		return 0;
+	}
+	if (left.mons != right.mons) {
+		return 0;
+	}
+	if (left.days != right.days) {
+		return 0;
+	}
+	if (left.hours != right.hours) {
+		return 0;
+	}
+	if (left.mins != right.mins) {
+		return 0;
+	}
+	if (left.secs != right.secs) {
+		return 0;
+	}
+	if (left.usecs != right.usecs) {
+		return 0;
+	}
+	return 1;
+}
+
+void intervalPrint(PGinterval interval) {
+	fprintf(stderr, "years=%d\n", interval.years);
+	fprintf(stderr, "mons=%d\n", interval.mons);
+	fprintf(stderr, "days=%d\n", interval.days);
+	fprintf(stderr, "hours=%d\n", interval.hours);
+	fprintf(stderr, "mins=%d\n", interval.mins);
+	fprintf(stderr, "secs=%d\n", interval.secs);
+	fprintf(stderr, "usecs=%d\n", interval.usecs);
+}
+
+int dateEqual(PGdate left, PGdate right) {
+	if (left.isbc != right.isbc) {
+		return 0;
+	}
+	if (left.year != right.year) {
+		return 0;
+	}
+	if (left.mon != right.mon) {
+		return 0;
+	}
+	if (left.mday != right.mday) {
+		return 0;
+	}
+	if (left.jday != right.jday) {
+		return 0;
+	}
+	if (left.yday != right.yday) {
+		return 0;
+	}
+	if (left.wday != right.wday) {
+		return 0;
+	}
+	return 1;
+}
+
+void datePrint(PGdate date) {
+	fprintf(stderr, "isbc=%d\n", date.isbc);
+	fprintf(stderr, "year=%d\n", date.year);
+	fprintf(stderr, "mon=%d\n", date.mon);
+	fprintf(stderr, "mday=%d\n", date.mday);
+	fprintf(stderr, "jday=%d\n", date.jday);
+	fprintf(stderr, "yday=%d\n", date.yday);
+	fprintf(stderr, "wday=%d\n", date.wday);
+}
+
+int timeEqual(PGtime left, PGtime right) {
+	if (left.hour != right.hour) {
+		return 0;
+	}
+	if (left.min != right.min) {
+		return 0;
+	}
+	if (left.sec != right.sec) {
+		return 0;
+	}
+	if (left.usec != right.usec) {
+		return 0;
+	}
+	if (left.withtz != right.withtz) {
+		return 0;
+	}
+	if (left.isdst != right.isdst) {
+		return 0;
+	}
+	if (left.gmtoff != right.gmtoff) {
+		return 0;
+	}
+	if (left.tzabbr != right.tzabbr) {
+		return 0;
+	}
+	return 1;
+}
+
+void timePrint(PGtime time) {
+	fprintf(stderr, "hour=%d\n", time.hour);
+	fprintf(stderr, "min=%d\n", time.min);
+	fprintf(stderr, "sec=%d\n", time.sec);
+	fprintf(stderr, "usec=%d\n", time.usec);
+	fprintf(stderr, "withtz=%d\n", time.withtz);
+	fprintf(stderr, "isdst=%d\n", time.isdst);
+	fprintf(stderr, "gmtoff=%d\n", time.gmtoff);
+	fprintf(stderr, "tzabbr=%d\n", time.tzabbr);
+}
+
+int timestampEqual(PGtimestamp left, PGtimestamp right) {
+	if (left.epoch != right.epoch) {
+		return 0;
+	}
+	if (!dateEqual(left.date, right.date)) {
+		return 0;
+	}
+	if (!timeEqual(left.time, right.time)) {
+		return 0;
+	}
+	return 1;
+}
+
+void timestampPrint(PGtimestamp ts) {
+	fprintf(stderr, "epoch=%d\n", ts.epoch);
+	fprintf(stderr, "date:\n");
+	datePrint(ts.date);
+	fprintf(stderr, "time:\n");
+	timePrint(ts.time);
+}
 
 int main(int argc, char const *argv[]) {
 	PGconn *conn = PQconnectdb("");
@@ -59,7 +193,7 @@ int main(int argc, char const *argv[]) {
 
 	PGbool b = 1;
 	if (!PQputf(param, "%bool", b)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(bool): %s\n", PQgeterror());
 		return 1;
 	}
 
@@ -68,95 +202,98 @@ int main(int argc, char const *argv[]) {
 	bytea.len = sizeof(bytes);
 	bytea.data = bytes;
 	if (!PQputf(param, "%bytea", &bytea)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(bytea): %s\n", PQgeterror());
 		return 1;
 	}
 
-  // // '1401-01-19 BC'
-  // PGdate date;
-  // date.isbc = 1;
-  // date.year = 1401;
-  // date.mon  = 0;
-  // date.mday = 19;
-  // if (!PQputf(param, "%date", &date)) {
-  // 	fprintf(stderr, "ERROR: %s\n", PQgeterror());
-  // 	return 1;
-  // }
+	// '1401-01-19 BC'
+	PGdate date;
+	date.isbc = 1;
+	date.year = 1401;
+	date.mon  = 0;
+	date.mday = 19;
+	if (!PQputf(param, "%date", &date)) {
+		fprintf(stderr, "ERROR PQputf(date): %s\n", PQgeterror());
+		return 1;
+	}
 
 	PGnumeric numeric1 = "42";
 	if (!PQputf(param, "%numeric", numeric1)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(numeric): %s\n", PQgeterror());
 		return 1;
 	}
 
 	PGnumeric numeric2 = "-1728718718271827121233.1212121212";
 	if (!PQputf(param, "%numeric", numeric2)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(numeric): %s\n", PQgeterror());
 		return 1;
 	}
 
 	PGfloat8 f8 = 123456.789;
 	if (!PQputf(param, "%float8", f8)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(float8): %s\n", PQgeterror());
 		return 1;
 	}
 
 	PGint8 i8 = INT_MAX;
 	if (!PQputf(param, "%int8", i8)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(int8): %s\n", PQgeterror());
 		return 1;
 	}
 
- //  // "20 years 8 months 9 hours 10 mins 15 secs 123456 usecs"
- //  PGinterval interval;
- //  interval.years = 20;
- //  interval.mons  = 8;
- //  interval.days  = 0; // not used, set to 0
- //  interval.hours = 9;
- //  interval.mins  = 10;
- //  interval.secs  = 15;
- //  interval.usecs = 123456;
- //  if (!PQputf(param, "%interval", &interval)) {
- //  	fprintf(stderr, "ERROR: %s\n", PQgeterror());
- //  	return 1;
- //  }
+	// "20 years 8 months 9 hours 10 mins 15 secs 123456 usecs"
+	PGinterval interval;
+	interval.years = 20;
+	interval.mons  = 8;
+	interval.days  = 0; // not used, set to 0
+	interval.hours = 9;
+	interval.mins  = 10;
+	interval.secs  = 15;
+	interval.usecs = 123456;
+	// TODO(tamird,nvanbenschoten): implement interval binary encoding/decoding.
+	if (0) {
+		if (!PQputf(param, "%interval", &interval)) {
+			fprintf(stderr, "ERROR PQputf(interval): %s\n", PQgeterror());
+			return 1;
+		}
+	}
 
 	PGtext text = "foobar";
 	if (!PQputf(param, "%text", text)) {
-		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		fprintf(stderr, "ERROR PQputf(text): %s\n", PQgeterror());
 		return 1;
 	}
 
- //  // '2000-01-19 10:41:06'
- //  PGtimestamp ts;
- //  ts.date.isbc   = 0;
- //  ts.date.year   = 2000;
- //  ts.date.mon    = 0;
- //  ts.date.mday   = 19;
- //  ts.time.hour   = 10;
- //  ts.time.min    = 41;
- //  ts.time.sec    = 6;
- //  ts.time.usec   = 0;
- //  if (!PQputf(param, "%timestamp", &ts)) {
- //  	fprintf(stderr, "ERROR: %s\n", PQgeterror());
- //  	return 1;
- //  }
+	// '2000-01-19 10:41:06'
+	PGtimestamp ts;
+	ts.date.isbc   = 0;
+	ts.date.year   = 2000;
+	ts.date.mon    = 0;
+	ts.date.mday   = 19;
+	ts.time.hour   = 10;
+	ts.time.min    = 41;
+	ts.time.sec    = 6;
+	ts.time.usec   = 0;
+	if (!PQputf(param, "%timestamp", &ts)) {
+		fprintf(stderr, "ERROR PQputf(timestamp): %s\n", PQgeterror());
+		return 1;
+	}
 
- //  // '2000-01-19 10:41:06-05'
- //  PGtimestamp tstz;
- //  tstz.date.isbc   = 0;
- //  tstz.date.year   = 2000;
- //  tstz.date.mon    = 0;
- //  tstz.date.mday   = 19;
- //  tstz.time.hour   = 10;
- //  tstz.time.min    = 41;
- //  tstz.time.sec    = 6;
- //  tstz.time.usec   = 0;
- //  tstz.time.gmtoff = -18000;
- //  if (!PQputf(param, "%timestamptz", &tstz)) {
- //  	fprintf(stderr, "ERROR: %s\n", PQgeterror());
- //  	return 1;
- //  }
+	// '2000-01-19 10:41:06-05'
+	PGtimestamp tstz;
+	tstz.date.isbc   = 0;
+	tstz.date.year   = 2000;
+	tstz.date.mon    = 0;
+	tstz.date.mday   = 19;
+	tstz.time.hour   = 10;
+	tstz.time.min    = 41;
+	tstz.time.sec    = 6;
+	tstz.time.usec   = 0;
+	tstz.time.gmtoff = -18000;
+	if (!PQputf(param, "%timestamptz", &tstz)) {
+		fprintf(stderr, "ERROR PQputf(timestamptz): %s\n", PQgeterror());
+		return 1;
+	}
 
 	// resultFormat: 0 for text, 1 for binary.
 	for (int resultFormat = 0; resultFormat <= 1; ++resultFormat) {
@@ -166,23 +303,25 @@ int main(int argc, char const *argv[]) {
 				return 1;
 			}
 
+			int i = 0;
+
 			PGbool recvb;
-			if (!PQgetf(result, 0, "%bool", 0, &recvb)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%bool", i++, &recvb)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(bool): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (recvb != b) {
-				fprintf(stderr, "expected: %d, got: %d\n", b, recvb);
+				fprintf(stderr, "resultFormat=%d expected: %d, got: %d\n", resultFormat, b, recvb);
 				return 1;
 			}
 
 			PGbytea recvbytea;
-			if (!PQgetf(result, 0, "%bytea", 1, &recvbytea)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%bytea", i++, &recvbytea)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(bytea): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (memcmp(recvbytea.data, bytea.data, MIN(recvbytea.len, bytea.len)) != 0) {
-				fprintf(stderr, "expected (%d bytes): ", bytea.len);
+				fprintf(stderr, "resultFormat=%d expected (%d bytes): ", resultFormat, bytea.len);
 				for (int i = 0; i < bytea.len; ++i) {
 					fprintf(stderr, "%c", bytea.data[i]);
 				}
@@ -194,54 +333,295 @@ int main(int argc, char const *argv[]) {
 				return 1;
 			}
 
+			PGdate recvdate;
+			if (!PQgetf(result, 0, "%date", i++, &recvdate)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(date): %s\n", resultFormat, PQgeterror());
+				return 1;
+			}
+			// TODO(tamird,nvanbenschoten): fix date decoding
+			// resultFormat={0,1} expected:
+			// isbc=1
+			// year=1401
+			// mon=0
+			// mday=19
+			// jday=-1804639424
+			// yday=32764
+			// wday=-1804639440
+			//
+			// got:
+			// isbc=1
+			// year=1401
+			// mon=0
+			// mday=19
+			// jday=1209739
+			// yday=18
+			// wday=0
+			if (!dateEqual(recvdate, date)) {
+				fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
+				datePrint(date);
+				fprintf(stderr, "\ngot:\n");
+				datePrint(recvdate);
+				if (0) {
+					return 1;
+				}
+			}
+
 			PGnumeric recvnumeric1;
-			if (!PQgetf(result, 0, "%numeric", 2, &recvnumeric1)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%numeric", i++, &recvnumeric1)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(numeric): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (strcmp(recvnumeric1, numeric1)) {
-				fprintf(stderr, "expected: %s, got: %s\n", numeric1, recvnumeric1);
+				fprintf(stderr, "resultFormat=%d expected: %s, got: %s\n", resultFormat, numeric1, recvnumeric1);
 				return 1;
 			}
 
 			PGnumeric recvnumeric2;
-			if (!PQgetf(result, 0, "%numeric", 3, &recvnumeric2)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%numeric", i++, &recvnumeric2)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(numeric): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (strcmp(recvnumeric2, numeric2)) {
-				fprintf(stderr, "expected: %s, got: %s\n", numeric2, recvnumeric2);
+				fprintf(stderr, "resultFormat=%d expected: %s, got: %s\n", resultFormat, numeric2, recvnumeric2);
 				return 1;
 			}
 
 			PGfloat8 recvf8;
-			if (!PQgetf(result, 0, "%float8", 4, &recvf8)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%float8", i++, &recvf8)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(float8): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (recvf8 != f8) {
-				fprintf(stderr, "expected: %f, got: %f\n", f8, recvf8);
+				fprintf(stderr, "resultFormat=%d expected: %f, got: %f\n", resultFormat, f8, recvf8);
 				return 1;
 			}
 
 			PGint8 recvi8;
-			if (!PQgetf(result, 0, "%int8", 5, &recvi8)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%int8", i++, &recvi8)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(int8): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (recvi8 != i8) {
-				fprintf(stderr, "expected: %lld, got: %lld\n", i8, recvi8);
+				fprintf(stderr, "resultFormat=%d expected: %lld, got: %lld\n", resultFormat, i8, recvi8);
 				return 1;
 			}
 
+			// TODO(tamird,nvanbenschoten): implement interval binary encoding/decoding.
+			if (0) {
+				PGinterval recvinterval;
+				if (!PQgetf(result, 0, "%interval", i++, &recvinterval)) {
+					fprintf(stderr, "ERROR resultFormat=%d PQgetf(interval): %s\n", resultFormat, PQgeterror());
+					return 1;
+				}
+				if (!intervalEqual(recvinterval, interval)) {
+					fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
+					intervalPrint(interval);
+					fprintf(stderr, "\ngot:\n");
+					intervalPrint(recvinterval);
+					return 1;
+				}
+			}
+
 			PGtext recvtext;
-			if (!PQgetf(result, 0, "%text", 6, &recvtext)) {
-				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+			if (!PQgetf(result, 0, "%text", i++, &recvtext)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(text): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
 			if (strcmp(recvtext, text)) {
-				fprintf(stderr, "expected: %s, got: %s\n", text, recvtext);
+				fprintf(stderr, "resultFormat=%d expected: %s, got: %s\n", resultFormat, text, recvtext);
 				return 1;
+			}
+
+			PGtimestamp recvts;
+			if (!PQgetf(result, 0, "%timestamp", i++, &recvts)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(timestamp): %s\n", resultFormat, PQgeterror());
+				return 1;
+			}
+			// TODO(tamird,nvanbenschoten): fix ts decoding
+			// resultFormat=0 expected:
+			// epoch=-1804639240
+			// date:
+			// isbc=0
+			// year=2000
+			// mon=0
+			// mday=19
+			// jday=428660541
+			// yday=32582
+			// wday=0
+			// time:
+			// hour=10
+			// min=41
+			// sec=6
+			// usec=0
+			// withtz=0
+			// isdst=0
+			// gmtoff=0
+			// tzabbr=-1804640132
+			//
+			// got:
+			// epoch=1848018046
+			// date:
+			// isbc=0
+			// year=150924
+			// mon=3
+			// mday=3
+			// jday=56845012
+			// yday=93
+			// wday=1
+			// time:
+			// hour=1
+			// min=44
+			// sec=30
+			// usec=803968
+			// withtz=0
+			// isdst=-1
+			// gmtoff=0
+			// tzabbr=-1804640132
+			//
+			//
+			// resultFormat=1 expected:
+			// epoch=-1804639240
+			// date:
+			// isbc=0
+			// year=2000
+			// mon=0
+			// mday=19
+			// jday=428660541
+			// yday=32582
+			// wday=0
+			// time:
+			// hour=10
+			// min=41
+			// sec=6
+			// usec=0
+			// withtz=0
+			// isdst=0
+			// gmtoff=0
+			// tzabbr=-1804640132
+
+			// got:
+			// epoch=948278466
+			// date:
+			// isbc=0
+			// year=2000
+			// mon=0
+			// mday=19
+			// jday=2451563
+			// yday=18
+			// wday=3
+			// time:
+			// hour=10
+			// min=41
+			// sec=6
+			// usec=0
+			// withtz=0
+			// isdst=-1
+			// gmtoff=0
+			// tzabbr=-1804640132
+			if (!timestampEqual(recvts, ts)) {
+				fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
+				timestampPrint(ts);
+				fprintf(stderr, "\ngot:\n");
+				timestampPrint(recvts);
+				if (0) {
+					return 1;
+				}
+			}
+
+			// TODO(tamird,nvanbenschoten): fix ts decoding
+			// resultFormat=0 expected:
+			// epoch=430804992
+			// date:
+			// isbc=0
+			// year=2000
+			// mon=0
+			// mday=19
+			// jday=4195360
+			// yday=0
+			// wday=0
+			// time:
+			// hour=10
+			// min=41
+			// sec=6
+			// usec=0
+			// withtz=32764
+			// isdst=430774272
+			// gmtoff=-18000
+			// tzabbr=-1804640132
+			//
+			// got:
+			// epoch=1925327458
+			// date:
+			// isbc=0
+			// year=150926
+			// mon=8
+			// mday=14
+			// jday=56845906
+			// yday=256
+			// wday=6
+			// time:
+			// hour=20
+			// min=34
+			// sec=42
+			// usec=131968
+			// withtz=1
+			// isdst=-1
+			// gmtoff=0
+			// tzabbr=-1804640132
+			//
+			//
+			// resultFormat=1 expected:
+			// epoch=430804992
+			// date:
+			// isbc=0
+			// year=2000
+			// mon=0
+			// mday=19
+			// jday=4195360
+			// yday=0
+			// wday=0
+			// time:
+			// hour=10
+			// min=41
+			// sec=6
+			// usec=0
+			// withtz=32764
+			// isdst=430774272
+			// gmtoff=-18000
+			// tzabbr=-1804640132
+			//
+			// got:
+			// epoch=948296466
+			// date:
+			// isbc=0
+			// year=2000
+			// mon=0
+			// mday=19
+			// jday=2451563
+			// yday=18
+			// wday=3
+			// time:
+			// hour=15
+			// min=41
+			// sec=6
+			// usec=0
+			// withtz=1
+			// isdst=0
+			// gmtoff=0
+			// tzabbr=-1804640132
+			PGtimestamp recvtstz;
+			if (!PQgetf(result, 0, "%timestamptz", i++, &recvtstz)) {
+				fprintf(stderr, "ERROR resultFormat=%d PQgetf(timestamptz): %s\n", resultFormat, PQgeterror());
+				return 1;
+			}
+			if (!timestampEqual(recvtstz, tstz)) {
+				fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
+				timestampPrint(tstz);
+				fprintf(stderr, "\ngot:\n");
+				timestampPrint(recvtstz);
+				if (0) {
+					return 1;
+				}
 			}
 	}
 
