@@ -2057,36 +2057,44 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return &res, nil
 		}
 
-	case *StringColType:
-		var s DString
+	case *StringColType, *CollatedStringColType:
+		var s string
 		switch t := d.(type) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
-			s = DString(d.String())
+			s = d.String()
 		case *DTimestamp, *DTimestampTZ, *DDate:
-			s = DString(AsStringWithFlags(d, FmtBareStrings))
+			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DInterval:
 			// When converting an interval to string, we need a string representation
 			// of the duration (e.g. "5s") and not of the interval itself (e.g.
 			// "INTERVAL '5s'").
-			s = DString(t.ValueAsString())
+			s = t.ValueAsString()
 		case *DString:
-			s = *t
+			s = string(*t)
 		case *DCollatedString:
-			s = DString(t.Contents)
+			s = t.Contents
 		case *DBytes:
 			if !utf8.ValidString(string(*t)) {
 				return nil, fmt.Errorf("invalid utf8: %q", string(*t))
 			}
-			s = DString(*t)
+			s = string(*t)
 		}
-		if c, ok := expr.Type.(*StringColType); ok {
+		switch c := expr.Type.(type) {
+		case *StringColType:
 			// If the CHAR type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			if c.N > 0 && c.N < len(s) {
 				s = s[:c.N]
 			}
+			return NewDString(s), nil
+		case *CollatedStringColType:
+			if c.N > 0 && c.N < len(s) {
+				s = s[:c.N]
+			}
+			return NewDCollatedString(s, c.Locale, &ctx.collationEnv), nil
+		default:
+			panic(fmt.Sprintf("missing case for cast to string: %T", c))
 		}
-		return &s, nil
 
 	case *BytesColType:
 		switch t := d.(type) {
