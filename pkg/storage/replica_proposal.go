@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -428,6 +429,17 @@ func (r *Replica) leasePostApply(
 		newLease.OwnedBy(r.store.StoreID())) {
 		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
 	}
+
+	// Potentially re-gossip if the range contains system data (e.g. system
+	// config or node liveness).
+	if iAmTheLeaseHolder {
+		if err := r.maybeGossipSystemConfig(ctx); err != nil {
+			log.Error(ctx, err)
+		}
+		if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+			log.Error(ctx, err)
+		}
+	}
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership
@@ -697,7 +709,7 @@ func (r *Replica) handleLocalEvalResult(
 	}
 
 	if lResult.maybeGossipSystemConfig {
-		r.maybeGossipSystemConfig()
+		r.maybeGossipSystemConfig(ctx)
 		lResult.maybeGossipSystemConfig = false
 	}
 
@@ -711,7 +723,7 @@ func (r *Replica) handleLocalEvalResult(
 			}
 		}
 		if lResult.maybeGossipNodeLiveness != nil {
-			r.maybeGossipNodeLiveness(*lResult.maybeGossipNodeLiveness)
+			r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness)
 		}
 	}
 	// Satisfy the assertions for all of the items processed only on the
