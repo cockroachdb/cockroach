@@ -26,14 +26,15 @@ DROP INDEX baw
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
-users foo     false  1   name   ASC       false
-users bar     true   1   id     ASC       false
-users bar     true   2   name   ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+users  bar      true    1    id      ASC        false    false
+users  bar      true    2    name    ASC        false    false
 
 statement error index "ffo" does not exist
 DROP INDEX users@ffo
@@ -41,25 +42,26 @@ DROP INDEX users@ffo
 statement ok
 DROP INDEX IF EXISTS users@ffo
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
-users foo     false  1   name   ASC       false
-users bar     true   1   id     ASC       false
-users bar     true   2   name   ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+users  bar      true    1    id      ASC        false    false
+users  bar      true    2    name    ASC        false    false
 
 statement ok
 DROP INDEX IF EXISTS users@foo
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
-users bar     true   1   id     ASC       false
-users bar     true   2   name   ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  bar      true    1    id      ASC        false    false
+users  bar      true    2    name    ASC        false    false
 
 user testuser
 
@@ -76,11 +78,11 @@ user testuser
 statement ok
 DROP INDEX users@bar
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
 
 user root
 
@@ -102,13 +104,15 @@ CREATE INDEX baz ON users (name, title)
 statement ok
 DROP INDEX IF EXISTS users@invalid, users@baz
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
-users foo     false  1   name   ASC       false
-users bar     false  1   title  ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
+users  bar      false   1    title   ASC        false    false
+users  bar      false   2    id      ASC        false    true
 
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
@@ -119,12 +123,13 @@ DROP INDEX users@foo
 statement ok
 DROP INDEX users@bar
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
-users foo     false  1   name   ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+users  foo      false   1    name    ASC        false    false
+users  foo      false   2    id      ASC        false    true
 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
@@ -152,11 +157,11 @@ user root
 statement ok
 DROP INDEX users@foo CASCADE
 
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table Name    Unique Seq Column Direction Storing
-users primary true   1   id     ASC       false
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
 
 query T
 SHOW TABLES

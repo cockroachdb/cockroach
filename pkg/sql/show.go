@@ -651,6 +651,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		{Name: "Column", Typ: parser.TypeString},
 		{Name: "Direction", Typ: parser.TypeString},
 		{Name: "Storing", Typ: parser.TypeBool},
+		{Name: "Implicit", Typ: parser.TypeBool},
 	}
 	return &delayedNode{
 		name:    "SHOW INDEXES FROM " + tn.String(),
@@ -664,7 +665,8 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 					SEQ_IN_INDEX AS "Seq",
 					COLUMN_NAME AS "Column",
 					DIRECTION AS "Direction",
-					STORING AS "Storing"
+					STORING AS "Storing",
+					IMPLICIT AS "Implicit"
 				FROM information_schema.statistics
 				WHERE
 					TABLE_SCHEMA=$1 AND
