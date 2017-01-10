@@ -23,11 +23,13 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type metaRecord struct {
@@ -139,7 +142,23 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := store.DB().Run(context.TODO(), b); err != nil {
+
+		// This test constructs an overlapping batch (delete then put on the same
+		// key), which is only allowed in a transaction. The test wants to send the
+		// batch through the "client" interface (because that's what it used to
+		// construct it); unfortunately we can't use the client's transactional
+		// interface without sending through a TxnCoordSender (which initializes a
+		// transaction id). Also, we need the TxnCoordSender to clean up the
+		// intents, otherwise the MVCCScan that the test does below fails.
+		tcs := kv.NewTxnCoordSender(log.AmbientContext{Tracer: tracing.NewTracer()},
+			store.testSender(), store.cfg.Clock,
+			false, stopper, kv.MakeTxnMetrics(time.Second))
+		db := client.NewDB(tcs)
+		txn := client.NewTxn(context.TODO(), *db)
+		if err := txn.Run(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn.Commit(); err != nil {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
