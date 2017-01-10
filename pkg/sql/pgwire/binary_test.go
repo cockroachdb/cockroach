@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -59,7 +58,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 		buf.wrapped.Reset()
 
 		d := datumConstructor(test.In)
-		oid, _ := sql.DatumToOid(d.ResolvedType())
+		oid := d.ResolvedType().Oid()
 		func() {
 			defer func() {
 				if r := recover(); r != nil {

@@ -640,6 +640,7 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 1184  timestamptz  1782195457    NULL      24      true      b
 1186  interval     1782195457    NULL      24      true      b
 1700  decimal      1782195457    NULL      -1      false     b
+2249  tuple        1782195457    NULL      0       true      b
 2283  anyelement   1782195457    NULL      -1      false     b
 
 query ITTBBTIII colnames
@@ -666,6 +667,7 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 1184  timestamptz  D            false           true          ,         0         0        0
 1186  interval     T            false           true          ,         0         0        0
 1700  decimal      N            false           true          ,         0         0        0
+2249  tuple        P            false           true          ,         0         0        0
 2283  anyelement   P            false           true          ,         0         0        0
 
 query ITIIIIIII colnames
@@ -692,6 +694,7 @@ oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout
 1184  timestamptz  0         0          0           0        0         0          0
 1186  interval     0         0          0           0        0         0          0
 1700  decimal      0         0          0           0        0         0          0
+2249  tuple        0         0          0           0        0         0          0
 2283  anyelement   0         0          0           0        0         0          0
 
 query ITTTBII colnames
@@ -718,6 +721,7 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 1184  timestamptz  NULL      NULL        false       0            -1
 1186  interval     NULL      NULL        false       0            -1
 1700  decimal      NULL      NULL        false       0            -1
+2249  tuple        NULL      NULL        false       0            -1
 2283  anyelement   NULL      NULL        false       0            -1
 
 query ITIITTT colnames
@@ -744,6 +748,7 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 1184  timestamptz  0         0             NULL           NULL        NULL
 1186  interval     0         0             NULL           NULL        NULL
 1700  decimal      0         0             NULL           NULL        NULL
+2249  tuple        0         0             NULL           NULL        NULL
 2283  anyelement   0         0             NULL           NULL        NULL
 
 ## pg_catalog.pg_proc

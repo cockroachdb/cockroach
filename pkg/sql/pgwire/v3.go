@@ -507,7 +507,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if t == 0 {
 			continue
 		}
-		v, ok := sql.OidToDatum(t)
+		v, ok := parser.OidToType[t]
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
 		}
@@ -542,11 +542,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if inTypes[i] != 0 {
 			continue
 		}
-		id, ok := sql.DatumToOid(t)
-		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", t))
-		}
-		inTypes[i] = id
+		inTypes[i] = t.Oid()
 	}
 	for i, t := range inTypes {
 		if t == 0 {

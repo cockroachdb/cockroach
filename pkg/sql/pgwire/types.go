@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -79,45 +78,13 @@ type pgNumeric struct {
 }
 
 func pgTypeForParserType(t parser.Type) pgType {
-	// Compare all types that can rely on == equality.
-	switch t {
-	case parser.TypeNull:
-		return pgType{oid: oid.T_unknown}
-	case parser.TypeBool:
-		return pgType{oid.T_bool, 1}
-	case parser.TypeBytes:
-		return pgType{oid.T_bytea, -1}
-	case parser.TypeInt:
-		return pgType{oid.T_int8, 8}
-	case parser.TypeFloat:
-		return pgType{oid.T_float8, 8}
-	case parser.TypeDecimal:
-		return pgType{oid.T_numeric, -1}
-	case parser.TypeString:
-		return pgType{oid.T_text, -1}
-	case parser.TypeDate:
-		return pgType{oid.T_date, 8}
-	case parser.TypeTimestamp:
-		return pgType{oid.T_timestamp, 8}
-	case parser.TypeTimestampTZ:
-		return pgType{oid.T_timestamptz, 8}
-	case parser.TypeInterval:
-		return pgType{oid.T_interval, 8}
-	case parser.TypeStringArray:
-		return pgType{oid.T__text, -1}
-	case parser.TypeIntArray:
-		return pgType{oid.T__int8, -1}
-	default:
-		// Compare all types that cannot rely on == equality.
-		istype := t.FamilyEqual
-		switch {
-		case istype(parser.TypeCollatedString):
-			return pgType{oid.T_unknown, -1}
-		case istype(parser.TypeTuple):
-			return pgType{oid.T_record, -1}
-		default:
-			panic(fmt.Sprintf("unsupported type %s", t))
-		}
+	size := -1
+	if s, variable := t.Size(); !variable {
+		size = int(s)
+	}
+	return pgType{
+		oid:  t.Oid(),
+		size: size,
 	}
 }
 
