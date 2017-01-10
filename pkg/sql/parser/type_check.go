@@ -220,7 +220,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 
 	castFrom := typedSubExpr.ResolvedType()
 	for _, t := range validCastTypes(returnType) {
-		if castFrom.Equal(t) {
+		if castFrom.FamilyEqual(t) {
 			expr.Expr = typedSubExpr
 			expr.typ = returnType
 			return expr, nil
