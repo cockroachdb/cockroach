@@ -563,16 +563,18 @@ func TestInterpolation(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
-		actual := make([]float64, 0, len(tc.expected))
-		iter := newInterpolatingIterator(ds, 0, 10, tc.extractFn, downsampleSum, tc.derivative)
-		for i := 0; i < len(tc.expected); i++ {
-			iter.advanceTo(int32(i))
-			actual = append(actual, iter.value())
-		}
-		if !reflect.DeepEqual(actual, tc.expected) {
-			t.Fatalf("test %d, interpolated values: %v, expected values: %v", i, actual, tc.expected)
-		}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			actual := make([]float64, 0, len(tc.expected))
+			iter := newInterpolatingIterator(ds, 0, 10, tc.extractFn, downsampleSum, tc.derivative)
+			for i := 0; i < len(tc.expected); i++ {
+				iter.advanceTo(int32(i))
+				actual = append(actual, iter.value())
+			}
+			if !reflect.DeepEqual(actual, tc.expected) {
+				t.Fatalf("interpolated values: %v, expected values: %v", actual, tc.expected)
+			}
+		})
 	}
 }
 

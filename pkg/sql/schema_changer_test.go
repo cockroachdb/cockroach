@@ -799,7 +799,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		{"DROP INDEX t.test@foo", 1},
 	}
 
-	for i, testCase := range testCases {
+	for _, testCase := range testCases {
 		t.Run(testCase.sql, func(t *testing.T) {
 			// Delete two rows so that the table size is smaller than a backfill
 			// chunk. The two values will be added later to make the table larger
@@ -858,7 +858,7 @@ COMMIT;
 			}
 			// 1 failed + 2 retried backfill chunks.
 			expectNumBackfills := int64(3)
-			if i == len(testCases)-1 {
+			if testCase == testCases[len(testCases)-1] {
 				// The DROP INDEX case: The above INSERTs do not add any index
 				// entries for the inserted rows, so the index remains smaller
 				// than a backfill chunk and is dropped in a single retried
