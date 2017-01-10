@@ -16,15 +16,16 @@ import { SummaryBar, SummaryLabel, SummaryStat, SummaryMetricStat } from "../com
 import { Axis, AxisUnits } from "../components/graphs";
 import { LineGraph } from "../components/linegraph";
 import { Metric } from "../components/metric";
-import { StackedAreaGraph } from "../components/stackedgraph";
 import Events from "../containers/events";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
-import { MetricConstants, BytesUsed } from "../util/proto";
+import { NodeStatus, MetricConstants, BytesUsed } from "../util/proto";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
+  nodeIds: string[];
+  nodeStatusByID: {[s: string]: NodeStatus};
   nodeCount: number;
   capacityAvailable: number;
   capacityTotal: number;
@@ -39,8 +40,6 @@ type NodeGraphsProps = NodeGraphsOwnProps & IInjectedProps;
 class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   static displayTimeScale = true;
 
-  sources: string[] = [];
-
   refresh(props = this.props) {
     if (!props.nodesQueryValid) {
       props.refreshNodes();
@@ -48,8 +47,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   componentWillMount() {
-    let nodeID = this.props.params[nodeIDAttr];
-    this.sources =  (_.isString(nodeID) && nodeID !== "") ? [nodeID] : null;
     this.refresh();
   }
 
@@ -57,411 +54,405 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     this.refresh(props);
   }
 
-  render() {
-    let sources = this.sources;
-    let dashboard = this.props.params[dashboardNameAttr];
-    let specifier = (sources && sources.length === 1) ? `on node ${sources[0]}` : "across all nodes";
+  nodeAddress(nid: string) {
+    let ns = this.props.nodeStatusByID[nid];
+    if (!ns) {
+      // This should only happen immediately after loading a page, and 
+      // associated graphs should display no data.
+      return "unknown address";
+    }
+    return this.props.nodeStatusByID[nid].desc.address.address_field;
+  }
 
-    // Capacity math.
+  storeIDsForNode(nid: string): string[] {
+    let ns = this.props.nodeStatusByID[nid];
+    if (!ns) {
+      return [];
+    }
+    return _.map(ns.store_statuses, (ss) => ss.desc.store_id.toString());
+  }
+
+  render() {
+    let selectedNode = this.props.params[nodeIDAttr];
+    let nodeSources =  (_.isString(selectedNode) && selectedNode !== "") ? [selectedNode] : null;
+    let storeSources: string[] = null;
+
+    // When "all" is the selected source, some graphs display a line for every
+    // node in the cluster using the nodeIds collection. However, if a specific
+    // node is already selected, these per-node graphs should only display data
+    // only for the selected node.
+    //
+    // Similarly, if a single node is selected, we also need to restrict the
+    // set of stores queried (only stores that belong to that node will be
+    // queried).
+    let nodeIds = this.props.nodeIds;
+    if (nodeSources && nodeSources.length !== 0) {
+      nodeIds = nodeSources;
+      storeSources = [];
+      _.each(nodeSources, (nid) => {
+        _.each(this.storeIDsForNode(nid), (sid) => storeSources.push(sid));
+      });
+    }
+
+    let dashboard = this.props.params[dashboardNameAttr];
+    let specifier = (nodeSources && nodeSources.length === 1) ? `on node ${nodeSources[0]}` : "across all nodes";
+
+    // Capacity math used in the summary status section.
     let { capacityTotal, capacityAvailable } = this.props;
     let capacityUsed = capacityTotal - capacityAvailable;
     let capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
 
     return <div className="section l-columns">
       <div className="chart-group l-columns__left">
-        <GraphGroup groupId="node.activity" hide={dashboard !== "activity"}>
-          <LineGraph title="SQL Connections" sources={sources} tooltip={`The total number of active SQL connections ${specifier}.`}>
+        <GraphGroup groupId="node.runtime" hide={dashboard !== "runtime"}>
+          <LineGraph title="Node Count" tooltip="The number of nodes active on the cluster.">
+            <Axis>
+              <Metric name="cr.node.liveness.livenodes" title="Live Nodes" aggregateMax />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Memory Usage" sources={nodeSources} tooltip={<div>{`Memory in use ${specifier}:`}<dl>
+            <dt>RSS</dt><dd>Total memory in use by CockroachDB</dd>
+            <dt>Go Allocated</dt><dd>Memory allocated by the Go layer</dd>
+            <dt>Go Total</dt><dd>Total memory managed by the Go layer</dd>
+            <dt>C Allocated</dt><dd>Memory allocated by the C layer</dd>
+            <dt>C Total</dt><dd>Total memory managed by the C layer</dd>
+            </dl></div>}>
+            <Axis units={ AxisUnits.Bytes }>
+              <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
+              <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
+              <Metric name="cr.node.sys.go.totalbytes" title="Go Total" />
+              <Metric name="cr.node.sys.cgo.allocbytes" title="CGo Allocated" />
+              <Metric name="cr.node.sys.cgo.totalbytes" title="CGo Total" />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Goroutine Count" sources={nodeSources} tooltip={`The number of Goroutines ${specifier}. This count should rise and fall based on load.`}>
+            <Axis>
+              <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
+            </Axis>
+          </LineGraph>
+
+          {
+            // TODO(mrtracy): The following two graphs are a good first example of a graph with
+            // two axes; the two series should be highly correlated, but have different units.
+          }
+          <LineGraph title="GC Runs" sources={nodeSources} tooltip={`The number of times that Go’s garbage collector was invoked per second ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.node.sys.gc.count" title="GC Runs" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="GC Pause Time" sources={nodeSources} tooltip={`The amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
+            <Axis units={ AxisUnits.Duration }>
+              <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="CPU Time" sources={nodeSources} tooltip={`The amount of CPU time used by CockroachDB (User) and system-level operations (Sys) ${specifier}.`}>
+            <Axis units={ AxisUnits.Duration }>
+              <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
+              <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+        </GraphGroup>
+
+        <GraphGroup groupId="node.sql" hide={dashboard !== "sql"}>
+          <LineGraph title="SQL Connections" sources={nodeSources} tooltip={`The total number of active SQL connections ${specifier}.`}>
             <Axis>
               <Metric name="cr.node.sql.conns" title="Client Connections" />
             </Axis>
           </LineGraph>
 
-            <LineGraph title="SQL Traffic" sources={sources} tooltip={`The average amount of SQL client network traffic in bytes per second ${specifier}.`}>
-              <Axis units={ AxisUnits.Bytes }>
-                <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
-                <Metric name="cr.node.sql.bytesout" title="Bytes Out" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="SQL Byte Traffic" sources={nodeSources} tooltip={`The average amount of SQL client network traffic in bytes per second ${specifier}.`}>
+            <Axis units={ AxisUnits.Bytes }>
+              <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
+              <Metric name="cr.node.sql.bytesout" title="Bytes Out" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Queries Per Second" sources={sources} tooltip={`The average number of SQL queries per second ${specifier}.`}>
-              <Axis>
-                <Metric name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
+              <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
+              <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
+              <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
+              <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Live Bytes" sources={sources} tooltip={`The amount of storage space used by live (non-historical) data ${specifier}.`}>
-              <Axis units={ AxisUnits.Bytes }>
-                <Metric name="cr.store.livebytes" title="Live Bytes" />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Exec Latency: 99th percentile"
+                    tooltip={`The 99th percentile of latency between query requests and responses 
+                              over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIds, (node) =>
+                  <Metric key={node}
+                          name="cr.node.exec.latency-p99"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />
+                )
+              }
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Query Time"
-                       subtitle="(Max Per Percentile)"
-                       tooltip={`The latency between query requests and responses over a 1 minute period.
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum latency across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis units={ AxisUnits.Duration }>
-                <Metric name="cr.node.exec.latency-max" title="Max Latency"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.exec.latency-p99" title="99th percentile latency"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.exec.latency-p90" title="90th percentile latency"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.exec.latency-p50" title="50th percentile latency"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Exec Latency: 90th percentile"
+                    tooltip={`The 90th percentile of latency between query requests and responses 
+                              over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIds, (node) =>
+                  <Metric key={node}
+                          name="cr.node.exec.latency-p90"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />
+                )
+              }
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="GC Pause Time" sources={sources} tooltip={`The ${sources ? "average and maximum" : ""} amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
-              <Axis units={ AxisUnits.Duration }>
-                <Metric name="cr.node.sys.gc.pause.ns" title={`${sources ? "" : "Avg "}Time`} aggregateAvg nonNegativeRate />
-                { (sources && sources[0]) ? null : <Metric name="cr.node.sys.gc.pause.ns" title="Max Time" aggregateMax nonNegativeRate /> }
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Transactions" sources={nodeSources} tooltip={`The average number of transactions opened, committed, rolled back, or aborted per second ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.node.sql.txn.begin.count" title="Begin" nonNegativeRate />
+              <Metric name="cr.node.sql.txn.commit.count" title="Commits" nonNegativeRate />
+              <Metric name="cr.node.sql.txn.rollback.count" title="Rollbacks" nonNegativeRate />
+              <Metric name="cr.node.sql.txn.abort.count" title="Aborts" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-          </GraphGroup>
-        <GraphGroup groupId="node.queries" hide={dashboard !== "queries"}>
-            <LineGraph title="Reads" sources={sources} tooltip={`The average number of SELECT statements per second ${specifier}.`}>
-              <Axis>
-                <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
-                <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Schema Changes" sources={nodeSources} tooltip={`The average number of DDL statements per second ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+        </GraphGroup>
 
-            <LineGraph title="Writes" sources={sources} tooltip={`The average number of INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>
-              <Axis>
-                <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
-                <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
-                <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+        <GraphGroup groupId="node.storage" hide={dashboard !== "storage"}>
+          <LineGraph title="Capacity" sources={storeSources} tooltip={`Summary of total and available capacity ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.store.capacity" title="Capacity" />
+              {
+                // TODO(mrtracy): We really want to display a used capacity
+                // stat, but that is not directly recorded. We either need to
+                // start directly recording it, or add the ability to create
+                // derived series.
+              }
+              <Metric name="cr.store.capacity.available" title="Available" />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Transactions" sources={sources} tooltip={`The average number of transactions committed, rolled back, or aborted per second ${specifier}.`}>
-              <Axis>
-                <Metric name="cr.node.sql.txn.commit.count" title="Commits" nonNegativeRate />
-                <Metric name="cr.node.sql.txn.rollback.count" title="Rollbacks" nonNegativeRate />
-                <Metric name="cr.node.sql.txn.abort.count" title="Aborts" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Live Bytes" sources={storeSources} tooltip={`The amount of Live data used by both applications and the CockroachDB system ${specifier}. 
+                                                                    This excludes historical and deleted data.`}>
+            <Axis units={ AxisUnits.Bytes }>
+              <Metric name="cr.store.livebytes" title="Live" />
+              <Metric name="cr.store.sysbytes" title="System" />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Schema Changes" sources={sources} tooltip={`The average number of DDL statements per second ${specifier}.`}>
-              <Axis>
-                <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="RocksDB Read Amplification" sources={storeSources} tooltip={`RocksDB read amplification statistic; measures the average number of real read operations
+                                                                                    executed per logical read operation ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" aggregateAvg />
+            </Axis>
+          </LineGraph>
 
-          </GraphGroup>
+          <LineGraph title="RocksDB SSTables" sources={storeSources} tooltip={`The number of RocksDB SSTables in use ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
+            </Axis>
+          </LineGraph>
 
-          <GraphGroup groupId="node.resources" hide={dashboard !== "resources"}>
-            <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
-              <Axis units={ AxisUnits.Percentage }>
-                <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
-                <Metric name="cr.node.sys.cpu.sys.percent" aggregateAvg title="CPU Sys %" />
-              </Axis>
-            </StackedAreaGraph>
+          <LineGraph title="File Descriptors" sources={nodeSources} tooltip={`The number of open file descriptors ${specifier}, compared with the file descriptor limit.`}>
+            <Axis>
+              <Metric name="cr.node.sys.fd.open" title="Open" />
+              <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
+            </Axis>
+          </LineGraph>
+        </GraphGroup>
 
-            <LineGraph title="Memory Usage" sources={sources} tooltip={<div>{`Memory in use ${specifier}:`}<dl>
-              <dt>RSS</dt><dd>Total memory in use by CockroachDB</dd>
-              <dt>Go Allocated</dt><dd>Memory allocated by the Go layer</dd>
-              <dt>Go Total</dt><dd>Total memory managed by the Go layer</dd>
-              <dt>C Allocated</dt><dd>Memory allocated by the C layer</dd>
-              <dt>C Total</dt><dd>Total memory managed by the C layer</dd>
-              </dl></div>}>
-              <Axis units={ AxisUnits.Bytes }>
-                <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
-                <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
-                <Metric name="cr.node.sys.go.totalbytes" title="Go Total" />
-                <Metric name="cr.node.sys.cgo.allocbytes" title="C Allocated" />
-                <Metric name="cr.node.sys.cgo.totalbytes" title="C Total" />
-              </Axis>
-            </LineGraph>
+        <GraphGroup groupId="node.replication" hide={dashboard !== "replication"}>
+          <LineGraph title="Ranges" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.ranges" title="Ranges" />
+              <Metric name="cr.store.replicas.leaders" title="Leaders" />
+              <Metric name="cr.store.replicas.leaseholders" title="Lease Holders" />
+              <Metric name="cr.store.replicas.leaders_not_leaseholders" title="Leaders w/o Lease" />
+              <Metric name="cr.store.ranges.unavailable" title="Unavailable" />
+              <Metric name="cr.store.ranges.underreplicated" title="Under-replicated" />
+            </Axis>
+          </LineGraph>
 
-            <StackedAreaGraph title="SQL Memory" sources={sources}>
-              <Axis units={ AxisUnits.Bytes }>
-                <Metric name="cr.node.sql.mon.client.cur" title="Clients" />
-              </Axis>
-            </StackedAreaGraph>
+          <LineGraph title="Replicas per Store"
+                    tooltip={`The number of replicas on each store.`}>
+            <Axis>
+              {
+                _.map(nodeIds, (nid) =>
+                  <Metric key={nid}
+                          name="cr.store.replicas"
+                          title={this.nodeAddress(nid)}
+                          sources={this.storeIDsForNode(nid)}/>
+                )
+              }
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Goroutine Count" sources={sources} tooltip={`The number of Goroutines ${specifier}. This count should rise and fall based on load.`}>
-              <Axis>
-                <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Leaseholders per Store"
+                    tooltip={`The number of replicas on each store.`}>
+            <Axis>
+              {
+                _.map(nodeIds, (nid) =>
+                  <Metric key={nid}
+                          name="cr.store.replicas.leaseholders"
+                          title={this.nodeAddress(nid)}
+                          sources={this.storeIDsForNode(nid)}/>
+                )
+              }
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Cgo Calls" sources={sources} tooltip={`The average number of calls from Go to C per second ${specifier}.`}>
-              <Axis>
-                <Metric name="cr.node.sys.cgocalls" title="Cgo Calls" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Replicas" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.replicas" title="Replicas" />
+              <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
+            </Axis>
+          </LineGraph>
 
-          </GraphGroup>
+          <LineGraph title="Range Operations" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
+              <Metric name="cr.store.range.adds" title="Adds" nonNegativeRate />
+              <Metric name="cr.store.range.removes" title="Removes" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-          <GraphGroup groupId="node.internals" hide={dashboard !== "internals"}>
-            <StackedAreaGraph title="Key/Value Transactions" sources={sources}>
-              <Axis>
-                <Metric name="cr.node.txn.commits-count" title="Commits" nonNegativeRate />
-                <Metric name="cr.node.txn.commits1PC-count" title="Fast 1PC" nonNegativeRate />
-                <Metric name="cr.node.txn.aborts-count" title="Aborts" nonNegativeRate />
-                <Metric name="cr.node.txn.abandons-count" title="Abandons" nonNegativeRate />
-              </Axis>
-            </StackedAreaGraph>
+          <LineGraph title="Snapshots" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.range.snapshots.generated" title="Generated" nonNegativeRate />
+              <Metric name="cr.store.range.snapshots.normal-applied" title="Normal-applied" nonNegativeRate />
+              <Metric name="cr.store.range.snapshots.preemptive-applied" title="Preemptive-applied" nonNegativeRate />
+              <Metric name="cr.store.replicas.reserved" title="Reserved" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+        </GraphGroup>
 
-            <StackedAreaGraph title="Node Liveness" sources={sources}>
-              <Axis>
-                <Metric name="cr.node.liveness.heartbeatsuccesses" title="Heartbeat Successes" nonNegativeRate />
-                <Metric name="cr.node.liveness.heartbeatfailures" title="Heartbeat Failures" nonNegativeRate />
-                <Metric name="cr.node.liveness.epochincrements" title="Epoch Increments" nonNegativeRate />
-              </Axis>
-            </StackedAreaGraph>
+        <GraphGroup groupId="node.queues" hide={dashboard !== "queues"}>
+          <LineGraph title="Queue Processing Failures" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.gc.process.failure" title="GC" nonNegativeRate />
+              <Metric name="cr.store.queue.replicagc.process.failure" title="Replica GC" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.process.failure" title="Replication" nonNegativeRate />
+              <Metric name="cr.store.queue.split.process.failure" title="Split" nonNegativeRate />
+              <Metric name="cr.store.queue.consistency.process.failure" title="Consistency" nonNegativeRate />
+              <Metric name="cr.store.queue.raftlog.process.failure" title="Raft Log" nonNegativeRate />
+              <Metric name="cr.store.queue.tsmaintenance.process.failure" title="Time Series Maintenance" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Engine Memory Usage" sources={sources}>
-              <Axis units={ AxisUnits.Bytes }>
-                <Metric name="cr.store.rocksdb.block.cache.usage" title="Block Cache" />
-                <Metric name="cr.store.rocksdb.block.cache.pinned-usage" title="Iterators" />
-                <Metric name="cr.store.rocksdb.memtable.total-size" title="Memtable" />
-                <Metric name="cr.store.rocksdb.table-readers-mem-estimate" title="Index" />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Queue Processing Times" sources={storeSources}>
+            <Axis units={AxisUnits.Duration}>
+              <Metric name="cr.store.queue.gc.processingnanos" title="GC" nonNegativeRate />
+              <Metric name="cr.store.queue.replicagc.processingnanos" title="Replica GC" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.processingnanos" title="Replication" nonNegativeRate />
+              <Metric name="cr.store.queue.split.processingnanos" title="Split" nonNegativeRate />
+              <Metric name="cr.store.queue.consistency.processingnanos" title="Consistency" nonNegativeRate />
+              <Metric name="cr.store.queue.raftlog.processingnanos" title="Raft Log" nonNegativeRate />
+              <Metric name="cr.store.queue.tsmaintenance.processingnanos" title="Time Series Maintenance" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <StackedAreaGraph title="Block Cache Hits/Misses" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.rocksdb.block.cache.hits"
-                        title="Cache Hits"
-                        nonNegativeRate />
-                <Metric name="cr.store.rocksdb.block.cache.misses"
-                        title="Cache Missses"
-                        nonNegativeRate />
-              </Axis>
-            </StackedAreaGraph>
+          {
+            // TODO(mrtracy): The queues below should also have "processing
+            // nanos" on the graph, but that has a time unit instead of a count
+            // unit, and thus we need support for multi-axis graphs.
+          }
 
-            <StackedAreaGraph title="Range Events" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
-                <Metric name="cr.store.range.adds" title="Adds" nonNegativeRate />
-                <Metric name="cr.store.range.removes" title="Removes" nonNegativeRate />
-              </Axis>
-            </StackedAreaGraph>
+          <LineGraph title="Replica GC Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.replicagc.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicagc.pending" title="Pending Actions" downsampleMax />
+              <Metric name="cr.store.queue.replicagc.removereplica" title="Replicas Removed / sec" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Flushes and Compactions" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.rocksdb.flushes" title="Flushes" nonNegativeRate />
-                <Metric name="cr.store.rocksdb.compactions" title="Compactions" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Replication Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.replicate.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.pending" title="Pending Actions" />
+              <Metric name="cr.store.queue.replicate.addreplica" title="Replicas Added / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.removereplica" title="Replicas Removed / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.removedeadreplica" title="Dead Replicas Removed / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.rebalancereplica" title="Replicas Rebalanced / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.transferlease" title="Leases Transferred / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.replicate.purgatory" title="Replicas in Purgatory" downsampleMax />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Bloom Filter Prefix" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.rocksdb.bloom.filter.prefix.checked"
-                        title="Checked"
-                        nonNegativeRate />
-                <Metric name="cr.store.rocksdb.bloom.filter.prefix.useful"
-                        title="Useful"
-                        nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Split Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.split.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.split.pending" title="Pending Actions" downsampleMax />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Read Amplification" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="GC Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.gc.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.gc.pending" title="Pending Actions" downsampleMax />
+            </Axis>
+          </LineGraph>
 
-            <StackedAreaGraph title="Raft Time" sources={sources}>
-              <Axis units={ AxisUnits.Duration }>
-                <Metric name="cr.store.raft.process.workingnanos" title="Working" nonNegativeRate />
-                <Metric name="cr.store.raft.process.tickingnanos" title="Ticking" nonNegativeRate />
-              </Axis>
-            </StackedAreaGraph>
+          <LineGraph title="Raft Log Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.raftlog.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.raftlog.pending" title="Pending Actions" downsampleMax />
+            </Axis>
+          </LineGraph>
 
-            <StackedAreaGraph title="Raft Messages received" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.raft.rcvd.prop" title="MsgProp" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.app" title="MsgApp" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.appresp" title="MsgAppResp" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.vote" title="MsgVote" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.voteresp" title="MsgVoteResp" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.snap" title="MsgSnap" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.heartbeat" title="MsgHeartbeat" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.heartbeatresp" title="MsgHeartbeatResp" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.transferleader" title="MsgTransferLeader" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.timeoutnow" title="MsgTimeoutNow" nonNegativeRate />
-                <Metric name="cr.store.raft.rcvd.dropped" title="MsgDropped" nonNegativeRate />
-              </Axis>
-            </StackedAreaGraph>
+          <LineGraph title="Consistency Checker Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.consistency.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.consistency.pending" title="Pending Actions" downsampleMax />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="GCInfo metrics" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.queue.gc.info.numkeysaffected" title="NumKeysAffected" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.intentsconsidered" title="IntentsConsidered" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.intenttxns" title="IntentTxns" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.transactionspanscanned" title="TransactionSpanScanned" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.transactionspangcaborted" title="TransactionSpanGCAborted" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.transactionspangccommitted" title="TransactionSpanGCCommitted" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.transactionspangcpending" title="TransactionSpanGCPending" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.abortspanscanned" title="AbortSpanScanned" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.abortspanconsidered" title="AbortSpanConsidered" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.abortspangcnum" title="AbortSpanGCNum" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.pushtxn" title="PushTxn" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.resolvetotal" title="ResolveTotal" nonNegativeRate />
-                <Metric name="cr.store.queue.gc.info.resovlesuccess" title="ResolveSuccess" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Time Series Maintenance Queue" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.queue.tsmaintenance.process.success" title="Successful Actions / sec" nonNegativeRate />
+              <Metric name="cr.store.queue.tsmaintenance.pending" title="Pending Actions" downsampleMax />
+            </Axis>
+          </LineGraph>
+        </GraphGroup>
 
-            <LineGraph title="Raft Transport Queue Pending Count" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.raft.enqueued.pending" title="Outstanding message count in the Raft Transport queue to be sent over the network" />
-                <Metric name="cr.store.raft.heartbeats.pending" title="Outstanding individual heartbeats in the Raft Transport queue that have been coalesced" />
-              </Axis>
-            </LineGraph>
+        <GraphGroup groupId="node.requests" hide={dashboard !== "requests"}>
+          <LineGraph title="Slow Distsender Requests" sources={nodeSources}>
+            <Axis>
+              <Metric name="cr.node.requests.slow.distsender" title="Slow Distsender Requests" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Replicas: Details" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.replicas.leaders" title="Leaders" />
-                <Metric name="cr.store.replicas.leaseholders" title="Lease Holders" />
-                <Metric name="cr.store.replicas.leaders_not_leaseholders" title="Leaders w/o Lease" />
-                <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Slow Raft Proposals" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.requests.slow.raft" title="Slow Raft Proposals" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Raft Ticks" sources={sources}>
-              <Axis>
-                <Metric name="cr.store.raft.ticks" title="Raft Ticks" nonNegativeRate />
-              </Axis>
-            </LineGraph>
+          <LineGraph title="Slow Lease Acquisitions" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.requests.slow.lease" title="Slow Lease Acquisitions" nonNegativeRate />
+            </Axis>
+          </LineGraph>
 
-            <LineGraph title="Critical Section Time"
-                       tooltip={`The maximum duration (capped at 1s) for which the corresponding mutex was held in the last minute ${specifier}.`}
-                       sources={sources}>
-              <Axis units={ AxisUnits.Duration }>
-                <Metric name="cr.store.mutex.storenanos-max" title="StoreMu"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.store.mutex.schedulernanos-max" title="SchedulerMu"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.store.mutex.replicananos-max" title="ReplicaMu"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.store.mutex.raftnanos-max" title="RaftMu"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-            <StackedAreaGraph title="SQL Memory (detailed)" sources={sources}>
-              <Axis units={ AxisUnits.Bytes }>
-                <Metric name="cr.node.sql.mon.client.cur" title="Clients" />
-                <Metric name="cr.node.sql.mon.admin.cur" title="Admin" />
-                <Metric name="cr.node.sql.mon.internal.cur" title="Internal" />
-              </Axis>
-            </StackedAreaGraph>
-
-            <LineGraph title="SQL Session Cumulative Max Size"
-                       subtitle="(log10(Max) Per Percentile)"
-                       tooltip={`The maximum memory usage per SQL session (including session-bound and txn-bound data), displayed as log(max).
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum usage across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
-                <Metric name="cr.node.sql.mon.client.max-max" title="Max Mem Usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.client.max-p99" title="99th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.client.max-p90" title="90th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.client.max-p50" title="50th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="SQL Session Cumulative Max Size (Admin)"
-                       subtitle="(log10(Max) Per Percentile)"
-                       tooltip={`The maximum memory usage per SQL admin session (including session-bound and txn-bound data), displayed as log(max).
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum usage across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
-                <Metric name="cr.node.sql.mon.admin.max-max" title="Max Mem Usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.admin.max-p99" title="99th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.admin.max-p90" title="90th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.admin.max-p50" title="50th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="SQL Session Cumulative Max Size (Internal)"
-                       subtitle="(log10(Max) Per Percentile)"
-                       tooltip={`The maximum memory usage per SQL internal session (including session-bound and txn-bound data), displayed as log(max).
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum usage across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
-                <Metric name="cr.node.sql.mon.internal.max-max" title="Max Mem Usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.internal.max-p99" title="99th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.internal.max-p90" title="90th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.internal.max-p50" title="50th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="SQL Txn Max Size"
-                       subtitle="(log10(Max) Per Percentile)"
-                       tooltip={`The maximum memory usage per SQL txn, displayed as log(max).
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum usage across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
-                <Metric name="cr.node.sql.mon.client.txn.max-max" title="Max Mem Usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.client.txn.max-p99" title="99th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.client.txn.max-p90" title="90th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.client.txn.max-p50" title="50th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="SQL Txn Max Size (Admin)"
-                       subtitle="(log10(Max) Per Percentile)"
-                       tooltip={`The maximum memory usage per SQL admin session (including session-bound and txn-bound data), displayed as log(max).
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum usage across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
-                <Metric name="cr.node.sql.mon.admin.txn.max-max" title="Max Mem Usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.admin.txn.max-p99" title="99th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.admin.txn.max-p90" title="90th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.admin.txn.max-p50" title="50th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-            <LineGraph title="SQL Txn Max Size (Internal)"
-                       subtitle="(log10(Max) Per Percentile)"
-                       tooltip={`The maximum memory usage per SQL internal session (including session-bound and txn-bound data), displayed as log(max).
-                                 Percentiles are first calculated on each node.
-                                 For each percentile, the maximum usage across all nodes is then shown.`}
-                       sources={sources}>
-              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
-                <Metric name="cr.node.sql.mon.internal.txn.max-max" title="Max Mem Usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.internal.txn.max-p99" title="99th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.internal.txn.max-p90" title="90th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-                <Metric name="cr.node.sql.mon.internal.txn.max-p50" title="50th percentile max mem usage (log10)"
-                        aggregateMax downsampleMax />
-              </Axis>
-            </LineGraph>
-
-          </GraphGroup>
+          <LineGraph title="Slow Command Queue Entries" sources={storeSources}>
+            <Axis>
+              <Metric name="cr.store.requests.slow.commandqueue" title="Slow Command Queue Entries" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+        </GraphGroup>
       </div>
       <div className="l-columns__right">
         <SummaryBar>
@@ -474,13 +465,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                        storage capacity across all nodes.`} />
           <SummaryStat title="Unavailable ranges" value={this.props.unavailableRanges} />
           <SummaryMetricStat id="qps" title="Queries per second" format={d3.format(".1f")} >
-            <Metric sources={sources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
+            <Metric sources={nodeSources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
           </SummaryMetricStat>
           <SummaryMetricStat id="p50" title="P50 latency" format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} >
-            <Metric sources={sources} name="cr.node.exec.latency-p50" aggregateMax downsampleMax />
+            <Metric sources={nodeSources} name="cr.node.exec.latency-p50" aggregateMax downsampleMax />
           </SummaryMetricStat>
           <SummaryMetricStat id="p99" title="P99 latency" format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} >
-            <Metric sources={sources} name="cr.node.exec.latency-p99" aggregateMax downsampleMax />
+            <Metric sources={nodeSources} name="cr.node.exec.latency-p99" aggregateMax downsampleMax />
           </SummaryMetricStat>
         </SummaryBar>
         <SummaryBar>
@@ -521,10 +512,32 @@ export let nodeSums = createSelector(
   }
 );
 
+let nodeIds = createSelector(
+  nodeStatuses,
+  (nss) => {
+    return _.map(nss, (ns) => {
+      return ns.desc.node_id.toString();
+    });
+  }
+);
+
+let nodeStatusByID = createSelector(
+  nodeStatuses,
+  (nss) => {
+    let statuses: {[s: string]: NodeStatus} = {};
+    _.each(nss, (ns) => {
+      statuses[ns.desc.node_id.toString()] = ns;
+    });
+    return statuses;
+  }
+);
+
 export default connect(
   (state: AdminUIState) => {
     let sums = nodeSums(state);
     return {
+      nodeIds: nodeIds(state),
+      nodeStatusByID: nodeStatusByID(state),
       nodeCount: sums.nodeCount,
       capacityAvailable: sums.capacityAvailable,
       capacityTotal: sums.capacityTotal,
