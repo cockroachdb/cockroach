@@ -42,7 +42,7 @@ imports:
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
-  version: 63df2d8aba63451ac147193c87f3681e2c12393f
+  version: 30d10be492927e2dcae0089c374c455d42414fcb
 - name: github.com/cockroachdb/cockroach-go
   version: ba57380fe1f490388284806affe325d081e62be6
   subpackages:
