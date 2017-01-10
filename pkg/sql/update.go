@@ -197,7 +197,7 @@ func (p *planner) Update(
 			case (*parser.Tuple):
 				for _, e := range t.Exprs {
 					typ := updateCols[i].Type.ToDatumType()
-					e := fillDefault(e, typ, i, defaultExprs)
+					e = fillDefault(e, typ, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 					i++
