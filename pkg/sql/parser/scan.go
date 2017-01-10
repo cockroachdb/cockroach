@@ -620,6 +620,16 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			return
 		}
 
+		// Strip off leading zeros from non-hex (decimal) literals so that
+		// constant.MakeFromLiteral doesn't inappropriately interpret the
+		// string as an octal literal. Note: we can't use strings.TrimLeft
+		// here, because it will truncate '0' to ''.
+		if !isHex {
+			for len(lval.str) > 1 && lval.str[0] == '0' {
+				lval.str = lval.str[1:]
+			}
+		}
+
 		lval.id = ICONST
 		intConst := constant.MakeFromLiteral(lval.str, token.INT, 0)
 		if intConst.Kind() == constant.Unknown {
