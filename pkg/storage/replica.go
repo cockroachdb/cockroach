@@ -1907,15 +1907,16 @@ func (r *Replica) addWriteCmd(
 			continue // retry
 		case proposalAmbiguousShouldBeReevaluated:
 			ambiguousResult = true
+			ba.WillNotBeRetried = true
 			continue // retry
 		case proposalRangeNoLongerExists, proposalErrorReproposing:
 			ambiguousResult = true
 		}
 		if pErr != nil {
-			// If this isn't an end transaction with commit=true, return
-			// error without further ado.
-			if etArg, ok := ba.GetArg(roachpb.EndTransaction); !ok ||
-				!etArg.(*roachpb.EndTransactionRequest).Commit {
+			// If this isn't a non-transactional request or an end transaction with
+			// commit=true, return error without further ado.
+			if etArg, ok := ba.GetArg(roachpb.EndTransaction); !(ok &&
+				etArg.(*roachpb.EndTransactionRequest).Commit) && ba.Txn != nil {
 				return nil, pErr
 			}
 			// If we've gotten an indication of possible ambiguous result,
@@ -4010,9 +4011,10 @@ func (r *Replica) executeWriteBatch(
 		return batch, ms, br, result, nil
 	}
 
-	// Otherwise, re-execute with the original, transactional batch.
 	batch.Close()
 	batch = r.store.Engine().NewBatch()
+	log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for "+
+		"batch: %s", batch)
 	ms = enginepb.MVCCStats{}
 	br, result, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
 	return batch, ms, br, result, pErr
@@ -4193,39 +4195,33 @@ func (r *Replica) executeBatch(
 		if pErr != nil {
 			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.WriteTooOldError:
-				// WriteTooOldErrors may be the product of raft reproposals. If
-				// timestamp of the request matches exactly with the existing
-				// value, maybe propagate the WriteTooOldError to let client
-				// retry at a higher timestamp. Keep in mind that this replay
-				// protection is best effort only. If replays come out of
-				// order, we'd expect them to succeed as the timestamps which
-				// would match on a successive replay won't match if the replay
-				// is delivered only after another raft command has been applied
-				// to the same key. Same thing happens on replays of batches with
-				// overlapping writes.
-				if ba.Timestamp.Next().Equal(tErr.ActualTimestamp) {
-					// If in a txn, propagate WriteTooOldError immediately. In
-					// a txn, intents from earlier commands in the same batch
-					// won't return a WriteTooOldError.
-					if ba.Txn != nil {
-						return nil, result, pErr
-					}
-					// If not in a txn, need to make sure we don't propagate the
-					// error unless there are no earlier commands in the batch
-					// which might have written the same key.
-					var overlap bool
+				// We got a WriteTooOldError. In case this is a transactional request,
+				// we want to run the other commands in the batch and let them lay
+				// intents so that other concurrent overlapping transactions are forced
+				// through intent resolution and the chances of this batch succeeding
+				// when it will be retried are increased.
+				// Except in case the ba.WillNotBeRetried bit is set we don't want the
+				// the intents to be laid - it would be futile.
+				if ba.WillNotBeRetried {
+					nonTxnOverlappingBatch := false
+					// If this is a non-transactional batch, then the WriteTooOldError
+					// can be caused by a previous overlapping command in the batch (in
+					// transactional batches, running into your own intent doesn't cause a
+					// WriteTooOldError). If this is the case, we want to swallow the
+					// error and continue execution.
 					if ba.Txn == nil {
 						for _, union := range ba.Requests[:index] {
 							if union.GetInner().Header().Overlaps(args.Header()) {
-								overlap = true
+								nonTxnOverlappingBatch = true
 								break
 							}
 						}
 					}
-					if !overlap {
+					if !nonTxnOverlappingBatch {
 						return nil, result, pErr
 					}
 				}
+
 				// On WriteTooOldError, we've written a new value or an intent
 				// at a too-high timestamp and we must forward the batch txn or
 				// timestamp as appropriate so that it's returned.
@@ -4233,11 +4229,16 @@ func (r *Replica) executeBatch(
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
 					ba.Txn.WriteTooOld = true
 				} else {
+					// Note that, when the batch appears here to be non-transactional but in
+					// fact is coming from a 1PC with the Begin/End elided, pushing the
+					// timestamp here will cause executeWriteBatch() to discard the 1PC
+					// attempt and retry the batch transactionally.
 					ba.Timestamp.Forward(tErr.ActualTimestamp)
 				}
 				// Clear the WriteTooOldError; we're done processing it by having
 				// moved the batch or txn timestamps forward and set WriteTooOld
-				// if this is a transactional write.
+				// if this is a transactional write. The EndTransaction will detect this
+				// pushed timestamp and return a TransactionRetryError.
 				pErr = nil
 			default:
 				// Initialize the error index.

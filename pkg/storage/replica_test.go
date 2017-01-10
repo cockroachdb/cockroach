@@ -3219,118 +3219,9 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	}
 }
 
-// TestRaftReplayProtection verifies that non-transactional batches
-// enjoy some protection from raft replays, but highlights an example
-// where they won't.
-func TestRaftReplayProtection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer setTxnAutoGC(true)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	tc.Start(t, stopper)
-
-	key := roachpb.Key("a")
-	incs := []int64{1, 3, 7}
-	sum := 2 * incs[0]
-	for _, n := range incs[1:] {
-		sum += n
-	}
-
-	{
-		// Start with an increment for key.
-		incArgs := incrementArgs(key, incs[0])
-		_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{}, &incArgs)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-
-		// Do an increment with timestamp to an earlier timestamp, but same key.
-		// This will bump up to a higher timestamp than the original increment
-		// and not surface a WriteTooOldError.
-		h := roachpb.Header{Timestamp: respH.Timestamp.Prev()}
-		_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), h, &incArgs)
-		if pErr != nil {
-			t.Fatalf("unexpected error: %s", respH)
-		}
-		if expTS := h.Timestamp.Next().Next(); !respH.Timestamp.Equal(expTS) {
-			t.Fatalf("expected too-old increment to advance two logical ticks to %s; got %s", expTS, respH.Timestamp)
-		}
-
-		// Do an increment with exact timestamp; should propagate write too
-		// old error. This is assumed to be a replay because the timestamp
-		// encountered is an exact duplicate and nothing came before the
-		// increment in the batch.
-		h.Timestamp = respH.Timestamp
-		_, _, pErr = SendWrapped(context.Background(), tc.Sender(), h, &incArgs)
-		if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-			t.Fatalf("expected WriteTooOldError; got %s", pErr)
-		}
-	}
-
-	// Send a double increment in a batch. This should increment twice,
-	// as the same key is being incremented in the same batch.
-	var ba roachpb.BatchRequest
-	for _, inc := range incs[1:] {
-		incArgs := incrementArgs(key, inc)
-		ba.Add(&incArgs)
-	}
-	br, pErr := tc.Sender().Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatalf("unexpected error: %s", pErr)
-	}
-
-	if latest := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.IncrementResponse).NewValue; latest != sum {
-		t.Fatalf("expected %d, got %d", sum, latest)
-	}
-
-	// Now resend the batch with the same timestamp; this should look
-	// like the replay it is and surface a WriteTooOldError.
-	ba.Timestamp = br.Timestamp
-	_, pErr = tc.Sender().Send(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-		t.Fatalf("expected WriteTooOldError; got %s", pErr)
-	}
-
-	// Send a DeleteRange & increment.
-	incArgs := incrementArgs(key, 1)
-	ba = roachpb.BatchRequest{}
-	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
-	ba.Add(&incArgs)
-	br, pErr = tc.Sender().Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatalf("unexpected error: %s", pErr)
-	}
-
-	// Send exact same batch; the DeleteRange should trip up and
-	// we'll get a replay error.
-	ba.Timestamp = br.Timestamp
-	_, pErr = tc.Sender().Send(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-		t.Fatalf("expected WriteTooOldError; got %s", pErr)
-	}
-
-	// Send just a DeleteRange batch.
-	ba = roachpb.BatchRequest{}
-	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
-	br, pErr = tc.Sender().Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatalf("unexpected error: %s", pErr)
-	}
-
-	// Now send it again; will not look like a replay because the
-	// previous DeleteRange didn't leave any tombstones at this
-	// timestamp for the replay to "trip" over.
-	ba.Timestamp = br.Timestamp
-	_, pErr = tc.Sender().Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatalf("unexpected error: %s", pErr)
-	}
-}
-
 // TestRaftReplayProtectionInTxn verifies that transactional batches
-// enjoy protection from raft replays.
-func TestRaftReplayProtectionInTxn(t *testing.T) {
+// enjoy protection from "Raft retries".
+func TestRaftRetryProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	cfg := TestStoreConfig(nil)
@@ -3357,9 +3248,15 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
+	// We're going to attempt two retries:
+	// - the first one will fail because of a WriteTooOldError that pushes the
+	// transaction, which fails the 1PC path and forces the txn to execute
+	// normally at which point the WriteTooOld gets indirectly turned into a
+	// TransactionRetryError.
+	// - the second one fails because the BeginTxn is detected to be a duplicate.
 	for i := 0; i < 2; i++ {
-		// Reach in and manually send to raft (to simulate Raft replay) and
-		// also avoid updating the timestamp cache; verify WriteTooOldError.
+		// Reach in and manually send to raft (to simulate Raft retry) and
+		// also avoid updating the timestamp cache.
 		ba.Timestamp = txn.OrigTimestamp
 		lease, _ := tc.repl.getLease()
 		ch, _, err := tc.repl.propose(context.Background(), lease, ba, nil)
@@ -3367,8 +3264,8 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
 		respWithErr := <-ch
-		if _, ok := respWithErr.Err.GetDetail().(*roachpb.WriteTooOldError); !ok {
-			t.Fatalf("%d: expected WriteTooOldError; got %s", i, respWithErr.Err)
+		if _, ok := respWithErr.Err.GetDetail().(*roachpb.TransactionRetryError); !ok {
+			t.Fatalf("%d: expected TransactionRetryError; got %s", i, respWithErr.Err)
 		}
 	}
 }
@@ -3416,10 +3313,21 @@ func TestReplicaLaziness(t *testing.T) {
 	})
 }
 
-// TestReplayProtection verifies that transactional replays cannot
-// commit intents. The replay consists of an initial BeginTxn/Write
-// batch and ends with an EndTxn batch.
-func TestReplayProtection(t *testing.T) {
+// TestRaftRetryCantCommitIntents tests that transactional Raft retries cannot
+// commit intents.
+// It also tests current behavior - that a retried transactional batch can lay
+// down an intent that will never be committed. We don't necessarily like this
+// behavior, though. Note that normally intents are not left hanging by retries
+// like they are in this low-level test. There are two cases:
+// - in case of Raft *reproposals*, the MaxLeaseIndex mechanism will make
+// the reproposal not execute if the original proposal had already been
+// applied.
+// - in case of Raft *retries*, in most cases we know that the original proposal
+// has been dropped and will never be applied. In some cases, the retry is
+// "ambiguous" - we don't know if the original proposal was applied. In those
+// cases, the retry does not leave intents around because of the
+// batch.WillNotBeRetried bit.
+func TestRaftRetryCantCommitIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
@@ -3427,82 +3335,88 @@ func TestReplayProtection(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
-		key := roachpb.Key(fmt.Sprintf("a-%d", i))
-		keyB := roachpb.Key(fmt.Sprintf("b-%d", i))
-		txn := newTransaction("test", key, 1, iso, tc.Clock())
+	testCases := []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT}
 
-		// Send a batch with put to key.
-		var ba roachpb.BatchRequest
-		bt, btH := beginTxnArgs(key, txn)
-		put := putArgs(key, []byte("value"))
-		ba.Header = btH
-		ba.Add(&bt)
-		ba.Add(&put)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
-			t.Fatal(err)
-		}
-		br, pErr := tc.Sender().Send(context.Background(), ba)
-		if pErr != nil {
-			t.Fatalf("%d: unexpected error: %s", i, pErr)
-		}
+	for i, iso := range testCases {
+		t.Run(iso.String(), func(t *testing.T) {
+			key := roachpb.Key(fmt.Sprintf("a-%d", i))
+			keyB := roachpb.Key(fmt.Sprintf("b-%d", i))
+			txn := newTransaction("test", key, 1, iso, tc.Clock())
 
-		// Send a put for keyB.
-		putB := putArgs(keyB, []byte("value"))
-		putTxn := br.Txn.Clone()
-		putTxn.Sequence++
-		_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: &putTxn}, &putB)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
+			// Send a batch with put to key.
+			var ba roachpb.BatchRequest
+			bt, btH := beginTxnArgs(key, txn)
+			put := putArgs(key, []byte("value"))
+			ba.Header = btH
+			ba.Add(&bt)
+			ba.Add(&put)
+			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+				t.Fatal(err)
+			}
+			br, pErr := tc.Sender().Send(context.Background(), ba)
+			if pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
 
-		// EndTransaction.
-		etTxn := respH.Txn.Clone()
-		etTxn.Sequence++
-		et, etH := endTxnArgs(&etTxn, true)
-		et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
-		if _, pErr := tc.SendWrappedWith(etH, &et); pErr != nil {
-			t.Fatalf("%d: unexpected error: %s", i, pErr)
-		}
+			// Send a put for keyB.
+			putB := putArgs(keyB, []byte("value"))
+			putTxn := br.Txn.Clone()
+			putTxn.Sequence++
+			_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: &putTxn}, &putB)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
 
-		// Verify txn record is cleaned.
-		var readTxn roachpb.Transaction
-		txnKey := keys.TransactionKey(txn.Key, *txn.ID)
-		ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.ZeroTimestamp, true /* consistent */, nil /* txn */, &readTxn)
-		if err != nil || ok {
-			t.Errorf("%d: expected transaction record to be cleared (%t): %s", i, ok, err)
-		}
+			// EndTransaction.
+			etTxn := respH.Txn.Clone()
+			etTxn.Sequence++
+			et, etH := endTxnArgs(&etTxn, true)
+			et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
+			if _, pErr := tc.SendWrappedWith(etH, &et); pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
 
-		// Now replay begin & put. BeginTransaction should fail with a replay error.
-		_, pErr = tc.Sender().Send(context.Background(), ba)
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
-			t.Errorf("%d: expected transaction replay for iso=%s; got %s", i, iso, pErr)
-		}
+			// Verify txn record is cleaned.
+			var readTxn roachpb.Transaction
+			txnKey := keys.TransactionKey(txn.Key, *txn.ID)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.ZeroTimestamp, true /* consistent */, nil /* txn */, &readTxn)
+			if err != nil || ok {
+				t.Errorf("expected transaction record to be cleared (%t): %s", ok, err)
+			}
 
-		// Intent should not have been created.
-		gArgs := getArgs(key)
-		if _, pErr = tc.SendWrapped(&gArgs); pErr != nil {
-			t.Errorf("%d: unexpected error reading key: %s", i, pErr)
-		}
+			// Now replay begin & put. BeginTransaction should fail with a replay error.
+			_, pErr = tc.Sender().Send(context.Background(), ba)
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
+				t.Errorf("expected transaction replay for iso=%s; got %s", iso, pErr)
+			}
 
-		// Send a put for keyB; should fail with a WriteTooOldError as this
-		// will look like an obvious replay.
-		_, _, pErr = SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: &putTxn}, &putB)
-		if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-			t.Errorf("%d: expected write too old error for iso=%s; got %s", i, iso, pErr)
-		}
+			// Intent should not have been created.
+			gArgs := getArgs(key)
+			if _, pErr = tc.SendWrapped(&gArgs); pErr != nil {
+				t.Errorf("unexpected error reading key: %s", pErr)
+			}
 
-		// EndTransaction should also fail, but with a status error (does not exist).
-		_, pErr = tc.SendWrappedWith(etH, &et)
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
-			t.Errorf("%d: expected transaction aborted for iso=%s; got %s", i, iso, pErr)
-		}
+			// Send a put for keyB; this currently succeeds as there's nothing to detect
+			// the retry.
+			if _, _, pErr = SendWrapped(
+				context.Background(), tc.Sender(),
+				roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
+				t.Error(pErr)
+			}
 
-		// Expect that keyB intent did not get written!
-		gArgs = getArgs(keyB)
-		if _, pErr = tc.SendWrapped(&gArgs); pErr != nil {
-			t.Errorf("%d: unexpected error reading keyB: %s", i, pErr)
-		}
+			// EndTransaction should fail with a status error (does not exist).
+			_, pErr = tc.SendWrappedWith(etH, &et)
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
+				t.Errorf("expected transaction aborted for iso=%s; got %s", iso, pErr)
+			}
+
+			// Expect that keyB intent did not get written!
+			gArgs = getArgs(keyB)
+			_, pErr = tc.SendWrapped(&gArgs)
+			if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+				t.Errorf("expected WriteIntentError, got: %v", pErr)
+			}
+		})
 	}
 }
 
@@ -6671,6 +6585,26 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 }
 
+func checkValue(tc *testContext, key []byte, expectedVal []byte) error {
+	gArgs := getArgs(key)
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{}, &gArgs)
+	if pErr != nil {
+		return errors.Errorf("could not get data: %s", pErr)
+	}
+	v := resp.(*roachpb.GetResponse).Value
+	if v == nil {
+		return errors.Errorf("no value")
+	}
+	val, err := v.GetBytes()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(val, expectedVal) {
+		return errors.Errorf("expected %q got: %s", expectedVal, val)
+	}
+	return nil
+}
+
 // TestAmbiguousResultErrorOnRetry verifies that when a batch with
 // EndTransaction(commit=true) is retried, it will return an
 // AmbiguousResultError if the retry fails.
@@ -6686,18 +6620,8 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 	var baPuts roachpb.BatchRequest
 	{
 		key := roachpb.Key("put1")
-		put1 := putArgs(key, []byte("value1"))
-		// We're batching two put's to introduce uncertainty in
-		// replica.executeBatch() about whether WriteTooOldError's happened
-		// because of retries/reproposals or because of other writes in the same
-		// batch. If we didn't do this, the retry that this test performs would
-		// result in a WriteTooOldError.
-		// NOTE(andrei): I don't quite understand what we're testing with the
-		// retries of non-transactional batches. There's no "replay protection" for
-		// non-transactional batches, but the results of their retries are
-		// unreliable (you can easily get a WriteTooOldError).
-		put2 := putArgs(key, []byte("value2"))
-		baPuts.Add(&put1, &put2)
+		put1 := putArgs(key, []byte("value"))
+		baPuts.Add(&put1)
 	}
 	var ba1PCTxn roachpb.BatchRequest
 	{
@@ -6720,14 +6644,20 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 			name: "batch-of-puts",
 			ba:   baPuts,
 			checkFn: func(pErr *roachpb.Error) error {
-				if pErr != nil {
-					// Note that this is successful because we don't provide replay
-					// protection for non-transactional commands, though this may
-					// change in the future.
-					return errors.Wrap(pErr.GoError(),
-						"expected success on retry of puts-only batch")
+				detail := pErr.GetDetail()
+				are, ok := detail.(*roachpb.AmbiguousResultError)
+				if !ok {
+					return errors.Wrapf(detail, "expected AmbiguousResultError, got error %T", detail)
 				}
-				return nil
+				detail = are.WrappedErr.GetDetail()
+				if _, ok := detail.(*roachpb.WriteTooOldError); !ok {
+					return errors.Wrapf(detail,
+						"expected the AmbiguousResultError to be caused by a "+
+							"WriteTooOldError, got %T", detail)
+				}
+				// Test that the original proposal succeeded by checking the effects of
+				// the transaction.
+				return checkValue(&tc, roachpb.Key("put1"), []byte("value"))
 			},
 		},
 		{
@@ -6740,9 +6670,9 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 				// This unittest verifies that the timestamp cache isn't updated before
 				// sending the retry. Otherwise, the retry would receive an
 				// AmbiguousResultError, but it would be caused by a
-				// TransactionReplayError instead of a WriteTooOldError. This is because
-				// the EndTxn updates the timestamp cache and the subsequent begin (part
-				// of the retried) checks it. Before the fix in #10639, this
+				// TransactionReplayError instead of a TransactionRetryError. This is
+				// because the EndTxn updates the timestamp cache and the subsequent
+				// begin (part of the retried) checks it. Before the fix in #10639, this
 				// retry of 1pc batches would always get TransactionReplayError (wrapped
 				// in an AmbiguousResultError), which would have been too pessimistic -
 				// unnecessary in case the original command was never actually applied.
@@ -6758,37 +6688,18 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 				detail = are.WrappedErr.GetDetail()
 				if _, ok := detail.(*roachpb.WriteTooOldError); !ok {
 					return errors.Wrapf(detail,
-						"expected the AmbiguousResultError to be caused by a WriteTooOldError, "+
-							"got %T", detail)
+						"expected the AmbiguousResultError to be caused by a "+
+							"WriteTooOldError, got %T", detail)
 				}
 
 				// Test that the original proposal succeeded by checking the effects of
 				// the transaction.
-				key := roachpb.Key("1pc")
-				gArgs := getArgs(key)
-				var resp roachpb.Response
-				resp, pErr = tc.SendWrappedWith(roachpb.Header{}, &gArgs)
-				if pErr != nil {
-					return errors.Errorf("could not get data: %s", pErr)
-				}
-				v := resp.(*roachpb.GetResponse).Value
-				if v == nil {
-					return errors.Errorf("no value")
-				}
-				val, err := v.GetBytes()
-				if err != nil {
-					return err
-				}
-				if !bytes.Equal(val, []byte("value")) {
-					return errors.Errorf("expected \"value\", got: %s", val)
-				}
-
-				return nil
+				return checkValue(&tc, roachpb.Key("1pc"), []byte("value"))
 			},
 		},
 	}
 
-	errCh := make(chan error, 1)
+	originalProposalErrChan := make(chan error, 1)
 
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
@@ -6821,7 +6732,7 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 					// We've just told the "client" to retry the request, but we still
 					// want this "original" command to be proposed. Moreover, the test
 					// relies on this original succeeding.
-					errCh <- defaultSubmitProposalLocked(tc.repl, p)
+					originalProposalErrChan <- defaultSubmitProposalLocked(tc.repl, p)
 					tc.repl.mu.Unlock()
 				}()
 				return nil // pretend we proposed though we haven't yet.
@@ -6829,13 +6740,40 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 			tc.repl.mu.Unlock()
 
 			_, pErr := tc.Sender().Send(context.Background(), c.ba)
+			if err := <-originalProposalErrChan; err != nil {
+				t.Fatal(err)
+			}
 			if err := c.checkFn(pErr); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-errCh; err != nil {
-				t.Fatal(err)
-			}
 		})
+	}
+}
+
+// Test that an overlapping non-transactional batch executes correctly: the 2nd
+// write will get a WriteTooOldError because of the first, and we need to
+// swallow the error.
+func TestOverlappingNontransactionalBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg := TestStoreConfig(nil)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	var baPuts roachpb.BatchRequest
+	{
+		key := roachpb.Key("put1")
+		put1 := putArgs(key, []byte("value1"))
+		put2 := putArgs(key, []byte("value2"))
+		baPuts.Add(&put1, &put2)
+	}
+	if _, pErr := tc.Sender().Send(context.Background(), baPuts); pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
+	if err := checkValue(&tc, roachpb.Key("put1"), []byte("value2")); err != nil {
+		t.Fatal(err)
 	}
 }
 

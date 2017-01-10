@@ -303,6 +303,10 @@ func (*SendError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []
 // An AmbiguousResultError indicates that an EndTransaction request
 // may have succeeded or failed, but the response was not received and
 // the final result is ambiguous.
+// This error is also sometimes returned for non-transactional batches, although
+// there the detection of retried batches is not always reliable (detection
+// relies on a WriteTooOldError situation, which doesn't happen for requests
+// like IncrementRequest).
 type AmbiguousResultError struct {
 	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
 	// This can be set to give extra information about which error was converted

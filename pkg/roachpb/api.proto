@@ -842,6 +842,22 @@ message Header {
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.
   optional bool return_range_info = 10 [(gogoproto.nullable) = false];
+  // If set, this indicates to the batch evaluation process that, in case of a
+  // retriable error, this batch will not be retried. This is used in
+  // relationship with WriteTooOldError's: normally, these errors are
+  // swallowed for transactional batches in replica.executeBatch() so that the
+  // the batch continues to lay down intents even if it's going to have to be
+  // retried. If will_not_be_retried is set, then the batch is not allowed to
+  // continue, since the intents would not be useful.
+  // Concretely, this is set when a batch is retried at the Raft level and the
+  // retry is ambiguous (i.e. the batch might had been already applied before
+  // and, if the retry fails, we need to report an AmbiguousResultError to the
+  // client and not retry the batch at higher levels (with a different
+  // timestamp)).
+  // Note(andrei): besides optimizing these retries, the field was introduced to
+  // prevent retries from leaving around intents that were inconveniencing
+  // tests.
+  optional bool will_not_be_retried = 11 [(gogoproto.nullable) = false];
 }
 
 

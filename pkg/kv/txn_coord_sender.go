@@ -849,6 +849,15 @@ func (tc *TxnCoordSender) updateState(
 		// cache entries or newer versions which caused the restart.
 		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
 	case *roachpb.WriteTooOldError:
+		// WriteTooOldError's are usually handled in replica.executeBatch() by
+		// pushing the txn's timestamp, which will cause the EndTransaction to raise
+		// a TransactionRetryError. However, in case the raft command is being
+		// retried and the retry is ambiguous, WriteTooOldError from the retry are
+		// just propagated (see comments in replica.executeBatch()).
+		if !ba.WillNotBeRetried {
+			log.Error(ctx, "got WriteTooOldError for a batch that can be retried. "+
+				"This shouldn't happen. ba: %s, pErr: %s", ba, pErr)
+		}
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, t.ActualTimestamp)
 	case nil:
 		// Nothing to do here, avoid the default case.
