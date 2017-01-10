@@ -4608,7 +4608,7 @@ func calcGoodReplicas(
 				// A single range can process thousands of ops/sec, so a replica that
 				// is 10 Raft log entries behind is fairly current. Setting this value
 				// to 0 makes the under-replicated metric overly sensitive. Setting
-				// this value too high and the metric doesn't show all of the
+				// this value too high makes the metric not show all of the
 				// under-replicated replicas.
 				const behindThreshold = 10
 				// TODO(peter): progress.Match will be 0 if this node recently
