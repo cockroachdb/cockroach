@@ -57,32 +57,32 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
     "1 hour": {
       windowSize: moment.duration(1, "hour"),
       windowValid: moment.duration(1, "minute"),
-      sampleSize: moment.duration(1, "minutes"),
+      sampleSize: moment.duration(30, "seconds"),
     },
     "6 hours": {
       windowSize: moment.duration(6, "hours"),
       windowValid: moment.duration(5, "minutes"),
-      sampleSize: moment.duration(5, "minutes"),
+      sampleSize: moment.duration(1, "minutes"),
     },
     "12 hours": {
       windowSize: moment.duration(12, "hours"),
       windowValid: moment.duration(10, "minutes"),
-      sampleSize: moment.duration(10, "minutes"),
+      sampleSize: moment.duration(2, "minutes"),
     },
     "1 day": {
       windowSize: moment.duration(1, "day"),
       windowValid: moment.duration(10, "minutes"),
-      sampleSize: moment.duration(30, "minutes"),
+      sampleSize: moment.duration(5, "minutes"),
     },
     "1 week": {
       windowSize: moment.duration(7, "days"),
       windowValid: moment.duration(10, "minutes"),
-      sampleSize: moment.duration(1, "hour"),
+      sampleSize: moment.duration(30, "minutes"),
     },
     "1 month": {
       windowSize: moment.duration(1, "month"),
       windowValid: moment.duration(20, "minutes"),
-      sampleSize: moment.duration(2, "hours"),
+      sampleSize: moment.duration(1, "hour"),
     },
   },
   (v: TimeScale, k) => {
