@@ -229,12 +229,16 @@ func TestScanNumber(t *testing.T) {
 		expected string
 		id       int
 	}{
+		{`0`, `0`, ICONST},
+		{`000`, `0`, ICONST},
 		{`1`, `1`, ICONST},
 		{`0x1`, `0x1`, ICONST},
 		{`0X2`, `0X2`, ICONST},
 		{`0xff`, `0xff`, ICONST},
 		{`0xff.`, `0xff`, ICONST},
 		{`12345`, `12345`, ICONST},
+		{`08`, `8`, ICONST},
+		{`0011`, `11`, ICONST},
 		{`1.`, `1.`, FCONST},
 		{`.1`, `.1`, FCONST},
 		{`1..2`, `1`, ICONST},
@@ -410,7 +414,6 @@ func TestScanError(t *testing.T) {
 		{`1.0x`, "invalid hexadecimal numeric literal"},
 		{`0x0x`, "invalid hexadecimal numeric literal"},
 		{`00x0x`, "invalid hexadecimal numeric literal"},
-		{`08`, "could not make constant int from literal \"08\""},
 		{`x'zzz'`, "invalid hexadecimal string literal"},
 		{`X'zzz'`, "invalid hexadecimal string literal"},
 		{`x'beef\x41'`, "invalid hexadecimal string literal"},
