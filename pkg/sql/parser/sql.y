@@ -105,7 +105,10 @@ func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
 }
 func (u *sqlSymUnion) strs() []string {
-    return u.val.([]string)
+    if stmt, ok := u.val.([]string); ok {
+      return stmt
+    }
+    return nil
 }
 func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
     return u.val.(*TableNameWithIndex)
@@ -317,6 +320,15 @@ func (u *sqlSymUnion) cmpOp() ComparisonOperator {
 func (u *sqlSymUnion) durationField() durationField {
     return u.val.(durationField)
 }
+func (u *sqlSymUnion) kvOption() KVOption {
+    return u.val.(KVOption)
+}
+func (u *sqlSymUnion) kvOptions() []KVOption {
+    if colType, ok := u.val.([]KVOption); ok {
+        return colType
+    }
+    return nil
+}
 
 %}
 
@@ -365,7 +377,10 @@ func (u *sqlSymUnion) durationField() durationField {
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
 
-%type <*StrVal> opt_incremental
+%type <[]string> opt_incremental
+%type <KVOption> kv_option
+%type <[]KVOption> kv_option_list opt_with_options
+%type <str> opt_equal_value
 
 %type <*Select> select_no_parens
 %type <SelectStatement> select_clause select_with_parens simple_select values_clause
@@ -533,6 +548,7 @@ func (u *sqlSymUnion) durationField() durationField {
 %type <Expr>  non_reserved_word_or_sconst
 %type <Expr>  var_value
 %type <Expr>  zone_value
+%type <[]string> string_list
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
@@ -635,7 +651,7 @@ func (u *sqlSymUnion) durationField() durationField {
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
-%token <str>   OF OFF OFFSET OID ON ONLY OR
+%token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
@@ -952,26 +968,68 @@ alter_using:
   USING a_expr { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
-/* TODO(dan): backup/restore all databases, only certain tables, etc */
+// TODO(dan): Rename privlege_target to reflect its new use when merging upstream.
 backup_stmt:
-  BACKUP DATABASE name TO SCONST opt_incremental
+  BACKUP privilege_target TO SCONST opt_as_of_clause opt_incremental opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &Backup{Database: Name($3), To: &StrVal{s: $5}, IncrementalFrom: $6.strVal()}
+    $$.val = &Backup{Targets: $2.targetList(), To: $4, IncrementalFrom: $6.strs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
-| RESTORE DATABASE name FROM SCONST
+| RESTORE privilege_target FROM string_list opt_as_of_clause opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &Restore{Database: Name($3), From: &StrVal{s: $5}}
+    $$.val = &Restore{Targets: $2.targetList(), From: $4.strs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+  }
+
+string_list:
+  SCONST
+  {
+    $$.val = []string{$1}
+  }
+| string_list ',' SCONST
+  {
+    $$.val = append($1.strs(), $3)
   }
 
 opt_incremental:
-  INCREMENTAL FROM SCONST
+  INCREMENTAL FROM string_list
   {
-    $$.val = &StrVal{s: $3}
+    $$.val = $3.strs()
   }
 | /* EMPTY */ {}
 
+opt_equal_value:
+  '=' SCONST
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
+kv_option:
+  SCONST opt_equal_value
+  {
+    $$.val = KVOption{Key: $1, Value: $2}
+  }
+
+kv_option_list:
+  kv_option
+  {
+    $$.val = []KVOption{$1.kvOption()}
+  }
+|  kv_option_list ',' kv_option
+  {
+    $$.val = append($1.kvOptions(), $3.kvOption())
+  }
+
+opt_with_options:
+  WITH OPTIONS '(' kv_option_list ')'
+  {
+    $$.val = $4.kvOptions()
+  }
+| /* EMPTY */ {}
 
 copy_from_stmt:
   COPY qualified_name FROM STDIN
@@ -3799,9 +3857,9 @@ a_expr:
       return 1
     }
     $$.val = &ComparisonExpr{
-      Operator: op, 
+      Operator: op,
       SubOperator: subOpCmp,
-      Left: $1.expr(), 
+      Left: $1.expr(),
       Right: $4.expr(),
     }
   }
@@ -5006,6 +5064,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OID
+| OPTIONS
 | ORDINALITY
 | OVER
 | PARENT
