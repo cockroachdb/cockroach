@@ -244,6 +244,12 @@ func TestDistAggregationTable(t *testing.T) {
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	for fn, info := range DistAggregationTable {
+		if info.LocalStage == distsqlrun.AggregatorSpec_IDENT &&
+			info.FinalStage == distsqlrun.AggregatorSpec_IDENT {
+			// IDENT only works as expected if all rows have the same value on the
+			// relevant column; skip testing this trivial case.
+			continue
+		}
 		// We're going to test each aggregation function on every column that can be
 		// used as input for it.
 		foundCol := false
