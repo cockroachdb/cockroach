@@ -20,37 +20,92 @@ import "bytes"
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Database        Name
-	To              *StrVal
-	IncrementalFrom *StrVal
+	Targets         TargetList
+	To              string
+	IncrementalFrom []string
+	AsOf            AsOfClause
+	Options         KVOptions
 }
 
 var _ Statement = &Backup{}
 
 // Format implements the NodeFormatter interface.
 func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("BACKUP DATABASE ")
-	FormatNode(buf, f, node.Database)
+	buf.WriteString("BACKUP ")
+	FormatNode(buf, f, node.Targets)
 	buf.WriteString(" TO ")
-	FormatNode(buf, f, node.To)
+	encodeSQLString(buf, node.To)
+	if node.AsOf.Expr != nil {
+		buf.WriteString(" ")
+		FormatNode(buf, f, node.AsOf)
+	}
 	if node.IncrementalFrom != nil {
 		buf.WriteString(" INCREMENTAL FROM ")
-		FormatNode(buf, f, node.IncrementalFrom)
+		for i, from := range node.IncrementalFrom {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			encodeSQLString(buf, from)
+		}
+	}
+	if node.Options != nil {
+		buf.WriteString(" WITH OPTIONS (")
+		FormatNode(buf, f, node.Options)
+		buf.WriteString(")")
 	}
 }
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Database Name
-	From     *StrVal
+	Targets TargetList
+	From    []string
+	AsOf    AsOfClause
+	Options KVOptions
 }
 
 var _ Statement = &Restore{}
 
 // Format implements the NodeFormatter interface.
 func (node *Restore) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("RESTORE DATABASE ")
-	FormatNode(buf, f, node.Database)
+	buf.WriteString("RESTORE ")
+	FormatNode(buf, f, node.Targets)
 	buf.WriteString(" FROM ")
-	FormatNode(buf, f, node.From)
+	for i, from := range node.From {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		encodeSQLString(buf, from)
+	}
+	if node.AsOf.Expr != nil {
+		buf.WriteString(" ")
+		FormatNode(buf, f, node.AsOf)
+	}
+	if node.Options != nil {
+		buf.WriteString(" WITH OPTIONS (")
+		FormatNode(buf, f, node.Options)
+		buf.WriteString(")")
+	}
+}
+
+// KVOption is a key-value option.
+type KVOption struct {
+	Key   string
+	Value string
+}
+
+// KVOptions is a list of KVOptions.
+type KVOptions []KVOption
+
+// Format implements the NodeFormatter interface.
+func (l KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, n := range l {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		encodeSQLString(buf, n.Key)
+		if len(n.Value) != 0 {
+			buf.WriteString(`=`)
+			encodeSQLString(buf, n.Value)
+		}
+	}
 }

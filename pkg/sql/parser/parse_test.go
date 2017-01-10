@@ -612,9 +612,20 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX i SPLIT AT (1)`},
 		{`ALTER INDEX d.i SPLIT AT (2)`},
 
+		{`BACKUP foo TO 'bar'`},
+		{`BACKUP foo.foo, baz.baz TO 'bar'`},
+		{`BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 		{`BACKUP DATABASE foo TO 'bar'`},
-		{`BACKUP DATABASE foo TO 'bar' INCREMENTAL FROM 'baz'`},
+		{`BACKUP DATABASE foo, baz TO 'bar'`},
+		{`BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
+		{`RESTORE foo FROM 'bar'`},
+		{`RESTORE foo, baz FROM 'bar'`},
+		{`RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 		{`RESTORE DATABASE foo FROM 'bar'`},
+		{`RESTORE DATABASE foo, baz FROM 'bar'`},
+		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
+		{`BACKUP foo TO 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
+		{`RESTORE foo FROM 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
