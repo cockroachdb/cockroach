@@ -643,14 +643,6 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		return nil, err
 	}
 
-	desc, err := p.mustGetTableDesc(tn)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.anyPrivilege(desc); err != nil {
-		return nil, err
-	}
-
 	columns := ResultColumns{
 		{Name: "Table", Typ: parser.TypeString},
 		{Name: "Name", Typ: parser.TypeString},
@@ -660,46 +652,38 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		{Name: "Direction", Typ: parser.TypeString},
 		{Name: "Storing", Typ: parser.TypeBool},
 	}
-
 	return &delayedNode{
-		name:    "SHOW INDEX FROM " + tn.String(),
+		name:    "SHOW INDEXES FROM " + tn.String(),
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(columns, 0)
+			const getIndexes = `
+				SELECT
+					TABLE_NAME AS "Table",
+					INDEX_NAME AS "Name",
+					NOT NON_UNIQUE AS "Unique",
+					SEQ_IN_INDEX AS "Seq",
+					COLUMN_NAME AS "Column",
+					DIRECTION AS "Direction",
+					STORING AS "Storing"
+				FROM information_schema.statistics
+				WHERE
+					TABLE_SCHEMA=$1 AND
+					TABLE_NAME=$2`
 
-			appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
-				direction string, isStored bool) error {
-				newRow := parser.DTuple{
-					parser.NewDString(tn.Table()),
-					parser.NewDString(index.Name),
-					parser.MakeDBool(parser.DBool(index.Unique)),
-					parser.NewDInt(parser.DInt(sequence)),
-					parser.NewDString(colName),
-					parser.NewDString(direction),
-					parser.MakeDBool(parser.DBool(isStored)),
-				}
-				_, err := v.rows.AddRow(newRow)
-				return err
+			db := tn.Database()
+			if err := checkDBExists(p, db); err != nil {
+				return nil, err
 			}
 
-			for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
-				sequence := 1
-				for i, col := range index.ColumnNames {
-					if err := appendRow(index, col, sequence, index.ColumnDirections[i].String(), false); err != nil {
-						v.rows.Close()
-						return nil, err
-					}
-					sequence++
-				}
-				for _, col := range index.StoreColumnNames {
-					if err := appendRow(index, col, sequence, "N/A", true); err != nil {
-						v.rows.Close()
-						return nil, err
-					}
-					sequence++
-				}
+			if err := checkTableExists(p, tn); err != nil {
+				return nil, err
 			}
-			return v, nil
+
+			if err := checkTablePrivileges(p, tn); err != nil {
+				return nil, err
+			}
+
+			return queryInfoSchema(p, columns, db, getIndexes, tn.Database(), tn.Table())
 		},
 	}, nil
 }
