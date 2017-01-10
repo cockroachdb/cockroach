@@ -136,10 +136,10 @@ TABLE_NAME       STRING     false  ''
 TABLE_TYPE       STRING     false  ''
 VERSION          INT        true   NULL
 
-query TTTTTTT colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
 ----
-Table  Name  Unique  Seq  Column  Direction  Storing
+Table  Name  Unique  Seq  Column  Direction  Storing  Implicit
 
 query TTTTT colnames
 SHOW CONSTRAINTS FROM information_schema.tables
@@ -745,14 +745,16 @@ user root
 statement ok
 CREATE TABLE other_db.teststatics(id INT PRIMARY KEY, c INT, d INT, e STRING, INDEX idx_c(c), UNIQUE INDEX idx_cd(c,d))
 
-query TTTBTTITIITB colnames
+query TTTBTTITIITBB colnames
 SELECT * FROM information_schema.statistics WHERE table_schema='other_db' AND table_name='teststatics' ORDER BY INDEX_SCHEMA,INDEX_NAME,SEQ_IN_INDEX
 ----
-TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME   NON_UNIQUE  INDEX_SCHEMA  INDEX_NAME  SEQ_IN_INDEX  COLUMN_NAME  COLLATION  CARDINALITY  DIRECTION  STORING
-def            other_db      teststatics  true        other_db      idx_c       1             c            NULL       NULL         ASC        false
-def            other_db      teststatics  false       other_db      idx_cd      1             c            NULL       NULL         ASC        false
-def            other_db      teststatics  false       other_db      idx_cd      2             d            NULL       NULL         ASC        false
-def            other_db      teststatics  false       other_db      primary     1             id           NULL       NULL         ASC        false
+TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME   NON_UNIQUE  INDEX_SCHEMA  INDEX_NAME  SEQ_IN_INDEX  COLUMN_NAME  COLLATION  CARDINALITY  DIRECTION  STORING  IMPLICIT
+def            other_db      teststatics  true        other_db      idx_c       1             c            NULL       NULL         ASC        false    false
+def            other_db      teststatics  true        other_db      idx_c       2             id           NULL       NULL         ASC        false    true
+def            other_db      teststatics  false       other_db      idx_cd      1             c            NULL       NULL         ASC        false    false
+def            other_db      teststatics  false       other_db      idx_cd      2             d            NULL       NULL         ASC        false    false
+def            other_db      teststatics  false       other_db      idx_cd      3             id           NULL       NULL         ASC        false    true
+def            other_db      teststatics  false       other_db      primary     1             id           NULL       NULL         ASC        false    false
 
 # Verify information_schema.views
 statement ok

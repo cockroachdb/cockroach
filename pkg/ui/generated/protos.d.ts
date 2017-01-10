@@ -3651,6 +3651,15 @@ getStoring?() : boolean;
 
 
 
+implicit?: boolean;
+		
+
+getImplicit?() : boolean;
+		setImplicit?(implicit : boolean): void;
+		
+
+
+
 }
 
 	export interface IndexMessage extends Index {

@@ -70,14 +70,15 @@ id username  species
 2  jerry     rat
 
 # Renaming a column updates the column names in an index.
-query TTBITTB colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
-Table  Name     Unique  Seq  Column   Direction  Storing
-users  primary  true    1    id       ASC        false
-users  foo      false   1    username ASC        false
-users  bar      true    1    id       ASC        false
-users  bar      true    2    username ASC        false
+Table  Name     Unique  Seq  Column    Direction  Storing  Implicit
+users  primary  true    1    id        ASC        false    false
+users  foo      false   1    username  ASC        false    false
+users  foo      false   2    id        ASC        false    true
+users  bar      true    1    id        ASC        false    false
+users  bar      true    2    username  ASC        false    false
 
 statement ok
 CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'
