@@ -28,14 +28,17 @@ interface DropdownOwnProps {
   highlightedArrow?: ArrowDirection;
 }
 
-class DropdownState {
-
+enum ArrowButtonHighlightState {
+  NOT_HIGHLIGHTED, HIGHLIGHTED, FADING,
 }
 
 /**
  * Dropdown component that uses the URL query string for state.
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
+
+  arrowButtonHighlightState: ArrowButtonHighlightState = ArrowButtonHighlightState.NOT_HIGHLIGHTED;
+
   render() {
     let {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
     let className = "dropdown";
