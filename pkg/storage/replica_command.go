@@ -1747,20 +1747,12 @@ func (r *Replica) applyNewLeaseLocked(
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
 	pd.Replicated.State.Lease = &lease
-	if l := r.mu.state.Lease; l == nil || l.Replica.StoreID != lease.Replica.StoreID {
-		pd.Local.maybeGossipNodeLiveness = &keys.NodeLivenessSpan
-	}
 	pd.Local.leaseMetricsResult = new(leaseMetricsType)
 	if isTransfer {
 		*pd.Local.leaseMetricsResult = leaseTransferSuccess
 	} else {
 		*pd.Local.leaseMetricsResult = leaseRequestSuccess
 	}
-	// TODO(tschottdorf): having traced the origin of this call back to
-	// rev 6281926, it seems that we should only be doing this when the
-	// lease holder has changed. However, it's likely not a big deal to
-	// do it always.
-	pd.Local.maybeGossipSystemConfig = true
 	return pd, nil
 }
 
