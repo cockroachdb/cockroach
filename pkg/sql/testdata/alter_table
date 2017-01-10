@@ -154,9 +154,6 @@ ALTER TABLE t DROP IF EXISTS d
 statement error column "a" is referenced by the primary key
 ALTER TABLE t DROP a
 
-statement error column "b" is referenced by existing index "foo"
-ALTER TABLE t DROP b
-
 statement error constraint "bar" does not exist
 ALTER TABLE t DROP CONSTRAINT bar
 
@@ -267,15 +264,11 @@ a   d     x     y     z
 31  32    NULL  1.3   1.4
 33  34    2     2.1   2.2
 
-# fix #6463
-statement error column "d" is referenced by existing index "t_d_key"
+statement ok
 ALTER TABLE t DROP COLUMN d
 
 statement ok
-DROP INDEX t@t_d_key
-
-statement ok
-ALTER TABLE t ADD COLUMN e INT
+ALTER TABLE t ADD COLUMN e INT; ALTER TABLE t ADD COLUMN d INT
 
 statement ok
 CREATE VIEW v AS SELECT x, y FROM t WHERE e > 5
@@ -309,6 +302,24 @@ ALTER TABLE t DROP COLUMN IF EXISTS e
 
 statement ok
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
+
+statement ok
+ALTER TABLE t ADD COLUMN g INT UNIQUE
+
+statement ok
+CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX ii (i) STORING(h))
+
+statement error "t_g_key" is referenced by foreign key from table "o"
+ALTER TABLE t DROP COLUMN g
+
+statement ok
+ALTER TABLE t DROP COLUMN g CASCADE
+
+statement error column "h" is referenced by existing index "ii"
+ALTER TABLE o DROP COLUMN h
+
+statement ok
+ALTER TABLE o DROP COLUMN h CASCADE
 
 statement error adding a CHECK constraint via ALTER not supported
 ALTER TABLE t ADD f INT CHECK (f>1)
