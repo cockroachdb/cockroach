@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -914,6 +915,43 @@ func TestClusterTimestampConversion(t *testing.T) {
 		if final != d.expected {
 			t.Errorf("expected %s, but found %s", d.expected, final)
 		}
+	}
+}
+
+func TestCastToCollatedString(t *testing.T) {
+	cases := []struct {
+		typ      CollatedStringColType
+		contents string
+	}{
+		{CollatedStringColType{Locale: "de"}, "test"},
+		{CollatedStringColType{Locale: "en"}, "test"},
+		{CollatedStringColType{Locale: "en", N: 5}, "test"},
+		{CollatedStringColType{Locale: "en", N: 4}, "test"},
+		{CollatedStringColType{Locale: "en", N: 3}, "tes"},
+	}
+	for i, cas := range cases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, syntaxMode: castShort}
+			typedexpr, err := expr.TypeCheck(&SemaContext{}, TypeAny)
+			if err != nil {
+				t.Fatal(err)
+			}
+			val, err := typedexpr.Eval(&EvalContext{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch v := val.(type) {
+			case *DCollatedString:
+				if v.Locale != cas.typ.Locale {
+					t.Errorf("expected locale %q but got %q", cas.typ.Locale, v.Locale)
+				}
+				if v.Contents != cas.contents {
+					t.Errorf("expected contents %q but got %q", cas.contents, v.Contents)
+				}
+			default:
+				t.Errorf("expected type *DCollatedString but got %T", v)
+			}
+		})
 	}
 }
 
