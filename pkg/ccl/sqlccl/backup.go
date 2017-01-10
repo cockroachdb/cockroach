@@ -1048,6 +1048,12 @@ func backupPlanHook(
 		}
 		// TODO(dan): Don't ignore the database named passed in.
 		endTime := cfg.Clock.Now()
+		if backup.AsOf.Expr != nil {
+			var err error
+			if endTime, err = sql.EvalAsOfTimestamp(nil, backup.AsOf, endTime); err != nil {
+				return nil, err
+			}
+		}
 		desc, err := Backup(ctx, *cfg.DB, backup.To, startTime, endTime)
 		if err != nil {
 			return nil, err
