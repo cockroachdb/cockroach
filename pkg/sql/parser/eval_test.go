@@ -17,7 +17,6 @@
 package parser
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -929,8 +928,8 @@ func TestCastToCollatedString(t *testing.T) {
 		{CollatedStringColType{Locale: "en", N: 4}, "test"},
 		{CollatedStringColType{Locale: "en", N: 3}, "tes"},
 	}
-	for i, cas := range cases {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+	for _, cas := range cases {
+		t.Run("", func(t *testing.T) {
 			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, syntaxMode: castShort}
 			typedexpr, err := expr.TypeCheck(&SemaContext{}, TypeAny)
 			if err != nil {
