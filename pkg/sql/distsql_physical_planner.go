@@ -361,6 +361,24 @@ func mergePlans(
 	return mergedPlan, leftRouters, rightRouters
 }
 
+// exprFmtFlagsBase are FmtFlags used for serializing expressions; a proper
+// IndexedVar formatting function needs to be added on.
+var exprFmtFlagsBase = parser.FmtStarDatumFormat(
+	parser.FmtSimple,
+	func(buf *bytes.Buffer, _ parser.FmtFlags) {
+		fmt.Fprintf(buf, "0")
+	},
+)
+
+// exprFmtFlagsNoMap are FmtFlags used for serializing expressions that don't
+// need to remap IndexedVars.
+var exprFmtFlagsNoMap = parser.FmtIndexedVarFormat(
+	exprFmtFlagsBase,
+	func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+		fmt.Fprintf(buf, "@%d", idx+1)
+	},
+)
+
 // The distsqlrun Expression uses the placeholder syntax (@1, @2, @3..) to
 // refer to columns. We format the expression using the IndexedVar and StarDatum
 // formatting interceptors. A columnMap can optionally be used to remap the
@@ -370,39 +388,20 @@ func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsqlrun.Expres
 		return distsqlrun.Expression{}
 	}
 
-	// TODO(irfansharif): currently there’s no nice way to “compose” FmtFlags
-	// out of multiple FmtFlag‘s (this unit does not exist today).
-	// By introducing such composability, the flags below can be constructed
-	// once and reused for subsequent calls. Additionally the construction of
-	// the flags would not need to inspect expression type.
 	var f parser.FmtFlags
-	switch expr.(type) {
-	case *parser.StarDatum:
-		// By default parser.StarDatum is rendered as a DInt(0), but formatting
-		// this as 0 we can replicate this behavior in distsqlrun.
-		f = parser.FmtStarDatumFormat(
-			func(buf *bytes.Buffer, _ parser.FmtFlags) {
-				fmt.Fprintf(buf, "0")
+	if columnMap == nil {
+		f = exprFmtFlagsNoMap
+	} else {
+		f = parser.FmtIndexedVarFormat(
+			exprFmtFlagsBase,
+			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+				remappedIdx := columnMap[idx]
+				if remappedIdx < 0 {
+					panic(fmt.Sprintf("unmapped index %d", idx))
+				}
+				fmt.Fprintf(buf, "@%d", remappedIdx+1)
 			},
 		)
-	default:
-		if columnMap == nil {
-			f = parser.FmtIndexedVarFormat(
-				func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-					fmt.Fprintf(buf, "@%d", idx+1)
-				},
-			)
-		} else {
-			f = parser.FmtIndexedVarFormat(
-				func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-					remappedIdx := columnMap[idx]
-					if remappedIdx < 0 {
-						panic(fmt.Sprintf("unmapped index %d", idx))
-					}
-					fmt.Fprintf(buf, "@%d", remappedIdx+1)
-				},
-			)
-		}
 	}
 	var buf bytes.Buffer
 	expr.Format(&buf, f)

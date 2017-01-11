@@ -28,7 +28,7 @@ func TestStarDatum(t *testing.T) {
 	var buf bytes.Buffer
 	typedExpr.Format(
 		&buf,
-		FmtStarDatumFormat(func(buf *bytes.Buffer, _ FmtFlags) {
+		FmtStarDatumFormat(FmtSimple, func(buf *bytes.Buffer, _ FmtFlags) {
 			fmt.Fprintf(buf, "STAR")
 		}),
 	)
