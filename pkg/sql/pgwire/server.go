@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -281,9 +282,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrSSLRequired)
 		}
 		if draining {
-			// TODO(tschottdorf): Likely not handled gracefully by clients.
-			// See #6295.
-			return v3conn.sendInternalError(ErrDraining)
+			return v3conn.sendError(newAdminShutdownErr(errors.New(ErrDraining)))
 		}
 
 		v3conn.sessionArgs.User = parser.Name(v3conn.sessionArgs.User).Normalize()
@@ -306,7 +305,13 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 				baseSQLMemoryBudget, err)
 		}
 
-		return v3conn.serve(ctx, acc)
+		err := v3conn.serve(ctx, s.IsDraining, acc)
+		// If the error that closed the connection is related to an
+		// administrative shutdown, relay that information to the client.
+		if code, ok := pgerror.PGCode(err); ok && code == pgerror.CodeAdminShutdownError {
+			return v3conn.sendError(err)
+		}
+		return err
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)
