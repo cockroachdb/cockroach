@@ -104,6 +104,9 @@ func (u *sqlSymUnion) strVal() *StrVal {
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
 }
+func (u *sqlSymUnion) strPtr() *string {
+    return u.val.(*string)
+}
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
@@ -365,8 +368,6 @@ func (u *sqlSymUnion) durationField() durationField {
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
 
-%type <*StrVal> opt_incremental
-
 %type <*Select> select_no_parens
 %type <SelectStatement> select_clause select_with_parens simple_select values_clause
 
@@ -384,9 +385,9 @@ func (u *sqlSymUnion) durationField() durationField {
 
 %type <ValidationBehavior> opt_validate_behavior
 
-%type <*StrVal> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-
-%type <*StrVal> opt_password
+%type <str> opt_incremental
+%type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+%type <*string> opt_password
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
@@ -530,7 +531,7 @@ func (u *sqlSymUnion) durationField() durationField {
 %type <UnresolvedName> var_name
 %type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
-%type <Expr>  non_reserved_word_or_sconst
+%type <str>   non_reserved_word_or_sconst
 %type <Expr>  var_value
 %type <Expr>  zone_value
 
@@ -954,23 +955,26 @@ alter_using:
 
 /* TODO(dan): backup/restore all databases, only certain tables, etc */
 backup_stmt:
-  BACKUP DATABASE name TO SCONST opt_incremental
+  BACKUP DATABASE name TO non_reserved_word_or_sconst opt_incremental
   {
     /* SKIP DOC */
-    $$.val = &Backup{Database: Name($3), To: &StrVal{s: $5}, IncrementalFrom: $6.strVal()}
+    $$.val = &Backup{Database: Name($3), To: Name($5), IncrementalFrom: Name($6)}
   }
-| RESTORE DATABASE name FROM SCONST
+| RESTORE DATABASE name FROM non_reserved_word_or_sconst
   {
     /* SKIP DOC */
-    $$.val = &Restore{Database: Name($3), From: &StrVal{s: $5}}
+    $$.val = &Restore{Database: Name($3), From: Name($5)}
   }
 
 opt_incremental:
-  INCREMENTAL FROM SCONST
+  INCREMENTAL FROM non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 
 copy_from_stmt:
@@ -1442,6 +1446,9 @@ opt_boolean_or_string:
   // non_reserved_word rule. The action for booleans and strings is the same,
   // so we don't need to distinguish them here.
 | non_reserved_word_or_sconst
+  {
+    $$.val = &StrVal{s: $1}
+  }
 
 // Timezone values can be:
 // - a string such as 'pst8pdt'
@@ -1489,13 +1496,7 @@ opt_encoding:
 
 non_reserved_word_or_sconst:
   non_reserved_word
-  {
-    $$.val = &StrVal{s: $1}
-  }
 | SCONST
-  {
-    $$.val = &StrVal{s: $1}
-  }
 
 show_stmt:
   SHOW IDENT
@@ -1958,16 +1959,17 @@ truncate_stmt:
 create_user_stmt:
   CREATE USER name opt_with opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $5.strVal()}
+    $$.val = &CreateUser{Name: Name($3), Password: $5.strPtr()}
   }
 
 opt_password:
   PASSWORD SCONST
   {
-    $$.val = &StrVal{s: $2}
+    pwd := $2
+    $$.val = &pwd
   }
 | /* EMPTY */ {
-    $$.val = (*StrVal)(nil)
+    $$.val = (*string)(nil)
   }
 
 // CREATE VIEW relname
@@ -2217,10 +2219,10 @@ create_database_stmt:
   {
     $$.val = &CreateDatabase{
       Name: Name($3),
-      Template: $5.strVal(),
-      Encoding: $6.strVal(),
-      Collate: $7.strVal(),
-      CType: $8.strVal(),
+      Template: Name($5),
+      Encoding: Name($6),
+      Collate: Name($7),
+      CType: Name($8),
     }
   }
 | CREATE DATABASE IF NOT EXISTS name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
@@ -2228,51 +2230,51 @@ create_database_stmt:
     $$.val = &CreateDatabase{
       IfNotExists: true,
       Name: Name($6),
-      Template: $8.strVal(),
-      Encoding: $9.strVal(),
-      Collate: $10.strVal(),
-      CType: $11.strVal(),
+      Template: Name($8),
+      Encoding: Name($9),
+      Collate: Name($10),
+      CType: Name($11),
     }
   }
 
 opt_template_clause:
-  TEMPLATE opt_equal IDENT
+  TEMPLATE opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_encoding_clause:
-  ENCODING opt_equal SCONST
+  ENCODING opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_lc_collate_clause:
-  LC_COLLATE opt_equal SCONST
+  LC_COLLATE opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_lc_ctype_clause:
-  LC_CTYPE opt_equal SCONST
+  LC_CTYPE opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_equal:

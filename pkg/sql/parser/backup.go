@@ -21,8 +21,8 @@ import "bytes"
 // Backup represents a BACKUP statement.
 type Backup struct {
 	Database        Name
-	To              *StrVal
-	IncrementalFrom *StrVal
+	To              Name
+	IncrementalFrom Name
 }
 
 var _ Statement = &Backup{}
@@ -33,7 +33,7 @@ func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Database)
 	buf.WriteString(" TO ")
 	FormatNode(buf, f, node.To)
-	if node.IncrementalFrom != nil {
+	if node.IncrementalFrom != "" {
 		buf.WriteString(" INCREMENTAL FROM ")
 		FormatNode(buf, f, node.IncrementalFrom)
 	}
@@ -42,7 +42,7 @@ func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
 // Restore represents a RESTORE statement.
 type Restore struct {
 	Database Name
-	From     *StrVal
+	From     Name
 }
 
 var _ Statement = &Restore{}
