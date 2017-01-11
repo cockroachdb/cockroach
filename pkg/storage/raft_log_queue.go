@@ -237,7 +237,10 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.Syste
 			Index:   oldestIndex,
 			RangeID: r.RangeID,
 		})
-		return rlq.db.Run(ctx, b)
+		if err := rlq.db.Run(ctx, b); err != nil {
+			return err
+		}
+		r.store.metrics.RaftLogTruncated.Inc(int64(truncatableIndexes))
 	}
 	return nil
 }
