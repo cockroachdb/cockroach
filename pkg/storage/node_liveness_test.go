@@ -107,6 +107,38 @@ func TestNodeLiveness(t *testing.T) {
 	}
 }
 
+func TestNodeLivenessInitialIncrement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	// Verify liveness of all nodes for all nodes.
+	verifyLiveness(t, mtc)
+
+	liveness, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if liveness.Epoch != 1 {
+		t.Errorf("expected epoch to be set to 1 initially; got %d", liveness.Epoch)
+	}
+
+	// Restart the node and verify the epoch is incremented with initial heartbeat.
+	mtc.stopStore(0)
+	mtc.restartStore(0)
+	testutils.SucceedsSoon(t, func() error {
+		liveness, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		if err != nil {
+			return err
+		}
+		if liveness.Epoch != 2 {
+			return errors.Errorf("expected epoch to be incremented to 2 on restart; got %d", liveness.Epoch)
+		}
+		return nil
+	})
+}
+
 // TestNodeLivenessCallback verifies that the liveness callback for a
 // node is invoked when it changes from state false to true.
 func TestNodeLivenessCallback(t *testing.T) {
