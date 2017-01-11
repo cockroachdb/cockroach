@@ -35,10 +35,32 @@ import (
 type CreateDatabase struct {
 	IfNotExists bool
 	Name        Name
-	Template    *StrVal
-	Encoding    *StrVal
-	Collate     *StrVal
-	CType       *StrVal
+	Template    Name
+	Encoding    Name
+	Collate     Name
+	CType       Name
+}
+
+// HasTemplate returns if the CreateDatabase has a template.
+func (node *CreateDatabase) HasTemplate() bool {
+	return node.Template != ""
+}
+
+// HasEncoding returns if the CreateDatabase has an encoding.
+func (node *CreateDatabase) HasEncoding() bool {
+	return node.Encoding != ""
+}
+
+// HasCollate returns if the CreateDatabase has a locale category
+// for character collation.
+func (node *CreateDatabase) HasCollate() bool {
+	return node.Collate != ""
+}
+
+// HasCType returns if the CreateDatabase has a locale category
+// for character handling functions.
+func (node *CreateDatabase) HasCType() bool {
+	return node.CType != ""
 }
 
 // Format implements the NodeFormatter interface.
@@ -48,21 +70,21 @@ func (node *CreateDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, node.Name)
-	if node.Template != nil {
+	if node.HasTemplate() {
 		buf.WriteString(" TEMPLATE = ")
-		Name((*node.Template).s).Format(buf, f)
+		FormatNode(buf, f, node.Template)
 	}
-	if node.Encoding != nil {
+	if node.HasEncoding() {
 		buf.WriteString(" ENCODING = ")
-		node.Encoding.Format(buf, f)
+		FormatNode(buf, f, node.Encoding)
 	}
-	if node.Collate != nil {
+	if node.HasCollate() {
 		buf.WriteString(" LC_COLLATE = ")
-		node.Collate.Format(buf, f)
+		FormatNode(buf, f, node.Collate)
 	}
-	if node.CType != nil {
+	if node.HasCType() {
 		buf.WriteString(" LC_CTYPE = ")
-		node.CType.Format(buf, f)
+		FormatNode(buf, f, node.CType)
 	}
 }
 
@@ -654,14 +676,19 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {
 	Name     Name
-	Password *StrVal
+	Password *string // pointer so that empty and nil can be differentiated
+}
+
+// HasPassword returns if the CreateUser has a password.
+func (node *CreateUser) HasPassword() bool {
+	return node.Password != nil
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("CREATE USER ")
 	FormatNode(buf, f, node.Name)
-	if node.Password != nil {
+	if node.HasPassword() {
 		buf.WriteString(" WITH PASSWORD *****")
 	}
 }

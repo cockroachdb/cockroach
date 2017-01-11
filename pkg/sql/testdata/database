@@ -32,28 +32,28 @@ CREATE DATABASE IF NOT EXISTS c TEMPLATE=NOPE
 statement ok
 CREATE DATABASE b2 ENCODING='UTF8'
 
-statement error unsupported encoding: 'NOPE'
+statement error unsupported encoding: NOPE
 CREATE DATABASE c ENCODING='NOPE'
 
-statement error unsupported encoding: 'NOPE'
+statement error unsupported encoding: NOPE
 CREATE DATABASE IF NOT EXISTS c ENCODING='NOPE'
 
 statement ok
 CREATE DATABASE b3 LC_COLLATE='C.UTF-8'
 
-statement error unsupported collation: 'NOPE'
+statement error unsupported collation: NOPE
 CREATE DATABASE c LC_COLLATE='NOPE'
 
-statement error unsupported collation: 'NOPE'
+statement error unsupported collation: NOPE
 CREATE DATABASE IF NOT EXISTS c LC_COLLATE='NOPE'
 
 statement ok
 CREATE DATABASE b4 LC_CTYPE='C.UTF-8'
 
-statement error unsupported character classification: 'NOPE'
+statement error unsupported character classification: NOPE
 CREATE DATABASE c LC_CTYPE='NOPE'
 
-statement error unsupported character classification: 'NOPE'
+statement error unsupported character classification: NOPE
 CREATE DATABASE IF NOT EXISTS c LC_CTYPE='NOPE'
 
 statement ok
