@@ -281,9 +281,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrSSLRequired)
 		}
 		if draining {
-			// TODO(tschottdorf): Likely not handled gracefully by clients.
-			// See #6295.
-			return v3conn.sendInternalError(ErrDraining)
+			return v3conn.sendError(newAdminShutdownErr(errors.New(ErrDraining)))
 		}
 
 		v3conn.sessionArgs.User = parser.Name(v3conn.sessionArgs.User).Normalize()
@@ -306,7 +304,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 				baseSQLMemoryBudget, err)
 		}
 
-		return v3conn.serve(ctx, acc)
+		return v3conn.serve(ctx, s.IsDraining, acc)
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)

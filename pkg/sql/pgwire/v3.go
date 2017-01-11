@@ -316,7 +316,7 @@ func (c *v3Conn) closeSession(ctx context.Context) {
 	c.session = nil
 }
 
-func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
+func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.BoundAccount) error {
 	for key, value := range statusReportParams {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		c.writeBuf.writeTerminatedString(key)
@@ -336,8 +336,21 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	defer c.closeSession(ctx)
 
 	// Once a session has been set up, the underlying net.Conn is switched to
-	// a conn that exits if the session's context is cancelled.
-	c.conn = newReadTimeoutConn(c.conn, c.session.Ctx().Err)
+	// a conn that exits if the session's context is cancelled or if the server
+	// is draining and the session does not have an ongoing transaction. In both
+	// cases, the client is notified of an administrative shutdown.
+	c.conn = newReadTimeoutConn(c.conn, func() error {
+		err := func() error {
+			if draining() && c.session.TxnState.State == sql.NoTxn {
+				return errors.New(ErrDraining)
+			}
+			return c.session.Ctx().Err()
+		}()
+		if err != nil {
+			c.sendError(newAdminShutdownErr(err))
+		}
+		return err
+	})
 	c.rd = bufio.NewReader(c.conn)
 
 	for {
@@ -1075,5 +1088,10 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) (int64, error) {
 func newUnrecognizedMsgTypeErr(typ clientMessageType) error {
 	err := errors.Errorf("unrecognized client message type %v", typ)
 	err = pgerror.WithPGCode(err, pgerror.CodeProtocolViolationError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+func newAdminShutdownErr(err error) error {
+	err = pgerror.WithPGCode(err, pgerror.CodeAdminShutdownError)
 	return pgerror.WithSourceContext(err, 1)
 }
