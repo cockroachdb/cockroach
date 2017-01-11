@@ -3165,7 +3165,9 @@ func sendSnapshot(
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
+	sent func(),
 ) error {
+	start := timeutil.Now()
 	storeID := header.RaftMessageRequest.ToReplica.StoreID
 	if err := stream.Send(&SnapshotRequest{Header: &header}); err != nil {
 		return err
@@ -3269,8 +3271,9 @@ func sendSnapshot(
 	if err := stream.Send(req); err != nil {
 		return err
 	}
-	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d",
-		n, len(logEntries))
+	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d, %0.0fms",
+		n, len(logEntries), timeutil.Since(start).Seconds()*1000)
+	sent()
 
 	resp, err = stream.Recv()
 	if err != nil {
