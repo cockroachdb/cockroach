@@ -2029,10 +2029,10 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 		return true
 	case nil:
 		ctx := s.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "range=%d: placeholder not found", rngID)
+		log.Fatalf(ctx, "r%d: placeholder not found", rngID)
 	default:
 		ctx := s.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "range=%d: expected placeholder, got %T", rngID, exRng)
+		log.Fatalf(ctx, "r%d: expected placeholder, got %T", rngID, exRng)
 	}
 	return false // appease the compiler
 }
@@ -3163,21 +3163,21 @@ func sendSnapshot(
 			if len(resp.Message) > 0 {
 				declinedMsg = resp.Message
 			}
-			return errors.Errorf("range=%s: remote declined snapshot: %s",
+			return errors.Errorf("r%d: remote declined snapshot: %s",
 				header.State.Desc.RangeID, declinedMsg)
 		}
 		storePool.throttle(throttleFailed, storeID)
-		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
+		return errors.Errorf("r%d: programming error: remote declined required snapshot: %s",
 			header.State.Desc.RangeID, resp.Message)
 	case SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, storeID)
-		return errors.Errorf("range=%s: remote couldn't accept snapshot with error: %s",
+		return errors.Errorf("r%d: remote couldn't accept snapshot with error: %s",
 			header.State.Desc.RangeID, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:
 		storePool.throttle(throttleFailed, storeID)
-		return errors.Errorf("range=%s: server sent an invalid status during negotiation: %s",
+		return errors.Errorf("r%d: server sent an invalid status during negotiation: %s",
 			header.State.Desc.RangeID, resp.Status)
 	}
 
@@ -3253,23 +3253,23 @@ func sendSnapshot(
 
 	resp, err = stream.Recv()
 	if err != nil {
-		return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", rangeID)
+		return errors.Wrapf(err, "r%d: remote failed to apply snapshot", rangeID)
 	}
 	// NB: wait for EOF which ensures that all processing on the server side has
 	// completed (such as defers that might be run after the previous message was
 	// received).
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
-		return errors.Errorf("range=%s: expected EOF, got resp=%v err=%v",
+		return errors.Errorf("r%d: expected EOF, got resp=%v err=%v",
 			rangeID, unexpectedResp, err)
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
-		return errors.Errorf("range=%s: remote failed to apply snapshot for reason %s",
+		return errors.Errorf("r%d: remote failed to apply snapshot for reason %s",
 			rangeID, resp.Message)
 	case SnapshotResponse_APPLIED:
 		return nil
 	default:
-		return errors.Errorf("range=%s: server sent an invalid status during finalization: %s",
+		return errors.Errorf("r%d: server sent an invalid status during finalization: %s",
 			rangeID, resp.Status)
 	}
 }
