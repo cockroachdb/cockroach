@@ -134,6 +134,13 @@ If left unspecified, defaults to 25% of the physical memory, or
 		Description: `Include dependency versions`,
 	}
 
+	DumpMode = FlagInfo{
+		Name: "dump-mode",
+		Description: `
+What to dump. "schema" dumps the schema only. "data" dumps the data only.
+"both" (default) dumps the schema then the data.`,
+	}
+
 	Execute = FlagInfo{
 		Name:      "execute",
 		Shorthand: "e",

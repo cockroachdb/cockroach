@@ -32,17 +32,18 @@ import (
 
 // dumpCmd dumps SQL tables.
 var dumpCmd = &cobra.Command{
-	Use:   "dump [options] <database> <table>",
+	Use:   "dump [options] <database> [<table> [<table>...]]",
 	Short: "dump sql tables\n",
 	Long: `
-Dump SQL tables of a cockroach database.
+Dump SQL tables of a cockroach database. If the table name
+is omitted, dump all tables in the database.
 `,
 	RunE:         MaybeDecorateGRPCError(runDump),
 	SilenceUsage: true,
 }
 
 func runDump(cmd *cobra.Command, args []string) error {
-	if len(args) != 2 {
+	if len(args) < 1 {
 		return usageAndError(cmd)
 	}
 
@@ -52,85 +53,188 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	return DumpTable(os.Stdout, conn, args[0], args[1])
-}
+	dbName := args[0]
+	var tableNames []string
+	if len(args) > 1 {
+		tableNames = args[1:]
+	}
 
-// DumpTable dumps the specified table to w.
-func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) error {
-	const limit = 100
-
-	// Escape names since they can't be used in placeholders.
-	dbname := parser.Name(origDBName).String()
-	tablename := parser.Name(origTableName).String()
-
-	if err := conn.Exec(fmt.Sprintf("SET DATABASE = %s", dbname), nil); err != nil {
+	mds, ts, err := getDumpMetadata(conn, dbName, tableNames)
+	if err != nil {
 		return err
 	}
 
+	// TODO(knz/mjibson) dump foreign key constraints and dump in
+	// topological order to ensure key relationships can be verified
+	// during load.
+
+	if dumpCtx.dumpMode != dumpDataOnly {
+		for i, md := range mds {
+			if i > 0 {
+				fmt.Println()
+			}
+			if err := dumpCreateTable(os.Stdout, md); err != nil {
+				return err
+			}
+		}
+	}
+	if dumpCtx.dumpMode != dumpSchemaOnly {
+		for _, md := range mds {
+			if err := dumpTableData(os.Stdout, conn, ts, md); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// tableMetadata describes one table to dump.
+type tableMetadata struct {
+	name         *parser.TableName
+	primaryIndex string
+	numIndexCols int
+	idxColNames  string
+	columnNames  string
+	columnTypes  map[string]string
+	createStmt   string
+}
+
+// getDumpMetadata retrieves the table information for the specified table(s).
+// It also retrieves the cluster timestamp at which the metadata was
+// retrieved.
+func getDumpMetadata(
+	conn *sqlConn, origDBName string, tableNames []string,
+) (mds []tableMetadata, clusterTS string, err error) {
 	// Fetch all table metadata in a transaction and its time to guarantee it
 	// doesn't change between the various SHOW statements.
 	if err := conn.Exec("BEGIN", nil); err != nil {
-		return err
+		return nil, "", err
 	}
 
 	vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
-	clusterTS := string(vals[0].([]byte))
+	clusterTS = string(vals[0].([]byte))
 
+	dbName := parser.Name(origDBName)
+	if tableNames == nil {
+		tableNames, err = getTableNames(conn, dbName)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	mds = make([]tableMetadata, len(tableNames))
+	for i, origTableName := range tableNames {
+		tableName := parser.Name(origTableName)
+
+		md, err := getMetadataForTable(conn, dbName, tableName)
+		if err != nil {
+			return nil, "", err
+		}
+		mds[i] = md
+	}
+
+	if err := conn.Exec("COMMIT", nil); err != nil {
+		return nil, "", err
+	}
+
+	return mds, clusterTS, nil
+}
+
+// getTableNames retrieves all tables names in the given database.
+func getTableNames(conn *sqlConn, dbName parser.Name) (tableNames []string, err error) {
+	rows, err := conn.Query(fmt.Sprintf("SHOW TABLES FROM %s", dbName), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	vals := make([]driver.Value, 1)
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		nameI := vals[0]
+		name, ok := nameI.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected value: %T", nameI)
+		}
+		tableNames = append(tableNames, name)
+	}
+
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	return tableNames, nil
+}
+
+func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMetadata, error) {
 	// A previous version of the code did a SELECT on system.descriptor. This
 	// required the SELECT privilege to the descriptor table, which only root
 	// has. Allowing non-root to do this would let users see other users' table
 	// descriptors which is a problem in multi-tenancy.
 
-	// Fetch column types.
-	rows, err := conn.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", tablename), nil)
-	if err != nil {
-		return err
+	if err := conn.Exec(fmt.Sprintf("SET DATABASE = %s", dbName), nil); err != nil {
+		return tableMetadata{}, err
 	}
-	vals = make([]driver.Value, 2)
+
+	// Fetch column types.
+	rows, err := conn.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", tableName), nil)
+	if err != nil {
+		return tableMetadata{}, err
+	}
+	vals := make([]driver.Value, 2)
 	coltypes := make(map[string]string)
+	var colnames bytes.Buffer
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return tableMetadata{}, err
 		}
 		nameI, typI := vals[0], vals[1]
 		name, ok := nameI.(string)
 		if !ok {
-			return fmt.Errorf("unexpected value: %T", nameI)
+			return tableMetadata{}, fmt.Errorf("unexpected value: %T", nameI)
 		}
 		typ, ok := typI.(string)
 		if !ok {
-			return fmt.Errorf("unexpected value: %T", typI)
+			return tableMetadata{}, fmt.Errorf("unexpected value: %T", typI)
 		}
 		coltypes[name] = typ
+		if colnames.Len() > 0 {
+			colnames.WriteString(", ")
+		}
+		parser.Name(name).Format(&colnames, parser.FmtSimple)
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return tableMetadata{}, err
 	}
 
-	// index holds the names, in order, of the primary key columns.
-	var index []string
 	// Primary index is always the first index returned by SHOW INDEX.
-	rows, err = conn.Query(fmt.Sprintf("SHOW INDEX FROM %s", tablename), nil)
+	rows, err = conn.Query(fmt.Sprintf("SHOW INDEX FROM %s", tableName), nil)
 	if err != nil {
-		return err
+		return tableMetadata{}, err
 	}
 	vals = make([]driver.Value, 5)
+
+	var numIndexCols int
 	var primaryIndex string
+	var idxColNames bytes.Buffer
 	// Find the primary index columns.
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return tableMetadata{}, err
 		}
 		b, ok := vals[1].(string)
 		if !ok {
-			return fmt.Errorf("unexpected value: %T", vals[1])
+			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[1])
 		}
 		if primaryIndex == "" {
 			primaryIndex = b
@@ -139,25 +243,62 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 		}
 		b, ok = vals[4].(string)
 		if !ok {
-			return fmt.Errorf("unexpected value: %T", vals[4])
+			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[4])
 		}
-		index = append(index, parser.Name(b).String())
+		if idxColNames.Len() > 0 {
+			idxColNames.WriteString(", ")
+		}
+		parser.Name(b).Format(&idxColNames, parser.FmtSimple)
+		numIndexCols++
 	}
 	if err := rows.Close(); err != nil {
+		return tableMetadata{}, err
+	}
+	if numIndexCols == 0 {
+		return tableMetadata{}, fmt.Errorf("no primary key index found")
+	}
+
+	vals, err = conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName), nil)
+	if err != nil {
+		return tableMetadata{}, err
+	}
+	create := vals[1].(string)
+
+	return tableMetadata{
+		name:         &parser.TableName{DatabaseName: dbName, TableName: tableName},
+		primaryIndex: primaryIndex,
+		numIndexCols: numIndexCols,
+		idxColNames:  idxColNames.String(),
+		columnNames:  colnames.String(),
+		columnTypes:  coltypes,
+		createStmt:   create,
+	}, nil
+}
+
+// dumpCreateTable dumps the CREATE statement of the specified table to w.
+func dumpCreateTable(w io.Writer, md tableMetadata) error {
+	if _, err := w.Write([]byte(md.createStmt)); err != nil {
 		return err
 	}
-	if len(index) == 0 {
-		return fmt.Errorf("no primary key index found")
+	if _, err := w.Write([]byte(";\n")); err != nil {
+		return err
 	}
-	indexes := strings.Join(index, ", ")
+	return nil
+}
 
+// limit determines how many rows to dump at a time (in each SELECT statement).
+const limit = 100
+
+// dumpTableData dumps the data of the specified table to w.
+func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
 	// Build the SELECT query.
 	var sbuf bytes.Buffer
-	fmt.Fprintf(&sbuf, "SELECT %s, * FROM %s@%s AS OF SYSTEM TIME %s", indexes, tablename, primaryIndex, clusterTS)
+	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME %s",
+		md.idxColNames, md.columnNames, md.name, parser.Name(md.primaryIndex), clusterTS)
 
 	var wbuf bytes.Buffer
-	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", indexes)
-	for i := range index {
+	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", md.idxColNames)
+	for i := 0; i < md.numIndexCols; i++ {
 		if i > 0 {
 			wbuf.WriteString(", ")
 		}
@@ -165,24 +306,8 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 	}
 	wbuf.WriteString(")")
 	// No WHERE clause first time, so add a place to inject it.
-	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", indexes, limit)
+	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
 	bs := sbuf.String()
-
-	vals, err = conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tablename), nil)
-	if err != nil {
-		return err
-	}
-	create := vals[1].(string)
-	if _, err := w.Write([]byte(create)); err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte(";\n")); err != nil {
-		return err
-	}
-
-	if err := conn.Exec("COMMIT", nil); err != nil {
-		return err
-	}
 
 	// pk holds the last values of the fetched primary keys
 	var pk []driver.Value
@@ -193,8 +318,8 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 			return err
 		}
 		cols := rows.Columns()
-		pkcols := cols[:len(index)]
-		cols = cols[len(index):]
+		pkcols := cols[:md.numIndexCols]
+		cols = cols[md.numIndexCols:]
 		inserts := make([][]string, 0, limit)
 		i := 0
 		for i < limit {
@@ -207,8 +332,8 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 			if pk == nil {
 				q = fmt.Sprintf(bs, wbuf.String())
 			}
-			pk = vals[:len(index)]
-			vals = vals[len(index):]
+			pk = vals[:md.numIndexCols]
+			vals = vals[md.numIndexCols:]
 			ivals := make([]string, len(vals))
 			// Values need to be correctly encoded for INSERT statements in a text file.
 			for si, sv := range vals {
@@ -224,7 +349,7 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 				case string:
 					ivals[si] = parser.NewDString(t).String()
 				case []byte:
-					switch ct := coltypes[cols[si]]; ct {
+					switch ct := md.columnTypes[cols[si]]; ct {
 					case "INTERVAL":
 						ivals[si] = fmt.Sprintf("'%s'", t)
 					case "BYTES":
@@ -232,17 +357,17 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					default:
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
-						if strings.HasPrefix(coltypes[cols[si]], "STRING") {
+						if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
 							ivals[si] = parser.NewDString(string(t)).String()
-						} else if strings.HasPrefix(coltypes[cols[si]], "DECIMAL") {
+						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
 							ivals[si] = string(t)
 						} else {
-							panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], coltypes[cols[si]]))
+							panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
 						}
 					}
 				case time.Time:
 					var d parser.Datum
-					ct := coltypes[cols[si]]
+					ct := md.columnTypes[cols[si]]
 					switch ct {
 					case "DATE":
 						d = parser.NewDDateFromTime(t, time.UTC)
@@ -251,7 +376,7 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 					case "TIMESTAMP WITH TIME ZONE":
 						d = parser.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
-						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], coltypes[cols[si]]))
+						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
 					}
 					ivals[si] = fmt.Sprintf("%s", d)
 				default:
@@ -263,7 +388,7 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 		}
 		for si, sv := range pk {
 			b, ok := sv.([]byte)
-			if ok && strings.HasPrefix(coltypes[pkcols[si]], "STRING") {
+			if ok && strings.HasPrefix(md.columnTypes[pkcols[si]], "STRING") {
 				// Primary key strings need to be converted to a go string, but not SQL
 				// encoded since they aren't being written to a text file.
 				pk[si] = string(b)
@@ -275,7 +400,7 @@ func DumpTable(w io.Writer, conn *sqlConn, origDBName, origTableName string) err
 		if i == 0 {
 			break
 		}
-		fmt.Fprintf(w, "\nINSERT INTO %s VALUES", tablename)
+		fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
 		for idx, values := range inserts {
 			if idx > 0 {
 				fmt.Fprint(w, ",")
