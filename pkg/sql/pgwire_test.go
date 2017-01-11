@@ -174,8 +174,9 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
-// TestPGWireDrainClient makes sure the server refuses new connections when
-// it's in draining mode.
+// TestPGWireDrainClient makes sure that in draining mode, the server refuses
+// new connections and allows sessions with ongoing transactions to finish
+// before closing them.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
@@ -194,22 +195,56 @@ func TestPGWireDrainClient(t *testing.T) {
 		RawQuery: "sslmode=disable",
 	}
 
-	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
+	db, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("BEGIN TRANSACTION"); err != nil {
+		t.Fatal(err)
+	}
 
-	if now, err := s.(*server.TestServer).Drain(on); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(on, now) {
-		t.Fatalf("expected drain modes %v, got %v", on, now)
+	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
+	// Draining runs in a separate goroutine since it won't return until
+	// the connection with an ongoing transaction finishes.
+	errChan := make(chan error)
+	go func() {
+		defer close(errChan)
+		errChan <- func() error {
+			if now, err := s.(*server.TestServer).Drain(on); err != nil {
+				return err
+			} else if !reflect.DeepEqual(on, now) {
+				return fmt.Errorf("expected drain modes %v, got %v", on, now)
+			}
+			return nil
+		}()
+	}()
+
+	// Ensure server is in draining mode and rejects new connections.
+	testutils.SucceedsSoon(t, func() error {
+		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
+			return fmt.Errorf("unexpected error: %v", err)
+		}
+		return nil
+	})
+
+	stmts := []string{
+		"SELECT 1",
+		"COMMIT TRANSACTION",
 	}
-	if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("unexpected error %v when executing %q", err, stmt)
+		}
+	}
+	// An error from the draining goroutine would indicate that the connection
+	// with the ongoing transaction was not closed before drainMaxWait elapsed.
+	if err = <-errChan; err != nil {
 		t.Fatal(err)
 	}
-	if now := s.(*server.TestServer).Undrain(
-		[]serverpb.DrainMode{serverpb.DrainMode_CLIENT}); len(now) != 0 {
+
+	if now := s.(*server.TestServer).Undrain(on); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
-	}
-	if err := trivialQuery(pgBaseURL); err != nil {
-		t.Fatal(err)
 	}
 }
 
