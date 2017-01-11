@@ -241,6 +241,11 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 var statusReportParams = map[string]string{
 	"client_encoding": "UTF8",
 	"DateStyle":       "ISO",
+	// All datetime binary formats expect 64-bit integer microsecond values.
+	// This param needs to be provided to clients or some may provide 64-bit
+	// floating-point microsecond values instead, which was a legacy datetime
+	// binary format.
+	"integer_datetimes": "on",
 	// The latest version of the docs that was consulted during the development
 	// of this package. We specify this version to avoid having to support old
 	// code paths which various client tools fall back to if they can't

@@ -83,6 +83,10 @@ void intervalPrint(PGinterval interval) {
 }
 
 int dateEqual(PGdate left, PGdate right) {
+	// Only check the fields we explicitly set. The uninitialized fields for our
+	// expected result will have non-deterministic values, and those same fields
+	// may be populated in the actual result by libpqtypes after decoding the
+	// database query's output.
 	if (left.isbc != right.isbc) {
 		return 0;
 	}
@@ -95,15 +99,6 @@ int dateEqual(PGdate left, PGdate right) {
 	if (left.mday != right.mday) {
 		return 0;
 	}
-	if (left.jday != right.jday) {
-		return 0;
-	}
-	if (left.yday != right.yday) {
-		return 0;
-	}
-	if (left.wday != right.wday) {
-		return 0;
-	}
 	return 1;
 }
 
@@ -112,12 +107,10 @@ void datePrint(PGdate date) {
 	fprintf(stderr, "year=%d\n", date.year);
 	fprintf(stderr, "mon=%d\n", date.mon);
 	fprintf(stderr, "mday=%d\n", date.mday);
-	fprintf(stderr, "jday=%d\n", date.jday);
-	fprintf(stderr, "yday=%d\n", date.yday);
-	fprintf(stderr, "wday=%d\n", date.wday);
 }
 
 int timeEqual(PGtime left, PGtime right) {
+	// Only check the fields we explicitly set. See comment on dateEqual.
 	if (left.hour != right.hour) {
 		return 0;
 	}
@@ -130,18 +123,6 @@ int timeEqual(PGtime left, PGtime right) {
 	if (left.usec != right.usec) {
 		return 0;
 	}
-	if (left.withtz != right.withtz) {
-		return 0;
-	}
-	if (left.isdst != right.isdst) {
-		return 0;
-	}
-	if (left.gmtoff != right.gmtoff) {
-		return 0;
-	}
-	if (left.tzabbr != right.tzabbr) {
-		return 0;
-	}
 	return 1;
 }
 
@@ -150,16 +131,10 @@ void timePrint(PGtime time) {
 	fprintf(stderr, "min=%d\n", time.min);
 	fprintf(stderr, "sec=%d\n", time.sec);
 	fprintf(stderr, "usec=%d\n", time.usec);
-	fprintf(stderr, "withtz=%d\n", time.withtz);
-	fprintf(stderr, "isdst=%d\n", time.isdst);
-	fprintf(stderr, "gmtoff=%d\n", time.gmtoff);
-	fprintf(stderr, "tzabbr=%d\n", time.tzabbr);
 }
 
 int timestampEqual(PGtimestamp left, PGtimestamp right) {
-	if (left.epoch != right.epoch) {
-		return 0;
-	}
+	// Only check the fields we explicitly set. See comment on dateEqual.
 	if (!dateEqual(left.date, right.date)) {
 		return 0;
 	}
@@ -170,7 +145,6 @@ int timestampEqual(PGtimestamp left, PGtimestamp right) {
 }
 
 void timestampPrint(PGtimestamp ts) {
-	fprintf(stderr, "epoch=%d\n", ts.epoch);
 	fprintf(stderr, "date:\n");
 	datePrint(ts.date);
 	fprintf(stderr, "time:\n");
@@ -289,7 +263,7 @@ int main(int argc, char const *argv[]) {
 	tstz.time.min    = 41;
 	tstz.time.sec    = 6;
 	tstz.time.usec   = 0;
-	tstz.time.gmtoff = -18000;
+	tstz.time.gmtoff = 0;
 	if (!PQputf(param, "%timestamptz", &tstz)) {
 		fprintf(stderr, "ERROR PQputf(timestamptz): %s\n", PQgeterror());
 		return 1;
@@ -338,32 +312,12 @@ int main(int argc, char const *argv[]) {
 				fprintf(stderr, "ERROR resultFormat=%d PQgetf(date): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
-			// TODO(tamird,nvanbenschoten): fix date decoding
-			// resultFormat={0,1} expected:
-			// isbc=1
-			// year=1401
-			// mon=0
-			// mday=19
-			// jday=-1804639424
-			// yday=32764
-			// wday=-1804639440
-			//
-			// got:
-			// isbc=1
-			// year=1401
-			// mon=0
-			// mday=19
-			// jday=1209739
-			// yday=18
-			// wday=0
 			if (!dateEqual(recvdate, date)) {
 				fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
 				datePrint(date);
 				fprintf(stderr, "\ngot:\n");
 				datePrint(recvdate);
-				if (0) {
-					return 1;
-				}
+				return 1;
 			}
 
 			PGnumeric recvnumeric1;
@@ -437,178 +391,14 @@ int main(int argc, char const *argv[]) {
 				fprintf(stderr, "ERROR resultFormat=%d PQgetf(timestamp): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
-			// TODO(tamird,nvanbenschoten): fix ts decoding
-			// resultFormat=0 expected:
-			// epoch=-1804639240
-			// date:
-			// isbc=0
-			// year=2000
-			// mon=0
-			// mday=19
-			// jday=428660541
-			// yday=32582
-			// wday=0
-			// time:
-			// hour=10
-			// min=41
-			// sec=6
-			// usec=0
-			// withtz=0
-			// isdst=0
-			// gmtoff=0
-			// tzabbr=-1804640132
-			//
-			// got:
-			// epoch=1848018046
-			// date:
-			// isbc=0
-			// year=150924
-			// mon=3
-			// mday=3
-			// jday=56845012
-			// yday=93
-			// wday=1
-			// time:
-			// hour=1
-			// min=44
-			// sec=30
-			// usec=803968
-			// withtz=0
-			// isdst=-1
-			// gmtoff=0
-			// tzabbr=-1804640132
-			//
-			//
-			// resultFormat=1 expected:
-			// epoch=-1804639240
-			// date:
-			// isbc=0
-			// year=2000
-			// mon=0
-			// mday=19
-			// jday=428660541
-			// yday=32582
-			// wday=0
-			// time:
-			// hour=10
-			// min=41
-			// sec=6
-			// usec=0
-			// withtz=0
-			// isdst=0
-			// gmtoff=0
-			// tzabbr=-1804640132
-			//
-			// got:
-			// epoch=948278466
-			// date:
-			// isbc=0
-			// year=2000
-			// mon=0
-			// mday=19
-			// jday=2451563
-			// yday=18
-			// wday=3
-			// time:
-			// hour=10
-			// min=41
-			// sec=6
-			// usec=0
-			// withtz=0
-			// isdst=-1
-			// gmtoff=0
-			// tzabbr=-1804640132
 			if (!timestampEqual(recvts, ts)) {
 				fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
 				timestampPrint(ts);
 				fprintf(stderr, "\ngot:\n");
 				timestampPrint(recvts);
-				if (0) {
-					return 1;
-				}
+				return 1;
 			}
 
-			// TODO(tamird,nvanbenschoten): fix ts decoding
-			// resultFormat=0 expected:
-			// epoch=430804992
-			// date:
-			// isbc=0
-			// year=2000
-			// mon=0
-			// mday=19
-			// jday=4195360
-			// yday=0
-			// wday=0
-			// time:
-			// hour=10
-			// min=41
-			// sec=6
-			// usec=0
-			// withtz=32764
-			// isdst=430774272
-			// gmtoff=-18000
-			// tzabbr=-1804640132
-			//
-			// got:
-			// epoch=1925327458
-			// date:
-			// isbc=0
-			// year=150926
-			// mon=8
-			// mday=14
-			// jday=56845906
-			// yday=256
-			// wday=6
-			// time:
-			// hour=20
-			// min=34
-			// sec=42
-			// usec=131968
-			// withtz=1
-			// isdst=-1
-			// gmtoff=0
-			// tzabbr=-1804640132
-			//
-			//
-			// resultFormat=1 expected:
-			// epoch=430804992
-			// date:
-			// isbc=0
-			// year=2000
-			// mon=0
-			// mday=19
-			// jday=4195360
-			// yday=0
-			// wday=0
-			// time:
-			// hour=10
-			// min=41
-			// sec=6
-			// usec=0
-			// withtz=32764
-			// isdst=430774272
-			// gmtoff=-18000
-			// tzabbr=-1804640132
-			//
-			// got:
-			// epoch=948296466
-			// date:
-			// isbc=0
-			// year=2000
-			// mon=0
-			// mday=19
-			// jday=2451563
-			// yday=18
-			// wday=3
-			// time:
-			// hour=15
-			// min=41
-			// sec=6
-			// usec=0
-			// withtz=1
-			// isdst=0
-			// gmtoff=0
-			// tzabbr=-1804640132
 			PGtimestamp recvtstz;
 			if (!PQgetf(result, 0, "%timestamptz", i++, &recvtstz)) {
 				fprintf(stderr, "ERROR resultFormat=%d PQgetf(timestamptz): %s\n", resultFormat, PQgeterror());
@@ -619,9 +409,7 @@ int main(int argc, char const *argv[]) {
 				timestampPrint(tstz);
 				fprintf(stderr, "\ngot:\n");
 				timestampPrint(recvtstz);
-				if (0) {
-					return 1;
-				}
+				return 1;
 			}
 	}
 
