@@ -5,6 +5,7 @@ import { createSelector } from "reselect";
 import { findChildrenOfType } from "../util/find";
 import {
   MetricsDataComponentProps, Axis, AxisProps, InitLineChart, ConfigureLineChart,
+  GraphLineState, mouseEnter, mouseMove, mouseLeave,
 } from "./graphs";
 import { Metric, MetricProps } from "./metric";
 import Visualization from "./visualization";
@@ -22,9 +23,11 @@ interface StackedAreaGraphProps extends MetricsDataComponentProps {
  * currently only supports a single Y-axis, but multiple metrics can be graphed
  * on the same axis.
  */
-export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}> {
+export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, GraphLineState> {
   // The SVG Element in the DOM used to render the graph.
   svgEl: SVGElement;
+
+  state = new GraphLineState();
 
   // A configured NVD3 chart used to render the chart.
   chart: nvd3.StackedAreaChart;
@@ -111,9 +114,18 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
 
   render() {
     let { title, subtitle, tooltip, data } = this.props;
+    let graphLineClass = "graph-lines__line";
+    if (this.state.mouseIn) {
+      graphLineClass += " graph-lines__line--hidden";
+    }
+
+    let mouseEnterBound = () => mouseEnter(this);
+    let mouseLeaveBound = () => mouseLeave(this);
+
     return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">
-        <svg className="graph" ref={(svg) => this.svgEl = svg}/>
+        <div className={graphLineClass}></div>
+        <svg className="graph" ref={(svg) => this.svgEl = svg} onMouseMove={mouseMove} onMouseEnter={mouseEnterBound} onMouseLeave={mouseLeaveBound} />
       </div>
     </Visualization>;
   }

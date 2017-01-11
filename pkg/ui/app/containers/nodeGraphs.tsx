@@ -57,7 +57,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   nodeAddress(nid: string) {
     let ns = this.props.nodeStatusByID[nid];
     if (!ns) {
-      // This should only happen immediately after loading a page, and 
+      // This should only happen immediately after loading a page, and
       // associated graphs should display no data.
       return "unknown address";
     }
@@ -102,7 +102,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     let capacityUsed = capacityTotal - capacityAvailable;
     let capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
 
-    return <div className="section l-columns">
+    return <div className="section l-columns graph-lines">
       <div className="chart-group l-columns__left">
         <GraphGroup groupId="node.runtime" hide={dashboard !== "runtime"}>
           <LineGraph title="Node Count" tooltip="The number of nodes active on the cluster.">
@@ -183,7 +183,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
 
           <LineGraph title="Exec Latency: 99th percentile"
-                    tooltip={`The 99th percentile of latency between query requests and responses 
+                    tooltip={`The 99th percentile of latency between query requests and responses
                               over a 1 minute period.
                               Values are displayed individually for each node on each node.`}>
             <Axis units={ AxisUnits.Duration }>
@@ -200,7 +200,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           </LineGraph>
 
           <LineGraph title="Exec Latency: 90th percentile"
-                    tooltip={`The 90th percentile of latency between query requests and responses 
+                    tooltip={`The 90th percentile of latency between query requests and responses
                               over a 1 minute period.
                               Values are displayed individually for each node on each node.`}>
             <Axis units={ AxisUnits.Duration }>
@@ -246,7 +246,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="Live Bytes" sources={storeSources} tooltip={`The amount of Live data used by both applications and the CockroachDB system ${specifier}. 
+          <LineGraph title="Live Bytes" sources={storeSources} tooltip={`The amount of Live data used by both applications and the CockroachDB system ${specifier}.
                                                                     This excludes historical and deleted data.`}>
             <Axis units={ AxisUnits.Bytes }>
               <Metric name="cr.store.livebytes" title="Live" />
