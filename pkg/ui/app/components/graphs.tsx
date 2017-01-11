@@ -527,3 +527,48 @@ export class TextGraph extends React.Component<MetricsDataComponentProps, {}> {
     }</div>;
   }
 }
+
+/**
+ * mouseEnter, mouseMove, and mouseLeave are helper functions used by LineChart
+ * and StackedAreaChart to show/hide lines on all the graphs when hovering over
+ * a specific graph.
+ */
+
+// GraphLineState is a shared state that indicates whether the current graph is
+// receiving the mousemove events. This is used to hide the guideline for the
+// current graph.
+export class GraphLineState {
+  mouseIn: boolean = false;
+}
+
+// mouseEnter sets the graph-lines--show class on the element with the
+// .graph-lines class, which should be a parent element of all graphs which need
+// graph lines. This will cause all the graph lines to appear. It also sets the
+// mouseIn state to true which is used to hide the guideline on the current
+// graph in favor of the nvd3 line.
+export function mouseEnter (node: React.Component<any, GraphLineState>) {
+  this.setState({
+    mouseIn: true,
+  });
+  d3.select(".graph-lines").classed("graph-lines--show", true);
+};
+
+// mouseMove changes the graph line positions based on the mouse position.
+export function mouseMove() {
+  let currentGuideline = d3.select("line.nv-guideline");
+  // HACK: Gets x value of the currently visible guideline.
+  // TODO: set this based on the chart axis, not based on the guideline.
+  let x = currentGuideline && currentGuideline.data()[0] || 0;
+  d3.selectAll(".graph-lines__line").style("left", (x + CHART_MARGINS.left) + "px");
+};
+
+// mouseLeave removes the graph-line--show class on the element with the
+// .graph-lines class which will cause all the graph lines to be hidden. It also
+// sets the mouseIn state to false so that the current graph's guideline will
+// appear when hovering over a different graph.
+export function mouseLeave(node: React.Component<any, GraphLineState>) {
+  this.setState({
+    mouseIn: false,
+  });
+  d3.select(".graph-lines").classed("graph-lines--show", false);
+};
