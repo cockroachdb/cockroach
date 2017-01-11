@@ -46,7 +46,7 @@ type FmtFlags *fmtFlags
 // FmtSimple instructs the pretty-printer to produce
 // a straightforward representation, ideally using SQL
 // syntax that makes prettyprint+parse idempotent.
-var FmtSimple FmtFlags = &fmtFlags{showTypes: false}
+var FmtSimple FmtFlags = &fmtFlags{}
 
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
@@ -63,32 +63,38 @@ var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
-func FmtNormalizeTableNames(fn func(*NormalizableTableName) *TableName) FmtFlags {
-	return &fmtFlags{tableNameNormalizer: fn}
+func FmtNormalizeTableNames(base FmtFlags, fn func(*NormalizableTableName) *TableName) FmtFlags {
+	f := *base
+	f.tableNameNormalizer = fn
+	return &f
 }
 
 // FmtExpr returns FmtFlags that indicate how the pretty-printer
 // should format expressions.
-func FmtExpr(showTypes, symbolicVars, showTableAliases bool) FmtFlags {
-	return &fmtFlags{
-		showTypes:        showTypes,
-		symbolicVars:     symbolicVars,
-		ShowTableAliases: showTableAliases,
-	}
+func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases bool) FmtFlags {
+	f := *base
+	f.showTypes = showTypes
+	f.symbolicVars = symbolicVars
+	f.ShowTableAliases = showTableAliases
+	return &f
 }
 
 // FmtIndexedVarFormat returns FmtFlags that customizes the printing of
 // IndexedVars using the provided function.
 func FmtIndexedVarFormat(
-	fn func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int),
+	base FmtFlags, fn func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int),
 ) FmtFlags {
-	return &fmtFlags{indexedVarFormat: fn}
+	f := *base
+	f.indexedVarFormat = fn
+	return &f
 }
 
 // FmtStarDatumFormat returns FmtFlags that customizes the printing of
 // StarDatums using the provided function.
-func FmtStarDatumFormat(fn func(buf *bytes.Buffer, f FmtFlags)) FmtFlags {
-	return &fmtFlags{starDatumFormat: fn}
+func FmtStarDatumFormat(base FmtFlags, fn func(buf *bytes.Buffer, f FmtFlags)) FmtFlags {
+	f := *base
+	f.starDatumFormat = fn
+	return &f
 }
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
