@@ -1330,9 +1330,16 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			return r, err
 		}
 	case ColumnType_COLLATEDSTRING:
+		if col.Type.Locale == nil {
+			panic("locale is required for COLLATEDSTRING")
+		}
 		if v, ok := val.(*parser.DCollatedString); ok {
-			r.SetString(v.Contents)
-			return r, nil
+			if v.Locale == *col.Type.Locale {
+				r.SetString(v.Contents)
+				return r, nil
+			}
+			return r, fmt.Errorf("locale %q doesn't match locale %q of column %q",
+				v.Locale, *col.Type.Locale, col.Name)
 		}
 	default:
 		return r, errors.Errorf("unsupported column type: %s", col.Type.Kind)

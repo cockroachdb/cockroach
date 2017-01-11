@@ -214,6 +214,10 @@ INSERT INTO t VALUES
   ('x' COLLATE en),
   ('ü' COLLATE en);
 
+statement error locale "de" doesn't match locale "en" of column "a"
+----
+INSERT INTO t VALUES ('X' COLLATE de);
+
 query T
 SELECT a FROM t ORDER BY t.a;
 ----
