@@ -1163,6 +1163,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	defer cleanupFn()
 
 	const minbytes = 20
+	const maxbytes = 350
 
 	// Make sure we're starting at 0.
 	if _, _, err := checkSQLNetworkMetrics(s, 0, 0, 0, 0); err != nil {
@@ -1173,7 +1174,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
 	}
-	bytesIn, bytesOut, err := checkSQLNetworkMetrics(s, minbytes, minbytes, 300, 300)
+	bytesIn, bytesOut, err := checkSQLNetworkMetrics(s, minbytes, minbytes, maxbytes, maxbytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1182,7 +1183,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	}
 
 	// A second query should give us more I/O.
-	_, _, err = checkSQLNetworkMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 300, 300)
+	_, _, err = checkSQLNetworkMetrics(s, bytesIn+minbytes, bytesOut+minbytes, maxbytes, maxbytes)
 	if err != nil {
 		t.Fatal(err)
 	}
