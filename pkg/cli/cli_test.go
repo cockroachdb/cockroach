@@ -73,7 +73,7 @@ func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
 	baseCfg.InitDefaults()
-	cliCtx.InitCLIDefaults()
+	InitCLIDefaults()
 
 	if t != nil {
 		c.logScope = log.Scope(t, "")
