@@ -31,13 +31,13 @@ variable "azure_resource_group" {
   default = "cockroach-nightly"
 }
 
-variable "azure_storage_account" {
+variable "azure_vhd_storage_account" {
   # Only lowercase letters and numbers are allowed by Azure. This account needs
-  # to belong to ${var.azure_resource_group}.
+  # to belong to ${var.vhd_azure_resource_group}.
   #
   # This must be created before applying this Terraform config, because creation
   # of storage accounts through the Azure API routinely timeout as of 1/4/2017.
-  default = "cockroachnightly"
+  default = "cockroachnightlyvhd"
 }
 
 variable "vhd_storage_container" {

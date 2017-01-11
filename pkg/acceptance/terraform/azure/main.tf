@@ -89,6 +89,30 @@ resource "azurerm_subnet" "cockroach" {
 }
 
 #
+# Storage accounts.
+#
+
+# Stores OS VHDs.
+resource "azurerm_storage_account" "vhd" {
+  # Globally unique name for the storage account. This must have only lowercase
+  # letters and numbers. We can't use the prefix, because it's often longer than
+  # the max length for storage account names (24).
+  name = "crn${lower(replace(replace(timestamp(), "-", ""), ":", ""))}"
+  resource_group_name = "${var.azure_resource_group}"
+  account_kind = "Storage"
+  account_type = "Standard_RAGRS"
+  location = "${var.azure_location}"
+  tags {
+    environment = "test"
+  }
+
+  # Don't re-generate the storage account based on name.
+  lifecycle {
+    ignore_changes = [ "name" ]
+  }
+}
+
+#
 # CockroachDB nodes.
 #
 
@@ -97,7 +121,8 @@ resource "azurerm_public_ip" "cockroach" {
   name = "${var.prefix}-ip-${count.index + 1}"
   location = "${var.azure_location}"
   resource_group_name = "${var.azure_resource_group}"
-  public_ip_address_allocation = "static"
+  public_ip_address_allocation = "dynamic"
+  domain_name_label="${var.prefix}-cockroach-${count.index + 1}"
 
   tags {
     environment = "test"
@@ -138,7 +163,7 @@ resource "azurerm_virtual_machine" "cockroach" {
 
   storage_os_disk {
     name = "disk1"
-    vhd_uri = "https://${var.azure_storage_account}.blob.core.windows.net/${var.vhd_storage_container}/${var.prefix}-cockroach-${count.index + 1}.vhd"
+    vhd_uri = "https://${azurerm_storage_account.vhd.name}.blob.core.windows.net/${var.vhd_storage_container}/${var.prefix}-cockroach-${count.index + 1}.vhd"
     #image_uri = "canonical:UbuntuServer:16.04.0-LTS:latest"
     #os_type = "linux"
     create_option = "FromImage"
@@ -168,13 +193,15 @@ resource "azurerm_virtual_machine" "cockroach" {
 data "template_file" "supervisor" {
   count = "${var.num_instances}"
   template = "${file("../common/supervisor.conf.tpl")}"
+  depends_on = [ "azurerm_virtual_machine.cockroach" ]
+
   vars {
     stores = "${var.stores}"
     cockroach_port = "${var.sql_port}"
     # The value of the --join flag must be empty for the first node,
     # and a running node for all others. We build a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
-    join_address = "${element(concat(split(",", ""), azurerm_public_ip.cockroach.*.ip_address), count.index)}"
+    join_address = "${element(concat(split(",", ""), azurerm_public_ip.cockroach.*.fqdn), count.index)}"
     cockroach_flags = "${var.cockroach_flags}"
     # If the following changes, (*terrafarm.Farmer).Add() must change too.
     cockroach_env = "${var.cockroach_env}"
@@ -185,11 +212,12 @@ data "template_file" "supervisor" {
 # Set up CockroachDB nodes.
 resource "null_resource" "cockroach-runner" {
   count = "${var.num_instances}"
+  depends_on = [ "azurerm_virtual_machine.cockroach" ]
 
   connection {
     user = "ubuntu"
     private_key = "${file(format("~/.ssh/%s", var.key_name))}"
-    host = "${element(azurerm_public_ip.cockroach.*.ip_address, count.index)}"
+    host = "${element(azurerm_public_ip.cockroach.*.fqdn, count.index)}"
   }
 
   provisioner "file" {
