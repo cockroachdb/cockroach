@@ -54,7 +54,7 @@ func TestNewDecFromFloat(t *testing.T) {
 
 		var dec inf.Dec
 		if SetFromFloat(&dec, tf); dec.Cmp(td) != 0 {
-			t.Errorf("SetFromFloat(%f) expected to set decimal to %s, but got %s", tf, td, dec)
+			t.Errorf("SetFromFloat(%f) expected to set decimal to %s, but got %s", tf, td, &dec)
 		}
 	}
 }
