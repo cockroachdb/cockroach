@@ -101,7 +101,11 @@ func testMaliciousInput(t *testing.T, data []byte) {
 
 	v3Conn := makeTestV3Conn(r)
 	defer v3Conn.finish(context.Background())
-	_ = v3Conn.serve(context.Background(), mon.BoundAccount{})
+	_ = v3Conn.serve(
+		context.Background(),
+		func() bool { return false }, /* draining */
+		mon.BoundAccount{},
+	)
 }
 
 // TestReadTimeoutConn asserts that a readTimeoutConn performs reads normally
