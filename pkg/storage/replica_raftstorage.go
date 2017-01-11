@@ -318,7 +318,6 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 		return nil, err
 	}
 	log.Event(ctx, "snapshot generated")
-	r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	return &snapData, nil
 }
 
