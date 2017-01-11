@@ -98,7 +98,7 @@ func (p *planner) makeUpsertHelper(
 			if t, ok := updateExpr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
 					typ := updateCols[i].Type.ToDatumType()
-					e := fillDefault(e, typ, i, defaultExprs)
+					e = fillDefault(e, typ, i, defaultExprs)
 					untupledExprs = append(untupledExprs, e)
 					i++
 				}
