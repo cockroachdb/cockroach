@@ -31,10 +31,6 @@ var (
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
 	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataMin}
 
-	// GossipedSystemSpans are spans which contain system data which needs to be
-	// shared with other nodes in the system via gossip.
-	GossipedSystemSpans = []roachpb.Span{NodeLivenessSpan, SystemConfigSpan}
-
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
