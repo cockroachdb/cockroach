@@ -603,7 +603,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 			return
 		}
 		log.Infof(ctx, "removed node %d from gossip", nodeID)
-		delete(g.nodeDescs, nodeID)
+		g.removeNodeDescriptorLocked(nodeID)
 		return
 	}
 
@@ -612,12 +612,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		return
 	}
 	g.nodeDescs[desc.NodeID] = &desc
-
-	// Recompute max peers based on size of network and set the max
-	// sizes for incoming and outgoing node sets.
-	maxPeers := g.maxPeers(len(g.nodeDescs))
-	g.mu.incoming.setMaxSize(maxPeers)
-	g.outgoing.setMaxSize(maxPeers)
+	g.recomputeMaxPeersLocked()
 
 	// Skip if it's our own address.
 	if desc.Address == g.mu.is.NodeAddr {
@@ -643,7 +638,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	if ok && oldNodeID != unknownNodeID && oldNodeID != desc.NodeID {
 		log.Infof(ctx, "removing node %d which was at same address (%s) as new node %v",
 			oldNodeID, desc.Address, desc)
-		delete(g.nodeDescs, oldNodeID)
+		g.removeNodeDescriptorLocked(oldNodeID)
 
 		// Deleting the local copy isn't enough to remove the node from the gossip
 		// network. We also have to clear it out in the infoStore by overwriting
@@ -667,6 +662,19 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 			log.Error(ctx, err)
 		}
 	}
+}
+
+func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
+	delete(g.nodeDescs, nodeID)
+	g.recomputeMaxPeersLocked()
+}
+
+// recomputeMaxPeersLocked recomputes max peers based on size of
+// network and set the max sizes for incoming and outgoing node sets.
+func (g *Gossip) recomputeMaxPeersLocked() {
+	maxPeers := g.maxPeers(len(g.nodeDescs))
+	g.mu.incoming.setMaxSize(maxPeers)
+	g.outgoing.setMaxSize(maxPeers)
 }
 
 // getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
