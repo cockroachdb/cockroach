@@ -624,6 +624,7 @@ func (t *RaftTransport) SendSnapshot(
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
+	sent func(),
 ) error {
 	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
@@ -653,5 +654,5 @@ func (t *RaftTransport) SendSnapshot(
 		snapshotClientWithBreaker{
 			MultiRaft_RaftSnapshotClient: stream,
 			breaker: breaker,
-		}, storePool, header, snap, newBatch)
+		}, storePool, header, snap, newBatch, sent)
 }

@@ -3315,8 +3315,11 @@ func (r *Replica) sendSnapshot(
 		// Recipients can choose to decline snapshots.
 		CanDecline: true,
 	}
+	sent := func() {
+		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
+	}
 	if err := r.store.cfg.Transport.SendSnapshot(
-		ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
+		ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch, sent); err != nil {
 		return &preemptiveSnapshotError{
 			errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r),
 		}
