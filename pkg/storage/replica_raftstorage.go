@@ -317,8 +317,6 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
 	}
-	log.Event(ctx, "snapshot generated")
-	r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	return &snapData, nil
 }
 
