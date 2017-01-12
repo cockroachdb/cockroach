@@ -528,6 +528,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 		AlternateNodeID: nodeID + 1,
 		AlternateAddr:   &newAddr,
 	}
+	local.outgoing.addPlaceholder() // so that the resolvePlaceholder in handleResponse doesn't fail
 	if err := client.handleResponse(
 		context.TODO(), local, reply,
 	); !testutils.IsError(err, "received forward") {

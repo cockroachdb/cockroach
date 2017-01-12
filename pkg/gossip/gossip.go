@@ -565,7 +565,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 // maximum for number of hops allowed before the gossip network
 // will seek to "tighten" by creating new connections to distant
 // nodes.
-func (g *Gossip) maxPeers(nodeCount int) int {
+func maxPeers(nodeCount int) int {
 	// This formula uses MaxHops-1, instead of MaxHops, to provide a
 	// "fudge" factor for max connected peers, to account for the
 	// arbitrary, decentralized way in which gossip networks are created.
@@ -675,7 +675,7 @@ func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
 func (g *Gossip) recomputeMaxPeersLocked() {
-	maxPeers := g.maxPeers(len(g.nodeDescs))
+	maxPeers := maxPeers(len(g.nodeDescs))
 	g.mu.incoming.setMaxSize(maxPeers)
 	g.outgoing.setMaxSize(maxPeers)
 }
@@ -1093,8 +1093,8 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 }
 
 // tightenNetwork "tightens" the network by starting a new gossip
-// client to the most distant node as measured in required gossip hops
-// to propagate info from the distant node to this node.
+// client to the provided node, which ideally should be the most distant
+// node from this one in terms of gossip hops.
 func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
