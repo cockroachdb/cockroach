@@ -41,6 +41,7 @@ type client struct {
 
 	createdAt             time.Time
 	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
+	resolvedPlaceholder   bool                     // Whether we've resolved the nodeSet's placeholder for this client
 	addr                  net.Addr                 // Peer node network address
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
@@ -81,6 +82,11 @@ func (c *client) start(
 	stopper *stop.Stopper,
 	breaker *circuit.Breaker,
 ) {
+	// Add a placeholder for the new outgoing connection because we may not know
+	// the ID of the node we're connecting to yet. This will be resolved in
+	// (*client).handleResponse once we know the ID.
+	g.outgoing.addPlaceholder()
+
 	stopper.RunWorker(func() {
 		ctx, cancel := context.WithCancel(c.AnnotateCtx(context.Background()))
 		var wg sync.WaitGroup
@@ -227,7 +233,10 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		g.maybeTightenLocked()
 	}
 	c.peerID = reply.NodeID
-	g.outgoing.addNode(c.peerID)
+	if !c.resolvedPlaceholder {
+		c.resolvedPlaceholder = true
+		g.outgoing.resolvePlaceholder(c.peerID)
+	}
 	c.remoteHighWaterStamps = reply.HighWaterStamps
 
 	// Handle remote forwarding.
