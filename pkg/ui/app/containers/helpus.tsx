@@ -180,7 +180,7 @@ let helpusConnected = connect(
     loadUIData: uiData.loadUIData,
     saveUIData: uiData.saveUIData,
     setUISetting,
-  }
+  },
 )(HelpUs);
 
 export default helpusConnected;

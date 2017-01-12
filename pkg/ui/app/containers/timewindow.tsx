@@ -114,7 +114,7 @@ let timeWindowManagerConnected = connect(
   },
   {
     setTimeWindow: timewindow.setTimeWindow,
-  }
+  },
 )(TimeWindowManager);
 
 export default timeWindowManagerConnected;

@@ -167,7 +167,7 @@ let tableMainConnected = connect(
     setUISetting,
     refreshTableDetails,
     refreshTableStats,
-  }
+  },
 )(TableMain);
 
 export default tableMainConnected;

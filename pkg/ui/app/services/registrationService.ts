@@ -74,7 +74,7 @@ export function loadNeededData(state: AdminUIState, dispatch: (a: any) => any) {
 }
 
 // Returns true if the registration has not been synced.
-export function shouldSyncRegistration(state: AdminUIState, newState?: AdminUIState): boolean {
+export function shouldSyncRegistration(state: AdminUIState): boolean {
   return !uiData.getData(state, uiData.KEY_REGISTRATION_SYNCHRONIZED);
 }
 
@@ -118,7 +118,7 @@ export function syncRegistration(state: AdminUIState, dispatch: (a: any) => any,
 
   return cockroachServerRequest
     .then(registrationCallback)
-    .catch((e) => incrErrors())
+    .catch((_e) => incrErrors())
     .then(() => setSaving(false));
 }
 

@@ -272,7 +272,7 @@ export function queryMetrics<S>(id: string, query: TSRequestMessage) {
       return queuePromise;
     }
 
-    queuePromise = new Promise<void>((resolve, reject) => {
+    queuePromise = new Promise<void>((resolve, _reject) => {
       setTimeout(() => {
         // Increment in-flight counter.
         dispatch(fetchMetrics());

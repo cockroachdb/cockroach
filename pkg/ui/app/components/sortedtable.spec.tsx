@@ -35,7 +35,7 @@ const columns: ColumnDescriptor<TestRow>[] = [
 const TestSortedTable = SortedTable as new () => SortedTable<TestRow>;
 
 function makeTable(
-  data: TestRow[], sortSetting?: SortSetting, onChangeSortSetting?: (ss: SortSetting) => void
+  data: TestRow[], sortSetting?: SortSetting, onChangeSortSetting?: (ss: SortSetting) => void,
 ) {
   return mount(<TestSortedTable data={data}
                                 sortSetting={sortSetting}

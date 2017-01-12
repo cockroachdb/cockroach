@@ -186,7 +186,7 @@ describe("metrics reducer", function() {
       fetchMock.mock({
         matcher: "/ts/query",
         method: "POST",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1 or 2.
           assert.isAtLeast(mockMetricsState.inFlight, 1);
           assert.isAtMost(mockMetricsState.inFlight, 2);
@@ -226,7 +226,7 @@ describe("metrics reducer", function() {
 
       // Dispatch an additional query for the short timespan, but in a
       // setTimeout - this should result in a separate batch.
-      let p2 = new Promise<void>((resolve, reject) => {
+      let p2 = new Promise<void>((resolve, _reject) => {
         setTimeout(() => {
           resolve(queryMetrics("id.6", createRequest(shortTimespan, "short.6")));
         });
@@ -256,7 +256,7 @@ describe("metrics reducer", function() {
       fetchMock.mock({
         matcher: "/ts/query",
         method: "POST",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1.
           assert.equal(mockMetricsState.inFlight, 1);
 

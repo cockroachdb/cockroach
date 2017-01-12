@@ -103,5 +103,5 @@ export default connect(
     refreshDatabaseDetails,
     refreshTableDetails,
     refreshTableStats,
-  }
+  },
 )(DatabaseSummaryGrants);

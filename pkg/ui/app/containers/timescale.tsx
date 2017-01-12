@@ -105,7 +105,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   }
 
   getTimescaleOptions = () => {
-    let timescaleOptions = _.map(timewindow.availableTimeScales, (ts, k) => {
+    let timescaleOptions = _.map(timewindow.availableTimeScales, (_ts, k) => {
       return { value: k, label: "Last " + k };
     });
 
@@ -194,5 +194,5 @@ export default connect(
     setTimeScale: timewindow.setTimeScale,
     refreshNodes: refreshNodes,
     setUISetting: setUISetting,
-  }
+  },
 )(TimeScaleDropdown);

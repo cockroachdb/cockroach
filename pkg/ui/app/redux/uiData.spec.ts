@@ -332,7 +332,7 @@ describe("UIData reducer", function() {
       fetchMock.mock({
         matcher: "/_admin/v1/uidata",
         method: "POST",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.equal(state[uiKey1].state, uidata.UIDataState.SAVING);
           assert.equal(state[uiKey2].state, uidata.UIDataState.SAVING);
 
@@ -355,13 +355,13 @@ describe("UIData reducer", function() {
 
       let p = saveUIData(
         {key: uiKey1, value: uiObj1},
-        {key: uiKey2, value: uiObj2}
+        {key: uiKey2, value: uiObj2},
       );
 
       // Second save should be ignored.
       let p2 = saveUIData(
         {key: uiKey1, value: uiObj1},
-        {key: uiKey2, value: uiObj2}
+        {key: uiKey2, value: uiObj2},
       );
 
       return Promise.all([p, p2]).then(() => {
@@ -388,7 +388,7 @@ describe("UIData reducer", function() {
 
       let p = saveUIData(
         {key: uiKey1, value: uiObj1},
-        {key: uiKey2, value: uiObj2}
+        {key: uiKey2, value: uiObj2},
       );
 
       p.then(() => {
@@ -410,7 +410,7 @@ describe("UIData reducer", function() {
             assert.instanceOf(state[uiKey2].error, Error);
             done();
           },
-          1000
+          1000,
         );
       });
     });
@@ -487,7 +487,7 @@ describe("UIData reducer", function() {
             assert.instanceOf(state[uiKey2].error, Error);
             done();
           },
-          1000
+          1000,
         );
       });
     });

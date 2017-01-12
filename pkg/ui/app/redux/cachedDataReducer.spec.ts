@@ -12,7 +12,7 @@ describe("basic cachedDataReducer", function () {
     constructor(public response: string) { };
   }
 
-  let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, reject) => resolve(new Response(req.request)));
+  let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
 
   let expected: CachedDataReducerState<Response>;
 
@@ -138,7 +138,7 @@ describe("keyed cachedDataReducer", function () {
     constructor(public response: string) { };
   }
 
-  let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, reject) => resolve(new Response(req.request)));
+  let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
 
   let requestToID = (req: Request) => req.request;
 

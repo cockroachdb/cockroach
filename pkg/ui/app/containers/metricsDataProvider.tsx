@@ -238,7 +238,7 @@ let metricsDataProviderConnected = connect(
   },
   {
     queryMetrics,
-  }
+  },
 )(MetricsDataProvider);
 
 export {

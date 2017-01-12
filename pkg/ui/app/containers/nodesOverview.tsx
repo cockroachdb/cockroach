@@ -218,7 +218,7 @@ let nodesMainConnected = connect(
   {
     refreshNodes: refreshNodes,
     setUISetting: setUISetting,
-  }
+  },
 )(NodesMain);
 
 export { nodesMainConnected as default };
