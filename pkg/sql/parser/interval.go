@@ -39,6 +39,12 @@ func (l *intervalLexer) consumeInt() int64 {
 	}
 
 	offset := l.offset
+	neg := false
+	// Treat '+' invalid as postgres do.
+	if l.str[l.offset] == '-' {
+		neg = true
+		l.offset++
+	}
 	var x int64
 	for ; l.offset < len(l.str); l.offset++ {
 		if l.str[l.offset] < '0' || l.str[l.offset] > '9' {
@@ -60,6 +66,9 @@ func (l *intervalLexer) consumeInt() int64 {
 		l.err = fmt.Errorf("interval: missing int at offset %d, %v", offset, l.str[offset])
 		return 0
 	}
+	if neg {
+		return -1 * x
+	}
 	return x
 }
 
@@ -70,8 +79,10 @@ func (l *intervalLexer) consumeUnit(skipCharacter byte) string {
 	}
 
 	offset := l.offset
+	var c byte
 	for ; l.offset < len(l.str); l.offset++ {
-		if (l.str[l.offset] >= '0' && l.str[l.offset] <= '9') || l.str[l.offset] == skipCharacter {
+		c = l.str[l.offset]
+		if (c >= '0' && c <= '9') || c == skipCharacter || c == '-' {
 			break
 		}
 	}
