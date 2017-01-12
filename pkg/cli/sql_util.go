@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -424,6 +425,10 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 			}
 		}
 		return fmt.Sprintf("%+q", t)
+
+	case time.Time:
+		return val.(time.Time).Format("2006-01-02 15:04:05.999999999-07:00")
 	}
+
 	return fmt.Sprint(val)
 }
