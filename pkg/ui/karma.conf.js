@@ -20,5 +20,7 @@ module.exports = function (config) {
     browsers: ['PhantomJS'],
 
     singleRun: true,
+
+    browserNoActivityTimeout: 60000,
   })
 }
