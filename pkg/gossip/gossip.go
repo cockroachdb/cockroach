@@ -477,7 +477,9 @@ func (g *Gossip) EnableSimulationCycler(enable bool) {
 func (g *Gossip) SimulationCycle() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.simulationCycler.Broadcast()
+	if g.simulationCycler != nil {
+		g.simulationCycler.Broadcast()
+	}
 }
 
 // maybeAddResolver creates and adds a resolver for the specified
