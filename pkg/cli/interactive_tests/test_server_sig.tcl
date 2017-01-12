@@ -24,7 +24,7 @@ eexpect ":/# "
 send "$argv start & echo $! >server_pid; fg\r"
 eexpect "restarted"
 
-send "\003"
+interrupt
 eexpect "initiating graceful shutdown"
 eexpect "shutdown completed"
 eexpect ":/# "
@@ -38,9 +38,9 @@ eexpect ":/# "
 send "$argv start & echo $! >server_pid; fg\r"
 eexpect "restarted"
 
-send "\003"
+interrupt
 eexpect "initiating graceful shutdown"
-send "\003"
+interrupt
 eexpect "hard shutdown"
 eexpect ":/# "
 
