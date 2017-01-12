@@ -33,6 +33,7 @@ import (
 // TestPut starts up an N node cluster and runs N workers that write
 // to independent keys.
 func TestPut(t *testing.T) {
+	t.Skip("very flaky on teamcity (#12740)")
 	s := log.Scope(t, "")
 	defer s.Close(t)
 
