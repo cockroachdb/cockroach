@@ -1103,6 +1103,13 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Errorf(ctx, "unable to get address for node %d: %s", distantNodeID, err)
 		} else {
+			// Avoid opening a second connection to a node that we're already connected
+			// (or in the process of connecting) to.
+			if c := g.findClient(func(candidate *client) bool {
+				return candidate.addr == nodeAddr
+			}); c != nil {
+				return
+			}
 			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
 			g.startClient(nodeAddr)
