@@ -13,9 +13,8 @@ eexpect "CockroachDB"
 eexpect "starting cockroach node"
 
 # Stop it.
-send "\003"
-sleep 1
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 
 # Check that a server started with --logtostderr
@@ -25,38 +24,38 @@ eexpect "CockroachDB"
 eexpect "starting cockroach node"
 
 # Stop it.
-send "\003"
-sleep 1
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
+
+# We exclude messages about the env. var PROPOSER_EVALUATED_KV as this
+# may be emitted before the logging flags are handled.
+set silence_prop_eval_kv "2>&1 | grep -v 'running with experimental support for proposer-evaluated KV'"
 
 # Check that --alsologtostderr can override the threshold
 # regardless of what --logtostderr has set.
-send "echo marker; $argv start --alsologtostderr=ERROR\r"
+send "echo marker; $argv start --alsologtostderr=ERROR $silence_prop_eval_kv\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
-send "\003"
-sleep 1
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr\r"
+send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr $silence_prop_eval_kv\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
-send "\003"
-sleep 1
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false\r"
+send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false $silence_prop_eval_kv\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
-send "\003"
-sleep 1
-send "\003"
+interrupt
+interrupt
 eexpect ":/# "
 
 # Start a regular server
@@ -65,7 +64,7 @@ send "$argv start >/dev/null 2>&1 & sleep 1\r"
 # Now test `quit` as non-start command, and test that `quit` does not
 # emit logging output between the point the command starts until it
 # prints the final ok message.
-send "echo marker; $argv quit\r"
+send "echo marker; $argv quit $silence_prop_eval_kv\r"
 set timeout 20
 eexpect "marker\r\nok\r\n:/# "
 set timeout 5
@@ -74,7 +73,7 @@ set timeout 5
 # that the default logging level is WARNING, so that no INFO messages
 # are printed between the marker and the (first line) error message
 # from quit. Quit will error out because the server is already stopped.
-send "echo marker; $argv quit --logtostderr\r"
+send "echo marker; $argv quit --logtostderr $silence_prop_eval_kv\r"
 eexpect "marker\r\nError"
 eexpect ":/# "
 

@@ -26,6 +26,11 @@ proc eexpect {text} {
     }
 }
 
+proc interrupt {} {
+    send "\003"
+    sleep 0.4
+}
+
 # Convenience functions to start/shutdown the server.
 # Preserves the invariant that the server's PID is saved
 # in `server_pid`.

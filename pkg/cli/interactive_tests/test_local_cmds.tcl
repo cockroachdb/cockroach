@@ -62,7 +62,7 @@ eexpect "hello\\\\nworld"
 eexpect root@
 
 # Finally terminate with Ctrl+C.
-send "\003"
+interrupt
 eexpect eof
 
 spawn /bin/bash

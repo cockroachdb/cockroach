@@ -56,13 +56,13 @@ eexpect "SELECT 1;"
 
 # Test that the client cannot terminate with Ctrl+C while
 # cursor is on recalled line
-send "\003"
+interrupt
 send "\rselect 1;\r"
 eexpect "1 row"
 eexpect root@
 
 # Finally terminate with Ctrl+C
-send "\003"
+interrupt
 eexpect eof
 
 stop_server $argv
