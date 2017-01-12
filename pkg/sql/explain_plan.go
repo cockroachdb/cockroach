@@ -88,7 +88,8 @@ func (p *planner) makeExplainPlanNode(
 	}
 
 	explainer.fmtFlags = parser.FmtExpr(
-		explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames)
+		parser.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
+	)
 
 	node := &explainPlanNode{
 		p:         p,
@@ -143,7 +144,7 @@ func planToString(plan planNode) string {
 		showTypes:     true,
 		showExprs:     true,
 		showSelectTop: true,
-		fmtFlags:      parser.FmtExpr(true, true, true),
+		fmtFlags:      parser.FmtExpr(parser.FmtSimple, true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field

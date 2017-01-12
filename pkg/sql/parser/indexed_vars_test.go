@@ -75,9 +75,12 @@ func TestIndexedVars(t *testing.T) {
 	var buf bytes.Buffer
 	typedExpr.Format(
 		&buf,
-		FmtIndexedVarFormat(func(buf *bytes.Buffer, _ FmtFlags, _ IndexedVarContainer, idx int) {
-			fmt.Fprintf(buf, "customVar%d", idx)
-		}),
+		FmtIndexedVarFormat(
+			FmtSimple,
+			func(buf *bytes.Buffer, _ FmtFlags, _ IndexedVarContainer, idx int) {
+				fmt.Fprintf(buf, "customVar%d", idx)
+			},
+		),
 	)
 	str = buf.String()
 	expectedStr = "customVar0 + (customVar1 * customVar2)"

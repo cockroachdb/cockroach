@@ -385,6 +385,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	var queryBuf bytes.Buffer
 	var fmtErr error
 	n.AsSource.Format(&queryBuf, parser.FmtNormalizeTableNames(
+		parser.FmtSimple,
 		func(t *parser.NormalizableTableName) *parser.TableName {
 			tn, err := p.QualifyWithDatabase(t)
 			if err != nil {
