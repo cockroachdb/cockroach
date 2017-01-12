@@ -259,6 +259,7 @@ func (s *server) gossipReceiver(
 					altIdx--
 				}
 
+				s.nodeMetrics.ConnectionsRefused.Inc(1)
 				log.Infof(ctx, "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
 					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
