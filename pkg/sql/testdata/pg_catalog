@@ -83,10 +83,10 @@ nspname   STRING  false  ''
 nspowner  INT     true   NULL
 aclitem   STRING  true   NULL
 
-query TTTTTTT colnames
+query TTBITTBB colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
 ----
-Table  Name  Unique  Seq  Column  Direction  Storing
+Table  Name  Unique  Seq  Column  Direction  Storing  Implicit
 
 query TTTTT colnames
 SHOW CONSTRAINTS FROM pg_catalog.pg_namespace

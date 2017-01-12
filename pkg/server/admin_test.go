@@ -493,10 +493,11 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	// Verify indexes.
 	expIndexes := []serverpb.TableDetailsResponse_Index{
 		{Name: "primary", Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
+		{Name: "descIdx", Column: "rowid", Direction: "ASC", Unique: false, Seq: 2, Implicit: true},
 		{Name: "descIdx", Column: "default2", Direction: "DESC", Unique: false, Seq: 1},
 	}
-	testutils.SortStructs(expIndexes, "Column")
-	testutils.SortStructs(resp.Indexes, "Column")
+	testutils.SortStructs(expIndexes, "Name", "Seq")
+	testutils.SortStructs(resp.Indexes, "Name", "Seq")
 	for i, a := range resp.Indexes {
 		e := expIndexes[i]
 		if a.String() != e.String() {

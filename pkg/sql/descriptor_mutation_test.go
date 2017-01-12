@@ -830,8 +830,9 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.CheckQueryResults(
 		"SHOW INDEXES FROM t.test",
 		[][]string{
-			{"test", "primary", "true", "1", "a", "ASC", "false"},
-			{"test", "ufo", "false", "1", "d", "ASC", "false"},
+			{"test", "primary", "true", "1", "a", "ASC", "false", "false"},
+			{"test", "ufo", "false", "1", "d", "ASC", "false", "false"},
+			{"test", "ufo", "false", "2", "a", "ASC", "false", "true"},
 		},
 	)
 

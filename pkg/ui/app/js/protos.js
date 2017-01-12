@@ -2154,6 +2154,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                                     "type": "bool",
                                                     "name": "storing",
                                                     "id": 6
+                                                },
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "bool",
+                                                    "name": "implicit",
+                                                    "id": 7
                                                 }
                                             ]
                                         }

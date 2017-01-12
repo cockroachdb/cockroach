@@ -386,6 +386,7 @@ func (s *adminServer) TableDetails(
 			columnCol    = "Column"
 			directionCol = "Direction"
 			storingCol   = "Storing"
+			implicitCol  = "Implicit"
 		)
 		scanner := makeResultScanner(r.ResultList[1].Columns)
 		for i, nRows := 0, r.ResultList[1].Rows.Len(); i < nRows; i++ {
@@ -408,6 +409,9 @@ func (s *adminServer) TableDetails(
 				return nil, err
 			}
 			if err := scanner.Scan(row, storingCol, &index.Storing); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, implicitCol, &index.Implicit); err != nil {
 				return nil, err
 			}
 			resp.Indexes = append(resp.Indexes, index)
