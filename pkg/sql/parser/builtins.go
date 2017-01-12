@@ -804,6 +804,23 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"coalesce": {
+		Builtin{
+			Types:      AnyType{},
+			ReturnType: TypeAny,
+			category:   categoryComparison,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				for _, arg := range args {
+					if arg != DNull {
+						return arg, nil
+					}
+				}
+				return DNull, nil
+			},
+			Info: "Returns the first non-null element.",
+		},
+	},
+
 	// Timestamp/Date functions.
 
 	"experimental_strftime": {
