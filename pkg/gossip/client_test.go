@@ -164,6 +164,7 @@ func gossipSucceedsSoon(
 		select {
 		case client := <-disconnected:
 			// If the client wasn't able to connect, restart it.
+			gossip[client].outgoing.addPlaceholder()
 			client.start(gossip[client], disconnected, rpcContext, stopper, rpcContext.NewBreaker())
 		default:
 		}
@@ -528,6 +529,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 		AlternateNodeID: nodeID + 1,
 		AlternateAddr:   &newAddr,
 	}
+	local.outgoing.addPlaceholder()
 	if err := client.handleResponse(
 		context.TODO(), local, reply,
 	); !testutils.IsError(err, "received forward") {

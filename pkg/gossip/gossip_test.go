@@ -18,6 +18,7 @@ package gossip
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -178,6 +179,61 @@ func TestGossipRaceLogStatus(t *testing.T) {
 	close(gun)
 }
 
+// TestGossipOutgoingLimitEnforced verifies that a gossip node won't open more
+// outgoing connections than it should. If the gossip implementation is racy
+// with respect to opening outgoing connections, this may not fail every time
+// it's run, but should fail very quickly if run under stress.
+func TestGossipOutgoingLimitEnforced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// This test has an implicit dependency on the maxPeers logic deciding that
+	// maxPeers is 3 for a 5-node cluster, so let's go ahead and make that
+	// explicit.
+	maxPeers := maxPeers(5)
+	if maxPeers > 3 {
+		t.Fatalf("maxPeers(5)=%d, which is higher than this test's assumption", maxPeers)
+	}
+
+	local := startGossip(1, stopper, t, metric.NewRegistry())
+	var peers []*Gossip
+	for i := 0; i < 4; i++ {
+		// After creating a new node, join it to the first node to ensure that the
+		// network is connected (and thus all nodes know each other's addresses)
+		// before we start the actual test.
+		newPeer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
+		newPeer.outgoing.addPlaceholder()
+		newPeer.startClient(&local.mu.is.NodeAddr)
+		peers = append(peers, newPeer)
+	}
+
+	// Wait until the network is at least mostly connected.
+	testutils.SucceedsSoon(t, func() error {
+		local.mu.Lock()
+		defer local.mu.Unlock()
+		if local.mu.incoming.len() == maxPeers {
+			return nil
+		}
+		return fmt.Errorf("local.mu.incoming.len() = %d, want %d", local.mu.incoming.len(), maxPeers)
+	})
+
+	// Verify that we can't open more than maxPeers connections.
+	for _, peer := range peers {
+		local.tightenNetwork(peer.NodeID.Get())
+	}
+
+	if outgoing := local.outgoing.gauge.Value(); outgoing > int64(maxPeers) {
+		t.Errorf("outgoing nodeSet has %d connections; the max should be %d", outgoing, maxPeers)
+	}
+	local.clientsMu.Lock()
+	if numClients := len(local.clientsMu.clients); numClients > maxPeers {
+		t.Errorf("local gossip has %d clients; the max should be %d", numClients, maxPeers)
+	}
+	local.clientsMu.Unlock()
+}
+
 // TestGossipNoForwardSelf verifies that when a Gossip instance is full, it
 // redirects clients elsewhere (in particular not to itself).
 //
@@ -251,6 +307,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		for {
 			localAddr := local.GetNodeAddr()
 			c := newClient(log.AmbientContext{}, localAddr, makeMetrics())
+			peer.outgoing.addPlaceholder()
 			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.rpcContext.NewBreaker())
 
 			disconnectedClient := <-disconnectedCh

@@ -565,7 +565,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 // maximum for number of hops allowed before the gossip network
 // will seek to "tighten" by creating new connections to distant
 // nodes.
-func (g *Gossip) maxPeers(nodeCount int) int {
+func maxPeers(nodeCount int) int {
 	// This formula uses MaxHops-1, instead of MaxHops, to provide a
 	// "fudge" factor for max connected peers, to account for the
 	// arbitrary, decentralized way in which gossip networks are created.
@@ -675,7 +675,7 @@ func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
 func (g *Gossip) recomputeMaxPeersLocked() {
-	maxPeers := g.maxPeers(len(g.nodeDescs))
+	maxPeers := maxPeers(len(g.nodeDescs))
 	g.mu.incoming.setMaxSize(maxPeers)
 	g.outgoing.setMaxSize(maxPeers)
 }
@@ -1207,6 +1207,7 @@ func (g *Gossip) startClient(addr net.Addr) {
 	log.Eventf(ctx, "starting new client to %s", addr)
 	c := newClient(g.server.AmbientContext, addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
+	g.outgoing.addPlaceholder() // add a placeholder because we may not know the node's ID yet
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
 }
 
