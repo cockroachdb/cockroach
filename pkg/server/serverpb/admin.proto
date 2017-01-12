@@ -133,6 +133,9 @@ message TableDetailsResponse {
 
     // storing is an internal variable that's passed along.
     bool storing = 6;
+
+    // implicit is an internal variable that's passed along.
+    bool implicit = 7;
   }
 
   repeated Grant grants = 1 [(gogoproto.nullable) = false];

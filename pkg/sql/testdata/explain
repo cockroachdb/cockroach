@@ -206,9 +206,9 @@ query ITTT
 EXPLAIN SHOW INDEX FROM foo
 ----
 0  virtual table
-0                 source  SHOW INDEX FROM foo
+0                 source  SHOW INDEXES FROM foo
 1  values
-1                 size    7 columns, 2 rows
+1                 size    8 columns, 3 rows
 
 query ITTT
 EXPLAIN SHOW CONSTRAINTS FROM foo

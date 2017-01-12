@@ -266,8 +266,20 @@ CREATE TABLE information_schema.schema_privileges (
 }
 
 var (
-	indexDirectionNA = "N/A"
+	indexDirectionNA   = parser.NewDString("N/A")
+	indexDirectionAsc  = parser.NewDString(sqlbase.IndexDescriptor_ASC.String())
+	indexDirectionDesc = parser.NewDString(sqlbase.IndexDescriptor_DESC.String())
 )
+
+func dStringForIndexDirection(dir sqlbase.IndexDescriptor_Direction) parser.Datum {
+	switch dir {
+	case sqlbase.IndexDescriptor_ASC:
+		return indexDirectionAsc
+	case sqlbase.IndexDescriptor_DESC:
+		return indexDirectionDesc
+	}
+	panic("unreachable")
+}
 
 var informationSchemaStatisticsTable = virtualSchemaTable{
 	schema: `
@@ -283,13 +295,15 @@ CREATE TABLE information_schema.statistics (
 	"COLLATION" STRING NOT NULL DEFAULT '',
 	CARDINALITY INT NOT NULL DEFAULT 0,
 	DIRECTION STRING NOT NULL DEFAULT '',
-	STORING BOOL NOT NULL DEFAULT FALSE 
+	STORING BOOL NOT NULL DEFAULT FALSE,
+	IMPLICIT BOOL NOT NULL DEFAULT FALSE
 );`,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
-					direction string, isStored bool) error {
+					direction parser.Datum, isStored, isImplicit bool,
+				) error {
 					return addRow(
 						defString,                                     // table_catalog
 						parser.NewDString(db.GetName()),               // table_schema
@@ -301,25 +315,46 @@ CREATE TABLE information_schema.statistics (
 						parser.NewDString(colName),                    // column_name
 						parser.DNull,                                  // collation
 						parser.DNull,                                  // cardinality
-						parser.NewDString(direction),                  // direction
-						parser.MakeDBool(parser.DBool(isStored)),      // storing
+						direction,                                     // direction
+						parser.MakeDBool(parser.DBool(isStored)),   // storing
+						parser.MakeDBool(parser.DBool(isImplicit)), // implicit
 					)
 				}
 
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+					// Columns in the primary key that aren't in index.ColumnNames or
+					// index.StoreColumnNames are implicit columns in the index.
+					var implicitCols map[string]struct{}
+					if len(index.ExtraColumnIDs) > len(index.StoreColumnNames) {
+						implicitCols = make(map[string]struct{})
+						for _, col := range table.PrimaryIndex.ColumnNames {
+							implicitCols[col] = struct{}{}
+						}
+					}
+
 					sequence := 1
 					for i, col := range index.ColumnNames {
 						// We add a row for each column of index.
-						if err := appendRow(index, col, sequence,
-							index.ColumnDirections[i].String(), false); err != nil {
+						dir := dStringForIndexDirection(index.ColumnDirections[i])
+						if err := appendRow(index, col, sequence, dir, false, false); err != nil {
 							return err
 						}
 						sequence++
+						delete(implicitCols, col)
 					}
 					for _, col := range index.StoreColumnNames {
 						// We add a row for each stored column of index.
 						if err := appendRow(index, col, sequence,
-							indexDirectionNA, true); err != nil {
+							indexDirectionNA, true, false); err != nil {
+							return err
+						}
+						sequence++
+						delete(implicitCols, col)
+					}
+					for col := range implicitCols {
+						// We add a row for each implicit column of index.
+						if err := appendRow(index, col, sequence,
+							indexDirectionAsc, false, true); err != nil {
 							return err
 						}
 						sequence++
