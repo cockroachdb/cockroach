@@ -42,14 +42,14 @@ export const createAdminUIStore = () => createStore(
     (window as any).devToolsExtension ? (window as any).devToolsExtension({
       // TODO(maxlang): implement {,de}serializeAction.
       // TODO(maxlang): implement deserializeState.
-      serializeState: (key: string, value: any): Object => {
+      serializeState: (_key: string, value: any): Object => {
         if (value && value.toRaw) {
           return value.toRaw();
         }
         return value;
       },
-    }) : _.identity
-  ) as GenericStoreEnhancer
+    }) : _.identity,
+  ) as GenericStoreEnhancer,
 );
 
 export const store = createAdminUIStore();

@@ -178,7 +178,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
           let replicaLocations = nodeRange.state.state.desc.replicas.map(
             (replica) => "(Node " + replica.node_id.toString() +
                          " Store " + replica.store_id.toString() +
-                         " ReplicaID " + replica.replica_id.toString() + ")"
+                         " ReplicaID " + replica.replica_id.toString() + ")",
           );
           let display = (l?: Long): string => {
             if (l) {
@@ -267,7 +267,7 @@ let rangesMainConnected = connect(
   },
   {
     refreshRaft: refreshRaft,
-  }
+  },
 )(RangesMain);
 
 export { rangesMainConnected as default };

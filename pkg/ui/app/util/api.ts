@@ -91,7 +91,7 @@ function timeoutFetch<TResponse, TResponseMessage, TResponseMessageBuilder exten
   new (json: TResponse): TResponseMessage
   decode(buffer: ArrayBuffer): TResponseMessage
   decode(buffer: ByteBuffer): TResponseMessage
-  decode64(buffer: string): TResponseMessage
+  decode64(buffer: string): TResponseMessage,
 }>(builder: TResponseMessageBuilder, url: string, req: TRequestMessage = null, timeout: moment.Duration = moment.duration(30, "s")): Promise<TResponseMessage> {
   return withTimeout(
     fetch(url, {
@@ -103,7 +103,7 @@ function timeoutFetch<TResponse, TResponseMessage, TResponseMessageBuilder exten
       },
       body: req ? req.toArrayBuffer() : undefined,
     }),
-    timeout
+    timeout,
    ).then((res) => {
     if (!res.ok) {
       throw Error(res.statusText);
@@ -112,7 +112,7 @@ function timeoutFetch<TResponse, TResponseMessage, TResponseMessageBuilder exten
   });
 }
 
-export type APIRequestFn<TRequestMessage, TResponseMessage> = (req: TRequestMessage, timeout?: moment.Duration) => Promise<TResponseMessage>
+export type APIRequestFn<TRequestMessage, TResponseMessage> = (req: TRequestMessage, timeout?: moment.Duration) => Promise<TResponseMessage>;
 
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
@@ -126,7 +126,7 @@ export function propsToQueryString(props: any) {
  */
 
 // getDatabaseList gets a list of all database names
-export function getDatabaseList(req: DatabasesRequestMessage, timeout?: moment.Duration): Promise<DatabasesResponseMessage> {
+export function getDatabaseList(_req: DatabasesRequestMessage, timeout?: moment.Duration): Promise<DatabasesResponseMessage> {
   return timeoutFetch(serverpb.DatabasesResponse, `${API_PREFIX}/databases`, null, timeout);
 }
 
@@ -158,11 +158,11 @@ export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration):
 }
 
 // getNodes gets node data
-export function getNodes(req: NodesRequestMessage, timeout?: moment.Duration): Promise<NodesResponseMessage> {
+export function getNodes(_req: NodesRequestMessage, timeout?: moment.Duration): Promise<NodesResponseMessage> {
   return timeoutFetch(serverpb.NodesResponse, `/_status/nodes`, null, timeout);
 }
 
-export function raftDebug(req: RaftDebugRequestMessage): Promise<RaftDebugResponseMessage> {
+export function raftDebug(_req: RaftDebugRequestMessage): Promise<RaftDebugResponseMessage> {
   // NB: raftDebug intentionally does not pass a timeout through.
   return timeoutFetch(serverpb.RaftDebugResponse, `/_status/raft`);
 }
@@ -173,12 +173,12 @@ export function queryTimeSeries(req: TimeSeriesQueryRequestMessage, timeout?: mo
 }
 
 // getHealth gets health data
-export function getHealth(req: HealthRequestMessage, timeout?: moment.Duration): Promise<HealthResponseMessage> {
+export function getHealth(_req: HealthRequestMessage, timeout?: moment.Duration): Promise<HealthResponseMessage> {
   return timeoutFetch(serverpb.HealthResponse, `${API_PREFIX}/health`, null, timeout);
 }
 
 // getCluster gets info about the cluster
-export function getCluster(req: ClusterRequestMessage, timeout?: moment.Duration): Promise<ClusterResponseMessage> {
+export function getCluster(_req: ClusterRequestMessage, timeout?: moment.Duration): Promise<ClusterResponseMessage> {
   return timeoutFetch(serverpb.ClusterResponse, `${API_PREFIX}/cluster`, null, timeout);
 }
 

@@ -99,7 +99,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
               },
               {
                 title: "Schema Change",
-                cell: (tableInfo) => "",
+                cell: (_tableInfo) => "",
               },
               ]}/>
         }
@@ -144,5 +144,5 @@ export default connect(
     refreshDatabaseDetails,
     refreshTableDetails,
     refreshTableStats,
-  }
+  },
 )(DatabaseSummaryTables);

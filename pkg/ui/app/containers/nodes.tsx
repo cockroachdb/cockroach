@@ -115,12 +115,12 @@ class ClusterOverview extends React.Component<ClusterOverviewProps, ClusterOverv
 }
 
 export default connect(
-  (state: AdminUIState, ownProps: IInjectedProps) => {
+  (state: AdminUIState, _ownProps: IInjectedProps) => {
     return {
       nodes: state.cachedData.nodes.data,
     };
   },
   {
     refreshNodes,
-  }
+  },
 )(ClusterOverview);

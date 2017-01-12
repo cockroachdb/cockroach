@@ -63,13 +63,13 @@ let uiDataState = (state: AdminUIState): UIDataSet => state.uiData;
 // opted in to usage reporting
 let optinAttributes = createSelector(
   uiDataState,
-  (state: UIDataSet) => state[KEY_HELPUS] && state[KEY_HELPUS].data
+  (state: UIDataSet) => state[KEY_HELPUS] && state[KEY_HELPUS].data,
 );
 
 // attributesLoaded is a boolean that indicates whether the optinAttributes have been loaded yet
 let attributesLoaded = createSelector(
   uiDataState,
-  (state: UIDataSet) => state && _.has(state, KEY_HELPUS)
+  (state: UIDataSet) => state && _.has(state, KEY_HELPUS),
 );
 
 let helpusBannerDismissed = (state: AdminUIState): boolean => state.ui[HELPUS_BANNER_DISMISSED_KEY] || false;
@@ -87,7 +87,7 @@ let helpusBannerConnected = connect(
     loadUIData,
     saveUIData,
     setUISetting,
-  }
+  },
 )(HelpusBanner);
 
 export default helpusBannerConnected;

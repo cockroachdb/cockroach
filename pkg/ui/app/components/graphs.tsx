@@ -165,7 +165,7 @@ const countIncrementTable = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8,
 // "Human-friendly" increments are taken from the supplied countIncrementTable,
 // which should include decimal values between 0 and 1.
 function computeNormalizedIncrement(
-  range: number, tickCount: number, incrementTbl: number[] = countIncrementTable
+  range: number, tickCount: number, incrementTbl: number[] = countIncrementTable,
 ) {
   if (range === 0) {
     throw new Error("cannot compute tick increment with zero range");
@@ -183,7 +183,7 @@ function computeNormalizedIncrement(
 }
 
 function ComputeCountAxisDomain(
-  min: number, max: number, tickCount: number
+  min: number, max: number, tickCount: number,
 ): AxisDomain {
   let range = max - min;
   let increment = computeNormalizedIncrement(range, tickCount);
@@ -205,7 +205,7 @@ function ComputeCountAxisDomain(
 const byteLabels = ["bytes", "kilobytes", "megabytes", "gigabytes", "terabytes", "petabytes", "exabytes", "zettabytes", "yottabytes"];
 
 function ComputeByteAxisDomain(
-  min: number, max: number, tickCount: number
+  min: number, max: number, tickCount: number,
 ): AxisDomain {
   // Compute an appropriate unit for the maximum value to be displayed.
   let prefixExponent = ComputePrefixExponent(max, kibi, byteLabels);
@@ -238,7 +238,7 @@ function ComputeByteAxisDomain(
 const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"];
 
 function ComputeDurationAxisDomain(
-  min: number, max: number, tickCount: number
+  min: number, max: number, tickCount: number,
 ): AxisDomain {
   let prefixExponent = ComputePrefixExponent(max, 1000, durationLabels);
   let prefixFactor = Math.pow(1000, prefixExponent);
@@ -270,7 +270,7 @@ function ComputeDurationAxisDomain(
 const percentIncrementTable = [0.25, 0.5, 0.75, 1.0];
 
 function ComputePercentageAxisDomain(
-  min: number, max: number, tickCount: number
+  min: number, max: number, tickCount: number,
 ) {
   let range = max - min;
   let increment = computeNormalizedIncrement(range, tickCount, percentIncrementTable);
@@ -298,7 +298,7 @@ let timeIncrementDurations = [
 let timeIncrements = _.map(timeIncrementDurations, (inc) => inc.asMilliseconds());
 
 function ComputeTimeAxisDomain(
-  min: number, max: number, tickCount: number
+  min: number, max: number, tickCount: number,
 ): AxisDomain {
   // Compute increment; for time scales, this is taken from a table of allowed
   // values.
@@ -348,7 +348,7 @@ interface SeenTimestamps {
 function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponseMessage): SeenTimestamps {
   return _(metrics)
      // Get all the datapoints from all series in a single array.
-    .flatMap((s, idx) => data.results[idx].datapoints)
+    .flatMap((_s, idx) => data.results[idx].datapoints)
     // Create a map keyed by the datapoint timestamps.
     .keyBy((d) => d.timestamp_nanos.toNumber())
     // Set all values to false, since we only want the keys.
@@ -367,7 +367,7 @@ function ProcessDataPoints(
   axis: React.ReactElement<AxisProps>,
   data: TSResponseMessage,
   timeInfo: QueryTimeInfo,
-  stacked = false
+  stacked = false,
 ) {
   let yAxisRange = new AxisRange();
   let xAxisRange = new AxisRange();
@@ -466,7 +466,7 @@ export function ConfigureLineChart(
   axis: React.ReactElement<AxisProps>,
   data: TSResponseMessage,
   timeInfo: QueryTimeInfo,
-  stacked = false
+  stacked = false,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
   let formattedData: any[] = [];
@@ -546,7 +546,7 @@ export class GraphLineState {
 // graph lines. This will cause all the graph lines to appear. It also sets the
 // mouseIn state to true which is used to hide the guideline on the current
 // graph in favor of the nvd3 line.
-export function mouseEnter (node: React.Component<any, GraphLineState>) {
+export function mouseEnter(_node: React.Component<any, GraphLineState>) {
   this.setState({
     mouseIn: true,
   });
@@ -566,7 +566,7 @@ export function mouseMove() {
 // .graph-lines class which will cause all the graph lines to be hidden. It also
 // sets the mouseIn state to false so that the current graph's guideline will
 // appear when hovering over a different graph.
-export function mouseLeave(node: React.Component<any, GraphLineState>) {
+export function mouseLeave(_node: React.Component<any, GraphLineState>) {
   this.setState({
     mouseIn: false,
   });

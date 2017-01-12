@@ -115,7 +115,7 @@ let eventsConnected = connect(
   },
   {
     refreshEvents,
-  }
+  },
 )(EventList);
 
 export default eventsConnected;
