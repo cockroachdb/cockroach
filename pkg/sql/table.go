@@ -137,7 +137,7 @@ func getTableOrViewDesc(
 ) (*sqlbase.TableDescriptor, error) {
 	virtual, err := vt.getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
-		if _, ok := err.(*sqlbase.ErrUndefinedTable); ok {
+		if sqlbase.IsUndefinedTableError(err) {
 			return nil, nil
 		}
 		return virtual, err
@@ -522,7 +522,7 @@ func (p *planner) databaseFromSearchPath(tn *parser.TableName) (string, error) {
 		t.DatabaseName = parser.Name(database)
 		desc, err := p.getTableOrViewDesc(&t)
 		if err != nil {
-			if _, ok := err.(*sqlbase.ErrUndefinedDatabase); ok {
+			if sqlbase.IsUndefinedDatabaseError(err) {
 				// Keep iterating through search path if a database in the search path
 				// doesn't exist.
 				continue

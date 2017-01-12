@@ -998,9 +998,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); !testutils.IsError(
-		err, "current transaction is aborted, commands ignored until end of "+
-			"transaction block; SAVEPOINT COCKROACH_RESTART has not been used or a "+
-			"non-retriable error was encountered.") {
+		err, "SAVEPOINT COCKROACH_RESTART has not been used or a non-retriable error "+
+			"was encountered: current transaction is aborted, commands ignored until "+
+			"end of transaction block") {
 		t.Fatal(err)
 	}
 	if err = tx.Rollback(); err != nil {
