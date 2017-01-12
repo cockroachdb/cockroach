@@ -179,7 +179,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	if err := ts.purgeOldLeases(
-		kvDB, false, 1 /* minVersion */, leaseManager.LeaseStore); err != nil {
+		kvDB, false, 1 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
