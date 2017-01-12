@@ -179,7 +179,6 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				ctx, sp := ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
-				ctx, cancel := context.WithTimeout(ctx, nl.heartbeatInterval)
 				// Retry heartbeat in the event the conditional put fails.
 				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 					liveness, err := nl.Self()
@@ -190,12 +189,12 @@ func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stoppe
 						if err == errSkippedHeartbeat {
 							continue
 						}
+						log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
 					} else {
 						incrementEpoch = false // don't increment epoch after first heartbeat
 					}
 					break
 				}
-				cancel()
 				sp.Finish()
 			}
 			select {
