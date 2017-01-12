@@ -72,7 +72,7 @@ lint: yarn.installed typings.installed
 
 .PHONY: test
 test: yarn.installed typings.installed jspm.installed
-	karma start
+	./travis_retry.sh karma start
 
 test-debug: yarn.installed typings.installed jspm.installed
 	karma start --browsers Chrome --no-single-run --reporters mocha
