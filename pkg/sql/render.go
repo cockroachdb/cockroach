@@ -270,7 +270,7 @@ func (p *planner) SelectClause(
 
 	if where != nil && where.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter))
+		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter), false, false)
 	}
 
 	limitPlan, err := p.Limit(limit)
@@ -433,10 +433,10 @@ func (s *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 // node.
 //
 //    SELECT a, b FROM t@abc ...
-//    	the ordering is: first by column 0 (a), then by column 1 (b)
+//      the ordering is: first by column 0 (a), then by column 1 (b)
 //
 //    SELECT a, b FROM t@abc WHERE a = 1 ...
-//    	the ordering is: exact match column (a), ordered by column 1 (b)
+//      the ordering is: exact match column (a), ordered by column 1 (b)
 //
 //    SELECT b, a FROM t@abc ...
 //      the ordering is: first by column 1 (a), then by column 0 (a)

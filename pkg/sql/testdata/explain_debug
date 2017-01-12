@@ -128,14 +128,14 @@ EXPLAIN (DEBUG) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a
 1 1 (4, 5, 6) ROW
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a = 2
+EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a % 2 = 0
 ----
 0  /abc/primary/1/'one'    NULL  FILTERED
 1  /abc/primary/2/'two'    NULL  ROW
 2  /abc/primary/3/'three'  NULL  FILTERED
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a > 1 OFFSET 1
+EXPLAIN (DEBUG) SELECT * FROM (SELECT a+a/a-1 FROM abc) AS sub(a) WHERE a > 1 OFFSET 1
 ----
 0  /abc/primary/1/'one'    NULL  FILTERED
 1  /abc/primary/2/'two'    NULL  FILTERED
