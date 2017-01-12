@@ -882,7 +882,7 @@ const (
 	timestampWithNamedZoneFormat          = timestampFormat + " MST"
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
 
-	timestampNodeFormat = timestampFormat + ".999999-07:00"
+	TimestampNodeFormat = timestampFormat + ".999999-07:00"
 )
 
 var timeFormats = []string{
@@ -893,7 +893,7 @@ var timeFormats = []string{
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	timestampRFC3339NanoWithoutZoneFormat,
-	timestampNodeFormat,
+	TimestampNodeFormat,
 }
 
 func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
@@ -1008,7 +1008,7 @@ func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.UTC().Format(timestampNodeFormat))
+	buf.WriteString(d.UTC().Format(TimestampNodeFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1112,7 +1112,7 @@ func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.UTC().Format(timestampNodeFormat))
+	buf.WriteString(d.UTC().Format(TimestampNodeFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}

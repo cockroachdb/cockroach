@@ -737,7 +737,7 @@ func Example_sql() {
 	// 2
 }
 
-func Example_sql_escape() {
+func Example_sql_format() {
 	c, err := newCLITest(nil, false)
 	if err != nil {
 		panic(err)
@@ -760,6 +760,9 @@ func Example_sql_escape() {
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.u values (0, 0, 0, 0, 0)"})
 	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "-e", "create table t.times (bare timestamp, withtz timestamptz)"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.times"})
 	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--pretty", "-e", "show columns from t.u"})
 	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.u"})
@@ -821,6 +824,14 @@ func Example_sql_escape() {
 	// 1 row
 	// "\"foo"	"\\foo"	"foo\nbar"	"\u03ba\u1f79\u03c3\u03bc\u03b5"	"\u070885"
 	// 0	0	0	0	0
+	// sql -e create table t.times (bare timestamp, withtz timestamptz)
+	// CREATE TABLE
+	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
+	// INSERT 1
+	// sql -e select * from t.times
+	// 1 row
+	// bare	withtz
+	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
 	// sql --pretty -e select * from t.t
 	// +--------------------------------+--------------------------------+
 	// |               s                |               d                |
