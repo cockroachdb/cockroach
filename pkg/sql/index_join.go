@@ -125,7 +125,7 @@ func (p *planner) makeIndexJoin(
 	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
-	table.initDescDefaults(publicColumns)
+	table.initDescDefaults(origScan.scanVisibility)
 	table.initOrdering(0)
 	table.disableBatchLimit()
 
