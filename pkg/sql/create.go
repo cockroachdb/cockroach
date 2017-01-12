@@ -313,10 +313,9 @@ func (n *createUserNode) Start() error {
 		hashedPassword,
 	)
 	if err != nil {
-		if _, ok := err.(*sqlbase.ErrUniquenessConstraintViolation); ok {
-			err = fmt.Errorf("user %s already exists", normalizedUsername)
+		if sqlbase.IsUniquenessConstraintViolationError(err) {
+			err = errors.Errorf("user %s already exists", normalizedUsername)
 		}
-
 		return err
 	} else if rowsAffected != 1 {
 		return errors.Errorf(

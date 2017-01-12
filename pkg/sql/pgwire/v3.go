@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -263,7 +262,7 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 			ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
 		)
 		if err != nil {
-			return c.sendInternalError(err.Error())
+			return c.sendError(err)
 		}
 
 		tlsState := tlsConn.ConnectionState()
@@ -272,7 +271,7 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 		if len(tlsState.PeerCertificates) == 0 {
 			password, err := c.sendAuthPasswordRequest()
 			if err != nil {
-				return c.sendInternalError(err.Error())
+				return c.sendError(err)
 			}
 			authenticationHook = security.UserAuthPasswordHook(
 				insecure, password, hashedPassword,
@@ -285,12 +284,12 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 			var err error
 			authenticationHook, err = security.UserAuthCertHook(insecure, &tlsState)
 			if err != nil {
-				return c.sendInternalError(err.Error())
+				return c.sendError(err)
 			}
 		}
 
 		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
-			return c.sendInternalError(err.Error())
+			return c.sendError(err)
 		}
 	}
 
@@ -427,8 +426,7 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 			// The spec says to drop any extra of these messages.
 
 		default:
-			err = c.sendErrorWithCode(pgerror.CodeProtocolViolationError, "", "", sqlbase.MakeSrcCtx(0),
-				fmt.Sprintf("unrecognized client message type %s", typ))
+			return c.sendError(newUnrecognizedMsgTypeErr(typ))
 		}
 		if err != nil {
 			return err
@@ -559,7 +557,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 	typ, err := buf.getPrepareType()
 	if err != nil {
-		return c.sendInternalError(err.Error())
+		return c.sendError(err)
 	}
 	name, err := buf.getString()
 	if err != nil {
@@ -599,7 +597,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 func (c *v3Conn) handleClose(buf *readBuffer) error {
 	typ, err := buf.getPrepareType()
 	if err != nil {
-		return c.sendInternalError(err.Error())
+		return c.sendError(err)
 	}
 	name, err := buf.getString()
 	if err != nil {
@@ -808,24 +806,16 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendError(err error) error {
-	if sqlErr, ok := err.(sqlbase.ErrorWithPGCode); ok {
-		return c.sendErrorWithCode(sqlErr.Code(), sqlErr.Detail(), sqlErr.Hint(), sqlErr.SrcContext(), err.Error())
-	}
-	return c.sendInternalError(err.Error())
-}
-
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendErrorWithCode(pgerror.CodeInternalError, "", "", sqlbase.MakeSrcCtx(1), errToSend)
+	err := errors.Errorf(errToSend)
+	err = pgerror.WithPGCode(err, pgerror.CodeInternalError)
+	err = pgerror.WithSourceContext(err, 1)
+	return c.sendError(err)
 }
 
-// errCode is a postgres error code, plus our extensions.
-// See http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
-func (c *v3Conn) sendErrorWithCode(
-	errCode, detail, hint string, errCtx sqlbase.SrcCtx, errToSend string,
-) error {
+func (c *v3Conn) sendError(err error) error {
 	if c.doingExtendedQueryMessage {
 		c.ignoreTillSync = true
 	}
@@ -835,36 +825,42 @@ func (c *v3Conn) sendErrorWithCode(
 	c.writeBuf.putErrFieldMsg(serverErrFieldSeverity)
 	c.writeBuf.writeTerminatedString("ERROR")
 
-	if detail != "" {
+	code, ok := pgerror.PGCode(err)
+	if !ok {
+		code = pgerror.CodeInternalError
+	}
+	c.writeBuf.putErrFieldMsg(serverErrFieldSQLState)
+	c.writeBuf.writeTerminatedString(code)
+
+	if detail, ok := pgerror.Detail(err); ok {
 		c.writeBuf.putErrFieldMsg(serverErrFileldDetail)
 		c.writeBuf.writeTerminatedString(detail)
 	}
 
-	if hint != "" {
+	if hint, ok := pgerror.Hint(err); ok {
 		c.writeBuf.putErrFieldMsg(serverErrFileldHint)
 		c.writeBuf.writeTerminatedString(hint)
 	}
 
-	c.writeBuf.putErrFieldMsg(serverErrFieldSQLState)
-	c.writeBuf.writeTerminatedString(errCode)
+	if errCtx, ok := pgerror.SourceContext(err); ok {
+		if errCtx.File != "" {
+			c.writeBuf.putErrFieldMsg(serverErrFieldSrcFile)
+			c.writeBuf.writeTerminatedString(errCtx.File)
+		}
+
+		if errCtx.Line > 0 {
+			c.writeBuf.putErrFieldMsg(serverErrFieldSrcLine)
+			c.writeBuf.writeTerminatedString(strconv.Itoa(errCtx.Line))
+		}
+
+		if errCtx.Function != "" {
+			c.writeBuf.putErrFieldMsg(serverErrFieldSrcFunction)
+			c.writeBuf.writeTerminatedString(errCtx.Function)
+		}
+	}
 
 	c.writeBuf.putErrFieldMsg(serverErrFieldMsgPrimary)
-	c.writeBuf.writeTerminatedString(errToSend)
-
-	if errCtx.File != "" {
-		c.writeBuf.putErrFieldMsg(serverErrFieldSrcFile)
-		c.writeBuf.writeTerminatedString(errCtx.File)
-	}
-
-	if errCtx.Line > 0 {
-		c.writeBuf.putErrFieldMsg(serverErrFieldSrcLine)
-		c.writeBuf.writeTerminatedString(strconv.Itoa(errCtx.Line))
-	}
-
-	if errCtx.Function != "" {
-		c.writeBuf.putErrFieldMsg(serverErrFieldSrcFunction)
-		c.writeBuf.writeTerminatedString(errCtx.Function)
-	}
+	c.writeBuf.writeTerminatedString(err.Error())
 
 	c.writeBuf.nullTerminate()
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -1047,8 +1043,7 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 
 		default:
-			return c.sendErrorWithCode(pgerror.CodeProtocolViolationError, "", "", sqlbase.MakeSrcCtx(0),
-				fmt.Sprintf("unrecognized client message type %s", typ))
+			return c.sendError(newUnrecognizedMsgTypeErr(typ))
 		}
 		for _, res := range sr.ResultList {
 			if res.Err != nil {
@@ -1059,4 +1054,10 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 			return nil
 		}
 	}
+}
+
+func newUnrecognizedMsgTypeErr(typ clientMessageType) error {
+	err := errors.Errorf("unrecognized client message type %v", typ)
+	err = pgerror.WithPGCode(err, pgerror.CodeProtocolViolationError)
+	return pgerror.WithSourceContext(err, 1)
 }
