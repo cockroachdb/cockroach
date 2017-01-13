@@ -51,6 +51,9 @@ func makeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 	return makeReplicaKeyRanges(d, keys.MakeRangeIDReplicatedPrefix)
 }
 
+// makeReplicaKeyRanges returns a slice of 3 key ranges. The last key range in
+// the returned slice corresponds to the actual range data (i.e. not the range
+// metadata).
 func makeReplicaKeyRanges(
 	d *roachpb.RangeDescriptor, metaFunc func(roachpb.RangeID) roachpb.Key,
 ) []keyRange {

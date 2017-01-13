@@ -60,6 +60,7 @@ struct DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value) = 0;
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
   virtual DBStatus Delete(DBKey key) = 0;
+  virtual DBStatus DeleteRange(DBKey start, DBKey end) = 0;
   virtual DBStatus CommitBatch() = 0;
   virtual DBStatus ApplyBatchRepr(DBSlice repr) = 0;
   virtual DBSlice BatchRepr() = 0;
@@ -100,6 +101,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -120,6 +122,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -139,6 +142,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -163,6 +167,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -509,6 +514,8 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
   virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
     batch_->Merge(key, value);
   }
+  // NB: we don't support DeleteRangeCF yet which causes us to pick up
+  // the default implementation that returns an error.
 
  private:
   rocksdb::WriteBatchBase* const batch_;
@@ -1790,13 +1797,38 @@ DBStatus DBSnapshot::Delete(DBKey key) {
   return FmtStatus("unsupported");
 }
 
+DBStatus DBImpl::DeleteRange(DBKey start, DBKey end) {
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->DeleteRange(
+      options, rep->DefaultColumnFamily(), EncodeKey(start), EncodeKey(end)));
+}
+
+DBStatus DBBatch::DeleteRange(DBKey start, DBKey end) {
+  // TODO(peter): We don't support iteration on a batch containing a
+  // range tombstone, so prohibit such tombstones from behing added to
+  // a readable batch.
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::DeleteRange(DBKey start, DBKey end) {
+  ++updates;
+  batch.DeleteRange(EncodeKey(start), EncodeKey(end));
+  return kSuccess;
+}
+
+DBStatus DBSnapshot::DeleteRange(DBKey start, DBKey end) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBDelete(DBEngine *db, DBKey key) {
   return db->Delete(key);
 }
 
-DBStatus DBDeleteRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end) {
-  // TODO(peter): Replace with the RocksDB DeleteRange support when
-  // that lands and is stable.
+DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end) {
+  return db->DeleteRange(start, end);
+}
+
+DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end) {
   rocksdb::Iterator *const iter_rep = iter->rep.get();
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
@@ -2249,7 +2281,14 @@ DBString DBGetUserProperties(DBEngine* db) {
 
 DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
   const std::vector<std::string> paths = { ToString(path) };
-  rocksdb::Status status = db->rep->AddFile(paths);
+  rocksdb::IngestExternalFileOptions ifo;
+  ifo.move_files = false;
+  ifo.snapshot_consistency = true;
+  ifo.allow_global_seqno = false;
+  ifo.allow_blocking_flush = false;
+
+  rocksdb::Status status = db->rep->IngestExternalFile(
+      db->rep->DefaultColumnFamily(), paths, ifo);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
