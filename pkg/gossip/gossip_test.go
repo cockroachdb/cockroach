@@ -225,9 +225,22 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		return fmt.Errorf("local.mu.incoming.len() = %d, want %d", local.mu.incoming.len(), maxPeers)
 	})
 
-	// Verify that we can't open more than maxPeers connections.
-	for _, peer := range peers {
-		local.tightenNetwork(peer.NodeID.Get())
+	// Verify that we can't open more than maxPeers connections. We have to muck
+	// with the infostore's data so that the other nodes will appear far enough
+	// away to be worth opening a connection to.
+	local.mu.Lock()
+	err := local.mu.is.visitInfos(func(key string, i *Info) error {
+		copy := *i
+		copy.Hops = MaxHops + 1
+		copy.Value.Timestamp.WallTime++
+		return local.mu.is.addInfo(key, &copy)
+	})
+	local.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range peers {
+		local.tightenNetwork(context.TODO())
 	}
 
 	if outgoing := local.outgoing.gauge.Value(); outgoing > int64(maxPeers) {
