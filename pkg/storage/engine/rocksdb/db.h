@@ -112,7 +112,7 @@ DBStatus DBGet(DBEngine* db, DBKey key, DBString* value);
 DBStatus DBDelete(DBEngine* db, DBKey key);
 
 // Deletes a range of keys from start (inclusive) to end (exclusive).
-DBStatus DBDeleteRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end);
+DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end);
 
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically and closes the batch. It is only valid to call
