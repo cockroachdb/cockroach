@@ -18,6 +18,7 @@
 #define ROACHLIB_DB_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -267,6 +268,8 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 // Closes the writer, flushing any remaining writes to disk and freeing
 // memory and other resources. At least one kv entry must have been added.
 DBStatus DBSstFileWriterClose(DBSstFileWriter* fw);
+
+void DBRunLDB(int argc, char** argv);
 
 #ifdef __cplusplus
 }  // extern "C"
