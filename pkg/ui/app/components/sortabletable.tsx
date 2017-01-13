@@ -65,7 +65,7 @@ export class SortableTable extends React.Component<TableProps, {}> {
         sortKey: null,
         ascending: false,
       },
-      onChangeSortSetting: (ss) => {},
+      onChangeSortSetting: (_ss) => {},
   };
 
   clickSort(clickedSortKey: any) {

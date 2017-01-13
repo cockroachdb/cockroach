@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "chokidar-socket-emitter": "^0.5.4",
-    "jspm": "tamird/jspm-cli#dont-rewrite-package-json",
+    "jspm": "jspm/jspm-cli",
     "karma": "^1.1.2",
     "karma-chrome-launcher": "^2.0.0",
     "karma-jspm": "^2.1.1",
@@ -13,7 +13,7 @@
     "phantomjs-prebuilt": "^2.1.14",
     "stylint": "^1.3.10",
     "stylus": "^0.54.5",
-    "tslint": "^3.11.0",
+    "tslint": "^4.3.1",
     "typescript": "^2.0.9",
     "typings": "^2.0.0"
   },

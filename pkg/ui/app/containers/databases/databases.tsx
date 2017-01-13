@@ -127,7 +127,7 @@ let databaseTablesListConnected = connect(
   },
   {
     refreshDatabases,
-  }
+  },
 )(DatabaseTablesList);
 
 // Connect the DatabaseGrantsList class with our redux store.
@@ -139,7 +139,7 @@ let databaseGrantsListConnected = connect(
   },
   {
     refreshDatabases,
-  }
+  },
 )(DatabaseGrantsList);
 
 export {

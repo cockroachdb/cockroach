@@ -132,7 +132,7 @@ ReactDOM.render(
       </Route>
     </Router>
   </Provider>,
-  DOMNode
+  DOMNode,
 );
 
 // Subscribe store listeners.

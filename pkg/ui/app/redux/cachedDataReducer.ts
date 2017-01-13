@@ -144,7 +144,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * stateAccessor (optional) - a helper function that accesses this reducer's
    *   state given the global state object
    */
-  refresh = <S>(req?: TRequest, stateAccessor = (state: any, r: TRequest) => state.cachedData[this.actionNamespace]) => {
+  refresh = <S>(req?: TRequest, stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace]) => {
     return (dispatch: Dispatch<S>, getState: () => any) => {
       let state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 

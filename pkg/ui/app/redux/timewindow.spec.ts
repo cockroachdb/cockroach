@@ -42,7 +42,7 @@ describe("time window reducer", function() {
     it("should have the correct default value.", () => {
       assert.deepEqual(
         reducer(undefined, { type: "unknown" }),
-        new timewindow.TimeWindowState()
+        new timewindow.TimeWindowState(),
       );
       assert.deepEqual(
         (new timewindow.TimeWindowState()).scale,
@@ -62,7 +62,7 @@ describe("time window reducer", function() {
         expected.scaleChanged = false;
         assert.deepEqual(
           reducer(undefined, timewindow.setTimeWindow({ start, end })),
-          expected
+          expected,
         );
       });
     });
@@ -85,7 +85,7 @@ describe("time window reducer", function() {
             windowValid: newValid,
             sampleSize: newSample,
           })),
-          expected
+          expected,
         );
       });
     });

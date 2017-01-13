@@ -11,7 +11,7 @@ export interface DropdownOption {
 }
 
 export enum ArrowDirection {
-  LEFT, RIGHT
+  LEFT, RIGHT,
 }
 
 interface DropdownOwnProps {

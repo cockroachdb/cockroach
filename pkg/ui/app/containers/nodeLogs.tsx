@@ -70,7 +70,7 @@ let logsConnected = connect(
   },
   {
     refreshLogs,
-  }
+  },
 )(Logs);
 
 export default logsConnected;

@@ -177,7 +177,7 @@ describe("registration service helper functions", function () {
 
       fetchMock.mock({
         matcher: uiDataPostFetchURL,
-        response: (url, req) => {
+        response: (_url, req) => {
           assert(registrationService.getSaving());
           assert.equal(registrationService.getErrors(), 0);
           let uiDataRequest = protos.cockroach.server.serverpb.SetUIDataRequest.decode((req as any).body);
@@ -217,7 +217,7 @@ describe("registration service helper functions", function () {
 
       fetchMock.mock({
         matcher: uiDataPostFetchURL,
-        response: (url, req) => {
+        response: (_url, req) => {
           assert(registrationService.getSaving());
           assert.equal(registrationService.getErrors(), 0);
           let uiDataRequest = protos.cockroach.server.serverpb.SetUIDataRequest.decode((req as any).body);
@@ -257,7 +257,7 @@ describe("registration service helper functions", function () {
 
       fetchMock.mock({
         matcher: uiDataPostFetchURL,
-        response: (url, req) => {
+        response: (_url, _req) => {
           done(new Error("Should not have tried to set uiData."));
 
         },
@@ -364,7 +364,7 @@ describe("registration sync end to end", function() {
 
     fetchMock.mock({
       matcher: uiDataPostFetchURL,
-      response: (url, req) => {
+      response: (_url, _req) => {
         // This dispatch will trigger the listener, but it shouldn't trigger any
         // other requests.
         store.dispatch({ type: null });
@@ -386,7 +386,7 @@ describe("registration sync end to end", function() {
 
     fetchMock.mock({
       matcher: unregistrationFetchURL,
-      response: (url, req) => {
+      response: (_url, _req) => {
         // This dispatch will trigger the listener, but it shouldn't trigger any
         // other requests.
         store.dispatch({ type: null });
@@ -438,7 +438,7 @@ describe("registration sync end to end", function() {
 
     fetchMock.mock({
       matcher: uiDataPostFetchURL,
-      response: (url, req) => {
+      response: (_url, _req) => {
         // This dispatch will trigger the listener, but it shouldn't trigger any
         // other requests.
         store.dispatch({ type: null });
@@ -460,7 +460,7 @@ describe("registration sync end to end", function() {
 
     fetchMock.mock({
       matcher: registrationFetchURL,
-      response: (url, req) => {
+      response: (_url, _req) => {
         // This dispatch will trigger the listener, but it shouldn't trigger any
         // other requests.
         store.dispatch({ type: null });

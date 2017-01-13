@@ -106,27 +106,27 @@ let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismiss
 
 let versions = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info && s.build_info.tag))
+  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info && s.build_info.tag)),
 );
 
 let nodeCount = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]) => statuses && statuses.length
+  (statuses: NodeStatus[]) => statuses && statuses.length,
 );
 
 let versionCount = createSelector(
   versions,
-  (v: string[]) => v && v.length
+  (v: string[]) => v && v.length,
 );
 
 let versionsMatch = createSelector(
   versions,
-  (v: string[]) => v && v.length === 1
+  (v: string[]) => v && v.length === 1,
 );
 
 let buildtag = createSelector(
   versions,
-  (v: string[]): string => v && v.length === 1 ? v[0] : null
+  (v: string[]): string => v && v.length === 1 ? v[0] : null,
 );
 
 // Connect the DisconnectedBanner class with our redux store.
@@ -149,7 +149,7 @@ let outdatedBannerConnected = connect(
     refreshNodes,
     loadUIData,
     saveUIData,
-  }
+  },
 )(OutdatedBanner);
 
 export default outdatedBannerConnected;

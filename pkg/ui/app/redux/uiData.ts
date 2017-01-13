@@ -243,7 +243,7 @@ export function saveUIData(...values: KeyValue[]) {
       request.key_values.set(kv.key, ByteBuffer.fromUTF8(stringifiedValue));
     });
 
-    return setUIData(request).then((response) => {
+    return setUIData(request).then((_response) => {
       // SetUIDataResponse is empty. A positive return indicates success.
       _.each(values, (kv) => dispatch(setUIDataKey(kv.key, kv.value)));
     }).catch((error) => {

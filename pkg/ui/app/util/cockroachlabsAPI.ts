@@ -26,7 +26,7 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T, config: Fetch
       },
       body: req,
     }),
-    config.timeout
+    config.timeout,
   ).then((res) => {
     if (!res.ok) {
       throw Error(res.statusText);

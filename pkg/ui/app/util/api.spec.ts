@@ -23,7 +23,7 @@ describe("rest api", function() {
           memo[decodeURIComponent(key)] = decodeURIComponent(value);
           return memo;
         },
-        {}
+        {},
       );
     }
 
@@ -103,7 +103,7 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: api.API_PREFIX + "/databases",
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
 
           return {
@@ -126,13 +126,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: api.API_PREFIX + "/databases",
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return { throws: new Error() };
         },
       });
 
-      api.getDatabaseList(new protos.cockroach.server.serverpb.DatabasesRequest()).then((result) => {
+      api.getDatabaseList(new protos.cockroach.server.serverpb.DatabasesRequest()).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -146,13 +146,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: api.API_PREFIX + "/databases",
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return new Promise<any>(() => { });
         },
       });
 
-      api.getDatabaseList(new protos.cockroach.server.serverpb.DatabasesRequest(), moment.duration(0)).then((result) => {
+      api.getDatabaseList(new protos.cockroach.server.serverpb.DatabasesRequest(), moment.duration(0)).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -172,7 +172,7 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return {
             body: new protos.cockroach.server.serverpb.DatabaseDetailsResponse({
@@ -199,13 +199,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return { throws: new Error() };
         },
       });
 
-      api.getDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: dbName })).then((result) => {
+      api.getDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: dbName })).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -219,13 +219,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return new Promise<any>(() => { });
         },
       });
 
-      api.getDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: dbName }), moment.duration(0)).then((result) => {
+      api.getDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: dbName }), moment.duration(0)).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -246,7 +246,7 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return {
             body: new protos.cockroach.server.serverpb.TableDetailsResponse().toArrayBuffer(),
@@ -268,13 +268,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return { throws: new Error() };
         },
       });
 
-      api.getTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: dbName, table: tableName })).then((result) => {
+      api.getTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: dbName, table: tableName })).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -288,13 +288,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return new Promise<any>(() => { });
         },
       });
 
-      api.getTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: dbName, table: tableName }), moment.duration(0)).then((result) => {
+      api.getTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: dbName, table: tableName }), moment.duration(0)).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -314,7 +314,7 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: api.API_PREFIX + "/events?",
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return {
             body: new protos.cockroach.server.serverpb.EventsResponse({
@@ -375,13 +375,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: eventsUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return { throws: new Error() };
         },
       });
 
-      api.getEvents(new protos.cockroach.server.serverpb.EventsRequest()).then((result) => {
+      api.getEvents(new protos.cockroach.server.serverpb.EventsRequest()).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -395,13 +395,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: eventsUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return new Promise<any>(() => { });
         },
       });
 
-      api.getEvents(new protos.cockroach.server.serverpb.EventsRequest(), moment.duration(0)).then((result) => {
+      api.getEvents(new protos.cockroach.server.serverpb.EventsRequest(), moment.duration(0)).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -421,7 +421,7 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: healthUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return {
             body: new protos.cockroach.server.serverpb.HealthResponse().toArrayBuffer(),
@@ -429,7 +429,7 @@ describe("rest api", function() {
         },
       });
 
-      return api.getHealth(new protos.cockroach.server.serverpb.HealthRequest(), ).then((result) => {
+      return api.getHealth(new protos.cockroach.server.serverpb.HealthRequest()).then((result) => {
         assert.lengthOf(fetchMock.calls(healthUrl), 1);
         assert.deepEqual(result, new protos.cockroach.server.serverpb.HealthResponse());
       });
@@ -442,13 +442,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: healthUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return { throws: new Error() };
         },
       });
 
-      api.getHealth(new protos.cockroach.server.serverpb.HealthRequest(), ).then((result) => {
+      api.getHealth(new protos.cockroach.server.serverpb.HealthRequest()).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -462,13 +462,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: healthUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return new Promise<any>(() => { });
         },
       });
 
-      api.getHealth(new protos.cockroach.server.serverpb.HealthRequest(), moment.duration(0)).then((result) => {
+      api.getHealth(new protos.cockroach.server.serverpb.HealthRequest(), moment.duration(0)).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -488,7 +488,7 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: clusterUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return {
             body: new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: clusterID }).toArrayBuffer(),
@@ -509,13 +509,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: clusterUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return { throws: new Error() };
         },
       });
 
-      api.getCluster(new protos.cockroach.server.serverpb.ClusterRequest()).then((result) => {
+      api.getCluster(new protos.cockroach.server.serverpb.ClusterRequest()).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.isError(e));
@@ -529,13 +529,13 @@ describe("rest api", function() {
       fetchMock.mock({
         matcher: clusterUrl,
         method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
           return new Promise<any>(() => { });
         },
       });
 
-      api.getCluster(new protos.cockroach.server.serverpb.ClusterRequest(), moment.duration(0)).then((result) => {
+      api.getCluster(new protos.cockroach.server.serverpb.ClusterRequest(), moment.duration(0)).then((_result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");

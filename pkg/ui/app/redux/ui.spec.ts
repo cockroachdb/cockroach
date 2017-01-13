@@ -20,7 +20,7 @@ describe("ui reducer", () => {
     it("should have the correct default value.", () => {
       assert.deepEqual(
         reducer(undefined, { type: "unknown" }),
-        new UISettingsDict()
+        new UISettingsDict(),
       );
     });
 
@@ -51,7 +51,7 @@ describe("ui reducer", () => {
         };
         assert.deepEqual(
           reducer(initial, setUISetting(key, value)),
-          expected
+          expected,
         );
       });
     });

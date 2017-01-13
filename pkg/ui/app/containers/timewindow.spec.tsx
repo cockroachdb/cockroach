@@ -72,7 +72,7 @@ describe("<TimeWindowManager>", function() {
     assert.isTrue(spy.notCalled);
 
     // Wait 11 milliseconds, then verify that window was updated.
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, _reject) => {
       setTimeout(
         () => {
           assert.isTrue(spy.calledOnce);
@@ -110,7 +110,7 @@ describe("<TimeWindowManager>", function() {
     assert.isTrue(spy.notCalled);
 
     // Wait 11 milliseconds, then verify that window was updated a single time.
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, _reject) => {
       setTimeout(
         () => {
           assert.isTrue(spy.calledOnce);

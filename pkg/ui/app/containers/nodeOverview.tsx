@@ -114,16 +114,16 @@ function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: Proto2T
     <td className="title">{ props.title }</td>
     <td className="value">{ props.valueFn(props.data.metrics) }</td>
     {
-      _.map(props.data.store_statuses,
-            (ss) => <td key={ss.desc.store_id} className="value">{ props.valueFn(ss.metrics) }</td>
-           )
+      _.map(props.data.store_statuses, (ss) => {
+        return <td key={ss.desc.store_id} className="value">{ props.valueFn(ss.metrics) }</td>;
+      })
     }
   </tr>;
 }
 
 let currentNode = createSelector(
-  (state: AdminUIState, props: IInjectedProps): NodeStatus[] => state.cachedData.nodes.data,
-  (state: AdminUIState, props: IInjectedProps): number => parseInt(props.params[nodeIDAttr], 10),
+  (state: AdminUIState, _props: IInjectedProps): NodeStatus[] => state.cachedData.nodes.data,
+  (_state: AdminUIState, props: IInjectedProps): number => parseInt(props.params[nodeIDAttr], 10),
   (nodes, id) => {
     if (!nodes || !id) {
       return undefined;
@@ -139,5 +139,5 @@ export default connect(
   },
   {
     refreshNodes,
-  }
+  },
 )(NodeOverview);

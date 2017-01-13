@@ -27,7 +27,6 @@ export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[])
  * for all current usages of NodeStatus in the UI.
  */
 export function RollupStoreMetrics(ns: NodeStatus): void {
-  "use strict";
   AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, (ss) => ss.metrics));
 }
 
