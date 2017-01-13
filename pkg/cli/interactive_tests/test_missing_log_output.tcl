@@ -17,6 +17,13 @@ interrupt
 interrupt
 eexpect ":/# "
 
+# Disable replication so as to avoid spurious purgatory errors.
+start_server $argv
+send "$argv zone set .default --disable-replication\r"
+eexpect "num_replicas: 1"
+eexpect ":/# "
+stop_server $argv
+
 # Check that a server started with --logtostderr
 # logs even info messages to stderr.
 send "$argv start --logtostderr\r"
