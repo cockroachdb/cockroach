@@ -961,7 +961,15 @@ func (c *v3Conn) sendResponse(
 			}
 
 		case parser.CopyIn:
-			if err := c.copyIn(result.Columns); err != nil {
+			rows, err := c.copyIn(result.Columns)
+			if err != nil {
+				return err
+			}
+
+			// Send CommandComplete.
+			tag = append(tag, ' ')
+			tag = strconv.AppendInt(tag, rows, 10)
+			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
 
@@ -1004,8 +1012,10 @@ func (c *v3Conn) sendRowDescription(
 	return c.writeBuf.finishMsg(c.wr)
 }
 
+// copyIn processes COPY IN data and returns the number of rows inserted.
 // See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
+func (c *v3Conn) copyIn(columns []sql.ResultColumn) (int64, error) {
+	var rows int64
 	defer c.session.CopyEnd()
 
 	c.writeBuf.initMsg(serverMsgCopyInResponse)
@@ -1015,17 +1025,17 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 		c.writeBuf.putInt16(int16(formatText))
 	}
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return err
+		return 0, err
 	}
 	if err := c.wr.Flush(); err != nil {
-		return err
+		return 0, err
 	}
 
 	for {
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
-			return err
+			return rows, err
 		}
 		var sr sql.StatementResults
 		var done bool
@@ -1048,15 +1058,16 @@ func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 
 		default:
-			return c.sendError(newUnrecognizedMsgTypeErr(typ))
+			return rows, c.sendError(newUnrecognizedMsgTypeErr(typ))
 		}
 		for _, res := range sr.ResultList {
+			rows += int64(res.RowsAffected)
 			if res.Err != nil {
-				return c.sendError(res.Err)
+				return rows, c.sendError(res.Err)
 			}
 		}
 		if done {
-			return nil
+			return rows, nil
 		}
 	}
 }
