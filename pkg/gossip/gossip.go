@@ -946,7 +946,22 @@ func (g *Gossip) hasIncomingLocked(nodeID roachpb.NodeID) bool {
 // client matching the provided node ID. Mutex should be held by
 // caller.
 func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
-	return g.outgoing.hasNode(nodeID)
+	// We have to use findClient and compare node addresses rather than using the
+	// outgoing nodeSet due to the way that outgoing clients' node IDs are only
+	// resolved once the connection has been established (rather than as soon as
+	// we've created it).
+	nodeAddr, err := g.getNodeIDAddressLocked(nodeID)
+	if err != nil {
+		// If we don't have the address, fall back to using the outgoing nodeSet
+		// since at least it's better than nothing.
+		ctx := g.AnnotateCtx(context.TODO())
+		log.Errorf(ctx, "unable to get address for node %d: %s", nodeID, err)
+		return g.outgoing.hasNode(nodeID)
+	}
+	c := g.findClient(func(c *client) bool {
+		return c.addr.String() == nodeAddr.String()
+	})
+	return c != nil
 }
 
 // getNextBootstrapAddress returns the next available bootstrap
