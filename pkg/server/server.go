@@ -451,6 +451,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.rpcContext.SetLocalInternalServer(s.node)
 
+	// The cmux matches don't shut down properly unless serve is called on the
+	// cmux at some point. Use serveOnMux to ensure it's called during shutdown
+	// if we wouldn't otherwise reach the point where we start serving on it.
+	var serveOnMux sync.Once
 	m := cmux.New(ln)
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
@@ -499,6 +503,10 @@ func (s *Server) Start(ctx context.Context) error {
 		netutil.FatalIfUnexpected(anyL.Close())
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
+		serveOnMux.Do(func() {
+			// A cmux can't gracefully shut down without Serve being called on it.
+			netutil.FatalIfUnexpected(m.Serve())
+		})
 	})
 
 	s.stopper.RunWorker(func() {
@@ -622,7 +630,9 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
 	s.stopper.RunWorker(func() {
-		netutil.FatalIfUnexpected(m.Serve())
+		serveOnMux.Do(func() {
+			netutil.FatalIfUnexpected(m.Serve())
+		})
 	})
 
 	if len(s.cfg.SocketFile) != 0 {
