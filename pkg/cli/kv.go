@@ -216,10 +216,10 @@ func runInc(cmd *cobra.Command, args []string) error {
 	}
 	defer stopper.Stop()
 
-	amount := 1
+	amount := int64(1)
 	if len(args) == 2 {
 		var err error
-		if amount, err = strconv.Atoi(args[1]); err != nil {
+		if amount, err = strconv.ParseInt(args[1], 10, 0); err != nil {
 			return errors.Wrap(err, "invalid increment")
 		}
 	}
@@ -229,7 +229,7 @@ func runInc(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	key := roachpb.Key(unquoted)
-	r, err := kvDB.Inc(context.TODO(), key, int64(amount))
+	r, err := kvDB.Inc(context.TODO(), key, amount)
 	if err != nil {
 		return errors.Wrap(err, "increment failed")
 	}
