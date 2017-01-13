@@ -65,12 +65,20 @@ type cliTestParams struct {
 	insecure bool
 }
 
-func newCLITest(params cliTestParams) (cliTest, error) {
+func newCLITest(params cliTestParams) cliTest {
 	c := cliTest{t: params.t}
+
+	fail := func(err interface{}) {
+		if c.t != nil {
+			c.t.Fatal(err)
+		} else {
+			panic(err)
+		}
+	}
 
 	certsDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
-		return cliTest{}, err
+		fail(err)
 	}
 	c.certsDir = certsDir
 
@@ -86,10 +94,7 @@ func newCLITest(params cliTestParams) (cliTest, error) {
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: params.insecure})
 	if err != nil {
-		if c.t != nil {
-			c.logScope.Close(c.t)
-		}
-		return cliTest{}, err
+		fail(err)
 	}
 	c.TestServer = s.(*server.TestServer)
 
@@ -125,11 +130,10 @@ func newCLITest(params cliTestParams) (cliTest, error) {
 	// can be captured.
 	osStderr = os.Stdout
 
-	return c, nil
+	return c
 }
 
-// cleanup cleans up after the test.
-// It also stops the test server is runStopper is true.
+// cleanup cleans up after the test, stopping the server if necessary.
 // The log files are removed if the test has succeeded.
 func (c cliTest) cleanup() {
 	if c.t != nil {
@@ -246,10 +250,7 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(cliTestParams{t: t})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
 	c.Run("quit")
@@ -305,10 +306,7 @@ communicate with a secure cluster\).
 }
 
 func Example_basic() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3")
@@ -366,10 +364,7 @@ func Example_basic() {
 }
 
 func Example_quoted() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
@@ -403,10 +398,7 @@ func Example_quoted() {
 }
 
 func Example_insecure() {
-	c, err := newCLITest(cliTestParams{insecure: true})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{insecure: true})
 	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2")
@@ -421,10 +413,7 @@ func Example_insecure() {
 }
 
 func Example_ranges() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
@@ -486,10 +475,7 @@ func Example_ranges() {
 }
 
 func Example_logging() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
@@ -527,10 +513,7 @@ func Example_logging() {
 }
 
 func Example_cput() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
@@ -559,10 +542,7 @@ func Example_cput() {
 }
 
 func Example_max_results() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
@@ -594,10 +574,7 @@ func Example_max_results() {
 }
 
 func Example_zone() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run("zone ls")
@@ -692,10 +669,7 @@ func Example_zone() {
 }
 
 func Example_sql() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
@@ -747,10 +721,7 @@ func Example_sql() {
 }
 
 func Example_sql_format() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
@@ -898,10 +869,7 @@ func Example_sql_format() {
 }
 
 func Example_user() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.Run("user ls")
@@ -1025,10 +993,7 @@ Use "cockroach [command] --help" for more information about a command.
 }
 
 func Example_node() {
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		panic(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
@@ -1059,10 +1024,7 @@ func Example_node() {
 func TestFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	assertOutput := func(msg string) {
@@ -1091,10 +1053,7 @@ func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	start := timeutil.Now()
-	c, err := newCLITest(cliTestParams{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
