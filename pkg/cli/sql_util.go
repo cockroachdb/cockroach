@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pq"
@@ -424,6 +426,10 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 			}
 		}
 		return fmt.Sprintf("%+q", t)
+
+	case time.Time:
+		return t.Format(parser.TimestampNodeFormat)
 	}
+
 	return fmt.Sprint(val)
 }
