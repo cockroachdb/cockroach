@@ -89,7 +89,7 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
 	defer b.Close()
-	err := b.ClearRange(iter, engine.MakeMVCCMetadataKey(sc.min()),
+	err := b.ClearIterRange(iter, engine.MakeMVCCMetadataKey(sc.min()),
 		engine.MakeMVCCMetadataKey(sc.max()))
 	if err != nil {
 		return err

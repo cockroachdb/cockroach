@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -513,6 +514,29 @@ const (
 	snapTypePreemptive = "preemptive"
 )
 
+var fastClearRange = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_FAST_CLEAR_RANGE", false)
+
+func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch) error {
+	iter := eng.NewIterator(false)
+	defer iter.Close()
+
+	const metadataRanges = 2
+	for i, keyRange := range makeAllKeyRanges(desc) {
+		// The metadata ranges have a relatively small number of keys making usage
+		// of range tombstones (as created by ClearRange) a pessimization.
+		var err error
+		if i < metadataRanges || !fastClearRange {
+			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
+		} else {
+			err = batch.ClearRange(keyRange.start, keyRange.end)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // applySnapshot updates the replica based on the given snapshot and associated
 // HardState (which may be empty, as Raft may apply some snapshots which don't
 // require an update to the HardState). All snapshots must pass through Raft
@@ -583,18 +607,12 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	iter := r.store.Engine().NewIterator(false)
-	defer iter.Close()
-
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	for _, keyRange := range makeAllKeyRanges(s.Desc) {
-		if err := batch.ClearRange(iter, keyRange.start, keyRange.end); err != nil {
-			return err
-		}
+	if err := clearRangeData(s.Desc, r.store.Engine(), batch); err != nil {
+		return err
 	}
-
 	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.
