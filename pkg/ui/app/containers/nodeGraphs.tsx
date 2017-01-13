@@ -193,7 +193,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                           name="cr.node.exec.latency-p99"
                           title={this.nodeAddress(node)}
                           sources={[node]}
-                          downsampleMax />
+                          downsampleMax />,
                 )
               }
             </Axis>
@@ -210,7 +210,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                           name="cr.node.exec.latency-p90"
                           title={this.nodeAddress(node)}
                           sources={[node]}
-                          downsampleMax />
+                          downsampleMax />,
                 )
               }
             </Axis>
@@ -295,7 +295,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                   <Metric key={nid}
                           name="cr.store.replicas"
                           title={this.nodeAddress(nid)}
-                          sources={this.storeIDsForNode(nid)}/>
+                          sources={this.storeIDsForNode(nid)}/>,
                 )
               }
             </Axis>
@@ -309,7 +309,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                   <Metric key={nid}
                           name="cr.store.replicas.leaseholders"
                           title={this.nodeAddress(nid)}
-                          sources={this.storeIDsForNode(nid)}/>
+                          sources={this.storeIDsForNode(nid)}/>,
                 )
               }
             </Axis>
@@ -509,7 +509,7 @@ export let nodeSums = createSelector(
       });
     }
     return result;
-  }
+  },
 );
 
 let nodeIds = createSelector(
@@ -518,7 +518,7 @@ let nodeIds = createSelector(
     return _.map(nss, (ns) => {
       return ns.desc.node_id.toString();
     });
-  }
+  },
 );
 
 let nodeStatusByID = createSelector(
@@ -529,7 +529,7 @@ let nodeStatusByID = createSelector(
       statuses[ns.desc.node_id.toString()] = ns;
     });
     return statuses;
-  }
+  },
 );
 
 export default connect(
@@ -547,5 +547,5 @@ export default connect(
   },
   {
     refreshNodes,
-  }
+  },
 )(NodeGraphs);

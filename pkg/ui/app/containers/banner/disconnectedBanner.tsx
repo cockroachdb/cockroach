@@ -48,7 +48,7 @@ let disconnectedBannerConnected = connect(
   },
   {
     refreshHealth,
-  }
+  },
 )(DisconnectedBanner);
 
 export default disconnectedBannerConnected;

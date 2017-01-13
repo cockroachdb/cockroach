@@ -5,9 +5,7 @@
 // clusterIcon, cockroachIcon, databaseIcon, gearIcon
 // nodesIcon, storesIcon, usersIcon
 
-"use strict";
-
-export var clusterIcon: string = `
+export let clusterIcon: string = `
   <svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>Cluster Icon</title>
@@ -28,7 +26,7 @@ export var clusterIcon: string = `
     </g>
   </svg>`;
 
-export var cockroachIcon: string = `
+export let cockroachIcon: string = `
   <svg width="38px" height="38px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>CL Mark</title>
@@ -49,7 +47,7 @@ export var cockroachIcon: string = `
     </g>
   </svg>`;
 
-  export var cockroachIconSmall: string = `
+  export let cockroachIconSmall: string = `
   <svg width="22px" height="22px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>CL Mark</title>
@@ -70,7 +68,7 @@ export var cockroachIcon: string = `
     </g>
   </svg>`;
 
-  export var databaseIcon: string = `<svg width="24px" height="24px" viewBox="0 0 22 22" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let databaseIcon: string = `<svg width="24px" height="24px" viewBox="0 0 22 22" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>Database Icon</title>
     <desc>Created with Sketch.</desc>
@@ -90,7 +88,7 @@ export var cockroachIcon: string = `
     </g>
   </svg>`;
 
-  export var gearIcon: string = `<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let gearIcon: string = `<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>Gear Icon</title>
     <desc>Created with Sketch.</desc>
@@ -113,7 +111,7 @@ export var cockroachIcon: string = `
     </g>
   </svg>`;
 
-  export var nodesIcon: string = `<svg width="24px" height="20px" viewBox="0 0 24 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let nodesIcon: string = `<svg width="24px" height="20px" viewBox="0 0 24 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>Nodes Icon</title>
     <desc>Created with Sketch.</desc>
@@ -133,7 +131,7 @@ export var cockroachIcon: string = `
     </g>
   </svg>`;
 
-  export var storesIcon: string = `<svg width="24px" height="22px" viewBox="0 0 24 22" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let storesIcon: string = `<svg width="24px" height="22px" viewBox="0 0 24 22" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>Stores Icon</title>
     <desc>Created with Sketch.</desc>
@@ -156,7 +154,7 @@ export var cockroachIcon: string = `
     </g>
   </svg>`;
 
-  export var usersIcon: string = `<svg width="17px" height="24px" viewBox="0 0 17 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let usersIcon: string = `<svg width="17px" height="24px" viewBox="0 0 17 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>Users Icon</title>
     <desc>Created with Sketch.</desc>
@@ -180,7 +178,7 @@ export var cockroachIcon: string = `
   </svg>`;
 
   // TODO: replace with icon from Andrew
-  export var wrenchIcon: string = `<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let wrenchIcon: string = `<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.4.4 (17249) - http://www.bohemiancoding.com/sketch -->
     <title>Wrench Icon</title>
     <desc>Created with Sketch.</desc>
@@ -201,7 +199,7 @@ export var cockroachIcon: string = `
 </svg>`;
 
   // TODO: replace with icon from Andrew
-  export var logsIcon: string = `<svg width="23px" height="24px" viewBox="0 0 23 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+  export let logsIcon: string = `<svg width="23px" height="24px" viewBox="0 0 23 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.5.2 (25235) - http://www.bohemiancoding.com/sketch -->
     <title>Imported Layers</title>
     <desc>Created with Sketch.</desc>
@@ -219,7 +217,7 @@ export var cockroachIcon: string = `
     </g>
 </svg>`;
 
-export var leftArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+export let leftArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
     <title>Path 2</title>
     <desc>Created with Sketch.</desc>
@@ -233,7 +231,7 @@ export var leftArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10
     </g>
 </svg>`;
 
-export var rightArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+export let rightArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
     <title>Path 2 Copy</title>
     <desc>Created with Sketch.</desc>

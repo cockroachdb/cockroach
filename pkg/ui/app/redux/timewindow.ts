@@ -89,7 +89,7 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
     // Set the "key" attribute.
     v.key = k;
     return v;
-  }
+  },
 );
 
 export class TimeWindowState {

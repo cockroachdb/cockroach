@@ -13,7 +13,7 @@ export interface ColumnDescriptor<T> {
   title: string;
   // Function which generates the contents of an individual cell in this table.
   cell: (obj: T) => React.ReactNode;
-  // Function which returns a value that can be used to sort the collection of 
+  // Function which returns a value that can be used to sort the collection of
   // objects. This will be used to sort the table according to the data in
   // this column.
   sort?: (obj: T) => any;
@@ -26,7 +26,7 @@ export interface ColumnDescriptor<T> {
 }
 
 /**
- * SortedTableProps describes the properties expected by a SortedTable 
+ * SortedTableProps describes the properties expected by a SortedTable
  * component.
  */
 interface SortedTableProps<T> {
@@ -35,7 +35,7 @@ interface SortedTableProps<T> {
   data: T[];
   // Description of columns to display.
   columns: ColumnDescriptor<T>[];
-  // sortSetting specifies how data should be sorted in this table, by 
+  // sortSetting specifies how data should be sorted in this table, by
   // specifying a column id and a direction.
   sortSetting: SortSetting;
   // Callback that should be invoked when the user want to change the sort
@@ -50,7 +50,7 @@ interface SortedTableProps<T> {
  *
  * SortedTable also computes optional "rollup" values for each column; a rollup
  * is a total value that is computed for a column based on all available rows.
- * 
+ *
  * SortedTable should be preferred over the lower-level SortableTable when
  * all data rows to be displayed are available locally on the client side.
  */
@@ -65,7 +65,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
         }
         return undefined;
       });
-    }
+    },
   );
 
   sorted = createSelector(
@@ -81,7 +81,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
         return data;
       }
       return _.orderBy(data, sortColumn.sort, sortSetting.ascending ? "asc" : "desc");
-    }
+    },
   );
 
   /**

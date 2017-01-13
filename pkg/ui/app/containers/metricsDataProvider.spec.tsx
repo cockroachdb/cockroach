@@ -193,7 +193,7 @@ describe("<MetricsDataProvider>", function() {
                 <Metric name="test.metrics.2" />
               </Axis>
             </TextGraph>
-          </MetricsDataProvider>
+          </MetricsDataProvider>,
         );
         assert.fail("expected error from MetricsDataProvider");
       } catch (e) {
