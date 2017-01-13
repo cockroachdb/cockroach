@@ -694,6 +694,21 @@ func (r *Replica) String() string {
 func (r *Replica) destroyDataRaftMuLocked(
 	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
 ) error {
+	var stats struct {
+		clear  time.Time
+		commit time.Time
+	}
+	defer func(start time.Time) {
+		now := timeutil.Now()
+		ms := r.GetMVCCStats()
+		log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
+			now.Sub(start).Seconds()*1000,
+			stats.clear.Sub(start).Seconds()*1000,
+			stats.commit.Sub(stats.clear).Seconds()*1000)
+		log.Infof(ctx, "removed replica")
+	}(timeutil.Now())
+
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch.
 	batch := r.store.Engine().NewWriteOnlyBatch()
@@ -709,13 +724,18 @@ func (r *Replica) destroyDataRaftMuLocked(
 			return err
 		}
 	}
+	stats.clear = timeutil.Now()
 
 	// Save a tombstone. The range cannot be re-replicated onto this node
 	// without having a replica ID of at least consistentDesc.NextReplicaID.
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}
-	return batch.Commit()
+	if err := batch.Commit(); err != nil {
+		return err
+	}
+	stats.commit = timeutil.Now()
+	return nil
 }
 
 func (r *Replica) cancelPendingCommandsLocked() {
