@@ -43,7 +43,7 @@ send "\r"
 eexpect root@
 send "SELECT\r"
 eexpect " ->"
-send "\003"
+interrupt
 eexpect root@
 
 # Test that BEGIN .. without COMMIT begins a multi-line statement.
@@ -70,7 +70,7 @@ send "SELECT 1; COMMIT;\r"
 eexpect "1 row"
 eexpect root@
 
-send "\003"
+interrupt
 eexpect eof
 
 stop_server $argv

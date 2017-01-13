@@ -43,7 +43,7 @@ send "commit;\r"
 eexpect "ROLLBACK"
 eexpect root@
 
-send "\003"
+interrupt
 eexpect eof
 
 # Check that syntax errors are handled server-side by default when running non-interactive.

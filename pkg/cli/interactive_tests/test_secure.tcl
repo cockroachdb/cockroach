@@ -78,7 +78,7 @@ send "woof\r"
 eexpect "carl@"
 
 # Terminate with Ctrl+C.
-send "\003"
+interrupt
 
 eexpect $prompt
 
