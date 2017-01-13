@@ -208,7 +208,7 @@ func TestClientGossip(t *testing.T) {
 	})
 }
 
-// TestClientGossipMetrics verifies a that gossip stats are generated.
+// TestClientGossipMetrics verifies that gossip stats are generated.
 func TestClientGossipMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

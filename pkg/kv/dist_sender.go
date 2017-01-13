@@ -282,7 +282,7 @@ func (ds *DistSender) Metrics() DistSenderMetrics {
 }
 
 // GetParallelSendCount returns the number of parallel batch requests
-// the dist sender has dispatched of its lifetime.
+// the dist sender has dispatched in its lifetime.
 func (ds *DistSender) GetParallelSendCount() int32 {
 	return atomic.LoadInt32(&ds.asyncSenderCount)
 }
