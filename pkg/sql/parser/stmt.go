@@ -305,7 +305,7 @@ func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
 func (*SetTimeZone) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*SetTimeZone) StatementTag() string { return "SET TIMEZONE" }
+func (*SetTimeZone) StatementTag() string { return "SET TIME ZONE" }
 
 // StatementType implements the Statement interface.
 func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
