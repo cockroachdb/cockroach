@@ -375,7 +375,6 @@ func TestClientDisconnectRedundant(t *testing.T) {
 // multiple connections from the same client node ID.
 func TestClientDisallowMultipleConns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("unskip in #12920")
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t, metric.NewRegistry())
