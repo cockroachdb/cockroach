@@ -250,7 +250,11 @@ var ErrorCode = 1
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
-func runStart(_ *cobra.Command, args []string) error {
+func runStart(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return usageAndError(cmd)
+	}
+
 	if startBackground {
 		return rerunBackground()
 	}

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/spf13/cobra"
 )
 
 type cliTest struct {
@@ -63,6 +64,7 @@ type cliTest struct {
 type cliTestParams struct {
 	t        *testing.T
 	insecure bool
+	noServer bool
 }
 
 func newCLITest(params cliTestParams) cliTest {
@@ -93,37 +95,39 @@ func newCLITest(params cliTestParams) cliTest {
 		c.logScope = log.Scope(c.t, "")
 	}
 
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: params.insecure})
-	if err != nil {
-		fail(err)
-	}
-	c.TestServer = s.(*server.TestServer)
+	c.cleanupFunc = func() error { return nil }
 
-	if params.insecure {
-		c.cleanupFunc = func() error { return nil }
-	} else {
-		// Copy these assets to disk from embedded strings, so this test can
-		// run from a standalone binary.
-		// Disable embedded certs, or the security library will try to load
-		// our real files as embedded assets.
-		security.ResetReadFileFn()
-
-		assets := []string{
-			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
-			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
-			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
-			filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
+	if !params.noServer {
+		s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: params.insecure})
+		if err != nil {
+			fail(err)
 		}
+		c.TestServer = s.(*server.TestServer)
 
-		for _, a := range assets {
-			securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
-		}
+		if !params.insecure {
+			// Copy these assets to disk from embedded strings, so this test can
+			// run from a standalone binary.
+			// Disable embedded certs, or the security library will try to load
+			// our real files as embedded assets.
+			security.ResetReadFileFn()
 
-		c.cleanupFunc = func() error {
-			security.SetReadFileFn(securitytest.Asset)
-			return os.RemoveAll(certsDir)
+			assets := []string{
+				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
+				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
+				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
+				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
+				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
+			}
+
+			for _, a := range assets {
+				securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
+			}
+
+			c.cleanupFunc = func() error {
+				security.SetReadFileFn(securitytest.Asset)
+				return os.RemoveAll(certsDir)
+			}
 		}
 	}
 
@@ -144,13 +148,15 @@ func (c cliTest) cleanup() {
 	// Restore stderr.
 	osStderr = os.Stderr
 
-	select {
-	case <-c.Stopper().ShouldStop():
-		// If ShouldStop() doesn't block, that means someone has already
-		// called Stop(). We just need to wait.
-		<-c.Stopper().IsStopped()
-	default:
-		c.Stopper().Stop()
+	if c.TestServer != nil {
+		select {
+		case <-c.Stopper().ShouldStop():
+			// If ShouldStop() doesn't block, that means someone has already
+			// called Stop(). We just need to wait.
+			<-c.Stopper().IsStopped()
+		default:
+			c.Stopper().Stop()
+		}
 	}
 
 	if err := c.cleanupFunc(); err != nil {
@@ -222,21 +228,23 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 	zoneDisableReplication = false
 
 	if err := func() error {
-		h, p, err := net.SplitHostPort(c.ServingAddr())
-		if err != nil {
-			return err
-		}
 		args := append([]string(nil), origArgs[:1]...)
-		if c.Cfg.Insecure {
-			args = append(args, "--insecure")
-		} else {
-			args = append(args, "--insecure=false")
-			args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
-			args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedNodeCert)))
-			args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
+		if c.TestServer != nil {
+			h, p, err := net.SplitHostPort(c.ServingAddr())
+			if err != nil {
+				return err
+			}
+			if c.Cfg.Insecure {
+				args = append(args, "--insecure")
+			} else {
+				args = append(args, "--insecure=false")
+				args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
+				args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedNodeCert)))
+				args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
+			}
+			args = append(args, fmt.Sprintf("--host=%s", h))
+			args = append(args, fmt.Sprintf("--port=%s", p))
 		}
-		args = append(args, fmt.Sprintf("--host=%s", h))
-		args = append(args, fmt.Sprintf("--port=%s", p))
 		args = append(args, origArgs[1:]...)
 
 		fmt.Fprintf(os.Stderr, "%s\n", args)
@@ -1271,5 +1279,32 @@ func TestGenAutocomplete(t *testing.T) {
 	}
 	if size := info.Size(); size < minsize {
 		t.Fatalf("autocomplete file size (%d) < minimum (%d)", size, minsize)
+	}
+}
+
+func TestJunkPositionalArguments(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t, noServer: true})
+	defer c.cleanup()
+
+	for i, test := range []struct {
+		cmd        *cobra.Command
+		invocation string
+	}{
+		{startCmd, "start junk"},
+		{sqlShellCmd, "sql junk"},
+		{genManCmd, "gen man junk"},
+		{genAutocompleteCmd, "gen autocomplete junk"},
+		{genExamplesCmd, "gen example-data file junk"},
+	} {
+		out, err := c.RunWithCapture(test.invocation)
+		if err != nil {
+			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
+		}
+		exp := test.invocation + "\ninvalid arguments\n"
+		if exp != out {
+			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
+		}
 	}
 }
