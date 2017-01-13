@@ -171,7 +171,7 @@ batch) with heavy use of iterators.
 
 With the new code, we want mostly the same, but with two important changes:
 
-* we do not actually intent to commit the batch (though we could do this on the
+* we do not actually intend to commit the batch (though we could do this on the
   proposing node to avoid overhead)
 * we need to construct the `Writes` field, which (in some way or
   another) tracks the key-value pairs written (i.e. created, changed or

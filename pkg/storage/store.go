@@ -393,8 +393,8 @@ type Store struct {
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
-	// descriptor will be re-gossiped, earlier than the normal periodic
-	// gossip interval). Updated atomically.
+	// descriptor will be re-gossiped earlier than the normal periodic
+	// gossip interval. Updated atomically.
 	gossipRangeCountdown int32
 	gossipLeaseCountdown int32
 

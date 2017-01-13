@@ -66,13 +66,13 @@ type RangeDescriptorDB interface {
 		useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 	// FirstRange returns the descriptor for the first Range. This is the
-	// Range containing all \x00\x00meta1 entries.
+	// Range containing all meta1 entries.
 	FirstRange() (*roachpb.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
 // arbitrary keys. Descriptors are initially queried from storage
-// using a RangeDescriptorDB, but is cached for subsequent lookups.
+// using a RangeDescriptorDB, but are cached for subsequent lookups.
 type rangeDescriptorCache struct {
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.

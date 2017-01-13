@@ -874,7 +874,7 @@ func newNotLeaseHolderError(
 	}
 	err.Replica, _ = rangeDesc.GetReplicaDescriptor(originStoreID)
 	if l != nil {
-		// Morally, we return the lease-holding Replica here. However, in the
+		// Normally, we return the lease-holding Replica here. However, in the
 		// case in which a leader removes itself, we want the followers to
 		// avoid handing out a misleading clue (which in itself shouldn't be
 		// overly disruptive as the lease would expire and then this method
@@ -1882,9 +1882,9 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 // alternative, submitting requests to Raft one after another, paying massive
 // latency, is only taken for commands whose effects may overlap.
 //
-// Internally, multiple iterations of the above process are may take
-// place due to the Raft proposal failing retryably, possibly due to
-// proposal reordering or re-proposals.
+// Internally, multiple iterations of the above process may take place
+// due to the Raft proposal failing retryably, possibly due to proposal
+// reordering or re-proposals.
 func (r *Replica) addWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -2244,7 +2244,7 @@ func makeIDKey() storagebase.CmdIDKey {
 	return storagebase.CmdIDKey(idKeyBuf)
 }
 
-// propose prepares necessary pending command struct and initializes a
+// propose prepares the necessary pending command struct and initializes a
 // client command ID if one hasn't been. A verified lease is supplied
 // as a parameter if the command requires a lease; nil otherwise. It
 // then proposes the command to Raft and returns
