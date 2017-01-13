@@ -139,6 +139,10 @@ func TestSecureHTTPRedirect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Avoid automatically following redirects.
+	httpClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 
 	origURL := "http://" + ts.Cfg.HTTPAddr
 	expURL := url.URL{Scheme: "https", Host: ts.Cfg.HTTPAddr, Path: "/"}

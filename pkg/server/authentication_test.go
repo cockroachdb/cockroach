@@ -111,11 +111,11 @@ func TestSSLEnforcement(t *testing.T) {
 		code         int  // http response code
 	}{
 		// /ui/: basic file server: no auth.
-		{"GET", "/index.html", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", "/index.html", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", "/index.html", nil, testCertsContext, true, http.StatusOK},
-		{"GET", "/index.html", nil, noCertsContext, true, http.StatusOK},
-		{"GET", "/index.html", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", "", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", "", nil, nodeCertsContext, true, http.StatusOK},
+		{"GET", "", nil, testCertsContext, true, http.StatusOK},
+		{"GET", "", nil, noCertsContext, true, http.StatusOK},
+		{"GET", "", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_admin/: server.adminServer: no auth.
 		{"GET", adminPrefix + "health", nil, rootCertsContext, true, http.StatusOK},
@@ -151,6 +151,10 @@ func TestSSLEnforcement(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}
+		// Avoid automatically following redirects.
+		client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
 		url := fmt.Sprintf(
 			"%s://%s%s", tc.ctx.HTTPRequestScheme(),
 			s.(*TestServer).Cfg.HTTPAddr, tc.path)
@@ -165,6 +169,8 @@ func TestSSLEnforcement(t *testing.T) {
 		defer resp.Body.Close()
 		if resp.StatusCode != tc.code {
 			t.Errorf("[%d]: expected status code %d, got %d", tcNum, tc.code, resp.StatusCode)
+			u, _ := resp.Location()
+			t.Errorf("orig=%s url=%s", tc.path, u)
 		}
 	}
 }
