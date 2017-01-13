@@ -49,7 +49,7 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 
 	distsqlrun.AggregatorSpec_COUNT: {
 		LocalStage: distsqlrun.AggregatorSpec_COUNT,
-		FinalStage: distsqlrun.AggregatorSpec_SUM,
+		FinalStage: distsqlrun.AggregatorSpec_SUM_INT,
 	},
 
 	distsqlrun.AggregatorSpec_MAX: {
