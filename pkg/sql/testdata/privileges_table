@@ -99,11 +99,11 @@ GRANT SELECT ON t TO testuser
 
 user testuser
 
-query TTBT
+query TTBTT
 SHOW COLUMNS FROM t
 ----
-k INT false NULL
-v INT true  NULL
+k INT false NULL {primary}
+v INT true  NULL {}
 
 statement error user testuser does not have GRANT privilege on table t
 GRANT ALL ON t TO bar

@@ -223,6 +223,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		{Name: "Type", Typ: parser.TypeString},
 		{Name: "Null", Typ: parser.TypeBool},
 		{Name: "Default", Typ: parser.TypeString},
+		{Name: "Indices", Typ: parser.TypeString},
 	}
 	return &delayedNode{
 		name:    "SHOW COLUMNS FROM " + tn.String(),
@@ -230,14 +231,25 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 		constructor: func(p *planner) (planNode, error) {
 			const getColumnsQuery = `
 				SELECT
-					COLUMN_NAME AS "Field", 
-					DATA_TYPE AS "Type", 
+					COLUMN_NAME AS "Field",
+					DATA_TYPE AS "Type",
 					(IS_NULLABLE != 'NO') AS "Null",
-					COLUMN_DEFAULT AS "Default"
-				FROM information_schema.columns
-				WHERE 
-					TABLE_SCHEMA=$1 AND 
-					TABLE_NAME=$2
+					COLUMN_DEFAULT AS "Default",
+					IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS "Indices"
+				FROM
+					(SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION,
+									ARRAY_AGG(INDEX_NAME) AS inames
+						 FROM
+								 (SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
+										FROM information_schema.columns
+									 WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2)
+								 LEFT OUTER JOIN
+								 (SELECT COLUMN_NAME, INDEX_NAME
+										FROM information_schema.statistics
+									 WHERE TABLE_SCHEMA=$1 AND TABLE_NAME=$2)
+								 USING(COLUMN_NAME)
+						GROUP BY COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
+					 )
 				ORDER BY ORDINAL_POSITION`
 
 			db := tn.Database()
