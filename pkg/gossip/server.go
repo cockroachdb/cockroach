@@ -135,14 +135,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	defer func() { syncChan <- struct{}{} }()
 
-	// Verify that there aren't multiple incoming connections from the same
-	// node. This can happen when bootstrap connections are initiated through
-	// a load balancer.
-	s.mu.Lock()
-	_, ok := s.mu.nodeMap[args.Addr]
-	s.mu.Unlock()
-	if ok {
-		return errors.Errorf("duplicate connection from node at %s", args.Addr)
+	doneFn, err := s.initGossipReceiver(ctx, args, send)
+	if err != nil {
+		return err
 	}
 
 	errCh := make(chan error, 1)
@@ -150,9 +145,14 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	// Starting workers in a task prevents data races during shutdown.
 	if err := s.stopper.RunTask(func() {
 		s.stopper.RunWorker(func() {
-			errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
+			errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv, doneFn)
 		})
 	}); err != nil {
+		// If we failed to start the gossip receiver, which normally takes
+		// responsibility for running doneFn, we'll have to do it here.
+		if doneFn != nil {
+			doneFn()
+		}
 		return err
 	}
 
@@ -197,12 +197,111 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	}
 }
 
+// initGossipReceiver handles the establishment of a new incoming
+// connection. If it returns an error, the connection should be closed.
+// If it returns a non-nil function, that function should be run to clean
+// up after the connection once it's done being used.
+func (s *server) initGossipReceiver(
+	ctx context.Context, args *Request, senderFn func(*Response) error,
+) (func(), error) {
+	if args.NodeID == 0 {
+		log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
+		return nil, nil
+	}
+
+	// Decide whether or not we can accept the incoming connection
+	// as a permanent peer.
+	if args.NodeID == s.NodeID.Get() {
+		// This is an incoming loopback connection which should be closed by
+		// the client.
+		if log.V(2) {
+			log.Infof(ctx, "ignoring gossip from node %d (loopback)", args.NodeID)
+		}
+		return nil, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// This is a duplicate connection from a node.
+	// This is a duplicate incoming connection from the same node as an existing
+	// connection. This can happen when bootstrap connections are initiated
+	// through a load balancer.
+	if _, ok := s.mu.nodeMap[args.Addr]; ok {
+		if log.V(2) {
+			log.Infof(ctx, "duplicate connection received from node %d at %s", args.NodeID, args.Addr)
+		}
+		return nil, errors.Errorf("duplicate connection from node at %s", args.Addr)
+	}
+
+	// If we don't have any space left, forward the client along to a peer.
+	if !s.mu.incoming.hasSpace() {
+		var alternateAddr util.UnresolvedAddr
+		var alternateNodeID roachpb.NodeID
+		// Choose a random peer for forwarding.
+		altIdx := rand.Intn(len(s.mu.nodeMap))
+		for addr, info := range s.mu.nodeMap {
+			if altIdx == 0 {
+				alternateAddr = addr
+				alternateNodeID = info.peerID
+				break
+			}
+			altIdx--
+		}
+
+		s.nodeMetrics.ConnectionsRefused.Inc(1)
+		log.Infof(ctx, "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+			args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
+
+		reply := &Response{
+			NodeID:          s.NodeID.Get(),
+			AlternateAddr:   &alternateAddr,
+			AlternateNodeID: alternateNodeID,
+		}
+
+		// Unlock while sending RPC, but re-lock before returning to avoid violating
+		// the caller's expectations.
+		s.mu.Unlock()
+		err := senderFn(reply)
+		s.mu.Lock()
+		return nil, err
+	}
+
+	// If we got here, we must have space to accept the incoming connection.
+	if log.V(2) {
+		log.Infof(ctx, "adding node %d to incoming set", args.NodeID)
+	}
+	s.mu.incoming.addNode(args.NodeID)
+	s.mu.nodeMap[args.Addr] = serverInfo{
+		peerID:    args.NodeID,
+		createdAt: timeutil.Now(),
+	}
+
+	// Set up the closure to be called when the gossip connection has closed.
+	nodeID := args.NodeID
+	addr := args.Addr
+	return func() {
+		if log.V(2) {
+			log.Infof(ctx, "removing node %d from incoming set", args.NodeID)
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.incoming.removeNode(nodeID)
+		delete(s.mu.nodeMap, addr)
+	}, nil
+}
+
 func (s *server) gossipReceiver(
 	ctx context.Context,
 	argsPtr **Request,
 	senderFn func(*Response) error,
 	receiverFn func() (*Request, error),
+	doneFn func(),
 ) error {
+	// Defer doneFn before s.mu.Unlock in case doneFn tries to take s.mu.
+	if doneFn != nil {
+		defer doneFn()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -212,79 +311,6 @@ func (s *server) gossipReceiver(
 	// server's gossip to the client.
 	for {
 		args := *argsPtr
-		if args.NodeID != 0 {
-			// Decide whether or not we can accept the incoming connection
-			// as a permanent peer.
-			if args.NodeID == s.NodeID.Get() {
-				// This is an incoming loopback connection which should be closed by
-				// the client.
-				if log.V(2) {
-					log.Infof(ctx, "ignoring gossip from node %d (loopback)", args.NodeID)
-				}
-			} else if s.mu.incoming.hasNode(args.NodeID) {
-				// Do nothing.
-				if log.V(2) {
-					log.Infof(ctx, "gossip received from node %d", args.NodeID)
-				}
-			} else if s.mu.incoming.hasSpace() {
-				if log.V(2) {
-					log.Infof(ctx, "adding node %d to incoming set", args.NodeID)
-				}
-
-				s.mu.incoming.addNode(args.NodeID)
-				s.mu.nodeMap[args.Addr] = serverInfo{
-					peerID:    args.NodeID,
-					createdAt: timeutil.Now(),
-				}
-
-				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
-					if log.V(2) {
-						log.Infof(ctx, "removing node %d from incoming set", args.NodeID)
-					}
-
-					s.mu.incoming.removeNode(nodeID)
-					delete(s.mu.nodeMap, addr)
-				}(args.NodeID, args.Addr)
-			} else {
-				var alternateAddr util.UnresolvedAddr
-				var alternateNodeID roachpb.NodeID
-				// Choose a random peer for forwarding.
-				altIdx := rand.Intn(len(s.mu.nodeMap))
-				for addr, info := range s.mu.nodeMap {
-					if altIdx == 0 {
-						alternateAddr = addr
-						alternateNodeID = info.peerID
-						break
-					}
-					altIdx--
-				}
-
-				s.nodeMetrics.ConnectionsRefused.Inc(1)
-				log.Infof(ctx, "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
-
-				*reply = Response{
-					NodeID:          s.NodeID.Get(),
-					AlternateAddr:   &alternateAddr,
-					AlternateNodeID: alternateNodeID,
-				}
-
-				s.mu.Unlock()
-				err := senderFn(reply)
-				s.mu.Lock()
-				// Naively, we would return err here unconditionally, but that
-				// introduces a race. Specifically, the client may observe the
-				// end of the connection before it has a chance to receive and
-				// process this message, which instructs it to hang up anyway.
-				// Instead, we send the message and proceed to gossip
-				// normally, depending on the client to end the connection.
-				if err != nil {
-					return err
-				}
-			}
-		} else {
-			log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
-		}
 
 		bytesReceived := int64(args.Size())
 		infosReceived := int64(len(args.Delta))
