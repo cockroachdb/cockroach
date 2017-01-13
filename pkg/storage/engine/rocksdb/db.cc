@@ -24,6 +24,7 @@
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/filter_policy.h"
+#include "rocksdb/ldb_tool.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice_transform.h"
@@ -2335,4 +2336,25 @@ DBStatus DBSstFileWriterClose(DBSstFileWriter* fw) {
     return ToDBStatus(status);
   }
   return kSuccess;
+}
+
+namespace {
+
+class CockroachKeyFormatter: public rocksdb::SliceFormatter {
+  std::string Format(const rocksdb::Slice& s) const {
+    char* p = prettyPrintKey(ToDBKey(s));
+    std::string ret(p);
+    free(static_cast<void*>(p));
+    return ret;
+  }
+};
+
+}  // unnamed namespace
+
+void DBRunLDB(int argc, char** argv) {
+  rocksdb::Options options = DBMakeOptions(DBOptions());
+  rocksdb::LDBOptions ldb_options;
+  ldb_options.key_formatter.reset(new CockroachKeyFormatter);
+  rocksdb::LDBTool tool;
+  tool.Run(argc, argv, options, ldb_options);
 }
