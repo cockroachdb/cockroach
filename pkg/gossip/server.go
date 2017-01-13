@@ -63,7 +63,7 @@ type server struct {
 		// https://github.com/golang/go/issues/16620
 		ready chan struct{}
 	}
-	tighten chan roachpb.NodeID // Channel of too-distant node IDs
+	tighten chan struct{} // Channel indicating that we may want to tighten the network
 
 	nodeMetrics   Metrics
 	serverMetrics Metrics
@@ -82,7 +82,7 @@ func newServer(
 		AmbientContext: ambient,
 		NodeID:         nodeID,
 		stopper:        stopper,
-		tighten:        make(chan roachpb.NodeID, 1),
+		tighten:        make(chan struct{}, 1),
 		nodeMetrics:    makeMetrics(),
 		serverMetrics:  makeMetrics(),
 	}
@@ -359,25 +359,11 @@ func (s *server) gossipReceiver(
 	}
 }
 
-// maybeTightenLocked examines the infostore for the most distant node and
-// if more distant than MaxHops, sends on the tightenNetwork channel
-// to start a new client connection. The mutex must be held by the caller.
 func (s *server) maybeTightenLocked() {
-	ctx := s.AnnotateCtx(context.TODO())
-	distantNodeID, distantHops := s.mu.is.mostDistant()
-	if log.V(2) {
-		log.Infof(ctx, "distantHops: %d from %d", distantHops, distantNodeID)
-	}
-	if distantHops > MaxHops {
-		select {
-		case s.tighten <- distantNodeID:
-			if log.V(1) {
-				log.Infof(ctx, "if possible, tightening network to node %d (%d > %d)",
-					distantNodeID, distantHops, MaxHops)
-			}
-		default:
-			// Do nothing.
-		}
+	select {
+	case s.tighten <- struct{}{}:
+	default:
+		// Do nothing.
 	}
 }
 

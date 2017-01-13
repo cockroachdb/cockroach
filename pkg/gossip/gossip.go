@@ -914,7 +914,7 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 func (g *Gossip) MaxHops() uint32 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	_, maxHops := g.mu.is.mostDistant()
+	_, maxHops := g.mu.is.mostDistant(func(_ roachpb.NodeID) bool { return false })
 	return maxHops
 }
 
@@ -1077,8 +1077,8 @@ func (g *Gossip) manage() {
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(c)
-			case nodeID := <-g.tighten:
-				g.tightenNetwork(nodeID)
+			case <-g.tighten:
+				g.tightenNetwork(ctx)
 			case <-cullTicker.C:
 				func() {
 					g.mu.Lock()
@@ -1123,25 +1123,26 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }
 
-// tightenNetwork "tightens" the network by starting a new gossip
-// client to the provided node, which ideally should be the most distant
-// node from this one in terms of gossip hops.
-func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
+// tightenNetwork "tightens" the network by starting a new gossip client to the
+// client to the most distant node to which we don't already have an outgoing
+// connection. Does nothing if we don't have room for any more outgoing
+// connections.
+func (g *Gossip) tightenNetwork(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.outgoing.hasSpace() {
-		ctx := g.AnnotateCtx(context.TODO())
+		distantNodeID, distantHops := g.mu.is.mostDistant(g.hasOutgoingLocked)
+		if log.V(2) {
+			log.Infof(ctx, "distantHops: %d from %d", distantHops, distantNodeID)
+		}
+		if distantHops <= MaxHops {
+			return
+		}
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(ctx, "unable to get address for node %d: %s", distantNodeID, err)
+			log.Errorf(ctx, "unable to get address for distant node %d: %s", distantNodeID, err)
 		} else {
-			// Avoid opening a second connection to a node that we're already connected
-			// (or in the process of connecting) to.
-			if c := g.findClient(func(candidate *client) bool {
-				return candidate.addr == nodeAddr
-			}); c != nil {
-				return
-			}
-			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
+			log.Infof(ctx, "starting client to distant node %d (%d > %d) to tighten network graph",
+				distantNodeID, distantHops, MaxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
 			g.startClientLocked(nodeAddr)
 		}
