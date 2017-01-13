@@ -811,7 +811,7 @@ func Example_sql_escape() {
 	// INSERT 1
 	// sql -e show columns from t.u
 	// 5 rows
-	// Field	Type	Null	Default
+	// Field	Type	Null	Default	Indices
 	// "\"foo"	INT	true	NULL
 	// "\\foo"	INT	true	NULL
 	// "foo\nbar"	INT	true	NULL
@@ -839,16 +839,16 @@ func Example_sql_escape() {
 	// +--------------------------------+--------------------------------+
 	// (9 rows)
 	// sql --pretty -e show columns from t.u
-	// +----------+------+------+---------+
-	// |  Field   | Type | Null | Default |
-	// +----------+------+------+---------+
-	// | "foo     | INT  | true | NULL    |
-	// | \foo     | INT  | true | NULL    |
-	// | foo␤     | INT  | true | NULL    |
-	// | bar      |      |      |         |
-	// | κόσμε    | INT  | true | NULL    |
-	// | ܈85      | INT  | true | NULL    |
-	// +----------+------+------+---------+
+	// +----------+------+------+---------+---------+
+	// |  Field   | Type | Null | Default | Indices |
+	// +----------+------+------+---------+---------+
+	// | "foo     | INT  | true | NULL    |         |
+	// | \foo     | INT  | true | NULL    |         |
+	// | foo␤     | INT  | true | NULL    |         |
+	// | bar      |      |      |         |         |
+	// | κόσμε    | INT  | true | NULL    |         |
+	// | ܈85      | INT  | true | NULL    |         |
+	// +----------+------+------+---------+---------+
 	// (5 rows)
 	// sql --pretty -e select * from t.u
 	// +------+------+------------+-------+-----+

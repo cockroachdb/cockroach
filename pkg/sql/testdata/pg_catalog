@@ -74,10 +74,10 @@ pg_catalog.pg_namespace  CREATE TABLE "pg_catalog.pg_namespace" (
                            aclitem STRING NULL
                        )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-Field     Type    Null  Default
+Field     Type    Null  Default Indices
 oid       INT     true   NULL
 nspname   STRING  false  ''
 nspowner  INT     true   NULL

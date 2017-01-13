@@ -427,8 +427,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SHOW COLUMNS FROM system.users": {
 			baseTest.
-				Results("username", "STRING", false, gosql.NullBool{}).
-				Results("hashedPassword", "BYTES", true, gosql.NullBool{}),
+				Results("username", "STRING", false, gosql.NullBool{}, "primary").
+				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, ""),
 		},
 		"SHOW DATABASES": {
 			baseTest.Results("d").Results("information_schema").Results("pg_catalog").Results("system"),

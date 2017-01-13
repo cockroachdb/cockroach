@@ -57,7 +57,7 @@ SELECT rowid FROM t WHERE a = 10
 ----
 11
 
-query TTBT
+query TTBTT
 SHOW COLUMNS FROM t
 ----
 a  INT     true  NULL

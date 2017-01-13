@@ -73,22 +73,22 @@ CREATE TABLE d (
   id    INT PRIMARY KEY NULL
 )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM d
 ----
-Field Type   Null  Default
-id    INT    false  NULL
+Field Type   Null  Default Indices
+id    INT    false NULL    primary
 
 statement ok
 CREATE TABLE e (
   id    INT NULL PRIMARY KEY
 )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM e
 ----
-Field Type   Null  Default
-id    INT    false  NULL
+Field Type   Null   Default Indices
+id    INT    false  NULL    primary
 
 statement ok
 CREATE TABLE f (
@@ -98,13 +98,13 @@ CREATE TABLE f (
   PRIMARY KEY (a, b, c)
 )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM f
 ----
-Field Type   Null  Default
-a     INT   false  NULL
-b     INT   false  NULL
-c     INT   false  NULL
+Field Type   Null  Default Indices
+a     INT   false  NULL    primary
+b     INT   false  NULL    primary
+c     INT   false  NULL    primary
 
 query T
 SHOW TABLES FROM test
@@ -150,12 +150,12 @@ CREATE TABLE test.users (
   UNIQUE INDEX bar (id, name)
 )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM test.users
 ----
-Field       Type        Null    Default
-id          INT         false   NULL
-name        STRING      false   NULL
+Field       Type        Null    Default Indices
+id          INT         false   NULL    primary foo bar
+name        STRING      false   NULL    foo bar
 title       STRING      true    NULL
 nickname    STRING      true    NULL
 username    STRING(10)  true    NULL
@@ -335,10 +335,10 @@ CREATE TABLE test.alltypes (
   al INTERVAL
   )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM test.alltypes
 ----
-Field       Type        Null    Default
+Field  Type                      Null   Default         Indices
 a      BOOL                      true   NULL
 b      INT                       true   NULL
 c      INT                       true   NULL
