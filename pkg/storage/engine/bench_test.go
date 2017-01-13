@@ -598,35 +598,22 @@ func BenchmarkClearRange_RocksDB(b *testing.B) {
 	const rangeBytes = 64 << 20
 	const valueBytes = 92
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, dir := setupMVCCData(setupMVCCRocksDB, 1, numKeys, valueBytes, b)
+	eng, _ := setupMVCCData(setupMVCCRocksDB, 1, numKeys, valueBytes, b)
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
-	b.StopTimer()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		locDirty := dir + "_dirty"
-		if err := os.RemoveAll(locDirty); err != nil {
+		batch := eng.NewWriteOnlyBatch()
+		if err := batch.ClearRange(NilKey, MVCCKeyMax); err != nil {
 			b.Fatal(err)
 		}
-		if err := shutil.CopyTree(dir, locDirty, nil); err != nil {
-			b.Fatal(err)
-		}
-		dupEng := setupMVCCRocksDB(b, locDirty)
-
-		b.StartTimer()
-		iter := dupEng.NewIterator(false)
-		batch := dupEng.NewWriteOnlyBatch()
-		if err := batch.ClearRange(iter, NilKey, MVCCKeyMax); err != nil {
-			b.Fatal(err)
-		}
-		iter.Close()
-		if err := batch.Commit(); err != nil {
-			b.Fatal(err)
-		}
-		b.StopTimer()
-
-		dupEng.Close()
+		// NB: We don't actually commit the batch here as we don't want to delete
+		// the data. Doing so would require repopulating on every iteration of the
+		// loop which was ok when ClearRange was slowly because the benchmark to
+		// take an exceptionally long time now that ClearRange is very fast.
 	}
+
+	b.StopTimer()
 }

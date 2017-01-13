@@ -699,13 +699,10 @@ func (r *Replica) destroyDataRaftMuLocked(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	iter := r.store.Engine().NewIterator(false)
-	defer iter.Close()
-
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
 	for _, keyRange := range makeAllKeyRanges(r.Desc()) {
-		if err := batch.ClearRange(iter, keyRange.start, keyRange.end); err != nil {
+		if err := batch.ClearRange(keyRange.start, keyRange.end); err != nil {
 			return err
 		}
 	}

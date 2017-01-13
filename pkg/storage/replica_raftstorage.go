@@ -588,14 +588,11 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	iter := r.store.Engine().NewIterator(false)
-	defer iter.Close()
-
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
 	for _, keyRange := range makeAllKeyRanges(s.Desc) {
-		if err := batch.ClearRange(iter, keyRange.start, keyRange.end); err != nil {
+		if err := batch.ClearRange(keyRange.start, keyRange.end); err != nil {
 			return err
 		}
 	}
