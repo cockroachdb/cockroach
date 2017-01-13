@@ -199,6 +199,17 @@ func checkDistAggregationInfo(
 	procs = append(procs, finalProc)
 	rowsDist := runTestFlow(t, srv, procs...)
 
+	if len(rowsDist[0]) != len(rowsNonDist[0]) {
+		t.Errorf("different row lengths (dist: %d non-dist: %d)", len(rowsDist[0]), len(rowsNonDist[0]))
+	} else {
+		for i := range rowsDist[0] {
+			tDist := rowsDist[0][i].Type.String()
+			tNonDist := rowsNonDist[0][i].Type.String()
+			if tDist != tNonDist {
+				t.Errorf("different type for column %d (dist: %s non-dist: %s)", i, tDist, tNonDist)
+			}
+		}
+	}
 	if rowsDist.String() != rowsNonDist.String() {
 		t.Errorf("different results\nw/o local stage:   %s\nwith local stage:  %s", rowsNonDist, rowsDist)
 	}
