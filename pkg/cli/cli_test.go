@@ -60,8 +60,13 @@ type cliTest struct {
 	logScope log.TestLogScope
 }
 
-func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
-	c := cliTest{t: t}
+type cliTestParams struct {
+	t        *testing.T
+	insecure bool
+}
+
+func newCLITest(params cliTestParams) (cliTest, error) {
+	c := cliTest{t: params.t}
 
 	certsDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
@@ -75,20 +80,20 @@ func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
 	baseCfg.InitDefaults()
 	InitCLIDefaults()
 
-	if t != nil {
-		c.logScope = log.Scope(t, "")
+	if c.t != nil {
+		c.logScope = log.Scope(c.t, "")
 	}
 
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: insecure})
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: params.insecure})
 	if err != nil {
-		if t != nil {
-			c.logScope.Close(t)
+		if c.t != nil {
+			c.logScope.Close(c.t)
 		}
 		return cliTest{}, err
 	}
 	c.TestServer = s.(*server.TestServer)
 
-	if insecure {
+	if params.insecure {
 		c.cleanupFunc = func() error { return nil }
 	} else {
 		// Copy these assets to disk from embedded strings, so this test can
@@ -123,10 +128,10 @@ func newCLITest(t *testing.T, insecure bool) (cliTest, error) {
 	return c, nil
 }
 
-// stop cleans up after the test.
+// cleanup cleans up after the test.
 // It also stops the test server is runStopper is true.
 // The log files are removed if the test has succeeded.
-func (c cliTest) stop(runStopper bool) {
+func (c cliTest) cleanup() {
 	if c.t != nil {
 		defer c.logScope.Close(c.t)
 	}
@@ -134,9 +139,15 @@ func (c cliTest) stop(runStopper bool) {
 	// Restore stderr.
 	osStderr = os.Stderr
 
-	if runStopper {
+	select {
+	case <-c.Stopper().ShouldStop():
+		// If ShouldStop() doesn't block, that means someone has already
+		// called Stop(). We just need to wait.
+		<-c.Stopper().IsStopped()
+	default:
 		c.Stopper().Stop()
 	}
+
 	if err := c.cleanupFunc(); err != nil {
 		panic(err)
 	}
@@ -235,16 +246,14 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
+	c, err := newCLITest(cliTestParams{t: t})
 	if err != nil {
 		panic(err)
 	}
-	// This test does not need to invoke the stopper because
-	// "quit" will have taken care of this.
-	defer c.stop(false)
+	defer c.cleanup()
 
 	c.Run("quit")
-	// Wait until this async command stops the server.
+	// Wait until this async command cleanups the server.
 	<-c.Stopper().IsStopped()
 
 	// NB: if this test is ever flaky due to port reuse, we could run against
@@ -296,11 +305,11 @@ communicate with a secure cluster\).
 }
 
 func Example_basic() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3")
 	c.Run("debug kv scan")
@@ -357,11 +366,11 @@ func Example_basic() {
 }
 
 func Example_quoted() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`debug kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -394,11 +403,11 @@ func Example_quoted() {
 }
 
 func Example_insecure() {
-	c, err := newCLITest(nil, true)
+	c, err := newCLITest(cliTestParams{insecure: true})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2")
 	c.Run("debug kv scan")
@@ -412,11 +421,11 @@ func Example_insecure() {
 }
 
 func Example_ranges() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -477,11 +486,11 @@ func Example_ranges() {
 }
 
 func Example_logging() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
@@ -518,11 +527,11 @@ func Example_logging() {
 }
 
 func Example_cput() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan")
@@ -550,11 +559,11 @@ func Example_cput() {
 }
 
 func Example_max_results() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("debug kv put a 1 b 2 c 3 d 4")
 	c.Run("debug kv scan --max-results=3")
@@ -585,11 +594,11 @@ func Example_max_results() {
 }
 
 func Example_zone() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
@@ -683,11 +692,11 @@ func Example_zone() {
 }
 
 func Example_sql() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
@@ -738,11 +747,11 @@ func Example_sql() {
 }
 
 func Example_sql_format() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
@@ -889,11 +898,11 @@ func Example_sql_format() {
 }
 
 func Example_user() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	c.Run("user ls")
 	c.Run("user ls --pretty")
@@ -1016,11 +1025,11 @@ Use "cockroach [command] --help" for more information about a command.
 }
 
 func Example_node() {
-	c, err := newCLITest(nil, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.WriteSummaries(); err != nil {
@@ -1050,11 +1059,11 @@ func Example_node() {
 func TestFreeze(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	assertOutput := func(msg string) {
 		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
@@ -1082,11 +1091,11 @@ func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	start := timeutil.Now()
-	c, err := newCLITest(t, false)
+	c, err := newCLITest(cliTestParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.stop(true)
+	defer c.cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.WriteSummaries(); err != nil {
