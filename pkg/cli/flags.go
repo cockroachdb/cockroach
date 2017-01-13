@@ -356,11 +356,6 @@ func init() {
 		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
 		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
 		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
-
-		// By default, client commands print their output as
-		// pretty-formatted tables on terminals, and TSV when redirected
-		// to a file. The user can override with --pretty.
-		boolFlag(f, &cliCtx.prettyFmt, cliflags.Pretty, isInteractive)
 	}
 
 	zf := setZoneCmd.Flags()
@@ -393,6 +388,19 @@ func init() {
 		stringFlag(f, &connUser, cliflags.User, security.RootUser)
 		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
 		stringFlag(f, &connDBName, cliflags.Database, "")
+	}
+
+	// Commands that print tables.
+	tableOutputCommands := []*cobra.Command{sqlShellCmd}
+	tableOutputCommands = append(tableOutputCommands, userCmds...)
+	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
+	for _, cmd := range tableOutputCommands {
+		f := cmd.Flags()
+
+		// By default, these commands print their output as pretty-formatted
+		// tables on terminals, and TSV when redirected to a file. The user
+		// can override with --pretty.
+		boolFlag(f, &cliCtx.prettyFmt, cliflags.Pretty, isInteractive)
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
