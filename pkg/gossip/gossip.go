@@ -351,7 +351,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	for _, addr := range storedBI.Addresses {
 		// If the address is new, and isn't our own address, add it.
 		if _, ok := existing[makeKey(addr)]; !ok && addr != g.mu.is.NodeAddr {
-			g.maybeAddBootstrapAddress(addr, unknownNodeID)
+			g.maybeAddBootstrapAddressLocked(addr, unknownNodeID)
 		}
 	}
 	// Persist merged addresses.
@@ -365,7 +365,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// any which haven't already been added.
 	newResolverFound := false
 	for _, addr := range g.bootstrapInfo.Addresses {
-		if !g.maybeAddResolver(addr) {
+		if !g.maybeAddResolverLocked(addr) {
 			continue
 		}
 		// If we find a new resolver, reset the resolver index so that the
@@ -483,10 +483,10 @@ func (g *Gossip) SimulationCycle() {
 	}
 }
 
-// maybeAddResolver creates and adds a resolver for the specified
+// maybeAddResolverLocked creates and adds a resolver for the specified
 // address if one does not already exist. Returns whether a new
 // resolver was added. The caller must hold the gossip mutex.
-func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
+func (g *Gossip) maybeAddResolverLocked(addr util.UnresolvedAddr) bool {
 	if _, ok := g.resolverAddrs[addr]; ok {
 		return false
 	}
@@ -502,10 +502,12 @@ func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
 	return true
 }
 
-// maybeAddBootstrapAddress adds the specified address to the list of
-// bootstrap addresses if not already present. Returns whether a new
+// maybeAddBootstrapAddressLocked adds the specified address to the list
+// of bootstrap addresses if not already present. Returns whether a new
 // bootstrap address was added. The caller must hold the gossip mutex.
-func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr, nodeID roachpb.NodeID) bool {
+func (g *Gossip) maybeAddBootstrapAddressLocked(
+	addr util.UnresolvedAddr, nodeID roachpb.NodeID,
+) bool {
 	if existingNodeID, ok := g.bootstrapAddrs[addr]; ok {
 		if existingNodeID == unknownNodeID || existingNodeID != nodeID {
 			g.bootstrapAddrs[addr] = nodeID
@@ -546,8 +548,8 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 			if desc.Address.IsEmpty() || desc.Address == g.mu.is.NodeAddr {
 				return nil
 			}
-			g.maybeAddResolver(desc.Address)
-			g.maybeAddBootstrapAddress(desc.Address, desc.NodeID)
+			g.maybeAddResolverLocked(desc.Address)
+			g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 		}
 		return nil
 	}); err != nil {
@@ -632,7 +634,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// Add this new node address (if it's not already there) to our list
 	// of resolvers so we can keep connecting to gossip if the original
 	// resolvers go offline.
-	g.maybeAddResolver(desc.Address)
+	g.maybeAddResolverLocked(desc.Address)
 
 	// We ignore empty addresses for the sake of not breaking the many tests
 	// that don't bother specifying addresses.
@@ -666,7 +668,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	}
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
-	added := g.maybeAddBootstrapAddress(desc.Address, desc.NodeID)
+	added := g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 	if added && g.storage != nil {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
 			log.Error(ctx, err)
@@ -951,7 +953,7 @@ func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 // address by consulting the first non-exhausted resolver from the
 // slice supplied to the constructor or set using setBootstrap().
 // The lock is assumed held.
-func (g *Gossip) getNextBootstrapAddress() net.Addr {
+func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 	// Run through resolvers round robin starting at last resolved index.
 	for i := 0; i < len(g.resolvers); i++ {
 		g.resolverIdx++
@@ -997,8 +999,8 @@ func (g *Gossip) bootstrap() {
 				log.Eventf(ctx, "have clients: %t, have sentinel: %t", haveClients, haveSentinel)
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
-					if addr := g.getNextBootstrapAddress(); addr != nil {
-						g.startClient(addr)
+					if addr := g.getNextBootstrapAddressLocked(); addr != nil {
+						g.startClientLocked(addr)
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
 						for addr := range g.bootstrapping {
@@ -1126,7 +1128,7 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 			}
 			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
-			g.startClient(nodeAddr)
+			g.startClientLocked(nodeAddr)
 		}
 	}
 }
@@ -1134,11 +1136,11 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 func (g *Gossip) doDisconnected(c *client) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.removeClient(c)
+	g.removeClientLocked(c)
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr)
+		g.startClientLocked(c.forwardAddr)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
@@ -1206,10 +1208,10 @@ func (g *Gossip) signalConnectedLocked() {
 	}
 }
 
-// startClient launches a new client connected to remote address.
+// startClientLocked launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr) {
+func (g *Gossip) startClientLocked(addr net.Addr) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
@@ -1224,9 +1226,9 @@ func (g *Gossip) startClient(addr net.Addr) {
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
 }
 
-// removeClient removes the specified client. Called when a client
+// removeClientLocked removes the specified client. Called when a client
 // disconnects.
-func (g *Gossip) removeClient(target *client) {
+func (g *Gossip) removeClientLocked(target *client) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	for i, candidate := range g.clientsMu.clients {
