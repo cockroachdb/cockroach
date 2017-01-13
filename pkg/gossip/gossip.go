@@ -569,6 +569,13 @@ func maxPeers(nodeCount int) int {
 	// This formula uses MaxHops-1, instead of MaxHops, to provide a
 	// "fudge" factor for max connected peers, to account for the
 	// arbitrary, decentralized way in which gossip networks are created.
+	//
+	// Quick derivation of the formula for posterity (without the fudge factor):
+	// maxPeers^maxHops > nodeCount
+	// maxHops * log(maxPeers) > log(nodeCount)
+	// log(maxPeers) > log(nodeCount) / maxHops
+	// maxPeers > e^(log(nodeCount) / maxHops)
+	// hence maxPeers = ceil(e^(log(nodeCount) / maxHops)) should work
 	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
 	if maxPeers < minPeers {
 		return minPeers
@@ -674,6 +681,13 @@ func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
+//
+// Note: if we notice issues with never-ending ConnectionsRefused errors
+// in real deployments, consider allowing more incoming connections than
+// outgoing connections. As of now, the cluster's steady state is to have
+// all nodes fill up, which can make rebalancing of connections tough.
+// I'm not making this change now since it tends to lead to less balanced
+// networks and I'm not sure what all the consequences of that might be.
 func (g *Gossip) recomputeMaxPeersLocked() {
 	maxPeers := maxPeers(len(g.nodeDescs))
 	g.mu.incoming.setMaxSize(maxPeers)
