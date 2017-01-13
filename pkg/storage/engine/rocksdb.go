@@ -75,6 +75,13 @@ const (
 
 func init() {
 	rocksdb.Logger = func(format string, args ...interface{}) { log.Infof(context.TODO(), format, args...) }
+	rocksdb.DBKeyPrinter = func(k []byte, wall_time int64, logical int32) string {
+		mvccKey := MVCCKey{
+			Key:       k,
+			Timestamp: hlc.Timestamp{WallTime: wall_time, Logical: logical},
+		}
+		return mvccKey.String()
+	}
 }
 
 // SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
@@ -1641,4 +1648,22 @@ func (fw *RocksDBSstFileWriter) Close() error {
 	err := statusToError(C.DBSstFileWriterClose(fw.fw))
 	fw.fw = nil
 	return err
+}
+
+// RunLDB runs RocksDB's ldb command-line tool. The passed
+// command-line arguments should not include argv[0].
+func RunLDB(args []string) {
+	// Prepend "ldb" as argv[0].
+	args = append([]string{"ldb"}, args...)
+	argv := make([]*C.char, len(args))
+	for i := range args {
+		argv[i] = C.CString(args[i])
+	}
+	defer func() {
+		for i := range argv {
+			C.free(unsafe.Pointer(argv[i]))
+		}
+	}()
+
+	C.DBRunLDB(C.int(len(argv)), &argv[0])
 }
