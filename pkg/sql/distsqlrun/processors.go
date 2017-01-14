@@ -178,6 +178,7 @@ func (n *noopProcessor) Run(wg *sync.WaitGroup) {
 			return
 		}
 		if !n.out.emitRow(ctx, row) {
+			n.input.NoMoreRows()
 			return
 		}
 	}

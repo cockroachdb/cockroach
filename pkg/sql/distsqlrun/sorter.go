@@ -119,4 +119,5 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 		// specified.
 		panic("optimizationt no implemented yet")
 	}
+	s.input.NoMoreRows()
 }

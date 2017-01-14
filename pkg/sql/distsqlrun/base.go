@@ -64,6 +64,12 @@ type RowSource interface {
 	// rows. Depending on the implementation, it may block.
 	// The caller must not modify the received row.
 	NextRow() (sqlbase.EncDatumRow, error)
+
+	// NoMoreRows lets the source know that we will not need any more rows. May
+	// block. If the consumer of the source stops before NextRow indicates that
+	// there are no more rows, this method must be called. It is ok to call the
+	// method even if all the rows were consumed.
+	NoMoreRows()
 }
 
 // StreamMsg is the message used in the channels that implement
@@ -142,10 +148,12 @@ func (rc *RowChannel) NextRow() (sqlbase.EncDatumRow, error) {
 	return d.Row, nil
 }
 
-// NoMoreRows causes future PushRow calls to return false. The caller should
-// still drain the channel to make sure the sender is not blocked.
+// NoMoreRows is part of the RowSource interface.
 func (rc *RowChannel) NoMoreRows() {
 	atomic.StoreUint32(&rc.noMoreRows, 1)
+	// Drain to allow senders to finish.
+	for range rc.dataChan {
+	}
 }
 
 // MultiplexedRowChannel is a RowChannel wrapper which allows multiple row
@@ -195,6 +203,11 @@ func (mrc *MultiplexedRowChannel) Types() []sqlbase.ColumnType {
 // NextRow is part of the RowSource interface.
 func (mrc *MultiplexedRowChannel) NextRow() (sqlbase.EncDatumRow, error) {
 	return mrc.rowChan.NextRow()
+}
+
+// NoMoreRows is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) NoMoreRows() {
+	mrc.rowChan.NoMoreRows()
 }
 
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
@@ -272,6 +285,9 @@ func (rb *RowBuffer) NextRow() (sqlbase.EncDatumRow, error) {
 	rb.Rows = rb.Rows[1:]
 	return row, nil
 }
+
+// NoMoreRows is part of the RowSource interface.
+func (rb *RowBuffer) NoMoreRows() {}
 
 // SetFlowRequestTrace populates req.Trace with the context of the current Span
 // in the context (if any).

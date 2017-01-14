@@ -163,6 +163,7 @@ func (ag *aggregator) Run(wg *sync.WaitGroup) {
 	}
 
 	ag.out.close(nil)
+	ag.input.NoMoreRows()
 }
 
 func (ag *aggregator) accumulateRows() error {
