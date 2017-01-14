@@ -117,6 +117,7 @@ func (jr *joinReader) mainLoop() error {
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}
+	defer jr.input.ConsumerDone()
 
 	for {
 		// TODO(radu): figure out how to send smaller batches if the source has
