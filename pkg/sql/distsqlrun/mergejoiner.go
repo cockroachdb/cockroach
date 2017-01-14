@@ -82,6 +82,8 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 		log.Infof(ctx, "starting merge joiner run")
 		defer log.Infof(ctx, "exiting merge joiner run")
 	}
+	defer m.leftSource.NoMoreRows()
+	defer m.rightSource.NoMoreRows()
 
 	for {
 		batch, err := m.streamMerger.NextBatch()

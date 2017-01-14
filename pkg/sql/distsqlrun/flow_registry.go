@@ -263,6 +263,11 @@ func (fr *flowRegistry) finishInboundStreamLocked(is *inboundStreamInfo) {
 	if is.finished {
 		panic("double finish")
 	}
+
+	if is.timedOut {
+		is.receiver.Close(errors.Errorf("inbound stream timed out"))
+	}
+
 	is.finished = true
 	is.waitGroup.Done()
 }

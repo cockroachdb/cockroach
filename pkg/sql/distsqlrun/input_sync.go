@@ -165,6 +165,20 @@ func (s *orderedSynchronizer) NextRow() (sqlbase.EncDatumRow, error) {
 	return s.sources[s.heap[0]].row, nil
 }
 
+// NoMoreRows is part of the RowSource interface.
+func (s *orderedSynchronizer) NoMoreRows() {
+	if !s.initialized {
+		for i := range s.sources {
+			s.sources[i].src.NoMoreRows()
+		}
+	} else {
+		// The sources that are not in the heap have been consumed already.
+		for _, sIdx := range s.heap {
+			s.sources[sIdx].src.NoMoreRows()
+		}
+	}
+}
+
 func makeOrderedSync(ordering sqlbase.ColumnOrdering, sources []RowSource) (RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))

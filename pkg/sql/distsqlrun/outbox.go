@@ -176,11 +176,7 @@ func (m *outbox) run() {
 	err := m.mainLoop()
 
 	m.RowChannel.NoMoreRows()
-	if err != nil {
-		// Drain to allow senders to finish.
-		for range m.dataChan {
-		}
-	}
+
 	if m.stream != nil {
 		resp, recvErr := m.stream.CloseAndRecv()
 		if err == nil {
