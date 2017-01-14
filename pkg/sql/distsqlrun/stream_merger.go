@@ -211,33 +211,29 @@ func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
 }
 
 func makeStreamMerger(
-	orderings []sqlbase.ColumnOrdering, sources []RowSource,
+	leftSource RowSource,
+	leftOrdering sqlbase.ColumnOrdering,
+	rightSource RowSource,
+	rightOrdering sqlbase.ColumnOrdering,
 ) (streamMerger, error) {
-	if len(sources) != 2 {
-		return streamMerger{}, errors.Errorf("only 2 sources allowed, %d provided", len(sources))
-	}
-	if len(sources) != len(orderings) {
+	if len(leftOrdering) != len(rightOrdering) {
 		return streamMerger{}, errors.Errorf(
-			"orderings count %d doesn't match source count %d", len(orderings), len(sources))
+			"ordering lengths don't match: %d and %d", len(leftOrdering), len(rightOrdering))
 	}
-	if len(orderings[0]) != len(orderings[1]) {
-		return streamMerger{}, errors.Errorf(
-			"ordering lengths don't match: %d and %d", len(orderings[0]), len(orderings[1]))
-	}
-	for i, ord := range orderings[0] {
-		if ord.Direction != orderings[1][i].Direction {
+	for i, ord := range leftOrdering {
+		if ord.Direction != rightOrdering[i].Direction {
 			return streamMerger{}, errors.New("Ordering mismatch")
 		}
 	}
 
 	return streamMerger{
 		left: streamCacher{
-			src:      sources[0],
-			ordering: orderings[0],
+			src:      leftSource,
+			ordering: leftOrdering,
 		},
 		right: streamCacher{
-			src:      sources[1],
-			ordering: orderings[1],
+			src:      rightSource,
+			ordering: rightOrdering,
 		},
 	}, nil
 }

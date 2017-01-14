@@ -53,7 +53,6 @@ func TestAggregator(t *testing.T) {
 			// SELECT MIN(@0), MAX(@0), COUNT(@0), AVG(@0), SUM(@0), STDDEV(@0),
 			// VARIANCE(@0) GROUP BY [] (no rows).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType{columnTypeInt},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_MIN,
@@ -93,7 +92,6 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT @2, COUNT(@1), GROUP BY @2.
 			spec: AggregatorSpec{
-				Types:     []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
@@ -122,7 +120,6 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT @2, COUNT(@1), GROUP BY @2.
 			spec: AggregatorSpec{
-				Types:     []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
@@ -149,7 +146,6 @@ func TestAggregator(t *testing.T) {
 		}, {
 			// SELECT @2, SUM(@1), GROUP BY @2.
 			spec: AggregatorSpec{
-				Types:     []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
@@ -176,7 +172,6 @@ func TestAggregator(t *testing.T) {
 		}, {
 			// SELECT COUNT(@1), SUM(@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_COUNT,
@@ -202,7 +197,6 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT SUM DISTINCT (@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType{columnTypeInt},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:     AggregatorSpec_SUM,
@@ -225,7 +219,6 @@ func TestAggregator(t *testing.T) {
 		{
 			// SELECT @1, GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType{columnTypeInt},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_IDENT,
@@ -244,7 +237,6 @@ func TestAggregator(t *testing.T) {
 		}, {
 			// SELECT MAX(@1), MIN(@2), COUNT(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
-				Types: []sqlbase.ColumnType{columnTypeInt, columnTypeInt},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
 						Func:   AggregatorSpec_MAX,
@@ -281,7 +273,11 @@ func TestAggregator(t *testing.T) {
 	for _, c := range testCases {
 		ags := c.spec
 
-		in := &RowBuffer{Rows: c.input}
+		var types []sqlbase.ColumnType
+		if len(c.input) == 0 {
+			types = []sqlbase.ColumnType{columnTypeInt}
+		}
+		in := NewRowBuffer(types, c.input)
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{
