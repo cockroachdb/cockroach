@@ -59,6 +59,9 @@ type RowReceiver interface {
 // RowSource is any component of a flow that produces rows that cam be consumed
 // by another component.
 type RowSource interface {
+	// Types returns the schema for the rows in this source.
+	Types() []sqlbase.ColumnType
+
 	// NextRow retrieves the next row. Returns a nil row if there are no more
 	// rows. Depending on the implementation, it may block.
 	// The caller must not modify the received row.
@@ -119,6 +122,8 @@ type StreamMsg struct {
 // RowChannel is a thin layer over a StreamMsg channel, which can be used to
 // transfer rows between goroutines.
 type RowChannel struct {
+	types []sqlbase.ColumnType
+
 	// The channel on which rows are delivered.
 	C <-chan StreamMsg
 
@@ -134,15 +139,16 @@ var _ RowReceiver = &RowChannel{}
 var _ RowSource = &RowChannel{}
 
 // InitWithBufSize initializes the RowChannel with a given buffer size.
-func (rc *RowChannel) InitWithBufSize(chanBufSize int) {
+func (rc *RowChannel) InitWithBufSize(types []sqlbase.ColumnType, chanBufSize int) {
+	rc.types = types
 	rc.dataChan = make(chan StreamMsg, chanBufSize)
 	rc.C = rc.dataChan
 	atomic.StoreUint32(&rc.noMoreRows, 0)
 }
 
 // Init initializes the RowChannel with the default buffer size.
-func (rc *RowChannel) Init() {
-	rc.InitWithBufSize(rowChannelBufSize)
+func (rc *RowChannel) Init(types []sqlbase.ColumnType) {
+	rc.InitWithBufSize(types, rowChannelBufSize)
 }
 
 // PushRow is part of the RowReceiver interface.
@@ -161,6 +167,11 @@ func (rc *RowChannel) Close(err error) {
 		rc.dataChan <- StreamMsg{Row: nil, Err: err}
 	}
 	close(rc.dataChan)
+}
+
+// Types is part of the RowSource interface.
+func (rc *RowChannel) Types() []sqlbase.ColumnType {
+	return rc.types
 }
 
 // NextRow is part of the RowSource interface.
@@ -196,8 +207,8 @@ var _ RowReceiver = &MultiplexedRowChannel{}
 var _ RowSource = &MultiplexedRowChannel{}
 
 // Init initializes the MultiplexedRowChannel with the default buffer size.
-func (mrc *MultiplexedRowChannel) Init(numSenders int) {
-	mrc.rowChan.Init()
+func (mrc *MultiplexedRowChannel) Init(numSenders int, types []sqlbase.ColumnType) {
+	mrc.rowChan.Init(types)
 	atomic.StoreInt32(&mrc.numSenders, int32(numSenders))
 	mrc.firstErr = nil
 }
@@ -219,6 +230,11 @@ func (mrc *MultiplexedRowChannel) Close(err error) {
 	if newVal == 0 {
 		mrc.rowChan.Close(mrc.firstErr)
 	}
+}
+
+// Types is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) Types() []sqlbase.ColumnType {
+	return mrc.rowChan.types
 }
 
 // NextRow is part of the RowSource interface.
@@ -245,10 +261,27 @@ type RowBuffer struct {
 	// Done is used when the RowBuffer is used as a RowSource; it is set to true
 	// when the receiver read all the rows.
 	Done bool
+
+	// Schema of the rows in this buffer.
+	types []sqlbase.ColumnType
 }
 
 var _ RowReceiver = &RowBuffer{}
 var _ RowSource = &RowBuffer{}
+
+// NewRowBuffer creates a RowBuffer with the given schema and initial rows. The
+// types are optional if there is at least one row.
+func NewRowBuffer(types []sqlbase.ColumnType, rows sqlbase.EncDatumRows) *RowBuffer {
+	rb := &RowBuffer{types: types, Rows: rows}
+
+	if len(rb.Rows) > 0 && rb.types == nil {
+		rb.types = make([]sqlbase.ColumnType, len(rb.Rows[0]))
+		for i, d := range rb.Rows[0] {
+			rb.types[i] = d.Type
+		}
+	}
+	return rb
+}
 
 // PushRow is part of the RowReceiver interface.
 func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
@@ -261,6 +294,14 @@ func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
 func (rb *RowBuffer) Close(err error) {
 	rb.Err = err
 	rb.Closed = true
+}
+
+// Types is part of the RowSource interface.
+func (rb *RowBuffer) Types() []sqlbase.ColumnType {
+	if rb.types == nil {
+		panic("not initialized with types")
+	}
+	return rb.types
 }
 
 // NextRow is part of the RowSource interface.

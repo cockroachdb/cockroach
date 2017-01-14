@@ -260,13 +260,13 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
-		return newMergeJoiner(&f.FlowCtx, ps.Core.MergeJoiner, inputs, outputs[0])
+		return newMergeJoiner(&f.FlowCtx, ps.Core.MergeJoiner, inputs[0], inputs[1], outputs[0])
 	}
 	if ps.Core.HashJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
-		return newHashJoiner(&f.FlowCtx, ps.Core.HashJoiner, inputs, outputs[0])
+		return newHashJoiner(&f.FlowCtx, ps.Core.HashJoiner, inputs[0], inputs[1], outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor %s", ps)
 }
@@ -284,14 +284,14 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 			case InputSyncSpec_UNORDERED:
 				if len(is.Streams) == 1 {
 					rowChan := &RowChannel{}
-					rowChan.Init()
+					rowChan.Init(is.ColumnTypes)
 					if err := f.setupInboundStream(is.Streams[0], rowChan); err != nil {
 						return err
 					}
 					sync = rowChan
 				} else {
 					mrc := &MultiplexedRowChannel{}
-					mrc.Init(len(is.Streams))
+					mrc.Init(len(is.Streams), is.ColumnTypes)
 					for _, s := range is.Streams {
 						if err := f.setupInboundStream(s, mrc); err != nil {
 							return err
@@ -304,7 +304,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 				streams := make([]RowSource, len(is.Streams))
 				for i, s := range is.Streams {
 					rowChan := &RowChannel{}
-					rowChan.Init()
+					rowChan.Init(is.ColumnTypes)
 					if err := f.setupInboundStream(s, rowChan); err != nil {
 						return err
 					}

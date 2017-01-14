@@ -128,7 +128,7 @@ func TestEvaluator(t *testing.T) {
 	for _, c := range testCases {
 		es := c.spec
 
-		in := &RowBuffer{Rows: c.input}
+		in := NewRowBuffer(nil, c.input)
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{

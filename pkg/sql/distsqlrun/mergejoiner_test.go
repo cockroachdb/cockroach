@@ -48,19 +48,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-				},
 				RightOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-					columnTypeInt,
-				},
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
@@ -92,19 +83,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-				},
 				RightOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-					columnTypeInt,
-				},
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 1, 3},
 				// Implicit @1 = @3 constraint.
@@ -141,19 +123,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-				},
 				RightOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-					columnTypeInt,
-				},
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 1, 3},
 				Expr:          Expression{Expr: "@4 >= 4"},
@@ -200,19 +173,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-				},
 				RightOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-					columnTypeInt,
-				},
 				Type:          JoinType_LEFT_OUTER,
 				OutputColumns: []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
@@ -247,19 +211,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-					columnTypeInt,
-				},
 				RightOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-				},
 				Type:          JoinType_RIGHT_OUTER,
 				OutputColumns: []uint32{3, 1, 2},
 				// Implicit @1 = @3 constraint.
@@ -294,19 +249,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				LeftTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-				},
 				RightOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				RightTypes: []sqlbase.ColumnType{
-					columnTypeInt,
-					columnTypeInt,
-					columnTypeInt,
-				},
 				Type:          JoinType_FULL_OUTER,
 				OutputColumns: []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
@@ -339,11 +285,12 @@ func TestMergeJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		ms := c.spec
-		inputs := []RowSource{&RowBuffer{Rows: c.inputs[0]}, &RowBuffer{Rows: c.inputs[1]}}
+		leftInput := NewRowBuffer(nil, c.inputs[0])
+		rightInput := NewRowBuffer(nil, c.inputs[1])
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
-		m, err := newMergeJoiner(&flowCtx, &ms, inputs, out)
+		m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, out)
 		if err != nil {
 			t.Fatal(err)
 		}

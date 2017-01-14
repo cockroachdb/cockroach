@@ -54,7 +54,11 @@ type hashJoiner struct {
 var _ processor = &hashJoiner{}
 
 func newHashJoiner(
-	flowCtx *FlowCtx, spec *HashJoinerSpec, inputs []RowSource, output RowReceiver,
+	flowCtx *FlowCtx,
+	spec *HashJoinerSpec,
+	leftSource RowSource,
+	rightSource RowSource,
+	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
 		leftEqCols:  columns(spec.LeftEqColumns),
@@ -62,8 +66,12 @@ func newHashJoiner(
 		buckets:     make(map[string]bucket),
 	}
 
-	err := h.joinerBase.init(flowCtx, inputs, output, spec.OutputColumns,
-		spec.Type, spec.LeftTypes, spec.RightTypes, spec.Expr)
+	err := h.joinerBase.init(
+		flowCtx,
+		leftSource, rightSource,
+		output, spec.OutputColumns,
+		spec.Type, spec.Expr,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +113,7 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 func (h *hashJoiner) buildPhase(ctx context.Context) error {
 	var scratch []byte
 	for {
-		rrow, err := h.inputs[1].NextRow()
+		rrow, err := h.rightSource.NextRow()
 		if err != nil || rrow == nil {
 			return err
 		}
@@ -165,7 +173,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 	}
 
 	for {
-		lrow, err := h.inputs[0].NextRow()
+		lrow, err := h.leftSource.NextRow()
 		if err != nil {
 			return err
 		}

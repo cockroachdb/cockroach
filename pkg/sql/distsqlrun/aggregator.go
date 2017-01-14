@@ -90,10 +90,8 @@ func newAggregator(
 		groupCols:   make(columns, len(spec.GroupCols)),
 	}
 
-	inputTypes := make([]sqlbase.ColumnType, len(spec.Aggregations))
 	for i, aggInfo := range spec.Aggregations {
 		ag.inputCols[i] = aggInfo.ColIdx
-		inputTypes[i] = spec.Types[aggInfo.ColIdx]
 	}
 	copy(ag.groupCols, spec.GroupCols)
 
@@ -102,10 +100,9 @@ func newAggregator(
 	// (which just returns the last value added to them for a bucket) to provide
 	// grouped-by values for each bucket.  ag.funcs is updated to contain all
 	// the functions which need to be fed values.
-	eh := &exprHelper{types: inputTypes}
-	eh.vars = parser.MakeIndexedVarHelper(eh, len(eh.types))
+	inputTypes := input.Types()
 	for i, aggInfo := range spec.Aggregations {
-		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, inputTypes[i])
+		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, inputTypes[aggInfo.ColIdx])
 		if err != nil {
 			return nil, err
 		}
