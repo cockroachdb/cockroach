@@ -90,6 +90,9 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
+	defer h.leftSource.ConsumerDone()
+	defer h.rightSource.ConsumerDone()
+
 	if err := h.buildPhase(ctx); err != nil {
 		h.out.close(err)
 		return
