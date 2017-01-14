@@ -33,8 +33,7 @@ var getUserCmd = &cobra.Command{
 	Long: `
 Fetches and displays the user for <username>.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runGetUser),
+	RunE: MaybeDecorateGRPCError(runGetUser),
 }
 
 func runGetUser(cmd *cobra.Command, args []string) error {
@@ -57,8 +56,7 @@ var lsUsersCmd = &cobra.Command{
 	Long: `
 List all users.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runLsUsers),
+	RunE: MaybeDecorateGRPCError(runLsUsers),
 }
 
 func runLsUsers(cmd *cobra.Command, args []string) error {
@@ -81,8 +79,7 @@ var rmUserCmd = &cobra.Command{
 	Long: `
 Remove an existing user by username.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runRmUser),
+	RunE: MaybeDecorateGRPCError(runRmUser),
 }
 
 func runRmUser(cmd *cobra.Command, args []string) error {
@@ -106,8 +103,7 @@ var setUserCmd = &cobra.Command{
 Create or update a user for the specified username, prompting
 for the password.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runSetUser),
+	RunE: MaybeDecorateGRPCError(runSetUser),
 }
 
 // runSetUser prompts for a password, then inserts the user and hash

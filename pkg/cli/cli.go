@@ -59,6 +59,13 @@ var cockroachCmd = &cobra.Command{
 	Short: "CockroachDB command-line interface and server",
 	// TODO(cdo): Add a pointer to the docs in Long.
 	Long: `CockroachDB command-line interface and server.`,
+	// Disable automatic printing of usage information whenever an error
+	// occurs. Many errors are not the result of a bad command invocation,
+	// e.g. attempting to start a node on an in-use port, and printing the
+	// usage information in these cases obscures the cause of the error.
+	// Commands should manually print usage information when the error is,
+	// in fact, a result of a bad invocation, e.g. too many arguments.
+	SilenceUsage: true,
 }
 
 // isInteractive indicates whether both stdin and stdout refer to the

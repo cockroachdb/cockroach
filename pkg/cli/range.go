@@ -34,8 +34,7 @@ var lsRangesCmd = &cobra.Command{
 	Long: `
 Lists the ranges in a cluster.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runLsRanges),
+	RunE: MaybeDecorateGRPCError(runLsRanges),
 }
 
 func runLsRanges(cmd *cobra.Command, args []string) error {
@@ -90,8 +89,7 @@ var splitRangeCmd = &cobra.Command{
 	Long: `
 Splits the range containing <key> at <key>.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runSplitRange),
+	RunE: MaybeDecorateGRPCError(runSplitRange),
 }
 
 func runSplitRange(cmd *cobra.Command, args []string) error {
