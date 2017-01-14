@@ -60,7 +60,7 @@ func SanitizeVarFreeExpr(
 	if err != nil {
 		return err
 	}
-	if defaultType := typedExpr.ResolvedType(); !expectedType.Equal(defaultType) {
+	if defaultType := typedExpr.ResolvedType(); !expectedType.Equivalent(defaultType) {
 		return incompatibleExprTypeError(context, expectedType, defaultType)
 	}
 	return nil
@@ -1256,7 +1256,7 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
 				p.Name, col.Name, err)
 		}
-	} else if !(typ.Equal(set) || (set == parser.TypeBytes && typ == parser.TypeString)) {
+	} else if !(typ.Equivalent(set) || (set == parser.TypeBytes && typ == parser.TypeString)) {
 		// Not a placeholder; check that the value cast has succeeded.
 		return fmt.Errorf("value type %s doesn't match type %s of column %q",
 			typ, col.Type.Kind, col.Name)

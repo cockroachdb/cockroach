@@ -116,7 +116,7 @@ func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
 			}
 			for i, col := range v.columns {
 				datum := datums[i]
-				if !(datum == parser.DNull || datum.ResolvedType().Equal(col.Typ)) {
+				if !(datum == parser.DNull || datum.ResolvedType().Equivalent(col.Typ)) {
 					panic(fmt.Sprintf("datum column %q expected to be type %s; found type %s",
 						col.Name, col.Typ, datum.ResolvedType()))
 				}

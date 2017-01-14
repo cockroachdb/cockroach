@@ -105,7 +105,7 @@ func DatumToEncDatum(ctyp ColumnType, d parser.Datum) EncDatum {
 	if d == nil {
 		panic("Cannot convert nil datum to EncDatum")
 	}
-	if ptyp := ctyp.ToDatumType(); d != parser.DNull && !ptyp.Equal(d.ResolvedType()) {
+	if ptyp := ctyp.ToDatumType(); d != parser.DNull && !ptyp.Equivalent(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
 			d.ResolvedType(), ptyp))
 	}
