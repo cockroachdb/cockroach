@@ -74,7 +74,6 @@ var getCmd = &cobra.Command{
 	Long: `
 Fetches and displays the value for <key>.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runGet),
 }
 
@@ -114,7 +113,6 @@ in pairs on the command line.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runPut),
 }
 
@@ -156,7 +154,6 @@ pass nil for expValue. The expValue defaults to 1 if not specified.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runCPut),
 }
 
@@ -201,7 +198,6 @@ flags.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runInc),
 }
 
@@ -246,7 +242,6 @@ Deletes the values of one or more keys.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runDel),
 }
 
@@ -283,7 +278,6 @@ Deletes the values for the range of keys [startKey, endKey).
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runDelRange),
 }
 
@@ -323,7 +317,6 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
 are retrieved.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runScan),
 }
 
@@ -361,7 +354,6 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
 are retrieved.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runReverseScan),
 }
 

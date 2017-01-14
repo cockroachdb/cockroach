@@ -33,7 +33,6 @@ var getUserCmd = &cobra.Command{
 	Long: `
 Fetches and displays the user for <username>.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runGetUser),
 }
 
@@ -57,7 +56,6 @@ var lsUsersCmd = &cobra.Command{
 	Long: `
 List all users.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runLsUsers),
 }
 
@@ -81,7 +79,6 @@ var rmUserCmd = &cobra.Command{
 	Long: `
 Remove an existing user by username.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runRmUser),
 }
 
@@ -106,7 +103,6 @@ var setUserCmd = &cobra.Command{
 Create or update a user for the specified username, prompting
 for the password.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runSetUser),
 }
 

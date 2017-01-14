@@ -208,7 +208,6 @@ var getZoneCmd = &cobra.Command{
 Fetches and displays the zone configuration for the specified database or
 table.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runGetZone),
 }
 
@@ -270,7 +269,6 @@ var lsZonesCmd = &cobra.Command{
 	Long: `
 List zone configs.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runLsZones),
 }
 
@@ -344,7 +342,6 @@ var rmZoneCmd = &cobra.Command{
 	Long: `
 Remove an existing zone config for the specified database or table.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runRmZone),
 }
 
@@ -414,7 +411,6 @@ EOF
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runSetZone),
 }
 

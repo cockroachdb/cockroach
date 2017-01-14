@@ -45,7 +45,6 @@ var lsNodesCmd = &cobra.Command{
 	Displays IDs for all nodes in cluster, which can be used with the status and stores
 	commands.
 	`,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runLsNodes),
 }
 
@@ -101,7 +100,6 @@ var statusNodeCmd = &cobra.Command{
 	If a node ID is specified, this will show the status for the corresponding node. If no node ID
 	is specified, this will display the status for all nodes in the cluster.
 	`,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runStatusNode),
 }
 

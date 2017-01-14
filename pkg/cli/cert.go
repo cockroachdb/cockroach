@@ -34,7 +34,6 @@ var createCACertCmd = &cobra.Command{
 	Long: `
 Generates CA certificate and key, writing them to --ca-cert and --ca-key.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runCreateCACert),
 }
 
@@ -57,7 +56,6 @@ Generates node certificate and keys for a given node, writing them to
 --cert and --key. CA certificate and key must be passed in.
 At least one host should be passed in (either IP address or dns name).
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runCreateNodeCert),
 }
 
@@ -84,7 +82,6 @@ Generates a client certificate and key, writing them to --cert and --key.
 CA certificate and key must be passed in.
 The certs directory should contain a CA cert and key.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runCreateClientCert),
 }
 

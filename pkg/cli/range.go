@@ -34,7 +34,6 @@ var lsRangesCmd = &cobra.Command{
 	Long: `
 Lists the ranges in a cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runLsRanges),
 }
 
@@ -90,7 +89,6 @@ var splitRangeCmd = &cobra.Command{
 	Long: `
 Splits the range containing <key> at <key>.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runSplitRange),
 }
 

@@ -79,7 +79,6 @@ uninitialized, specify the --join flag to point to any healthy node
 (or list of nodes) already part of the cluster.
 `,
 	Example:      `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runStart),
 }
 
@@ -563,7 +562,6 @@ Shutdown the server. The first stage is drain, where any new requests
 will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runQuit),
 }
 
@@ -670,7 +668,6 @@ nodes in the cluster should be terminated, all binaries updated, and only then
 restarted. A failed or incomplete invocation of this command can be rolled back
 using the --undo flag, or by restarting all the nodes in the cluster.
 `,
-	SilenceUsage: true,
 	RunE:         MaybeDecorateGRPCError(runFreezeCluster),
 }
 

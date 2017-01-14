@@ -54,7 +54,6 @@ var sqlShellCmd = &cobra.Command{
 Open a sql shell running against a cockroach database.
 `,
 	RunE:         MaybeDecorateGRPCError(runTerm),
-	SilenceUsage: true,
 }
 
 // cliState defines the current state of the CLI during

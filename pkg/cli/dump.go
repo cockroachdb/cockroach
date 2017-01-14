@@ -39,7 +39,6 @@ Dump SQL tables of a cockroach database. If the table name
 is omitted, dump all tables in the database.
 `,
 	RunE:         MaybeDecorateGRPCError(runDump),
-	SilenceUsage: true,
 }
 
 func runDump(cmd *cobra.Command, args []string) error {
