@@ -208,8 +208,7 @@ var getZoneCmd = &cobra.Command{
 Fetches and displays the zone configuration for the specified database or
 table.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runGetZone),
+	RunE: MaybeDecorateGRPCError(runGetZone),
 }
 
 // runGetZone retrieves the zone config for a given object id,
@@ -270,8 +269,7 @@ var lsZonesCmd = &cobra.Command{
 	Long: `
 List zone configs.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runLsZones),
+	RunE: MaybeDecorateGRPCError(runLsZones),
 }
 
 func runLsZones(cmd *cobra.Command, args []string) error {
@@ -344,8 +342,7 @@ var rmZoneCmd = &cobra.Command{
 	Long: `
 Remove an existing zone config for the specified database or table.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runRmZone),
+	RunE: MaybeDecorateGRPCError(runRmZone),
 }
 
 func runRmZone(cmd *cobra.Command, args []string) error {
@@ -414,8 +411,7 @@ EOF
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runSetZone),
+	RunE: MaybeDecorateGRPCError(runSetZone),
 }
 
 func readZoneConfig() (conf []byte, err error) {
