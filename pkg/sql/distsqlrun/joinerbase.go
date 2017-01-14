@@ -25,9 +25,9 @@ import (
 )
 
 type joinerBase struct {
-	inputs []RowSource
-	output RowReceiver
-	ctx    context.Context
+	ctx                     context.Context
+	leftSource, rightSource RowSource
+	output                  RowReceiver
 
 	joinType    joinType
 	outputCols  columns
@@ -40,24 +40,26 @@ type joinerBase struct {
 
 func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
-	inputs []RowSource,
+	leftSource RowSource,
+	rightSource RowSource,
 	output RowReceiver,
 	outputCols []uint32,
 	jType JoinType,
-	leftTypes []sqlbase.ColumnType,
-	rightTypes []sqlbase.ColumnType,
 	expr Expression,
 ) error {
-	jb.inputs = inputs
+	jb.leftSource = leftSource
+	jb.rightSource = rightSource
 	jb.output = output
 	jb.ctx = log.WithLogTag(flowCtx.Context, "Joiner", nil)
 	jb.outputCols = columns(outputCols)
 	jb.joinType = joinType(jType)
+
+	leftTypes := leftSource.Types()
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
 		jb.emptyLeft[i].Datum = parser.DNull
 	}
-
+	rightTypes := rightSource.Types()
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
 		jb.emptyRight[i].Datum = parser.DNull
