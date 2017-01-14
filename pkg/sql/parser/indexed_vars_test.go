@@ -89,7 +89,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	typ := typedExpr.ResolvedType()
-	if !typ.Equal(TypeInt) {
+	if !typ.Equivalent(TypeInt) {
 		t.Errorf("invalid expression type %s", typ)
 	}
 	d, err := typedExpr.Eval(&EvalContext{})

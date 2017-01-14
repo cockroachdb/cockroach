@@ -724,7 +724,7 @@ func IsNumericOne(expr TypedExpr) bool {
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
 func ReType(expr TypedExpr, wantedType Type) (TypedExpr, error) {
-	if expr.ResolvedType().Equal(wantedType) {
+	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}
 	reqType, err := DatumTypeToColumnType(wantedType)
