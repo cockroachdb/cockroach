@@ -48,9 +48,17 @@ func newEvaluator(
 		input:     input,
 		output:    output,
 		specExprs: spec.Exprs,
-		ctx:       log.WithLogTag(flowCtx.Context, "Evaluator", nil),
+		ctx:       log.WithLogTag(flowCtx.Context, "eval", nil),
 		exprs:     make([]exprHelper, len(spec.Exprs)),
 		exprTypes: make([]sqlbase.ColumnType, len(spec.Exprs)),
+	}
+
+	types := input.Types()
+	for i, expr := range ev.specExprs {
+		if err := ev.exprs[i].init(expr, types, ev.flowCtx.evalCtx); err != nil {
+			return nil, err
+		}
+		ev.exprTypes[i] = sqlbase.DatumTypeToColumnType(ev.exprs[i].expr.ResolvedType())
 	}
 
 	return ev, nil
@@ -70,29 +78,11 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting evaluator")
 	}
 
-	first := true
 	for {
 		row, err := ev.input.NextRow()
 		if err != nil || row == nil {
 			ev.output.Close(err)
 			return
-		}
-
-		if first {
-			first = false
-
-			types := make([]sqlbase.ColumnType, len(row))
-			for i := range types {
-				types[i] = row[i].Type
-			}
-			for i, expr := range ev.specExprs {
-				err := ev.exprs[i].init(expr, types, ev.flowCtx.evalCtx)
-				if err != nil {
-					ev.output.Close(err)
-					return
-				}
-				ev.exprTypes[i] = sqlbase.DatumTypeToColumnType(ev.exprs[i].expr.ResolvedType())
-			}
 		}
 
 		outRow, err := ev.eval(row)
