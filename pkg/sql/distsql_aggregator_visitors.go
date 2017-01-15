@@ -29,16 +29,16 @@ import (
 )
 
 type aggExprVisitor struct {
-	exprs []distsqlrun.AggregatorSpec_Expr
+	exprs []distsqlrun.AggregatorSpec_Aggregation
 	err   error
 }
 
 var _ parser.Visitor = &aggExprVisitor{}
 
 // Our base case is when our expression is of type *aggregateFuncHolder, in
-// which case we construct the equivalent AggregatorSpec_Expr and accumulate it.
-// If our expression is NOT of the type *aggregateFuncHolder we may have an
-// expression like 'COUNT(k) + 1', we recurse.
+// which case we construct the equivalent AggregatorSpec_Aggregation and
+// accumulate it. If our expression is NOT of the type *aggregateFuncHolder we
+// may have an expression like 'COUNT(k) + 1', we recurse.
 func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 	if v.err != nil {
 		return false, expr
@@ -53,7 +53,7 @@ func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 	// expression that also appears as one of the GROUP BY expressions.
 	f, ok := fholder.expr.(*parser.FuncExpr)
 	if !ok || f.GetAggregateConstructor() == nil {
-		aggexpr := distsqlrun.AggregatorSpec_Expr{
+		aggexpr := distsqlrun.AggregatorSpec_Aggregation{
 			Func: distsqlrun.AggregatorSpec_IDENT,
 		}
 		v.exprs = append(v.exprs, aggexpr)
@@ -69,7 +69,7 @@ func (v *aggExprVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 		return false, expr
 	}
 
-	aggexpr := distsqlrun.AggregatorSpec_Expr{
+	aggexpr := distsqlrun.AggregatorSpec_Aggregation{
 		Func:     distsqlrun.AggregatorSpec_Func(funcIdx),
 		Distinct: f.Type == parser.DistinctFuncType,
 	}
@@ -83,7 +83,7 @@ func (v *aggExprVisitor) VisitPost(expr parser.Expr) parser.Expr {
 
 func (v aggExprVisitor) extract(
 	typedExpr parser.TypedExpr,
-) ([]distsqlrun.AggregatorSpec_Expr, error) {
+) ([]distsqlrun.AggregatorSpec_Aggregation, error) {
 	parser.WalkExprConst(&v, typedExpr)
 	return v.exprs, v.err
 }
@@ -115,7 +115,7 @@ func (v aggExprVisitor) extract(
 //   postAggExprVisitor.
 func (dsp *distSQLPlanner) extractAggExprs(
 	render []parser.TypedExpr,
-) (aggExprs []distsqlrun.AggregatorSpec_Expr, err error) {
+) (aggExprs []distsqlrun.AggregatorSpec_Aggregation, err error) {
 	v := aggExprVisitor{}
 	for _, expr := range render {
 		exprs, err := v.extract(expr)

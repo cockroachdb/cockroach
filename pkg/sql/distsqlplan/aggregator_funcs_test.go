@@ -128,8 +128,8 @@ func checkDistAggregationInfo(
 				},
 			}},
 			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-				Types: []sqlbase.ColumnType{colType},
-				Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: fn, ColIdx: 0}},
+				Types:        []sqlbase.ColumnType{colType},
+				Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: fn, ColIdx: 0}},
 			}},
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
@@ -159,8 +159,8 @@ func checkDistAggregationInfo(
 			Type: distsqlrun.InputSyncSpec_UNORDERED,
 		}},
 		Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-			Types: []sqlbase.ColumnType{intermediaryType},
-			Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: info.FinalStage, ColIdx: 0}},
+			Types:        []sqlbase.ColumnType{intermediaryType},
+			Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: info.FinalStage, ColIdx: 0}},
 		}},
 		Output: []distsqlrun.OutputRouterSpec{{
 			Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
@@ -180,8 +180,8 @@ func checkDistAggregationInfo(
 				},
 			}},
 			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-				Types: []sqlbase.ColumnType{colType},
-				Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: info.LocalStage, ColIdx: 0}},
+				Types:        []sqlbase.ColumnType{colType},
+				Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: info.LocalStage, ColIdx: 0}},
 			}},
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
