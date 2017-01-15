@@ -84,16 +84,16 @@ func newAggregator(
 		ctx:         log.WithLogTag(ctx.Context, "Agg", nil),
 		rows:        &RowBuffer{},
 		buckets:     make(map[string]struct{}),
-		inputCols:   make(columns, len(spec.Exprs)),
-		funcs:       make([]*aggregateFuncHolder, len(spec.Exprs)),
-		outputTypes: make([]sqlbase.ColumnType, len(spec.Exprs)),
+		inputCols:   make(columns, len(spec.Aggregations)),
+		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
+		outputTypes: make([]sqlbase.ColumnType, len(spec.Aggregations)),
 		groupCols:   make(columns, len(spec.GroupCols)),
 	}
 
-	inputTypes := make([]sqlbase.ColumnType, len(spec.Exprs))
-	for i, expr := range spec.Exprs {
-		ag.inputCols[i] = expr.ColIdx
-		inputTypes[i] = spec.Types[expr.ColIdx]
+	inputTypes := make([]sqlbase.ColumnType, len(spec.Aggregations))
+	for i, aggInfo := range spec.Aggregations {
+		ag.inputCols[i] = aggInfo.ColIdx
+		inputTypes[i] = spec.Types[aggInfo.ColIdx]
 	}
 	copy(ag.groupCols, spec.GroupCols)
 
@@ -104,14 +104,14 @@ func newAggregator(
 	// the functions which need to be fed values.
 	eh := &exprHelper{types: inputTypes}
 	eh.vars = parser.MakeIndexedVarHelper(eh, len(eh.types))
-	for i, expr := range spec.Exprs {
-		aggConstructor, retType, err := GetAggregateInfo(expr.Func, inputTypes[i])
+	for i, aggInfo := range spec.Aggregations {
+		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, inputTypes[i])
 		if err != nil {
 			return nil, err
 		}
 
 		ag.funcs[i] = ag.newAggregateFuncHolder(aggConstructor)
-		if expr.Distinct {
+		if aggInfo.Distinct {
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
 

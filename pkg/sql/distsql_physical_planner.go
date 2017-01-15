@@ -801,12 +801,12 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 func (dsp *distSQLPlanner) addAggregators(
 	planCtx *planningCtx, p *physicalPlan, n *groupNode,
 ) error {
-	aggExprs, err := dsp.extractAggExprs(n.render)
+	aggregations, err := dsp.extractAggExprs(n.render)
 	if err != nil {
 		return err
 	}
-	for i := range aggExprs {
-		aggExprs[i].ColIdx = uint32(p.planToStreamColMap[i])
+	for i := range aggregations {
+		aggregations[i].ColIdx = uint32(p.planToStreamColMap[i])
 	}
 
 	types := dsp.getTypesForPlanResult(p.planToStreamColMap, n.plan)
@@ -842,7 +842,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	if prevStageNode == 0 {
 		// Check that all aggregation functions support a local stage.
 		multiStage = true
-		for _, e := range aggExprs {
+		for _, e := range aggregations {
 			if e.Distinct {
 				// We can't do local aggregation for functions with distinct (at least not
 				// in general).
@@ -869,23 +869,23 @@ func (dsp *distSQLPlanner) addAggregators(
 
 	if !multiStage {
 		finalAggSpec = distsqlrun.AggregatorSpec{
-			Exprs:     aggExprs,
-			Types:     types,
-			GroupCols: groupCols,
+			Aggregations: aggregations,
+			Types:        types,
+			GroupCols:    groupCols,
 		}
 	} else {
-		localExprs := make([]distsqlrun.AggregatorSpec_Expr, len(aggExprs)+len(groupCols))
-		finalTypes := make([]sqlbase.ColumnType, len(aggExprs)+len(groupCols))
-		finalExprs := make([]distsqlrun.AggregatorSpec_Expr, len(aggExprs))
+		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, len(aggregations)+len(groupCols))
+		finalTypes := make([]sqlbase.ColumnType, len(aggregations)+len(groupCols))
+		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, len(aggregations))
 		finalGroupCols := make([]uint32, len(groupCols))
 
-		for i, e := range aggExprs {
+		for i, e := range aggregations {
 			info := distsqlplan.DistAggregationTable[e.Func]
-			localExprs[i] = distsqlrun.AggregatorSpec_Expr{
+			localAgg[i] = distsqlrun.AggregatorSpec_Aggregation{
 				Func:   info.LocalStage,
 				ColIdx: e.ColIdx,
 			}
-			finalExprs[i] = distsqlrun.AggregatorSpec_Expr{
+			finalAgg[i] = distsqlrun.AggregatorSpec_Aggregation{
 				Func: info.FinalStage,
 				// The input of the i-th final expression is the output of the i-th
 				// local expression.
@@ -901,8 +901,8 @@ func (dsp *distSQLPlanner) addAggregators(
 		// Add IDENT expressions for the group columns; these need to be part of the
 		// output of the local stage because the final stage needs them.
 		for i, groupColIdx := range groupCols {
-			exprIdx := len(aggExprs) + i
-			localExprs[exprIdx] = distsqlrun.AggregatorSpec_Expr{
+			exprIdx := len(aggregations) + i
+			localAgg[exprIdx] = distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_IDENT,
 				ColIdx: groupColIdx,
 			}
@@ -911,9 +911,9 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 
 		localAggSpec := distsqlrun.AggregatorSpec{
-			Exprs:     localExprs,
-			Types:     types,
-			GroupCols: groupCols,
+			Aggregations: localAgg,
+			Types:        types,
+			GroupCols:    groupCols,
 		}
 
 		dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Aggregator: &localAggSpec})
@@ -921,9 +921,9 @@ func (dsp *distSQLPlanner) addAggregators(
 		p.ordering = orderingTerminated
 
 		finalAggSpec = distsqlrun.AggregatorSpec{
-			Exprs:     finalExprs,
-			Types:     finalTypes,
-			GroupCols: finalGroupCols,
+			Aggregations: finalAgg,
+			Types:        finalTypes,
+			GroupCols:    finalGroupCols,
 		}
 	}
 
