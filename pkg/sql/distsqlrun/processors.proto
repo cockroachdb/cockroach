@@ -241,7 +241,7 @@ message AggregatorSpec {
     VARIANCE = 12;
   }
 
-  message Expr {
+  message Aggregation {
     optional Func func = 1 [(gogoproto.nullable) = false];
 
     // Aggregation functions with distinct = true functions like you would
@@ -259,8 +259,7 @@ message AggregatorSpec {
   // basis of which we define our groups.
   repeated uint32 group_cols = 2;
 
-  // Exprs represents the SELECT expressions.
-  repeated Expr exprs = 3 [(gogoproto.nullable) = false];
+  repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
