@@ -41,6 +41,10 @@ many Unix-like systems, use "--path=/usr/local/share/man/man1".
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return usageAndError(cmd)
+	}
+
 	info := build.GetInfo()
 	header := &doc.GenManHeader{
 		Section: "1",
@@ -92,6 +96,9 @@ package (or an equivalent) and follow the post-install instructions.
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return usageAndError(cmd)
+	}
 	if err := cmd.Root().GenBashCompletionFile(autoCompletePath); err != nil {
 		return err
 	}

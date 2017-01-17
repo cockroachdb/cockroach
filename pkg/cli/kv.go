@@ -74,8 +74,7 @@ var getCmd = &cobra.Command{
 	Long: `
 Fetches and displays the value for <key>.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runGet),
+	RunE: MaybeDecorateGRPCError(runGet),
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
@@ -114,8 +113,7 @@ in pairs on the command line.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runPut),
+	RunE: MaybeDecorateGRPCError(runPut),
 }
 
 func runPut(cmd *cobra.Command, args []string) error {
@@ -156,8 +154,7 @@ pass nil for expValue. The expValue defaults to 1 if not specified.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runCPut),
+	RunE: MaybeDecorateGRPCError(runCPut),
 }
 
 func runCPut(cmd *cobra.Command, args []string) error {
@@ -201,8 +198,7 @@ flags.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runInc),
+	RunE: MaybeDecorateGRPCError(runInc),
 }
 
 func runInc(cmd *cobra.Command, args []string) error {
@@ -246,8 +242,7 @@ Deletes the values of one or more keys.
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runDel),
+	RunE: MaybeDecorateGRPCError(runDel),
 }
 
 func runDel(cmd *cobra.Command, args []string) error {
@@ -283,8 +278,7 @@ Deletes the values for the range of keys [startKey, endKey).
 
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runDelRange),
+	RunE: MaybeDecorateGRPCError(runDelRange),
 }
 
 func runDelRange(cmd *cobra.Command, args []string) error {
@@ -323,8 +317,7 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
 are retrieved.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runScan),
+	RunE: MaybeDecorateGRPCError(runScan),
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -361,8 +354,7 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
 are retrieved.
 `,
-	SilenceUsage: true,
-	RunE:         MaybeDecorateGRPCError(runReverseScan),
+	RunE: MaybeDecorateGRPCError(runReverseScan),
 }
 
 func runReverseScan(cmd *cobra.Command, args []string) error {
