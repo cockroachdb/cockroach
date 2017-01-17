@@ -546,8 +546,8 @@ export class GraphLineState {
 // graph lines. This will cause all the graph lines to appear. It also sets the
 // mouseIn state to true which is used to hide the guideline on the current
 // graph in favor of the nvd3 line.
-export function mouseEnter(_node: React.Component<any, GraphLineState>) {
-  this.setState({
+export function mouseEnter(node: React.Component<any, GraphLineState>) {
+  node.setState({
     mouseIn: true,
   });
   d3.select(".graph-lines").classed("graph-lines--show", true);
@@ -566,8 +566,8 @@ export function mouseMove() {
 // .graph-lines class which will cause all the graph lines to be hidden. It also
 // sets the mouseIn state to false so that the current graph's guideline will
 // appear when hovering over a different graph.
-export function mouseLeave(_node: React.Component<any, GraphLineState>) {
-  this.setState({
+export function mouseLeave(node: React.Component<any, GraphLineState>) {
+  node.setState({
     mouseIn: false,
   });
   d3.select(".graph-lines").classed("graph-lines--show", false);
