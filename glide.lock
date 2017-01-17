@@ -1,8 +1,8 @@
 hash: 0ba4cc5ad36884d66ee6111a5bd9bbd50057f50fb90089afa05993ac8ebfff81
-updated: 2017-02-08T15:51:59.5049392Z
+updated: 2017-02-09T19:31:29.197399967Z
 imports:
 - name: cloud.google.com/go
-  version: ce650573d812270c64426f3df9fd220324d24b2f
+  version: f5cbda1ef7bb2bedbbab5338045e1c265bf854a4
   subpackages:
   - compute/metadata
   - internal
@@ -12,6 +12,10 @@ imports:
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/agtorre/gocolorize
   version: f42b554bf7f006936130c9bb4f971afd2d87f671
+- name: github.com/Azure/azure-sdk-for-go
+  version: 8e625d1702a32d01cef05a9252198d231c4af113
+  subpackages:
+  - storage
 - name: github.com/Azure/go-ansiterm
   version: fa152c58bc15761d0200cb75fe958b89a9d4888e
   subpackages:
@@ -116,7 +120,7 @@ imports:
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/go-ole/go-ole
-  version: 5e9c030faf78847db7aa77e3661b9cc449de29b7
+  version: de8695c8edbf8236f30d6e1376e20b198a028d42
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
@@ -152,7 +156,7 @@ imports:
 - name: github.com/golang/glog
   version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/lint
-  version: 5295072ea38460cda1ff822cf6d30a7bf64329bd
+  version: 6d7efc48f3ecdd4fdd4035680f25173dbb22fdba
   subpackages:
   - golint
 - name: github.com/golang/protobuf
@@ -220,7 +224,7 @@ imports:
   - thrift_0_9_2/lib/go/thrift
   - thrift_rpc
 - name: github.com/mattn/go-isatty
-  version: 30a891c33c7cde7b02a981314b4228ec99380cca
+  version: 281032e84ae07510239465db46bf442aa44b953a
 - name: github.com/mattn/go-runewidth
   version: 14207d285c6c197daabb5c9793d63e7af9ab2d50
 - name: github.com/mattn/goveralls
@@ -297,7 +301,7 @@ imports:
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/StackExchange/wmi
-  version: e54cbda6595d7293a7a468ccf9525f6bc8887f99
+  version: e542ed97d15e640bdc14b5c12162d59e8fc67324
 - name: github.com/tebeka/go2xunit
   version: 5856a592616c62734bf27dac02b6b5f076f96ba6
   subpackages:
@@ -325,7 +329,7 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: 4464e7848382e6f39db55097f70e1460bdf944b3
+  version: de0725b330ab43c1a3d6c84d961cf01183783f1e
   subpackages:
   - google
   - internal
@@ -337,7 +341,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: dafb3384ad25363d928a9e97ce4ad3a2f0667e34
+  version: 06d6eba81293389cafdff7fca90d75592194b2d9
   subpackages:
   - collate
   - internal/colltab
@@ -349,7 +353,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 19c96be7c450e3dff3797cb1e458414c15010358
+  version: 44492e23b4afd3e75591994228422613777ee4ee
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -407,7 +411,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
 - name: honnef.co/go/tools
-  version: 401755ce93a601ab446c06d4c387277d426aeab8
+  version: dfe120846b54fbb9874bee649add493faf476fc9
   subpackages:
   - gcsizes
   - lint

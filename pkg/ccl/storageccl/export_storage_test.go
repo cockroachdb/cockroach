@@ -185,3 +185,30 @@ func TestPutGoogleCloud(t *testing.T) {
 			Prefix: "backup-test"},
 	})
 }
+
+func TestPutAzure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
+	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
+	if accountName == "" || accountKey == "" {
+		t.Skip("AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+	}
+	bucket := os.Getenv("AZURE_CONTAINER")
+	if bucket == "" {
+		t.Skip("AZURE_CONTAINER env var must be set")
+	}
+
+	// TODO(dt): this prevents leaking an http conn goroutine.
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
+	testExportToTarget(t, roachpb.ExportStorage{
+		Provider: roachpb.ExportStorageProvider_Azure,
+		AzureConfig: &roachpb.ExportStorage_Azure{
+			Container:   bucket,
+			Prefix:      "backup-test",
+			AccountName: accountName,
+			AccountKey:  accountKey,
+		},
+	})
+}

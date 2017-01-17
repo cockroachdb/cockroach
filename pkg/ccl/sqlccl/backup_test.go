@@ -239,6 +239,38 @@ func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
 	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
 }
 
+func TestBackupRestoreAzure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
+	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
+	if accountName == "" || accountKey == "" {
+		t.Skip("AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+	}
+	bucket := os.Getenv("AZURE_CONTAINER")
+	if bucket == "" {
+		t.Skip("AZURE_CONTAINER env var must be set")
+	}
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+
+	// TODO(dt): this prevents leaking an http conn goroutine.
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
+	ctx, _, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
+	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+	values := uri.Query()
+	values.Add(storageccl.AzureAccountNameParam, accountName)
+	values.Add(storageccl.AzureAccountKeyParam, accountKey)
+	uri.RawQuery = values.Encode()
+
+	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+}
+
 func backupAndRestore(
 	ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner, dest string, numAccounts int64,
 ) {
