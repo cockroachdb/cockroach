@@ -34,7 +34,7 @@ func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("BACKUP ")
 	FormatNode(buf, f, node.Targets)
 	buf.WriteString(" TO ")
-	encodeSQLString(buf, node.To)
+	encodeSQLStringWithFlags(buf, node.To, f)
 	if node.AsOf.Expr != nil {
 		buf.WriteString(" ")
 		FormatNode(buf, f, node.AsOf)
@@ -45,7 +45,7 @@ func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			encodeSQLString(buf, from)
+			encodeSQLStringWithFlags(buf, from, f)
 		}
 	}
 	if node.Options != nil {
@@ -74,7 +74,7 @@ func (node *Restore) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		encodeSQLString(buf, from)
+		encodeSQLStringWithFlags(buf, from, f)
 	}
 	if node.AsOf.Expr != nil {
 		buf.WriteString(" ")
@@ -102,10 +102,10 @@ func (l KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		encodeSQLString(buf, n.Key)
+		encodeSQLStringWithFlags(buf, n.Key, f)
 		if len(n.Value) != 0 {
 			buf.WriteString(`=`)
-			encodeSQLString(buf, n.Value)
+			encodeSQLStringWithFlags(buf, n.Value, f)
 		}
 	}
 }
