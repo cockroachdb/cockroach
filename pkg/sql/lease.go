@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -956,9 +957,12 @@ func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey 
 // LeaseManager.mu > tableState.mu > tableNameCache.mu > LeaseState.mu
 type LeaseManager struct {
 	LeaseStore
-	mu       syncutil.Mutex
-	draining bool
-	tables   map[sqlbase.ID]*tableState
+	mu struct {
+		syncutil.Mutex
+		tables map[sqlbase.ID]*tableState
+	}
+
+	draining atomic.Value
 
 	// tableNames is a cache for name -> id mappings. A mapping for the cache
 	// should only be used if we currently have an active lease on the respective
@@ -988,13 +992,18 @@ func NewLeaseManager(
 			testingKnobs: testingKnobs.LeaseStoreTestingKnobs,
 			memMetrics:   memMetrics,
 		},
-		tables:       make(map[sqlbase.ID]*tableState),
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{
 			tables: make(map[tableNameCacheKey]*LeaseState),
 		},
 		stopper: stopper,
 	}
+
+	lm.mu.Lock()
+	lm.mu.tables = make(map[sqlbase.ID]*tableState)
+	lm.mu.Unlock()
+
+	lm.draining.Store(false)
 	return lm
 }
 
@@ -1154,21 +1163,19 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 }
 
 func (m *LeaseManager) isDraining() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.draining
+	return m.draining.Load().(bool)
 }
 
 // SetDraining (when called with 'true') removes all inactive leases. Any leases
 // that are active will be removed once the lease's reference count drops to 0.
 func (m *LeaseManager) SetDraining(drain bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.draining = drain
+	m.draining.Store(drain)
 	if !drain {
 		return
 	}
-	for _, t := range m.tables {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.mu.tables {
 		t.mu.Lock()
 		t.releaseInactiveLeases(m.LeaseStore)
 		t.mu.Unlock()
@@ -1179,10 +1186,10 @@ func (m *LeaseManager) SetDraining(drain bool) {
 func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t := m.tables[tableID]
+	t := m.mu.tables[tableID]
 	if t == nil && create {
 		t = &tableState{id: tableID, tableNameCache: &m.tableNames, stopper: m.stopper}
-		m.tables[tableID] = t
+		m.mu.tables[tableID] = t
 	}
 	return t
 }
