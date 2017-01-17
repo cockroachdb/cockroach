@@ -113,7 +113,7 @@ func TestHashJoiner(t *testing.T) {
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_INNER,
 				OutputColumns:  []uint32{0, 1, 3},
-				Expr:           Expression{Expr: "@4 >= 4"},
+				OnExpr:         Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
@@ -281,7 +281,7 @@ func TestHashJoiner(t *testing.T) {
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_LEFT_OUTER,
 				OutputColumns:  []uint32{0, 1},
-				Expr:           Expression{Expr: "@2 > 1"},
+				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -308,7 +308,7 @@ func TestHashJoiner(t *testing.T) {
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_RIGHT_OUTER,
 				OutputColumns:  []uint32{0, 1},
-				Expr:           Expression{Expr: "@2 > 1"},
+				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
@@ -335,7 +335,7 @@ func TestHashJoiner(t *testing.T) {
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_FULL_OUTER,
 				OutputColumns:  []uint32{0, 1},
-				Expr:           Expression{Expr: "@2 > 1"},
+				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
 			inputs: []sqlbase.EncDatumRows{
 				{
