@@ -41,11 +41,8 @@ import (
 func TestDumpRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.stop(true)
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
 
 	const create = `
 	CREATE DATABASE d;
@@ -132,11 +129,8 @@ INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 func TestDumpFlags(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.stop(true)
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 
@@ -190,11 +184,8 @@ INSERT INTO f (x, y) VALUES
 func TestDumpMultipleTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.stop(true)
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "create table t.g (x int, y int); insert into t.g values (3, 4)"})
@@ -270,11 +261,8 @@ func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) er
 func TestDumpBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.stop(true)
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), "TestDumpBytes", url.User(security.RootUser))
 	defer cleanup()
@@ -337,11 +325,8 @@ func init() {
 func TestDumpRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c, err := newCLITest(t, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.stop(true)
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), "TestDumpRandom", url.User(security.RootUser))
 	defer cleanup()
