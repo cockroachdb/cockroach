@@ -397,6 +397,9 @@ statement error foreign key violation
 DELETE FROM employees WHERE id > 1
 
 statement ok
+DROP TABLE employees
+
+statement ok
 CREATE TABLE pairs (id INT PRIMARY KEY, src INT, dest STRING, UNIQUE (src, dest))
 
 statement ok
@@ -501,3 +504,9 @@ INSERT INTO crossdb VALUES (2)
 
 statement error foreign key violation: values \[2] in columns \[id\] referenced in table "crossdb"
 DELETE FROM otherdb.othertable WHERE id = 2
+
+statement error "othertable" is referenced by foreign key from table "crossdb"
+DROP TABLE otherdb.othertable
+
+statement ok
+DROP TABLE otherdb.othertable, crossdb
