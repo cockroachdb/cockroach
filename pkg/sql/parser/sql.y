@@ -104,6 +104,9 @@ func (u *sqlSymUnion) strVal() *StrVal {
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
 }
+func (u *sqlSymUnion) strPtr() *string {
+    return u.val.(*string)
+}
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
@@ -396,9 +399,8 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %type <ValidationBehavior> opt_validate_behavior
 
-%type <*StrVal> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-
-%type <*StrVal> opt_password
+%type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+%type <*string> opt_password
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
@@ -542,7 +544,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <UnresolvedName> var_name
 %type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
-%type <Expr>  non_reserved_word_or_sconst
+%type <str>   non_reserved_word_or_sconst
 %type <Expr>  var_value
 %type <Expr>  zone_value
 %type <[]string> string_list
@@ -966,7 +968,7 @@ alter_using:
 | /* EMPTY */ {}
 
 backup_stmt:
-  BACKUP targets TO SCONST opt_as_of_clause opt_incremental opt_with_options
+  BACKUP targets TO non_reserved_word_or_sconst opt_as_of_clause opt_incremental opt_with_options
   {
     /* SKIP DOC */
     $$.val = &Backup{Targets: $2.targetList(), To: $4, IncrementalFrom: $6.strs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
@@ -978,11 +980,11 @@ backup_stmt:
   }
 
 string_list:
-  SCONST
+  non_reserved_word_or_sconst
   {
     $$.val = []string{$1}
   }
-| string_list ',' SCONST
+| string_list ',' non_reserved_word_or_sconst
   {
     $$.val = append($1.strs(), $3)
   }
@@ -1499,6 +1501,9 @@ opt_boolean_or_string:
   // non_reserved_word rule. The action for booleans and strings is the same,
   // so we don't need to distinguish them here.
 | non_reserved_word_or_sconst
+  {
+    $$.val = &StrVal{s: $1}
+  }
 
 // Timezone values can be:
 // - a string such as 'pst8pdt'
@@ -1546,13 +1551,7 @@ opt_encoding:
 
 non_reserved_word_or_sconst:
   non_reserved_word
-  {
-    $$.val = &StrVal{s: $1}
-  }
 | SCONST
-  {
-    $$.val = &StrVal{s: $1}
-  }
 
 show_stmt:
   SHOW IDENT
@@ -2015,16 +2014,17 @@ truncate_stmt:
 create_user_stmt:
   CREATE USER name opt_with opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $5.strVal()}
+    $$.val = &CreateUser{Name: Name($3), Password: $5.strPtr()}
   }
 
 opt_password:
   PASSWORD SCONST
   {
-    $$.val = &StrVal{s: $2}
+    pwd := $2
+    $$.val = &pwd
   }
 | /* EMPTY */ {
-    $$.val = (*StrVal)(nil)
+    $$.val = (*string)(nil)
   }
 
 // CREATE VIEW relname
@@ -2274,10 +2274,10 @@ create_database_stmt:
   {
     $$.val = &CreateDatabase{
       Name: Name($3),
-      Template: $5.strVal(),
-      Encoding: $6.strVal(),
-      Collate: $7.strVal(),
-      CType: $8.strVal(),
+      Template: $5,
+      Encoding: $6,
+      Collate: $7,
+      CType: $8,
     }
   }
 | CREATE DATABASE IF NOT EXISTS name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
@@ -2285,51 +2285,51 @@ create_database_stmt:
     $$.val = &CreateDatabase{
       IfNotExists: true,
       Name: Name($6),
-      Template: $8.strVal(),
-      Encoding: $9.strVal(),
-      Collate: $10.strVal(),
-      CType: $11.strVal(),
+      Template: $8,
+      Encoding: $9,
+      Collate: $10,
+      CType: $11,
     }
   }
 
 opt_template_clause:
-  TEMPLATE opt_equal IDENT
+  TEMPLATE opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_encoding_clause:
-  ENCODING opt_equal SCONST
+  ENCODING opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_lc_collate_clause:
-  LC_COLLATE opt_equal SCONST
+  LC_COLLATE opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_lc_ctype_clause:
-  LC_CTYPE opt_equal SCONST
+  LC_CTYPE opt_equal non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $3}
+    $$ = $3
   }
 | /* EMPTY */
   {
-    $$.val = (*StrVal)(nil)
+    $$ = ""
   }
 
 opt_equal:
