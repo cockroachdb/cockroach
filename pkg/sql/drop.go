@@ -547,25 +547,38 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		if !droppedDesc.IsTable() {
 			return nil, sqlbase.NewWrongObjectTypeError(name.String(), "table")
 		}
+		td = append(td, droppedDesc)
+	}
 
+	dropping := make(map[sqlbase.ID]bool)
+	for _, d := range td {
+		dropping[d.ID] = true
+	}
+
+	for _, droppedDesc := range td {
 		for _, idx := range droppedDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
-				if _, err := p.canRemoveFK(droppedDesc.Name, ref, n.DropBehavior); err != nil {
-					return nil, err
+				if !dropping[ref.Table] {
+					if _, err := p.canRemoveFK(droppedDesc.Name, ref, n.DropBehavior); err != nil {
+						return nil, err
+					}
 				}
 			}
 			for _, ref := range idx.InterleavedBy {
-				if err := p.canRemoveInterleave(droppedDesc.Name, ref, n.DropBehavior); err != nil {
-					return nil, err
+				if !dropping[ref.Table] {
+					if err := p.canRemoveInterleave(droppedDesc.Name, ref, n.DropBehavior); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
-			if err := p.canRemoveDependentView(droppedDesc, ref, n.DropBehavior); err != nil {
-				return nil, err
+			if !dropping[ref.ID] {
+				if err := p.canRemoveDependentView(droppedDesc, ref, n.DropBehavior); err != nil {
+					return nil, err
+				}
 			}
 		}
-		td = append(td, droppedDesc)
 	}
 
 	if len(td) == 0 {
