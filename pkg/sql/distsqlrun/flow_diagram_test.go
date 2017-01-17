@@ -164,7 +164,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		LeftEqColumns:  []uint32{0, 2},
 		RightEqColumns: []uint32{2, 1},
 		OutputColumns:  []uint32{0, 1, 2, 3, 4, 5},
-		Expr:           Expression{Expr: "@1+@2<@6"},
+		OnExpr:         Expression{Expr: "@1+@2<@6"},
 	}
 
 	f1 := FlowSpec{

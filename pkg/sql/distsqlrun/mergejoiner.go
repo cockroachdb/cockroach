@@ -51,7 +51,7 @@ func newMergeJoiner(
 
 	m := &mergeJoiner{}
 	err := m.joinerBase.init(
-		flowCtx, leftSource, rightSource, output, spec.OutputColumns, spec.Type, spec.Expr,
+		flowCtx, leftSource, rightSource, output, spec.OutputColumns, spec.Type, spec.OnExpr,
 	)
 	if err != nil {
 		return nil, err
