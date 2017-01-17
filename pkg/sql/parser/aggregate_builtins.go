@@ -22,6 +22,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 func initAggregateBuiltins() {
@@ -136,6 +137,8 @@ var Aggregates = map[string][]Builtin{
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatSumAggregate,
 			"Calculates the sum of the selected values."),
 		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalSumAggregate,
+			"Calculates the sum of the selected values."),
+		makeAggBuiltin(TypeInterval, TypeInterval, newIntervalSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
@@ -625,6 +628,33 @@ func (a *floatSumAggregate) Result() Datum {
 		return DNull
 	}
 	return NewDFloat(DFloat(a.sum))
+}
+
+type intervalSumAggregate struct {
+	sum        duration.Duration
+	sawNonNull bool
+}
+
+func newIntervalSumAggregate() AggregateFunc {
+	return &intervalSumAggregate{}
+}
+
+// Add adds the value of the passed datum to the sum.
+func (a *intervalSumAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	t := datum.(*DInterval).Duration
+	a.sum = a.sum.Add(t)
+	a.sawNonNull = true
+}
+
+// Result returns the sum.
+func (a *intervalSumAggregate) Result() Datum {
+	if !a.sawNonNull {
+		return DNull
+	}
+	return &DInterval{Duration: a.sum}
 }
 
 type intVarianceAggregate struct {

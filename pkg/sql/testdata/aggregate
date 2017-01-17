@@ -540,6 +540,21 @@ SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
 ----
 1.75 3.5 3.0500000000000000 6.1
 
+# Verify summing of intervals
+statement ok
+CREATE TABLE intervals (
+  a INTERVAL PRIMARY KEY
+)
+
+statement ok
+INSERT INTO intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INTERVAL '2 year 3 months 4 days 5 seconds'), (INTERVAL '10000ms')
+
+query T
+SELECT SUM(a) FROM intervals
+----
+41m7d19s
+
+
 query error unknown signature: avg\(string\)
 SELECT AVG(a) FROM abc
 

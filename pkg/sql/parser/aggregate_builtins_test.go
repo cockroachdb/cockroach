@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -120,6 +121,10 @@ func TestSumDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalSumAggregate, makeDecimalTestDatum(10))
 }
 
+func TestSumIntervalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newIntervalSumAggregate, makeIntervalTestDatum(10))
+}
+
 func TestVarianceIntResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newIntVarianceAggregate, makeIntTestDatum(10))
 }
@@ -201,6 +206,19 @@ func makeBoolTestDatum(count int) []Datum {
 	vals := make([]Datum, count)
 	for i := range vals {
 		vals[i] = MakeDBool(DBool(rng.Int31n(2) == 0))
+	}
+	return vals
+}
+
+func makeIntervalTestDatum(count int) []Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]Datum, count)
+	for i := range vals {
+		vals[i] = &DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
+			Days:  rng.Int63n(1000),
+			Nanos: rng.Int63n(1000000),
+		}}
 	}
 	return vals
 }
