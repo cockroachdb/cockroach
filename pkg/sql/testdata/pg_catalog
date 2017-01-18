@@ -52,6 +52,7 @@ pg_constraint
 pg_database
 pg_depend
 pg_description
+pg_enum
 pg_index
 pg_indexes
 pg_namespace
@@ -848,6 +849,13 @@ query IIIT colnames
 SELECT * FROM pg_catalog.pg_description
 ----
 objoid  classoid  objsubid  description
+
+## pg_catalog.pg_enum
+
+query IIRT colnames
+SELECT * FROM pg_catalog.pg_enum
+----
+oid  enumtypid  enumsortorder  enumlabel
 
 ## pg_catalog.pg_settings
 

@@ -57,6 +57,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogDatabaseTable,
 		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
+		pgCatalogEnumTable,
 		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
@@ -682,6 +683,22 @@ CREATE TABLE pg_catalog.pg_description (
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		// Comments on database objects are not currently supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-enum.html.
+var pgCatalogEnumTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_enum (
+  oid INT,
+  enumtypid INT,
+  enumsortorder FLOAT,
+  enumlabel STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Enum types are not currently supported.
 		return nil
 	},
 }
