@@ -277,13 +277,29 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		if err := is.addInfo(fmt.Sprintf("b.%d", i), inf); err != nil {
 			t.Fatal(err)
 		}
-		nodeID, hops := is.mostDistant()
+		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
 		if nodeID != inf.NodeID {
 			t.Errorf("%d: expected node %d; got %d", i, inf.NodeID, nodeID)
 		}
 		if hops != inf.Hops {
 			t.Errorf("%d: expected node %d; got %d", i, inf.Hops, hops)
 		}
+	}
+
+	// Finally, simulate a Gossip instance that has an outgoing connection
+	// and expect the outgoing connection to not be recommended even though
+	// it's the furthest node away.
+	filteredNode := nodes[len(nodes)-1]
+	expectedNode := nodes[len(nodes)-2]
+	expectedHops := expectedNode
+	nodeID, hops := is.mostDistant(func(nodeID roachpb.NodeID) bool {
+		return nodeID == filteredNode
+	})
+	if nodeID != expectedNode {
+		t.Errorf("expected node %d; got %d", expectedNode, nodeID)
+	}
+	if hops != uint32(expectedHops) {
+		t.Errorf("expected node %d; got %d", expectedHops, hops)
 	}
 }
 

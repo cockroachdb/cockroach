@@ -38,9 +38,9 @@ the system with minimal total hops. The algorithm is as follows:
       received, the client in question is credited. If node has no
       outgoing connections, goto #1.
 
-   b. If any gossip was received at > MaxHops and num connected peers
+   b. If any gossip was received at > maxHops and num connected peers
       < maxPeers(), choose random peer from those originating Info >
-      MaxHops, start it, and goto #2.
+      maxHops, start it, and goto #2.
 
    c. If sentinel gossip keyed by KeySentinel is missing or expired,
       node is considered partitioned; goto #1.
@@ -87,10 +87,10 @@ import (
 )
 
 const (
-	// MaxHops is the maximum number of hops which any gossip info
+	// maxHops is the maximum number of hops which any gossip info
 	// should require to transit between any two nodes in a gossip
 	// network.
-	MaxHops = 5
+	maxHops = 5
 
 	// minPeers is the minimum number of peers which the maxPeers()
 	// function will return. This is set higher than one to prevent
@@ -351,7 +351,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	for _, addr := range storedBI.Addresses {
 		// If the address is new, and isn't our own address, add it.
 		if _, ok := existing[makeKey(addr)]; !ok && addr != g.mu.is.NodeAddr {
-			g.maybeAddBootstrapAddress(addr, unknownNodeID)
+			g.maybeAddBootstrapAddressLocked(addr, unknownNodeID)
 		}
 	}
 	// Persist merged addresses.
@@ -365,7 +365,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// any which haven't already been added.
 	newResolverFound := false
 	for _, addr := range g.bootstrapInfo.Addresses {
-		if !g.maybeAddResolver(addr) {
+		if !g.maybeAddResolverLocked(addr) {
 			continue
 		}
 		// If we find a new resolver, reset the resolver index so that the
@@ -483,10 +483,10 @@ func (g *Gossip) SimulationCycle() {
 	}
 }
 
-// maybeAddResolver creates and adds a resolver for the specified
+// maybeAddResolverLocked creates and adds a resolver for the specified
 // address if one does not already exist. Returns whether a new
 // resolver was added. The caller must hold the gossip mutex.
-func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
+func (g *Gossip) maybeAddResolverLocked(addr util.UnresolvedAddr) bool {
 	if _, ok := g.resolverAddrs[addr]; ok {
 		return false
 	}
@@ -502,10 +502,12 @@ func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
 	return true
 }
 
-// maybeAddBootstrapAddress adds the specified address to the list of
-// bootstrap addresses if not already present. Returns whether a new
+// maybeAddBootstrapAddressLocked adds the specified address to the list
+// of bootstrap addresses if not already present. Returns whether a new
 // bootstrap address was added. The caller must hold the gossip mutex.
-func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr, nodeID roachpb.NodeID) bool {
+func (g *Gossip) maybeAddBootstrapAddressLocked(
+	addr util.UnresolvedAddr, nodeID roachpb.NodeID,
+) bool {
 	if existingNodeID, ok := g.bootstrapAddrs[addr]; ok {
 		if existingNodeID == unknownNodeID || existingNodeID != nodeID {
 			g.bootstrapAddrs[addr] = nodeID
@@ -546,8 +548,8 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 			if desc.Address.IsEmpty() || desc.Address == g.mu.is.NodeAddr {
 				return nil
 			}
-			g.maybeAddResolver(desc.Address)
-			g.maybeAddBootstrapAddress(desc.Address, desc.NodeID)
+			g.maybeAddResolverLocked(desc.Address)
+			g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 		}
 		return nil
 	}); err != nil {
@@ -566,10 +568,17 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 // will seek to "tighten" by creating new connections to distant
 // nodes.
 func maxPeers(nodeCount int) int {
-	// This formula uses MaxHops-1, instead of MaxHops, to provide a
+	// This formula uses maxHops-1, instead of maxHops, to provide a
 	// "fudge" factor for max connected peers, to account for the
 	// arbitrary, decentralized way in which gossip networks are created.
-	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	//
+	// Quick derivation of the formula for posterity (without the fudge factor):
+	// maxPeers^maxHops > nodeCount
+	// maxHops * log(maxPeers) > log(nodeCount)
+	// log(maxPeers) > log(nodeCount) / maxHops
+	// maxPeers > e^(log(nodeCount) / maxHops)
+	// hence maxPeers = ceil(e^(log(nodeCount) / maxHops)) should work
+	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(maxHops-1))))
 	if maxPeers < minPeers {
 		return minPeers
 	}
@@ -625,7 +634,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// Add this new node address (if it's not already there) to our list
 	// of resolvers so we can keep connecting to gossip if the original
 	// resolvers go offline.
-	g.maybeAddResolver(desc.Address)
+	g.maybeAddResolverLocked(desc.Address)
 
 	// We ignore empty addresses for the sake of not breaking the many tests
 	// that don't bother specifying addresses.
@@ -659,7 +668,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	}
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
-	added := g.maybeAddBootstrapAddress(desc.Address, desc.NodeID)
+	added := g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 	if added && g.storage != nil {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
 			log.Error(ctx, err)
@@ -674,6 +683,13 @@ func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
+//
+// Note: if we notice issues with never-ending connection refused errors
+// in real deployments, consider allowing more incoming connections than
+// outgoing connections. As of now, the cluster's steady state is to have
+// all nodes fill up, which can make rebalancing of connections tough.
+// I'm not making this change now since it tends to lead to less balanced
+// networks and I'm not sure what all the consequences of that might be.
 func (g *Gossip) recomputeMaxPeersLocked() {
 	maxPeers := maxPeers(len(g.nodeDescs))
 	g.mu.incoming.setMaxSize(maxPeers)
@@ -898,7 +914,7 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 func (g *Gossip) MaxHops() uint32 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	_, maxHops := g.mu.is.mostDistant()
+	_, maxHops := g.mu.is.mostDistant(func(_ roachpb.NodeID) bool { return false })
 	return maxHops
 }
 
@@ -930,14 +946,29 @@ func (g *Gossip) hasIncomingLocked(nodeID roachpb.NodeID) bool {
 // client matching the provided node ID. Mutex should be held by
 // caller.
 func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
-	return g.outgoing.hasNode(nodeID)
+	// We have to use findClient and compare node addresses rather than using the
+	// outgoing nodeSet due to the way that outgoing clients' node IDs are only
+	// resolved once the connection has been established (rather than as soon as
+	// we've created it).
+	nodeAddr, err := g.getNodeIDAddressLocked(nodeID)
+	if err != nil {
+		// If we don't have the address, fall back to using the outgoing nodeSet
+		// since at least it's better than nothing.
+		ctx := g.AnnotateCtx(context.TODO())
+		log.Errorf(ctx, "unable to get address for node %d: %s", nodeID, err)
+		return g.outgoing.hasNode(nodeID)
+	}
+	c := g.findClient(func(c *client) bool {
+		return c.addr.String() == nodeAddr.String()
+	})
+	return c != nil
 }
 
 // getNextBootstrapAddress returns the next available bootstrap
 // address by consulting the first non-exhausted resolver from the
 // slice supplied to the constructor or set using setBootstrap().
 // The lock is assumed held.
-func (g *Gossip) getNextBootstrapAddress() net.Addr {
+func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 	// Run through resolvers round robin starting at last resolved index.
 	for i := 0; i < len(g.resolvers); i++ {
 		g.resolverIdx++
@@ -983,8 +1014,8 @@ func (g *Gossip) bootstrap() {
 				log.Eventf(ctx, "have clients: %t, have sentinel: %t", haveClients, haveSentinel)
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
-					if addr := g.getNextBootstrapAddress(); addr != nil {
-						g.startClient(addr)
+					if addr := g.getNextBootstrapAddressLocked(); addr != nil {
+						g.startClientLocked(addr)
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
 						for addr := range g.bootstrapping {
@@ -1024,10 +1055,10 @@ func (g *Gossip) bootstrap() {
 }
 
 // manage manages outgoing clients. Periodically, the infostore is
-// scanned for infos with hop count exceeding the MaxHops
+// scanned for infos with hop count exceeding the maxHops
 // threshold. If the number of outgoing clients doesn't exceed
 // maxPeers(), a new gossip client is connected to a randomly selected
-// peer beyond MaxHops threshold. Otherwise, the least useful peer
+// peer beyond maxHops threshold. Otherwise, the least useful peer
 // node is cut off to make room for a replacement. Disconnected
 // clients are processed via the disconnected channel and taken out of
 // the outgoing address set. If there are no longer any outgoing
@@ -1046,8 +1077,8 @@ func (g *Gossip) manage() {
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(c)
-			case nodeID := <-g.tighten:
-				g.tightenNetwork(nodeID)
+			case <-g.tighten:
+				g.tightenNetwork(ctx)
 			case <-cullTicker.C:
 				func() {
 					g.mu.Lock()
@@ -1092,27 +1123,26 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }
 
-// tightenNetwork "tightens" the network by starting a new gossip
-// client to the provided node, which ideally should be the most distant
-// node from this one in terms of gossip hops.
-func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
+// tightenNetwork "tightens" the network by starting a new gossip client to the
+// client to the most distant node to which we don't already have an outgoing
+// connection. Does nothing if we don't have room for any more outgoing
+// connections.
+func (g *Gossip) tightenNetwork(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.outgoing.hasSpace() {
-		ctx := g.AnnotateCtx(context.TODO())
+		distantNodeID, distantHops := g.mu.is.mostDistant(g.hasOutgoingLocked)
+		log.VEventf(ctx, 2, "distantHops: %d from %d", distantHops, distantNodeID)
+		if distantHops <= maxHops {
+			return
+		}
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(ctx, "unable to get address for node %d: %s", distantNodeID, err)
+			log.Errorf(ctx, "unable to get address for distant node %d: %s", distantNodeID, err)
 		} else {
-			// Avoid opening a second connection to a node that we're already connected
-			// (or in the process of connecting) to.
-			if c := g.findClient(func(candidate *client) bool {
-				return candidate.addr == nodeAddr
-			}); c != nil {
-				return
-			}
-			log.Infof(ctx, "starting client to distant node %d to tighten network graph", distantNodeID)
+			log.Infof(ctx, "starting client to distant node %d (%d > %d) to tighten network graph",
+				distantNodeID, distantHops, maxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
-			g.startClient(nodeAddr)
+			g.startClientLocked(nodeAddr)
 		}
 	}
 }
@@ -1120,11 +1150,11 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 func (g *Gossip) doDisconnected(c *client) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.removeClient(c)
+	g.removeClientLocked(c)
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr)
+		g.startClientLocked(c.forwardAddr)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
@@ -1192,10 +1222,10 @@ func (g *Gossip) signalConnectedLocked() {
 	}
 }
 
-// startClient launches a new client connected to remote address.
+// startClientLocked launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr) {
+func (g *Gossip) startClientLocked(addr net.Addr) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
@@ -1210,9 +1240,9 @@ func (g *Gossip) startClient(addr net.Addr) {
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
 }
 
-// removeClient removes the specified client. Called when a client
+// removeClientLocked removes the specified client. Called when a client
 // disconnects.
-func (g *Gossip) removeClient(target *client) {
+func (g *Gossip) removeClientLocked(target *client) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	for i, candidate := range g.clientsMu.clients {

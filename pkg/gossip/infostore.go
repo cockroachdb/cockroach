@@ -369,13 +369,21 @@ func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[str
 	return infos
 }
 
-// mostDistant returns the most distant gossip node known to the
-// store as well as the number of hops to reach it.
-func (is *infoStore) mostDistant() (roachpb.NodeID, uint32) {
+// mostDistant returns the most distant gossip node known to the store
+// as well as the number of hops to reach it.
+//
+// Uses haveOutgoingConn to check for whether or not this node is already
+// in the process of connecting to a given node (but haven't yet received
+// Infos from it) for the purposes of excluding them from the result.
+// This check is particularly useful if mostDistant is called multiple times
+// in quick succession.
+func (is *infoStore) mostDistant(
+	hasOutgoingConn func(roachpb.NodeID) bool,
+) (roachpb.NodeID, uint32) {
 	var nodeID roachpb.NodeID
 	var maxHops uint32
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.Hops > maxHops {
+		if i.Hops > maxHops && !hasOutgoingConn(i.NodeID) {
 			maxHops = i.Hops
 			nodeID = i.NodeID
 		}
