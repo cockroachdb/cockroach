@@ -1438,3 +1438,9 @@ CREATE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
 
 query error pq: unknown signature: pg_catalog.pg_get_indexdef\(int, int, bool\)
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
+
+# This function always returns NULL since we don't support column comments.
+query T
+SELECT col_description('pg_class'::regclass::oid, 2)
+----
+NULL
