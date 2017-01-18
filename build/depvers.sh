@@ -22,14 +22,12 @@ function visit() {
   return 1
 }
 
-# List the current package and all of the dependencies which are not
-# part of the standard library (i.e. packages that contain a least one
-# dot in the first component of their name).
-pkgs=$(go list -f '{{printf "%s\n" .ImportPath}}{{range .Deps}}{{printf "%s\n" .}}{{end}}' . 2>/dev/null | \
-  sort -u | egrep '[^/]+\.[^/]+/')
+# List the current package and all of the dependencies.
+pkgs=$(go list -f '{{.ImportPath}}{{"\n"}}{{join .Deps "\n" }}' . | sort -u)
 
-# For each package, list the package directory and package root.
-pkginfo=($(go list -f '{{.Dir}} {{.Root}}' ${pkgs} 2>/dev/null))
+# For each package which is not part of the standard library, list the package
+# directory and package root.
+pkginfo=$(echo "$pkgs" | xargs go list -f '{{if not .Standard}}{{.Dir}} {{.Root}}{{end}}')
 
 # Loop over the package info which comes in pairs in the pkginfo
 # array.
