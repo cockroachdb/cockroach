@@ -551,3 +551,25 @@ INSERT INTO insert_t (VALUES(1, DEFAULT),(2,'BBB') LIMIT 1)
 
 query error DEFAULT can only appear in a VALUES list within INSERT
 INSERT INTO insert_t (VALUES(1, DEFAULT),(2,'BBB')) LIMIT 1
+
+statement ok
+CREATE TABLE bytes_t (
+  b BYTES PRIMARY KEY
+)
+
+statement ok
+INSERT INTO bytes_t VALUES ('byte')
+
+statement ok
+CREATE TABLE string_t (
+  s STRING PRIMARY KEY
+)
+
+statement ok
+INSERT INTO string_t VALUES ('str')
+
+query error value type string doesn't match type BYTES of column "b"
+INSERT INTO bytes_t SELECT * FROM string_t
+
+query error value type bytes doesn't match type STRING of column "s"
+INSERT INTO string_t SELECT * FROM bytes_t
