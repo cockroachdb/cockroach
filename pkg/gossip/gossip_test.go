@@ -138,11 +138,13 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"localhost:9004",
 	}
 	for i := 0; i < len(expAddresses); i++ {
-		if addr := g.getNextBootstrapAddress(); addr == nil {
+		g.mu.Lock()
+		if addr := g.getNextBootstrapAddressLocked(); addr == nil {
 			t.Errorf("%d: unexpected nil addr when expecting %s", i, expAddresses[i])
 		} else if addrStr := addr.String(); addrStr != expAddresses[i] {
 			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addrStr)
 		}
+		g.mu.Unlock()
 	}
 }
 
@@ -155,7 +157,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 
 	local.mu.Lock()
 	peer := startGossip(2, stopper, t, metric.NewRegistry())
-	local.startClient(&peer.mu.is.NodeAddr)
+	local.startClientLocked(&peer.mu.is.NodeAddr)
 	local.mu.Unlock()
 
 	// Race gossiping against LogStatus.
@@ -208,7 +210,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		// before we start the actual test.
 		newPeer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
 		newPeer.mu.Lock()
-		newPeer.startClient(&localAddr)
+		newPeer.startClientLocked(&localAddr)
 		newPeer.mu.Unlock()
 		peers = append(peers, newPeer)
 	}
@@ -223,9 +225,22 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		return fmt.Errorf("local.mu.incoming.len() = %d, want %d", local.mu.incoming.len(), maxPeers)
 	})
 
-	// Verify that we can't open more than maxPeers connections.
-	for _, peer := range peers {
-		local.tightenNetwork(peer.NodeID.Get())
+	// Verify that we can't open more than maxPeers connections. We have to muck
+	// with the infostore's data so that the other nodes will appear far enough
+	// away to be worth opening a connection to.
+	local.mu.Lock()
+	err := local.mu.is.visitInfos(func(key string, i *Info) error {
+		copy := *i
+		copy.Hops = maxHops + 1
+		copy.Value.Timestamp.WallTime++
+		return local.mu.is.addInfo(key, &copy)
+	})
+	local.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range peers {
+		local.tightenNetwork(context.TODO())
 	}
 
 	if outgoing := local.outgoing.gauge.Value(); outgoing > int64(maxPeers) {
@@ -342,7 +357,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Lock()
 	for i := 0; i < minPeers; i++ {
 		peer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
-		local.startClient(peer.GetNodeAddr())
+		local.startClientLocked(peer.GetNodeAddr())
 	}
 	local.mu.Unlock()
 
@@ -391,7 +406,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	peerAddr := peer.GetNodeAddr()
 	peerAddrStr := peerAddr.String()
 
-	local.startClient(peerAddr)
+	local.startClientLocked(peerAddr)
 
 	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
