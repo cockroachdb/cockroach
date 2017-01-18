@@ -233,7 +233,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		g.maybeTightenLocked()
 	}
 	c.peerID = reply.NodeID
-	if !c.resolvedPlaceholder {
+	if !c.resolvedPlaceholder && c.peerID != 0 {
 		c.resolvedPlaceholder = true
 		g.outgoing.resolvePlaceholder(c.peerID)
 	}
