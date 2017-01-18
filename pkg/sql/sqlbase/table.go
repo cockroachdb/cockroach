@@ -1230,49 +1230,15 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 		return nil
 	}
 
-	var set parser.Type
-	switch col.Type.Kind {
-	case ColumnType_BOOL:
-		set = parser.TypeBool
-	case ColumnType_INT:
-		set = parser.TypeInt
-	case ColumnType_FLOAT:
-		set = parser.TypeFloat
-	case ColumnType_DECIMAL:
-		set = parser.TypeDecimal
-	case ColumnType_STRING:
-		set = parser.TypeString
-	case ColumnType_BYTES:
-		set = parser.TypeBytes
-	case ColumnType_DATE:
-		set = parser.TypeDate
-	case ColumnType_TIMESTAMP:
-		set = parser.TypeTimestamp
-	case ColumnType_TIMESTAMPTZ:
-		set = parser.TypeTimestampTZ
-	case ColumnType_INTERVAL:
-		set = parser.TypeInterval
-	case ColumnType_COLLATEDSTRING:
-		if col.Type.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		set = parser.TCollatedString{Locale: *col.Type.Locale}
-	case ColumnType_NAME:
-		set = parser.TypeName
-	case ColumnType_OID:
-		set = parser.TypeOid
-	default:
-		return errors.Errorf("unsupported column type: %s", col.Type.Kind)
-	}
-
 	// If the value is a placeholder, then the column check above has
-	// populated 'set' with a type to assign to it.
+	// populated 'colTyp' with a type to assign to it.
+	colTyp := col.Type.ToDatumType()
 	if p, pok := typ.(parser.TPlaceholder); pok {
-		if err := pmap.SetType(p.Name, set); err != nil {
+		if err := pmap.SetType(p.Name, colTyp); err != nil {
 			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
 				p.Name, col.Name, err)
 		}
-	} else if !typ.Equivalent(set) {
+	} else if !typ.Equivalent(colTyp) {
 		// Not a placeholder; check that the value cast has succeeded.
 		return fmt.Errorf("value type %s doesn't match type %s of column %q",
 			typ, col.Type.Kind, col.Name)
