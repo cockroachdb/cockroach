@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/lib/pq/oid"
 )
 
 var (
@@ -1558,6 +1559,24 @@ var Builtins = map[string][]Builtin{
 			},
 			category: categoryCompatibility,
 			Info:     "Not usable; supported only for ORM compatibility",
+		},
+	},
+	"pg_catalog.format_type": {
+		Builtin{
+			// TODO(jordan) typemod should be a Nullable TypeInt when supported.
+			Types:      NamedArgTypes{{"type_oid", TypeInt}, {"typemod", TypeInt}},
+			ReturnType: TypeString,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				typ, ok := OidToType[oid.Oid(int(*args[0].(*DInt)))]
+				if !ok {
+					return NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
+				}
+				return NewDString(typ.SQLName()), nil
+			},
+			category: categoryCompatibility,
+			Info: "format_type returns the SQL name of a data type that is " +
+				"identified by its type OID and possibly a type modifier. " +
+				"Currently, the type modifier is ignored.",
 		},
 	},
 }
