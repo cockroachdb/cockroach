@@ -1256,7 +1256,7 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
 				p.Name, col.Name, err)
 		}
-	} else if !(typ.Equivalent(set) || (set == parser.TypeBytes && typ == parser.TypeString)) {
+	} else if !(typ.Equivalent(set)) {
 		// Not a placeholder; check that the value cast has succeeded.
 		return fmt.Errorf("value type %s doesn't match type %s of column %q",
 			typ, col.Type.Kind, col.Name)
@@ -1302,10 +1302,6 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 		}
 	case ColumnType_BYTES:
 		if v, ok := val.(*parser.DBytes); ok {
-			r.SetString(string(*v))
-			return r, nil
-		}
-		if v, ok := val.(*parser.DString); ok {
 			r.SetString(string(*v))
 			return r, nil
 		}
