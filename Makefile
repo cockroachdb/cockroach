@@ -60,10 +60,11 @@ export GIT_PAGER :=
 
 ifeq ($(STATIC),1)
 # Static linking with glibc is a bad time; see
-# https://github.com/golang/go/issues/13470. If a static build is
-# requested, only link libgcc and libstdc++ statically.
-# TODO(peter): Allow this only when `go env CC` reports "gcc".
-override LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+# https://github.com/golang/go/issues/13470. If a static build is requested,
+# assume musl is installed (it is in the cockroachdb/builder docker container)
+# and link against it instead.
+override LDFLAGS += -linkmode external -extldflags -static
+override GOFLAGS += -installsuffix musl
 endif
 
 .PHONY: all

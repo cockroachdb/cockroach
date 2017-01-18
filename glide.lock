@@ -32,7 +32,7 @@ imports:
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/c-jemalloc
-  version: 5135b33df2bc67c42a91f6183072bba8a6c30d51
+  version: 2582439cfbace368ad093c71209ad72efef8aa4d
 - name: github.com/cockroachdb/c-protobuf
   version: 070b64667a22925d971878b61e4f0c1df31e8599
   subpackages:
