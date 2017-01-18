@@ -15,7 +15,8 @@ case ${1-} in
            --machine-type "custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
-           --image "/ubuntu-os-cloud/ubuntu-1604-xenial-v20160830" \
+           --image-project "ubuntu-os-cloud" \
+           --image "ubuntu-1604-xenial-v20170113" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${name}"
