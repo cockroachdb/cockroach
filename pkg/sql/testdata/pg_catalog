@@ -48,6 +48,7 @@ pg_am
 pg_attrdef
 pg_attribute
 pg_class
+pg_collation
 pg_constraint
 pg_database
 pg_depend
@@ -450,6 +451,14 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 724530982   908875140   true       false           {1,6}   0             0         0          NULL      NULL
 3505585425  2199392917  true       false           {1,2}   0             0         0          NULL      NULL
 3491800018  3270885600  true       false           {1,7}   0             0         0          NULL      NULL
+
+## pg_catalog.pg_collation
+query ITIIITT colnames
+SELECT * FROM pg_collation
+WHERE collname='en-US'
+----
+oid         collname  collnamespace  collowner  collencoding  collcollate  collctype
+1661428263  en-US     1782195457     NULL       6             NULL         NULL
 
 ## pg_catalog.pg_constraint
 ##
