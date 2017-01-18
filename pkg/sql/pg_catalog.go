@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
+	"golang.org/x/text/collate"
 )
 
 var (
@@ -53,6 +54,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
+		pgCatalogCollationTable,
 		pgCatalogConstraintTable,
 		pgCatalogDatabaseTable,
 		pgCatalogDependTable,
@@ -359,6 +361,40 @@ var (
 	_ = fkMatchTypeFull
 	_ = fkMatchTypePartial
 )
+
+var pgCatalogCollationTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_collation (
+  oid INT,
+  collname STRING,
+  collnamespace INT,
+  collowner INT,
+  collencoding INT,
+  collcollate STRING,
+  collctype STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := addRow(
+				h.CollationOid(collName),    // oid
+				parser.NewDString(collName), // collname
+				pgNamespacePGCatalog.Oid,    // collnamespace
+				parser.DNull,                // collowner
+				datEncodingUTFId,            // collencoding
+				// It's not clear how to translate a Go collation tag into the format
+				// required by LC_COLLATE and LC_CTYPE.
+				parser.DNull, // collcollate
+				parser.DNull, // collctype
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-constraint.html.
 var pgCatalogConstraintTable = virtualSchemaTable{
@@ -1491,6 +1527,7 @@ const (
 	uniqueConstraintTypeTag
 	functionTypeTag
 	userTypeTag
+	collationTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -1626,6 +1663,12 @@ func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DInt
 func (h oidHasher) UserOid(username string) *parser.DInt {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(username)
+	return h.getOid()
+}
+
+func (h oidHasher) CollationOid(collation string) *parser.DInt {
+	h.writeTypeTag(collationTypeTag)
+	h.writeStr(collation)
 	return h.getOid()
 }
 

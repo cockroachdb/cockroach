@@ -219,6 +219,7 @@ pg_am
 pg_attrdef
 pg_attribute
 pg_class
+pg_collation
 pg_constraint
 pg_database
 pg_depend
@@ -273,6 +274,7 @@ pg_description
 pg_depend
 pg_database
 pg_constraint
+pg_collation
 pg_class
 pg_attribute
 pg_attrdef
@@ -298,6 +300,7 @@ def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_collation       SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
@@ -351,6 +354,7 @@ def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_collation       SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
@@ -395,6 +399,7 @@ def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_collation       SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
