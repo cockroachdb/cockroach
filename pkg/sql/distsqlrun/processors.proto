@@ -161,9 +161,6 @@ message MergeJoinerSpec {
   optional Ordering left_ordering = 1 [(gogoproto.nullable) = false];
   optional Ordering right_ordering = 2 [(gogoproto.nullable) = false];
 
-  repeated sqlbase.ColumnType left_types = 3 [(gogoproto.nullable) = false];
-  repeated sqlbase.ColumnType right_types = 4 [(gogoproto.nullable) = false];
-
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression ordinal references @1 to @N refer
@@ -193,9 +190,6 @@ message HashJoinerSpec {
   // corresponding columns on the right stream. These must have the same length.
   repeated uint32 left_eq_columns = 1 [packed = true];
   repeated uint32 right_eq_columns = 2 [packed = true];
-
-  repeated sqlbase.ColumnType left_types = 3 [(gogoproto.nullable) = false];
-  repeated sqlbase.ColumnType right_types = 4 [(gogoproto.nullable) = false];
 
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
@@ -241,7 +235,7 @@ message AggregatorSpec {
     VARIANCE = 12;
   }
 
-  message Expr {
+  message Aggregation {
     optional Func func = 1 [(gogoproto.nullable) = false];
 
     // Aggregation functions with distinct = true functions like you would
@@ -253,14 +247,11 @@ message AggregatorSpec {
     optional uint32 col_idx = 3 [(gogoproto.nullable) = false];
   }
 
-  repeated sqlbase.ColumnType types = 1 [(gogoproto.nullable) = false];
-
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.
   repeated uint32 group_cols = 2;
 
-  // Exprs represents the SELECT expressions.
-  repeated Expr exprs = 3 [(gogoproto.nullable) = false];
+  repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {

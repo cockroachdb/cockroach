@@ -20,7 +20,6 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -38,7 +37,11 @@ type mergeJoiner struct {
 var _ processor = &mergeJoiner{}
 
 func newMergeJoiner(
-	flowCtx *FlowCtx, spec *MergeJoinerSpec, inputs []RowSource, output RowReceiver,
+	flowCtx *FlowCtx,
+	spec *MergeJoinerSpec,
+	leftSource RowSource,
+	rightSource RowSource,
+	output RowReceiver,
 ) (*mergeJoiner, error) {
 	for i, c := range spec.LeftOrdering.Columns {
 		if spec.RightOrdering.Columns[i].Direction != c.Direction {
@@ -47,17 +50,19 @@ func newMergeJoiner(
 	}
 
 	m := &mergeJoiner{}
-	err := m.joinerBase.init(flowCtx, nil, output, spec.OutputColumns,
-		spec.Type, spec.LeftTypes, spec.RightTypes, spec.Expr)
+	err := m.joinerBase.init(
+		flowCtx, leftSource, rightSource, output, spec.OutputColumns, spec.Type, spec.Expr,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	m.streamMerger, err = makeStreamMerger(
-		[]sqlbase.ColumnOrdering{
-			convertToColumnOrdering(spec.LeftOrdering),
-			convertToColumnOrdering(spec.RightOrdering),
-		}, inputs)
+		leftSource,
+		convertToColumnOrdering(spec.LeftOrdering),
+		rightSource,
+		convertToColumnOrdering(spec.RightOrdering),
+	)
 	if err != nil {
 		return nil, err
 	}

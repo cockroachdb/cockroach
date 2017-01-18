@@ -84,7 +84,7 @@ func TestDistinct(t *testing.T) {
 	for _, c := range testCases {
 		ds := c.spec
 
-		in := &RowBuffer{Rows: c.input}
+		in := NewRowBuffer(nil, c.input)
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{

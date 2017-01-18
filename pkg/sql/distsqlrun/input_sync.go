@@ -57,6 +57,11 @@ type orderedSynchronizer struct {
 
 var _ RowSource = &orderedSynchronizer{}
 
+// Types is part of the RowSource interface.
+func (s *orderedSynchronizer) Types() []sqlbase.ColumnType {
+	return s.sources[0].src.Types()
+}
+
 // Len is part of heap.Interface and is only meant to be used internally.
 func (s *orderedSynchronizer) Len() int {
 	return len(s.heap)
