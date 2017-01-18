@@ -67,14 +67,38 @@
   .Select-arrow-zone
     display none
 
-// @stylint on
-
 // NVD3 Style overrides.
+.nvtooltip
+  font-family lato !important
+  color $light-blue !important
+  padding 15px 20px !important
+  background rgba(255, 255, 255, .98) !important
+  border-radius 5px !important
+  border 1px solid rgba(0, 0, 0, .1) !important
+  box-shadow 0px 0px 4px rgba(0, 0, 0, .2)
+
+.nvtooltip table
+  margin 0 !important
+
+.nvtooltip .legend-color-guide div
+  width 7px !important
+  height 7px !important
+  border-radius 50% !important
+  border none !important
+
 .nvtooltip table tr.highlight td
-  padding 2px 9px 2px 0
+  padding 2px 9px 2px 0 !important
+  border none !important
 
 .nvtooltip table tr.highlight td:first-child
   padding 2px 9px 2px 3rem
+
+.nvtooltip strong
+  font-weight 400 !important
+
+.legend-subtext
+  color $light-gray !important
+  font-weight 300
 
 .nvd3 .nv-axis
   .tick line
