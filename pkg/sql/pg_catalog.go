@@ -42,6 +42,7 @@ var (
 
 const (
 	cockroachIndexEncoding = "prefix"
+	defaultCollationTag    = "en-US"
 )
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
@@ -152,6 +153,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attisdropped BOOL,
 	attislocal BOOL,
 	attinhcount INT,
+	attcollation INT,
 	attacl STRING,
 	attoptions STRING,
 	attfdwoptions STRING
@@ -182,6 +184,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 						parser.MakeDBool(false),                                   // attisdropped
 						parser.MakeDBool(true),                                    // attislocal
 						zeroVal,                                                   // attinhcount
+						typColl(colTyp, h),                                        // attcollation
 						parser.DNull,                                              // attacl
 						parser.DNull,                                              // attoptions
 						parser.DNull,                                              // attfdwoptions
@@ -1344,6 +1347,7 @@ CREATE TABLE pg_catalog.pg_type (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
 		for oid, typ := range parser.OidToType {
 			if err := addRow(
 				parser.NewDInt(parser.DInt(oid)), // oid
@@ -1376,7 +1380,7 @@ CREATE TABLE pg_catalog.pg_type (
 				zeroVal,                 // typbasetype
 				negOneVal,               // typtypmod
 				zeroVal,                 // typndims
-				zeroVal,                 // typcollation
+				typColl(typ, h),         // typcollation
 				parser.DNull,            // typdefaultbin
 				parser.DNull,            // typdefault
 				parser.DNull,            // typacl
@@ -1405,6 +1409,20 @@ func typLen(typ parser.Type) *parser.DInt {
 func typByVal(typ parser.Type) parser.Datum {
 	_, variable := typ.Size()
 	return parser.MakeDBool(parser.DBool(!variable))
+}
+
+// typColl returns the collation OID for a given type.
+// The default collation is en-US, which is equivalent to but spelled
+// differently than the default database collation, en_US.utf8.
+func typColl(typ parser.Type, h oidHasher) *parser.DInt {
+	if typ.FamilyEqual(parser.TypeAny) {
+		return zeroVal
+	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TypeStringArray) {
+		return h.CollationOid(defaultCollationTag)
+	} else if typ.FamilyEqual(parser.TypeCollatedString) {
+		return h.CollationOid(typ.(parser.TCollatedString).Locale)
+	}
+	return zeroVal
 }
 
 // This mapping should be kept sync with PG's categorization.
