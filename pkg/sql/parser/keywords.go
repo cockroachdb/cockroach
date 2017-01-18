@@ -164,6 +164,7 @@ var keywords = map[string]int{
 	"OID":               OID,
 	"ON":                ON,
 	"ONLY":              ONLY,
+	"OPTIONS":           OPTIONS,
 	"OR":                OR,
 	"ORDER":             ORDER,
 	"ORDINALITY":        ORDINALITY,
