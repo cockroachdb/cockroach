@@ -42,7 +42,7 @@ curl "https://storage.googleapis.com/golang/go${GOVERSION}.src.tar.gz" | tar --s
 
 # Apply the patch for the "major" go version (e.g. 1.6, 1.7).
 GOPATCHVER=$(echo ${GOVERSION} | grep -o "^[0-9]\+\.[0-9]\+")
-patch -p1 -d ../goroot < "parallelbuilds-go${GOPATCHVER}.patch"
+patch -p1 -d ../goroot < "../build/parallelbuilds-go${GOPATCHVER}.patch"
 
 (cd ~/goroot/src && GOROOT_BOOTSTRAP=~/go-bootstrap ./make.bash)
 
@@ -54,6 +54,6 @@ echo '. ~/.bashrc_go' >> ~/.bashrc
 . ~/.bashrc_go
 
 # Allow Go support files in gdb.
-echo "add-auto-load-safe-path ${HOME}/goroot/src/runtime/runtime-gdb.py" >> ~/.gdbinit
+echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" >> ~/.gdbinit
 
 go get -d github.com/cockroachdb/cockroach
