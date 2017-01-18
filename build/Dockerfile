@@ -1,41 +1,73 @@
-FROM golang:1.7.4
+FROM alpine:3.5
 
-MAINTAINER Peter Mattis <peter@cockroachlabs.com>
+MAINTAINER Tamir Duberstein <tamird@gmail.com>
 
-RUN \
- apt-key adv --keyserver pgp.mit.edu --recv D101F7899D41F3C3 && \
- echo 'deb http://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list
-
+# curl, gnupg are used by the yarn installer. TODO(tamird): consider removing
+# when https://github.com/alpinelinux/aports/pull/714 is merged.
+#
+# gcc/g++ are needed for libgcc.
+# bash, go are used to bootstrap go.
 # nodejs is used to build and test the UI.
 # bzip2 and fontconfig are used by phantomjs-prebuilt to test the UI.
 # iptables is used in the acceptance tests' partition nemesis.
+# linux-headers is needed for rocksdb.
+# rsync is needed for updating c-jemalloc.
 # yarn is the dependency manager for the UI, as an alternative to npm.
-RUN \
- curl --silent --location https://deb.nodesource.com/setup_6.x | bash - && \
- apt-get dist-upgrade -y && \
- apt-get install --no-install-recommends --auto-remove -y \
- bzip2 \
- fontconfig \
- iptables \
- nodejs \
- unzip \
- yarn \
- && \
- apt-get clean autoclean && \
- apt-get autoremove -y && \
- git clone --depth 1 https://chromium.googlesource.com/chromium/src/tools/clang && \
- clang/scripts/update.py && \
- rm -rf /tmp/*
+RUN apk add --no-cache \
+    bash \
+    bzip2 \
+    curl \
+    fontconfig \
+    g++ \
+    gcc \
+    git \
+    gnupg \
+    go \
+    iptables \
+    linux-headers \
+    make \
+    nodejs \
+    rsync \
+    unzip
 
-RUN \
- cd /usr/local/bin && \
- curl --silent https://releases.hashicorp.com/terraform/0.7.7/terraform_0.7.7_linux_amd64.zip -o terraform_linux_amd64.zip && \
- unzip terraform_linux_amd64.zip && \
- rm terraform_linux_amd64.zip
+RUN curl -fsSL https://yarnpkg.com/install.sh | bash -s
 
-# Both clang and gcc are installed and gcc is used by default. To use clang,
-# set CC=clang and CXX=clang++ when building.
-ENV PATH=/opt/backtrace/bin:/third_party/llvm-build/Release+Asserts/bin:$PATH
+# START https://raw.githubusercontent.com/docker-library/golang/master/1.7/alpine/Dockerfile
+
+ENV GOLANG_VERSION 1.7.4
+ENV GOLANG_SRC_URL https://golang.org/dl/go$GOLANG_VERSION.src.tar.gz
+ENV GOLANG_SRC_SHA256 4c189111e9ba651a2bb3ee868aa881fab36b2f2da3409e80885ca758a6b614cc
+
+ADD parallelbuilds-go1.7.patch /
+ADD https://raw.githubusercontent.com/docker-library/golang/master/1.7/alpine/no-pic.patch /
+ADD https://raw.githubusercontent.com/docker-library/golang/master/1.7/alpine/17847.patch /
+
+RUN curl -fsSL "$GOLANG_SRC_URL" -o golang.tar.gz \
+ && echo "$GOLANG_SRC_SHA256  golang.tar.gz" | sha256sum -c - \
+ && tar -C /usr/local -xzf golang.tar.gz \
+ && rm golang.tar.gz \
+ && cd /usr/local/go/src \
+ && patch -p2 -i /parallelbuilds-go1.7.patch \
+ && patch -p2 -i /no-pic.patch \
+ && patch -p2 -i /17847.patch \
+ && rm /*.patch \
+ && GOROOT_BOOTSTRAP=$(go env GOROOT) ./make.bash
+
+ENV GOPATH /go
+ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
+
+RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
+WORKDIR $GOPATH
+
+# END https://raw.githubusercontent.com/docker-library/golang/master/1.7/alpine/Dockerfile
+
+RUN apk del \
+    go
+
+RUN curl -fsSL https://releases.hashicorp.com/terraform/0.8.4/terraform_0.8.4_linux_amd64.zip -o terraform_linux_amd64.zip && \
+    unzip terraform_linux_amd64.zip -d /usr/local/bin && rm terraform_linux_amd64.zip
+
+ENV PATH /opt/backtrace/bin:$HOME/.yarn/bin:$PATH
 
 RUN chmod -R a+w $(go env GOTOOLDIR)
 
