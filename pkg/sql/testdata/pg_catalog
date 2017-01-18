@@ -362,6 +362,20 @@ v1            b        false         true        0            NULL    NULL      
 v1            c        false         true        0            NULL    NULL        NULL
 
 
+# Select all columns with collations.
+query TTTIT colnames
+SELECT c.relname, attname, t.typname, attcollation, k.collname
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+JOIN pg_catalog.pg_type t ON a.atttypid = t.oid
+JOIN pg_catalog.pg_collation k ON a.attcollation = k.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'public'
+----
+relname  attname  typname  attcollation  collname
+t3       c        string   1661428263    en-US
+
+
 ## pg_catalog.pg_am
 
 query ITIT colnames
@@ -745,14 +759,14 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 20    int          0         0             NULL           NULL        NULL
 21    int          0         0             NULL           NULL        NULL
 23    int          0         0             NULL           NULL        NULL
-25    string       0         0             NULL           NULL        NULL
+25    string       0         1661428263    NULL           NULL        NULL
 700   float        0         0             NULL           NULL        NULL
 701   float        0         0             NULL           NULL        NULL
 1005  int[]        0         0             NULL           NULL        NULL
 1007  int[]        0         0             NULL           NULL        NULL
-1009  string[]     0         0             NULL           NULL        NULL
+1009  string[]     0         1661428263    NULL           NULL        NULL
 1016  int[]        0         0             NULL           NULL        NULL
-1043  string       0         0             NULL           NULL        NULL
+1043  string       0         1661428263    NULL           NULL        NULL
 1082  date         0         0             NULL           NULL        NULL
 1114  timestamp    0         0             NULL           NULL        NULL
 1184  timestamptz  0         0             NULL           NULL        NULL
