@@ -1370,6 +1370,52 @@ bytes
 int[]
 
 query T
+VALUES (format_type('anyelement'::regtype, -1)),
+       (format_type('bool'::regtype, -1)),
+       (format_type('bytes'::regtype, -1)),
+       (format_type('date'::regtype, -1)),
+       (format_type('decimal'::regtype, -1)),
+       (format_type('interval'::regtype, -1)),
+       (format_type('timestamp'::regtype, -1)),
+       (format_type('timestamptz'::regtype, -1)),
+       (format_type('tuple'::regtype, -1))
+----
+anyelement
+boolean
+bytea
+date
+numeric
+interval
+timestamp without time zone
+timestamp with time zone
+record
+
+query T
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='string' LIMIT 1
+----
+text
+
+query T
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='int' LIMIT 1
+----
+bigint
+
+query T
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='float' LIMIT 1
+----
+double precision
+
+query T
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='int[]' LIMIT 1
+----
+bigint[]
+
+query T
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='string[]' LIMIT 1
+----
+text[]
+
+query T
 SELECT pg_catalog.pg_get_userbyid((SELECT oid FROM pg_roles WHERE rolname='root'))
 ----
 root
