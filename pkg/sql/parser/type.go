@@ -38,6 +38,10 @@ type Type interface {
 
 	// Oid returns the type's Postgres object ID.
 	Oid() oid.Oid
+	// SQLName returns the type's SQL standard name. This can be looked up for a
+	// type `t` in postgres by running `SELECT format_type(t::regtype, NULL)`.
+	SQLName() string
+
 	// Size returns a lower bound on the total size of a Datum whose type is the
 	// receiver in bytes, including memory that is pointed at (even if shared
 	// between Datum instances) but excluding allocation overhead.
@@ -142,6 +146,7 @@ func (tNull) Equivalent(other Type) bool  { return other == TypeNull || other ==
 func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
 func (tNull) Size() (uintptr, bool)       { return unsafe.Sizeof(dNull{}), fixedSize }
 func (tNull) Oid() oid.Oid                { return oid.T_unknown }
+func (tNull) SQLName() string             { return "unknown" }
 func (tNull) IsAmbiguous() bool           { return true }
 
 type tBool struct{}
@@ -151,6 +156,7 @@ func (tBool) Equivalent(other Type) bool  { return other == TypeBool || other ==
 func (tBool) FamilyEqual(other Type) bool { return other == TypeBool }
 func (tBool) Size() (uintptr, bool)       { return unsafe.Sizeof(DBool(false)), fixedSize }
 func (tBool) Oid() oid.Oid                { return oid.T_bool }
+func (tBool) SQLName() string             { return "boolean" }
 func (tBool) IsAmbiguous() bool           { return false }
 
 type tInt struct{}
@@ -160,6 +166,7 @@ func (tInt) Equivalent(other Type) bool  { return other == TypeInt || other == T
 func (tInt) FamilyEqual(other Type) bool { return other == TypeInt }
 func (tInt) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
 func (tInt) Oid() oid.Oid                { return oid.T_int8 }
+func (tInt) SQLName() string             { return "bigint" }
 func (tInt) IsAmbiguous() bool           { return false }
 
 type tFloat struct{}
@@ -169,6 +176,7 @@ func (tFloat) Equivalent(other Type) bool  { return other == TypeFloat || other 
 func (tFloat) FamilyEqual(other Type) bool { return other == TypeFloat }
 func (tFloat) Size() (uintptr, bool)       { return unsafe.Sizeof(DFloat(0.0)), fixedSize }
 func (tFloat) Oid() oid.Oid                { return oid.T_float8 }
+func (tFloat) SQLName() string             { return "double precision" }
 func (tFloat) IsAmbiguous() bool           { return false }
 
 type tDecimal struct{}
@@ -178,6 +186,7 @@ func (tDecimal) Equivalent(other Type) bool  { return other == TypeDecimal || ot
 func (tDecimal) FamilyEqual(other Type) bool { return other == TypeDecimal }
 func (tDecimal) Size() (uintptr, bool)       { return unsafe.Sizeof(DDecimal{}), variableSize }
 func (tDecimal) Oid() oid.Oid                { return oid.T_numeric }
+func (tDecimal) SQLName() string             { return "numeric" }
 func (tDecimal) IsAmbiguous() bool           { return false }
 
 type tString struct{}
@@ -187,6 +196,7 @@ func (tString) Equivalent(other Type) bool  { return other == TypeString || othe
 func (tString) FamilyEqual(other Type) bool { return other == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
 func (tString) Oid() oid.Oid                { return oid.T_text }
+func (tString) SQLName() string             { return "text" }
 func (tString) IsAmbiguous() bool           { return false }
 
 // TCollatedString is the type of strings with a locale.
@@ -223,7 +233,9 @@ func (TCollatedString) Size() (uintptr, bool) {
 }
 
 // Oid implements the Type interface.
-func (TCollatedString) Oid() oid.Oid { return oid.T_unknown }
+func (TCollatedString) Oid() oid.Oid    { return oid.T_unknown }
+// SQLName implements the Type interface.
+func (TCollatedString) SQLName() string { return "text" }
 
 // IsAmbiguous implements the Type interface.
 func (t TCollatedString) IsAmbiguous() bool {
@@ -237,6 +249,7 @@ func (tBytes) Equivalent(other Type) bool  { return other == TypeBytes || other 
 func (tBytes) FamilyEqual(other Type) bool { return other == TypeBytes }
 func (tBytes) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }
 func (tBytes) Oid() oid.Oid                { return oid.T_bytea }
+func (tBytes) SQLName() string             { return "bytea" }
 func (tBytes) IsAmbiguous() bool           { return false }
 
 type tDate struct{}
@@ -246,6 +259,7 @@ func (tDate) Equivalent(other Type) bool  { return other == TypeDate || other ==
 func (tDate) FamilyEqual(other Type) bool { return other == TypeDate }
 func (tDate) Size() (uintptr, bool)       { return unsafe.Sizeof(DDate(0)), fixedSize }
 func (tDate) Oid() oid.Oid                { return oid.T_date }
+func (tDate) SQLName() string             { return "date" }
 func (tDate) IsAmbiguous() bool           { return false }
 
 type tTimestamp struct{}
@@ -255,6 +269,7 @@ func (tTimestamp) Equivalent(other Type) bool  { return other == TypeTimestamp |
 func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
 func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
 func (tTimestamp) Oid() oid.Oid                { return oid.T_timestamp }
+func (tTimestamp) SQLName() string             { return "timestamp without time zone" }
 func (tTimestamp) IsAmbiguous() bool           { return false }
 
 type tTimestampTZ struct{}
@@ -264,6 +279,7 @@ func (tTimestampTZ) Equivalent(other Type) bool  { return other == TypeTimestamp
 func (tTimestampTZ) FamilyEqual(other Type) bool { return other == TypeTimestampTZ }
 func (tTimestampTZ) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampTZ{}), fixedSize }
 func (tTimestampTZ) Oid() oid.Oid                { return oid.T_timestamptz }
+func (tTimestampTZ) SQLName() string             { return "timestamp with time zone" }
 func (tTimestampTZ) IsAmbiguous() bool           { return false }
 
 type tInterval struct{}
@@ -273,6 +289,7 @@ func (tInterval) Equivalent(other Type) bool  { return other == TypeInterval || 
 func (tInterval) FamilyEqual(other Type) bool { return other == TypeInterval }
 func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}), fixedSize }
 func (tInterval) Oid() oid.Oid                { return oid.T_interval }
+func (tInterval) SQLName() string             { return "interval" }
 func (tInterval) IsAmbiguous() bool           { return false }
 
 // TTuple is the type of a DTuple.
@@ -333,6 +350,9 @@ func (t TTuple) Size() (uintptr, bool) {
 // Oid implements the Type interface.
 func (TTuple) Oid() oid.Oid { return oid.T_record }
 
+// SQLName implements the Type interface.
+func (TTuple) SQLName() string { return "record" }
+
 // IsAmbiguous implements the Type interface.
 func (t TTuple) IsAmbiguous() bool {
 	for _, typ := range t {
@@ -371,6 +391,9 @@ func (TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undef
 
 // Oid implements the Type interface.
 func (TPlaceholder) Oid() oid.Oid { panic("TPlaceholder.Oid() is undefined") }
+
+// SQLName implements the Type interface.
+func (TPlaceholder) SQLName() string { panic("TPlaceholder.SQLName() is undefined") }
 
 // IsAmbiguous implements the Type interface.
 func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
@@ -414,6 +437,11 @@ func (a tArray) Oid() oid.Oid {
 	}
 }
 
+// SQLName implements the Type interface.
+func (a tArray) SQLName() string {
+	return a.Typ.SQLName() + "[]"
+}
+
 // IsAmbiguous implements the Type interface.
 func (a tArray) IsAmbiguous() bool {
 	return a.Typ == nil || a.Typ.IsAmbiguous()
@@ -446,9 +474,10 @@ func (a TTable) Size() (uintptr, bool) {
 }
 
 // Oid implements the Type interface.
-func (TTable) Oid() oid.Oid {
-	return oid.T_anyelement
-}
+func (TTable) Oid() oid.Oid { return oid.T_anyelement }
+
+// SQLName implements the Type interface.
+func (TTable) SQLName() string { return "anyelement" }
 
 // IsAmbiguous implements the Type interface.
 func (a TTable) IsAmbiguous() bool {
@@ -462,4 +491,5 @@ func (tAny) Equivalent(other Type) bool  { return true }
 func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
 func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
 func (tAny) Oid() oid.Oid                { return oid.T_anyelement }
+func (tAny) SQLName() string             { return "anyelement" }
 func (tAny) IsAmbiguous() bool           { return true }
