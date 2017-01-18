@@ -38,9 +38,9 @@ the system with minimal total hops. The algorithm is as follows:
       received, the client in question is credited. If node has no
       outgoing connections, goto #1.
 
-   b. If any gossip was received at > MaxHops and num connected peers
+   b. If any gossip was received at > maxHops and num connected peers
       < maxPeers(), choose random peer from those originating Info >
-      MaxHops, start it, and goto #2.
+      maxHops, start it, and goto #2.
 
    c. If sentinel gossip keyed by KeySentinel is missing or expired,
       node is considered partitioned; goto #1.
@@ -87,10 +87,10 @@ import (
 )
 
 const (
-	// MaxHops is the maximum number of hops which any gossip info
+	// maxHops is the maximum number of hops which any gossip info
 	// should require to transit between any two nodes in a gossip
 	// network.
-	MaxHops = 5
+	maxHops = 5
 
 	// minPeers is the minimum number of peers which the maxPeers()
 	// function will return. This is set higher than one to prevent
@@ -568,7 +568,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 // will seek to "tighten" by creating new connections to distant
 // nodes.
 func maxPeers(nodeCount int) int {
-	// This formula uses MaxHops-1, instead of MaxHops, to provide a
+	// This formula uses maxHops-1, instead of maxHops, to provide a
 	// "fudge" factor for max connected peers, to account for the
 	// arbitrary, decentralized way in which gossip networks are created.
 	//
@@ -578,7 +578,7 @@ func maxPeers(nodeCount int) int {
 	// log(maxPeers) > log(nodeCount) / maxHops
 	// maxPeers > e^(log(nodeCount) / maxHops)
 	// hence maxPeers = ceil(e^(log(nodeCount) / maxHops)) should work
-	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(maxHops-1))))
 	if maxPeers < minPeers {
 		return minPeers
 	}
@@ -1055,10 +1055,10 @@ func (g *Gossip) bootstrap() {
 }
 
 // manage manages outgoing clients. Periodically, the infostore is
-// scanned for infos with hop count exceeding the MaxHops
+// scanned for infos with hop count exceeding the maxHops
 // threshold. If the number of outgoing clients doesn't exceed
 // maxPeers(), a new gossip client is connected to a randomly selected
-// peer beyond MaxHops threshold. Otherwise, the least useful peer
+// peer beyond maxHops threshold. Otherwise, the least useful peer
 // node is cut off to make room for a replacement. Disconnected
 // clients are processed via the disconnected channel and taken out of
 // the outgoing address set. If there are no longer any outgoing
@@ -1133,14 +1133,14 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 	if g.outgoing.hasSpace() {
 		distantNodeID, distantHops := g.mu.is.mostDistant(g.hasOutgoingLocked)
 		log.VEventf(ctx, 2, "distantHops: %d from %d", distantHops, distantNodeID)
-		if distantHops <= MaxHops {
+		if distantHops <= maxHops {
 			return
 		}
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Errorf(ctx, "unable to get address for distant node %d: %s", distantNodeID, err)
 		} else {
 			log.Infof(ctx, "starting client to distant node %d (%d > %d) to tighten network graph",
-				distantNodeID, distantHops, MaxHops)
+				distantNodeID, distantHops, maxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
 			g.startClientLocked(nodeAddr)
 		}

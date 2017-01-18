@@ -231,7 +231,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 	local.mu.Lock()
 	err := local.mu.is.visitInfos(func(key string, i *Info) error {
 		copy := *i
-		copy.Hops = MaxHops + 1
+		copy.Hops = maxHops + 1
 		copy.Value.Timestamp.WallTime++
 		return local.mu.is.addInfo(key, &copy)
 	})
