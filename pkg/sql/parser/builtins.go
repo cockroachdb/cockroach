@@ -1579,6 +1579,18 @@ var Builtins = map[string][]Builtin{
 				"Currently, the type modifier is ignored.",
 		},
 	},
+	"pg_catalog.col_description": {
+		Builtin{
+			Types:      NamedArgTypes{{"table_oid", TypeInt}, {"column_number", TypeInt}},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info: "col_description returns the comment for a table column. " +
+				"Currently, CockroachDB does not support adding comments to columns.",
+		},
+	},
 }
 
 var substringImpls = []Builtin{
