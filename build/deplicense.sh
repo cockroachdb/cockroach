@@ -90,7 +90,7 @@ function inspect() {
 
 # For each dependency which is not part of the standard library, list the
 # package directory and package root.
-pkginfo=($(go list -f '{{ join .Deps "\n"}}' ./pkg/... | sort | uniq | \
+pkginfo=($(go list -f '{{ join .Deps "\n"}}' ./pkg/... | sort -u | \
   xargs go list -f '{{if not .Standard}}{{.Dir}} {{.Root}}{{end}}'))
 
 # Loop over the package info which comes in pairs in the pkginfo
