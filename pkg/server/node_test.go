@@ -657,7 +657,7 @@ func TestStatusSummaries(t *testing.T) {
 func TestStartNodeWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testLocalityWitNewNode := func(locality roachpb.Locality) {
+	testLocalityWithNewNode := func(locality roachpb.Locality) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 		if _, err := bootstrapCluster(
@@ -713,6 +713,6 @@ func TestStartNodeWithLocality(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testLocalityWitNewNode(testCase)
+		testLocalityWithNewNode(testCase)
 	}
 }
