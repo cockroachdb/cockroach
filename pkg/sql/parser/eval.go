@@ -2383,84 +2383,18 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
+	datumTyp := d.ResolvedType()
 
 	result := DBool(true)
 	if expr.Not {
 		result = !result
 	}
-
-	switch d.(type) {
-	case *DBool:
-		for _, t := range expr.Types {
-			if _, ok := t.(*BoolColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DInt:
-		for _, t := range expr.Types {
-			if _, ok := t.(*IntColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DFloat:
-		for _, t := range expr.Types {
-			if _, ok := t.(*FloatColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DDecimal:
-		for _, t := range expr.Types {
-			if _, ok := t.(*DecimalColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DString:
-		for _, t := range expr.Types {
-			if _, ok := t.(*StringColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DBytes:
-		for _, t := range expr.Types {
-			if _, ok := t.(*BytesColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DDate:
-		for _, t := range expr.Types {
-			if _, ok := t.(*DateColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DTimestamp:
-		for _, t := range expr.Types {
-			if _, ok := t.(*TimestampColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DTimestampTZ:
-		for _, t := range expr.Types {
-			if _, ok := t.(*TimestampTZColType); ok {
-				return MakeDBool(result), nil
-			}
-		}
-
-	case *DInterval:
-		for _, t := range expr.Types {
-			if _, ok := t.(*IntervalColType); ok {
-				return MakeDBool(result), nil
-			}
+	for _, t := range expr.Types {
+		wantTyp := columnTypeToDatumType(t)
+		if datumTyp.FamilyEqual(wantTyp) {
+			return MakeDBool(result), nil
 		}
 	}
-
 	return MakeDBool(!result), nil
 }
 
