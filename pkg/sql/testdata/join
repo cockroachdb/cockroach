@@ -863,3 +863,170 @@ SELECT     NULL::text  AS pktable_cat,
            pos.n
 ----
 NULL public customers id NULL public orders cust 1 3 3 fk_cust_ref_customers primary 7
+
+
+# Tests for filter propagation through joins.
+
+statement ok
+CREATE TABLE square (n INT PRIMARY KEY, sq INT)
+
+statement ok
+INSERT INTO square VALUES (1,1), (2,4), (3,9), (4,16), (5,25), (6,36)
+
+statement ok
+CREATE TABLE pairs (a INT, b INT)
+
+statement ok
+INSERT INTO pairs VALUES (1,1), (1,2), (1,3), (1,4), (1,5), (1,6), (2,3), (2,4), (2,5), (2,6), (3,4), (3,5), (3,6), (4,5), (4,6)
+
+# The filter expression becomes an equality constraint.
+query ITTT
+EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
+----
+0  join
+0        type      inner
+0        equality  (b) = (n)
+1  scan
+1        table     pairs@primary
+1  scan
+1        table     square@primary
+
+query IIII
+SELECT * FROM pairs, square WHERE pairs.b = square.n
+----
+1  1  1  1
+1  2  2  4
+1  3  3  9
+1  4  4  16
+1  5  5  25
+1  6  6  36
+2  3  3  9
+2  4  4  16
+2  5  5  25
+2  6  6  36
+3  4  4  16
+3  5  5  25
+3  6  6  36
+4  5  5  25
+4  6  6  36
+
+# The filter expression becomes an ON predicate.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
+----
+0  render                                                            (a, b, n, sq)
+0          render 0  test.pairs.a
+0          render 1  test.pairs.b
+0          render 2  test.square.n
+0          render 3  test.square.sq
+1  join                                                              (a, b, rowid[hidden,omitted], n, sq)
+1          type      inner
+1          pred      (test.pairs.a + test.pairs.b) = test.square.sq
+2  scan                                                              (a, b, rowid[hidden,omitted])
+2          table     pairs@primary
+2  scan                                                              (n, sq)
+2          table     square@primary
+
+query IIII
+SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
+----
+1  3  2  4
+3  6  3  9
+4  5  3  9
+
+# Query similar to the one above, but the filter refers to a rendered
+# expression and can't "break through". See the comment for propagateFilters
+# in fitler_opt.go for all the details.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
+----
+0  render                                         (a, b, n, sq)
+0          render 0  a
+0          render 1  b
+0          render 2  n
+0          render 3  sq
+1  filter                                         (a, b, sum, n, sq)
+1          filter    sum = sq
+2  render                                         (a, b, sum, n, sq)
+2          render 0  test.pairs.a
+2          render 1  test.pairs.b
+2          render 2  test.pairs.a + test.pairs.b
+2          render 3  test.square.n
+2          render 4  test.square.sq
+3  join                                           (a, b, rowid[hidden,omitted], n, sq)
+3          type      cross
+4  scan                                           (a, b, rowid[hidden,omitted])
+4          table     pairs@primary
+4  scan                                           (n, sq)
+4          table     square@primary
+
+query IIII
+SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
+----
+1  3  2  4
+3  6  3  9
+4  5  3  9
+
+# The filter expression must stay on top of the outer join.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
+----
+0  render                                                            (a, b, n, sq)
+0          render 0  test.pairs.a
+0          render 1  test.pairs.b
+0          render 2  test.square.n
+0          render 3  test.square.sq
+1  join                                                              (a, b, rowid[hidden,omitted], n, sq)
+1          type      full outer
+1          pred      (test.pairs.a + test.pairs.b) = test.square.sq
+2  scan                                                              (a, b, rowid[hidden,omitted])
+2          table     pairs@primary
+2  scan                                                              (n, sq)
+2          table     square@primary
+
+query IIII
+SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
+----
+1     1     NULL  NULL
+1     2     NULL  NULL
+1     3     2     4
+1     4     NULL  NULL
+1     5     NULL  NULL
+1     6     NULL  NULL
+2     3     NULL  NULL
+2     4     NULL  NULL
+2     5     NULL  NULL
+2     6     NULL  NULL
+3     4     NULL  NULL
+3     5     NULL  NULL
+3     6     3     9
+4     5     3     9
+4     6     NULL  NULL
+NULL  NULL  1     1
+NULL  NULL  4     16
+NULL  NULL  5     25
+NULL  NULL  6     36
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
+----
+0  render                                                            (a, b, n, sq)
+0          render 0  test.pairs.a
+0          render 1  test.pairs.b
+0          render 2  test.square.n
+0          render 3  test.square.sq
+1  filter                                                            (a, b, rowid[hidden,omitted], n, sq)
+1          filter    (test.pairs.b % 2) != (test.square.sq % 2)
+2  join                                                              (a, b, rowid[hidden,omitted], n, sq)
+2          type      full outer
+2          pred      (test.pairs.a + test.pairs.b) = test.square.sq
+3  scan                                                              (a, b, rowid[hidden,omitted])
+3          table     pairs@primary
+3  scan                                                              (n, sq)
+3          table     square@primary
+
+query IIII
+SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
+----
+1     3     2     4
+3     6     3     9
