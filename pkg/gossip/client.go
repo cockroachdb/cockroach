@@ -233,11 +233,16 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		g.maybeTightenLocked()
 	}
 	c.peerID = reply.NodeID
-	if !c.resolvedPlaceholder {
+	c.remoteHighWaterStamps = reply.HighWaterStamps
+
+	// If we haven't yet recorded which node ID we're connected to in the outgoing
+	// nodeSet, do so now. Note that we only want to do this if the peer has a
+	// node ID allocated (i.e. if it's nonzero), because otherwise it could change
+	// after we record it.
+	if !c.resolvedPlaceholder && c.peerID != 0 {
 		c.resolvedPlaceholder = true
 		g.outgoing.resolvePlaceholder(c.peerID)
 	}
-	c.remoteHighWaterStamps = reply.HighWaterStamps
 
 	// Handle remote forwarding.
 	if reply.AlternateAddr != nil {
