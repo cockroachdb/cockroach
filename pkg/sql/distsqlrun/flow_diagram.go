@@ -63,16 +63,16 @@ func (*NoopCoreSpec) summary() (string, []string) {
 }
 
 func (a *AggregatorSpec) summary() (string, []string) {
-	details := make([]string, 0, len(a.Exprs)+1)
+	details := make([]string, 0, len(a.Aggregations)+1)
 	if len(a.GroupCols) > 0 {
 		details = append(details, colListStr(a.GroupCols))
 	}
-	for _, expr := range a.Exprs {
+	for _, agg := range a.Aggregations {
 		distinct := ""
-		if expr.Distinct {
+		if agg.Distinct {
 			distinct = "DISTINCT "
 		}
-		str := fmt.Sprintf("%s(%s@%d)", expr.Func, distinct, expr.ColIdx+1)
+		str := fmt.Sprintf("%s(%s@%d)", agg.Func, distinct, agg.ColIdx+1)
 		details = append(details, str)
 	}
 

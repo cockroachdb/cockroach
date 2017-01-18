@@ -96,8 +96,13 @@ message InputSyncSpec {
     ORDERED = 1;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
+
   optional Ordering ordering = 2 [(gogoproto.nullable) = false];
+
   repeated StreamEndpointSpec streams = 3 [(gogoproto.nullable) = false];
+
+  // Schema for the streams entering this synchronizer.
+  repeated sqlbase.ColumnType column_types = 4 [(gogoproto.nullable) = false];
 }
 
 // OutputRouterSpec is the specification for the output router of a processor;

@@ -109,7 +109,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := &RowBuffer{Rows: srcRows}
+			rowBuf := NewRowBuffer(nil, srcRows)
 			sources = append(sources, rowBuf)
 		}
 		src, err := makeOrderedSync(c.ordering, sources)
@@ -139,14 +139,14 @@ func TestOrderedSync(t *testing.T) {
 func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
+	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	mrc := &MultiplexedRowChannel{}
-	mrc.Init(5)
+	mrc.Init(5, []sqlbase.ColumnType{columnTypeInt})
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
-				b := sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(j)))
+				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				mrc.PushRow(row)
 			}
@@ -182,12 +182,12 @@ func TestUnorderedSync(t *testing.T) {
 
 	// Test case when one source closes with an error.
 	mrc = &MultiplexedRowChannel{}
-	mrc.Init(5)
+	mrc.Init(5, []sqlbase.ColumnType{columnTypeInt})
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
-				b := sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(j)))
+				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				mrc.PushRow(row)
 			}

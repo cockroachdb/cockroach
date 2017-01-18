@@ -122,14 +122,14 @@ func checkDistAggregationInfo(
 		makeTableReader(1, numRows+1, 0),
 		distsqlrun.ProcessorSpec{
 			Input: []distsqlrun.InputSyncSpec{{
-				Type: distsqlrun.InputSyncSpec_UNORDERED,
+				Type:        distsqlrun.InputSyncSpec_UNORDERED,
+				ColumnTypes: []sqlbase.ColumnType{colType},
 				Streams: []distsqlrun.StreamEndpointSpec{
 					{Type: distsqlrun.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
 			}},
 			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-				Types: []sqlbase.ColumnType{colType},
-				Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: fn, ColIdx: 0}},
+				Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: fn, ColIdx: 0}},
 			}},
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
@@ -156,11 +156,11 @@ func checkDistAggregationInfo(
 	}
 	finalProc := distsqlrun.ProcessorSpec{
 		Input: []distsqlrun.InputSyncSpec{{
-			Type: distsqlrun.InputSyncSpec_UNORDERED,
+			Type:        distsqlrun.InputSyncSpec_UNORDERED,
+			ColumnTypes: []sqlbase.ColumnType{intermediaryType},
 		}},
 		Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-			Types: []sqlbase.ColumnType{intermediaryType},
-			Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: info.FinalStage, ColIdx: 0}},
+			Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: info.FinalStage, ColIdx: 0}},
 		}},
 		Output: []distsqlrun.OutputRouterSpec{{
 			Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
@@ -174,14 +174,14 @@ func checkDistAggregationInfo(
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
 		agg := distsqlrun.ProcessorSpec{
 			Input: []distsqlrun.InputSyncSpec{{
-				Type: distsqlrun.InputSyncSpec_UNORDERED,
+				Type:        distsqlrun.InputSyncSpec_UNORDERED,
+				ColumnTypes: []sqlbase.ColumnType{colType},
 				Streams: []distsqlrun.StreamEndpointSpec{
 					{Type: distsqlrun.StreamEndpointSpec_LOCAL, StreamID: distsqlrun.StreamID(2 * i)},
 				},
 			}},
 			Core: distsqlrun.ProcessorCoreUnion{Aggregator: &distsqlrun.AggregatorSpec{
-				Types: []sqlbase.ColumnType{colType},
-				Exprs: []distsqlrun.AggregatorSpec_Expr{{Func: info.LocalStage, ColIdx: 0}},
+				Aggregations: []distsqlrun.AggregatorSpec_Aggregation{{Func: info.LocalStage, ColIdx: 0}},
 			}},
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
