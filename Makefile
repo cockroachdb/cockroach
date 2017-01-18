@@ -97,9 +97,6 @@ install:
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
-# If STATIC=1, tests are statically linked.
-# eg: to statically build the sql tests, run:
-#   make STATIC=1 testbuild PKG=./pkg/sql
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \
