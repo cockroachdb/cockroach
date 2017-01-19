@@ -16,24 +16,14 @@
 
 package main
 
+// The ccl hook import below means building this will produce CCL'ed binaries.
+// This file itself reamins Apache2 though to preserve the organization of ccl
+// code under the /pkg/ccl substree, but is unused for pure FLOSS builds.
 import (
-	"fmt"
-	"math/rand"
-	"os"
-
+	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func main() {
-	// Seed the math/rand RNG from crypto/rand.
-	rand.Seed(randutil.NewPseudoSeed())
-
-	if len(os.Args) == 1 {
-		os.Args = append(os.Args, "help")
-	}
-	if err := cli.Run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed running %q\n", os.Args[1])
-		os.Exit(cli.ErrorCode)
-	}
+	cli.Main()
 }
