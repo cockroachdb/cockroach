@@ -1133,6 +1133,11 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+// NodeID returns the ID of the node this replica belongs to.
+func (r *Replica) NodeID() roachpb.NodeID {
+	return r.store.nodeDesc.NodeID
+}
+
 // setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the Store handle the descriptor
 // update. Requires raftMu to be locked.
@@ -4138,6 +4143,16 @@ func optimizePuts(
 	return reqs
 }
 
+// GCThreshold returns the GC threshold of the Range, typically updated when
+// keys are garbage collected. Reads and writes at timestamps <= this time will
+// not be served.
+func (r *Replica) GCThreshold() hlc.Timestamp {
+	r.mu.Lock()
+	threshold := r.mu.state.GCThreshold
+	r.mu.Unlock()
+	return threshold
+}
+
 func (r *Replica) executeBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -4147,9 +4162,7 @@ func (r *Replica) executeBatch(
 ) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	br := ba.CreateReply()
 
-	r.mu.Lock()
-	threshold := r.mu.state.GCThreshold
-	r.mu.Unlock()
+	threshold := r.GCThreshold()
 	if !threshold.Less(ba.Timestamp) {
 		return nil, EvalResult{}, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
 	}
