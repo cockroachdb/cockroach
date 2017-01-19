@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -62,7 +63,6 @@ type aggregator struct {
 	input       RowSource
 	output      RowReceiver
 	ctx         context.Context
-	rows        *RowBuffer
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
@@ -82,7 +82,6 @@ func newAggregator(
 		input:       input,
 		output:      output,
 		ctx:         log.WithLogTag(ctx.Context, "Agg", nil),
-		rows:        &RowBuffer{},
 		buckets:     make(map[string]struct{}),
 		inputCols:   make(columns, len(spec.Aggregations)),
 		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
@@ -124,39 +123,46 @@ func (ag *aggregator) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
+	ctx, span := tracing.ChildSpan(ag.ctx, "aggregator")
+	defer tracing.FinishSpan(span)
+
 	if log.V(2) {
-		log.Infof(ag.ctx, "starting aggregation process")
-		defer log.Infof(ag.ctx, "exiting aggregator")
+		log.Infof(ctx, "starting aggregation process")
+		defer log.Infof(ctx, "exiting aggregator")
 	}
 
 	if err := ag.accumulateRows(); err != nil {
 		ag.output.Close(err)
 		return
 	}
-	if err := ag.computeAggregates(); err != nil {
-		ag.output.Close(err)
-		return
+
+	log.VEvent(ctx, 1, "accumulation complete")
+
+	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
+	// aggregated.
+	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
+		ag.buckets[""] = struct{}{}
 	}
 
-	for {
-		row, err := ag.rows.NextRow()
-		if err != nil || row == nil {
-			ag.output.Close(err)
-			return
+	// Render the results.
+	tuple := make(parser.DTuple, len(ag.funcs))
+
+	for bucket := range ag.buckets {
+		row := ag.rowAlloc.AllocRow(len(tuple))
+		for i, f := range ag.funcs {
+			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], f.get(bucket))
 		}
-		if log.V(3) {
-			log.Infof(ag.ctx, "pushing %s\n", row)
-		}
+
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
 		if !ag.output.PushRow(row) {
 			if log.V(2) {
-				log.Infof(ag.ctx, "no more rows required")
+				log.Infof(ctx, "no more rows required")
 			}
-			ag.output.Close(nil)
-			return
+			break
 		}
 	}
+	ag.output.Close(nil)
 }
 
 func (ag *aggregator) accumulateRows() error {
@@ -189,31 +195,6 @@ func (ag *aggregator) accumulateRows() error {
 		}
 		scratch = encoded[:0]
 	}
-}
-
-func (ag *aggregator) computeAggregates() error {
-	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
-	// aggregated.
-	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
-		ag.buckets[""] = struct{}{}
-	}
-
-	// Render the results.
-	tuple := make(parser.DTuple, 0, len(ag.funcs))
-	for bucket := range ag.buckets {
-		for _, f := range ag.funcs {
-			datum := f.get(bucket)
-			tuple = append(tuple, datum)
-		}
-
-		row := ag.rowAlloc.AllocRow(len(tuple))
-		sqlbase.DTupleToEncDatumRow(row, ag.outputTypes, tuple)
-		if ok := ag.rows.PushRow(row); !ok {
-			return errors.Errorf("unable to add row %s", row)
-		}
-		tuple = tuple[:0]
-	}
-	return nil
 }
 
 type aggregateFuncHolder struct {
