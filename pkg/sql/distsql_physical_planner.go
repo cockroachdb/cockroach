@@ -142,10 +142,10 @@ func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
 func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notSuppErr error) {
 	switch n := tree.(type) {
 	case *filterNode:
-		// The Evaluator processors we use for select don't support filters yet.
-		// This is easily fixed, but it will only matter when we support joins
-		// (normally, all filters are pushed down to scanNodes).
-		return false, errors.Errorf("filter not supported as separate node")
+		if err := dsp.checkExpr(n.filter); err != nil {
+			return false, err
+		}
+		return dsp.CheckSupport(n.source.plan)
 
 	case *renderNode:
 		for i, e := range n.render {
@@ -409,6 +409,75 @@ func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsqlrun.Expres
 		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), parser.ExprDebugString(expr))
 	}
 	return distsqlrun.Expression{Expr: buf.String()}
+}
+
+// getLastStagePost returns the PostProcessSpec for the current result
+// processors in the plan.
+func (p *physicalPlan) getLastStagePost() distsqlrun.PostProcessSpec {
+	post := p.processors[p.resultRouters[0]].spec.Post
+
+	// All processors of a stage should be identical in terms of post-processing;
+	// verify this assumption.
+	for i := 1; i < len(p.resultRouters); i++ {
+		pi := &p.processors[p.resultRouters[i]].spec.Post
+		if pi.Filter != post.Filter || len(pi.OutputColumns) != len(post.OutputColumns) {
+			panic(fmt.Sprintf("inconsistent post-processing: %v vs %v", post, pi))
+		}
+		for j, col := range pi.OutputColumns {
+			if col != post.OutputColumns[j] {
+				panic(fmt.Sprintf("inconsistent post-processing: %v vs %v", post, pi))
+			}
+		}
+	}
+
+	return post
+}
+
+// addFilter adds a filter on the output of a plan. The filter is added as a
+// post-processing step to the last stage. The expression's IndexedVars, after
+// remapping through indexVarMap, refer to the output columns of the plan's
+// resultRouters.
+func addFilter(p *physicalPlan, expr parser.TypedExpr, indexVarMap []int) {
+	post := p.getLastStagePost()
+
+	// The indexed variables in the filter expression - after remapping via
+	// indexVarMap - refer to the output columns of the processor(s) in the last
+	// stage (specifically p.resultRouters). These processors could have been
+	// already configured with projections.
+	//
+	// The filter in a processor's PostProcessSpec refers to variables *before*
+	// any output projection; so if there is an output projection, we have to take
+	// it into account and generate a composite indexed var map. For example:
+	//
+	//  TableReader // table columns A,B,C,D
+	//  OutputColumns:       0, 2  //  A, C
+	//
+	//  Filter:              IndexedVar(0) < IndexedVar(1)  //  A < C
+	//  indexVarMap:         0, 1  // identity
+	//  compositeMap:        0, 2
+	//  Remapped expression: IndexedVar(0) < IndexedVar(2)
+
+	var compositeMap []int
+	if len(post.OutputColumns) == 0 {
+		compositeMap = indexVarMap
+	} else {
+		compositeMap = make([]int, len(indexVarMap))
+		for i, col := range indexVarMap {
+			if col == -1 {
+				compositeMap[i] = -1
+			} else {
+				compositeMap[i] = int(post.OutputColumns[col])
+			}
+		}
+	}
+
+	filter := distSQLExpression(expr, compositeMap)
+	if post.Filter.Expr != "" {
+		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+	}
+	for _, pIdx := range p.resultRouters {
+		p.processors[pIdx].spec.Post.Filter = filter
+	}
 }
 
 // spanPartition is the intersection between a set of spans for a certain
@@ -776,6 +845,7 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 	p *physicalPlan,
 	nodeID roachpb.NodeID,
 	core distsqlrun.ProcessorCoreUnion,
+	post distsqlrun.PostProcessSpec,
 	colTypes []sqlbase.ColumnType,
 ) {
 	proc := processor{
@@ -786,6 +856,7 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 				ColumnTypes: colTypes,
 			}},
 			Core: core,
+			Post: post,
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 			}},
@@ -955,7 +1026,9 @@ func (dsp *distSQLPlanner) addAggregators(
 		node = prevStageNode
 	}
 	dsp.addSingleGroupStage(
-		p, node, distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec}, inputTypes,
+		p, node,
+		distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec}, distsqlrun.PostProcessSpec{},
+		inputTypes,
 	)
 	evalExprs, needEval := dsp.extractPostAggrExprs(n.render)
 	if needEval {
@@ -1034,10 +1107,10 @@ ColLoop:
 		types[i] = sqlbase.DatumTypeToColumnType(n.index.resultColumns[col].Typ)
 	}
 	dsp.addSingleGroupStage(
-		&plan, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec}, types,
+		&plan, dsp.nodeDesc.NodeID,
+		distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec}, post,
+		types,
 	)
-	// TODO(radu): write generic code to add a filter.
-	plan.processors[plan.resultRouters[0]].spec.Post = post
 	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
 	// output stream.
 	for i := range plan.planToStreamColMap {
@@ -1324,6 +1397,16 @@ func (dsp *distSQLPlanner) createPlanForNode(
 
 		return plan, nil
 
+	case *filterNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+
+		addFilter(&plan, n.filter, plan.planToStreamColMap)
+
+		return plan, nil
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
@@ -1422,6 +1505,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 		plan.processors[plan.resultRouters[0]].node != thisNodeID {
 		dsp.addSingleGroupStage(
 			&plan, thisNodeID, distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+			distsqlrun.PostProcessSpec{},
 			dsp.getTypesForPlanResult(plan.planToStreamColMap, tree),
 		)
 		if len(plan.resultRouters) != 1 {
