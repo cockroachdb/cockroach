@@ -125,4 +125,6 @@ const (
 	ChangeFrozen
 	// WriteBatch applies the operations encoded in a BatchRepr.
 	WriteBatch
+	// Export dumps a keyrange into files.
+	Export
 )

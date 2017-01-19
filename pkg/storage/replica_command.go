@@ -107,6 +107,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.ComputeChecksum:    {Eval: evalComputeChecksum},
 	roachpb.ChangeFrozen:       {Eval: evalChangeFrozen},
 	roachpb.WriteBatch:         writeBatchCmd,
+	roachpb.Export:             exportCmd,
 
 	roachpb.DeprecatedVerifyChecksum: {Eval: func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
 		return EvalResult{}, nil
@@ -2125,12 +2126,20 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 }
 
 var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
+var exportCmd = makeUnimplementedCommand(roachpb.Export)
 
 // SetWriteBatchCmd allows setting the function that will be called as the
 // implementation of the WriteBatch command. Only allowed to be called by Init.
 func SetWriteBatchCmd(cmd Command) {
 	// This is safe if SetWriteBatchCmd is only called at init time.
 	commands[roachpb.WriteBatch] = cmd
+}
+
+// SetExportCmd allows setting the function that will be called as the
+// implementation of the Export command. Only allowed to be called by Init.
+func SetExportCmd(cmd Command) {
+	// This is safe if SetExportCmd is only called at init time.
+	commands[roachpb.Export] = cmd
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
