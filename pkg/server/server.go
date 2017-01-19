@@ -524,9 +524,8 @@ func (s *Server) Start(ctx context.Context) error {
 		case <-s.stopper.ShouldQuiesce():
 			return
 		}
-		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
-			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+			connCtx := log.WithLogTagStr(s.pgServer.Ctx(), "client", conn.RemoteAddr().String())
 			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
@@ -657,9 +656,8 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-s.stopper.ShouldQuiesce():
 				return
 			}
-			pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
-				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				connCtx := log.WithLogTagStr(s.pgServer.Ctx(), "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 					// Report the error on this connection's context, so that we
 					// know which remote client caused the error when looking at

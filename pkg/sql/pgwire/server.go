@@ -18,7 +18,6 @@ package pgwire
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"time"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -60,7 +58,14 @@ const (
 	versionSSL = 80877103
 )
 
-const drainMaxWait = 10 * time.Second
+const (
+	// drainMaxWait is the amount of time a draining server gives to sessions
+	// with ongoing transactions to finish work before cancellation.
+	drainMaxWait = 10 * time.Second
+	// cancelMaxWait is the amount of time a draining server gives to sessions
+	// to react to cancellation and return before a forceful shutdown.
+	cancelMaxWait = 1 * time.Second
+)
 
 // baseSQLMemoryBudget is the amount of memory pre-allocated in each connection.
 var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET",
@@ -77,7 +82,7 @@ var (
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
-	AmbientCtx log.AmbientContext
+	ambientCtx log.AmbientContext
 	cfg        *base.Config
 	executor   *sql.Executor
 
@@ -85,7 +90,14 @@ type Server struct {
 
 	mu struct {
 		syncutil.Mutex
-		draining bool
+		// All session contexts are derived from this cancellable context which
+		// in turn is derived from the server's ambient context. This context
+		// will be reset when the server exits draining mode, hence the need to
+		// keep around the ambient context to derive a new context from.
+		ctx           context.Context
+		cancel        context.CancelFunc
+		connDoneChans map[chan struct{}]struct{}
+		draining      bool
 	}
 
 	sqlMemoryPool mon.MemoryMonitor
@@ -133,7 +145,7 @@ func MakeServer(
 	maxSQLMem int64,
 ) *Server {
 	server := &Server{
-		AmbientCtx: ambientCtx,
+		ambientCtx: ambientCtx,
 		cfg:        cfg,
 		executor:   executor,
 		metrics:    makeServerMetrics(internalMemMetrics),
@@ -150,7 +162,17 @@ func MakeServer(
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes)
 	server.connMonitor.Start(context.Background(), &server.sqlMemoryPool, mon.BoundAccount{})
 
+	server.mu.Lock()
+	server.resetStateLocked()
+	server.mu.Unlock()
+
 	return server
+}
+
+// s.mu must be locked.
+func (s *Server) resetStateLocked() {
+	s.mu.ctx, s.mu.cancel = context.WithCancel(s.ambientCtx.AnnotateCtx(context.Background()))
+	s.mu.connDoneChans = make(map[chan struct{}]struct{})
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -175,6 +197,13 @@ func (s *Server) IsDraining() bool {
 	return s.mu.draining
 }
 
+// Ctx returns the current cancellable context.
+func (s *Server) Ctx() context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.ctx
+}
+
 // Metrics returns the metrics struct.
 func (s *Server) Metrics() *ServerMetrics {
 	return &s.metrics
@@ -187,21 +216,76 @@ func (s *Server) Metrics() *ServerMetrics {
 // When called with 'false', switches back to the normal mode of operation in
 // which connections are accepted.
 func (s *Server) SetDraining(drain bool) error {
-	s.mu.Lock()
-	s.mu.draining = drain
-	s.mu.Unlock()
-	if !drain {
+	return s.SetDrainingImpl(drain, drainMaxWait, cancelMaxWait)
+}
+
+// SetDrainingImpl is exported for testing purposes only.
+func (s *Server) SetDrainingImpl(
+	drain bool, drainWait time.Duration, cancelWait time.Duration,
+) error {
+	// This anonymous function returns a slice of channels to listen to for the
+	// completion of the server's connections if the server is entering draining
+	// mode.
+	connDoneChans := func() map[chan struct{}]struct{} {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.mu.draining == drain {
+			return nil
+		}
+		s.mu.draining = drain
+		if !drain {
+			// If the server is returning to an operational state, the context that
+			// all new sessions will be derived from must be reset as well as the
+			// map of connection done channels.
+			s.resetStateLocked()
+			return nil
+		}
+
+		// Copy the state of the connection done channel map within the critical
+		// section.
+		connDoneChans := make(map[chan struct{}]struct{})
+		for done := range s.mu.connDoneChans {
+			connDoneChans[done] = struct{}{}
+		}
+		return connDoneChans
+	}()
+	if connDoneChans == nil {
 		return nil
 	}
-	return util.RetryForDuration(drainMaxWait, func() error {
-		if c := s.metrics.Conns.Count(); c != 0 {
-			// TODO(tschottdorf): Do more plumbing to actively disrupt
-			// connections; see #6283. There isn't much of a point until
-			// we know what load-balanced clients like to see (#6295).
-			return fmt.Errorf("timed out waiting for %d open connections to drain", c)
+
+	// Spin off a goroutine that waits for all connections to signal that they
+	// are done and reports it on allConnsDone. The main goroutine signals this
+	// goroutine to stop work through quitWaitingForConns.
+	allConnsDone := make(chan struct{})
+	quitWaitingForConns := make(chan struct{})
+	defer close(quitWaitingForConns)
+	go func() {
+		defer close(allConnsDone)
+		for done := range connDoneChans {
+			select {
+			case <-done:
+			case <-quitWaitingForConns:
+				return
+			}
 		}
-		return nil
-	})
+	}()
+
+	// Wait for all connections to finish up to drainWait.
+	select {
+	case <-time.After(drainWait):
+	case <-allConnsDone:
+	}
+
+	// Cancel the parent contexts of any sessions. Any context derived from a
+	// cancelled context will also be cancelled.
+	s.mu.cancel()
+
+	select {
+	case <-time.After(cancelWait):
+		return errors.Errorf("some sessions did not respond to cancellation within %s", cancelWait)
+	case <-allConnsDone:
+	}
+	return nil
 }
 
 // ServeConn serves a single connection, driving the handshake process
@@ -211,6 +295,16 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	{
 		s.mu.Lock()
 		draining = s.mu.draining
+		if !draining {
+			done := make(chan struct{})
+			s.mu.connDoneChans[done] = struct{}{}
+			defer func() {
+				close(done)
+				s.mu.Lock()
+				delete(s.mu.connDoneChans, done)
+				s.mu.Unlock()
+			}()
+		}
 		s.mu.Unlock()
 	}
 

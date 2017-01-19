@@ -200,51 +200,104 @@ func TestPGWireDrainClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
-	// Draining runs in a separate goroutine since it won't return until
-	// the connection with an ongoing transaction finishes.
-	errChan := make(chan error)
-	go func() {
-		defer close(errChan)
-		errChan <- func() error {
-			if now, err := s.(*server.TestServer).Drain(on); err != nil {
-				return err
-			} else if !reflect.DeepEqual(on, now) {
-				return fmt.Errorf("expected drain modes %v, got %v", on, now)
-			}
-			return nil
-		}()
-	}()
-
-	// Ensure server is in draining mode and rejects new connections.
-	testutils.SucceedsSoon(t, func() error {
-		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
-			return fmt.Errorf("unexpected error: %v", err)
-		}
-		return nil
-	})
-
-	if _, err := txn.Exec("SELECT 1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
-	}
-
-	for err := range errChan {
+	{
+		txn, err := db.Begin()
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
+		// Draining runs in a separate goroutine since it won't return until
+		// the connection with an ongoing transaction finishes.
+		errChan := make(chan error)
+		go func() {
+			defer close(errChan)
+			errChan <- func() error {
+				if now, err := s.(*server.TestServer).Drain(on); err != nil {
+					return err
+				} else if !reflect.DeepEqual(on, now) {
+					return fmt.Errorf("expected drain modes %v, got %v", on, now)
+				}
+				return nil
+			}()
+		}()
+
+		// Ensure server is in draining mode and rejects new connections.
+		testutils.SucceedsSoon(t, func() error {
+			if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
+				return fmt.Errorf("unexpected error: %v", err)
+			}
+			return nil
+		})
+
+		if _, err := txn.Exec("SELECT 1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn.Commit(); err != nil {
+			t.Fatal(err)
+		}
+
+		for err := range errChan {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if now := s.(*server.TestServer).Undrain(on); len(now) != 0 {
+			t.Fatalf("unexpected active drain modes: %v", now)
+		}
 	}
 
-	if now := s.(*server.TestServer).Undrain(on); len(now) != 0 {
-		t.Fatalf("unexpected active drain modes: %v", now)
+	{
+		pgServer := s.(*server.TestServer).PGServer()
+		{
+			_, err := db.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Set draining with no drainWait or cancelWait timeout. The
+			// expected behavior is that the ongoing session is immediately
+			// cancelled but pgServer won't wait for the connection to close
+			// properly and notify the caller that a session did not respond
+			// to cancellation.
+			if err := pgServer.SetDrainingImpl(
+				true,
+				0*time.Second, /* drainWait */
+				0*time.Second, /* cancelWait */
+			); !testutils.IsError(err, "some sessions did not respond to cancellation") {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			if err := pgServer.SetDraining(false); err != nil {
+				t.Fatal(err)
+			}
+		}
+		{
+			_, err := db.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Set draining with no drainWait timeout and a 1s cancelWait
+			// timeout. The expected behavior is for the pgServer to immediately
+			// cancel any ongoing sessions and wait for 1s for the cancellation
+			// to take effect. Note we validate that a session finishes
+			// correctly by ensuring that SetDrainingImpl returns no error.
+			if err := pgServer.SetDrainingImpl(
+				true,
+				0*time.Second, /* drainWait */
+				1*time.Second, /* cancelWait */
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := pgServer.SetDraining(false); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
+
 }
 
 func TestPGWireDBName(t *testing.T) {

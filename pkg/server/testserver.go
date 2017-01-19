@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -234,6 +235,14 @@ func (ts *TestServer) TsDB() *ts.DB {
 func (ts *TestServer) DB() *client.DB {
 	if ts != nil {
 		return ts.db
+	}
+	return nil
+}
+
+// PGServer returns the pgwire.Server used by the TestServer.
+func (ts *TestServer) PGServer() *pgwire.Server {
+	if ts != nil {
+		return ts.pgServer
 	}
 	return nil
 }
