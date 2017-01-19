@@ -17,6 +17,7 @@
 package client
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
@@ -90,7 +91,10 @@ func (txn *Txn) SetDebugName(name string, depth int) {
 
 // DebugName returns the debug name associated with the transaction.
 func (txn *Txn) DebugName() string {
-	return txn.Proto.Name
+	if txn.Proto.ID == nil {
+		return txn.Proto.Name
+	}
+	return fmt.Sprintf("%s (id: %s)", txn.Proto.Name, txn.Proto.ID)
 }
 
 // SetIsolation sets the transaction's isolation type. Transactions default to
@@ -396,8 +400,7 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
-// The txn's status is set to ABORTED in case of error. txn is
-// considered finalized and cannot be used to send any more commands.
+// txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() error {
 	log.VEventf(txn.Context, 2, "rolling back transaction")
 	err := txn.sendEndTxnReq(false /* commit */, nil)
@@ -486,20 +489,6 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 		panic("asked to retry or commit a txn that is already aborted")
 	}
 
-	// Ensure that a RetryableTxnError escaping this function is not used by
-	// another (higher-level) Exec() invocation to restart its unrelated
-	// transaction. Technically, setting TxnID to nil here is best-effort and
-	// doesn't ensure that (the error will be wrongly used if the outer txn also
-	// has a nil TxnID).
-	// TODO(andrei): set TxnID to a bogus non-nil value once we get rid of the
-	// retErr.Transaction field.
-	defer func() {
-		if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
-			retErr.TxnID = nil
-			retErr.Transaction = nil
-		}
-	}()
-
 	if opt.AutoRetry {
 		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
@@ -538,23 +527,22 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 			}
 		}
 
-		if !opt.AutoRetry {
-			break
-		}
-
-		if retErr, retryable := err.(*roachpb.RetryableTxnError); !retryable {
-			break
-		} else {
+		retErr, retryable := err.(*roachpb.RetryableTxnError)
+		if retryable && !IsRetryableErrMeantForThisTransaction(retErr, txn) {
 			// Make sure the txn record that err carries is for this txn.
-			// If it's not, we terminate the "retryable" character of the error.
-			if txn.Proto.ID != nil && (retErr.TxnID == nil || *retErr.TxnID != *txn.Proto.ID) {
-				return errors.New(retErr.Error())
-			}
-
-			if !retErr.Backoff {
-				r.Reset()
-			}
+			// If it's not, we terminate the "retryable" character of the error. We
+			// might get a RetryableTxnError if the closure ran another transaction
+			// internally and let the error propagate upwards.
+			return errors.Wrap(retErr, "terminated retryable error")
 		}
+		retErr, retryable = err.(*roachpb.RetryableTxnError)
+		if !opt.AutoRetry || !retryable {
+			break
+		}
+		if !retErr.Backoff {
+			r.Reset()
+		}
+
 		txn.commitTriggers = nil
 
 		log.VEventf(txn.Context, 2, "automatically retrying transaction: %s because of error: %s",
@@ -562,6 +550,18 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 	}
 
 	return err
+}
+
+// IsRetryableErrMeantForThisTransaction returns true if err is a retryable
+// error meant to restart txn.
+func IsRetryableErrMeantForThisTransaction(err *roachpb.RetryableTxnError, txn *Txn) bool {
+	// Make sure the txn record that err carries is for this txn.
+	// TODO(andrei): this "wrong id" detection doesn't always work after a
+	// transaction's proto has been reset (when txn.Proto.ID == nil at the time of
+	// this check). Figure out a more robust mechanism. We should probably move
+	// the initialization of the txn ID here, in the client, from the
+	// TxnCoordSender.
+	return txn.Proto.ID == nil || roachpb.TxnIDEqual(err.TxnID, txn.Proto.ID)
 }
 
 // sendInternal sends the batch and updates the transaction on error. Depending
@@ -610,6 +610,27 @@ func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *
 
 	if log.V(1) {
 		log.Infof(txn.Context, "failed batch: %s", pErr)
+	}
+
+	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+		if !IsRetryableErrMeantForThisTransaction(
+			pErr.GoError().(*roachpb.RetryableTxnError), txn) {
+			// If this happens, something is wrong; we've received an error that
+			// wasn't meant for this transaction. This is a sign that we either
+			// somehow ran another txn inside our txn and didn't properly terminate
+			// its error, or our transaction got a TransactionAbortedError (and the
+			// proto was reset), was retried, and then we still somehow managed to get
+			// an error meant for the previous incarnation of the transaction.
+			// Letting this wrong error slip here can cause us to retry the wrong
+			// transaction.
+			// TODO(andrei): this "wrong id" detection doesn't always work after a
+			// transaction's proto has been reset (when txn.Proto.ID == nil at the
+			// time of this check). Figure out a more robust mechanism. We should
+			// probably move the initialization of the txn ID here, in the client,
+			// from the TxnCoordSender.
+			panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
+				"txn.Proto.ID: %v, pErr.ID: %v", txn.Proto.ID, pErr.GetTxn().ID))
+		}
 	}
 
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {

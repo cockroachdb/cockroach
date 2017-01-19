@@ -87,7 +87,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) erro
 // Note that this returns a new proto, and no fields from the original one are
 // copied. So only use it in contexts where the only thing that matters in the
 // response is the error detail.
-// TODO(andrei): convertBatchError() above seems to serve similar purposes, but
+// TODO(andrei): convertBatchError() seems to serve similar purposes, but
 // it's called from more specialized contexts. Consider unifying the two.
 func convertToErrWithPGCode(err error) error {
 	if err == nil {
