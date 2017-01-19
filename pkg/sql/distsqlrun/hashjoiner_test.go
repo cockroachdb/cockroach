@@ -40,6 +40,7 @@ func TestHashJoiner(t *testing.T) {
 
 	testCases := []struct {
 		spec     HashJoinerSpec
+		outCols  []uint32
 		inputs   []sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
@@ -48,9 +49,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_INNER,
-				OutputColumns:  []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -77,9 +78,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_INNER,
-				OutputColumns:  []uint32{0, 1, 3},
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 1, 3},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -112,10 +113,10 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_INNER,
-				OutputColumns:  []uint32{0, 1, 3},
 				OnExpr:         Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 1, 3},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -156,9 +157,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_LEFT_OUTER,
-				OutputColumns:  []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -188,9 +189,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_RIGHT_OUTER,
-				OutputColumns:  []uint32{3, 1, 2},
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{3, 1, 2},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[1], v[0], v[4]},
@@ -220,9 +221,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_FULL_OUTER,
-				OutputColumns:  []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -252,9 +253,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_INNER,
-				OutputColumns:  []uint32{0, 3, 4},
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -280,9 +281,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_LEFT_OUTER,
-				OutputColumns:  []uint32{0, 1},
 				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
+			outCols: []uint32{0, 1},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0]},
@@ -307,9 +308,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_RIGHT_OUTER,
-				OutputColumns:  []uint32{0, 1},
 				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
+			outCols: []uint32{0, 1},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0]},
@@ -334,9 +335,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
 				Type:           JoinType_FULL_OUTER,
-				OutputColumns:  []uint32{0, 1},
 				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
+			outCols: []uint32{0, 1},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0]},
@@ -364,9 +365,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
 				Type:           JoinType_INNER,
-				OutputColumns:  []uint32{0, 1, 2, 3, 4},
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
+			outCols: []uint32{0, 1, 2, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -391,9 +392,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
 				Type:           JoinType_LEFT_OUTER,
-				OutputColumns:  []uint32{0, 1, 2, 3, 4},
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
+			outCols: []uint32{0, 1, 2, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -421,9 +422,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
 				Type:           JoinType_RIGHT_OUTER,
-				OutputColumns:  []uint32{0, 1, 2, 3, 4},
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
+			outCols: []uint32{0, 1, 2, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -451,9 +452,9 @@ func TestHashJoiner(t *testing.T) {
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
 				Type:           JoinType_FULL_OUTER,
-				OutputColumns:  []uint32{0, 1, 2, 3, 4},
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
+			outCols: []uint32{0, 1, 2, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -487,7 +488,8 @@ func TestHashJoiner(t *testing.T) {
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
-		h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, out)
+		post := PostProcessSpec{OutputColumns: c.outCols}
+		h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
 		if err != nil {
 			t.Fatal(err)
 		}

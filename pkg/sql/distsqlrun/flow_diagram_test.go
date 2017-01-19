@@ -52,20 +52,16 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		Indexes: []sqlbase.IndexDescriptor{{Name: "SomeIndex"}},
 	}
 	tr := TableReaderSpec{
-		Table:         *desc,
-		IndexIdx:      1,
-		OutputColumns: []uint32{0, 1},
-	}
-
-	jr := JoinReaderSpec{
-		Table:         *desc,
-		OutputColumns: []uint32{2},
-		Filter:        Expression{Expr: "@1+@2<@3"},
+		Table:    *desc,
+		IndexIdx: 1,
 	}
 
 	f1 := FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
+			Post: PostProcessSpec{
+				OutputColumns: []uint32{0, 1},
+			},
 			Output: []OutputRouterSpec{{
 				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
@@ -78,6 +74,9 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	f2 := FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
+			Post: PostProcessSpec{
+				OutputColumns: []uint32{0, 1},
+			},
 			Output: []OutputRouterSpec{{
 				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
@@ -91,6 +90,9 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{0, 1},
+				},
 				Output: []OutputRouterSpec{{
 					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
@@ -108,7 +110,11 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 						{StreamID: 2},
 					},
 				}},
-				Core: ProcessorCoreUnion{JoinReader: &jr},
+				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
+				Post: PostProcessSpec{
+					Filter:        Expression{Expr: "@1+@2<@3"},
+					OutputColumns: []uint32{2},
+				},
 				Output: []OutputRouterSpec{{
 					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
@@ -124,21 +130,22 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	}
 
 	expected := `
-		{"nodeNames":["1","2","3"],
-			"processors":[
-				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","@1,@2"]},"outputs":[]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","@1,@2"]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","@1,@2"]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","@3","@1+@2\u003c@3"]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
-			],
-			"edges":[
-				{"sourceProc":0,"sourceOutput":0,"destProc":3,"destInput":1},
-				{"sourceProc":1,"sourceOutput":0,"destProc":3,"destInput":1},
-				{"sourceProc":2,"sourceOutput":0,"destProc":3,"destInput":1},
-				{"sourceProc":3,"sourceOutput":0,"destProc":4,"destInput":0}
-			]
-		}
+		{
+		  "nodeNames":["1","2","3"],
+		  "processors":[
+		    {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
+		    {"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
+		    {"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[]},
+		    {"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[]},
+		    {"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
+		  ],
+		  "edges":[
+		    {"sourceProc":0,"sourceOutput":0,"destProc":3,"destInput":1},
+		    {"sourceProc":1,"sourceOutput":0,"destProc":3,"destInput":1},
+		    {"sourceProc":2,"sourceOutput":0,"destProc":3,"destInput":1},
+		    {"sourceProc":3,"sourceOutput":0,"destProc":4,"destInput":0}
+		  ]
+	  }
 	`
 
 	compareDiagrams(t, buf.String(), expected)
@@ -150,20 +157,13 @@ func TestPlanDiagramJoin(t *testing.T) {
 	descA := &sqlbase.TableDescriptor{Name: "TableA"}
 	descB := &sqlbase.TableDescriptor{Name: "TableB"}
 
-	trA := TableReaderSpec{
-		Table:         *descA,
-		OutputColumns: []uint32{0, 1, 3},
-	}
+	trA := TableReaderSpec{Table: *descA}
 
-	trB := TableReaderSpec{
-		Table:         *descB,
-		OutputColumns: []uint32{1, 2, 4},
-	}
+	trB := TableReaderSpec{Table: *descB}
 
 	hj := HashJoinerSpec{
 		LeftEqColumns:  []uint32{0, 2},
 		RightEqColumns: []uint32{2, 1},
-		OutputColumns:  []uint32{0, 1, 2, 3, 4, 5},
 		OnExpr:         Expression{Expr: "@1+@2<@6"},
 	}
 
@@ -171,6 +171,9 @@ func TestPlanDiagramJoin(t *testing.T) {
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{0, 1, 3},
+				},
 				Output: []OutputRouterSpec{{
 					Type:        OutputRouterSpec_BY_HASH,
 					HashColumns: []uint32{0, 1},
@@ -187,6 +190,9 @@ func TestPlanDiagramJoin(t *testing.T) {
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{0, 1, 3},
+				},
 				Output: []OutputRouterSpec{{
 					Type:        OutputRouterSpec_BY_HASH,
 					HashColumns: []uint32{0, 1},
@@ -215,6 +221,9 @@ func TestPlanDiagramJoin(t *testing.T) {
 					},
 				},
 				Core: ProcessorCoreUnion{HashJoiner: &hj},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{0, 1, 2, 3, 4, 5},
+				},
 				Output: []OutputRouterSpec{{
 					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
@@ -242,6 +251,9 @@ func TestPlanDiagramJoin(t *testing.T) {
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{0, 1, 3},
+				},
 				Output: []OutputRouterSpec{{
 					Type:        OutputRouterSpec_BY_HASH,
 					HashColumns: []uint32{0, 1},
@@ -253,6 +265,9 @@ func TestPlanDiagramJoin(t *testing.T) {
 			},
 			{
 				Core: ProcessorCoreUnion{TableReader: &trB},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{1, 2, 4},
+				},
 				Output: []OutputRouterSpec{{
 					Type:        OutputRouterSpec_BY_HASH,
 					HashColumns: []uint32{2, 1},
@@ -294,6 +309,9 @@ func TestPlanDiagramJoin(t *testing.T) {
 	f4 := FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &trB},
+			Post: PostProcessSpec{
+				OutputColumns: []uint32{1, 2, 4},
+			},
 			Output: []OutputRouterSpec{{
 				Type:        OutputRouterSpec_BY_HASH,
 				HashColumns: []uint32{2, 1},
@@ -313,21 +331,21 @@ func TestPlanDiagramJoin(t *testing.T) {
 	}
 
 	expected := `
-		{
-			"nodeNames":["1","2","3","4"],
-			"processors":[
-				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","@1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","@1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)","@1,@2,@3,@4,@5,@6","@1+@2\u003c@6"]},"outputs":[]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","@1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","@2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)","@1,@2,@3,@4,@5,@6","@1+@2\u003c@6"]},"outputs":[]},
-				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","@2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
-			],
-			"edges":[
-				{"sourceProc":0,"sourceOutput":1,"destProc":2,"destInput":1},
+    {
+    	"nodeNames":["1","2","3","4"],
+    	"processors":[
+    	  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+    		{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+    		{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
+    		{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
+    		{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+    		{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+    		{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)"]},"outputs":[]},
+    		{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+    		{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
+      ],
+    	"edges":[
+			  {"sourceProc":0,"sourceOutput":1,"destProc":2,"destInput":1},
 				{"sourceProc":0,"sourceOutput":1,"destProc":6,"destInput":1},
 				{"sourceProc":1,"sourceOutput":1,"destProc":2,"destInput":1},
 				{"sourceProc":1,"sourceOutput":1,"destProc":6,"destInput":1},
@@ -341,7 +359,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 				{"sourceProc":7,"sourceOutput":1,"destProc":2,"destInput":2},
 				{"sourceProc":7,"sourceOutput":1,"destProc":6,"destInput":2}
 			]
-		}
+    }
 	`
 
 	compareDiagrams(t, buf.String(), expected)

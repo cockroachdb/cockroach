@@ -27,31 +27,28 @@ import (
 type joinerBase struct {
 	ctx                     context.Context
 	leftSource, rightSource RowSource
-	output                  RowReceiver
 
 	joinType    joinType
-	outputCols  columns
 	onCond      exprHelper
-	rowAlloc    sqlbase.EncDatumRowAlloc
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
 	combinedRow sqlbase.EncDatumRow
+
+	out procOutputHelper
 }
 
 func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
 	leftSource RowSource,
 	rightSource RowSource,
-	output RowReceiver,
-	outputCols []uint32,
 	jType JoinType,
-	expr Expression,
+	onExpr Expression,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) error {
 	jb.leftSource = leftSource
 	jb.rightSource = rightSource
-	jb.output = output
 	jb.ctx = log.WithLogTag(flowCtx.Context, "Joiner", nil)
-	jb.outputCols = columns(outputCols)
 	jb.joinType = joinType(jType)
 
 	leftTypes := leftSource.Types()
@@ -69,7 +66,10 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	return jb.onCond.init(expr, types, flowCtx.evalCtx)
+	if err := jb.onCond.init(onExpr, types, flowCtx.evalCtx); err != nil {
+		return err
+	}
+	return jb.out.init(post, types, flowCtx.evalCtx, output)
 }
 
 // render evaluates the provided on-condition and constructs a row with columns
@@ -117,10 +117,5 @@ func (jb *joinerBase) render(
 		}
 		jb.combinedRow = append(jb.combinedRow[:len(lrow)], jb.emptyRight...)
 	}
-
-	row := jb.rowAlloc.AllocRow(len(jb.outputCols))
-	for i, col := range jb.outputCols {
-		row[i] = jb.combinedRow[col]
-	}
-	return row, !res, nil
+	return jb.combinedRow, !res, nil
 }

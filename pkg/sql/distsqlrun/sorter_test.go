@@ -173,7 +173,10 @@ func TestSorter(t *testing.T) {
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background()}
 
-		s := newSorter(&flowCtx, &ss, in, out)
+		s, err := newSorter(&flowCtx, &ss, in, &PostProcessSpec{}, out)
+		if err != nil {
+			t.Fatal(err)
+		}
 		s.Run(nil)
 		if out.Err != nil {
 			t.Fatal(out.Err)

@@ -71,31 +71,39 @@ func TestTableReader(t *testing.T) {
 
 	testCases := []struct {
 		spec     TableReaderSpec
+		post     PostProcessSpec
 		expected string
 	}{
 		{
-			spec: TableReaderSpec{
+			spec: TableReaderSpec{},
+			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"}, // sum < 5 && b != 3
 				OutputColumns: []uint32{0, 1},
 			},
 			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
 		},
+		/* TODO(radu): reenable this when we add back support for HardLimit
 		{
 			spec: TableReaderSpec{
+				HardLimit: 4,
+			},
+			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"},
 				OutputColumns: []uint32{3}, // s
-				HardLimit:     4,
 			},
 			expected: "[['one'] ['two'] ['four'] ['one-zero']]",
 		},
+		*/
 		{
 			spec: TableReaderSpec{
-				IndexIdx:      1,
-				Reverse:       true,
-				Spans:         []TableReaderSpan{makeIndexSpan(4, 6)},
+				IndexIdx:  1,
+				Reverse:   true,
+				Spans:     []TableReaderSpan{makeIndexSpan(4, 6)},
+				SoftLimit: 1,
+			},
+			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@1 < 3"}, // sum < 8
 				OutputColumns: []uint32{0, 1},
-				SoftLimit:     1,
 			},
 			expected: "[[2 5] [1 5] [0 5] [2 4] [1 4] [0 4]]",
 		},
@@ -113,7 +121,7 @@ func TestTableReader(t *testing.T) {
 		}
 
 		out := &RowBuffer{}
-		tr, err := newTableReader(&flowCtx, &ts, out)
+		tr, err := newTableReader(&flowCtx, &ts, &c.post, out)
 		if err != nil {
 			t.Fatal(err)
 		}

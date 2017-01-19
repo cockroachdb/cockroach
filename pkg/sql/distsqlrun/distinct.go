@@ -27,27 +27,30 @@ import (
 
 type distinct struct {
 	input        RowSource
-	output       RowReceiver
 	ctx          context.Context
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
 	orderedCols  map[uint32]struct{}
 	datumAlloc   sqlbase.DatumAlloc
+	out          procOutputHelper
 }
 
 var _ processor = &distinct{}
 
 func newDistinct(
-	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, output RowReceiver,
+	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
 		input:       input,
-		output:      output,
 		ctx:         log.WithLogTag(flowCtx.Context, "Evaluator", nil),
 		orderedCols: make(map[uint32]struct{}),
 	}
 	for _, col := range spec.OrderedColumns {
 		d.orderedCols[col] = struct{}{}
+	}
+
+	if err := d.out.init(post, input.Types(), flowCtx.evalCtx, output); err != nil {
+		return nil, err
 	}
 
 	return d, nil
@@ -71,7 +74,7 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 	for {
 		row, err := d.input.NextRow()
 		if err != nil || row == nil {
-			d.output.Close(err)
+			d.out.close(err)
 			return
 		}
 
@@ -81,7 +84,7 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 		// the row is the key we use in our 'seen' set.
 		encoding, err := d.encode(scratch, row)
 		if err != nil {
-			d.output.Close(err)
+			d.out.close(err)
 			return
 		}
 
@@ -89,7 +92,7 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 		// group key thus avoiding the need to store encodings of all rows.
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			d.output.Close(err)
+			d.out.close(err)
 			return
 		}
 
@@ -101,11 +104,8 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 		key := string(encoding)
 		if _, ok := d.seen[key]; !ok {
 			d.seen[key] = struct{}{}
-			if !d.output.PushRow(row) {
-				if log.V(2) {
-					log.Infof(ctx, "no more rows required")
-				}
-				d.output.Close(nil)
+			if !d.out.emitRow(ctx, row) {
+				d.out.close(nil)
 				return
 			}
 		}

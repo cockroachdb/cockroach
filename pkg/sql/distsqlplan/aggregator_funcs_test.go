@@ -89,9 +89,8 @@ func checkDistAggregationInfo(
 
 	makeTableReader := func(startPK, endPK int, streamID int) distsqlrun.ProcessorSpec {
 		tr := distsqlrun.TableReaderSpec{
-			Table:         *tableDesc,
-			OutputColumns: []uint32{uint32(colIdx)},
-			Spans:         make([]distsqlrun.TableReaderSpan, 1),
+			Table: *tableDesc,
+			Spans: make([]distsqlrun.TableReaderSpan, 1),
 		}
 
 		var err error
@@ -106,6 +105,9 @@ func checkDistAggregationInfo(
 
 		return distsqlrun.ProcessorSpec{
 			Core: distsqlrun.ProcessorCoreUnion{TableReader: &tr},
+			Post: distsqlrun.PostProcessSpec{
+				OutputColumns: []uint32{uint32(colIdx)},
+			},
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 				Streams: []distsqlrun.StreamEndpointSpec{
