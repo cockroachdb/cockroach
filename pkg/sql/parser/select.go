@@ -27,7 +27,7 @@ import (
 	"fmt"
 )
 
-// SelectStatement any SELECT statement.
+// SelectStatement represents any SELECT statement.
 type SelectStatement interface {
 	Statement
 	selectStatement()
