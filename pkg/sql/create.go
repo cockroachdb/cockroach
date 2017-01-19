@@ -49,52 +49,32 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	if n.Template != nil {
-		template, err := n.Template.ResolveAsType(&p.semaCtx, parser.TypeString)
-		if err != nil {
-			return nil, err
-		}
-		templateStr := string(*template.(*parser.DString))
+	if tmpl := n.Template; tmpl != "" {
 		// See https://www.postgresql.org/docs/current/static/manage-ag-templatedbs.html
-		if !strings.EqualFold(templateStr, "template0") {
-			return nil, fmt.Errorf("unsupported template: %s", templateStr)
+		if !strings.EqualFold(tmpl, "template0") {
+			return nil, fmt.Errorf("unsupported template: %s", tmpl)
 		}
 	}
 
-	if n.Encoding != nil {
-		encoding, err := n.Encoding.ResolveAsType(&p.semaCtx, parser.TypeString)
-		if err != nil {
-			return nil, err
-		}
-		encodingStr := string(*encoding.(*parser.DString))
+	if enc := n.Encoding; enc != "" {
 		// We only support UTF8 (and aliases for UTF8).
-		if !(strings.EqualFold(encodingStr, "UTF8") ||
-			strings.EqualFold(encodingStr, "UTF-8") ||
-			strings.EqualFold(encodingStr, "UNICODE")) {
-			return nil, fmt.Errorf("unsupported encoding: %s", encoding)
+		if !(strings.EqualFold(enc, "UTF8") ||
+			strings.EqualFold(enc, "UTF-8") ||
+			strings.EqualFold(enc, "UNICODE")) {
+			return nil, fmt.Errorf("unsupported encoding: %s", enc)
 		}
 	}
 
-	if n.Collate != nil {
-		collate, err := n.Collate.ResolveAsType(&p.semaCtx, parser.TypeString)
-		if err != nil {
-			return nil, err
-		}
-		collateStr := string(*collate.(*parser.DString))
+	if col := n.Collate; col != "" {
 		// We only support C and C.UTF-8.
-		if collateStr != "C" && collateStr != "C.UTF-8" {
-			return nil, fmt.Errorf("unsupported collation: %s", collate)
+		if col != "C" && col != "C.UTF-8" {
+			return nil, fmt.Errorf("unsupported collation: %s", col)
 		}
 	}
 
-	if n.CType != nil {
-		ctype, err := n.CType.ResolveAsType(&p.semaCtx, parser.TypeString)
-		if err != nil {
-			return nil, err
-		}
-		ctypeStr := string(*ctype.(*parser.DString))
+	if ctype := n.CType; ctype != "" {
 		// We only support C and C.UTF-8.
-		if ctypeStr != "C" && ctypeStr != "C.UTF-8" {
+		if ctype != "C" && ctype != "C.UTF-8" {
 			return nil, fmt.Errorf("unsupported character classification: %s", ctype)
 		}
 	}
@@ -277,13 +257,8 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 	}
 
 	var resolvedPassword string
-	if n.Password != nil {
-		password, err := n.Password.ResolveAsType(&p.semaCtx, parser.TypeString)
-		if err != nil {
-			return nil, err
-		}
-
-		resolvedPassword = string(*password.(*parser.DString))
+	if n.HasPassword() {
+		resolvedPassword = *n.Password
 		if resolvedPassword == "" {
 			return nil, security.ErrEmptyPassword
 		}
