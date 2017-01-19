@@ -75,7 +75,7 @@ func newClient(ambient log.AmbientContext, addr net.Addr, nodeMetrics Metrics) *
 // start dials the remote addr and commences gossip once connected. Upon exit,
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
-func (c *client) start(
+func (c *client) startLocked(
 	g *Gossip,
 	disconnected chan *client,
 	rpcCtx *rpc.Context,
