@@ -18,7 +18,6 @@ package pgwire
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"time"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -60,7 +58,14 @@ const (
 	versionSSL = 80877103
 )
 
-const drainMaxWait = 10 * time.Second
+const (
+	// drainMaxWait is the amount of time a draining server gives to sessions
+	// with ongoing transactions to finish work before cancellation.
+	drainMaxWait = 10 * time.Second
+	// cancelMaxWait is the amount of time a draining server gives to sessions
+	// to react to cancellation and return before a forceful shutdown.
+	cancelMaxWait = 1 * time.Second
+)
 
 // baseSQLMemoryBudget is the amount of memory pre-allocated in each connection.
 var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET",
@@ -75,6 +80,10 @@ var (
 	sslUnsupported = []byte{'N'}
 )
 
+// cancelChanMap keeps track of channels that are closed after the associated
+// cancellation function has been called and the cancellation has taken place.
+type cancelChanMap map[chan struct{}]context.CancelFunc
+
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
 	AmbientCtx log.AmbientContext
@@ -85,7 +94,8 @@ type Server struct {
 
 	mu struct {
 		syncutil.Mutex
-		draining bool
+		connCancelMap cancelChanMap
+		draining      bool
 	}
 
 	sqlMemoryPool mon.MemoryMonitor
@@ -150,6 +160,10 @@ func MakeServer(
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes)
 	server.connMonitor.Start(context.Background(), &server.sqlMemoryPool, mon.BoundAccount{})
 
+	server.mu.Lock()
+	server.mu.connCancelMap = make(cancelChanMap)
+	server.mu.Unlock()
+
 	return server
 }
 
@@ -187,32 +201,110 @@ func (s *Server) Metrics() *ServerMetrics {
 // When called with 'false', switches back to the normal mode of operation in
 // which connections are accepted.
 func (s *Server) SetDraining(drain bool) error {
-	s.mu.Lock()
-	s.mu.draining = drain
-	s.mu.Unlock()
-	if !drain {
+	return s.setDrainingImpl(drain, drainMaxWait, cancelMaxWait)
+}
+
+func (s *Server) setDrainingImpl(
+	drain bool, drainWait time.Duration, cancelWait time.Duration,
+) error {
+	// This anonymous function returns a copy of s.mu.connCancelMap if there are
+	// any active connections to cancel. We will only attempt to cancel
+	// connections that were active at the moment the draining switch happened.
+	// It is enough to do this because:
+	// 1) If no new connections are added to the original map all connections
+	// will be cancelled.
+	// 2) If new connections are added to the original map, it follows that they
+	// were added when s.mu.draining = false, thus not requiring cancellation.
+	connCancelMap := func() cancelChanMap {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.mu.draining == drain {
+			return nil
+		}
+		s.mu.draining = drain
+		if !drain {
+			return nil
+		}
+
+		connCancelMap := make(cancelChanMap)
+		for done, cancel := range s.mu.connCancelMap {
+			connCancelMap[done] = cancel
+		}
+		return connCancelMap
+	}()
+	if len(connCancelMap) == 0 {
 		return nil
 	}
-	return util.RetryForDuration(drainMaxWait, func() error {
-		if c := s.metrics.Conns.Count(); c != 0 {
-			// TODO(tschottdorf): Do more plumbing to actively disrupt
-			// connections; see #6283. There isn't much of a point until
-			// we know what load-balanced clients like to see (#6295).
-			return fmt.Errorf("timed out waiting for %d open connections to drain", c)
+
+	// Spin off a goroutine that waits for all connections to signal that they
+	// are done and reports it on allConnsDone. The main goroutine signals this
+	// goroutine to stop work through quitWaitingForConns.
+	allConnsDone := make(chan struct{})
+	quitWaitingForConns := make(chan struct{})
+	defer close(quitWaitingForConns)
+	go func() {
+		defer close(allConnsDone)
+		for done := range connCancelMap {
+			select {
+			case <-done:
+			case <-quitWaitingForConns:
+				return
+			}
 		}
+	}()
+
+	// Wait for all connections to finish up to drainWait.
+	select {
+	case <-time.After(drainWait):
+	case <-allConnsDone:
+	}
+
+	// Cancel the contexts of all sessions if the server is still in draining
+	// mode.
+	if stop := func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !s.mu.draining {
+			return true
+		}
+		for _, cancel := range connCancelMap {
+			// There is a possibility that different calls to SetDraining have
+			// overlapping connCancelMaps, but context.CancelFunc calls are
+			// idempotent.
+			cancel()
+		}
+		return false
+	}(); stop {
 		return nil
-	})
+	}
+
+	select {
+	case <-time.After(cancelWait):
+		return errors.Errorf("some sessions did not respond to cancellation within %s", cancelWait)
+	case <-allConnsDone:
+	}
+	return nil
 }
 
 // ServeConn serves a single connection, driving the handshake process
 // and delegating to the appropriate connection type.
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
-	var draining bool
-	{
-		s.mu.Lock()
-		draining = s.mu.draining
-		s.mu.Unlock()
+	s.mu.Lock()
+	draining := s.mu.draining
+	if !draining {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		done := make(chan struct{})
+		s.mu.connCancelMap[done] = cancel
+		defer func() {
+			cancel()
+			close(done)
+			s.mu.Lock()
+			delete(s.mu.connCancelMap, done)
+			s.mu.Unlock()
+		}()
 	}
+	s.mu.Unlock()
 
 	// If the Server is draining, we will use the connection only to send an
 	// error, so we don't count it in the stats. This makes sense since
