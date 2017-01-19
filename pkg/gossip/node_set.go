@@ -85,13 +85,7 @@ func (as nodeSet) hasNode(node roachpb.NodeID) bool {
 
 // setMaxSize adjusts the maximum size allowed for the node set.
 func (as *nodeSet) setMaxSize(maxSize int) {
-	// Only allow increases to maxSize to avoid potentially breaking the
-	// placeholders logic. Keeping extra gossip connections open is safe.
-	// TODO(a-robinson): Remove this clumsy workaround, potentially by just
-	// not killing the server if our assertions fail (e.g. #12680).
-	if maxSize > as.maxSize {
-		as.maxSize = maxSize
-	}
+	as.maxSize = maxSize
 }
 
 // addNode adds the node to the nodes set.
@@ -139,12 +133,5 @@ func (as *nodeSet) updateGauge() {
 		log.Fatalf(context.TODO(),
 			"nodeSet.placeholders should never be less than 0; gossip logic is broken %+v", as)
 	}
-
-	newTotal := as.len()
-	if newTotal > as.maxSize {
-		log.Fatalf(context.TODO(),
-			"too many nodes (%d) in nodeSet (maxSize=%d); gossip logic is broken: %+v",
-			newTotal, as.maxSize, as)
-	}
-	as.gauge.Update(int64(newTotal))
+	as.gauge.Update(int64(as.len()))
 }
