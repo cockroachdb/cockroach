@@ -105,7 +105,7 @@ func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 	if s.result == nil {
 		panic("subquery was not pre-evaluated properly")
 	}
-	return s.result, s.err
+	return s.result, nil
 }
 
 func (s *subquery) doEval() (result parser.Datum, err error) {

@@ -333,7 +333,14 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 	if err := c.setupSession(ctx, reserved); err != nil {
 		return err
 	}
-	defer c.closeSession(ctx)
+	defer func() {
+		// If we're panicking, don't bother trying to close the session; it would
+		// pollute the logs.
+		if r := recover(); r != nil {
+			panic(r)
+		}
+		c.closeSession(ctx)
+	}()
 
 	// Once a session has been set up, the underlying net.Conn is switched to
 	// a conn that exits if the session's context is cancelled or if the server

@@ -641,6 +641,13 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
 		err := txn.Exec(execOpt, txnClosure)
+		if len(results) > 0 {
+			// Override the error in the last result, if any. We might have had a
+			// RetryableTxnError that got converted to a non-retryable error when the
+			// txn closure was done.
+			lastRes := &results[len(results)-1]
+			lastRes.Err = convertToErrWithPGCode(err)
+		}
 
 		// Update the Err field of the last result if the error was coming from
 		// auto commit. The error was generated outside of the txn closure, so it was not
@@ -669,6 +676,15 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				log.Fatalf(session.Ctx(),
 					"error (%s) was returned, but it was not set in the last result (%v)",
 					err, lastResult)
+			}
+		}
+
+		// Sanity check about not leaving KV txns open on errors.
+		if err != nil && txnState.txn != nil && !txnState.txn.IsFinalized() {
+			if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
+					"transaction is not finalized. TxnState: %s, err: %s\n"+
+					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto)
 			}
 		}
 
@@ -863,7 +879,6 @@ func (e *Executor) execStmtsInCurrentTxn(
 				}
 			}
 		}
-		res.Err = convertToErrWithPGCode(res.Err)
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
 			filter(ctx, stmt.String(), &res)
 		}
