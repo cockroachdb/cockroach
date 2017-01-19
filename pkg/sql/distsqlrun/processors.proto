@@ -166,7 +166,7 @@ message MergeJoinerSpec {
   // stream has M columns, in this expression ordinal references @1 to @N refer
   // to columns of the left stream and variables @(N+1) to @(N+M) refer to
   // columns in the right stream.
-  optional Expression expr = 5 [(gogoproto.nullable) = false];
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
 
@@ -196,7 +196,7 @@ message HashJoinerSpec {
   // stream has M columns, in this expression variables @1 to @N refer to
   // columns of the left stream and variables @N to @(N+M) refer to columns in
   // the right stream.
-  optional Expression expr = 5 [(gogoproto.nullable) = false];
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
 

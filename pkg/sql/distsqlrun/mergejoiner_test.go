@@ -129,7 +129,7 @@ func TestMergeJoiner(t *testing.T) {
 					}),
 				Type:          JoinType_INNER,
 				OutputColumns: []uint32{0, 1, 3},
-				Expr:          Expression{Expr: "@4 >= 4"},
+				OnExpr:        Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
 			inputs: []sqlbase.EncDatumRows{
