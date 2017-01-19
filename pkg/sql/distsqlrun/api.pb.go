@@ -34,6 +34,7 @@
 		HashJoinerSpec
 		AggregatorSpec
 		ProcessorCoreUnion
+		PostProcessSpec
 		ProcessorSpec
 		FlowSpec
 */

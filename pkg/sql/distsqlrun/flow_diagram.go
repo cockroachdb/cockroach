@@ -86,10 +86,6 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 	}
 	details := []string{
 		fmt.Sprintf("%s@%s", index, tr.Table.Name),
-		colListStr(tr.OutputColumns),
-	}
-	if tr.Filter.Expr != "" {
-		details = append(details, tr.Filter.Expr)
 	}
 	// TODO(radu): a summary of the spans
 	return "TableReader", details
@@ -102,10 +98,6 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	}
 	details := []string{
 		fmt.Sprintf("%s@%s", index, jr.Table.Name),
-		colListStr(jr.OutputColumns),
-	}
-	if jr.Filter.Expr != "" {
-		details = append(details, jr.Filter.Expr)
 	}
 	return "JoinReader", details
 }
@@ -115,10 +107,6 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 		fmt.Sprintf(
 			"ON left(%s)=right(%s)", colListStr(hj.LeftEqColumns), colListStr(hj.RightEqColumns),
 		),
-		colListStr(hj.OutputColumns),
-	}
-	if hj.OnExpr.Expr != "" {
-		details = append(details, hj.OnExpr.Expr)
 	}
 	return "HashJoiner", details
 }
@@ -141,8 +129,6 @@ func (e *EvaluatorSpec) summary() (string, []string) {
 	}
 	return "Evaluator", details
 }
-
-// TODO(radu): implement summary() for other core types.
 
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
@@ -168,6 +154,17 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 	default:
 		return "unknown", []string{}
 	}
+}
+
+func (post *PostProcessSpec) summary() []string {
+	var res []string
+	if post.Filter.Expr != "" {
+		res = append(res, fmt.Sprintf("Filter: %s", post.Filter.Expr))
+	}
+	if len(post.OutputColumns) > 0 {
+		res = append(res, fmt.Sprintf("Out: %s", colListStr(post.OutputColumns)))
+	}
+	return res
 }
 
 type diagramCell struct {
@@ -208,6 +205,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 		for _, p := range flows[n].Processors {
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
+			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
 
 			// We need explicit synchronizers if we have multiple inputs, or if the
 			// one input has multiple input streams.

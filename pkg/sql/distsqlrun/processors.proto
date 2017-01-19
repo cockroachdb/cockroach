@@ -45,6 +45,8 @@ message TableReaderSpan {
 // TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
+//
+// The internal columns of a TableReader are the columns of the table.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -52,15 +54,6 @@ message TableReaderSpec {
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
   optional bool reverse = 3 [(gogoproto.nullable) = false];
   repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
-
-  // The filter expression references the columns in the table (table.columns)
-  // via ordinal references (@1, @2, etc). If a secondary index is used, the
-  // columns that are not available as part of the index cannot be referenced.
-  optional Expression filter = 5 [(gogoproto.nullable) = false];
-
-  // The table reader will only produce values for these columns, referenced by
-  // their indices in table.columns.
-  repeated uint32 output_columns = 6 [packed = true];
 
   // If nonzero, the table reader only needs to return this many rows.
   optional int64 hard_limit = 8 [(gogoproto.nullable) = false];
@@ -73,6 +66,8 @@ message TableReaderSpec {
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
 // values in the input stream (join by lookup).
+//
+// The internal columns of a JoinReader are the columns of the table.
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -80,15 +75,6 @@ message JoinReaderSpec {
   // for each primary key.
   // TODO(radu): figure out the correct semantics when joining with an index.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
-
-  // The filter expression references the columns in the table (table.columns)
-  // via ordinal references (@1, @2, etc). If a secondary index is used, the
-  // columns that are not available as part of the index cannot be referenced.
-  optional Expression filter = 3 [(gogoproto.nullable) = false];
-
-  // The table reader will only produce values for these columns, referenced by
-  // their indices in table.columns.
-  repeated uint32 output_columns = 4 [packed = true];
 
   // TODO(radu): add field to describe the input columns and allow plumbing
   // through values that aren't used for the lookup.
@@ -117,11 +103,6 @@ message SorterSpec {
 // The 'program' is a set of expressions evaluated in order, the output
 // schema therefore consists of the results of evaluating each of these
 // expressions on the input row.
-//
-// TODO(irfansharif): Add support for an optional output filter expression.
-// The filter expression would reference the columns in the row via @1, @2,
-// etc., possibly optimizing if filtering on expressions common to the
-// 'program'.
 message EvaluatorSpec {
   repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 }
@@ -150,7 +131,10 @@ enum JoinType {
 // same ordering on columns C1, C2 and C5, C4 respectively. For example: C1+,C2-
 // and C5+,C4-.
 //
-// It is guaranteed that the results preserve this ordering.
+// The internal columns of a MergeJoiner are as follows: assuming that the left
+// stream has N columns and the right stream has M columns, column indices 0 to
+// (N-1) refer to left stream columns and indices N to (N+M-1) refer to right
+// stream columns.
 message MergeJoinerSpec {
   // The streams must be ordered according to the columns that have equality
   // constraints. The first column of the left ordering is constrained to be
@@ -170,10 +154,6 @@ message MergeJoinerSpec {
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
 
-  // Columns for the output stream. Assuming that the left stream has N columns
-  // and the right stream has M columns, column indices 0 to (N-1) refer to left
-  // stream columns and indices N to (N+M-1) refer to right stream columns.
-  repeated uint32 output_columns = 7 [packed = true];
 }
 
 // HashJoinerSpec is the specification for a hash join processor. The processor
@@ -185,6 +165,11 @@ message MergeJoinerSpec {
 // guaranteed that results that involve the left stream preserve the ordering;
 // i.e. all results that stem from left row (i) precede results that stem from
 // left row (i+1).
+//
+// The internal columns of a HashJoiner are as follows: assuming that the left
+// stream has N columns and the right stream has M columns, column indices 0 to
+// (N-1) refer to left stream columns and indices N to (N+M-1) refer to right
+// stream columns.
 message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
   // corresponding columns on the right stream. These must have the same length.
@@ -199,11 +184,6 @@ message HashJoinerSpec {
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
-
-  // Columns for the output stream. Assuming that the left stream has N columns
-  // and the right stream has M columns, column indices 0 to (N-1) refer to left
-  // stream columns and indices N to (N+M-1) refer to right stream columns.
-  repeated uint32 output_columns = 7 [packed = true];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core
@@ -249,7 +229,7 @@ message AggregatorSpec {
 
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.
-  repeated uint32 group_cols = 2;
+  repeated uint32 group_cols = 2 [packed = true];
 
   repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
 }
@@ -266,8 +246,21 @@ message ProcessorCoreUnion {
   optional DistinctSpec distinct = 7;
   optional MergeJoinerSpec mergeJoiner = 8;
   optional HashJoinerSpec hashJoiner = 9;
-  // TODO(radu): other "processor core" types will go here.
-  // TODO(irfansharif): add join, set operations, etc. from #7587
+}
+
+// PostProcessSpec describes the processing required to obtain the output
+// (filtering, projection). It operates on the internal schema of the processor
+// core.
+message PostProcessSpec {
+  // A filtering expression which references the internal columns of the
+  // processor via ordinal references (@1, @2, etc).
+  optional Expression filter = 1 [(gogoproto.nullable) = false];
+
+  // Every processor has an internal set of columns (as described above); it may
+  // only emit some of them, as described by this list. This can be omitted for
+  // some processors (like Evaluator, Aggregator) where the mapping is a trivial
+  // 1-to-1.
+  repeated uint32 output_columns = 2 [packed = true];
 }
 
 message ProcessorSpec {
@@ -275,6 +268,8 @@ message ProcessorSpec {
   repeated InputSyncSpec input = 1 [(gogoproto.nullable) = false];
 
   optional ProcessorCoreUnion core = 2 [(gogoproto.nullable) = false];
+
+  optional PostProcessSpec post = 4 [(gogoproto.nullable) = false];
 
   // In most cases, there is one output.
   repeated OutputRouterSpec output = 3 [(gogoproto.nullable) = false];
