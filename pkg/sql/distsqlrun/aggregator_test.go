@@ -285,7 +285,7 @@ func TestAggregator(t *testing.T) {
 			evalCtx: &parser.EvalContext{},
 		}
 
-		ag, err := newAggregator(&flowCtx, &ags, in, out)
+		ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)
 		if err != nil {
 			t.Fatal(err)
 		}

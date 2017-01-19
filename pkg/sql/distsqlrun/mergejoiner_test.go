@@ -39,6 +39,7 @@ func TestMergeJoiner(t *testing.T) {
 
 	testCases := []struct {
 		spec     MergeJoinerSpec
+		outCols  []uint32
 		inputs   []sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
@@ -52,10 +53,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:          JoinType_INNER,
-				OutputColumns: []uint32{0, 3, 4},
+				Type: JoinType_INNER,
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -87,10 +88,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:          JoinType_INNER,
-				OutputColumns: []uint32{0, 1, 3},
+				Type: JoinType_INNER,
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 1, 3},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -127,11 +128,11 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:          JoinType_INNER,
-				OutputColumns: []uint32{0, 1, 3},
-				OnExpr:        Expression{Expr: "@4 >= 4"},
+				Type:   JoinType_INNER,
+				OnExpr: Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 1, 3},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -177,10 +178,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:          JoinType_LEFT_OUTER,
-				OutputColumns: []uint32{0, 3, 4},
+				Type: JoinType_LEFT_OUTER,
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -215,10 +216,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:          JoinType_RIGHT_OUTER,
-				OutputColumns: []uint32{3, 1, 2},
+				Type: JoinType_RIGHT_OUTER,
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{3, 1, 2},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[1], v[0], v[4]},
@@ -253,10 +254,10 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:          JoinType_FULL_OUTER,
-				OutputColumns: []uint32{0, 3, 4},
+				Type: JoinType_FULL_OUTER,
 				// Implicit @1 = @3 constraint.
 			},
+			outCols: []uint32{0, 3, 4},
 			inputs: []sqlbase.EncDatumRows{
 				{
 					{v[0], v[0]},
@@ -290,7 +291,8 @@ func TestMergeJoiner(t *testing.T) {
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
 
-		m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, out)
+		post := PostProcessSpec{OutputColumns: c.outCols}
+		m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)
 		if err != nil {
 			t.Fatal(err)
 		}

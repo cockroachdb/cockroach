@@ -31,7 +31,7 @@ import (
 // simply guarantees an intra-stream ordering on the physical output stream.
 type sorter struct {
 	input    RowSource
-	output   RowReceiver
+	out      procOutputHelper
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	limit    int64
@@ -40,15 +40,20 @@ type sorter struct {
 
 var _ processor = &sorter{}
 
-func newSorter(flowCtx *FlowCtx, spec *SorterSpec, input RowSource, output RowReceiver) *sorter {
-	return &sorter{
+func newSorter(
+	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
+) (*sorter, error) {
+	s := &sorter{
 		input:    input,
-		output:   output,
 		ordering: convertToColumnOrdering(spec.OutputOrdering),
 		matchLen: spec.OrderingMatchLen,
 		limit:    spec.Limit,
 		ctx:      log.WithLogTag(flowCtx.Context, "Sorter", nil),
 	}
+	if err := s.out.init(post, input.Types(), flowCtx.evalCtx, output); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // Run is part of the processor interface.
@@ -79,7 +84,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			log.Errorf(ctx, "error sorting rows in memory: %s", err)
 		}
 
-		s.output.Close(err)
+		s.out.close(err)
 	case s.matchLen == 0:
 		// No specified ordering match length but specified limit, we can optimize our sort procedure by
 		// maintaining a max-heap populated with only the smallest k rows seen. It has a worst-case time
@@ -93,7 +98,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			log.Errorf(ctx, "error sorting rows: %s", err)
 		}
 
-		s.output.Close(err)
+		s.out.close(err)
 	case s.matchLen != 0:
 		// Ordering match length is specified, but no specified limit. We will be able to use
 		// existing ordering in order to avoid loading all the rows into memory. If we're scanning
@@ -108,10 +113,10 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			log.Errorf(ctx, "error sorting rows: %s", err)
 		}
 
-		s.output.Close(err)
+		s.out.close(err)
 	default:
 		// TODO(irfansharif): Add optimization for case where both ordering match length and limit is
 		// specified.
-		panic("optimization no implemented yet")
+		panic("optimizationt no implemented yet")
 	}
 }

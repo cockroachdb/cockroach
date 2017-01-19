@@ -523,8 +523,6 @@ func initTableReaderSpec(n *scanNode) (distsqlrun.TableReaderSpec, error) {
 	} else {
 		s.HardLimit = n.limitHint
 	}
-
-	s.Filter = distSQLExpression(n.filter, nil)
 	return s, nil
 }
 
@@ -587,13 +585,19 @@ func (dsp *distSQLPlanner) createTableReaders(
 	if err != nil {
 		return physicalPlan{}, err
 	}
-	if overrideResultColumns != nil {
-		spec.OutputColumns = overrideResultColumns
-	} else {
-		spec.OutputColumns = getOutputColumnsFromScanNode(n)
+
+	post := distsqlrun.PostProcessSpec{
+		Filter: distSQLExpression(n.filter, nil),
 	}
+
+	if overrideResultColumns != nil {
+		post.OutputColumns = overrideResultColumns
+	} else {
+		post.OutputColumns = getOutputColumnsFromScanNode(n)
+	}
+
 	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
-	for i, col := range spec.OutputColumns {
+	for i, col := range post.OutputColumns {
 		planToStreamColMap[col] = i
 	}
 	ordering := dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
@@ -628,6 +632,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 		}
 
 		proc.spec.Core.SetValue(tr)
+		proc.spec.Post = post
 		proc.spec.Output = make([]distsqlrun.OutputRouterSpec, 1)
 		proc.spec.Output[0].Type = distsqlrun.OutputRouterSpec_PASS_THROUGH
 
@@ -1010,8 +1015,11 @@ ColLoop:
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
-		Table:         n.index.desc,
-		IndexIdx:      0,
+		Table:    n.index.desc,
+		IndexIdx: 0,
+	}
+
+	post := distsqlrun.PostProcessSpec{
 		Filter:        distSQLExpression(n.table.filter, nil),
 		OutputColumns: getOutputColumnsFromScanNode(n.table),
 	}
@@ -1021,19 +1029,21 @@ ColLoop:
 	// that the index columns are part of the output (so that ordered
 	// synchronizers down the road can maintain the order).
 
-	types := make([]sqlbase.ColumnType, len(joinReaderSpec.OutputColumns))
-	for i, col := range joinReaderSpec.OutputColumns {
+	types := make([]sqlbase.ColumnType, len(post.OutputColumns))
+	for i, col := range post.OutputColumns {
 		types[i] = sqlbase.DatumTypeToColumnType(n.index.resultColumns[col].Typ)
 	}
 	dsp.addSingleGroupStage(
 		&plan, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec}, types,
 	)
+	// TODO(radu): write generic code to add a filter.
+	plan.processors[plan.resultRouters[0]].spec.Post = post
 	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
 	// output stream.
 	for i := range plan.planToStreamColMap {
 		plan.planToStreamColMap[i] = -1
 	}
-	for i, col := range joinReaderSpec.OutputColumns {
+	for i, col := range post.OutputColumns {
 		plan.planToStreamColMap[col] = i
 	}
 	return plan, nil
@@ -1144,11 +1154,12 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
 	}
 
-	// addOutCol appends to joinerSpec.OutputColumns and returns the index
+	var post distsqlrun.PostProcessSpec
+	// addOutCol appends to post.OutputColumns and returns the index
 	// in the slice of the added column.
 	addOutCol := func(col uint32) int {
-		idx := len(joinerSpec.OutputColumns)
-		joinerSpec.OutputColumns = append(joinerSpec.OutputColumns, col)
+		idx := len(post.OutputColumns)
+		post.OutputColumns = append(post.OutputColumns, col)
 		return idx
 	}
 
@@ -1209,6 +1220,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 				{ColumnTypes: rightTypes},
 			},
 			Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+			Post:   post,
 			Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 		}
 
@@ -1225,6 +1237,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 					{ColumnTypes: rightTypes},
 				},
 				Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+				Post:   post,
 				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 			}
 			p.processors = append(p.processors, processor{node: n, spec: procSpec})
