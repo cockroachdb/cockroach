@@ -62,7 +62,6 @@ func walkPlan(plan planNode, observer planObserver) error {
 // planVisitor is the support structure for walkPlan().
 type planVisitor struct {
 	observer planObserver
-	nodeName string
 
 	// subplans is a temporary accumulator array used when collecting
 	// sub-query plans at each planNode.
@@ -79,10 +78,9 @@ func (v *planVisitor) visit(plan planNode) {
 		return
 	}
 
-	lv := *v
-	lv.nodeName = nodeName(plan)
-	recurse := v.observer.enterNode(lv.nodeName, plan)
-	defer lv.observer.leaveNode(lv.nodeName)
+	curNodeName := nodeName(plan)
+	recurse := v.observer.enterNode(curNodeName, plan)
+	defer v.observer.leaveNode(curNodeName)
 
 	if !recurse {
 		return
@@ -100,7 +98,7 @@ func (v *planVisitor) visit(plan planNode) {
 		}
 		description := fmt.Sprintf("%d column%s, %s",
 			len(n.columns), util.Pluralize(int64(len(n.columns))), suffix)
-		lv.attr("size", description)
+		v.attr(curNodeName, "size", description)
 
 		var subplans []planNode
 		for i, tuple := range n.tuples {
@@ -108,55 +106,55 @@ func (v *planVisitor) visit(plan planNode) {
 				if n.columns[j].omitted {
 					continue
 				}
-				subplans = lv.expr(fmt.Sprintf("row %d, expr", i), j, expr, subplans)
+				subplans = v.expr(curNodeName, fmt.Sprintf("row %d, expr", i), j, expr, subplans)
 			}
 		}
-		lv.subqueries(subplans)
+		v.subqueries(curNodeName, subplans)
 
 	case *valueGenerator:
-		subplans := lv.expr("expr", -1, n.expr, nil)
-		lv.subqueries(subplans)
+		subplans := v.expr(curNodeName, "expr", -1, n.expr, nil)
+		v.subqueries(curNodeName, subplans)
 
 	case *scanNode:
-		lv.attr("table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
+		v.attr(curNodeName, "table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
 		if n.noIndexJoin {
-			lv.attr("hint", "no index join")
+			v.attr(curNodeName, "hint", "no index join")
 		}
 		if n.specifiedIndex != nil {
-			lv.attr("hint", fmt.Sprintf("force index @%s", n.specifiedIndex.Name))
+			v.attr(curNodeName, "hint", fmt.Sprintf("force index @%s", n.specifiedIndex.Name))
 		}
 		spans := sqlbase.PrettySpans(n.spans, 2)
 		if spans != "" {
 			if spans == "-" {
 				spans = "ALL"
 			}
-			lv.attr("spans", spans)
+			v.attr(curNodeName, "spans", spans)
 		}
 		if n.limitHint > 0 && !n.limitSoft {
-			lv.attr("limit", fmt.Sprintf("%d", n.limitHint))
+			v.attr(curNodeName, "limit", fmt.Sprintf("%d", n.limitHint))
 		}
-		subplans := lv.expr("filter", -1, n.filter, nil)
-		lv.subqueries(subplans)
+		subplans := v.expr(curNodeName, "filter", -1, n.filter, nil)
+		v.subqueries(curNodeName, subplans)
 
 	case *filterNode:
-		subplans := lv.expr("filter", -1, n.filter, nil)
+		subplans := v.expr(curNodeName, "filter", -1, n.filter, nil)
 		if n.explain != explainNone {
-			lv.attr("mode", explainStrings[n.explain])
+			v.attr(curNodeName, "mode", explainStrings[n.explain])
 		}
-		lv.subqueries(subplans)
-		lv.visit(n.source.plan)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.source.plan)
 
 	case *renderNode:
 		var subplans []planNode
 		for i, r := range n.render {
-			subplans = lv.expr("render", i, r, subplans)
+			subplans = v.expr(curNodeName, "render", i, r, subplans)
 		}
-		lv.subqueries(subplans)
-		lv.visit(n.source.plan)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.source.plan)
 
 	case *indexJoinNode:
-		lv.visit(n.index)
-		lv.visit(n.table)
+		v.visit(n.index)
+		v.visit(n.table)
 
 	case *joinNode:
 		jType := ""
@@ -173,7 +171,7 @@ func (v *planVisitor) visit(plan planNode) {
 		case joinTypeFullOuter:
 			jType = "full outer"
 		}
-		lv.attr("type", jType)
+		v.attr(curNodeName, "type", jType)
 
 		if len(n.pred.leftColNames) > 0 {
 			var buf bytes.Buffer
@@ -182,40 +180,40 @@ func (v *planVisitor) visit(plan planNode) {
 			buf.WriteString(") = (")
 			n.pred.rightColNames.Format(&buf, parser.FmtSimple)
 			buf.WriteByte(')')
-			lv.attr("equality", buf.String())
+			v.attr(curNodeName, "equality", buf.String())
 		}
-		subplans := lv.expr("pred", -1, n.pred.onCond, nil)
-		lv.subqueries(subplans)
-		lv.visit(n.left.plan)
-		lv.visit(n.right.plan)
+		subplans := v.expr(curNodeName, "pred", -1, n.pred.onCond, nil)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.left.plan)
+		v.visit(n.right.plan)
 
 	case *selectTopNode:
 		if n.plan != nil {
-			lv.visit(n.plan)
+			v.visit(n.plan)
 		} else {
 			if n.limit != nil {
-				lv.visit(n.limit)
+				v.visit(n.limit)
 			}
 			if n.distinct != nil {
-				lv.visit(n.distinct)
+				v.visit(n.distinct)
 			}
 			if n.sort != nil {
-				lv.visit(n.sort)
+				v.visit(n.sort)
 			}
 			if n.window != nil {
-				lv.visit(n.window)
+				v.visit(n.window)
 			}
 			if n.group != nil {
-				lv.visit(n.group)
+				v.visit(n.group)
 			}
-			lv.visit(n.source)
+			v.visit(n.source)
 		}
 
 	case *limitNode:
-		subplans := lv.expr("count", -1, n.countExpr, nil)
-		subplans = lv.expr("offset", -1, n.offsetExpr, subplans)
-		lv.subqueries(subplans)
-		lv.visit(n.plan)
+		subplans := v.expr(curNodeName, "count", -1, n.countExpr, nil)
+		subplans = v.expr(curNodeName, "offset", -1, n.offsetExpr, subplans)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.plan)
 
 	case *distinctNode:
 		if n.columnsInOrder != nil {
@@ -229,9 +227,9 @@ func (v *planVisitor) visit(plan planNode) {
 					prefix = ", "
 				}
 			}
-			lv.attr("key", buf.String())
+			v.attr(curNodeName, "key", buf.String())
 		}
-		lv.visit(n.plan)
+		v.visit(n.plan)
 
 	case *sortNode:
 		var columns ResultColumns
@@ -242,48 +240,48 @@ func (v *planVisitor) visit(plan planNode) {
 		// plan.Ordering() does not include the added sort columns not
 		// present in the output.
 		order := orderingInfo{ordering: n.ordering}
-		lv.attr("order", order.AsString(columns))
+		v.attr(curNodeName, "order", order.AsString(columns))
 		switch ss := n.sortStrategy.(type) {
 		case *iterativeSortStrategy:
-			lv.attr("strategy", "iterative")
+			v.attr(curNodeName, "strategy", "iterative")
 		case *sortTopKStrategy:
-			lv.attr("strategy", fmt.Sprintf("top %d", ss.topK))
+			v.attr(curNodeName, "strategy", fmt.Sprintf("top %d", ss.topK))
 		}
-		lv.visit(n.plan)
+		v.visit(n.plan)
 
 	case *groupNode:
 		var subplans []planNode
 		for i, agg := range n.funcs {
-			subplans = lv.expr("aggregate", i, agg.expr, subplans)
+			subplans = v.expr(curNodeName, "aggregate", i, agg.expr, subplans)
 		}
 		for i, rexpr := range n.render {
-			subplans = lv.expr("render", i, rexpr, subplans)
+			subplans = v.expr(curNodeName, "render", i, rexpr, subplans)
 		}
-		subplans = lv.expr("having", -1, n.having, subplans)
-		lv.subqueries(subplans)
-		lv.visit(n.plan)
+		subplans = v.expr(curNodeName, "having", -1, n.having, subplans)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.plan)
 
 	case *windowNode:
 		var subplans []planNode
 		for i, agg := range n.funcs {
-			subplans = lv.expr("window", i, agg.expr, subplans)
+			subplans = v.expr(curNodeName, "window", i, agg.expr, subplans)
 		}
 		for i, rexpr := range n.windowRender {
-			subplans = lv.expr("render", i, rexpr, subplans)
+			subplans = v.expr(curNodeName, "render", i, rexpr, subplans)
 		}
-		lv.subqueries(subplans)
-		lv.visit(n.plan)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.plan)
 
 	case *unionNode:
-		lv.visit(n.left)
-		lv.visit(n.right)
+		v.visit(n.left)
+		v.visit(n.right)
 
 	case *splitNode:
 		var subplans []planNode
 		for i, e := range n.exprs {
-			subplans = lv.expr("expr", i, e, subplans)
+			subplans = v.expr(curNodeName, "expr", i, e, subplans)
 		}
-		lv.subqueries(subplans)
+		v.subqueries(curNodeName, subplans)
 
 	case *insertNode:
 		var buf bytes.Buffer
@@ -296,26 +294,26 @@ func (v *planVisitor) visit(plan planNode) {
 			buf.WriteString(col.Name)
 		}
 		buf.WriteByte(')')
-		lv.attr("into", buf.String())
+		v.attr(curNodeName, "into", buf.String())
 
 		var subplans []planNode
 		for i, dexpr := range n.defaultExprs {
-			subplans = lv.expr("default", i, dexpr, subplans)
+			subplans = v.expr(curNodeName, "default", i, dexpr, subplans)
 		}
 		for i, cexpr := range n.checkHelper.exprs {
-			subplans = lv.expr("check", i, cexpr, subplans)
+			subplans = v.expr(curNodeName, "check", i, cexpr, subplans)
 		}
 		for i, rexpr := range n.rh.exprs {
-			subplans = lv.expr("returning", i, rexpr, subplans)
+			subplans = v.expr(curNodeName, "returning", i, rexpr, subplans)
 		}
 		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
-			subplans = lv.expr(d, i, e, subplans)
+			subplans = v.expr(curNodeName, d, i, e, subplans)
 		})
-		lv.subqueries(subplans)
-		lv.visit(n.run.rows)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.run.rows)
 
 	case *updateNode:
-		lv.attr("table", n.tableDesc.Name)
+		v.attr(curNodeName, "table", n.tableDesc.Name)
 		if len(n.tw.ru.updateCols) > 0 {
 			var buf bytes.Buffer
 			for i, col := range n.tw.ru.updateCols {
@@ -324,70 +322,70 @@ func (v *planVisitor) visit(plan planNode) {
 				}
 				buf.WriteString(col.Name)
 			}
-			lv.attr("set", buf.String())
+			v.attr(curNodeName, "set", buf.String())
 		}
 		var subplans []planNode
 		for i, rexpr := range n.rh.exprs {
-			subplans = lv.expr("returning", i, rexpr, subplans)
+			subplans = v.expr(curNodeName, "returning", i, rexpr, subplans)
 		}
 		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
-			subplans = lv.expr(d, i, e, subplans)
+			subplans = v.expr(curNodeName, d, i, e, subplans)
 		})
-		lv.subqueries(subplans)
-		lv.visit(n.run.rows)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.run.rows)
 
 	case *deleteNode:
-		lv.attr("from", n.tableDesc.Name)
+		v.attr(curNodeName, "from", n.tableDesc.Name)
 		var subplans []planNode
 		for i, rexpr := range n.rh.exprs {
-			subplans = lv.expr("returning", i, rexpr, subplans)
+			subplans = v.expr(curNodeName, "returning", i, rexpr, subplans)
 		}
 		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
-			subplans = lv.expr(d, i, e, subplans)
+			subplans = v.expr(curNodeName, d, i, e, subplans)
 		})
-		lv.subqueries(subplans)
-		lv.visit(n.run.rows)
+		v.subqueries(curNodeName, subplans)
+		v.visit(n.run.rows)
 
 	case *createTableNode:
 		if n.n.As() {
-			lv.visit(n.sourcePlan)
+			v.visit(n.sourcePlan)
 		}
 
 	case *createViewNode:
-		lv.attr("query", n.sourceQuery)
-		lv.visit(n.sourcePlan)
+		v.attr(curNodeName, "query", n.sourceQuery)
+		v.visit(n.sourcePlan)
 
 	case *delayedNode:
-		lv.attr("source", n.name)
-		lv.visit(n.plan)
+		v.attr(curNodeName, "source", n.name)
+		v.visit(n.plan)
 
 	case *explainDebugNode:
-		lv.visit(n.plan)
+		v.visit(n.plan)
 
 	case *ordinalityNode:
-		lv.visit(n.source)
+		v.visit(n.source)
 
 	case *explainTraceNode:
-		lv.visit(n.plan)
+		v.visit(n.plan)
 
 	case *explainPlanNode:
-		lv.attr("expanded", strconv.FormatBool(n.expanded))
-		lv.visit(n.plan)
+		v.attr(curNodeName, "expanded", strconv.FormatBool(n.expanded))
+		v.visit(n.plan)
 	}
 }
 
 // attr wraps observer.attr() and provides it with the current node's name.
-func (v *planVisitor) attr(name, value string) {
-	v.observer.attr(v.nodeName, name, value)
+func (v *planVisitor) attr(nodeName, name, value string) {
+	v.observer.attr(nodeName, name, value)
 }
 
 // subqueries informs the observer that the following sub-plans are
 // for sub-queries.
-func (v *planVisitor) subqueries(subplans []planNode) {
+func (v *planVisitor) subqueries(nodeName string, subplans []planNode) {
 	if len(subplans) == 0 || v.err != nil {
 		return
 	}
-	v.attr("subqueries", strconv.Itoa(len(subplans)))
+	v.attr(nodeName, "subqueries", strconv.Itoa(len(subplans)))
 	for _, p := range subplans {
 		v.visit(p)
 	}
@@ -396,13 +394,13 @@ func (v *planVisitor) subqueries(subplans []planNode) {
 // expr wraps observer.expr() and provides it with the current node's
 // name. It also collects the plans for the sub-queries.
 func (v *planVisitor) expr(
-	fieldName string, n int, expr parser.Expr, subplans []planNode,
+	nodeName string, fieldName string, n int, expr parser.Expr, subplans []planNode,
 ) []planNode {
 	if v.err != nil {
 		return subplans
 	}
 
-	v.observer.expr(v.nodeName, fieldName, n, expr)
+	v.observer.expr(nodeName, fieldName, n, expr)
 
 	if expr != nil {
 		// Note: the recursion through WalkExprConst does nothing else
