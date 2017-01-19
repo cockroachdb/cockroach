@@ -387,21 +387,21 @@ var exprFmtFlagsNoMap = parser.FmtIndexedVarFormat(
 
 // The distsqlrun Expression uses the placeholder syntax (@1, @2, @3..) to
 // refer to columns. We format the expression using the IndexedVar and StarDatum
-// formatting interceptors. A columnMap can optionally be used to remap the
+// formatting interceptors. An indexVarMap can optionally be used to remap the
 // indices.
-func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsqlrun.Expression {
+func distSQLExpression(expr parser.TypedExpr, indexVarMap []int) distsqlrun.Expression {
 	if expr == nil {
 		return distsqlrun.Expression{}
 	}
 
 	var f parser.FmtFlags
-	if columnMap == nil {
+	if indexVarMap == nil {
 		f = exprFmtFlagsNoMap
 	} else {
 		f = parser.FmtIndexedVarFormat(
 			exprFmtFlagsBase,
 			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-				remappedIdx := columnMap[idx]
+				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
 				}
@@ -450,44 +450,84 @@ func (p *physicalPlan) setLastStagePost(
 	p.resultTypes = outputTypes
 }
 
-// addFilter adds a filter on the output of a plan. The filter is added as a
-// post-processing step to the last stage. The expression's IndexedVars, after
-// remapping through indexVarMap, refer to the output columns of the plan's
-// resultRouters.
-func addFilter(p *physicalPlan, expr parser.TypedExpr, indexVarMap []int) {
-	post := p.getLastStagePost()
-
-	// The indexed variables in the filter expression - after remapping via
-	// indexVarMap - refer to the output columns of the processor(s) in the last
-	// stage (specifically p.resultRouters). These processors could have been
-	// already configured with projections.
-	//
-	// The filter in a processor's PostProcessSpec refers to variables *before*
-	// any output projection; so if there is an output projection, we have to take
-	// it into account and generate a composite indexed var map. For example:
-	//
-	//  TableReader // table columns A,B,C,D
-	//  OutputColumns:       0, 2  //  A, C
-	//
-	//  Filter:              IndexedVar(0) < IndexedVar(1)  //  A < C
-	//  indexVarMap:         0, 1  // identity
-	//  compositeMap:        0, 2
-	//  Remapped expression: IndexedVar(0) < IndexedVar(2)
-
-	var compositeMap []int
-	if len(post.OutputColumns) == 0 {
-		compositeMap = indexVarMap
-	} else {
-		compositeMap = make([]int, len(indexVarMap))
-		for i, col := range indexVarMap {
-			if col == -1 {
-				compositeMap[i] = -1
-			} else {
-				compositeMap[i] = int(post.OutputColumns[col])
-			}
+// reverseProjection remaps expression variable indices to refer to internal
+// columns (i.e. before post-processing) of a processor instead of output
+// columns (i.e. after post-processing).
+//
+// Inputs:
+//   indexVarMap is a mapping from columns that appear in an expression
+//               (planNode columns) to columns in the output stream of a
+//               processor.
+//   outputColumns is the list of output columns in the processor's
+//                 PostProcessSpec; it is effectively a mapping from the output
+//                 schema to the internal schema of a processor. If nil, an
+//                 identity mapping is assumed.
+//
+// Result: a "composite map" that maps the planNode columns to the internal
+//         columns of the processor.
+//
+// For efficiency, the indexVarMap and the resulting map are represented as
+// slices, with missing elements having values -1.
+//
+// Used when adding expressions (filtering, rendering) to a processor's
+// PostProcessSpec. For example:
+//
+//  TableReader // table columns A,B,C,D
+//  Internal schema (before post-processing): A, B, C, D
+//  OutputColumns:  [1 3]
+//  Output schema (after post-processing): B, D
+//
+//  Expression "B < D" might be represented as:
+//    IndexedVar(4) < IndexedVar(1)
+//  with associated indexVarMap:
+//    [-1 1 -1 -1 0]  // 1->1, 4->0
+//  This is effectively equivalent to "IndexedVar(0) < IndexedVar(1)"; 0 means
+//  the first output column (B), 1 means the second output column (D).
+//
+//  To get an index var map that refers to the internal schema:
+//    reverseProjection(
+//      [1 3],           // OutputColumns
+//      [-1 1 -1 -1 0],
+//    ) =
+//      [-1 3 -1 -1 1]   // 1->3, 4->1
+//  This is effectively equivalent to "IndexedVar(1) < IndexedVar(3)"; 1
+//  means the second internal column (B), 3 means the fourth internal column
+//  (D).
+func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
+	if len(outputColumns) == 0 {
+		// No projection.
+		return indexVarMap
+	}
+	compositeMap := make([]int, len(indexVarMap))
+	for i, col := range indexVarMap {
+		if col == -1 {
+			compositeMap[i] = -1
+		} else {
+			compositeMap[i] = int(outputColumns[col])
 		}
 	}
+	return compositeMap
+}
 
+// addFilter adds a filter on the output of a plan. The filter is added either
+// as a post-processing step to the last stage or to a new "no-op" stage, as
+// necessary.
+func (dsp *distSQLPlanner) addFilter(p *physicalPlan, expr parser.TypedExpr, indexVarMap []int) {
+	post := p.getLastStagePost()
+	if len(post.RenderExprs) > 0 {
+		// The last stage contains render expressions. The filter refers to the
+		// output of these, so we need to add another "no-op" stage to which to
+		// attach the filter.
+		post = distsqlrun.PostProcessSpec{}
+		dsp.addNoGroupingStage(
+			p,
+			distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+			post,
+			p.resultTypes,
+		)
+	}
+
+	compositeMap := reverseProjection(post.OutputColumns, indexVarMap)
 	filter := distSQLExpression(expr, compositeMap)
 	if post.Filter.Expr != "" {
 		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
@@ -777,27 +817,32 @@ func (dsp *distSQLPlanner) addNoGroupingStage(
 // stage post-process spec, or via a new stage.
 // The caller must update p.ordering, p.planToStreamColMap.
 func (dsp *distSQLPlanner) addRendering(
-	planCtx *planningCtx, p *physicalPlan, exprs []parser.TypedExpr, outTypes []sqlbase.ColumnType,
+	planCtx *planningCtx,
+	p *physicalPlan,
+	exprs []parser.TypedExpr,
+	indexVarMap []int,
+	outTypes []sqlbase.ColumnType,
 ) {
 	// First check if we need an Evaluator, or we are just shuffling values.
-	needEval := false
+	needRendering := false
 
 	for _, e := range exprs {
 		if _, ok := e.(*parser.IndexedVar); !ok {
-			needEval = true
+			needRendering = true
 			break
 		}
 	}
 
-	if !needEval {
-		// We don't need an evaluator stage; we just need to adjust the projection
+	post := p.getLastStagePost()
+	if !needRendering {
+		// We don't need to do any rendering; we just need to adjust the projection
 		// to output only the columns in the rendering.
-		post := p.getLastStagePost()
+
 		oldOutCols := post.OutputColumns
 		newOutCols := make([]uint32, len(exprs))
 		for i, e := range exprs {
 			idx := e.(*parser.IndexedVar).Idx
-			streamCol := p.planToStreamColMap[idx]
+			streamCol := indexVarMap[idx]
 			if streamCol == -1 {
 				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
 			}
@@ -807,24 +852,44 @@ func (dsp *distSQLPlanner) addRendering(
 				newOutCols[i] = uint32(streamCol)
 			}
 		}
-		post.OutputColumns = newOutCols
-		p.setLastStagePost(post, outTypes)
-	} else {
-		// Add a stage with Evaluator processors.
-		evalSpec := distsqlrun.EvaluatorSpec{
-			Exprs: make([]distsqlrun.Expression, len(exprs)),
+
+		if post.RenderExprs != nil {
+			oldRenders := post.RenderExprs
+			// Apply the new projection to the existing rendering; in other words,
+			// keep only the renders needed by the new output columns, and reorder
+			// them accordingly.
+			post.RenderExprs = make([]distsqlrun.Expression, len(newOutCols))
+			for i, c := range newOutCols {
+				post.RenderExprs[i] = oldRenders[c]
+			}
+		} else {
+			// We didn't have a rendering before and we also don't need one for the
+			// new expressions. Simply overwrite the projection with the columns
+			// needed indicated by the new expressions.
+			post.OutputColumns = newOutCols
 		}
-		for i, e := range exprs {
-			evalSpec.Exprs[i] = distSQLExpression(e, p.planToStreamColMap)
+	} else {
+		if len(post.RenderExprs) > 0 {
+			post = distsqlrun.PostProcessSpec{}
+			// The last stage contains render expressions. The new renders refer to
+			// the output of these, so we need to add another "no-op" stage to which
+			// to attach the new rendering.
+			dsp.addNoGroupingStage(
+				p,
+				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+				post,
+				p.resultTypes,
+			)
 		}
 
-		dsp.addNoGroupingStage(
-			p,
-			distsqlrun.ProcessorCoreUnion{Evaluator: &evalSpec},
-			distsqlrun.PostProcessSpec{},
-			outTypes,
-		)
+		compositeMap := reverseProjection(post.OutputColumns, indexVarMap)
+		post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
+		for i, e := range exprs {
+			post.RenderExprs[i] = distSQLExpression(e, compositeMap)
+		}
+		post.OutputColumns = nil
 	}
+	p.setLastStagePost(post, outTypes)
 }
 
 // selectRenders takes a physicalPlan that produces the results corresponding to
@@ -832,7 +897,7 @@ func (dsp *distSQLPlanner) addRendering(
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
 func (dsp *distSQLPlanner) selectRenders(planCtx *planningCtx, p *physicalPlan, n *renderNode) {
-	dsp.addRendering(planCtx, p, n.render, getTypesForPlanResult(n, nil))
+	dsp.addRendering(planCtx, p, n.render, p.planToStreamColMap, getTypesForPlanResult(n, nil))
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
@@ -1093,7 +1158,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	)
 
 	evalExprs := dsp.extractPostAggrExprs(n.render)
-	dsp.addRendering(planCtx, p, evalExprs, getTypesForPlanResult(n, nil))
+	dsp.addRendering(planCtx, p, evalExprs, p.planToStreamColMap, getTypesForPlanResult(n, nil))
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator (and possibly
@@ -1453,7 +1518,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 
-		addFilter(&plan, n.filter, plan.planToStreamColMap)
+		dsp.addFilter(&plan, n.filter, plan.planToStreamColMap)
 
 		return plan, nil
 
