@@ -429,12 +429,6 @@ type Store struct {
 	// has likely improved).
 	drainLeases atomic.Value
 
-	// These vars are atomically updated from 0 to 1 once per store
-	// lifetime to ensure we gossip system data in the event that the
-	// node ends up owning the relevant range lease on a restart.
-	haveGossipedSystemConfig int32
-	haveGossipedNodeLiveness int32
-
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
 	// < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.

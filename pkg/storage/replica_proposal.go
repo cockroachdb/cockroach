@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -432,19 +431,19 @@ func (r *Replica) leasePostApply(
 	}
 
 	// Potentially re-gossip if the range contains system data (e.g.
-	// system config or node liveness) and the lease is changing hands
-	// or this is the first time that either system data has been
-	// gossiped.
+	// system config or node liveness).
 	if iAmTheLeaseHolder {
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedSystemConfig, 0, 1) {
-			if err := r.maybeGossipSystemConfig(ctx); err != nil {
-				log.Error(ctx, err)
-			}
+		// If lease has changed hands, ensure that we gossip system config
+		// and node liveness.
+		if leaseChangingHands {
+			r.systemConfigHash = nil
+			r.nodeLivenessHash = nil
 		}
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedNodeLiveness, 0, 1) {
-			if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Error(ctx, err)
-			}
+		if err := r.maybeGossipSystemConfig(ctx); err != nil {
+			log.Error(ctx, err)
+		}
+		if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+			log.Error(ctx, err)
 		}
 	}
 }
@@ -716,10 +715,17 @@ func (r *Replica) handleLocalEvalResult(
 	}
 
 	if lResult.maybeGossipSystemConfig {
+		r.systemConfigHash = nil
 		if err := r.maybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)
 		}
 		lResult.maybeGossipSystemConfig = false
+	}
+	if lResult.maybeGossipNodeLiveness != nil {
+		r.nodeLivenessHash = nil
+		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
+			log.Error(ctx, err)
+		}
 	}
 
 	if originReplica.StoreID == r.store.StoreID() {
@@ -729,11 +735,6 @@ func (r *Replica) handleLocalEvalResult(
 				r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
 			case leaseTransferSuccess, leaseTransferError:
 				r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
-			}
-		}
-		if lResult.maybeGossipNodeLiveness != nil {
-			if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
-				log.Error(ctx, err)
 			}
 		}
 	}
