@@ -18,14 +18,32 @@ package cli
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
+
+// Main is the entry point for the cli, with a single line calling it intended
+// to be the body of an action package main `main` func elsewhere. It is
+// abstracted for reuse by duplicated `main` funcs in different distributions.
+func Main() {
+	// Seed the math/rand RNG from crypto/rand.
+	rand.Seed(randutil.NewPseudoSeed())
+
+	if len(os.Args) == 1 {
+		os.Args = append(os.Args, "help")
+	}
+	if err := Run(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed running %q\n", os.Args[1])
+		os.Exit(ErrorCode)
+	}
+}
 
 // Proxy to allow overrides in tests.
 var osStderr = os.Stderr
@@ -41,11 +59,12 @@ Output build version information.
 	Run: func(cmd *cobra.Command, args []string) {
 		info := build.GetInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(tw, "Build Tag:   %s\n", info.Tag)
-		fmt.Fprintf(tw, "Build Time:  %s\n", info.Time)
-		fmt.Fprintf(tw, "Platform:    %s\n", info.Platform)
-		fmt.Fprintf(tw, "Go Version:  %s\n", info.GoVersion)
-		fmt.Fprintf(tw, "C Compiler:  %s\n", info.CgoCompiler)
+		fmt.Fprintf(tw, "Build Tag:    %s\n", info.Tag)
+		fmt.Fprintf(tw, "Build Time:   %s\n", info.Time)
+		fmt.Fprintf(tw, "Distribution: %s\n", info.Distribution)
+		fmt.Fprintf(tw, "Platform:     %s\n", info.Platform)
+		fmt.Fprintf(tw, "Go Version:   %s\n", info.GoVersion)
+		fmt.Fprintf(tw, "C Compiler:   %s\n", info.CgoCompiler)
 		if versionIncludesDeps {
 			fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
 				strings.Replace(strings.Replace(info.Dependencies, " ", "\n\t", -1), ":", "\t", -1))
