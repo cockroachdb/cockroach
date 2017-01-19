@@ -17,6 +17,8 @@
 package storage
 
 import (
+	"crypto/sha256"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -66,6 +68,34 @@ var (
 		Help: "Number of times this node has incremented its liveness epoch",
 	}
 )
+
+// livenessSlice to sort Liveness records and compute a hash of the contents.
+type livenessSlice []Liveness
+
+// livenessSlice implements sort.Interface.
+var _ sort.Interface = livenessSlice{}
+
+func (ls livenessSlice) Len() int { return len(ls) }
+
+func (ls livenessSlice) Less(i, j int) bool { return ls[i].NodeID < ls[j].NodeID }
+
+func (ls livenessSlice) Swap(i, j int) { ls[i], ls[j] = ls[j], ls[i] }
+
+// Hash of the contents. Note that the result of this hash is
+// dependent on the order of the elements; consider sorting the slice.
+func (ls livenessSlice) Hash() []byte {
+	sha := sha256.New()
+	for _, l := range ls {
+		data, err := l.Marshal()
+		if err != nil {
+			panic(err.Error())
+		}
+		if _, err := sha.Write(data); err != nil {
+			panic(err.Error())
+		}
+	}
+	return sha.Sum(nil)
+}
 
 func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 	expiration := l.Expiration.Add(-maxOffset.Nanoseconds(), 0)
@@ -311,6 +341,18 @@ func (nl *NodeLiveness) GetLivenessMap() map[roachpb.NodeID]bool {
 		lMap[nl.mu.self.NodeID] = nl.mu.self.isLive(now, maxOffset)
 	}
 	return lMap
+}
+
+// Hash of the NodeLiveness contents.
+func (nl *NodeLiveness) Hash() []byte {
+	nl.mu.Lock()
+	lives := make(livenessSlice, 0, len(nl.mu.nodes))
+	for _, l := range nl.mu.nodes {
+		lives = append(lives, l)
+	}
+	nl.mu.Unlock()
+	sort.Sort(lives)
+	return lives.Hash()
 }
 
 // GetLiveness returns the liveness record for the specified nodeID.

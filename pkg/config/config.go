@@ -18,7 +18,7 @@ package config
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -189,9 +189,9 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 	return uint32(id64), err == nil
 }
 
-// Hash returns a SHA1 hash of the SystemConfig contents.
+// Hash of the SystemConfig contents.
 func (s SystemConfig) Hash() []byte {
-	sha := sha1.New()
+	sha := sha256.New()
 	for _, kv := range s.Values {
 		_, _ = sha.Write(kv.Key)
 		// There are all kinds of different types here, so we can't use the typed
