@@ -1237,7 +1237,7 @@ func (g *Gossip) startClientLocked(addr net.Addr) {
 	log.Eventf(ctx, "starting new client to %s", addr)
 	c := newClient(g.server.AmbientContext, addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
-	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
+	c.startLocked(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
 }
 
 // removeClientLocked removes the specified client. Called when a client
