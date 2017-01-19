@@ -14,15 +14,29 @@
 //
 // Author: Ben Darnell
 
-package pgwire
+package pgwire_test
 
 import (
+	"os"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
+}
+
+func TestMain(m *testing.M) {
+	randutil.SeedForTests()
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+	os.Exit(m.Run())
 }
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
