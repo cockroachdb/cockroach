@@ -1500,7 +1500,7 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
   }
 };
 
-DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
+rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   rocksdb::BlockBasedTableOptions table_options;
   if (db_opts.cache != nullptr) {
     table_options.block_cache = db_opts.cache->rep;
@@ -1629,6 +1629,12 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.target_file_size_base = options.max_bytes_for_level_base / 4;
   options.target_file_size_multiplier = 2;
 
+  return options;
+}
+
+DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
+  rocksdb::Options options = DBMakeOptions(db_opts);
+
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
   options.listeners.emplace_back(event_listener);
@@ -1644,7 +1650,9 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
-  *db = new DBImpl(db_ptr, memenv.release(), table_options.block_cache, event_listener);
+  *db = new DBImpl(db_ptr, memenv.release(),
+      db_opts.cache != nullptr ? db_opts.cache->rep : nullptr,
+      event_listener);
   return kSuccess;
 }
 
