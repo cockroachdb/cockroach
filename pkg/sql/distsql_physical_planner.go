@@ -760,34 +760,40 @@ func (dsp *distSQLPlanner) selectRenders(
 		}
 	}
 	if !needEval {
-		// We don't need an evaluator stage. However, we do need to update
-		// p.planToStreamColMap to make the plan correspond to the renderNode
-		// (rather than n.source).
-		planToStreamColMap := makePlanToStreamColMap(len(n.render))
+		// We don't need an evaluator stage; we just need to mess with the
+		// projection of the last stage.
+		post := p.getLastStagePost()
+		oldOutCols := post.OutputColumns
+		newOutCols := make([]uint32, len(n.render))
 		for i, e := range n.render {
 			idx := e.(*parser.IndexedVar).Idx
 			streamCol := p.planToStreamColMap[idx]
 			if streamCol == -1 {
 				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
 			}
-			planToStreamColMap[i] = streamCol
+			if oldOutCols != nil {
+				newOutCols[i] = oldOutCols[streamCol]
+			} else {
+				newOutCols[i] = uint32(streamCol)
+			}
 		}
-		p.planToStreamColMap = planToStreamColMap
-		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-		return nil
-	}
-	// Add a stage with Evaluator processors.
-	evalSpec := distsqlrun.EvaluatorSpec{
-		Exprs: make([]distsqlrun.Expression, len(n.render)),
-	}
-	for i := range n.render {
-		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
-	}
+		for _, pIdx := range p.resultRouters {
+			p.processors[pIdx].spec.Post.OutputColumns = newOutCols
+		}
+	} else {
+		// Add a stage with Evaluator processors.
+		evalSpec := distsqlrun.EvaluatorSpec{
+			Exprs: make([]distsqlrun.Expression, len(n.render)),
+		}
+		for i := range n.render {
+			evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
+		}
 
-	dsp.addNoGroupingStage(
-		p, distsqlrun.ProcessorCoreUnion{Evaluator: &evalSpec},
-		dsp.getTypesForPlanResult(p.planToStreamColMap, n.source.plan),
-	)
+		dsp.addNoGroupingStage(
+			p, distsqlrun.ProcessorCoreUnion{Evaluator: &evalSpec},
+			dsp.getTypesForPlanResult(p.planToStreamColMap, n.source.plan),
+		)
+	}
 
 	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
@@ -821,17 +827,22 @@ func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *
 	)
 
 	p.ordering = sorterSpec.OutputOrdering
-	// In cases like:
-	//   SELECT a FROM t ORDER BY b
-	// we have columns (b) that are only used for sorting. These columns are not
-	// in the output columns of the sortNode; we remove them from
-	// planToStreamColMap.
-	//
-	// TODO(radu): these columns are not referenceable in the plan anymore, but
-	// the values are still transferred in physical streams. We should improve the
-	// sorter processor to be configurable with a projection so it only outputs
-	// the columns that are needed.
-	p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
+	if len(n.columns) != len(p.planToStreamColMap) {
+		// In cases like:
+		//   SELECT a FROM t ORDER BY b
+		// we have columns (b) that are only used for sorting. These columns are not
+		// in the output columns of the sortNode; we set a projection on the
+		// processors we just added.
+		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
+		outCols := make([]uint32, len(n.columns))
+		for i := range outCols {
+			outCols[i] = uint32(p.planToStreamColMap[i])
+			p.planToStreamColMap[i] = i
+		}
+		for _, pIdx := range p.resultRouters {
+			p.processors[pIdx].spec.Post.OutputColumns = outCols
+		}
+	}
 }
 
 // addSingleGroupStage adds a "single group" stage (one that cannot be
