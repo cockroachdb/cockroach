@@ -31,7 +31,6 @@
 		TableReaderSpec
 		JoinReaderSpec
 		SorterSpec
-		EvaluatorSpec
 		DistinctSpec
 		MergeJoinerSpec
 		HashJoinerSpec

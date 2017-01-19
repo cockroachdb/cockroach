@@ -76,7 +76,15 @@ message PostProcessSpec {
   // only the columns in this list will be emitted. This can be omitted if the
   // set of output columns is a trivial identity (in which case all the internal
   // columns will be emitted).
+  //
+  // Cannot be set at the same time with render expressions.
   repeated uint32 output_columns = 2 [packed = true];
+
+  // If set, the output is the result of rendering these expressions. The
+  // expressions reference the internal columns of the processor.
+  //
+  // Cannot be set at the same time with output columns.
+  repeated Expression render_exprs = 3 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
@@ -87,7 +95,6 @@ message ProcessorCoreUnion {
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
   optional AggregatorSpec aggregator = 5;
-  optional EvaluatorSpec evaluator = 6;
   optional DistinctSpec distinct = 7;
   optional MergeJoinerSpec mergeJoiner = 8;
   optional HashJoinerSpec hashJoiner = 9;
@@ -167,21 +174,6 @@ message SorterSpec {
   optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
-// EvaluatorSpec is the specification for an "evaluator", a fully
-// programmable no-grouping aggregator. It runs a 'program' on each individual
-// row and is restricted to operating on one row of data at a time.
-// The 'program' is a set of expressions evaluated in order, the output
-// schema therefore consists of the results of evaluating each of these
-// expressions on the input row.
-//
-// The "internal columns" of a Sorter (see ProcessorSpec) map 1-1 to the
-// epxressions.
-message EvaluatorSpec {
-  repeated Expression exprs = 1 [(gogoproto.nullable) = false];
-}
-
-// The "internal columns" of a Distict (see ProcessorSpec) are the same as the
-// input columns.
 message DistinctSpec {
   // The ordered columns in the input stream can be optionally specified for
   // possible optimizations. The specific ordering (ascending/descending) of
