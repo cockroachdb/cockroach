@@ -45,11 +45,13 @@ var (
 	deps        string      // Git SHAs of dependencies
 	cgoCompiler = C.GoString(C.compilerVersion())
 	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
+	// Distribution is changed by the CCL init-time hook in non-APL builds.
+	Distribution = "OSS"
 )
 
 // Short returns a pretty printed build and version summary.
 func (b Info) Short() string {
-	return fmt.Sprintf("CockroachDB %s (%s, built %s, %s)", b.Tag, b.Platform, b.Time, b.GoVersion)
+	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)", b.Distribution, b.Tag, b.Platform, b.Time, b.GoVersion)
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
@@ -70,5 +72,6 @@ func GetInfo() Info {
 		Dependencies: deps,
 		CgoCompiler:  cgoCompiler,
 		Platform:     platform,
+		Distribution: Distribution,
 	}
 }

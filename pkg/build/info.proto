@@ -28,4 +28,5 @@ message Info {
   optional string dependencies = 4 [(gogoproto.nullable) = false];
   optional string cgo_compiler = 5 [(gogoproto.nullable) = false];
   optional string platform = 6 [(gogoproto.nullable) = false];
+  optional string distribution = 7 [(gogoproto.nullable) = false];
 }
