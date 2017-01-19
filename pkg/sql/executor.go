@@ -1575,3 +1575,21 @@ func SetTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
 	txn.Proto.MaxTimestamp = ts
 	txn.UpdateDeadlineMaybe(ts)
 }
+
+// convertToErrWithPGCode recognizes errs that should have SQL error codes to be
+// reported to the client and converts err to them. If this doesn't apply, err
+// is returned.
+// Note that this returns a new proto, and no fields from the original one are
+// copied. So only use it in contexts where the only thing that matters in the
+// response is the error detail.
+// TODO(andrei): sqlbase.ConvertBatchError() seems to serve similar purposes, but
+// it's called from more specialized contexts. Consider unifying the two.
+func convertToErrWithPGCode(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*roachpb.RetryableTxnError); ok {
+		return sqlbase.NewRetryError(err)
+	}
+	return err
+}
