@@ -1197,7 +1197,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		for i := 0; i < n.pred.numRightCols; i++ {
 			joinColMap = append(joinColMap, rightPlan.planToStreamColMap[i]+len(leftTypes))
 		}
-		joinerSpec.Expr = distSQLExpression(n.pred.onCond, joinColMap)
+		joinerSpec.OnExpr = distSQLExpression(n.pred.onCond, joinColMap)
 	}
 
 	pIdxStart := processorIdx(len(p.processors))

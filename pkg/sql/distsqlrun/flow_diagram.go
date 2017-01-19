@@ -117,8 +117,8 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 		),
 		colListStr(hj.OutputColumns),
 	}
-	if hj.Expr.Expr != "" {
-		details = append(details, hj.Expr.Expr)
+	if hj.OnExpr.Expr != "" {
+		details = append(details, hj.OnExpr.Expr)
 	}
 	return "HashJoiner", details
 }

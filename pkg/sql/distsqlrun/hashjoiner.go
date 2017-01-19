@@ -70,7 +70,7 @@ func newHashJoiner(
 		flowCtx,
 		leftSource, rightSource,
 		output, spec.OutputColumns,
-		spec.Type, spec.Expr,
+		spec.Type, spec.OnExpr,
 	)
 	if err != nil {
 		return nil, err
