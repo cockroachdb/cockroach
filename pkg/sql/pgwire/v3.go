@@ -62,6 +62,7 @@ const (
 	clientMsgTerminate   clientMessageType = 'X'
 
 	serverMsgAuth                 serverMessageType = 'R'
+	serverMsgBackendKeyData       serverMessageType = 'K'
 	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgCommandComplete      serverMessageType = 'C'
 	serverMsgCloseComplete        serverMessageType = '3'
@@ -339,6 +340,21 @@ func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	// a conn that exits if the session's context is cancelled.
 	c.conn = newReadTimeoutConn(c.conn, c.session.Ctx().Err)
 	c.rd = bufio.NewReader(c.conn)
+
+	// Send the client a dummy BackendKeyData message. This is necessary for
+	// compatibility with pgpool, a popular third-party load balancer.
+	// This information is normally used by clients to send a CancelRequest
+	// message:
+	// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
+	c.writeBuf.initMsg(serverMsgBackendKeyData)
+	c.writeBuf.putInt32(0)
+	c.writeBuf.putInt32(0)
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	if err := c.wr.Flush(); err != nil {
+		return err
+	}
 
 	for {
 		if !c.doingExtendedQueryMessage {
