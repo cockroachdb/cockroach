@@ -41,11 +41,12 @@ Output build version information.
 	Run: func(cmd *cobra.Command, args []string) {
 		info := build.GetInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(tw, "Build Tag:   %s\n", info.Tag)
-		fmt.Fprintf(tw, "Build Time:  %s\n", info.Time)
-		fmt.Fprintf(tw, "Platform:    %s\n", info.Platform)
-		fmt.Fprintf(tw, "Go Version:  %s\n", info.GoVersion)
-		fmt.Fprintf(tw, "C Compiler:  %s\n", info.CgoCompiler)
+		fmt.Fprintf(tw, "Build Tag:    %s\n", info.Tag)
+		fmt.Fprintf(tw, "Build Time:   %s\n", info.Time)
+		fmt.Fprintf(tw, "Distribution: %s\n", info.Distribution)
+		fmt.Fprintf(tw, "Platform:     %s\n", info.Platform)
+		fmt.Fprintf(tw, "Go Version:   %s\n", info.GoVersion)
+		fmt.Fprintf(tw, "C Compiler:   %s\n", info.CgoCompiler)
 		if versionIncludesDeps {
 			fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
 				strings.Replace(strings.Replace(info.Dependencies, " ", "\n\t", -1), ":", "\t", -1))

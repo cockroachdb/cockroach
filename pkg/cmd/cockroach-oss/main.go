@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"os"
 
-	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )

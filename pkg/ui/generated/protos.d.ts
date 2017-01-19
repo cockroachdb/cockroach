@@ -6129,6 +6129,15 @@ getPlatform?() : string;
 
 
 
+distribution?: string;
+		
+
+getDistribution?() : string;
+		setDistribution?(distribution : string): void;
+		
+
+
+
 }
 
 	export interface InfoMessage extends Info {
