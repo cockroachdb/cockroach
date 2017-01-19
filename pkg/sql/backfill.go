@@ -125,7 +125,7 @@ func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) e
 		}
 		desc.MakeMutationComplete(mutation)
 	}
-	return convertBatchError(desc, b)
+	return sqlbase.ConvertBatchError(desc, b)
 }
 
 func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
