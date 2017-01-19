@@ -89,9 +89,8 @@ func TestTxnSnowballTrace(t *testing.T) {
 func newTestSender(
 	pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 ) SenderFunc {
-	txnID := uuid.MakeV4()
-
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		txnID := uuid.MakeV4()
 		if ba.UserPriority == 0 {
 			ba.UserPriority = 1
 		}
@@ -619,7 +618,7 @@ func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 			mc.Increment(1)
 			count++
 			if count < 3 {
-				return nil, roachpb.NewError(&roachpb.TransactionAbortedError{})
+				return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
 			}
 		}
 		return ba.CreateReply(), nil
@@ -677,7 +676,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			case *roachpb.EndTransactionRequest:
 				if t.Commit {
 					commit = true
-					return nil, roachpb.NewError(test.err)
+					return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
 				}
 				abort = true
 			}
@@ -841,16 +840,20 @@ func TestWrongTxnRetry(t *testing.T) {
 		}
 		var execOpt TxnExecOptions
 		execOpt.AutoRetry = false
-		err := outerTxn.Exec(
-			execOpt,
-			func(innerTxn *Txn, opt *TxnExecOptions) error {
-				// Ensure the KV transaction is created.
-				if err := innerTxn.Put("x", "y"); err != nil {
-					t.Fatal(err)
-				}
-				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
-					PusheeTxn: outerTxn.Proto}, &innerTxn.Proto).GoError()
-			})
+		innerClosure := func(innerTxn *Txn, opt *TxnExecOptions) error {
+			log.Infof(context.TODO(), "starting inner: %s", innerTxn.Proto)
+			// Ensure the KV transaction is created.
+			if err := innerTxn.Put("x", "y"); err != nil {
+				t.Fatal(err)
+			}
+			return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
+				PusheeTxn: outerTxn.Proto}, &innerTxn.Proto).GoError()
+		}
+		innerTxn := NewTxn(context.TODO(), *db)
+		err := innerTxn.Exec(execOpt, innerClosure)
+		if !testutils.IsError(err, "failed to push") {
+			t.Fatalf("unexpected inner failure: %v", err)
+		}
 		return err
 	}
 

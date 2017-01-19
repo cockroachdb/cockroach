@@ -1453,7 +1453,30 @@ var Builtins = map[string][]Builtin{
 					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()")
+					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", nil /* txnID */)
+				}
+				return NewDInt(0), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+		Builtin{
+			Types: NamedArgTypes{
+				{"val", TypeInterval},
+				{"txnID", TypeString}},
+			ReturnType: TypeInt,
+			impure:     true,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				minDuration := args[0].(*DInterval).Duration
+				txnID := args[1].(*DString)
+				elapsed := duration.Duration{
+					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
+				}
+				if elapsed.Compare(minDuration) < 0 {
+					uuid, err := uuid.FromString(string(*txnID))
+					if err != nil {
+						return nil, err
+					}
+					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", &uuid)
 				}
 				return NewDInt(0), nil
 			},
