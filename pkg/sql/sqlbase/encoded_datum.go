@@ -261,17 +261,6 @@ func (r EncDatumRow) String() string {
 	return b.String()
 }
 
-// DTupleToEncDatumRow converts a parser.DTuple to an EncDatumRow.
-func DTupleToEncDatumRow(row EncDatumRow, types []ColumnType, tuple parser.DTuple) {
-	if len(row) != len(tuple) || len(tuple) != len(types) {
-		panic(fmt.Sprintf("Length mismatch (%d, %d and %d) between row, types and tuple",
-			len(row), len(types), len(tuple)))
-	}
-	for i, datum := range tuple {
-		row[i] = DatumToEncDatum(types[i], datum)
-	}
-}
-
 // EncDatumRowToDTuple converts a given EncDatumRow to a DTuple.
 func EncDatumRowToDTuple(tuple parser.DTuple, row EncDatumRow, da *DatumAlloc) error {
 	if len(row) != len(tuple) {
