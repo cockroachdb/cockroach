@@ -35,10 +35,10 @@ import (
 type CreateDatabase struct {
 	IfNotExists bool
 	Name        Name
-	Template    *StrVal
-	Encoding    *StrVal
-	Collate     *StrVal
-	CType       *StrVal
+	Template    string
+	Encoding    string
+	Collate     string
+	CType       string
 }
 
 // Format implements the NodeFormatter interface.
@@ -48,21 +48,21 @@ func (node *CreateDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, node.Name)
-	if node.Template != nil {
+	if node.Template != "" {
 		buf.WriteString(" TEMPLATE = ")
-		Name((*node.Template).s).Format(buf, f)
+		encodeSQLStringWithFlags(buf, node.Template, f)
 	}
-	if node.Encoding != nil {
+	if node.Encoding != "" {
 		buf.WriteString(" ENCODING = ")
-		node.Encoding.Format(buf, f)
+		encodeSQLStringWithFlags(buf, node.Encoding, f)
 	}
-	if node.Collate != nil {
+	if node.Collate != "" {
 		buf.WriteString(" LC_COLLATE = ")
-		node.Collate.Format(buf, f)
+		encodeSQLStringWithFlags(buf, node.Collate, f)
 	}
-	if node.CType != nil {
+	if node.CType != "" {
 		buf.WriteString(" LC_CTYPE = ")
-		node.CType.Format(buf, f)
+		encodeSQLStringWithFlags(buf, node.CType, f)
 	}
 }
 
@@ -654,14 +654,19 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {
 	Name     Name
-	Password *StrVal
+	Password *string // pointer so that empty and nil can be differentiated
+}
+
+// HasPassword returns if the CreateUser has a password.
+func (node *CreateUser) HasPassword() bool {
+	return node.Password != nil
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("CREATE USER ")
 	FormatNode(buf, f, node.Name)
-	if node.Password != nil {
+	if node.HasPassword() {
 		buf.WriteString(" WITH PASSWORD *****")
 	}
 }
