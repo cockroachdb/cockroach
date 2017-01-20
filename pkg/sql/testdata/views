@@ -339,4 +339,10 @@ statement ok
 SELECT * FROM dt
 
 statement ok
+CREATE VIEW dt2 AS SELECT d, t FROM t WHERE d > d + INTERVAL '10h'
+
+statement ok
+SELECT * FROM dt2
+
+statement ok
 DROP TABLE t CASCADE

@@ -364,7 +364,7 @@ func mergePlans(
 // exprFmtFlagsBase are FmtFlags used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on.
 var exprFmtFlagsBase = parser.FmtStarDatumFormat(
-	parser.FmtSimple,
+	parser.FmtParsable,
 	func(buf *bytes.Buffer, _ parser.FmtFlags) {
 		fmt.Fprintf(buf, "0")
 	},

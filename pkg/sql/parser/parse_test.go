@@ -774,9 +774,9 @@ func TestParse2(t *testing.T) {
 		{`SET TIME ZONE "Europe/Rome"`,
 			`SET TIME ZONE 'Europe/Rome'`},
 		{`SET TIME ZONE INTERVAL '-7h'`,
-			`SET TIME ZONE INTERVAL '-7h0m0s'`},
+			`SET TIME ZONE '-7h0m0s'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
-			`SET TIME ZONE INTERVAL '-7h0m0s'`},
+			`SET TIME ZONE '-7h0m0s'`},
 		// Special substring syntax
 		{`SELECT SUBSTRING('RoacH' from 2 for 3)`,
 			`SELECT substring('RoacH', 2, 3)`},

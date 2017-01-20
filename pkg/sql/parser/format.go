@@ -38,14 +38,17 @@ type fmtFlags struct {
 	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
 	// If true, strings will be rendered without wrapping quotes if possible.
 	bareStrings bool
+	// If true, datums and placeholders will have type annotations (like
+	// :::interval) as necessary to disambiguate between possible type
+	// resolutions.
+	disambiguateDatumTypes bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
 type FmtFlags *fmtFlags
 
 // FmtSimple instructs the pretty-printer to produce
-// a straightforward representation, ideally using SQL
-// syntax that makes prettyprint+parse idempotent.
+// a straightforward representation.
 var FmtSimple FmtFlags = &fmtFlags{}
 
 // FmtShowTypes instructs the pretty-printer to
@@ -60,6 +63,11 @@ var FmtSymbolicVars FmtFlags = &fmtFlags{symbolicVars: true}
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if possible.
 var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+
+// FmtParsable instructs the pretty-printer to produce a representation that
+// can be parsed into an equivalent expression (useful for serialization of
+// expressions).
+var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
@@ -126,6 +134,24 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 		}
 	}
 	n.Format(buf, f)
+	if f.disambiguateDatumTypes {
+		var typ Type
+		if d, isDatum := n.(Datum); isDatum {
+			if d.AmbiguousFormat() {
+				typ = d.ResolvedType()
+			}
+		} else if p, isPlaceholder := n.(*Placeholder); isPlaceholder {
+			typ = p.typ
+		}
+		if typ != nil {
+			buf.WriteString(":::")
+			colType, err := DatumTypeToColumnType(typ)
+			if err != nil {
+				panic(err)
+			}
+			FormatNode(buf, f, colType)
+		}
+	}
 }
 
 // AsStringWithFlags pretty prints a node to a string given specific flags.
@@ -138,4 +164,11 @@ func AsStringWithFlags(n NodeFormatter, f FmtFlags) string {
 // AsString pretty prints a node to a string.
 func AsString(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtSimple)
+}
+
+// Serialize pretty prints a node to a string using FmtParsable; it is
+// appropriate when we store expressions into strings that are later parsed back
+// into expressions.
+func Serialize(n NodeFormatter) string {
+	return AsStringWithFlags(n, FmtParsable)
 }
