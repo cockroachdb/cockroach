@@ -226,7 +226,6 @@ func (p *planner) runShowTransactionState(txnState *txnState, implicitTxn bool) 
 	}
 	if _, err := result.Rows.AddRow(parser.DTuple{parser.NewDString(state.String())}); err != nil {
 		result.Rows.Close()
-		result.Err = err
 		return result, err
 	}
 	return result, nil
