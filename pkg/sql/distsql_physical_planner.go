@@ -74,6 +74,16 @@ const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 // debugging).
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
+// EnableDistSQLDiagramLog enables the logging of plan diagrams; returns a
+// function that can be used to restore the previous mode.
+func EnableDistSQLDiagramLog() func() {
+	prevMode := logPlanDiagram
+	logPlanDiagram = true
+	return func() {
+		logPlanDiagram = prevMode
+	}
+}
+
 func newDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,

@@ -1178,6 +1178,20 @@ func TestLogic(t *testing.T) {
 	l.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
 }
 
+// TestLogicDistSQL is a variant of TestLogic that uses DistSQL for all
+// supported queries.
+func TestLogicDistSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(radu): set things up so that this test only runs in TeamCity (and not
+	// during a local `make test`).
+
+	defer sql.SetDefaultDistSQLMode("ON")()
+	defer sql.EnableDistSQLDiagramLog()()
+
+	TestLogic(t)
+}
+
 type errorSummaryEntry struct {
 	errmsg string
 	sql    []string
