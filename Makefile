@@ -39,6 +39,7 @@ STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
 BUILDMODE    := install
+BUILDTARGET  := .
 SUFFIX       :=
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
@@ -73,6 +74,10 @@ endif
 .PHONY: all
 all: build test check
 
+.PHONY: buildoss
+buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
+buildoss: build
+
 .PHONY: build
 build: BUILDMODE = build -i -o cockroach$(SUFFIX)
 build: install
@@ -88,8 +93,8 @@ install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
-	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
-	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)'
+	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS) $(BUILDTARGET)
+	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
