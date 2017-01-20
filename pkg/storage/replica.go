@@ -312,6 +312,10 @@ type Replica struct {
 		lastAssignedLeaseIndex uint64
 		// Last index persisted to the raft log (not necessarily committed).
 		lastIndex uint64
+		// The most recent commit index seen in a message from the leader. Used by
+		// the follower to estimate the number of Raft log entries it is
+		// behind. This field is only valid when the Replica is a follower.
+		estimatedCommitIndex uint64
 		// The raft log index of a pending preemptive snapshot. Used to prohibit
 		// raft log truncation while a preemptive snapshot is in flight. A value of
 		// 0 indicates that there is no pending snapshot.
@@ -801,6 +805,46 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	}
 
 	return nil
+}
+
+func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
+	// The estimated commit index only ratches up to account for Raft messages
+	// arriving out of order.
+	if r.mu.estimatedCommitIndex < commit {
+		r.mu.estimatedCommitIndex = commit
+	}
+}
+
+// getEstimatedBehindCountLocked returns an estimate of how far this replica is
+// behind. A return value of 0 indicates that the replica is up to date.
+func (r *Replica) getEstimatedBehindCountLocked(raftStatus *raft.Status) int64 {
+	if r.mu.quiescent {
+		// The range is quiescent, so it is up to date.
+		return 0
+	}
+	if raftStatus != nil && roachpb.ReplicaID(raftStatus.SoftState.Lead) == r.mu.replicaID {
+		// We're the leader, so we can't be behind.
+		return 0
+	}
+	if !hasRaftLeader(raftStatus) && r.store.canCampaignIdleReplica() {
+		// The Raft group is idle or there is no Raft leader. This can be a
+		// temporary situation due to an in progress election or because the group
+		// can't achieve quorum. In either case, assume we're up to date.
+		return 0
+	}
+	if r.mu.estimatedCommitIndex == 0 {
+		// We haven't heard from the leader, assume we're far behind. This is the
+		// case that is commonly hit when a node restarts. In particular, we hit
+		// this case until an election timeout passes and canCampaignIdleReplica
+		// starts to return true. The results it that a restarted node will
+		// consider its replicas far behind initially which will in turn cause it
+		// to reject rebalances.
+		return prohibitRebalancesBehindThreshold
+	}
+	if r.mu.estimatedCommitIndex >= r.mu.state.RaftAppliedIndex {
+		return int64(r.mu.estimatedCommitIndex - r.mu.state.RaftAppliedIndex)
+	}
+	return 0
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -4514,6 +4558,7 @@ type replicaMetrics struct {
 	unavailable     bool
 	underreplicated bool
 	behindCount     int64
+	selfBehindCount int64
 }
 
 func (r *Replica) metrics(
@@ -4527,10 +4572,11 @@ func (r *Replica) metrics(
 	status := r.leaseStatus(r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
+	selfBehindCount := r.getEstimatedBehindCountLocked(raftStatus)
 	r.mu.Unlock()
 
 	return calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
-		raftStatus, status, r.store.StoreID(), quiescent)
+		raftStatus, status, r.store.StoreID(), quiescent, selfBehindCount)
 }
 
 func isRaftLeader(raftStatus *raft.Status) bool {
@@ -4551,6 +4597,7 @@ func calcReplicaMetrics(
 	status LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
+	selfBehindCount int64,
 ) replicaMetrics {
 	var m replicaMetrics
 
@@ -4563,6 +4610,9 @@ func calcReplicaMetrics(
 	m.leaseholder = m.leaseValid && leaseOwner
 	m.leader = isRaftLeader(raftStatus)
 	m.quiescent = quiescent
+	if !m.leader {
+		m.selfBehindCount = selfBehindCount
+	}
 
 	// We gather per-range stats on either the leader or, if there is no leader,
 	// the first live replica in the descriptor. Note that the first live replica
@@ -4639,7 +4689,8 @@ func calcGoodReplicas(
 			}
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {
-				behindCount += int64(raftStatus.Commit) - int64(progress.Match)
+				v := int64(raftStatus.Commit) - int64(progress.Match)
+				behindCount += v
 			}
 		}
 	}
