@@ -883,6 +883,11 @@ func (m *multiTestContext) restartStore(i int) {
 		}
 		return nil
 	})
+
+	// Normally, the newly restarted store would not be able to accept rebalances
+	// until the election timeout passed. But we're using a manual clock which
+	// won't advance the time properly, so manually enable rebalances.
+	m.stores[i].SetRebalancesDisabled(false)
 }
 
 func (m *multiTestContext) Store(i int) *storage.Store {

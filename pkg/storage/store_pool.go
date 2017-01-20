@@ -73,8 +73,8 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 
 type storeDetail struct {
 	desc *roachpb.StoreDescriptor
-	// throttledUntil is when an throttled store can be considered available
-	// again due to a failed or declined Reserve RPC.
+	// throttledUntil is when a throttled store can be considered available again
+	// due to a failed or declined snapshot.
 	throttledUntil time.Time
 	// lastUpdatedTime is set when a store is first consulted and every time
 	// gossip arrives for a store.
@@ -469,11 +469,10 @@ const (
 // for up-replication or rebalancing until after the configured timeout period
 // has elapsed. Declined being true indicates that the remote store explicitly
 // declined a snapshot.
-func (sp *StorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) {
+func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	detail := sp.getStoreDetailLocked(toStoreID)
-	ctx := sp.AnnotateCtx(context.TODO())
+	detail := sp.getStoreDetailLocked(storeID)
 
 	// If a snapshot is declined, be it due to an error or because it was
 	// rejected, we mark the store detail as having been declined so it won't
@@ -483,14 +482,16 @@ func (sp *StorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) 
 	case throttleDeclined:
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(ctx, "snapshot declined, store:%s will be throttled for %s until %s",
-				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
+			ctx := sp.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "snapshot declined, s%d will be throttled for %s until %s",
+				storeID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
 	case throttleFailed:
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(sp.failedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(ctx, "snapshot failed, store:%s will be throttled for %s until %s",
-				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
+			ctx := sp.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "snapshot failed, s%d will be throttled for %s until %s",
+				storeID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
 	}
 }
