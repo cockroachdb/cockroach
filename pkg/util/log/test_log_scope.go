@@ -69,6 +69,10 @@ func Scope(t tShim, testName string) TestLogScope {
 // Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
 func (l TestLogScope) Close(t tShim) {
+	if string(l) == "" {
+		// Never initialized.
+		return
+	}
 	defer func() {
 		// Check whether there is something to remove.
 		emptyDir, err := isDirEmpty(string(l))
