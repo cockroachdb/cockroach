@@ -110,6 +110,16 @@ var defaultDistSQLMode = distSQLExecModeFromString(
 	envutil.EnvOrDefaultString("COCKROACH_DISTSQL_MODE", "OFF"),
 )
 
+// SetDefaultDistSQLMode changes the default DistSQL mode; returns a function
+// that can be used to restore the previous mode.
+func SetDefaultDistSQLMode(mode string) func() {
+	prevMode := defaultDistSQLMode
+	defaultDistSQLMode = distSQLExecModeFromString(mode)
+	return func() {
+		defaultDistSQLMode = prevMode
+	}
+}
+
 type traceResult struct {
 	tag   string
 	count int
