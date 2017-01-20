@@ -408,7 +408,9 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	peerAddr := peer.GetNodeAddr()
 	peerAddrStr := peerAddr.String()
 
+	local.mu.Lock()
 	local.startClientLocked(peerAddr)
+	local.mu.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
