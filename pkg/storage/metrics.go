@@ -200,8 +200,10 @@ var (
 	}
 
 	// Raft log metrics.
-	metaRaftLogBehindCount = metric.Metadata{Name: "raftlog.behind",
-		Help: "Number of Raft log entries followers are behind"}
+	metaRaftLogFollowerBehindCount = metric.Metadata{Name: "raftlog.behind",
+		Help: "Number of Raft log entries followers are other stores behind"}
+	metaRaftLogSelfBehindCount = metric.Metadata{Name: "raftlog.selfbehind",
+		Help: "Number of Raft log entries followers on this store are behind"}
 	metaRaftLogTruncated = metric.Metadata{Name: "raftlog.truncated",
 		Help: "Number of Raft log entries truncated"}
 
@@ -429,8 +431,9 @@ type StoreMetrics struct {
 	RaftRcvdMsgDropped        *metric.Counter
 
 	// Raft log metrics.
-	RaftLogBehindCount *metric.Gauge
-	RaftLogTruncated   *metric.Counter
+	RaftLogFollowerBehindCount *metric.Gauge
+	RaftLogSelfBehindCount     *metric.Gauge
+	RaftLogTruncated           *metric.Counter
 
 	// A map for conveniently finding the appropriate metric. The individual
 	// metric references must exist as AddMetricStruct adds them by reflection
@@ -618,8 +621,9 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
 
 		// Raft log metrics.
-		RaftLogBehindCount: metric.NewGauge(metaRaftLogBehindCount),
-		RaftLogTruncated:   metric.NewCounter(metaRaftLogTruncated),
+		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
+		RaftLogSelfBehindCount:     metric.NewGauge(metaRaftLogSelfBehindCount),
+		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
 		// Replica queue metrics.
 		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),

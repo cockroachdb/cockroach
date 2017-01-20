@@ -23,6 +23,7 @@ package storage
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -158,6 +159,14 @@ func (s *Store) SetSplitQueueActive(active bool) {
 // inactive, removals are still processed.
 func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
+}
+
+func (s *Store) SetRebalancesDisabled(v bool) {
+	var i int32
+	if v {
+		i = 1
+	}
+	atomic.StoreInt32(&s.rebalancesDisabled, i)
 }
 
 // EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
