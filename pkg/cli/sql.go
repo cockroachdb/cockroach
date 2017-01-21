@@ -404,7 +404,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 //This function is performing the 'refresh' action to update the cli prompt with the current
 //database in the user's context.
-func (c *cliState) refreshDatabaseName(promptSuffix string, nextState cliStateEnum) cliStateEnum {
+func (c *cliState) refreshDatabaseName(txnStatus string, nextState cliStateEnum) cliStateEnum {
 	var dbVals [1]driver.Value
 
 	query := makeQuery(`SHOW DATABASE`)
@@ -412,24 +412,22 @@ func (c *cliState) refreshDatabaseName(promptSuffix string, nextState cliStateEn
 
 	if err != nil {
 		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
-		return c.refreshPrompts(promptSuffix, nextState)
+		return c.refreshPrompts(txnStatus, nextState)
 	}
 
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(osStderr, "cannot get the database name")
-		return c.refreshPrompts(promptSuffix, nextState)
+		return c.refreshPrompts(txnStatus, nextState)
 	}
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
 		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
-		return c.refreshPrompts(promptSuffix, nextState)
-	} else {
-		dbName := formatVal(dbVals[0].(string), false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
-		return c.refreshPrompts(promptSuffix+":/"+dbName, nextState)
+		return c.refreshPrompts(txnStatus, nextState)
 	}
 
-	return c.refreshPrompts(promptSuffix, nextState)
+	dbName := formatVal(dbVals[0].(string), false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	return c.refreshPrompts("/"+dbName+txnStatus, nextState)
 }
 
 func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
