@@ -91,10 +91,6 @@ func initGeneratorBuiltins() {
 				panic(fmt.Sprintf("generator functions should be marked with the GeneratorClass "+
 					"function class, found %v", g))
 			}
-			if g.generator == nil {
-				panic(fmt.Sprintf("generator functions should have Generator objects, "+
-					"found %v", g))
-			}
 		}
 		Builtins[k] = v
 	}
@@ -123,7 +119,6 @@ func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info stri
 		class:      GeneratorClass,
 		Types:      in,
 		ReturnType: TTable{Cols: ret},
-		generator:  g,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {
