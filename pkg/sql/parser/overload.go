@@ -225,7 +225,7 @@ func (v VariadicType) match(types ArgTypes) bool {
 }
 
 func (v VariadicType) matchAt(typ Type, i int) bool {
-	return typ == TypeNull || typ.Equivalent(v.Typ)
+	return v.Typ.Equivalent(typ)
 }
 
 func (v VariadicType) matchLen(l int) bool {

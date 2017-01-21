@@ -147,7 +147,7 @@ var OidToType = map[oid.Oid]Type{
 type tNull struct{}
 
 func (tNull) String() string              { return "NULL" }
-func (tNull) Equivalent(other Type) bool  { return other == TypeNull || other == TypeAny }
+func (tNull) Equivalent(other Type) bool  { return other == TypeNull || other.Equivalent(TypeNull) }
 func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
 func (tNull) Size() (uintptr, bool)       { return unsafe.Sizeof(dNull{}), fixedSize }
 func (tNull) Oid() oid.Oid                { return oid.T_unknown }
@@ -508,6 +508,26 @@ func (tAny) Oid() oid.Oid                { return oid.T_anyelement }
 func (tAny) SQLName() string             { return "anyelement" }
 func (tAny) IsAmbiguous() bool           { return true }
 
+// typeWrapper extends an instance of a Type, modifying its behavior in some
+// way while preserving the rest of its semantics.
+type typeWrapper interface {
+	Type
+	Unwrap() Type
+}
+
+var _ typeWrapper = tOidWrapper{}
+var _ typeWrapper = tNullable{}
+
+// UnwrapType returns the base Type type for a provided type, stripping
+// a typeWrapper if present. This is useful for cases like type switches,
+// where type specifications like tOidWrapper and tNullable should be ignored.
+func UnwrapType(t Type) Type {
+	if w, ok := t.(typeWrapper); ok {
+		return UnwrapType(w.Unwrap())
+	}
+	return t
+}
+
 // tOidWrapper is a Type implementation which is a wrapper around a Type, allowing
 // custom Oid values to be attached to the Type. The Type is used by DOidWrapper
 // to permit type aliasing with custom Oids without needing to create new typing
@@ -515,6 +535,18 @@ func (tAny) IsAmbiguous() bool           { return true }
 type tOidWrapper struct {
 	Type
 	oid oid.Oid
+}
+
+// wrapTypeWithOid wraps a Type with a custom Oid.
+func wrapTypeWithOid(t Type, oid oid.Oid) Type {
+	switch v := t.(type) {
+	case tNull, tAny, tOidWrapper:
+		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
+	}
+	return tOidWrapper{
+		Type: t,
+		oid:  oid,
+	}
 }
 
 var customOidNames = map[oid.Oid]string{
@@ -531,25 +563,23 @@ func (t tOidWrapper) String() string {
 }
 
 func (t tOidWrapper) Oid() oid.Oid { return t.oid }
+func (t tOidWrapper) Unwrap() Type { return t.Type }
 
-// wrapTypeWithOid wraps a Type with a custom Oid.
-func wrapTypeWithOid(t Type, oid oid.Oid) Type {
-	switch v := t.(type) {
-	case tNull, tAny, tOidWrapper:
-		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
-	}
-	return tOidWrapper{
-		Type: t,
-		oid:  oid,
-	}
+var (
+	typeNullableInt    Type = tNullable{TypeInt}
+	typeNullableString Type = tNullable{TypeString}
+)
+
+// tNullable is a meta-type that wraps other Types and changes their
+// semantics for equivalency to also be equivalent to NULL. It is meant
+// exclusively for use in function signatures where NULL parameters should
+// be accepted.
+type tNullable struct {
+	Type
 }
 
-// UnwrapType returns the base Type type for a provided type, stripping
-// a *TOidWrapper if present. This is useful for cases like type switches,
-// where type aliases should be ignored.
-func UnwrapType(t Type) Type {
-	if w, ok := t.(tOidWrapper); ok {
-		return w.Type
-	}
-	return t
+func (t tNullable) String() string { return "nullable " + t.Type.String() }
+func (t tNullable) Equivalent(other Type) bool {
+	return t.Type.Equivalent(other) || other == TypeNull
 }
+func (t tNullable) Unwrap() Type { return t.Type }

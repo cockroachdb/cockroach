@@ -1391,6 +1391,27 @@ timestamp with time zone
 record
 
 query T
+VALUES (format_type('anyelement'::regtype, NULL)),
+       (format_type('bool'::regtype, NULL)),
+       (format_type('bytes'::regtype, NULL)),
+       (format_type('date'::regtype, NULL)),
+       (format_type('decimal'::regtype, NULL)),
+       (format_type('interval'::regtype, NULL)),
+       (format_type('timestamp'::regtype, NULL)),
+       (format_type('timestamptz'::regtype, NULL)),
+       (format_type('tuple'::regtype, NULL))
+----
+anyelement
+boolean
+bytea
+date
+numeric
+interval
+timestamp without time zone
+timestamp with time zone
+record
+
+query T
 SELECT format_type(oid, -1) FROM pg_type WHERE typname='string' LIMIT 1
 ----
 text

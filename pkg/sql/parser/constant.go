@@ -200,6 +200,9 @@ func (expr *NumVal) AvailableTypes() []Type {
 
 // ResolveAsType implements the Constant interface.
 func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
+	if nullable, ok := typ.(tNullable); ok {
+		typ = nullable.Type
+	}
 	switch typ {
 	case TypeInt:
 		// We may have already set expr.resInt in AsInt64.
@@ -359,6 +362,9 @@ func (expr *StrVal) AvailableTypes() []Type {
 
 // ResolveAsType implements the Constant interface.
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
+	if nullable, ok := typ.(tNullable); ok {
+		typ = nullable.Type
+	}
 	switch typ {
 	case TypeString:
 		expr.resString = DString(expr.s)

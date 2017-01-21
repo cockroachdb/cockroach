@@ -265,7 +265,7 @@ var Builtins = map[string][]Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		Builtin{
-			Types:      VariadicType{TypeString},
+			Types:      VariadicType{typeNullableString},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				var buffer bytes.Buffer
@@ -283,7 +283,7 @@ var Builtins = map[string][]Builtin{
 
 	"concat_ws": {
 		Builtin{
-			Types:      VariadicType{TypeString},
+			Types:      VariadicType{typeNullableString},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				if len(args) == 0 {
@@ -1563,8 +1563,7 @@ var Builtins = map[string][]Builtin{
 	},
 	"pg_catalog.format_type": {
 		Builtin{
-			// TODO(jordan) typemod should be a Nullable TypeInt when supported.
-			Types:      NamedArgTypes{{"type_oid", TypeInt}, {"typemod", TypeInt}},
+			Types:      NamedArgTypes{{"type_oid", TypeInt}, {"typemod", typeNullableInt}},
 			ReturnType: TypeString,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				typ, ok := OidToType[oid.Oid(int(MustBeDInt(args[0])))]
