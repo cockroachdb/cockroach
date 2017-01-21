@@ -33,9 +33,18 @@ import (
 // The AbortCache sets markers for aborted transactions to provide
 // protection against an aborted but active transaction not reading
 // values it wrote (due to its intents having been removed).
+// The cache is range-specific. It is updated when an intent for an aborted txn
+// is cleared from a range, and is consulted before read commands are processed
+// on a range.
 //
 // The AbortCache stores responses in the underlying engine, using
 // keys derived from Range ID and txn ID.
+// Note that the epoch number is not part of the is not used to query the cache:
+// once aborted, even higher epochs are prohibited from reading data. That's
+// because, for better or worse, the intent resolution process clears intents
+// even from epochs higher than the txn meta used for clearing (see
+// engine.MVCCResolveWriteIntent), and this clearing can race with the new epoch
+// laying intents.
 //
 // A AbortCache is not thread safe. Access to it is serialized
 // through Raft.
