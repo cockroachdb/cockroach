@@ -1,12 +1,17 @@
 package: github.com/cockroachdb/cockroach
 import:
+# we never want resolved rockdb version to change on its own.
+- package: github.com/cockroachdb/c-rocksdb
+  version: 894d369c
 # https://github.com/docker/docker/issues/29362
 - package: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
 # etcd pins this via glide, so we must pin harder.
 - package: golang.org/x/net
   version: da2b4fa28524a3baf148c1b94df4440267063c88
-# used by a long-lived branch. TODO(dt): remove when merged.
-- package: cloud.google.com/go
-  subpackages:
-  - storage
+# etcd pins this via glide, so we must pin harder.
+- package: github.com/grpc-ecosystem/grpc-gateway
+  version: 6193f51e
+# etcd pins this via glide, so we must pin harder.
+- package: google.golang.org/grpc
+  version: 85497e2c516cd289bce5551b840ee27c2a0d6878
