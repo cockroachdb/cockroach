@@ -230,7 +230,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}
 
 	if txn.Proto.ID != nil {
-		t.Errorf("expected txn to be cleared")
+		t.Error("expected txn to be cleared")
 	}
 }
 
