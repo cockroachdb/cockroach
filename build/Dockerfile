@@ -33,6 +33,8 @@ RUN \
  unzip terraform_linux_amd64.zip && \
  rm terraform_linux_amd64.zip
 
+# Both clang and gcc are installed and gcc is used by default. To use clang,
+# set CC=clang and CXX=clang++ when building.
 ENV PATH=/opt/backtrace/bin:/third_party/llvm-build/Release+Asserts/bin:$PATH
 
 RUN chmod -R a+w $(go env GOTOOLDIR)
