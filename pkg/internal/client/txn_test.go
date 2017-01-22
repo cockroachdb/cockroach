@@ -80,7 +80,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !found {
-		t.Fatalf("didnt match: %s", dump)
+		t.Fatalf("didn't match: %s", dump)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}
 
 	if txn.Proto.ID != nil {
-		t.Errorf("expected txn to be cleared")
+		t.Error("expected txn to be cleared")
 	}
 }
 
