@@ -80,7 +80,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !found {
-		t.Fatalf("didnt match: %s", dump)
+		t.Fatalf("didn't match: %s", dump)
 	}
 }
 
