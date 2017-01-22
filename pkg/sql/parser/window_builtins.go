@@ -106,53 +106,55 @@ type WindowFunc interface {
 // See `windowFuncHolder` in the sql package.
 var windows = map[string][]Builtin{
 	"row_number": {
-		makeWindowBuiltin(ArgTypes{}, TypeInt, newRowNumberWindow),
+		makeWindowBuiltin(NamedArgTypes{}, TypeInt, newRowNumberWindow),
 	},
 	"rank": {
-		makeWindowBuiltin(ArgTypes{}, TypeInt, newRankWindow),
+		makeWindowBuiltin(NamedArgTypes{}, TypeInt, newRankWindow),
 	},
 	"dense_rank": {
-		makeWindowBuiltin(ArgTypes{}, TypeInt, newDenseRankWindow),
+		makeWindowBuiltin(NamedArgTypes{}, TypeInt, newDenseRankWindow),
 	},
 	"percent_rank": {
-		makeWindowBuiltin(ArgTypes{}, TypeFloat, newPercentRankWindow),
+		makeWindowBuiltin(NamedArgTypes{}, TypeFloat, newPercentRankWindow),
 	},
 	"cume_dist": {
-		makeWindowBuiltin(ArgTypes{}, TypeFloat, newCumulativeDistWindow),
+		makeWindowBuiltin(NamedArgTypes{}, TypeFloat, newCumulativeDistWindow),
 	},
 	"ntile": {
-		makeWindowBuiltin(ArgTypes{TypeInt}, TypeInt, newNtileWindow),
+		makeWindowBuiltin(NamedArgTypes{{"n", TypeInt}}, TypeInt, newNtileWindow),
 	},
 	"lag": mergeBuiltinSlices(
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(false, false, false))
+			return makeWindowBuiltin(NamedArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(false, true, false))
+			return makeWindowBuiltin(NamedArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(false, true, true))
+			return makeWindowBuiltin(NamedArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
+				t, makeLeadLagWindowConstructor(false, true, true))
 		}, anyElementTypes...),
 	),
 	"lead": mergeBuiltinSlices(
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(true, false, false))
+			return makeWindowBuiltin(NamedArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(true, true, false))
+			return makeWindowBuiltin(NamedArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(true, true, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(true, true, true))
+			return makeWindowBuiltin(NamedArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
+				t, makeLeadLagWindowConstructor(true, true, true))
 		}, anyElementTypes...),
 	),
 	"first_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t}, t, newFirstValueWindow)
+		return makeWindowBuiltin(NamedArgTypes{{"val", t}}, t, newFirstValueWindow)
 	}, anyElementTypes...),
 	"last_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t}, t, newLastValueWindow)
+		return makeWindowBuiltin(NamedArgTypes{{"val", t}}, t, newLastValueWindow)
 	}, anyElementTypes...),
 	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
+		return makeWindowBuiltin(NamedArgTypes{{"val", t}, {"n", TypeInt}}, t, newNthValueWindow)
 	}, anyElementTypes...),
 }
 
@@ -169,7 +171,7 @@ var anyElementTypes = []Type{
 	TypeTuple,
 }
 
-func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {
+func makeWindowBuiltin(in NamedArgTypes, ret Type, f func() WindowFunc) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      WindowClass,

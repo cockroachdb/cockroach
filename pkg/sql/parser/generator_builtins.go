@@ -103,13 +103,13 @@ func initGeneratorBuiltins() {
 var generators = map[string][]Builtin{
 	"pg_catalog.generate_series": {
 		makeGeneratorBuiltin(
-			ArgTypes{TypeInt, TypeInt},
+			NamedArgTypes{{"a", TypeInt}, {"b", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
 			"Not usable; supported only for ORM compatibility.",
 		),
 		makeGeneratorBuiltin(
-			ArgTypes{TypeInt, TypeInt, TypeInt},
+			NamedArgTypes{{"a", TypeInt}, {"b", TypeInt}, {"c", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
 			"Not usable; supported only for ORM compatibility.",
@@ -117,7 +117,7 @@ var generators = map[string][]Builtin{
 	},
 }
 
-func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info string) Builtin {
+func makeGeneratorBuiltin(in NamedArgTypes, ret TTuple, g generatorFactory, info string) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      GeneratorClass,

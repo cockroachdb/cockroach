@@ -33,7 +33,7 @@ type overloadImpl interface {
 // typeList is a list of types representing a function parameter list.
 type typeList interface {
 	// match checks if all types in the typeList match the corresponding elements in types.
-	match(types ArgTypes) bool
+	match(types []Type) bool
 	// matchAt checks if the parameter type at index i of the typeList matches type typ.
 	matchAt(typ Type, i int) bool
 	// matchLen checks that the typeList can support l parameters.
@@ -49,67 +49,9 @@ type typeList interface {
 	String() string
 }
 
-var _ typeList = ArgTypes{}
 var _ typeList = NamedArgTypes{}
 var _ typeList = AnyType{}
 var _ typeList = VariadicType{}
-
-// ArgTypes is a typeList implementation that accepts a specific number of
-// argument types.
-type ArgTypes []Type
-
-func (a ArgTypes) match(types ArgTypes) bool {
-	if len(types) != len(a) {
-		return false
-	}
-	for i := range types {
-		if !a.matchAt(types[i], i) {
-			return false
-		}
-	}
-	return true
-}
-
-func (a ArgTypes) matchAt(typ Type, i int) bool {
-	// The parameterized types for Tuples are checked in the type checking
-	// routines before getting here, so we only need to check if the argument
-	// type is a TypeTuple below. This allows us to avoid defining overloads
-	// for TypeTuple{}, TypeTuple{TypeAny}, TypeTuple{TypeAny, TypeAny}, etc.
-	// for Tuple operators.
-	if typ.FamilyEqual(TypeTuple) {
-		typ = TypeTuple
-	}
-	return i < len(a) && a[i].Equivalent(typ)
-}
-
-func (a ArgTypes) matchLen(l int) bool {
-	return len(a) == l
-}
-
-func (a ArgTypes) getAt(i int) Type {
-	return a[i]
-}
-
-// Length implements the typeList interface.
-func (a ArgTypes) Length() int {
-	return len(a)
-}
-
-// Types implements the typeList interface.
-func (a ArgTypes) Types() []Type {
-	return a
-}
-
-func (a ArgTypes) String() string {
-	var s bytes.Buffer
-	for i, typ := range a {
-		if i > 0 {
-			s.WriteString(", ")
-		}
-		s.WriteString(typ.String())
-	}
-	return s.String()
-}
 
 // NamedArgTypes is very similar to ArgTypes except it allows keeping a string
 // name for each argument as well and using those when printing the
@@ -119,7 +61,7 @@ type NamedArgTypes []struct {
 	Typ  Type
 }
 
-func (a NamedArgTypes) match(types ArgTypes) bool {
+func (a NamedArgTypes) match(types []Type) bool {
 	if len(types) != len(a) {
 		return false
 	}
@@ -132,7 +74,11 @@ func (a NamedArgTypes) match(types ArgTypes) bool {
 }
 
 func (a NamedArgTypes) matchAt(typ Type, i int) bool {
-	// See ArgTypes.matchAt for explanation.
+	// The parameterized types for Tuples are checked in the type checking
+	// routines before getting here, so we only need to check if the argument
+	// type is a TypeTuple below. This allows us to avoid defining overloads
+	// for TypeTuple{}, TypeTuple{TypeAny}, TypeTuple{TypeAny, TypeAny}, etc.
+	// for Tuple operators.
 	if typ.FamilyEqual(TypeTuple) {
 		typ = TypeTuple
 	}
@@ -178,7 +124,7 @@ func (a NamedArgTypes) String() string {
 // AnyType is a typeList implementation that accepts any arguments.
 type AnyType struct{}
 
-func (AnyType) match(types ArgTypes) bool {
+func (AnyType) match(types []Type) bool {
 	return true
 }
 
@@ -215,7 +161,7 @@ type VariadicType struct {
 	Typ Type
 }
 
-func (v VariadicType) match(types ArgTypes) bool {
+func (v VariadicType) match(types []Type) bool {
 	for i := range types {
 		if !v.matchAt(types[i], i) {
 			return false
