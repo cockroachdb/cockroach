@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# To build or run a program with MemorySanitizer enabled, prefix it with this script:
+#   with-msan make test PKG=./pkg/storage GOFLAGS=-msan TAGS=stdmalloc TESTTIMEOUT=10m
+# or
+#   with-msan make test PKG=./pkg/storage GOFLAGS=-msan TAGS=stdmalloc TESTFLAGS=-c
+#   with-msan gdb ./storage/test
+# or
+#   with-msan $(SHELL)
+#
+# MemorySanitizer is only available on linux; this script assumes the machine has
+# been set up with bootstrap-debian.sh.
+
+# CGO build variables
+export CC=clang
+export CXX=clang++
+export CGO_CPPFLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I${HOME}/libcxx_msan/include -I${HOME}/libcxx_msan/include/c++/v1"
+export CGO_LDFLAGS="-fsanitize=memory -stdlib=libc++ -L${HOME}/libcxx_msan/lib -lc++abi"
+
+# Runtime variable (needed to run anything built with the above config)
+export LD_LIBRARY_PATH=${HOME}/libcxx_msan/lib
+
+"$@"
