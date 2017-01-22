@@ -73,7 +73,7 @@ func (UnaryOp) preferred() bool {
 func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{impl.Typ}
+			impl.types = NamedArgTypes{{"arg", impl.Typ}}
 			UnaryOps[op][i] = impl
 		}
 	}
@@ -185,7 +185,7 @@ func (BinOp) preferred() bool {
 func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{impl.LeftType, impl.RightType}
+			impl.types = NamedArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
 			BinOps[op][i] = impl
 		}
 	}
@@ -898,7 +898,7 @@ func (CmpOp) preferred() bool {
 func init() {
 	for op, overload := range CmpOps {
 		for i, impl := range overload {
-			impl.types = ArgTypes{impl.LeftType, impl.RightType}
+			impl.types = NamedArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
 			CmpOps[op][i] = impl
 		}
 	}
@@ -2338,7 +2338,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		args = append(args, arg)
 	}
 
-	if !expr.fn.Types.match(ArgTypes(args.ResolvedType().(TTuple))) {
+	if !expr.fn.Types.match([]Type(args.ResolvedType().(TTuple))) {
 		// The argument types no longer match the memoized function. This happens
 		// when a non-NULL argument becomes NULL and the function does not support
 		// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is

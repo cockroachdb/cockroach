@@ -166,10 +166,6 @@ func (b Builtin) Category() string {
 	}
 	// If single argument attempt to categorize by the type of the argument.
 	switch typ := b.Types.(type) {
-	case ArgTypes:
-		if len(typ) == 1 {
-			return categorizeType(typ[0])
-		}
 	case NamedArgTypes:
 		if len(typ) == 1 {
 			return categorizeType(typ[0].Typ)
