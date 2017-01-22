@@ -366,14 +366,8 @@ DBStatus FmtStatus(const char *fmt, ...) {
 }
 
 DBIterState DBIterGetState(DBIterator* iter) {
-  DBIterState state;
+  DBIterState state = {};
   state.valid = iter->rep->Valid();
-  state.key.key.data = NULL;
-  state.key.key.len = 0;
-  state.key.wall_time = 0;
-  state.key.logical = 0;
-  state.value.data = NULL;
-  state.value.len = 0;
 
   if (state.valid) {
     rocksdb::Slice key;
