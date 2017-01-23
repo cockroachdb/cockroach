@@ -129,7 +129,6 @@ type Builtin struct {
 
 	AggregateFunc func() AggregateFunc
 	WindowFunc    func() WindowFunc
-	generator     generatorFactory
 	fn            func(*EvalContext, DTuple) (Datum, error)
 }
 
