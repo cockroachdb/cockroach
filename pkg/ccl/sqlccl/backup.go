@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -166,7 +167,7 @@ func Backup(
 		writeSST := func() (writeSSTErr error) {
 			// This is a function so the defered Close (and resultant flush) is
 			// called before the checksum is computed.
-			sst := engine.MakeRocksDBSstFileWriter()
+			sst := engineccl.MakeRocksDBSstFileWriter()
 			if err := sst.Open(backupDescs[i].Path); err != nil {
 				return err
 			}
@@ -253,7 +254,7 @@ func Ingest(
 		return errors.Errorf("%s: checksum mismatch got %d expected %d", path, c, checksum)
 	}
 
-	sst, err := engine.MakeRocksDBSstFileReader()
+	sst, err := engineccl.MakeRocksDBSstFileReader()
 	if err != nil {
 		return err
 	}

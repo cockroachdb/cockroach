@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -412,7 +413,7 @@ func BenchmarkSstRekey(b *testing.B) {
 			Value: make([]byte, valLen),
 		}
 
-		sst := engine.MakeRocksDBSstFileWriter()
+		sst := engineccl.MakeRocksDBSstFileWriter()
 		if err := sst.Open(sstPath); err != nil {
 			b.Fatal(sst)
 		}
@@ -440,7 +441,7 @@ func BenchmarkSstRekey(b *testing.B) {
 	const newTableID = 100
 
 	b.ResetTimer()
-	sst, err := engine.MakeRocksDBSstFileReader()
+	sst, err := engineccl.MakeRocksDBSstFileReader()
 	if err != nil {
 		b.Fatal(err)
 	}
