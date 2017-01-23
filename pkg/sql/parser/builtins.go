@@ -1591,6 +1591,17 @@ var Builtins = map[string][]Builtin{
 				"Currently, CockroachDB does not support adding comments to columns.",
 		},
 	},
+	"pg_catalog.array_in": {
+		Builtin{
+			Types:      NamedArgTypes{},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return nil, errors.New("unimplemented")
+			},
+			category: categoryCompatibility,
+			Info:     "array_in is unimplemented and exists for compatibility purposes",
+		},
+	},
 }
 
 var substringImpls = []Builtin{
