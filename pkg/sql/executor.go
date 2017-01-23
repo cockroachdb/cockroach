@@ -1454,6 +1454,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeInterval:
 	case parser.TypeStringArray:
 	case parser.TypeIntArray:
+	case parser.TypeNullArray:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual

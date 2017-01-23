@@ -106,6 +106,9 @@ var (
 	// TypeIntArray is the type family of a DArray containing ints. Can be
 	// compared with ==.
 	TypeIntArray Type = tArray{TypeInt}
+	// TypeNullArray is the type of a DArray containing nulls. Can be
+	// compared with ==.
+	TypeNullArray Type = tArray{TypeNull}
 	// TypeAnyArray is the type of a DArray with a wildcard parameterized type.
 	// Can be compared with ==.
 	TypeAnyArray Type = tArray{TypeAny}

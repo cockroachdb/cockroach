@@ -130,6 +130,8 @@ var windows = map[string][]Builtin{
 		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(false, true, false))
 		}, anyElementTypes...),
+		// TODO(nvanbenschoten) We still have no good way to represent two parameters that
+		// can be any types but must be the same (eg. lag(T, Int, T)).
 		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(false, true, true))
 		}, anyElementTypes...),
@@ -145,15 +147,15 @@ var windows = map[string][]Builtin{
 			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(true, true, true))
 		}, anyElementTypes...),
 	),
-	"first_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t}, t, newFirstValueWindow)
-	}, anyElementTypes...),
-	"last_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t}, t, newLastValueWindow)
-	}, anyElementTypes...),
-	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
-	}, anyElementTypes...),
+	"first_value": {
+		makeIdentityWindowBuiltin(ArgTypes{TypeAny}, newFirstValueWindow),
+	},
+	"last_value": {
+		makeIdentityWindowBuiltin(ArgTypes{TypeAny}, newLastValueWindow),
+	},
+	"nth_value": {
+		makeIdentityWindowBuiltin(ArgTypes{TypeAny, TypeInt}, newNthValueWindow),
+	},
 }
 
 var anyElementTypes = []Type{
@@ -177,6 +179,12 @@ func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {
 		ReturnType: ret,
 		WindowFunc: f,
 	}
+}
+
+func makeIdentityWindowBuiltin(in ArgTypes, f func() WindowFunc) Builtin {
+	b := makeWindowBuiltin(in, TypeAny, f)
+	b.ReturnTypeStyle = identity
+	return b
 }
 
 func collectWindowBuiltins(f func(Type) Builtin, types ...Type) []Builtin {

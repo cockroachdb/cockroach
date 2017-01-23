@@ -62,6 +62,10 @@ func (op UnaryOp) params() typeList {
 	return op.types
 }
 
+func (UnaryOp) returnTypeStyle() returnTypeStyle {
+	return standard
+}
+
 func (op UnaryOp) returnType() Type {
 	return op.ReturnType
 }
@@ -172,6 +176,10 @@ func (op BinOp) params() typeList {
 
 func (op BinOp) matchParams(l, r Type) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
+}
+
+func (BinOp) returnTypeStyle() returnTypeStyle {
+	return standard
 }
 
 func (op BinOp) returnType() Type {
@@ -885,6 +893,10 @@ func (op CmpOp) params() typeList {
 
 func (op CmpOp) matchParams(l, r Type) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
+}
+
+func (CmpOp) returnTypeStyle() returnTypeStyle {
+	return standard
 }
 
 func (op CmpOp) returnType() Type {

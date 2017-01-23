@@ -450,15 +450,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		expr.Exprs[i] = subExpr
 	}
 	expr.fn = builtin
-	returnType := fn.returnType()
-	if _, ok := expr.fn.params().(AnyType); ok {
-		if len(typedSubExprs) > 0 {
-			returnType = typedSubExprs[0].ResolvedType()
-		} else {
-			returnType = TypeNull
-		}
-	}
-	expr.typ = returnType
+	expr.typ = overloadReturnTypeGivenArgs(builtin, typedSubExprs)
 	return expr, nil
 }
 

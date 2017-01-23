@@ -88,8 +88,9 @@ const (
 
 // Builtin is a built-in function.
 type Builtin struct {
-	Types      typeList
-	ReturnType Type
+	Types           typeList
+	ReturnTypeStyle returnTypeStyle
+	ReturnType      Type
 
 	// When multiple overloads are eligible based on types even after all of of
 	// the heuristics to pick one have been used, if one of the overloads is a
@@ -134,6 +135,10 @@ type Builtin struct {
 
 func (b Builtin) params() typeList {
 	return b.Types
+}
+
+func (b Builtin) returnTypeStyle() returnTypeStyle {
+	return b.ReturnTypeStyle
 }
 
 func (b Builtin) returnType() Type {
@@ -782,9 +787,10 @@ var Builtins = map[string][]Builtin{
 
 	"greatest": {
 		Builtin{
-			Types:      AnyType{},
-			ReturnType: TypeAny,
-			category:   categoryComparison,
+			Types:           HomogeneousType{},
+			ReturnTypeStyle: identity,
+			ReturnType:      TypeAny,
+			category:        categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
 			},
@@ -794,9 +800,10 @@ var Builtins = map[string][]Builtin{
 
 	"least": {
 		Builtin{
-			Types:      AnyType{},
-			ReturnType: TypeAny,
-			category:   categoryComparison,
+			Types:           HomogeneousType{},
+			ReturnTypeStyle: identity,
+			ReturnType:      TypeAny,
+			category:        categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
 			},
