@@ -704,8 +704,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT "a'a" FROM t`,
 			`SELECT "a'a" FROM t`},
 		// Hexadecimal literal strings are turned into regular strings.
-		{`SELECT x'61'`, `SELECT 'a'`},
-		{`SELECT X'61'`, `SELECT 'a'`},
+		{`SELECT x'61'`, `SELECT b'a'`},
+		{`SELECT X'61'`, `SELECT b'a'`},
 		// Comments are stripped.
 		{`SELECT 1 FROM t -- hello world`,
 			`SELECT 1 FROM t`},
@@ -1042,7 +1042,7 @@ SELECT 0x FROM t
 		},
 		{
 			`SELECT x'fail' FROM t`,
-			`invalid hexadecimal string literal
+			`invalid hexadecimal bytes literal
 SELECT x'fail' FROM t
        ^
 `,

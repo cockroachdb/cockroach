@@ -82,9 +82,10 @@ func TestEval(t *testing.T) {
 		// Hexadecimal numbers.
 		{`0xa`, `10`},
 		{`0xcafe1111`, `3405648145`},
-		// Hexadecimal string literals.
-		{`x'636174'`, `'cat'`},
-		{`X'636174'`, `'cat'`},
+		// Hexadecimal bytes literals.
+		{`x'636174'`, `b'cat'`},
+		{`X'636174'`, `b'cat'`},
+		{`x'636174'::string`, `'cat'`},
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
 		{`'a' || (1 + 2)::char`, `'a3'`},
