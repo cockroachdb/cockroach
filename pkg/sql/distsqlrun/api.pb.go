@@ -27,6 +27,7 @@
 		PostProcessSpec
 		ProcessorCoreUnion
 		NoopCoreSpec
+		ValuesCoreSpec
 		TableReaderSpan
 		TableReaderSpec
 		JoinReaderSpec
