@@ -676,27 +676,27 @@ SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodo
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid   typname      typinput  typoutput  typreceive  typsend  typmodin  typmodout  typanalyze
-16    bool         0         0          0           0        0         0          0
-17    bytes        0         0          0           0        0         0          0
-20    int          0         0          0           0        0         0          0
-21    int          0         0          0           0        0         0          0
-23    int          0         0          0           0        0         0          0
-25    string       0         0          0           0        0         0          0
-700   float        0         0          0           0        0         0          0
-701   float        0         0          0           0        0         0          0
-1005  int[]        0         0          0           0        0         0          0
-1007  int[]        0         0          0           0        0         0          0
-1009  string[]     0         0          0           0        0         0          0
-1016  int[]        0         0          0           0        0         0          0
-1043  string       0         0          0           0        0         0          0
-1082  date         0         0          0           0        0         0          0
-1114  timestamp    0         0          0           0        0         0          0
-1184  timestamptz  0         0          0           0        0         0          0
-1186  interval     0         0          0           0        0         0          0
-1700  decimal      0         0          0           0        0         0          0
-2249  tuple        0         0          0           0        0         0          0
-2283  anyelement   0         0          0           0        0         0          0
+oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodout  typanalyze
+16    bool         0           0          0           0        0         0          0
+17    bytes        0           0          0           0        0         0          0
+20    int          0           0          0           0        0         0          0
+21    int          0           0          0           0        0         0          0
+23    int          0           0          0           0        0         0          0
+25    string       0           0          0           0        0         0          0
+700   float        0           0          0           0        0         0          0
+701   float        0           0          0           0        0         0          0
+1005  int[]        2892088402  0          0           0        0         0          0
+1007  int[]        2892088402  0          0           0        0         0          0
+1009  string[]     2892088402  0          0           0        0         0          0
+1016  int[]        2892088402  0          0           0        0         0          0
+1043  string       0           0          0           0        0         0          0
+1082  date         0           0          0           0        0         0          0
+1114  timestamp    0           0          0           0        0         0          0
+1184  timestamptz  0           0          0           0        0         0          0
+1186  interval     0           0          0           0        0         0          0
+1700  decimal      0           0          0           0        0         0          0
+2249  tuple        0           0          0           0        0         0          0
+2283  anyelement   0           0          0           0        0         0          0
 
 query ITTTBII colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
