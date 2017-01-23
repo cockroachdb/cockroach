@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -577,8 +578,10 @@ func init() {
 
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit
+	logging.gcNotify = make(chan struct{}, 1)
 
 	go logging.flushDaemon()
+	go logging.gcDaemon()
 }
 
 // Flush flushes all pending log I/O.
@@ -624,9 +627,10 @@ type loggingT struct {
 	traceLocation traceLocation
 	// These flags are modified only under lock, although verbosity may be fetched
 	// safely using atomic.LoadInt32.
-	vmodule   moduleSpec // The state of the --vmodule flag.
-	verbosity level      // V logging level, the value of the --verbosity flag/
-	exitFunc  func(int)  // func that will be called on fatal errors
+	vmodule   moduleSpec    // The state of the --vmodule flag.
+	verbosity level         // V logging level, the value of the --verbosity flag/
+	exitFunc  func(int)     // func that will be called on fatal errors
+	gcNotify  chan struct{} // notify GC daemon that a new log file was created
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -952,6 +956,11 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}
 		logging.putBuffer(buf)
 	}
+
+	select {
+	case logging.gcNotify <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -1034,6 +1043,43 @@ func (l *loggingT) flushAll() {
 		if file != nil {
 			_ = file.Flush() // ignore error
 			_ = file.Sync()  // ignore error
+		}
+	}
+}
+
+func (l *loggingT) gcDaemon() {
+	l.gcOldFiles()
+	for range l.gcNotify {
+		l.gcOldFiles()
+	}
+}
+
+func (l *loggingT) gcOldFiles() {
+	dir, err := logDir.get()
+	if err != nil {
+		// No log directory configured. Nothing to do.
+		return
+	}
+
+	allFiles, err := ListLogFiles()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to GC log files: %s\n", err)
+		return
+	}
+
+	for s := Severity_INFO; s <= Severity_FATAL; s++ {
+		severityFiles := selectFiles(allFiles, s, math.MaxInt64)
+		if len(severityFiles) < MaxFilesPerSeverity {
+			continue
+		}
+		// severityFiles is sorted with the newest log files first (which we want
+		// to keep).
+		toDelete := severityFiles[MaxFilesPerSeverity:]
+		for _, f := range toDelete {
+			path := filepath.Join(dir, f.Name)
+			if err := os.Remove(path); err != nil {
+				fmt.Fprintf(os.Stderr, "%s\n", err)
+			}
 		}
 	}
 }

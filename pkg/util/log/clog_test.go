@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -524,6 +525,36 @@ func TestRollover(t *testing.T) {
 	}
 	if info.nbytes >= MaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
+	}
+}
+
+func TestGC(t *testing.T) {
+	s := Scope(t, "")
+	defer s.Close(t)
+
+	setFlags()
+	logging.stderrThreshold.set(Severity_NONE)
+	defer func(previous uint64) { MaxSize = previous }(MaxSize)
+	MaxSize = 1 // ensure rotation on every log write
+
+	for i := 0; i < 100; i++ {
+		Info(context.Background(), "x")
+		Error(context.Background(), "x")
+		Warning(context.Background(), "x")
+	}
+
+	// Ensure the GC has seen the most recent files.
+	logging.gcOldFiles()
+
+	allFiles, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for s := Severity_INFO; s <= Severity_ERROR; s++ {
+		severityFiles := selectFiles(allFiles, s, math.MaxInt64)
+		if len(severityFiles) != MaxFilesPerSeverity {
+			t.Fatalf("%s: expected %d, but found %d", s, MaxFilesPerSeverity, len(severityFiles))
+		}
 	}
 }
 

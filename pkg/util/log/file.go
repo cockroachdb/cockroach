@@ -41,6 +41,9 @@ import (
 // MaxSize is the maximum size of a log file in bytes.
 var MaxSize uint64 = 1024 * 1024 * 10
 
+// MaxFilesPerSeverity is the maximum number of log files per severity.
+var MaxFilesPerSeverity = 20
+
 // If non-empty, overrides the choice of directory in which to write logs. See
 // createLogDirs for the full list of possible destinations. Note that the
 // default is to log to stderr independent of this setting. See --logtostderr.
