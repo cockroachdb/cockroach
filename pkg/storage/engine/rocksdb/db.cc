@@ -1479,7 +1479,6 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
  private:
   std::string ts_min_;
   std::string ts_max_;
-  uint32_t count_ = 0;
 };
 
 class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
