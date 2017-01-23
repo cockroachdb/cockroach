@@ -349,7 +349,8 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State *storagebase.ReplicaState
+	State    *storagebase.ReplicaState
+	snapType string
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
@@ -527,14 +528,13 @@ func (r *Replica) applySnapshot(
 	}
 
 	r.mu.Lock()
-	replicaID := r.mu.replicaID
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
 
-	isPreemptive := replicaID == 0 // only used for accounting and log format
+	snapType := inSnap.snapType
 	defer func() {
 		if err == nil {
-			if !isPreemptive {
+			if snapType == snapTypeRaft {
 				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
 			} else {
 				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
@@ -547,11 +547,6 @@ func (r *Replica) applySnapshot(
 		// already ahead of what the snapshot provides. But we count it for
 		// stats (see the defer above).
 		return nil
-	}
-
-	snapType := snapTypePreemptive
-	if !isPreemptive {
-		snapType = snapTypeRaft
 	}
 
 	var stats struct {
