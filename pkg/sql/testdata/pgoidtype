@@ -13,6 +13,14 @@ SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
 1736923753  1736923753
 
+query II
+SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE
+----
+1736923753  1736923753
+
+query error function 'blah' does not exist
+SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
+
 query error more than one function named 'max'
 SELECT 'max'::REGPROC
 

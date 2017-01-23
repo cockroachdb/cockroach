@@ -1905,6 +1905,11 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return DNull, nil
 }
 
+// regprocRegexp matches a Postgres function type signature, capturing the
+// name of the function into group 1.
+// e.g. function(a, b, c) or function( a )
+var regprocRegexp = regexp.MustCompile(`^\s*(\w+)\((\s*\w+\s*,\s*)*\s*\w+\s*\)\s*$`)
+
 // Eval implements the TypedExpr interface.
 func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
@@ -2175,30 +2180,38 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInt:
 			return v, nil
 		case *DString:
-			queryOid := func(table_name string, col_name string, obj_name string) (Datum, error) {
+			queryOid := func(s string, table_name string, col_name string, obj_name string) (Datum, error) {
 				results, err := ctx.Planner.QueryRow(
-					fmt.Sprintf("SELECT oid FROM pg_catalog.%s WHERE %s = %s", table_name, col_name, v))
+					fmt.Sprintf("SELECT oid FROM pg_catalog.%s WHERE %s = $1", table_name, col_name), s)
 				if err != nil {
 					if _, ok := err.(*MultipleResultsError); ok {
-						return nil, errors.Errorf("more than one %s named %s", obj_name, v)
+						return nil, errors.Errorf("more than one %s named '%s'", obj_name, s)
 					}
 					return nil, err
 				}
 				if results.Len() == 0 {
-					return nil, errors.Errorf("%s %s does not exist", obj_name, v)
+					return nil, errors.Errorf("%s '%s' does not exist", obj_name, s)
 				}
 				return results[0], nil
 			}
+			s := v.String()
+			// Trim off the single quotes.
+			s = s[1 : len(s)-1]
 
 			switch typ {
 			case oidPseudoTypeRegClass:
-				return queryOid("pg_class", "relname", "relation")
+				return queryOid(s, "pg_class", "relname", "relation")
 			case oidPseudoTypeRegProc:
-				return queryOid("pg_proc", "proname", "function")
+				// Trim procedure type parameters. Postgres only does this when the
+				// cast is ::regprocedure, but we're going to always do it.
+				// We additionally do not yet implement disambiguation based on type
+				// parameters: we return the match iff there is exactly one.
+				s = regprocRegexp.ReplaceAllString(s, "$1")
+				return queryOid(s, "pg_proc", "proname", "function")
 			case oidPseudoTypeRegNamespace:
-				return queryOid("pg_namespace", "nspname", "namespace")
+				return queryOid(s, "pg_namespace", "nspname", "namespace")
 			case oidPseudoTypeRegType:
-				return queryOid("pg_type", "typname", "type")
+				return queryOid(s, "pg_type", "typname", "type")
 			}
 		}
 	}
