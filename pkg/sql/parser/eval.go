@@ -73,7 +73,7 @@ func (UnaryOp) preferred() bool {
 func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
-			impl.types = NamedArgTypes{{"arg", impl.Typ}}
+			impl.types = ArgTypes{{"arg", impl.Typ}}
 			UnaryOps[op][i] = impl
 		}
 	}
@@ -185,7 +185,7 @@ func (BinOp) preferred() bool {
 func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
-			impl.types = NamedArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
+			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
 			BinOps[op][i] = impl
 		}
 	}
@@ -898,7 +898,7 @@ func (CmpOp) preferred() bool {
 func init() {
 	for op, overload := range CmpOps {
 		for i, impl := range overload {
-			impl.types = NamedArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
+			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
 			CmpOps[op][i] = impl
 		}
 	}

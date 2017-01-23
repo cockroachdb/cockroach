@@ -167,7 +167,7 @@ func makeAggBuiltin(in, ret Type, f func() AggregateFunc, info string) Builtin {
 		// of the Builtins array above.
 		impure:        true,
 		class:         AggregateClass,
-		Types:         NamedArgTypes{{"arg", in}},
+		Types:         ArgTypes{{"arg", in}},
 		ReturnType:    ret,
 		AggregateFunc: f,
 		WindowFunc: func() WindowFunc {

@@ -25,7 +25,7 @@ import (
 )
 
 type testOverload struct {
-	paramTypes NamedArgTypes
+	paramTypes ArgTypes
 	retType    Type
 	pref       bool
 }
@@ -51,7 +51,7 @@ func (to *testOverload) String() string {
 }
 
 func makeTestOverload(retType Type, params ...Type) overloadImpl {
-	t := make(NamedArgTypes, len(params))
+	t := make(ArgTypes, len(params))
 	for i := range params {
 		t[i].Typ = params[i]
 	}
@@ -76,7 +76,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	}
 
 	unaryIntFn := makeTestOverload(TypeInt, TypeInt)
-	unaryIntFnPref := &testOverload{retType: TypeInt, paramTypes: NamedArgTypes{}, pref: true}
+	unaryIntFnPref := &testOverload{retType: TypeInt, paramTypes: ArgTypes{}, pref: true}
 	unaryFloatFn := makeTestOverload(TypeFloat, TypeFloat)
 	unaryDecimalFn := makeTestOverload(TypeDecimal, TypeDecimal)
 	unaryStringFn := makeTestOverload(TypeString, TypeString)
