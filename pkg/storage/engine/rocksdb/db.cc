@@ -183,8 +183,6 @@ struct DBIterator {
 
 }  // extern "C"
 
-namespace {
-
 // NOTE: these constants must be kept in sync with the values in
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
 // kKeyLocalRangePrefix are the mvcc-encoded prefixes.
@@ -370,6 +368,8 @@ DBStatus FmtStatus(const char *fmt, ...) {
   va_end(ap);
   return ToDBString(str);
 }
+
+namespace {
 
 DBIterState DBIterGetState(DBIterator* iter) {
   DBIterState state = {};
@@ -2154,12 +2154,11 @@ inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
 // in (*MVCCStats).AgeTo. Passing now_nanos in is semantically tricky if there
 // is a chance that we run into values ahead of now_nanos. Instead, now_nanos
 // should be taken as a hint but determined by the max timestamp encountered.
-MVCCStatsResult MVCCComputeStats(
-    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
+MVCCStatsResult MVCCComputeStatsInternal(
+    ::rocksdb::Iterator *const iter_rep, DBKey start, DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
   memset(&stats, 0, sizeof(stats));
 
-  rocksdb::Iterator *const iter_rep = iter->rep.get();
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
 
@@ -2266,6 +2265,11 @@ MVCCStatsResult MVCCComputeStats(
   return stats;
 }
 
+MVCCStatsResult MVCCComputeStats(
+    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
+  return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
+}
+
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
@@ -2357,4 +2361,12 @@ void DBRunLDB(int argc, char** argv) {
   ldb_options.key_formatter.reset(new CockroachKeyFormatter);
   rocksdb::LDBTool tool;
   tool.Run(argc, argv, options, ldb_options);
+}
+
+const rocksdb::Comparator* CockroachComparator() {
+  return &kComparator;
+}
+
+rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
+  return new DBBatchInserter(batch);
 }
