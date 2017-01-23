@@ -3312,8 +3312,8 @@ func (r *Replica) sendSnapshot(
 			},
 		},
 		RangeSize: r.GetMVCCStats().Total(),
-		// Recipients can choose to decline snapshots.
-		CanDecline: true,
+		// Recipients can choose to decline preemptive snapshots.
+		CanDecline: snapType == snapTypePreemptive,
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)

@@ -101,6 +101,13 @@ const (
 	// if a range lease holder experiences a failure causing a missed
 	// gossip update.
 	systemDataGossipInterval = 1 * time.Minute
+
+	// prohibitRebalancesBehindThreshold is the maximum number of log entries a
+	// store allows its replicas to be behind before it starts prohibiting
+	// rebalances. We prohibit rebalances in this situation to avoid adding
+	// additional work to a store that is either not keeping up or is undergoing
+	// recovery because it is on a recently restarted node.
+	prohibitRebalancesBehindThreshold = 1000
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -420,6 +427,10 @@ type Store struct {
 	// Semaphore to limit concurrent snapshot application and replica data
 	// destruction.
 	snapshotApplySem chan struct{}
+	// Are rebalances to this store allowed or prohibited. Rebalances are
+	// prohibited while a store is catching up replicas (i.e. recovering) after
+	// being restarted.
+	rebalancesDisabled int32
 
 	// drainLeases holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend range leases; see DrainLeases().
@@ -2640,6 +2651,9 @@ func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
 ) (func(), error) {
 	if header.CanDecline {
+		if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
+			return nil, nil
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
@@ -3084,6 +3098,9 @@ func (s *Store) processRaftRequest(
 		// We're processing a message from another replica which means that the
 		// other replica is not quiesced, so we don't need to wake the leader.
 		r.unquiesceLocked()
+		if req.Message.Type == raftpb.MsgApp {
+			r.setEstimatedCommitIndexLocked(req.Message.Commit)
+		}
 		return false, /* !unquiesceAndWakeLeader */
 			raftGroup.Step(req.Message)
 	}); err != nil {
@@ -3767,6 +3784,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
 		behindCount               int64
+		selfBehindCount           int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -3806,6 +3824,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.behindCount
+		selfBehindCount += metrics.selfBehindCount
 		return true // more
 	})
 
@@ -3819,8 +3838,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
-	s.metrics.RaftLogBehindCount.Update(behindCount)
+	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
+	s.metrics.RaftLogSelfBehindCount.Update(selfBehindCount)
 
+	if selfBehindCount > prohibitRebalancesBehindThreshold {
+		atomic.StoreInt32(&s.rebalancesDisabled, 1)
+	} else {
+		atomic.StoreInt32(&s.rebalancesDisabled, 0)
+	}
 	return nil
 }
 
