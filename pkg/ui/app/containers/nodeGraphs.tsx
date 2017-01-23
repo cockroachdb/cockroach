@@ -172,13 +172,43 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
 
-          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>
+          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second ${specifier}.`}>
             <Axis>
               <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
               <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
               <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
               <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
               <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Backend Statement Execution Latency: SQL"
+                       tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIds, (node) =>
+                  <Metric key={node}
+                          name="cr.node.sql.exec.latency-p99"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+
+          <LineGraph title="Backend Statement Execution Latency: DistSQL"
+                       tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIds, (node) =>
+                  <Metric key={node}
+                          name="cr.node.sql.distsql.exec.latency-p99"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
             </Axis>
           </LineGraph>
 
