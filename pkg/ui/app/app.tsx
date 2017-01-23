@@ -83,6 +83,7 @@ import NodesOverview from "./containers/nodesOverview";
 import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
+import { EventPage } from "./containers/events";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 import ClusterViz from "./containers/clusterViz";
@@ -108,7 +109,8 @@ ReactDOM.render(
           <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
         </Route>
         <Route path="cluster">
-          <Route path="nodes" component={ NodesOverview } />
+          <Route path="nodes" component={NodesOverview} />
+          <Route path="events" component={ EventPage } />
         </Route>
         <Route path="nodes">
           // This path has to match the "nodes" route for the purpose of
