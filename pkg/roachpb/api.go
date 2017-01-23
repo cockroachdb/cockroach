@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/rlmcpherson/s3gof3r"
 )
 
 // UserPriority is a custom type for transaction's user priority.
@@ -860,3 +861,11 @@ func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV |
 func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }
+
+// Keys returns credentials in an s3gof3r.Keys
+func (b *ExportStorage_S3) Keys() s3gof3r.Keys {
+	return s3gof3r.Keys{
+		AccessKey: b.AccessKey,
+		SecretKey: b.Secret,
+	}
+}

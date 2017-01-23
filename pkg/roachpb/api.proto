@@ -698,6 +698,43 @@ message DeprecatedVerifyChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+enum ExportStorageProvider {
+  Unknown = 0;
+  LocalFile = 1;
+  //Http = 2;
+  S3 = 3;
+  GoogleCloud = 4;
+}
+
+message ExportStorage {
+  optional ExportStorageProvider provider = 1 [(gogoproto.nullable) = false];
+
+  message LocalFilePath {
+    optional string path  = 1 [(gogoproto.nullable) = false];
+  }
+  // TODO(dt): add http storage.
+  // message Http {
+  //   optional string baseUri = 1 [(gogoproto.nullable) = false];
+  // }
+  message S3 {
+    optional string bucket = 1 [(gogoproto.nullable) = false];
+    optional string prefix = 2 [(gogoproto.nullable) = false];
+
+    optional string access_key = 3 [(gogoproto.nullable) = false];
+    optional string secret= 4 [(gogoproto.nullable) = false];
+    optional string temp_token = 5 [(gogoproto.nullable) = false];
+  }
+  message GCS {
+    optional string bucket = 1 [(gogoproto.nullable) = false];
+    optional string prefix = 2 [(gogoproto.nullable) = false];
+  }
+  optional LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
+  // TODO(dt): add http storage.
+  // optional Http HttpPath = 3;
+  optional GCS GoogleCloudConfig = 4;
+  optional S3 S3Config = 5;
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
