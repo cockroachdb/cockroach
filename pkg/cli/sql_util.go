@@ -350,17 +350,6 @@ func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string
 		for _, row := range allRows {
 			for i, r := range row {
 				row[i] = expandTabsAndNewLines(r)
-				if firstChar, _ := utf8.DecodeRuneInString(row[i]); unicode.IsSpace(firstChar) {
-					// table.Append below trims whitespace in order to compute
-					// the padding. This is unfortunate, since leading spaces
-					// can be usefully exploited for formatting. Disable
-					// trimming by inserting an invisible unicode character
-					// (left-to-right mark) at the start.
-					// TODO(knz) We can revisit this once
-					// https://github.com/olekukonko/tablewriter/issues/52 is
-					// fixed (or we use another table writer).
-					row[i] = "\u200C" + row[i]
-				}
 			}
 			table.Append(row)
 		}
