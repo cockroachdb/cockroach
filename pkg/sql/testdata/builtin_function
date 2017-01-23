@@ -1444,3 +1444,6 @@ query T
 SELECT col_description('pg_class'::regclass::oid, 2)
 ----
 NULL
+
+query error pq: pg_catalog.array_in\(\): unimplemented
+SELECT array_in('foo', 3, -1)
