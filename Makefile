@@ -58,11 +58,6 @@ $(error bash is required)
 endif
 export GIT_PAGER :=
 
-# Note: We pass `-v` to `go build` and `go test -i` so that warnings
-# from the linker aren't suppressed. The usage of `-v` also shows when
-# dependencies are rebuilt which is useful when switching between
-# normal and race test builds.
-
 ifeq ($(STATIC),1)
 # Static linking with glibc is a bad time; see
 # https://github.com/golang/go/issues/13470. If a static build is
@@ -87,7 +82,10 @@ start: build
 start:
 	$(COCKROACH) start $(STARTFLAGS)
 
-
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings
+# from the linker aren't suppressed. The usage of `-v` also shows when
+# dependencies are rebuilt which is useful when switching between
+# normal and race test builds.
 .PHONY: install
 install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
