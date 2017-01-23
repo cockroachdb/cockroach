@@ -861,18 +861,18 @@ func Example_sql_format() {
 	// +-------+
 	// |   x   |
 	// +-------+
-	// | ‌  hai |
+	// |   hai |
 	// +-------+
 	// (1 row)
 	// sql --pretty -e explain(indent) select s from t.t union all select s from t.t
 	// +-------+--------+-------+-----------------+
 	// | Level |  Type  | Field |   Description   |
 	// +-------+--------+-------+-----------------+
-	// |     0 | append |       | ‌ -> append      |
-	// |     1 | scan   |       | ‌   -> scan      |
-	// |     1 |        | table | ‌      t@primary |
-	// |     1 | scan   |       | ‌   -> scan      |
-	// |     1 |        | table | ‌      t@primary |
+	// |     0 | append |       |  -> append      |
+	// |     1 | scan   |       |    -> scan      |
+	// |     1 |        | table |       t@primary |
+	// |     1 | scan   |       |    -> scan      |
+	// |     1 |        | table |       t@primary |
 	// +-------+--------+-------+-----------------+
 	// (5 rows)
 }

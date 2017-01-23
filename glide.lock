@@ -245,7 +245,7 @@ imports:
 - name: github.com/montanaflynn/stats
   version: f8cd06f93c6c1b06028caafb88b540fc820f77c1
 - name: github.com/olekukonko/tablewriter
-  version: 44e365d423f4f06769182abfeeae2b91be9d529b
+  version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
 - name: github.com/opencontainers/go-digest
   version: a6d0ee40d4207ea02364bd3b9e8e77b9159ba1eb
 - name: github.com/opentracing/basictracer-go
