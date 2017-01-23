@@ -1403,13 +1403,23 @@ DBString DBEngine::GetUserProperties() {
     auto userprops = i->second->user_collected_properties;
 
     auto ts_min = userprops.find("crdb.ts.min");
-    if (ts_min != userprops.end()) {
-      DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min());
+    if (ts_min != userprops.end() && !ts_min->second.empty()) {
+      if (!DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min())) {
+        google::protobuf::SStringPrintf(all.mutable_error(),
+              "unable to decode crdb.ts.min value '%s' in table %s",
+              rocksdb::Slice(ts_min->second).ToString(true).c_str(), sst->path().c_str());
+        break;
+      }
     }
 
     auto ts_max = userprops.find("crdb.ts.max");
-    if (ts_max != userprops.end()) {
-      DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max());
+    if (ts_max != userprops.end() && !ts_max->second.empty()) {
+      if (!DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max())) {
+        google::protobuf::SStringPrintf(all.mutable_error(),
+              "unable to decode crdb.ts.max value '%s' in table %s",
+              rocksdb::Slice(ts_max->second).ToString(true).c_str(), sst->path().c_str());
+        break;
+      }
     }
   }
   return ToDBString(all.SerializeAsString());
