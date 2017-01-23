@@ -1268,6 +1268,9 @@ var (
 	_ = typCategoryUnknown
 
 	typDelim = parser.NewDString(",")
+
+	arrayInProcName = "pg_catalog.array_in"
+	arrayInProcOid  = makeOidHasher().BuiltinOid(arrayInProcName, &parser.Builtins[arrayInProcName][0])
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
@@ -1309,6 +1312,11 @@ CREATE TABLE pg_catalog.pg_type (
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		for oid, typ := range parser.OidToType {
+			cat := typCategory(typ)
+			typInput := zeroVal
+			if cat == typCategoryArray {
+				typInput = arrayInProcOid
+			}
 			if err := addRow(
 				parser.NewDInt(parser.DInt(oid)), // oid
 				parser.NewDString(typ.String()),  // typname
@@ -1317,22 +1325,22 @@ CREATE TABLE pg_catalog.pg_type (
 				typLen(typ),                      // typlen
 				typByVal(typ),                    // typbyval
 				typTypeBase,                      // typtype
-				typCategory(typ),                 // typcategory
-				parser.MakeDBool(false),          // typispreferred
-				parser.MakeDBool(true),           // typisdefined
-				typDelim,                         // typdelim
-				zeroVal,                          // typrelid
-				zeroVal,                          // typelem
-				zeroVal,                          // typarray
+				cat,                              // typcategory
+				parser.MakeDBool(false), // typispreferred
+				parser.MakeDBool(true),  // typisdefined
+				typDelim,                // typdelim
+				zeroVal,                 // typrelid
+				zeroVal,                 // typelem
+				zeroVal,                 // typarray
 
 				// regproc references
-				zeroVal, // typinput
-				zeroVal, // typoutput
-				zeroVal, // typreceive
-				zeroVal, // typsend
-				zeroVal, // typmodin
-				zeroVal, // typmodout
-				zeroVal, // typanalyze
+				typInput, // typinput
+				zeroVal,  // typoutput
+				zeroVal,  // typreceive
+				zeroVal,  // typsend
+				zeroVal,  // typmodin
+				zeroVal,  // typmodout
+				zeroVal,  // typanalyze
 
 				parser.DNull,            // typalign
 				parser.DNull,            // typstorage
