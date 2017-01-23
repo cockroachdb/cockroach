@@ -1404,12 +1404,22 @@ DBString DBEngine::GetUserProperties() {
 
     auto ts_min = userprops.find("crdb.ts.min");
     if (ts_min != userprops.end()) {
-      DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min());
+      if (!DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min())) {
+        google::protobuf::SStringPrintf(all.mutable_error(),
+              "unable to decode crdb.ts.min value '%s' in table %s",
+              ts_min->second.c_str(), sst->path().c_str());
+        return ToDBString(all.SerializeAsString());
+      }
     }
 
     auto ts_max = userprops.find("crdb.ts.max");
     if (ts_max != userprops.end()) {
-      DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max());
+      if (!DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max())) {
+        google::protobuf::SStringPrintf(all.mutable_error(),
+              "unable to decode crdb.ts.max value '%s' in table %s",
+              ts_max->second.c_str(), sst->path().c_str());
+        return ToDBString(all.SerializeAsString());
+      }
     }
   }
   return ToDBString(all.SerializeAsString());
