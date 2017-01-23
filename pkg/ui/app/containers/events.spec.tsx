@@ -6,20 +6,20 @@ import Long from "long";
 import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";
-import { EventList, EventRow } from "./events";
+import { EventBoxUnconnected as EventBox, EventRow } from "./events";
 import { refreshEvents } from "../redux/apiReducers";
 
 type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
 
-function makeEventList(events: Event[], refreshEventsFn: typeof refreshEvents) {
-  return shallow(<EventList events={events} refreshEvents={refreshEventsFn}></EventList>);
+function makeEventBox(events: Event[], refreshEventsFn: typeof refreshEvents) {
+  return shallow(<EventBox events={events} refreshEvents={refreshEventsFn}></EventBox>);
 }
 
 function makeEvent(event: Event) {
   return shallow(<EventRow event={event}></EventRow>);
 }
 
-describe("<EventList>", function() {
+describe("<EventBox>", function() {
   let spy: sinon.SinonSpy;
 
   beforeEach(function() {
@@ -28,7 +28,7 @@ describe("<EventList>", function() {
 
   describe("refresh", function() {
     it("refreshes events when mounted.", function () {
-      makeEventList((new protos.cockroach.server.serverpb.EventsResponse()).events, spy);
+      makeEventBox((new protos.cockroach.server.serverpb.EventsResponse()).events, spy);
       assert.isTrue(spy.called);
     });
   });
@@ -48,7 +48,7 @@ describe("<EventList>", function() {
       ],
     });
 
-      let provider = makeEventList(eventsResponse.events, spy);
+      let provider = makeEventBox(eventsResponse.events, spy);
       let eventRows = provider.children().first().children().first().children();
       let event1Props: any = eventRows.first().props();
       let event2Props: any = eventRows.at(1).props();
