@@ -194,7 +194,22 @@ each replica located on different:
 
 Up to `F` failures can be tolerated, where the total number of replicas `N = 2F + 1` (e.g. with 3x replication, one failure can be tolerated; with 5x replication, two failures, and so on).
 
+节点和它所提供的可访问range可以跟据各种物理网络拓扑结构调整，以兼顾可靠性和性能。
+例如，一个3副本的range其每份副本放置到不同位置（以达到不同的效果）：
+
+-   位于一台服务器上的不同磁盘上以容忍磁盘失效；
+
+-   位于一个机架上的不同服务器上以容忍server失效；
+
+-   位于一个数据中心内不同机架的服务器上以以容忍机架电力/网络失效；
+
+-   位于不同数据中心的服务器上以容忍大范围断网或者停电
+
+若要最高容忍F个失效，则需副本总数N=2F + 1（例如：3个副本可容忍1个失效，5个副本容忍2个失效，等等）。
+
+
 # Keys
+# 键
 
 Cockroach keys are arbitrary byte arrays. Keys come in two flavors:
 system keys and table data keys. System keys are used by Cockroach for
@@ -202,6 +217,10 @@ internal data structures and metadata. Table data keys contain SQL
 table data (as well as index data). System and table data keys are
 prefixed in such a way that all system keys sort before any table data
 keys.
+
+Cockroach 的key是任意byte数组。Key分成两种：系统Key和表数据Key。
+系统Key由Cockroach使用，用于内部数据结构和元数据。表数据Key包含SQL表数据（也包含索引数据）。
+系统Key和表数据Key都被增加前缀，使用此种方式来使得排序时所有系统Key都在表数据Key之前。
 
 System keys come in several subtypes:
 
@@ -226,10 +245,27 @@ System keys come in several subtypes:
     local to a replica. The primary examples of such keys are the Raft
     state and Raft log.
 
+系统Key有几种子类型：
+
+- **全局** Key，存储集群范围内数据（如：”meta1”和”meta2” key）和各种其他系统范围内Key（如：节点和store ID分配器）。
+
+- **store本地** Key，用于非复制store元数据（如：StoreIdent结构）。“非复制”指这些值不会跨越多个store进行复制，
+因为这些Key所容纳数据与它们所在的store的生命周期紧密联系在一起。
+
+- **Range本地** Key，存储与一个全局Key相联系的range元数据。Range本地Key有一个跟在全局Key后的特殊前缀和一个特殊的后缀。
+例如：事务记录是Range本地Key，它看起来会是如下样子：\x01k<global-key>txn-<txnID>。
+
+- **复制RangeID本地** Key，存储range元数据，出现在一个range的所有副本中。这些Key通过Raft操作来更新。例如，包括range租约状态和放弃缓存的条目。
+
+- **非复制RangeID本地** Key，存储range元数据，对于一个副本是本地的。这些Key的主要例子有Raft状态和Raft日志。
+
+
 Table data keys are used to store all SQL data. Table data keys
 contain internal structure as described in the section on [mapping
 data between the SQL model and
 KV](#data-mapping-between-the-sql-model-and-kv).
+
+表数据Key用于存储所有SQL数据。表数据Key包含内部结构，该内部结构在[SQL模型与KV间的数据映射](#data-mapping-between-the-sql-model-and-kv)章节中描述。
 
 # Versioned Values
 
@@ -241,10 +277,17 @@ compaction according to a user-specified expiration interval. In order
 to support long-running scans (e.g. for MapReduce), all versions have a
 minimum expiration.
 
+Cockroach通过存储commit时间戳来维护值的多个历史版本。读取和扫描可以通过指定一个快照时间
+来返回该时间戳之前的最近一次更新后的数据。值的老版本在系统中根据用户指定的过期间隔而执行合并（compaction）期间被垃圾回收掉。
+为了支持运行时间较长的数据扫描（如，MapReduce），所有的版本都有一个最小过期时间。
+
 Versioned values are supported via modifications to RocksDB to record
 commit timestamps and GC expirations per key.
 
+多版本值是通过修改RocksDB来记录每个Key的提交时间戳和GC过期时间来实现的。
+
 # Lock-Free Distributed Transactions
+# 无锁分布式事务
 
 Cockroach provides distributed transactions without locks. Cockroach
 transactions support two isolation levels:
@@ -252,11 +295,21 @@ transactions support two isolation levels:
 - snapshot isolation (SI) and
 - *serializable* snapshot isolation (SSI).
 
+Cockroach提供无锁分布式事务，Cockroach事务支持两种隔离级别：
+
+- 快照隔离级别（SI）；
+
+- *序列化*快照隔离级别（SSI）。
+
 *SI* is simple to implement, highly performant, and correct for all but a
 handful of anomalous conditions (e.g. write skew). *SSI* requires just a touch
 more complexity, is still highly performant (less so with contention), and has
 no anomalous conditions. Cockroach’s SSI implementation is based on ideas from
 the literature and some possibly novel insights.
+
+SI 实现简单、性能高，在排除少数特殊情况（如：写偏序）下也具有正确性。*SSI*则更为复杂，
+但也具有高性能（随竞争增加而降低），同时也保障了正确性（没有特殊情况引致错误）。
+Cockroach的SSI实现基于来自文献的想法和一些创新性见解。
 
 SSI is the default level, with SI provided for application developers
 who are certain enough of their need for performance and the absence of
@@ -267,6 +320,10 @@ implementation of SSI still requires no locking, but will end up
 aborting more transactions. Cockroach’s SI and SSI implementations
 prevent starvation scenarios even for arbitrarily long transactions.
 
+SSI是默认的隔离级别。但CockroachDB也为应用开发者提供了SI隔离级别供选择，当确认需要高性能并没有写偏序的情况下使用该隔离级别。
+在轻度竞争系统中，SSI的实现和SI一样性能相当，无锁定或额外写入。在竞争系统中，SSI的实现仍然无锁定，但最终结果会中止更多的事务。
+CockroachDB的SI和SSI的实现即使在任意长事务情况下也均能防止饥饿情况的发生。
+
 See the [Cahill paper](https://drive.google.com/file/d/0B9GCVTp_FHJIcEVyZVdDWEpYYXVVbFVDWElrYUV0NHFhU2Fv/edit?usp=sharing)
 for one possible implementation of SSI. This is another [great paper](http://cs.yale.edu/homes/thomson/publications/calvin-sigmod12.pdf).
 For a discussion of SSI implemented by preventing read-write conflicts
@@ -274,16 +331,24 @@ For a discussion of SSI implemented by preventing read-write conflicts
 the [Yabandeh paper](https://drive.google.com/file/d/0B9GCVTp_FHJIMjJ2U2t6aGpHLTFUVHFnMTRUbnBwc2pLa1RN/edit?usp=sharing),
 which is the source of much inspiration for Cockroach’s SSI.
 
+SSI的一种可供参考实现参见 [MICHAEL JAMES CAHILL](https://drive.google.com/file/d/0B9GCVTp_FHJIcEVyZVdDWEpYYXVVbFVDWElrYUV0NHFhU2Fv/edit?usp=sharing)的论文（译注：指《SerializableIsolation for Snapshot Databases》）。还有另一个[很棒的论文](http://cs.yale.edu/homes/thomson/publications/calvin-sigmod12.pdf)，是关于通过防止读写冲突来实现SSI的讨论，参见[Yabandeh 的论文](https://drive.google.com/file/d/0B9GCVTp_FHJIMjJ2U2t6aGpHLTFUVHFnMTRUbnBwc2pLa1RN/edit?usp=sharing)（译注：指《Predicting and Preventing Inconsistencies in DeployedDistributed Systems》），该论文是CockroachDB的SSI实现中许多灵感的源泉。
+
 Both SI and SSI require that the outcome of reads must be preserved, i.e.
 a write of a key at a lower timestamp than a previous read must not succeed. To
 this end, each range maintains a bounded *in-memory* cache from key range to
 the latest timestamp at which it was read.
+
+SI和SSI都需要对读过的结果进行保存，例如，在比读操作更早时间戳版本Key上的写操作一定不可以成功。
+为达到这一效果，每个range维护了一个有界*内存*缓存，从key range到其被读过的最新时间戳。
 
 Most updates to this *timestamp cache* correspond to keys being read, though
 the timestamp cache also protects the outcome of some writes (notably range
 deletions) which consequently must also populate the cache. The cache’s entries
 are evicted oldest timestamp first, updating the low water mark of the cache
 appropriately.
+
+大多时候，时间戳缓存的更新相当于Key正在被读，尽管时间戳缓存也保护一些写操作（这些写操作的后果一定位于cache内）
+的结果（尤其是range删除操作）。该缓存首先淘汰掉最老时间戳条目，并适时地更新低水位线。
 
 Each Cockroach transaction is assigned a random priority and a
 "candidate timestamp" at start. The candidate timestamp is the
@@ -293,13 +358,21 @@ transaction. This means that a transaction without conflicts will
 usually commit with a timestamp that, in absolute time, precedes the
 actual work done by that transaction.
 
+每一个Cockroach事务在开始时都会分配一个随机优先级和“候选时间戳”。在事务将要提交时，
+候选时间戳是一个临时的时间戳，选自处理该事务的节点的当前时间。这意味着一个没有冲突的
+事务将使用该时间戳提交，从绝对时间来看，此时间戳先于事务结束时间。
+
 In the course of coordinating a transaction between one or more
 distributed nodes, the candidate timestamp may be increased, but will
 never be decreased. The core difference between the two isolation levels
 SI and SSI is that the former allows the transaction's candidate
 timestamp to increase and the latter does not.
 
+在跨一个或者多个分布式节点的事务的协同过程中，候选时间戳可能会增长，但不会降低。
+SI与SSI两种隔离级别的核心不同点是前者允许事务的候选时间戳增长，而后者不允许。
+
 **Hybrid Logical Clock**
+**混合逻辑时钟**
 
 Each cockroach node maintains a hybrid logical clock (HLC) as discussed
 in the [Hybrid Logical Clock paper](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf).
@@ -312,8 +385,13 @@ are received by a node, it informs the local HLC about the timestamp supplied
 with the event by the sender, and when events are sent a timestamp generated by
 the local HLC is attached.
 
+每个cockroach节点维护这个一个混合逻辑时钟（HLC）,探讨论文[混合逻辑时钟论文](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf)。
+HLC时间使用的时间戳有一个物理组件（看作总是接近本地物理时钟）和一个逻辑组件(用于区别相同物理组件上的事件)组成。
+它使我们能够以较少的开销跟踪相关联事件的因果性，类似于向量时钟（译注：vector clock，可参考Leslie Lamport在1978年发表的一篇论文《Time, Clocks, and the Ordering of Events in a Distributed System》）。在实践中，它工作起来更像一个逻辑时钟：当一个节点收到事件时，它通知本地逻辑HLC由发送者提供的事件时间戳，而当事件被发送时会附加一个由本地HLC生成的时间戳。 
+
 For a more in depth description of HLC please read the paper. Our
 implementation is [here](https://github.com/cockroachdb/cockroach/blob/master/pkg/util/hlc/hlc.go).
+关于混合逻辑时钟(HLC)更深入的描述请阅读相关论文。我们的实现见[这里](https://github.com/cockroachdb/cockroach/blob/master/pkg/util/hlc/hlc.go).。
 
 Cockroach picks a Timestamp for a transaction using HLC time. Throughout this
 document, *timestamp* always refers to the HLC time which is a singleton
@@ -322,6 +400,10 @@ the HLC time >= wall time. A read/write timestamp received in a cockroach reques
 from another node is not only used to version the operation, but also updates
 the HLC on the node. This is useful in guaranteeing that all data read/written
 on a node is at a timestamp < next HLC time.
+
+Cockroach使用HLC时间为事务选取时间戳。本文中，所有 时间戳 都是指HLC时间，HLC时钟在每个节点上是都是单一实例的
+（译注：也就是说每个节点上只有唯一一个HLC时钟，不会有两个时钟，产生两个时间的问题）。
+HLC时钟由节点上的每个读/写事件来更新，并且HLC 时间大于等于（ >= ）系统时间（wall time）。从来自其他节点的Cockroach请求里接收到的读/写时间戳不仅仅用来标识操作的版本，也会更新本节点上的HLC时钟。这用于保证在一个节点上的所有数据读写时间戳都小于下一次HLC时间。
 
 **Transaction execution flow**
 
