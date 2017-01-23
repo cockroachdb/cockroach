@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
+	"golang.org/x/text/collate"
 )
 
 var (
@@ -41,6 +42,7 @@ var (
 
 const (
 	cockroachIndexEncoding = "prefix"
+	defaultCollationTag    = "en-US"
 )
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
@@ -53,6 +55,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
+		pgCatalogCollationTable,
 		pgCatalogConstraintTable,
 		pgCatalogDatabaseTable,
 		pgCatalogDependTable,
@@ -150,6 +153,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attisdropped BOOL,
 	attislocal BOOL,
 	attinhcount INT,
+	attcollation INT,
 	attacl STRING,
 	attoptions STRING,
 	attfdwoptions STRING
@@ -180,6 +184,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 						parser.MakeDBool(false),                                   // attisdropped
 						parser.MakeDBool(true),                                    // attislocal
 						zeroVal,                                                   // attinhcount
+						typColl(colTyp, h),                                        // attcollation
 						parser.DNull,                                              // attacl
 						parser.DNull,                                              // attoptions
 						parser.DNull,                                              // attfdwoptions
@@ -324,6 +329,41 @@ CREATE TABLE pg_catalog.pg_class (
 				})
 			},
 		)
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-collation.html.
+var pgCatalogCollationTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_collation (
+  oid INT,
+  collname STRING,
+  collnamespace INT,
+  collowner INT,
+  collencoding INT,
+  collcollate STRING,
+  collctype STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := addRow(
+				h.CollationOid(collName),    // oid
+				parser.NewDString(collName), // collname
+				pgNamespacePGCatalog.Oid,    // collnamespace
+				parser.DNull,                // collowner
+				datEncodingUTFId,            // collencoding
+				// It's not clear how to translate a Go collation tag into the format
+				// required by LC_COLLATE and LC_CTYPE.
+				parser.DNull, // collcollate
+				parser.DNull, // collctype
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
@@ -1308,6 +1348,7 @@ CREATE TABLE pg_catalog.pg_type (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
 		for oid, typ := range parser.OidToType {
 			if err := addRow(
 				parser.NewDInt(parser.DInt(oid)), // oid
@@ -1340,7 +1381,7 @@ CREATE TABLE pg_catalog.pg_type (
 				zeroVal,                 // typbasetype
 				negOneVal,               // typtypmod
 				zeroVal,                 // typndims
-				zeroVal,                 // typcollation
+				typColl(typ, h),         // typcollation
 				parser.DNull,            // typdefaultbin
 				parser.DNull,            // typdefault
 				parser.DNull,            // typacl
@@ -1369,6 +1410,20 @@ func typLen(typ parser.Type) *parser.DInt {
 func typByVal(typ parser.Type) parser.Datum {
 	_, variable := typ.Size()
 	return parser.MakeDBool(parser.DBool(!variable))
+}
+
+// typColl returns the collation OID for a given type.
+// The default collation is en-US, which is equivalent to but spelled
+// differently than the default database collation, en_US.utf8.
+func typColl(typ parser.Type, h oidHasher) *parser.DInt {
+	if typ.FamilyEqual(parser.TypeAny) {
+		return zeroVal
+	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TypeStringArray) {
+		return h.CollationOid(defaultCollationTag)
+	} else if typ.FamilyEqual(parser.TypeCollatedString) {
+		return h.CollationOid(typ.(parser.TCollatedString).Locale)
+	}
+	return zeroVal
 }
 
 // This mapping should be kept sync with PG's categorization.
@@ -1491,6 +1546,7 @@ const (
 	uniqueConstraintTypeTag
 	functionTypeTag
 	userTypeTag
+	collationTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -1626,6 +1682,12 @@ func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DInt
 func (h oidHasher) UserOid(username string) *parser.DInt {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(username)
+	return h.getOid()
+}
+
+func (h oidHasher) CollationOid(collation string) *parser.DInt {
+	h.writeTypeTag(collationTypeTag)
+	h.writeStr(collation)
 	return h.getOid()
 }
 
