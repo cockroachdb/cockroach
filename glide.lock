@@ -1,8 +1,8 @@
-hash: 11665188dd657f4b479ce3c7698b6bb3e2636f0b25570883d67a85bc7520b8d1
-updated: 2017-01-09T11:24:29.408700952-05:00
+hash: 86331d72230fa8047b2f4fdd243fff86a35306ce5ae606295fbd0b4a9e2362bc
+updated: 2017-01-21T01:00:41.003311513Z
 imports:
 - name: cloud.google.com/go
-  version: c96c4486674a140772b9788370fa29898577bc0c
+  version: 81b7822b1e798e8f17bf64b59512a5be4097e966
   subpackages:
   - compute/metadata
   - internal
@@ -17,7 +17,7 @@ imports:
   subpackages:
   - winterm
 - name: github.com/backtrace-labs/go-bcd
-  version: 389d108b62915963d915a02837f0ffc00b759d50
+  version: 4ad9137a248599da4b00da0be6e71a75c9e1b8d9
 - name: github.com/biogo/store
   version: 913427a1d5e89604e50ea1db0f28f34966d61602
   subpackages:
@@ -56,7 +56,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: f99c76cb4791430a25aaea2e7e44e460a332f261
+  version: 92cec10103e5a1d0ba832a35456a2f0cef73a92c
   subpackages:
   - raft
   - raft/raftpb
@@ -65,8 +65,9 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 7dba427612198a11b161a27f9d40bb2dca1ccd20
+  version: 7a0972304e201e2a5336a69d00e112c27823f554
   subpackages:
+  - digestset
   - reference
 - name: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
@@ -103,9 +104,9 @@ imports:
 - name: github.com/docker/go-units
   version: e30f1e79f3cd72542f2026ceec18d3bd67ab859c
 - name: github.com/dustin/go-humanize
-  version: 904a49491cd5fb5cba832fac98e7e87d56b690a4
+  version: 7a41df006ff9af79a29f0ffa9c5f21fbe6314a2d
 - name: github.com/elastic/gosigar
-  version: 171a3c9e31dde9688c154ba94be6cd5d8a78bf64
+  version: b49e01eb1e5c68c469392a63feaccae9352ceb12
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
@@ -117,7 +118,7 @@ imports:
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
-  version: f9114dace7bd920b32f943b3c73fafbcbab2bf31
+  version: 265e960d45b331a5055057ef0f29088cf1eb91ce
   subpackages:
   - gogoproto
   - jsonpb
@@ -164,11 +165,11 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: dcda0b96bd591fbeb40dcaddec3fb40a7fcaca34
+  version: c9c37fd6ce0247943d1aa34fc3813c62c5cb0225
   subpackages:
   - github
 - name: github.com/google/go-querystring
-  version: 9235644dd9e52eeae6fa48efd539fdc351a0af53
+  version: 53e6ce116135b80d037921a7fdd5138cf32d7a8a
   subpackages:
   - query
 - name: github.com/googleapis/gax-go
@@ -210,7 +211,7 @@ imports:
 - name: github.com/leekchan/timeutil
   version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
-  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
+  version: 67c3f2a8884c9b1aac5503c8d42ae4f73a93511c
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
@@ -241,13 +242,13 @@ imports:
   - syntax
   - syntax/golang
 - name: github.com/Microsoft/go-winio
-  version: 24a3e3d3fc7451805e09d11e11e95d9a0a4f205e
+  version: 307e919c663683a9000576fdc855acaf9534c165
 - name: github.com/montanaflynn/stats
   version: f8cd06f93c6c1b06028caafb88b540fc820f77c1
 - name: github.com/olekukonko/tablewriter
-  version: 44e365d423f4f06769182abfeeae2b91be9d529b
+  version: a02c902005fcb6f1c4e992cb6dfa748a93bd3b19
 - name: github.com/opencontainers/go-digest
-  version: a6d0ee40d4207ea02364bd3b9e8e77b9159ba1eb
+  version: 21dfd564fd89c944783d00d069f33e3e7123c448
 - name: github.com/opentracing/basictracer-go
   version: 1b32af207119a14b1b231d451df3ed04a72efebf
   subpackages:
@@ -258,7 +259,7 @@ imports:
   - ext
   - log
 - name: github.com/pborman/uuid
-  version: 5007efa264d92316c43112bc573e754bc889b7b1
+  version: 1b00554d822231195d1babd97ff4a781231955c9
 - name: github.com/petermattis/goid
   version: caab6446a35a918488a0f52d4b0bd088a60f3511
 - name: github.com/pkg/errors
@@ -292,13 +293,13 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: 9b48ece7fc373043054858f8c0d362665e866004
+  version: 61e43dc76f7ee59a82bdf3d71033dc12bea4c77d
 - name: github.com/spf13/cobra
-  version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
+  version: dc208f4211e7f6df7ec8cb62640f57d3e154910d
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 25f8b5b07aece3207895bf19f7ab517eb3b22a40
+  version: a232f6d9f87afaaa08bafaff5da685f974b83313
 - name: github.com/StackExchange/wmi
   version: e54cbda6595d7293a7a468ccf9525f6bc8887f99
 - name: github.com/tebeka/go2xunit
@@ -310,7 +311,7 @@ imports:
 - name: github.com/wadey/gocovmerge
   version: b5bfa59ec0adc420475f97f89b58045c721d761c
 - name: golang.org/x/crypto
-  version: c3b1d0d6d8690eaebe3064711b026770cc37efa3
+  version: b8a2a83acfe6e6770b75de42d5ff4c67596675c0
   subpackages:
   - bcrypt
   - blowfish
@@ -340,7 +341,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 44f4f658a783b0cee41fe0a23b8fc91d9c120558
+  version: 11dbc599981ccdf4fb18802a28392a8bcf7a9395
   subpackages:
   - collate
   - internal/colltab
@@ -352,7 +353,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 354f9f8b43608012e8192f2e8d9e13c615df5c34
+  version: fcfba28e23c7bbd8474b355ca7d6a9d88afcca00
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -365,7 +366,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 025e50fdada431a9bc9ef7f06b4d504cd26bfa11
+  version: b9d03e6e091e36f9a089515bc84cf14c2d199c4c
   subpackages:
   - gensupport
   - googleapi
@@ -377,7 +378,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: 8758a385849434ba5eac8aeedcf5192c5a0f5f10
+  version: a2c54d2174c17540446e0ced57d9d459af61bc1c
   subpackages:
   - internal
   - internal/app_identity
@@ -413,7 +414,7 @@ imports:
   subpackages:
   - lintutil
 - name: honnef.co/go/simple
-  version: 785f2adbeecfb675c110966bb69792863aa0aa49
+  version: 39e531f6a2d11a5bc7dc858863c8043642f89611
 - name: honnef.co/go/ssa
   version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
 - name: honnef.co/go/staticcheck
@@ -422,7 +423,7 @@ imports:
   - pure
   - vrp
 - name: honnef.co/go/unused
-  version: 33bc4cfe5599e665ab0117ca65e59f254aa6810d
+  version: 27ec41ddb4a80af3a4329abf098bcd023038ae98
 testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
