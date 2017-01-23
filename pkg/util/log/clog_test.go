@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -524,6 +526,43 @@ func TestRollover(t *testing.T) {
 	}
 	if info.nbytes >= MaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
+	}
+}
+
+func TestGC(t *testing.T) {
+	s := Scope(t, "")
+	defer s.Close(t)
+
+	setFlags()
+	logging.stderrThreshold.set(Severity_NONE)
+	defer func(previous uint64) { MaxSize = previous }(MaxSize)
+	MaxSize = 1 // ensure rotation on every log write
+	defer func(previous uint64) {
+		atomic.StoreUint64(&MaxSizePerSeverity, previous)
+	}(MaxSizePerSeverity)
+	atomic.StoreUint64(&MaxSizePerSeverity, 1500)
+	const expectedFiles = 2
+
+	// Empirically, each log file is ~650 bytes in size. Create 20 log files per
+	// level. GC should trim this down to 2.
+	for i := 0; i < expectedFiles*10; i++ {
+		Info(context.Background(), "x")
+		Error(context.Background(), "x")
+		Warning(context.Background(), "x")
+	}
+
+	// Ensure the GC has seen the most recent files.
+	logging.gcOldFiles()
+
+	allFiles, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for s := Severity_INFO; s <= Severity_ERROR; s++ {
+		severityFiles := selectFiles(allFiles, s, math.MaxInt64)
+		if expectedFiles != len(severityFiles) {
+			t.Fatalf("%s: expected %d, but found %d", s, expectedFiles, len(severityFiles))
+		}
 	}
 }
 
