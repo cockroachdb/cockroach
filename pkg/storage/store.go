@@ -2733,6 +2733,10 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 				Batches:    batches,
 				LogEntries: logEntries,
 				State:      &header.State,
+				snapType:   snapTypeRaft,
+			}
+			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
+				inSnap.snapType = snapTypePreemptive
 			}
 
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
