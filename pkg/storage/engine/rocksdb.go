@@ -1299,23 +1299,27 @@ func (r *rocksDBIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+	return cStatsToGoStats(result, nowNanos)
+}
+
+func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
-	if err := statusToError(result.status); err != nil {
+	if err := statusToError(stats.status); err != nil {
 		return ms, err
 	}
 	ms.ContainsEstimates = false
-	ms.LiveBytes = int64(result.live_bytes)
-	ms.KeyBytes = int64(result.key_bytes)
-	ms.ValBytes = int64(result.val_bytes)
-	ms.IntentBytes = int64(result.intent_bytes)
-	ms.LiveCount = int64(result.live_count)
-	ms.KeyCount = int64(result.key_count)
-	ms.ValCount = int64(result.val_count)
-	ms.IntentCount = int64(result.intent_count)
-	ms.IntentAge = int64(result.intent_age)
-	ms.GCBytesAge = int64(result.gc_bytes_age)
-	ms.SysBytes = int64(result.sys_bytes)
-	ms.SysCount = int64(result.sys_count)
+	ms.LiveBytes = int64(stats.live_bytes)
+	ms.KeyBytes = int64(stats.key_bytes)
+	ms.ValBytes = int64(stats.val_bytes)
+	ms.IntentBytes = int64(stats.intent_bytes)
+	ms.LiveCount = int64(stats.live_count)
+	ms.KeyCount = int64(stats.key_count)
+	ms.ValCount = int64(stats.val_count)
+	ms.IntentCount = int64(stats.intent_count)
+	ms.IntentAge = int64(stats.intent_age)
+	ms.GCBytesAge = int64(stats.gc_bytes_age)
+	ms.SysBytes = int64(stats.sys_bytes)
+	ms.SysCount = int64(stats.sys_count)
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
 }
