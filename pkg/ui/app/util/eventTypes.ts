@@ -37,6 +37,7 @@ export const nodeEvents = [NODE_JOIN, NODE_RESTART];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [CREATE_TABLE, DROP_TABLE, ALTER_TABLE, CREATE_INDEX,
   DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE];
+export const allEvents = [...nodeEvents, ...databaseEvents, ...tableEvents];
 
 interface EventSet {
   [key: string]: number;

@@ -10,13 +10,27 @@
         border 0
     td
       padding-left 0
+      text-overflow ellipsis
+      overflow hidden
+
+      div
+        text-overflow ellipsis
+        overflow hidden
+
 .events__message
   font-size 14
   color $secondary-gray-11
+  text-overflow ellipsis
+  display block
+  white-space nowrap
+  overflow hidden
+  width 180px
 
 .events__timestamp
   font-size 12
   color $light-gray
+  margin-left 20px
+  text-align right
 
 .events__more-link
   text-align center
@@ -26,3 +40,12 @@
   font-size 12px
   letter-spacing 2px
   cursor pointer
+
+  a
+    color $secondary-blue
+    text-decoration none
+
+.events-table .sort-table__cell
+  font-family Lato-Regular
+  font-weight normal
+  letter-spacing normal
