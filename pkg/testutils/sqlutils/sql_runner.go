@@ -77,7 +77,8 @@ type Row struct {
 // Scan is a wrapper around (*gosql.Row).Scan that kills the test on error.
 func (r *Row) Scan(dest ...interface{}) {
 	if err := r.row.Scan(dest...); err != nil {
-		r.Fatalf("error scanning '%v': %s", r.row, err)
+		file, line, _ := caller.Lookup(1)
+		r.Fatalf("%s:%d: error scanning '%v': %+v", file, line, r.row, err)
 	}
 }
 
