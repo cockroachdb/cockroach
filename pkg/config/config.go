@@ -18,7 +18,6 @@ package config
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
 	"sort"
 	"strings"
@@ -189,16 +188,27 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 	return uint32(id64), err == nil
 }
 
-// Hash returns a SHA1 hash of the SystemConfig contents.
-func (s SystemConfig) Hash() []byte {
-	sha := sha1.New()
-	for _, kv := range s.Values {
-		_, _ = sha.Write(kv.Key)
-		// There are all kinds of different types here, so we can't use the typed
-		// getters.
-		_, _ = sha.Write(kv.Value.RawBytes)
+// Equal checks for equality.
+//
+// It assumes that s.Values and other.Values are sorted in key order.
+func (s SystemConfig) Equal(other SystemConfig) bool {
+	if len(s.Values) != len(other.Values) {
+		return false
 	}
-	return sha.Sum(nil)
+	for i := range s.Values {
+		leftKV, rightKV := s.Values[i], other.Values[i]
+		if !leftKV.Key.Equal(rightKV.Key) {
+			return false
+		}
+		leftVal, rightVal := leftKV.Value, rightKV.Value
+		if !bytes.Equal(leftVal.RawBytes, rightVal.RawBytes) {
+			return false
+		}
+		if !leftVal.Timestamp.Equal(rightVal.Timestamp) {
+			return false
+		}
+	}
+	return true
 }
 
 // GetValue searches the kv list for 'key' and returns its
