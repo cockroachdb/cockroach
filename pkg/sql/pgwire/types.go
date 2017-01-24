@@ -99,7 +99,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.putInt32(-1)
 		return
 	}
-	switch v := d.(type) {
+	switch v := parser.UnwrapDatum(d).(type) {
 	case *parser.DBool:
 		b.putInt32(1)
 		if *v {
@@ -202,7 +202,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		b.putInt32(-1)
 		return
 	}
-	switch v := d.(type) {
+	switch v := parser.UnwrapDatum(d).(type) {
 	case *parser.DBool:
 		b.putInt32(1)
 		if *v {
@@ -483,6 +483,23 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, errors.Errorf("unsupported int8 format code: %d", code)
 		}
+	case oid.T_oid:
+		switch code {
+		case formatText:
+			u, err := strconv.ParseUint(string(b), 10, 32)
+			if err != nil {
+				return d, err
+			}
+			d = parser.NewDOid(parser.DInt(u))
+		case formatBinary:
+			if len(b) < 4 {
+				return d, errors.Errorf("oid requires 4 bytes for binary format")
+			}
+			u := binary.BigEndian.Uint32(b)
+			d = parser.NewDOid(parser.DInt(u))
+		default:
+			return d, errors.Errorf("unsupported oid format code: %d", code)
+		}
 	case oid.T_float4:
 		switch code {
 		case formatText:
@@ -608,6 +625,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			d = parser.NewDString(string(b))
 		default:
 			return d, errors.Errorf("unsupported text format code: %d", code)
+		}
+	case oid.T_name:
+		switch code {
+		case formatText, formatBinary:
+			d = parser.NewDName(string(b))
+		default:
+			return d, errors.Errorf("unsupported name format code: %d", code)
 		}
 	case oid.T_bytea:
 		switch code {

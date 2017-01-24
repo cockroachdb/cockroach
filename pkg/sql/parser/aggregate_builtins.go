@@ -335,7 +335,7 @@ func (a *concatAggregate) Add(datum Datum) {
 	if a.forBytes {
 		arg = string(*datum.(*DBytes))
 	} else {
-		arg = string(*datum.(*DString))
+		arg = string(MustBeDString(datum))
 	}
 	a.result.WriteString(arg)
 }
@@ -502,7 +502,7 @@ func (a *smallIntSumAggregate) Add(datum Datum) {
 		return
 	}
 
-	a.sum += int64(*datum.(*DInt))
+	a.sum += int64(MustBeDInt(datum))
 	a.seenNonNull = true
 }
 
@@ -535,7 +535,7 @@ func (a *intSumAggregate) Add(datum Datum) {
 		return
 	}
 
-	t := int64(*datum.(*DInt))
+	t := int64(MustBeDInt(datum))
 	if t != 0 {
 		// The sum can be computed using a single int64 as long as the
 		// result of the addition does not overflow.  However since Go
@@ -672,7 +672,7 @@ func (a *intVarianceAggregate) Add(datum Datum) {
 		return
 	}
 
-	a.tmpDec.SetUnscaled(int64(*datum.(*DInt)))
+	a.tmpDec.SetUnscaled(int64(MustBeDInt(datum)))
 	a.agg.Add(&a.tmpDec)
 }
 

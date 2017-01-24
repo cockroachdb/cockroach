@@ -168,8 +168,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		j := 1
 		for _, row := range retRows {
-			if int(*(row[0].Datum.(*parser.DInt))) == i {
-				if int(*(row[1].Datum.(*parser.DInt))) != j {
+			if int(parser.MustBeDInt(row[0].Datum)) == i {
+				if int(parser.MustBeDInt(row[1].Datum)) != j {
 					t.Errorf("Expected [%d %d], got %s", i, j, row)
 				}
 				j++

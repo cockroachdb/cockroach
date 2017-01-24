@@ -63,8 +63,8 @@ func TestRowContainer(t *testing.T) {
 				for i := 0; i < rc.Len(); i++ {
 					row := rc.At(i)
 					for j := range row {
-						dint, ok := row[j].(*parser.DInt)
-						if !ok || int(*dint) != (i+numPops)*numCols+j {
+						dint, ok := parser.AsDInt(row[j])
+						if !ok || int(dint) != (i+numPops)*numCols+j {
 							t.Fatalf("invalid value %+v on row %d, col %d", row[j], i+numPops, j)
 						}
 					}

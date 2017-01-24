@@ -23,6 +23,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CastTargetType represents a type that is a valid cast target.
+type CastTargetType interface {
+	fmt.Stringer
+	NodeFormatter
+
+	castTargetType()
+}
+
 // ColumnType represents a type in a column definition.
 type ColumnType interface {
 	CastTargetType
@@ -39,9 +47,11 @@ func (*TimestampColType) columnType()      {}
 func (*TimestampTZColType) columnType()    {}
 func (*IntervalColType) columnType()       {}
 func (*StringColType) columnType()         {}
+func (*NameColType) columnType()           {}
 func (*BytesColType) columnType()          {}
 func (*CollatedStringColType) columnType() {}
 func (*ArrayColType) columnType()          {}
+func (*OidColType) columnType()            {}
 
 // All ColumnTypes also implement CastTargetType.
 func (*BoolColType) castTargetType()           {}
@@ -53,9 +63,12 @@ func (*TimestampColType) castTargetType()      {}
 func (*TimestampTZColType) castTargetType()    {}
 func (*IntervalColType) castTargetType()       {}
 func (*StringColType) castTargetType()         {}
+func (*NameColType) castTargetType()           {}
 func (*BytesColType) castTargetType()          {}
 func (*CollatedStringColType) castTargetType() {}
 func (*ArrayColType) castTargetType()          {}
+func (*OidColType) castTargetType()            {}
+func (*OidPseudoType) castTargetType()         {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -242,6 +255,17 @@ func (node *StringColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// Pre-allocated immutable name column type.
+var nameColTypeName = &NameColType{}
+
+// NameColType represents a a NAME type.
+type NameColType struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *NameColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("NAME")
+}
+
 // Pre-allocated immutable bytes column types.
 var (
 	bytesColTypeBlob  = &BytesColType{Name: "BLOB"}
@@ -301,6 +325,41 @@ func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	}
 }
 
+// Pre-allocated immutable postgres oid column type.
+var oidColTypeOid = &OidColType{}
+
+// OidColType represents an OID type
+type OidColType struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("OID")
+}
+
+// Pre-allocated immutable postgres oid pseudo-types.
+var (
+	oidPseudoTypeRegProc      = &OidPseudoType{Name: "REGPROC"}
+	oidPseudoTypeRegClass     = &OidPseudoType{Name: "REGCLASS"}
+	oidPseudoTypeRegType      = &OidPseudoType{Name: "REGTYPE"}
+	oidPseudoTypeRegNamespace = &OidPseudoType{Name: "REGNAMESPACE"}
+)
+
+// OidPseudoType represents a postgres oid pseudo-type. It implements CastTargetType,
+// but NOT ColumnType. This is because a cast to one of these types is specialized to
+// accept and display symbolic names for system objects, rather than the raw numeric
+// value that type oid would use. However, they can not actually be used as column types,
+// and a cast to them will produce an OID type.
+//
+// See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
+type OidPseudoType struct {
+	Name string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *OidPseudoType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(node.Name)
+}
+
 func (node *BoolColType) String() string           { return AsString(node) }
 func (node *IntColType) String() string            { return AsString(node) }
 func (node *FloatColType) String() string          { return AsString(node) }
@@ -310,9 +369,12 @@ func (node *TimestampColType) String() string      { return AsString(node) }
 func (node *TimestampTZColType) String() string    { return AsString(node) }
 func (node *IntervalColType) String() string       { return AsString(node) }
 func (node *StringColType) String() string         { return AsString(node) }
+func (node *NameColType) String() string           { return AsString(node) }
 func (node *BytesColType) String() string          { return AsString(node) }
 func (node *CollatedStringColType) String() string { return AsString(node) }
 func (node *ArrayColType) String() string          { return AsString(node) }
+func (node *OidColType) String() string            { return AsString(node) }
+func (node *OidPseudoType) String() string         { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
@@ -335,8 +397,12 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return dateColTypeDate, nil
 	case TypeString:
 		return stringColTypeString, nil
+	case TypeName:
+		return nameColTypeName, nil
 	case TypeBytes:
 		return bytesColTypeBytes, nil
+	case TypeOid:
+		return oidColTypeOid, nil
 	default:
 		if typ, ok := t.(TCollatedString); ok {
 			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
@@ -345,9 +411,9 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
 }
 
-// columnTypeToDatumType produces a Datum type equivalent to the given
-// SQL column type.
-func columnTypeToDatumType(t CastTargetType) Type {
+// CastTargetToDatumType produces a Type equivalent to the given
+// SQL cast target type.
+func CastTargetToDatumType(t CastTargetType) Type {
 	switch ct := t.(type) {
 	case *BoolColType:
 		return TypeBool
@@ -359,6 +425,8 @@ func columnTypeToDatumType(t CastTargetType) Type {
 		return TypeDecimal
 	case *StringColType:
 		return TypeString
+	case *NameColType:
+		return TypeName
 	case *BytesColType:
 		return TypeBytes
 	case *DateColType:
@@ -372,10 +440,12 @@ func columnTypeToDatumType(t CastTargetType) Type {
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
-		return tArray{columnTypeToDatumType(ct.ParamType)}
-	case *PGOIDType:
-		return TypeInt
+		return tArray{CastTargetToDatumType(ct.ParamType)}
+	case *OidColType:
+		return TypeOid
+	case *OidPseudoType:
+		return TypeOid
 	default:
-		panic(errors.Errorf("unexpected ColumnType %T", t))
+		panic(errors.Errorf("unexpected CastTarget %T", t))
 	}
 }
