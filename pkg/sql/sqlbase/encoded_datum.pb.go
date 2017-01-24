@@ -2,6 +2,28 @@
 // source: cockroach/pkg/sql/sqlbase/encoded_datum.proto
 // DO NOT EDIT!
 
+/*
+Package sqlbase is a generated protocol buffer package.
+
+It is generated from these files:
+	cockroach/pkg/sql/sqlbase/encoded_datum.proto
+	cockroach/pkg/sql/sqlbase/privilege.proto
+	cockroach/pkg/sql/sqlbase/structured.proto
+
+It has these top-level messages:
+	UserPrivileges
+	PrivilegeDescriptor
+	ColumnType
+	ForeignKeyReference
+	ColumnDescriptor
+	ColumnFamilyDescriptor
+	InterleaveDescriptor
+	IndexDescriptor
+	DescriptorMutation
+	TableDescriptor
+	DatabaseDescriptor
+	Descriptor
+*/
 package sqlbase
 
 import proto "github.com/gogo/protobuf/proto"
@@ -12,6 +34,12 @@ import math "math"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // DatumEncoding identifies the encoding used for an EncDatum.
 type DatumEncoding int32

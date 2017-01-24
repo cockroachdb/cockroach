@@ -1,21 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
+// Licensed under the Cockroach Community Licence (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
-//
-// Author: Daniel Harrison (daniel.harrison@gmail.com)
+//     https://github.com/cockroachdb/cockroach/blob/master/pkg/ccl/LICENSE
 
-package sql_test
+package sqlccl
 
 import (
 	"bytes"
@@ -101,7 +92,7 @@ func TestIntersectHalfOpen(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		s, e := sql.IntersectHalfOpen(test.start1, test.end1, test.start2, test.end2)
+		s, e := IntersectHalfOpen(test.start1, test.end1, test.start2, test.end2)
 		if !bytes.Equal(s, test.starti) || !bytes.Equal(e, test.endi) {
 			t.Errorf("%d: got (%x, %x) expected (%x, %x)", i, s, e, test.starti, test.endi)
 		}
@@ -140,7 +131,7 @@ func bankSplitStmts(numAccounts int, numRanges int) []string {
 func rebalanceLeases(t testing.TB, tc *testcluster.TestCluster) {
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	txn := client.NewTxn(context.Background(), *kvDB)
-	rangeDescs, err := sql.AllRangeDescriptors(txn)
+	rangeDescs, err := AllRangeDescriptors(txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +179,7 @@ func backupRestoreTestSetup(
 		targets[i-1] = tc.Target(i)
 	}
 	txn := client.NewTxn(ctx, *kvDB)
-	rangeDescs, err := sql.AllRangeDescriptors(txn)
+	rangeDescs, err := AllRangeDescriptors(txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,6 +199,8 @@ func backupRestoreTestSetup(
 
 func TestBackupRestoreOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13016")
+
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
@@ -216,7 +209,7 @@ func TestBackupRestoreOnce(t *testing.T) {
 	defer cleanupFn()
 
 	{
-		desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+		desc, err := Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -237,7 +230,7 @@ func TestBackupRestoreOnce(t *testing.T) {
 		sqlDBRestore.Exec(bankCreateDatabase)
 
 		table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
-		if _, err := sql.Restore(ctx, *kvDBRestore, dir, table); err != nil {
+		if _, err := Restore(ctx, *kvDBRestore, dir, table); err != nil {
 			t.Fatal(err)
 		}
 
@@ -285,6 +278,8 @@ func startBankTransfers(t testing.TB, stopper *stop.Stopper, sqlDB *gosql.DB, nu
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13016")
+
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 
@@ -310,7 +305,7 @@ func TestBackupRestoreBank(t *testing.T) {
 	for i := 0; i < backupRestoreIterations; i++ {
 		dir := filepath.Join(baseDir, strconv.Itoa(i))
 
-		_, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+		_, err := Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -325,7 +320,7 @@ func TestBackupRestoreBank(t *testing.T) {
 		})
 		squaresSum = newSquaresSum
 
-		if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
+		if _, err := Restore(ctx, *kvDB, dir, table); err != nil {
 			t.Fatal(err)
 		}
 
@@ -357,7 +352,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+				desc, err := Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -379,7 +374,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 			// TODO(dan): Once mjibson's sql -> kv function is committed, use it
 			// here on the output of bankDataInsert to generate the backup data
 			// instead of this call.
-			desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+			desc, err := Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -390,7 +385,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 			b.ResetTimer()
 			table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
 			for i := 0; i < b.N; i++ {
-				if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
+				if _, err := Restore(ctx, *kvDB, dir, table); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -454,7 +449,7 @@ func BenchmarkSstRekey(b *testing.B) {
 	}
 	defer sst.Close()
 	count := 0
-	iterateFn := sql.MakeRekeyMVCCKeyValFunc(newTableID, func(kv engine.MVCCKeyValue) (bool, error) {
+	iterateFn := MakeRekeyMVCCKeyValFunc(newTableID, func(kv engine.MVCCKeyValue) (bool, error) {
 		count++
 		if count >= b.N {
 			return true, nil
