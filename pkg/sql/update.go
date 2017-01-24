@@ -66,7 +66,6 @@ func (p *planner) makeEditNode(
 // row-modifying statements.
 type editNodeRun struct {
 	rows      planNode
-	tw        tableWriter
 	resultRow parser.DTuple
 
 	explain explainMode
@@ -86,14 +85,11 @@ func (r *editNodeRun) initEditNode(
 	return nil
 }
 
-func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
+func (r *editNodeRun) startEditNode(en *editNodeBase) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}
-
-	r.tw = tw
-
 	return en.p.startPlan(r.rows)
 }
 
@@ -267,10 +263,10 @@ func (p *planner) Update(
 }
 
 func (u *updateNode) Start() error {
-	if err := u.run.startEditNode(&u.editNodeBase, &u.tw); err != nil {
+	if err := u.run.startEditNode(&u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(u.p.txn)
+	return u.tw.init(u.p.txn)
 }
 
 func (u *updateNode) Close() {

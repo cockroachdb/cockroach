@@ -274,11 +274,11 @@ func (n *insertNode) Start() error {
 		}
 	}
 
-	if err := n.run.startEditNode(&n.editNodeBase, n.tw); err != nil {
+	if err := n.run.startEditNode(&n.editNodeBase); err != nil {
 		return err
 	}
 
-	return n.run.tw.init(n.p.txn)
+	return n.tw.init(n.p.txn)
 }
 
 func (n *insertNode) Close() {
