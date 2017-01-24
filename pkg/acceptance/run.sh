@@ -3,7 +3,7 @@
 set -xeuo pipefail
 
 source "$(dirname "${0}")"/../../build/init-docker.sh
-"$(dirname "${0}")"/../../build/builder.sh make install GOFLAGS='-tags clockoffset'
+"$(dirname "${0}")"/../../build/builder.sh make install TAGS=clockoffset
 
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
