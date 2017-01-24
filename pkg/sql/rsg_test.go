@@ -125,10 +125,6 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
 		case parser.ArgTypes:
-			for _, typ := range ft {
-				args = append(args, r.GenerateRandomArg(typ))
-			}
-		case parser.NamedArgTypes:
 			for _, arg := range ft {
 				args = append(args, r.GenerateRandomArg(arg.Typ))
 			}
