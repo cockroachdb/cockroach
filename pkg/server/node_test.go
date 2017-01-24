@@ -96,6 +96,7 @@ func createTestNode(
 	cfg.DB = client.NewDB(sender)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)

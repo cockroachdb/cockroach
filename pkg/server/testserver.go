@@ -81,6 +81,7 @@ func makeTestConfig() Config {
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 
 	return cfg
 }

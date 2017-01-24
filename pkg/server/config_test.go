@@ -145,6 +145,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgExpected.MetricsSampleInterval = time.Hour + time.Minute*10
+	if err := os.Setenv("COCKROACH_HISTOGRAM_WINDOW_INTERVAL", "2h20m"); err != nil {
+		t.Fatal(err)
+	}
+	cfgExpected.HistogramWindowInterval = time.Hour*2 + time.Minute*20
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
@@ -191,6 +195,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_HISTOGRAM_WINDOW_INTERVAL", "abcd"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {

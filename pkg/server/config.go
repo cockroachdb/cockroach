@@ -58,6 +58,7 @@ const (
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 200 * time.Millisecond
 	defaultMetricsSampleInterval    = 10 * time.Second
+	defaultHistogramWindowInterval  = 1 * time.Minute
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
 	defaultEventLogEnabled          = true
@@ -143,6 +144,11 @@ type Config struct {
 	// server internal metrics.
 	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL
 	MetricsSampleInterval time.Duration
+
+	// HistogramWindowInterval determines the approximate length of time that
+	// individual samples are retained for metric histograms.
+	// Environment Variable: COCKROACH_HISTOGRAM_WINDOW_INTERVAL
+	HistogramWindowInterval time.Duration
 
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
@@ -355,6 +361,7 @@ func MakeConfig() Config {
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
+		HistogramWindowInterval:  defaultHistogramWindowInterval,
 		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
@@ -491,6 +498,7 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", cfg.ConsistencyCheckPanicOnFailure)
 	cfg.MaxOffset = envutil.EnvOrDefaultDuration("COCKROACH_MAX_OFFSET", cfg.MaxOffset)
 	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
+	cfg.HistogramWindowInterval = envutil.EnvOrDefaultDuration("COCKROACH_HISTOGRAM_WINDOW_INTERVAL", cfg.HistogramWindowInterval)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 	cfg.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", cfg.TimeUntilStoreDead)

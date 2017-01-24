@@ -174,7 +174,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
-		MetricsSampleInterval:          time.Hour,
+		MetricsSampleInterval:          metric.TestSampleInterval,
+		HistogramWindowInterval:        metric.TestSampleInterval,
 		EnableCoalescedHeartbeats:      true,
 		EnableEpochRangeLeases:         true,
 	}
@@ -673,6 +674,9 @@ type StoreConfig struct {
 	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
 	MetricsSampleInterval time.Duration
 
+	// HistogramWindowInterval is (server.Context).HistogramWindowInterval
+	HistogramWindowInterval time.Duration
+
 	// EnableCoalescedHeartbeats controls whether heartbeats are coalesced.
 	EnableCoalescedHeartbeats bool
 
@@ -850,7 +854,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		engine:    eng,
 		allocator: MakeAllocator(cfg.StorePool, cfg.AllocatorOptions),
 		nodeDesc:  nodeDesc,
-		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
+		metrics:   newStoreMetrics(cfg.HistogramWindowInterval),
 	}
 	// EnableCoalescedHeartbeats is enabled by TestStoreConfig, so in that case
 	// ignore the environment variable. Otherwise, use whatever the environment
