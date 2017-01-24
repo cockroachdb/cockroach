@@ -1,21 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
+// Licensed under the Cockroach Community Licence (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
-//
-// Author: Daniel Harrison (daniel.harrison@gmail.com)
+//     https://github.com/cockroachdb/cockroach/blob/master/pkg/ccl/LICENSE
 
-package sql
+package sqlccl
 
 import (
 	"bytes"
@@ -33,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -94,7 +86,7 @@ func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 // TODO(dan): Bikeshed this directory structure and naming.
 func Backup(
 	ctx context.Context, db client.DB, base string, endTime hlc.Timestamp,
-) (desc sqlbase.BackupDescriptor, retErr error) {
+) (desc BackupDescriptor, retErr error) {
 	// TODO(dan): Optionally take a start time for an incremental backup.
 	// TODO(dan): Take a uri for the path prefix and support various cloud storages.
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
@@ -113,7 +105,7 @@ func Backup(
 		txn := client.NewTxn(ctx, db)
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
-			SetTxnTimestamps(txn, endTime)
+			sql.SetTxnTimestamps(txn, endTime)
 
 			rangeDescs, err = AllRangeDescriptors(txn)
 			if err != nil {
@@ -123,15 +115,15 @@ func Backup(
 			return err
 		})
 		if err != nil {
-			return sqlbase.BackupDescriptor{}, err
+			return BackupDescriptor{}, err
 		}
 	}
 
 	var dataSize int64
-	backupDescs := make([]sqlbase.BackupRangeDescriptor, len(rangeDescs))
+	backupDescs := make([]BackupRangeDescriptor, len(rangeDescs))
 	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	for i, rangeDesc := range rangeDescs {
-		backupDescs[i] = sqlbase.BackupRangeDescriptor{
+		backupDescs[i] = BackupRangeDescriptor{
 			StartKey:  rangeDesc.StartKey.AsRawKey(),
 			EndKey:    rangeDesc.EndKey.AsRawKey(),
 			StartTime: hlc.Timestamp{},
@@ -144,7 +136,7 @@ func Backup(
 		dir := filepath.Join(base, fmt.Sprintf("%03d", nodeID))
 		dir = filepath.Join(dir, fmt.Sprintf("%x-%x", rangeDesc.StartKey, rangeDesc.EndKey))
 		if err := os.MkdirAll(dir, 0700); err != nil {
-			return sqlbase.BackupDescriptor{}, err
+			return BackupDescriptor{}, err
 		}
 
 		var kvs []client.KeyValue
@@ -152,14 +144,14 @@ func Backup(
 		txn := client.NewTxn(ctx, db)
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
-			SetTxnTimestamps(txn, endTime)
+			sql.SetTxnTimestamps(txn, endTime)
 
 			// TODO(dan): Iterate with some batch size.
 			kvs, err = txn.Scan(backupDescs[i].StartKey, backupDescs[i].EndKey, 0)
 			return err
 		})
 		if err != nil {
-			return sqlbase.BackupDescriptor{}, err
+			return BackupDescriptor{}, err
 		}
 		if len(kvs) == 0 {
 			if log.V(1) {
@@ -197,22 +189,22 @@ func Backup(
 			return nil
 		}
 		if err := writeSST(); err != nil {
-			return sqlbase.BackupDescriptor{}, err
+			return BackupDescriptor{}, err
 		}
 
 		crc.Reset()
 		f, err := os.Open(backupDescs[i].Path)
 		if err != nil {
-			return sqlbase.BackupDescriptor{}, err
+			return BackupDescriptor{}, err
 		}
 		defer f.Close()
 		if _, err := io.Copy(crc, f); err != nil {
-			return sqlbase.BackupDescriptor{}, err
+			return BackupDescriptor{}, err
 		}
 		backupDescs[i].CRC = crc.Sum32()
 	}
 
-	desc = sqlbase.BackupDescriptor{
+	desc = BackupDescriptor{
 		EndTime:  endTime,
 		Ranges:   backupDescs,
 		SQL:      sqlDescs,
@@ -221,10 +213,10 @@ func Backup(
 
 	descBuf, err := desc.Marshal()
 	if err != nil {
-		return sqlbase.BackupDescriptor{}, err
+		return BackupDescriptor{}, err
 	}
 	if err = ioutil.WriteFile(filepath.Join(base, backupDescriptorName), descBuf, 0600); err != nil {
-		return sqlbase.BackupDescriptor{}, err
+		return BackupDescriptor{}, err
 	}
 
 	return desc, nil
@@ -319,18 +311,6 @@ func IntersectHalfOpen(start1, end1, start2, end2 []byte) ([]byte, []byte) {
 	return nil, nil
 }
 
-func getDescriptorID(txn *client.Txn, key sqlbase.DescriptorKey) (sqlbase.ID, error) {
-	// TODO(dan): Share this with (*planner).getDescriptor.
-	idValue, err := txn.Get(key.Key())
-	if err != nil {
-		return 0, err
-	}
-	if !idValue.Exists() {
-		return 0, errors.Errorf("no descriptor for key: %s", key)
-	}
-	return sqlbase.ID(idValue.ValueInt()), nil
-}
-
 // restoreTable inserts the given DatabaseDescriptor. If the name conflicts with
 // an existing table, the one being restored is rekeyed with a new ID and the
 // old data is deleted.
@@ -339,7 +319,7 @@ func restoreTable(
 	db client.DB,
 	database sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
-	ranges []sqlbase.BackupRangeDescriptor,
+	ranges []BackupRangeDescriptor,
 ) error {
 	if log.V(1) {
 		log.Infof(ctx, "Restoring Table %q", table.Name)
@@ -348,8 +328,13 @@ func restoreTable(
 	var newTableID sqlbase.ID
 	if err := db.Txn(ctx, func(txn *client.Txn) error {
 		// Make sure there's a database with a name that matches the original.
-		if _, err := getDescriptorID(txn, tableKey{name: database.Name}); err != nil {
-			return errors.Wrapf(err, "a database named %q needs to exist to restore table %q",
+		existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
+		if err != nil {
+			return err
+		}
+		if existingDatabaseID.Value == nil {
+			// TODO(dan): Add the ability to restore the database from backups.
+			return errors.Errorf("a database named %q needs to exist to restore table %q",
 				database.Name, table.Name)
 		}
 
@@ -357,8 +342,7 @@ func restoreTable(
 		// generating a new ID, but varints get longer as they get bigger and so
 		// our keys will, too. We should someday figure out how to overwrite an
 		// existing table and steal its ID.
-		var err error
-		newTableID, err = GenerateUniqueDescID(txn)
+		newTableID, err = sql.GenerateUniqueDescID(txn)
 		return err
 	}); err != nil {
 		return err
@@ -391,7 +375,7 @@ func restoreTable(
 			// should be possible to remove it from the one txn this is all currently
 			// run under. If we do that, make sure this data gets cleaned up on errors.
 			wg.Add(1)
-			go func(desc sqlbase.BackupRangeDescriptor) {
+			go func(desc BackupRangeDescriptor) {
 				for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 					err := db.Txn(ctx, func(txn *client.Txn) error {
 						return Ingest(ctx, txn, desc.Path, desc.CRC, intersectBegin, intersectEnd, newTableID)
@@ -442,13 +426,18 @@ func restoreTableDesc(
 	database sqlbase.DatabaseDescriptor,
 	table sqlbase.TableDescriptor,
 ) error {
-	// Run getDescriptorID again to make sure the database hasn't been dropped
+	// Get the database id again to make sure the database hasn't been dropped
 	// while we were importing.
-	var err error
-	if table.ParentID, err = getDescriptorID(txn, tableKey{name: database.Name}); err != nil {
+	existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
+	if err != nil {
 		return err
 	}
-	tableIDKey := tableKey{parentID: table.ParentID, name: table.Name}.Key()
+	if existingDatabaseID.Value == nil {
+		// TODO(dan): Add the ability to restore the database from backups.
+		return errors.Errorf("a database named %q needs to exist to restore table %q",
+			database.Name, table.Name)
+	}
+	tableIDKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
 	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
 
 	// Check for an existing table.
@@ -486,7 +475,7 @@ func restoreTableDesc(
 		// fix the empty range interleaved table TODO below.
 		existingDataPrefix := roachpb.Key(keys.MakeTablePrefix(uint32(existingTable.ID)))
 		b.DelRange(existingDataPrefix, existingDataPrefix.PrefixEnd(), false)
-		zoneKey, _, descKey := GetKeysForTableDescriptor(existingTable)
+		zoneKey, _, descKey := sql.GetKeysForTableDescriptor(existingTable)
 		// Delete the desc and zone entries. Leave the name because the new
 		// table is using it.
 		b.Del(descKey)
@@ -540,7 +529,7 @@ func Restore(
 	if err != nil {
 		return nil, err
 	}
-	var backupDesc sqlbase.BackupDescriptor
+	var backupDesc BackupDescriptor
 	if err := backupDesc.Unmarshal(descBytes); err != nil {
 		return nil, err
 	}
@@ -550,7 +539,7 @@ func Restore(
 		return nil, err
 	}
 	if len(matches) == 0 {
-		return nil, errors.Errorf("no tables found: %s", &table)
+		return nil, errors.Errorf("no tables found: %q", table)
 	}
 	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
 	for _, desc := range matches {
