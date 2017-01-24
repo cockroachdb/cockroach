@@ -48,7 +48,7 @@ patch -p1 -d ../goroot < "parallelbuilds-go${GOPATCHVER}.patch"
 
 
 # Configure environment variables
-echo 'export GOPATH=${HOME}/go; export PATH="${HOME}/goroot/bin:${HOME}/go/bin:${HOME}/scripts:${PATH}"' >> ~/.bashrc_go
+echo 'export GOPATH=${HOME}/go; export PATH="${HOME}/goroot/bin:${HOME}/go/bin:${PATH}"' >> ~/.bashrc_go
 echo '. ~/.bashrc_go' >> ~/.bashrc
 
 . ~/.bashrc_go
