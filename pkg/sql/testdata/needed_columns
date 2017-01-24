@@ -93,12 +93,13 @@ EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
 ----
-0   render                               (y)
-0             subqueries             1
-1   render                               (x)
-2   render                               (s[omitted])
-3   nullrow                              ()
-1   nullrow                              ()
+0  render                  (y)
+0           subqueries  1
+1  limit                   (x)
+2  render                  (x)
+3  render                  (s[omitted])
+4  nullrow                 ()
+1  nullrow                 ()
 
 # Propagation through table scans.
 statement ok
