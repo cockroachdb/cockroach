@@ -190,7 +190,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 0  virtual table
 0                 source  SHOW COLUMNS FROM foo
 1  values
-1                 size    4 columns, 1 row
+1                 size    5 columns, 1 row
 
 query ITTT
 EXPLAIN SHOW GRANTS ON foo

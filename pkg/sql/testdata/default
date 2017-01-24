@@ -25,13 +25,13 @@ CREATE TABLE t (
   c FLOAT DEFAULT random()
 )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM t
 ----
-Field Type      Null Default
-a     INT       false 42
-b     TIMESTAMP true now()
-c     FLOAT     true random()
+Field Type      Null  Default  Indices
+a     INT       false 42       {primary}
+b     TIMESTAMP true  now()    {}
+c     FLOAT     true  random() {}
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)

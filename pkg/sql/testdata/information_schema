@@ -126,15 +126,15 @@ information_schema.tables  CREATE TABLE "information_schema.tables" (
                                VERSION INT NULL
                            )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM information_schema.tables
 ----
-Field            Type       Null   Default
-TABLE_CATALOG    STRING     false  ''
-TABLE_SCHEMA     STRING     false  ''
-TABLE_NAME       STRING     false  ''
-TABLE_TYPE       STRING     false  ''
-VERSION          INT        true   NULL
+Field            Type       Null   Default Indices
+TABLE_CATALOG    STRING     false  ''      {}
+TABLE_SCHEMA     STRING     false  ''	   {}
+TABLE_NAME       STRING     false  ''	   {}
+TABLE_TYPE       STRING     false  ''	   {}
+VERSION          INT        true   NULL    {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
