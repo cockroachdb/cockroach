@@ -56,10 +56,9 @@ type hookFnNode struct {
 
 var _ planNode = &hookFnNode{}
 
-func (*hookFnNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (*hookFnNode) SetLimitHint(_ int64, _ bool) {}
-func (*hookFnNode) MarkDebug(_ explainMode)      {}
-func (*hookFnNode) Close()                       {}
+func (*hookFnNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*hookFnNode) MarkDebug(_ explainMode) {}
+func (*hookFnNode) Close()                  {}
 
 func (f *hookFnNode) Start() error {
 	var err error

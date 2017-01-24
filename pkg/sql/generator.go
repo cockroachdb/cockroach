@@ -123,8 +123,7 @@ func (n *valueGenerator) DebugValues() debugValues {
 	}
 }
 
-func (n *valueGenerator) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *valueGenerator) Values() parser.DTuple        { return n.gen.Values() }
-func (n *valueGenerator) MarkDebug(_ explainMode)      {}
-func (n *valueGenerator) Columns() ResultColumns       { return n.columns }
-func (n *valueGenerator) SetLimitHint(_ int64, _ bool) {}
+func (n *valueGenerator) Ordering() orderingInfo  { return orderingInfo{} }
+func (n *valueGenerator) Values() parser.DTuple   { return n.gen.Values() }
+func (n *valueGenerator) MarkDebug(_ explainMode) {}
+func (n *valueGenerator) Columns() ResultColumns  { return n.columns }

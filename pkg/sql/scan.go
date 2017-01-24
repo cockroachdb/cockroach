@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -120,17 +119,6 @@ func (n *scanNode) DebugValues() debugValues {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
 	return n.debugVals
-}
-
-func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
-	// Either a limitNode or EXPLAIN is pushing a limit down onto this
-	// node. The special value math.MaxInt64 means "no limit".
-	if !n.disableBatchLimits && numRows != math.MaxInt64 {
-		n.limitHint = numRows
-		// If we have a filter, some of the rows we retrieve may not pass the
-		// filter so the limit becomes "soft".
-		n.limitSoft = soft || n.filter != nil
-	}
 }
 
 // disableBatchLimit disables the kvfetcher batch limits. Used for index-join,

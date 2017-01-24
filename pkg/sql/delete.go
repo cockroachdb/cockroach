@@ -237,5 +237,3 @@ func (d *deleteNode) DebugValues() debugValues {
 }
 
 func (d *deleteNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}

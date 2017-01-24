@@ -207,14 +207,13 @@ func (n *dropDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *dropDatabaseNode) Next() (bool, error)          { return false, nil }
-func (n *dropDatabaseNode) Close()                       {}
-func (n *dropDatabaseNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *dropDatabaseNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *dropDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *dropDatabaseNode) DebugValues() debugValues     { return debugValues{} }
-func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropDatabaseNode) MarkDebug(mode explainMode)   {}
+func (n *dropDatabaseNode) Next() (bool, error)        { return false, nil }
+func (n *dropDatabaseNode) Close()                     {}
+func (n *dropDatabaseNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *dropDatabaseNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *dropDatabaseNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *dropDatabaseNode) DebugValues() debugValues   { return debugValues{} }
+func (n *dropDatabaseNode) MarkDebug(mode explainMode) {}
 
 type dropIndexNode struct {
 	p        *planner
@@ -395,14 +394,13 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (n *dropIndexNode) Next() (bool, error)          { return false, nil }
-func (n *dropIndexNode) Close()                       {}
-func (n *dropIndexNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *dropIndexNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *dropIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *dropIndexNode) DebugValues() debugValues     { return debugValues{} }
-func (n *dropIndexNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropIndexNode) MarkDebug(mode explainMode)   {}
+func (n *dropIndexNode) Next() (bool, error)        { return false, nil }
+func (n *dropIndexNode) Close()                     {}
+func (n *dropIndexNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *dropIndexNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *dropIndexNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *dropIndexNode) DebugValues() debugValues   { return debugValues{} }
+func (n *dropIndexNode) MarkDebug(mode explainMode) {}
 
 type dropViewNode struct {
 	p  *planner
@@ -503,14 +501,13 @@ func (n *dropViewNode) Start() error {
 	return nil
 }
 
-func (n *dropViewNode) Next() (bool, error)          { return false, nil }
-func (n *dropViewNode) Close()                       {}
-func (n *dropViewNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *dropViewNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *dropViewNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *dropViewNode) DebugValues() debugValues     { return debugValues{} }
-func (n *dropViewNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropViewNode) MarkDebug(mode explainMode)   {}
+func (n *dropViewNode) Next() (bool, error)        { return false, nil }
+func (n *dropViewNode) Close()                     {}
+func (n *dropViewNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *dropViewNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *dropViewNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *dropViewNode) DebugValues() debugValues   { return debugValues{} }
+func (n *dropViewNode) MarkDebug(mode explainMode) {}
 
 type dropTableNode struct {
 	p  *planner
@@ -736,14 +733,13 @@ func (n *dropTableNode) Start() error {
 	return nil
 }
 
-func (n *dropTableNode) Next() (bool, error)          { return false, nil }
-func (n *dropTableNode) Close()                       {}
-func (n *dropTableNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *dropTableNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *dropTableNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *dropTableNode) DebugValues() debugValues     { return debugValues{} }
-func (n *dropTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *dropTableNode) MarkDebug(mode explainMode)   {}
+func (n *dropTableNode) Next() (bool, error)        { return false, nil }
+func (n *dropTableNode) Close()                     {}
+func (n *dropTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *dropTableNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *dropTableNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *dropTableNode) DebugValues() debugValues   { return debugValues{} }
+func (n *dropTableNode) MarkDebug(mode explainMode) {}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE

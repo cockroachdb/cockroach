@@ -135,10 +135,6 @@ func (s *renderNode) Next() (bool, error) {
 	return err == nil, err
 }
 
-func (s *renderNode) SetLimitHint(numRows int64, soft bool) {
-	s.source.plan.SetLimitHint(numRows, soft)
-}
-
 func (s *renderNode) Close() {
 	s.source.plan.Close()
 }

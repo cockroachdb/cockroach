@@ -314,10 +314,6 @@ func (n *indexJoinNode) Next() (bool, error) {
 	return false, nil
 }
 
-func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
-	n.index.SetLimitHint(numRows, soft)
-}
-
 func (n *indexJoinNode) Close() {
 	n.index.Close()
 	n.table.Close()
