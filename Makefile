@@ -234,13 +234,11 @@ GLOCK := ../../../../bin/glock
 #        |  |~ GOPATH/src/github.com
 #        |~ GOPATH/src/github.com/cockroachdb
 
-$(GLOCK):
-	$(GO) install ./vendor/github.com/robfig/glock
-
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE glide.lock
+.bootstrap: $(GITHOOKS) GLOCKFILE glide.lock
 	git submodule update --init
+	$(GO) install ./vendor/github.com/robfig/glock
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
 
