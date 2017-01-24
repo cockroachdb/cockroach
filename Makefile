@@ -91,7 +91,7 @@ install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
-	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS) $(BUILDTARGET)
+	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' $(BUILDTARGET)
 	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
