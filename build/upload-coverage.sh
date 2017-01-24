@@ -29,9 +29,9 @@ for pkg in $(go list $prefix/...); do
   # Note that grep's exit status is ignored here to allow for packages with no
   # dependencies.
   coverpkg=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{"\n"}}{{join .XTestImports "\n"}}' $pkg | \
-    sort | uniq | grep -v '^C$' | \
+    sort -u | grep -v '^C$' | \
     xargs go list -f '{{if not .Standard}}{{join .Deps "\n" }}{{end}}' | \
-    sort | uniq | grep -v '^C$' | \
+    sort -u | grep -v '^C$' | \
     xargs go list -f '{{if not .Standard}}{{.ImportPath}}{{end}}' | \
     grep $prefix || true)
 

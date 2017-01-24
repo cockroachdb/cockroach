@@ -106,7 +106,8 @@ mkdir -p "${host_home}"/.{jspm,yarn-cache}
 #
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
-vols="--volume=${passwd_file}:/etc/passwd"
+vols=""
+vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
 vols="${vols} --volume=${gopath0}/src:/go/src"
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/go/pkg/linux_amd64"
