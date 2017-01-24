@@ -57,7 +57,60 @@ x y
 query error argument of LIMIT must be type int, not type setof
 SELECT * FROM (VALUES (1)) LIMIT GENERATE_SERIES(1, 3)
 
-# Not supported yet: transforming a generator given in render position
-# to a cross join.
-query error unsupported result type: setof
+query I colnames
 SELECT GENERATE_SERIES(1, 2)
+----
+pg_catalog.generate_series
+1
+2
+
+query II colnames
+SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(3, 4)
+----
+pg_catalog.generate_series  pg_catalog.generate_series
+1                           3
+1                           4
+2                           3
+2                           4
+
+statement ok
+CREATE TABLE t (a string)
+
+statement ok
+CREATE TABLE u (b string)
+
+statement ok
+INSERT INTO t VALUES ('cat')
+
+statement ok
+INSERT INTO u VALUES ('bird')
+
+# The following two queries should have the same result. This exercises the
+# transformation that moves generator expressions in render positions to cross
+# joins.
+query TTII
+SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+----
+cat  bird  1  3
+cat  bird  1  4
+cat  bird  2  3
+cat  bird  2  4
+
+query TTII
+SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
+----
+cat  bird  1  3
+cat  bird  1  4
+cat  bird  2  3
+cat  bird  2  4
+
+query I
+SELECT 3 + x FROM generate_series(1,2) AS a(x)
+----
+4
+5
+
+# Not supported yet: transforming set-returning functions that aren't top-level
+# render expressions into cross joins.
+query error pq: unsupported binary operator: <int> \+ <setof tuple\{int\}>
+SELECT 3 + generate_series(1,2)
