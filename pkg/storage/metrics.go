@@ -201,7 +201,7 @@ var (
 
 	// Raft log metrics.
 	metaRaftLogFollowerBehindCount = metric.Metadata{Name: "raftlog.behind",
-		Help: "Number of Raft log entries followers are other stores behind"}
+		Help: "Number of Raft log entries followers on other stores are behind"}
 	metaRaftLogSelfBehindCount = metric.Metadata{Name: "raftlog.selfbehind",
 		Help: "Number of Raft log entries followers on this store are behind"}
 	metaRaftLogTruncated = metric.Metadata{Name: "raftlog.truncated",

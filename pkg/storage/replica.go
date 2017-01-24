@@ -4689,8 +4689,7 @@ func calcGoodReplicas(
 			}
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {
-				v := int64(raftStatus.Commit) - int64(progress.Match)
-				behindCount += v
+				behindCount += int64(raftStatus.Commit) - int64(progress.Match)
 			}
 		}
 	}
