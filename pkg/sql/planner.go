@@ -103,7 +103,7 @@ type queryRunner interface {
 	// The following methods control the state of the planner during its
 	// lifecycle.
 
-	// setTxn  resets the current transaction in the planner and
+	// setTxn resets the current transaction in the planner and
 	// initializes the timestamps used by SQL built-in functions from
 	// the new txn object, if any.
 	setTxn(*client.Txn)

@@ -182,6 +182,8 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 				return result, s.err
 			}
 		}
+	default:
+		panic(fmt.Sprintf("unexpected subqueryExecMode: %d", s.execMode))
 	}
 
 	return result, nil
