@@ -136,7 +136,7 @@ func TestEvaluator(t *testing.T) {
 			evalCtx: &parser.EvalContext{},
 		}
 
-		ev, err := newEvaluator(&flowCtx, &es, in, out)
+		ev, err := newEvaluator(&flowCtx, &es, in, &PostProcessSpec{}, out)
 		if err != nil {
 			t.Fatal(err)
 		}

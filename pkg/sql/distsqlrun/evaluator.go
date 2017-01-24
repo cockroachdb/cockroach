@@ -28,25 +28,23 @@ import (
 type evaluator struct {
 	flowCtx *FlowCtx
 	input   RowSource
-	output  RowReceiver
 	ctx     context.Context
 
 	specExprs []Expression
 	exprs     []exprHelper
 	exprTypes []sqlbase.ColumnType
 
-	rowAlloc sqlbase.EncDatumRowAlloc
+	out procOutputHelper
 }
 
 var _ processor = &evaluator{}
 
 func newEvaluator(
-	flowCtx *FlowCtx, spec *EvaluatorSpec, input RowSource, output RowReceiver,
+	flowCtx *FlowCtx, spec *EvaluatorSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*evaluator, error) {
 	ev := &evaluator{
 		flowCtx:   flowCtx,
 		input:     input,
-		output:    output,
 		specExprs: spec.Exprs,
 		ctx:       log.WithLogTag(flowCtx.Context, "eval", nil),
 		exprs:     make([]exprHelper, len(spec.Exprs)),
@@ -60,6 +58,10 @@ func newEvaluator(
 			return nil, err
 		}
 		ev.exprTypes[i] = sqlbase.DatumTypeToColumnType(ev.exprs[i].expr.ResolvedType())
+	}
+
+	if err := ev.out.init(post, ev.exprTypes, flowCtx.evalCtx, output); err != nil {
+		return nil, err
 	}
 
 	return ev, nil
@@ -79,44 +81,29 @@ func (ev *evaluator) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting evaluator")
 	}
 
+	outRow := make(sqlbase.EncDatumRow, len(ev.exprs))
+
 	for {
-		row, err := ev.input.NextRow()
-		if err != nil || row == nil {
-			ev.output.Close(err)
+		inputRow, err := ev.input.NextRow()
+		if err != nil || inputRow == nil {
+			ev.out.close(err)
 			return
 		}
 
-		outRow, err := ev.eval(row)
-		if err != nil {
-			ev.output.Close(err)
-			return
+		for i := range ev.exprs {
+			datum, err := ev.exprs[i].eval(inputRow)
+			if err != nil {
+				ev.out.close(err)
+				return
+			}
+			outRow[i] = sqlbase.DatumToEncDatum(ev.exprTypes[i], datum)
 		}
 
-		if log.V(3) {
-			log.Infof(ctx, "pushing %s\n", outRow)
-		}
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
-		if !ev.output.PushRow(outRow) {
-			if log.V(2) {
-				log.Infof(ctx, "no more rows required")
-			}
-			ev.output.Close(nil)
+		if !ev.out.emitRow(ctx, outRow) {
+			ev.out.close(nil)
 			return
 		}
 	}
-}
-
-func (ev *evaluator) eval(row sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	outRow := ev.rowAlloc.AllocRow(len(ev.exprs))
-
-	for i := range ev.exprs {
-		datum, err := ev.exprs[i].eval(row)
-		if err != nil {
-			return nil, err
-		}
-		outRow[i] = sqlbase.DatumToEncDatum(ev.exprTypes[i], datum)
-	}
-
-	return outRow, nil
 }
