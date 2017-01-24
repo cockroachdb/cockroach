@@ -1456,7 +1456,7 @@ var Builtins = map[string][]Builtin{
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"val", TypeInterval},
 				{"txnID", TypeString}},
 			ReturnType: TypeInt,
@@ -1611,7 +1611,7 @@ var Builtins = map[string][]Builtin{
 	},
 	"pg_catalog.array_in": {
 		Builtin{
-			Types:      NamedArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
+			Types:      ArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
 				return nil, errors.New("unimplemented")
