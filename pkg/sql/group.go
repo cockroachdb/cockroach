@@ -430,8 +430,6 @@ func (n *groupNode) computeAggregates() error {
 	return nil
 }
 
-func (*groupNode) SetLimitHint(_ int64, _ bool) {}
-
 func (n *groupNode) Close() {
 	n.plan.Close()
 	for _, f := range n.funcs {

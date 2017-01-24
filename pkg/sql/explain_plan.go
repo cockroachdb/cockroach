@@ -279,13 +279,12 @@ type explainPlanNode struct {
 	optimized bool
 }
 
-func (e *explainPlanNode) Next() (bool, error)          { return e.results.Next() }
-func (e *explainPlanNode) Columns() ResultColumns       { return e.results.Columns() }
-func (e *explainPlanNode) Ordering() orderingInfo       { return e.results.Ordering() }
-func (e *explainPlanNode) Values() parser.DTuple        { return e.results.Values() }
-func (e *explainPlanNode) DebugValues() debugValues     { return debugValues{} }
-func (e *explainPlanNode) SetLimitHint(n int64, s bool) { e.results.SetLimitHint(n, s) }
-func (e *explainPlanNode) MarkDebug(mode explainMode)   {}
+func (e *explainPlanNode) Next() (bool, error)        { return e.results.Next() }
+func (e *explainPlanNode) Columns() ResultColumns     { return e.results.Columns() }
+func (e *explainPlanNode) Ordering() orderingInfo     { return e.results.Ordering() }
+func (e *explainPlanNode) Values() parser.DTuple      { return e.results.Values() }
+func (e *explainPlanNode) DebugValues() debugValues   { return debugValues{} }
+func (e *explainPlanNode) MarkDebug(mode explainMode) {}
 func (e *explainPlanNode) Start() error {
 	return e.p.populateExplain(&e.explainer, e.results, e.plan)
 }
