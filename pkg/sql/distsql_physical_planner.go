@@ -142,10 +142,10 @@ func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
 func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notSuppErr error) {
 	switch n := tree.(type) {
 	case *filterNode:
-		// The Evaluator processors we use for select don't support filters yet.
-		// This is easily fixed, but it will only matter when we support joins
-		// (normally, all filters are pushed down to scanNodes).
-		return false, errors.Errorf("filter not supported as separate node")
+		if err := dsp.checkExpr(n.filter); err != nil {
+			return false, err
+		}
+		return dsp.CheckSupport(n.source.plan)
 
 	case *renderNode:
 		for i, e := range n.render {
@@ -294,6 +294,13 @@ type physicalPlan struct {
 	// index.
 	resultRouters []processorIdx
 
+	// resultTypes are column types (schema) of the rows produced
+	// by the resultRouters.
+	//
+	// This is aliased with InputSyncSpec.ColumnTypes, so it shouldn't be modified
+	// in-place during planning.
+	resultTypes []sqlbase.ColumnType
+
 	// planToStreamColMap maps planNode Columns() to columns in the result streams.
 	// Note that in some cases, not all columns in the result streams are
 	// referenced in the map (this is due to some processors not being
@@ -411,6 +418,86 @@ func distSQLExpression(expr parser.TypedExpr, columnMap []int) distsqlrun.Expres
 	return distsqlrun.Expression{Expr: buf.String()}
 }
 
+// getLastStagePost returns the PostProcessSpec for the current result
+// processors in the plan.
+func (p *physicalPlan) getLastStagePost() distsqlrun.PostProcessSpec {
+	post := p.processors[p.resultRouters[0]].spec.Post
+
+	// All processors of a stage should be identical in terms of post-processing;
+	// verify this assumption.
+	for i := 1; i < len(p.resultRouters); i++ {
+		pi := &p.processors[p.resultRouters[i]].spec.Post
+		if pi.Filter != post.Filter || len(pi.OutputColumns) != len(post.OutputColumns) {
+			panic(fmt.Sprintf("inconsistent post-processing: %v vs %v", post, pi))
+		}
+		for j, col := range pi.OutputColumns {
+			if col != post.OutputColumns[j] {
+				panic(fmt.Sprintf("inconsistent post-processing: %v vs %v", post, pi))
+			}
+		}
+	}
+
+	return post
+}
+
+// setLastStagePost changes the PostProcess spec of the processors in the last
+// stage (resultRouters).
+func (p *physicalPlan) setLastStagePost(
+	post distsqlrun.PostProcessSpec, outputTypes []sqlbase.ColumnType,
+) {
+	for _, pIdx := range p.resultRouters {
+		p.processors[pIdx].spec.Post = post
+	}
+	p.resultTypes = outputTypes
+}
+
+// addFilter adds a filter on the output of a plan. The filter is added as a
+// post-processing step to the last stage. The expression's IndexedVars, after
+// remapping through indexVarMap, refer to the output columns of the plan's
+// resultRouters.
+func addFilter(p *physicalPlan, expr parser.TypedExpr, indexVarMap []int) {
+	post := p.getLastStagePost()
+
+	// The indexed variables in the filter expression - after remapping via
+	// indexVarMap - refer to the output columns of the processor(s) in the last
+	// stage (specifically p.resultRouters). These processors could have been
+	// already configured with projections.
+	//
+	// The filter in a processor's PostProcessSpec refers to variables *before*
+	// any output projection; so if there is an output projection, we have to take
+	// it into account and generate a composite indexed var map. For example:
+	//
+	//  TableReader // table columns A,B,C,D
+	//  OutputColumns:       0, 2  //  A, C
+	//
+	//  Filter:              IndexedVar(0) < IndexedVar(1)  //  A < C
+	//  indexVarMap:         0, 1  // identity
+	//  compositeMap:        0, 2
+	//  Remapped expression: IndexedVar(0) < IndexedVar(2)
+
+	var compositeMap []int
+	if len(post.OutputColumns) == 0 {
+		compositeMap = indexVarMap
+	} else {
+		compositeMap = make([]int, len(indexVarMap))
+		for i, col := range indexVarMap {
+			if col == -1 {
+				compositeMap[i] = -1
+			} else {
+				compositeMap[i] = int(post.OutputColumns[col])
+			}
+		}
+	}
+
+	filter := distSQLExpression(expr, compositeMap)
+	if post.Filter.Expr != "" {
+		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+	}
+	for _, pIdx := range p.resultRouters {
+		p.processors[pIdx].spec.Post.Filter = filter
+	}
+}
+
 // spanPartition is the intersection between a set of spans for a certain
 // operation (e.g table scan) and the set of ranges owned by a given node.
 type spanPartition struct {
@@ -523,8 +610,6 @@ func initTableReaderSpec(n *scanNode) (distsqlrun.TableReaderSpec, error) {
 	} else {
 		s.HardLimit = n.limitHint
 	}
-
-	s.Filter = distSQLExpression(n.filter, nil)
 	return s, nil
 }
 
@@ -587,13 +672,19 @@ func (dsp *distSQLPlanner) createTableReaders(
 	if err != nil {
 		return physicalPlan{}, err
 	}
-	if overrideResultColumns != nil {
-		spec.OutputColumns = overrideResultColumns
-	} else {
-		spec.OutputColumns = getOutputColumnsFromScanNode(n)
+
+	post := distsqlrun.PostProcessSpec{
+		Filter: distSQLExpression(n.filter, nil),
 	}
+
+	if overrideResultColumns != nil {
+		post.OutputColumns = overrideResultColumns
+	} else {
+		post.OutputColumns = getOutputColumnsFromScanNode(n)
+	}
+
 	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
-	for i, col := range spec.OutputColumns {
+	for i, col := range post.OutputColumns {
 		planToStreamColMap[col] = i
 	}
 	ordering := dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
@@ -614,6 +705,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 	p := physicalPlan{
 		ordering:           ordering,
 		planToStreamColMap: planToStreamColMap,
+		resultTypes:        getTypesForPlanResult(n, planToStreamColMap),
 	}
 	for _, sp := range spanPartitions {
 		proc := processor{
@@ -628,6 +720,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 		}
 
 		proc.spec.Core.SetValue(tr)
+		proc.spec.Post = post
 		proc.spec.Output = make([]distsqlrun.OutputRouterSpec, 1)
 		proc.spec.Output[0].Type = distsqlrun.OutputRouterSpec_PASS_THROUGH
 
@@ -641,8 +734,12 @@ func (dsp *distSQLPlanner) createTableReaders(
 // with the source of the stream; all processors have the same core. This is for
 // stages that correspond to logical blocks that don't require any grouping
 // (e.g. evaluator, sorting, etc).
+// The caller needs to update p.planToStreamColMap, p.ordering.
 func (dsp *distSQLPlanner) addNoGroupingStage(
-	p *physicalPlan, core distsqlrun.ProcessorCoreUnion, colTypes []sqlbase.ColumnType,
+	p *physicalPlan,
+	core distsqlrun.ProcessorCoreUnion,
+	post distsqlrun.PostProcessSpec,
+	outputTypes []sqlbase.ColumnType,
 ) {
 	for i, resultProc := range p.resultRouters {
 		prevProc := &p.processors[resultProc]
@@ -652,9 +749,10 @@ func (dsp *distSQLPlanner) addNoGroupingStage(
 			spec: distsqlrun.ProcessorSpec{
 				Input: []distsqlrun.InputSyncSpec{{
 					Type:        distsqlrun.InputSyncSpec_UNORDERED,
-					ColumnTypes: colTypes,
+					ColumnTypes: p.resultTypes,
 				}},
 				Core: core,
+				Post: post,
 				Output: []distsqlrun.OutputRouterSpec{{
 					Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 				}},
@@ -672,63 +770,80 @@ func (dsp *distSQLPlanner) addNoGroupingStage(
 
 		p.resultRouters[i] = pIdx
 	}
+	p.resultTypes = outputTypes
+}
+
+// addRendering adds a rendering (expression evaluation) to the output of a
+// plan. The rendering is achieved either through an adjustment on the last
+// stage post-process spec, or via a new stage.
+// The caller must update p.ordering, p.planToStreamColMap.
+func (dsp *distSQLPlanner) addRendering(
+	planCtx *planningCtx, p *physicalPlan, exprs []parser.TypedExpr, outTypes []sqlbase.ColumnType,
+) {
+	// First check if we need an Evaluator, or we are just shuffling values.
+	needEval := false
+
+	for _, e := range exprs {
+		if _, ok := e.(*parser.IndexedVar); !ok {
+			needEval = true
+			break
+		}
+	}
+
+	if !needEval {
+		// We don't need an evaluator stage; we just need to adjust the projection
+		// to output only the columns in the rendering.
+		post := p.getLastStagePost()
+		oldOutCols := post.OutputColumns
+		newOutCols := make([]uint32, len(exprs))
+		for i, e := range exprs {
+			idx := e.(*parser.IndexedVar).Idx
+			streamCol := p.planToStreamColMap[idx]
+			if streamCol == -1 {
+				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
+			}
+			if oldOutCols != nil {
+				newOutCols[i] = oldOutCols[streamCol]
+			} else {
+				newOutCols[i] = uint32(streamCol)
+			}
+		}
+		post.OutputColumns = newOutCols
+		p.setLastStagePost(post, outTypes)
+	} else {
+		// Add a stage with Evaluator processors.
+		evalSpec := distsqlrun.EvaluatorSpec{
+			Exprs: make([]distsqlrun.Expression, len(exprs)),
+		}
+		for i, e := range exprs {
+			evalSpec.Exprs[i] = distSQLExpression(e, p.planToStreamColMap)
+		}
+
+		dsp.addNoGroupingStage(
+			p,
+			distsqlrun.ProcessorCoreUnion{Evaluator: &evalSpec},
+			distsqlrun.PostProcessSpec{},
+			outTypes,
+		)
+	}
 }
 
 // selectRenders takes a physicalPlan that produces the results corresponding to
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
-func (dsp *distSQLPlanner) selectRenders(
-	planCtx *planningCtx, p *physicalPlan, n *renderNode,
-) error {
-	// First check if we need an Evaluator, or we are just returning values.
-	needEval := false
+func (dsp *distSQLPlanner) selectRenders(planCtx *planningCtx, p *physicalPlan, n *renderNode) {
+	dsp.addRendering(planCtx, p, n.render, getTypesForPlanResult(n, nil))
 
-	for _, e := range n.render {
-		if _, ok := e.(*parser.IndexedVar); !ok {
-			needEval = true
-			break
-		}
-	}
-	if !needEval {
-		// We don't need an evaluator stage. However, we do need to update
-		// p.planToStreamColMap to make the plan correspond to the renderNode
-		// (rather than n.source).
-		planToStreamColMap := makePlanToStreamColMap(len(n.render))
-		for i, e := range n.render {
-			idx := e.(*parser.IndexedVar).Idx
-			streamCol := p.planToStreamColMap[idx]
-			if streamCol == -1 {
-				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
-			}
-			planToStreamColMap[i] = streamCol
-		}
-		p.planToStreamColMap = planToStreamColMap
-		p.ordering = dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-		return nil
-	}
-	// Add a stage with Evaluator processors.
-	evalSpec := distsqlrun.EvaluatorSpec{
-		Exprs: make([]distsqlrun.Expression, len(n.render)),
-	}
-	for i := range n.render {
-		evalSpec.Exprs[i] = distSQLExpression(n.render[i], p.planToStreamColMap)
-	}
-
-	dsp.addNoGroupingStage(
-		p, distsqlrun.ProcessorCoreUnion{Evaluator: &evalSpec},
-		dsp.getTypesForPlanResult(p.planToStreamColMap, n.source.plan),
-	)
-
-	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
+	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
 	// programmed to produce the columns in renderNode.render order.
 	p.planToStreamColMap = p.planToStreamColMap[:0]
 	for i := range n.render {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
 	}
+
 	p.ordering = dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap)
-	return nil
 }
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
@@ -746,41 +861,50 @@ func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *
 			n.ordering, sorterSpec.OutputOrdering.Columns,
 		))
 	}
-	dsp.addNoGroupingStage(
-		p, distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
-		dsp.getTypesForPlanResult(p.planToStreamColMap, n.plan),
-	)
 
+	var post distsqlrun.PostProcessSpec
+	if len(n.columns) != len(p.planToStreamColMap) {
+		// In cases like:
+		//   SELECT a FROM t ORDER BY b
+		// we have columns (b) that are only used for sorting. These columns are not
+		// in the output columns of the sortNode; we set a projection on the
+		// processors we just added.
+		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
+		post.OutputColumns = make([]uint32, len(n.columns))
+		for i, col := range p.planToStreamColMap {
+			post.OutputColumns[i] = uint32(col)
+			p.planToStreamColMap[i] = i
+		}
+	}
+
+	dsp.addNoGroupingStage(
+		p,
+		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
+		post,
+		getTypesForPlanResult(n, p.planToStreamColMap),
+	)
 	p.ordering = sorterSpec.OutputOrdering
-	// In cases like:
-	//   SELECT a FROM t ORDER BY b
-	// we have columns (b) that are only used for sorting. These columns are not
-	// in the output columns of the sortNode; we remove them from
-	// planToStreamColMap.
-	//
-	// TODO(radu): these columns are not referenceable in the plan anymore, but
-	// the values are still transferred in physical streams. We should improve the
-	// sorter processor to be configurable with a projection so it only outputs
-	// the columns that are needed.
-	p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
 }
 
 // addSingleGroupStage adds a "single group" stage (one that cannot be
 // parallelized) which consists of a single processor on the specified node.
+// The caller needs to update p.planToStreamColMap, p.resultTypes, p.ordering.
 func (dsp *distSQLPlanner) addSingleGroupStage(
 	p *physicalPlan,
 	nodeID roachpb.NodeID,
 	core distsqlrun.ProcessorCoreUnion,
-	colTypes []sqlbase.ColumnType,
+	post distsqlrun.PostProcessSpec,
+	outputTypes []sqlbase.ColumnType,
 ) {
 	proc := processor{
 		node: nodeID,
 		spec: distsqlrun.ProcessorSpec{
 			Input: []distsqlrun.InputSyncSpec{{
 				// The other fields will be filled in by mergeResultStreams.
-				ColumnTypes: colTypes,
+				ColumnTypes: p.resultTypes,
 			}},
 			Core: core,
+			Post: post,
 			Output: []distsqlrun.OutputRouterSpec{{
 				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
 			}},
@@ -795,6 +919,8 @@ func (dsp *distSQLPlanner) addSingleGroupStage(
 	// We now have a single result stream.
 	p.resultRouters = p.resultRouters[:1]
 	p.resultRouters[0] = pIdx
+
+	p.resultTypes = outputTypes
 }
 
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
@@ -881,8 +1007,6 @@ func (dsp *distSQLPlanner) addAggregators(
 
 	var finalAggSpec distsqlrun.AggregatorSpec
 
-	inputTypes := dsp.getTypesForPlanResult(p.planToStreamColMap, n.plan)
-
 	if !multiStage {
 		finalAggSpec = distsqlrun.AggregatorSpec{
 			Aggregations: aggregations,
@@ -890,7 +1014,7 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 	} else {
 		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, len(aggregations)+len(groupCols))
-		finalInputTypes := make([]sqlbase.ColumnType, len(aggregations)+len(groupCols))
+		intermediateTypes := make([]sqlbase.ColumnType, len(aggregations)+len(groupCols))
 		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, len(aggregations))
 		finalGroupCols := make([]uint32, len(groupCols))
 
@@ -907,7 +1031,7 @@ func (dsp *distSQLPlanner) addAggregators(
 				ColIdx: uint32(i),
 			}
 			var err error
-			_, finalInputTypes[i], err = distsqlrun.GetAggregateInfo(e.Func, inputTypes[e.ColIdx])
+			_, intermediateTypes[i], err = distsqlrun.GetAggregateInfo(e.Func, p.resultTypes[e.ColIdx])
 			if err != nil {
 				return err
 			}
@@ -921,7 +1045,7 @@ func (dsp *distSQLPlanner) addAggregators(
 				Func:   distsqlrun.AggregatorSpec_IDENT,
 				ColIdx: groupColIdx,
 			}
-			finalInputTypes[exprIdx] = inputTypes[groupColIdx]
+			intermediateTypes[exprIdx] = p.resultTypes[groupColIdx]
 			finalGroupCols[i] = uint32(exprIdx)
 		}
 
@@ -930,11 +1054,15 @@ func (dsp *distSQLPlanner) addAggregators(
 			GroupCols:    groupCols,
 		}
 
-		dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Aggregator: &localAggSpec}, inputTypes)
+		dsp.addNoGroupingStage(
+			p,
+			distsqlrun.ProcessorCoreUnion{Aggregator: &localAggSpec},
+			distsqlrun.PostProcessSpec{},
+			intermediateTypes,
+		)
 		// The local aggregators don't guarantee any output ordering.
 		p.ordering = orderingTerminated
 
-		inputTypes = finalInputTypes
 		finalAggSpec = distsqlrun.AggregatorSpec{
 			Aggregations: finalAgg,
 			GroupCols:    finalGroupCols,
@@ -949,37 +1077,33 @@ func (dsp *distSQLPlanner) addAggregators(
 	if prevStageNode != 0 {
 		node = prevStageNode
 	}
-	dsp.addSingleGroupStage(
-		p, node, distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec}, inputTypes,
-	)
-	evalExprs, needEval := dsp.extractPostAggrExprs(n.render)
-	if needEval {
-		// Add a stage with Evaluator processors.
-		postevalSpec := distsqlrun.EvaluatorSpec{
-			Exprs: make([]distsqlrun.Expression, len(evalExprs)),
-		}
 
-		types := make([]sqlbase.ColumnType, len(finalAggSpec.Aggregations))
-		for i, agg := range finalAggSpec.Aggregations {
-			_, types[i], err = distsqlrun.GetAggregateInfo(agg.Func, inputTypes[agg.ColIdx])
-			if err != nil {
-				return err
-			}
+	finalOutTypes := make([]sqlbase.ColumnType, len(finalAggSpec.Aggregations))
+	for i, agg := range finalAggSpec.Aggregations {
+		var err error
+		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, p.resultTypes[agg.ColIdx])
+		if err != nil {
+			return err
 		}
-		for i := range evalExprs {
-			postevalSpec.Exprs[i] = distSQLExpression(evalExprs[i], nil)
-		}
-
-		dsp.addNoGroupingStage(p, distsqlrun.ProcessorCoreUnion{Evaluator: &postevalSpec}, types)
 	}
+	dsp.addSingleGroupStage(
+		p, node,
+		distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec},
+		distsqlrun.PostProcessSpec{},
+		finalOutTypes,
+	)
 
-	// Update p.planToStreamColMap; we now have a simple 1-to-1 mapping of
+	evalExprs := dsp.extractPostAggrExprs(n.render)
+	dsp.addRendering(planCtx, p, evalExprs, getTypesForPlanResult(n, nil))
+
+	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator (and possibly
 	// evaluator) have been programmed to produce the columns in order.
 	p.planToStreamColMap = p.planToStreamColMap[:0]
 	for i := range n.Columns() {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
 	}
+
 	// We don't guarantee any ordering. Thankfully the groupNode doesn't either.
 	p.ordering = orderingTerminated
 	if len(n.Ordering().ordering) != 0 {
@@ -1010,10 +1134,22 @@ ColLoop:
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
-		Table:         n.index.desc,
-		IndexIdx:      0,
+		Table:    n.index.desc,
+		IndexIdx: 0,
+	}
+
+	post := distsqlrun.PostProcessSpec{
 		Filter:        distSQLExpression(n.table.filter, nil),
 		OutputColumns: getOutputColumnsFromScanNode(n.table),
+	}
+
+	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
+	// output stream.
+	for i := range plan.planToStreamColMap {
+		plan.planToStreamColMap[i] = -1
+	}
+	for i, col := range post.OutputColumns {
+		plan.planToStreamColMap[col] = i
 	}
 
 	// TODO(radu): we currently use a single JoinReader. We could have multiple.
@@ -1021,36 +1157,35 @@ ColLoop:
 	// that the index columns are part of the output (so that ordered
 	// synchronizers down the road can maintain the order).
 
-	types := make([]sqlbase.ColumnType, len(joinReaderSpec.OutputColumns))
-	for i, col := range joinReaderSpec.OutputColumns {
-		types[i] = sqlbase.DatumTypeToColumnType(n.index.resultColumns[col].Typ)
-	}
 	dsp.addSingleGroupStage(
-		&plan, dsp.nodeDesc.NodeID, distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec}, types,
+		&plan,
+		dsp.nodeDesc.NodeID,
+		distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+		post,
+		getTypesForPlanResult(n, plan.planToStreamColMap),
 	)
-	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
-	// output stream.
-	for i := range plan.planToStreamColMap {
-		plan.planToStreamColMap[i] = -1
-	}
-	for i, col := range joinReaderSpec.OutputColumns {
-		plan.planToStreamColMap[col] = i
-	}
 	return plan, nil
 }
 
 // getTypesForPlanResult returns the types of the elements in the result streams
-// of a plan that corresponds to a given planNode.
-func (dsp *distSQLPlanner) getTypesForPlanResult(
-	planToStreamColMap []int, node planNode,
-) []sqlbase.ColumnType {
+// of a plan that corresponds to a given planNode. If planToSreamColMap is nil,
+// a 1-1 mapping is assumed.
+func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.ColumnType {
+	nodeColumns := node.Columns()
+	if planToStreamColMap == nil {
+		// No remapping.
+		types := make([]sqlbase.ColumnType, len(nodeColumns))
+		for i := range nodeColumns {
+			types[i] = sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
+		}
+		return types
+	}
 	numCols := 0
 	for _, streamCol := range planToStreamColMap {
 		if numCols <= streamCol {
 			numCols = streamCol + 1
 		}
 	}
-	nodeColumns := node.Columns()
 	types := make([]sqlbase.ColumnType, numCols)
 	for nodeCol, streamCol := range planToStreamColMap {
 		if streamCol != -1 {
@@ -1106,8 +1241,8 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	joinerSpec.Type = distsqlrun.JoinType_INNER
 
 	// Figure out the left and right types.
-	leftTypes := dsp.getTypesForPlanResult(leftPlan.planToStreamColMap, n.left.plan)
-	rightTypes := dsp.getTypesForPlanResult(rightPlan.planToStreamColMap, n.right.plan)
+	leftTypes := leftPlan.resultTypes
+	rightTypes := rightPlan.resultTypes
 
 	// Set up the output columns.
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
@@ -1144,11 +1279,12 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
 	}
 
-	// addOutCol appends to joinerSpec.OutputColumns and returns the index
+	var post distsqlrun.PostProcessSpec
+	// addOutCol appends to post.OutputColumns and returns the index
 	// in the slice of the added column.
 	addOutCol := func(col uint32) int {
-		idx := len(joinerSpec.OutputColumns)
-		joinerSpec.OutputColumns = append(joinerSpec.OutputColumns, col)
+		idx := len(post.OutputColumns)
+		post.OutputColumns = append(post.OutputColumns, col)
 		return idx
 	}
 
@@ -1209,6 +1345,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 				{ColumnTypes: rightTypes},
 			},
 			Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+			Post:   post,
 			Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 		}
 
@@ -1225,6 +1362,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 					{ColumnTypes: rightTypes},
 				},
 				Core:   distsqlrun.ProcessorCoreUnion{HashJoiner: &joinerSpec},
+				Post:   post,
 				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 			}
 			p.processors = append(p.processors, processor{node: n, spec: procSpec})
@@ -1262,6 +1400,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	}
 
 	p.planToStreamColMap = joinToStreamColMap
+	p.resultTypes = getTypesForPlanResult(n, joinToStreamColMap)
 	p.ordering = dsp.convertOrdering(n.Ordering().ordering, joinToStreamColMap)
 	return p, nil
 }
@@ -1284,9 +1423,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		if err := dsp.selectRenders(planCtx, &plan, n); err != nil {
-			return physicalPlan{}, err
-		}
+		dsp.selectRenders(planCtx, &plan, n)
 		return plan, nil
 
 	case *groupNode:
@@ -1308,6 +1445,16 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 
 		dsp.addSorters(planCtx, &plan, n)
+
+		return plan, nil
+
+	case *filterNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+
+		addFilter(&plan, n.filter, plan.planToStreamColMap)
 
 		return plan, nil
 
@@ -1408,8 +1555,11 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if len(plan.resultRouters) != 1 ||
 		plan.processors[plan.resultRouters[0]].node != thisNodeID {
 		dsp.addSingleGroupStage(
-			&plan, thisNodeID, distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
-			dsp.getTypesForPlanResult(plan.planToStreamColMap, tree),
+			&plan,
+			thisNodeID,
+			distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+			distsqlrun.PostProcessSpec{},
+			plan.resultTypes,
 		)
 		if len(plan.resultRouters) != 1 {
 			panic(fmt.Sprintf("%d results after single group stage", len(plan.resultRouters)))

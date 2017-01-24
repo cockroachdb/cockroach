@@ -41,6 +41,7 @@ func newMergeJoiner(
 	spec *MergeJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
+	post *PostProcessSpec,
 	output RowReceiver,
 ) (*mergeJoiner, error) {
 	for i, c := range spec.LeftOrdering.Columns {
@@ -50,9 +51,7 @@ func newMergeJoiner(
 	}
 
 	m := &mergeJoiner{}
-	err := m.joinerBase.init(
-		flowCtx, leftSource, rightSource, output, spec.OutputColumns, spec.Type, spec.OnExpr,
-	)
+	err := m.joinerBase.init(flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output)
 	if err != nil {
 		return nil, err
 	}
@@ -87,20 +86,17 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 	for {
 		batch, err := m.streamMerger.NextBatch()
 		if err != nil || len(batch) == 0 {
-			m.output.Close(err)
+			m.out.close(err)
 			return
 		}
 		for _, rowPair := range batch {
 			row, _, err := m.render(rowPair[0], rowPair[1])
 			if err != nil {
-				m.output.Close(err)
+				m.out.close(err)
 				return
 			}
-			if row != nil && !m.output.PushRow(row) {
-				if log.V(2) {
-					log.Infof(ctx, "no more rows required")
-				}
-				m.output.Close(nil)
+			if row != nil && !m.out.emitRow(ctx, row) {
+				m.out.close(nil)
 				return
 			}
 		}

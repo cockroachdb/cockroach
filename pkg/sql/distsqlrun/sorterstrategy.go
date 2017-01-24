@@ -122,15 +122,8 @@ func (ss *sortAllStrategy) Execute(s *sorter) error {
 			break
 		}
 
-		if log.V(3) {
-			log.Infof(s.ctx, "pushing row %s", row)
-		}
-
 		// Push the row to the output; stop if they don't need more rows.
-		if !s.output.PushRow(row) {
-			if log.V(2) {
-				log.Infof(s.ctx, "no more rows required")
-			}
+		if !s.out.emitRow(s.ctx, row) {
 			break
 		}
 	}
@@ -199,16 +192,8 @@ func (ss *sortTopKStrategy) Execute(s *sorter) error {
 		if row == nil {
 			break
 		}
-
-		if log.V(3) {
-			log.Infof(s.ctx, "pushing row %s", row)
-		}
-
 		// Push the row to the output; stop if they don't need more rows.
-		if !s.output.PushRow(row) {
-			if log.V(2) {
-				log.Infof(s.ctx, "no more rows required")
-			}
+		if !s.out.emitRow(s.ctx, row) {
 			break
 		}
 	}
@@ -314,18 +299,15 @@ func (ss *sortChunksStrategy) Execute(s *sorter) error {
 				break
 			}
 
-			// We don't need any more rows, we will clear out ss so to not hold on to that memory.
-			if !s.output.PushRow(res) {
+			if !s.out.emitRow(s.ctx, res) {
+				// We don't need any more rows; clear out ss so to not hold on to that memory.
 				ss = &sortChunksStrategy{}
 				return nil
 			}
 		}
 
-		// We've reached the end of the table.
 		if nextRow == nil {
-			if log.V(2) {
-				log.Infof(s.ctx, "no more rows required")
-			}
+			// We've reached the end of the table.
 			break
 		}
 	}

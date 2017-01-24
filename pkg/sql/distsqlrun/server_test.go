@@ -49,10 +49,12 @@ func TestServer(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	ts := TableReaderSpec{
-		Table:         *td,
-		IndexIdx:      0,
-		Reverse:       false,
-		Spans:         nil,
+		Table:    *td,
+		IndexIdx: 0,
+		Reverse:  false,
+		Spans:    nil,
+	}
+	post := PostProcessSpec{
 		Filter:        Expression{Expr: "@1 != 2"}, // a != 2
 		OutputColumns: []uint32{0, 1},              // a
 	}
@@ -63,6 +65,7 @@ func TestServer(t *testing.T) {
 	req.Flow = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},
+			Post: post,
 			Output: []OutputRouterSpec{{
 				Type:    OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},

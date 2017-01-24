@@ -184,21 +184,11 @@ func (v *postAggExprVisitor) extract(typedExpr parser.TypedExpr) parser.TypedExp
 // ordinal reference to each instance of an *aggregateFuncHolder (our base
 // case).
 // To this end we have a pointer receiver for postAggExprVisitor.extract(...).
-//
-// Additionally if we see that all of our evalExprs are simply of type
-// *parser.IndexedVar, we have an evaluator that simply forwards every single
-// row without any transformation/evaluation. In this case we return false for
-// needEval.
-func (dsp *distSQLPlanner) extractPostAggrExprs(
-	render []parser.TypedExpr,
-) (evalExprs []parser.TypedExpr, needEval bool) {
+func (dsp *distSQLPlanner) extractPostAggrExprs(render []parser.TypedExpr) []parser.TypedExpr {
+	evalExprs := make([]parser.TypedExpr, len(render))
 	v := postAggExprVisitor{}
-	for _, expr := range render {
-		result := v.extract(expr)
-		if _, ok := result.(*parser.IndexedVar); !ok {
-			needEval = true
-		}
-		evalExprs = append(evalExprs, result)
+	for i, expr := range render {
+		evalExprs[i] = v.extract(expr)
 	}
-	return evalExprs, needEval
+	return evalExprs
 }

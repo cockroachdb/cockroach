@@ -91,7 +91,7 @@ func TestDistinct(t *testing.T) {
 			Context: context.Background(),
 		}
 
-		d, err := newDistinct(&flowCtx, &ds, in, out)
+		d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
 		if err != nil {
 			t.Fatal(err)
 		}

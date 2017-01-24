@@ -44,6 +44,9 @@ type EncDatum struct {
 
 func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
 	if ed.Datum == nil {
+		if ed.encoded == nil {
+			return "<unset>"
+		}
 		if a == nil {
 			a = &DatumAlloc{}
 		}
