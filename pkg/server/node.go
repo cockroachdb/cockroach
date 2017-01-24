@@ -150,7 +150,18 @@ func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) 
 func allocateStoreIDs(
 	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
 ) (roachpb.StoreID, error) {
-	r, err := db.Inc(ctx, keys.StoreIDGenerator, inc)
+	var err error
+	var r client.KeyValue
+	// Perform a retryable non-transactional increment.
+	for retry := true; retry; {
+		r, err = db.Inc(ctx, keys.StoreIDGenerator, inc)
+		switch err.(type) {
+		default:
+			retry = false
+		case *roachpb.WriteTooOldError, *roachpb.AmbiguousResultError:
+			retry = true
+		}
+	}
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
@@ -533,7 +544,7 @@ func (n *Node) bootstrapStores(
 	inc := int64(len(bootstraps))
 	firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "error allocating store ids: %+v", err)
 	}
 	sIdent := roachpb.StoreIdent{
 		ClusterID: n.ClusterID,
