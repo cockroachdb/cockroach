@@ -2570,8 +2570,11 @@ func TestReplicaLazyLoad(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 1)
 
-	// Create 2 ranges by splitting range 1.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	// Split so we can rely on RHS range being quiescent after a restart.
+	// We use UserTableDataMin to avoid having the range activated to
+	// gossip system table data.
+	splitKey := keys.MakeRowSentinelKey(keys.UserTableDataMin)
+	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -2585,9 +2588,9 @@ func TestReplicaLazyLoad(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	replica := mtc.stores[0].LookupReplica(roachpb.RKey("b"), nil)
+	replica := mtc.stores[0].LookupReplica(splitKey, nil)
 	if replica == nil {
-		t.Fatalf("lookup replica at key \"b\" returned nil")
+		t.Fatalf("lookup replica at key %q returned nil", splitKey)
 	}
 	if replica.RaftStatus() != nil {
 		t.Fatalf("expected replica Raft group to be uninitialized")
