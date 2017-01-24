@@ -141,7 +141,8 @@ func TestStyle(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`^cmd/`),
-			stream.GrepNot(`^(build/style_test\.go|((util/(log|envutil|sdnotify))|acceptance(/.*)?)/\w+\.go)\b`),
+			stream.GrepNot(`^(build/style_test\.go|ccl/sqlccl/backup_test\.go|ccl/storageccl/export_storage_test\.go|acceptance(/.*)?/\w+\.go)\b`),
+			stream.GrepNot(`^util/(log|envutil|sdnotify)/\w+\.go\b`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "envutil" instead`, s)
 		}); err != nil {
