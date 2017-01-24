@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -221,7 +223,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	}
 
 	needed := allColumns(plan)
-	plan, err = p.optimizePlan(plan, needed)
+	plan, err = p.optimizePlan(plan, needed, math.MaxInt64)
 	if err != nil {
 		return nil, err
 	}

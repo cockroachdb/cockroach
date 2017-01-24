@@ -18,6 +18,7 @@ package sql
 
 import (
 	"go/constant"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -125,7 +126,7 @@ func TestValues(t *testing.T) {
 		}
 		if plan != nil {
 			defer plan.Close()
-			plan, err = p.optimizePlan(plan, allColumns(plan))
+			plan, err = p.optimizePlan(plan, allColumns(plan), math.MaxInt64)
 			if err != nil {
 				t.Errorf("%d: unexpected error in optimizePlan: %v", i, err)
 				continue

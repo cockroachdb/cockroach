@@ -29,8 +29,11 @@ import (
 // the query plan to its final form, including index selection and
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
-func (p *planner) expandPlan(plan planNode) (planNode, error) {
-	expander := makePlanExpander(p)
+func (p *planner) expandPlan(plan planNode, neededRows int64) (planNode, error) {
+	expander := planExpander{
+		p:           p,
+		numRowsHint: neededRows,
+	}
 	return expander.expand(plan)
 }
 
@@ -42,6 +45,8 @@ type planExpander struct {
 	desiredOrdering sqlbase.ColumnOrdering
 }
 
+// makePlanExpander creates a new expander context with no requirement
+// from its context.
 func makePlanExpander(p *planner) planExpander {
 	return planExpander{
 		p:               p,

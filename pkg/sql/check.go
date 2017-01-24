@@ -131,19 +131,19 @@ func (p *planner) validateCheckExpr(
 		From:  &parser.From{Tables: parser.TableExprs{tableName}},
 		Where: &parser.Where{Expr: &parser.NotExpr{Expr: expr}},
 	}
-	lim := &parser.Limit{Count: parser.NewDInt(1)}
 	// This could potentially use a variant of planner.SelectClause that could
 	// use the tableDesc we have, but this is a rare operation and be benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := p.SelectClause(sel, nil, lim, nil, publicColumns)
+	rows, err := p.SelectClause(sel, nil, nil, nil, publicColumns)
 	if err != nil {
 		return err
 	}
-	rows, err = p.optimizePlan(rows, allColumns(rows))
+	rows, err = p.optimizePlan(rows, allColumns(rows), 1)
 	if err != nil {
 		return err
 	}
+	rows.SetLimitHint(1, true)
 	if err := p.startPlan(rows); err != nil {
 		return err
 	}

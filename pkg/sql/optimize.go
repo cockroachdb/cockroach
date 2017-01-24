@@ -16,17 +16,23 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+)
 
 // optimizePlan transforms the query plan into its final form.  This
-// includes calling expandPlan().  The SQL "prepare" phase, as well as
+// includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
-func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
+func (p *planner) optimizePlan(
+	plan planNode, neededCols []bool, neededRows int64,
+) (planNode, error) {
 	// We propagate the needed columns a first time. This will remove
 	// any unused renders, which in turn may simplify expansion (remove
 	// sub-expressions).
-	setNeededColumns(plan, needed)
+	setNeededColumns(plan, neededCols)
 
 	newPlan, err := p.triggerFilterPropagation(plan)
 	if err != nil {
@@ -35,14 +41,14 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 
 	// Perform plan expansion; this does index selection, sort
 	// optimization etc.
-	newPlan, err = p.expandPlan(newPlan)
+	newPlan, err = p.expandPlan(newPlan, neededRows)
 	if err != nil {
 		return plan, err
 	}
 
 	// We now propagate the needed columns again. This will ensure that
 	// the needed columns are properly computed for newly expanded nodes.
-	setNeededColumns(newPlan, needed)
+	setNeededColumns(newPlan, neededCols)
 
 	// Now do the same work for all sub-queries.
 	i := subqueryInitializer{p: p}
@@ -64,15 +70,21 @@ var _ planObserver = &subqueryInitializer{}
 // subqueryNode implements the planObserver interface.
 func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 	if sq.plan != nil && !sq.expanded {
-		needed := make([]bool, len(sq.plan.Columns()))
+		neededRows := int64(math.MaxInt64)
+		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
+			neededRows = 1
+		}
+
+		neededCols := make([]bool, len(sq.plan.Columns()))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.
-			for i := range needed {
-				needed[i] = true
+			for i := range neededCols {
+				neededCols[i] = true
 			}
 		}
+
 		var err error
-		sq.plan, err = i.p.optimizePlan(sq.plan, needed)
+		sq.plan, err = i.p.optimizePlan(sq.plan, neededCols, neededRows)
 		if err != nil {
 			return err
 		}

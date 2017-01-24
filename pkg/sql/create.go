@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 
@@ -659,7 +660,7 @@ func (n *createTableNode) Start() error {
 			return err
 		}
 		defer insertPlan.Close()
-		insertPlan, err = n.p.optimizePlan(insertPlan, allColumns(insertPlan))
+		insertPlan, err = n.p.optimizePlan(insertPlan, allColumns(insertPlan), math.MaxInt64)
 		if err != nil {
 			return err
 		}
