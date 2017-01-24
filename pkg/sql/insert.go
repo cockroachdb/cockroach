@@ -131,7 +131,7 @@ func (p *planner) Insert(
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}
-	ri, err := MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
+	ri, err := makeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
 	if err != nil {
 		return nil, err
 	}

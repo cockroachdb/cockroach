@@ -123,8 +123,8 @@ func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.Colum
 	return colIDs, ok
 }
 
-// RowInserter abstracts the key/value operations for inserting table rows.
-type RowInserter struct {
+// rowInserter abstracts the key/value operations for inserting table rows.
+type rowInserter struct {
 	helper                rowHelper
 	insertCols            []sqlbase.ColumnDescriptor
 	InsertColIDtoRowIndex map[sqlbase.ColumnID]int
@@ -137,16 +137,16 @@ type RowInserter struct {
 	value      roachpb.Value
 }
 
-// MakeRowInserter creates a RowInserter for the given table.
+// makeRowInserter creates a rowInserter for the given table.
 //
 // insertCols must contain every column in the primary key.
-func MakeRowInserter(
+func makeRowInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	fkTables tableLookupsByID,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs bool,
-) (RowInserter, error) {
+) (rowInserter, error) {
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
 	for _, m := range tableDesc.Mutations {
@@ -157,7 +157,7 @@ func MakeRowInserter(
 		}
 	}
 
-	ri := RowInserter{
+	ri := rowInserter{
 		helper:                rowHelper{tableDesc: tableDesc, indexes: indexes},
 		insertCols:            insertCols,
 		InsertColIDtoRowIndex: colIDtoRowIndexFromCols(insertCols),
@@ -166,7 +166,7 @@ func MakeRowInserter(
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := ri.InsertColIDtoRowIndex[col]; !ok {
-			return RowInserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+			return rowInserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 
@@ -204,9 +204,9 @@ type puter interface {
 	Put(key, value interface{})
 }
 
-// InsertRow adds to the batch the kv operations necessary to insert a table row
+// insertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
-func (ri *RowInserter) InsertRow(
+func (ri *rowInserter) insertRow(
 	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool,
 ) error {
 	if len(values) != len(ri.insertCols) {
@@ -339,7 +339,7 @@ type rowUpdater struct {
 	primaryKeyColChange   bool
 
 	rd rowDeleter
-	ri RowInserter
+	ri rowInserter
 
 	fks fkUpdateHelper
 
@@ -455,7 +455,7 @@ func makeRowUpdater(
 		}
 		ru.fetchCols = ru.rd.fetchCols
 		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
+		if ru.ri, err = makeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
 			return rowUpdater{}, err
 		}
 	} else {
@@ -586,7 +586,7 @@ func (ru *rowUpdater) updateRow(
 		if err := ru.rd.deleteRow(ctx, b, oldValues); err != nil {
 			return nil, err
 		}
-		if err := ru.ri.InsertRow(ctx, b, ru.newValues, false); err != nil {
+		if err := ru.ri.insertRow(ctx, b, ru.newValues, false); err != nil {
 			return nil, err
 		}
 		return ru.newValues, nil
