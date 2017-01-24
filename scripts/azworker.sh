@@ -53,16 +53,15 @@ case ${1-} in
     ssh-keygen -R "${FQDN}"
     ssh -o StrictHostKeyChecking=no  "${FQDN}" true
 
-    # Copy and run the bootstrapping scripts.
-    rsync -az "$(dirname "${0}")/" "${FQDN}:scripts/"
-    ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
+    rsync -az "$(dirname "${0}")/" "${FQDN}:../build/bootstrap"
+    ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
     # halts the VM, but halting the VM doesn't stop billing. The VM
     # must instead be "deallocated" with the azure API.
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
-    #ssh "${FQDN}" "sudo cp scripts/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+    #ssh "${FQDN}" "sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
     echo "VM now running at ${FQDN}"
     ;;

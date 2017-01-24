@@ -22,12 +22,12 @@ case ${1-} in
            --boot-disk-device-name "${name}"
     sleep 20 # avoid SSH timeout on copy-files
 
-    gcloud compute copy-files "$(dirname "${0}")" "${name}:scripts"
-    gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
+    gcloud compute copy-files "$(dirname "${0}")" "${name}:../build/bootstrap"
+    gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
-    gcloud compute ssh "${name}" --command="sudo cp scripts/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+    gcloud compute ssh "${name}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
     ;;
     start)
