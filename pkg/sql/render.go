@@ -315,6 +315,40 @@ func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		if err != nil {
 			return err
 		}
+
+		// If the current expression is a set-returning function, we need to move
+		// it up to the sources list as a cross join with an alias and replace it
+		// with a star select on that alias.
+		if len(exprs) == 1 {
+			if exprs[0].ResolvedType().FamilyEqual(parser.TypeTable) {
+				switch e := exprs[0].(type) {
+				case *parser.FuncExpr:
+					src, err := s.planner.getDataSource(e, nil, publicColumns)
+					if err != nil {
+						return err
+					}
+					src, err = s.planner.makeJoin("CROSS JOIN", s.source, src, nil)
+					if err != nil {
+						return err
+					}
+					s.source = src
+					s.sourceInfo = multiSourceInfo{s.source.info}
+					// We must regenerate the var helper at this point since we changed
+					// the source list.
+					s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
+
+					newTarget := parser.SelectExpr{
+						Expr: s.ivarHelper.IndexedVar(s.ivarHelper.NumVars() - 1),
+					}
+					cols, exprs, hasStar, err = s.planner.computeRender(newTarget, desiredType,
+						s.source.info, s.ivarHelper, true)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+
 		s.isStar = s.isStar || hasStar
 		_ = s.addOrMergeRenders(cols, exprs, false)
 	}

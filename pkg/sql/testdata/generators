@@ -57,7 +57,18 @@ x y
 query error argument of LIMIT must be type int, not type setof
 SELECT * FROM (VALUES (1)) LIMIT GENERATE_SERIES(1, 3)
 
-# Not supported yet: transforming a generator given in render position
-# to a cross join.
-query error unsupported result type: setof
+query I colnames
 SELECT GENERATE_SERIES(1, 2)
+----
+pg_catalog.generate_series
+1
+2
+
+query II colnames
+SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(3, 4)
+----
+pg_catalog.generate_series  pg_catalog.generate_series
+1                           3
+1                           4
+2                           3
+2                           4
