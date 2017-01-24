@@ -103,7 +103,7 @@ const (
 	systemDataGossipInterval = 1 * time.Minute
 
 	// prohibitRebalancesBehindThreshold is the maximum number of log entries a
-	// store allows its replicas to be behind before it starts prohibiting
+	// store allows its replicas to be behind before it starts declining incoming
 	// rebalances. We prohibit rebalances in this situation to avoid adding
 	// additional work to a store that is either not keeping up or is undergoing
 	// recovery because it is on a recently restarted node.
