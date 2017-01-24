@@ -12,5 +12,7 @@ package ccl
 // import of this package enables building a binary with CCL features.
 
 import (
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl" // ccl init hooks
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"   // ccl init hooks
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"     // ccl init hooks
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl" // ccl init hooks
 )
