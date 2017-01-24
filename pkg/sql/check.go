@@ -143,8 +143,7 @@ func (p *planner) validateCheckExpr(
 	if err != nil {
 		return err
 	}
-	rows.SetLimitHint(1, true)
-	if err := p.startPlan(rows); err != nil {
+	if err := p.startPlan(rows, 1); err != nil {
 		return err
 	}
 	next, err := rows.Next()

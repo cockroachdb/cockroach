@@ -82,33 +82,9 @@ var _ planMaker = &planner{}
 // - planVisitor.visit()           (walk.go)
 // - planNodeNames                 (walk.go)
 // - planMaker.optimizeFilters()   (filter_opt.go)
+// - setLimitHint()                (limit_hint.go)
 //
 type planNode interface {
-	// SetLimitHint tells this node to optimize things under the assumption that
-	// we will only need the first `numRows` rows.
-	//
-	// The special value math.MaxInt64 indicates "no limit".
-	//
-	// If soft is true, this is a "soft" limit and is only a hint; the node must
-	// still be able to produce all results if requested.
-	//
-	// If soft is false, this is a "hard" limit and is a promise that Next will
-	// never be called more than numRows times.
-	//
-	// The action of calling this method triggers limit-based query plan
-	// optimizations, e.g. in expandSelectNode(). The primary user is
-	// limitNode.Start() after it has fully evaluated the limit and
-	// offset expressions. EXPLAIN also does this, see expandPlan() for
-	// explainPlanNode.
-	//
-	// TODO(radu) Arguably, this interface has room for improvement.  A
-	// limitNode may have a hard limit locally which is larger than the
-	// soft limit propagated up by nodes downstream. We may want to
-	// improve this API to pass both the soft and hard limit.
-	//
-	// Available during/after newPlan().
-	SetLimitHint(numRows int64, soft bool)
-
 	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
@@ -235,11 +211,16 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 }
 
 // startPlan starts the plan and all its sub-query nodes.
-func (p *planner) startPlan(plan planNode) error {
+func (p *planner) startPlan(plan planNode, numRowsNeeded int64) error {
 	if err := p.startSubqueryPlans(plan); err != nil {
 		return err
 	}
-	return plan.Start()
+	if err := plan.Start(); err != nil {
+		return err
+	}
+	// Trigger limit propagation through the plan and sub-queries.
+	setLimitHint(plan, numRowsNeeded, false /* !soft */)
+	return nil
 }
 
 // newPlan constructs a planNode from a statement. This is used

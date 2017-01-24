@@ -131,7 +131,7 @@ func TestValues(t *testing.T) {
 				t.Errorf("%d: unexpected error in optimizePlan: %v", i, err)
 				continue
 			}
-			if err := p.startPlan(plan); err != nil {
+			if err := p.startPlan(plan, math.MaxInt64); err != nil {
 				t.Errorf("%d: unexpected error in Start: %v", i, err)
 				continue
 			}

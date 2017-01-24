@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1245,7 +1246,7 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(plan); err != nil {
+	if err := planMaker.startPlan(plan, math.MaxInt64); err != nil {
 		return err
 	}
 

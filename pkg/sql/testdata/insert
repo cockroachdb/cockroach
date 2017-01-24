@@ -496,6 +496,7 @@ EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 1                 count     1
 2  scan
 2                 table     select_t@primary
+2				  limit		1
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1

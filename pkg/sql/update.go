@@ -94,7 +94,7 @@ func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
 
 	r.tw = tw
 
-	return en.p.startPlan(r.rows)
+	return r.rows.Start()
 }
 
 type updateNode struct {
@@ -395,5 +395,3 @@ func (u *updateNode) DebugValues() debugValues {
 }
 
 func (u *updateNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}

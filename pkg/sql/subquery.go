@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
@@ -202,7 +203,11 @@ func (v *subqueryPlanVisitor) subqueryNode(sq *subquery) error {
 		panic("subquery was not expanded properly")
 	}
 	if !sq.started {
-		if err := v.p.startPlan(sq.plan); err != nil {
+		numRows := int64(math.MaxInt64)
+		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
+			numRows = 1
+		}
+		if err := v.p.startPlan(sq.plan, numRows); err != nil {
 			return err
 		}
 		sq.started = true

@@ -674,14 +674,13 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		scan := planner.Scan()
 		scan.desc = *tableDesc
 		scan.spans = []roachpb.Span{sp}
-		scan.SetLimitHint(chunkSize, false)
 		scan.initDescDefaults(publicAndNonPublicColumns)
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
 			return err
 		}
 
-		if err := planner.startPlan(rows); err != nil {
+		if err := planner.startPlan(rows, chunkSize); err != nil {
 			return err
 		}
 

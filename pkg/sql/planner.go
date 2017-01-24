@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"golang.org/x/net/context"
@@ -323,7 +324,7 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, e
 		return nil, err
 	}
 	defer plan.Close()
-	if err := p.startPlan(plan); err != nil {
+	if err := p.startPlan(plan, math.MaxInt64); err != nil {
 		return nil, err
 	}
 	if next, err := plan.Next(); err != nil || !next {
@@ -363,7 +364,7 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 		return 0, err
 	}
 	defer plan.Close()
-	if err := p.startPlan(plan); err != nil {
+	if err := p.startPlan(plan, math.MaxInt64); err != nil {
 		return 0, err
 	}
 	return countRowsAffected(plan)

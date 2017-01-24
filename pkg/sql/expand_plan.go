@@ -110,7 +110,7 @@ func (p planExpander) expand(plan planNode) (planNode, error) {
 			// during the plan's Start() phase. This may trigger additional
 			// optimizations (eg. in sortNode) which the user of EXPLAIN will be
 			// interested in.
-			n.plan.SetLimitHint(math.MaxInt64, true)
+			setUnlimited(n.plan)
 		}
 
 	case *indexJoinNode:
@@ -224,8 +224,8 @@ func (p planExpander) expandSelectTopNode(n *selectTopNode) (planNode, error) {
 		// Estimate the limit parameters. We can't full eval them just yet,
 		// because evaluation requires running potential sub-queries, which
 		// cannot occur during expand.
-		limitCount, limitOffset := n.limit.estimateLimit()
-		p.numRowsHint = getLimit(limitCount, limitOffset)
+		n.limit.estimateLimit()
+		p.numRowsHint = getLimit(n.limit.count, n.limit.offset)
 	}
 
 	sourceExpander := p
@@ -246,15 +246,6 @@ func (p planExpander) expandSelectTopNode(n *selectTopNode) (planNode, error) {
 	n.plan = n.source
 
 	if n.group != nil {
-		if len(n.group.desiredOrdering) > 0 {
-			match := computeOrderingMatch(n.group.desiredOrdering, n.plan.Ordering(), false)
-			if match == len(n.group.desiredOrdering) {
-				// We have a single MIN/MAX function and the underlying plan's
-				// ordering matches the function. We only need to retrieve one row.
-				n.plan.SetLimitHint(1, false /* !soft */)
-				n.group.needOnlyOneRow = true
-			}
-		}
 		n.group.plan = n.plan
 		n.plan = n.group
 	}

@@ -20,7 +20,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -1386,7 +1385,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	ctx context.Context, txn *client.Txn, tree planNode, recv *distSQLReceiver,
 ) error {
 	// Trigger limit propagation.
-	tree.SetLimitHint(math.MaxInt64, true)
+	setUnlimited(tree)
 
 	planCtx := planningCtx{
 		ctx:           ctx,

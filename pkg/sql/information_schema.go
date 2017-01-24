@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -756,7 +757,7 @@ func forEachUser(p *planner, fn func(username string) error) error {
 		return nil
 	}
 	defer plan.Close()
-	if err := p.startPlan(plan); err != nil {
+	if err := p.startPlan(plan, math.MaxInt64); err != nil {
 		return err
 	}
 

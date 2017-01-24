@@ -113,14 +113,13 @@ func (n *createDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *createDatabaseNode) Next() (bool, error)          { return false, nil }
-func (n *createDatabaseNode) Close()                       {}
-func (n *createDatabaseNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *createDatabaseNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createDatabaseNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createDatabaseNode) MarkDebug(mode explainMode)   {}
+func (n *createDatabaseNode) Next() (bool, error)        { return false, nil }
+func (n *createDatabaseNode) Close()                     {}
+func (n *createDatabaseNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *createDatabaseNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *createDatabaseNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createDatabaseNode) DebugValues() debugValues   { return debugValues{} }
+func (n *createDatabaseNode) MarkDebug(mode explainMode) {}
 
 type createIndexNode struct {
 	p         *planner
@@ -224,14 +223,13 @@ func (n *createIndexNode) Start() error {
 	return nil
 }
 
-func (n *createIndexNode) Next() (bool, error)          { return false, nil }
-func (n *createIndexNode) Close()                       {}
-func (n *createIndexNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *createIndexNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createIndexNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createIndexNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createIndexNode) MarkDebug(mode explainMode)   {}
+func (n *createIndexNode) Next() (bool, error)        { return false, nil }
+func (n *createIndexNode) Close()                     {}
+func (n *createIndexNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *createIndexNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *createIndexNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createIndexNode) DebugValues() debugValues   { return debugValues{} }
+func (n *createIndexNode) MarkDebug(mode explainMode) {}
 
 type createUserNode struct {
 	p        *planner
@@ -302,14 +300,13 @@ func (n *createUserNode) Start() error {
 	return nil
 }
 
-func (n *createUserNode) Next() (bool, error)          { return false, nil }
-func (n *createUserNode) Close()                       {}
-func (n *createUserNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *createUserNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createUserNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createUserNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createUserNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createUserNode) MarkDebug(mode explainMode)   {}
+func (n *createUserNode) Next() (bool, error)        { return false, nil }
+func (n *createUserNode) Close()                     {}
+func (n *createUserNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *createUserNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *createUserNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createUserNode) DebugValues() debugValues   { return debugValues{} }
+func (n *createUserNode) MarkDebug(mode explainMode) {}
 
 type createViewNode struct {
 	p           *planner
@@ -462,13 +459,12 @@ func (n *createViewNode) Close() {
 	n.sourcePlan = nil
 }
 
-func (n *createViewNode) Next() (bool, error)          { return false, nil }
-func (n *createViewNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *createViewNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createViewNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createViewNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createViewNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createViewNode) MarkDebug(mode explainMode)   {}
+func (n *createViewNode) Next() (bool, error)        { return false, nil }
+func (n *createViewNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *createViewNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *createViewNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createViewNode) DebugValues() debugValues   { return debugValues{} }
+func (n *createViewNode) MarkDebug(mode explainMode) {}
 
 type createTableNode struct {
 	p          *planner
@@ -664,7 +660,7 @@ func (n *createTableNode) Start() error {
 		if err != nil {
 			return err
 		}
-		if err = n.p.startPlan(insertPlan); err != nil {
+		if err = n.p.startPlan(insertPlan, math.MaxInt64); err != nil {
 			return err
 		}
 		// This loop is done here instead of in the Next method
@@ -686,13 +682,12 @@ func (n *createTableNode) Close() {
 	}
 }
 
-func (n *createTableNode) Next() (bool, error)          { return false, nil }
-func (n *createTableNode) Columns() ResultColumns       { return make(ResultColumns, 0) }
-func (n *createTableNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createTableNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createTableNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createTableNode) MarkDebug(mode explainMode)   {}
+func (n *createTableNode) Next() (bool, error)        { return false, nil }
+func (n *createTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
+func (n *createTableNode) Ordering() orderingInfo     { return orderingInfo{} }
+func (n *createTableNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createTableNode) DebugValues() debugValues   { return debugValues{} }
+func (n *createTableNode) MarkDebug(mode explainMode) {}
 
 type indexMatch bool
 
