@@ -93,8 +93,7 @@ install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
-	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS) $(BUILDTARGET)
-	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
+	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.

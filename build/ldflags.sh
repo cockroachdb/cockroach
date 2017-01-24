@@ -12,4 +12,4 @@ fi
 # The build.utcTime format must remain in sync with TimeFormat in info.go.
 echo '-X "github.com/cockroachdb/cockroach/pkg/build.tag='${build_version}'"' \
      '-X "github.com/cockroachdb/cockroach/pkg/build.utcTime='$(date -u '+%Y/%m/%d %H:%M:%S')'"' \
-     '-X "github.com/cockroachdb/cockroach/pkg/build.deps='$(build/depvers.sh)'"'
+     '-X "github.com/cockroachdb/cockroach/pkg/build.deps='$(git -C vendor rev-parse HEAD)'"'
