@@ -114,65 +114,40 @@ func (a ArgTypes) String() string {
 // NamedArgTypes is very similar to ArgTypes except it allows keeping a string
 // name for each argument as well and using those when printing the
 // human-readable signature.
-type NamedArgTypes []struct {
-	Name string
-	Typ  Type
-}
-
-func (a NamedArgTypes) match(types ArgTypes) bool {
-	if len(types) != len(a) {
-		return false
-	}
-	for i := range types {
-		if !a.matchAt(types[i], i) {
-			return false
-		}
-	}
-	return true
-}
-
-func (a NamedArgTypes) matchAt(typ Type, i int) bool {
-	// See ArgTypes.matchAt for explanation.
-	if typ.FamilyEqual(TypeTuple) {
-		typ = TypeTuple
-	}
-	return i < len(a) && a[i].Typ.Equivalent(typ)
-}
-
-func (a NamedArgTypes) matchLen(l int) bool {
-	return len(a) == l
-}
-
-func (a NamedArgTypes) getAt(i int) Type {
-	return a[i].Typ
-}
-
-// Length implements the typeList interface.
-func (a NamedArgTypes) Length() int {
-	return len(a)
-}
-
-// Types implements the typeList interface.
-func (a NamedArgTypes) Types() []Type {
-	n := len(a)
-	ret := make([]Type, n, n)
-	for i, s := range a {
-		ret[i] = s.Typ
-	}
-	return ret
+type NamedArgTypes struct {
+	ArgTypes
+	Names []string
 }
 
 func (a NamedArgTypes) String() string {
 	var s bytes.Buffer
-	for i, arg := range a {
+	for i, arg := range a.ArgTypes {
 		if i > 0 {
 			s.WriteString(", ")
 		}
-		s.WriteString(arg.Name)
+		s.WriteString(a.Names[i])
 		s.WriteString(": ")
-		s.WriteString(arg.Typ.String())
+		s.WriteString(arg.String())
 	}
 	return s.String()
+}
+
+type namedArg struct {
+	Name string
+	Type Type
+}
+
+func makeNamedArgTypes(args ...namedArg) NamedArgTypes {
+	types := make([]Type, len(args))
+	names := make([]string, len(args))
+	for i, arg := range args {
+		types[i] = arg.Type
+		names[i] = arg.Name
+	}
+	return NamedArgTypes{
+		ArgTypes: ArgTypes(types),
+		Names:    names,
+	}
 }
 
 // AnyType is a typeList implementation that accepts any arguments.

@@ -129,8 +129,8 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(typ))
 			}
 		case parser.NamedArgTypes:
-			for _, arg := range ft {
-				args = append(args, r.GenerateRandomArg(arg.Typ))
+			for _, arg := range ft.ArgTypes {
+				args = append(args, r.GenerateRandomArg(arg))
 			}
 		case parser.AnyType:
 			for i := r.Intn(5); i > 0; i-- {
