@@ -1218,3 +1218,30 @@ SELECT * from t.test WHERE k = 'test_key';
 		t.Errorf("expected exactly one restart, but got %d", u)
 	}
 }
+
+// Test that if as part of a transaction A we receive a retryable error intended
+// for a different transaction B, we don't retry transaction A.
+func TestRetryableErrorForWrongTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	bogusTxnID := "deadb33f-baaa-aaaa-aaaa-aaaaaaaaaaad"
+
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := sqlDB.Exec(`UPDATE t.test SET v = 'updated' WHERE (`+
+		`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1) > 0)`, bogusTxnID)
+	if isRetryableErr(err) {
+		t.Fatalf("expected non-retryable error, got: %s", err)
+	}
+	if !testutils.IsError(err, "pq: retryable error from another txn: forced by crdb_internal.force_retry()") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
