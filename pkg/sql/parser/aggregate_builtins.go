@@ -167,7 +167,7 @@ func makeAggBuiltin(in, ret Type, f func() AggregateFunc, info string) Builtin {
 		// of the Builtins array above.
 		impure:        true,
 		class:         AggregateClass,
-		Types:         ArgTypes{in},
+		Types:         ArgTypes{{"arg", in}},
 		ReturnType:    ret,
 		AggregateFunc: f,
 		WindowFunc: func() WindowFunc {
@@ -186,7 +186,7 @@ func makeAggBuiltins(f func() AggregateFunc, info string, types ...Type) []Built
 }
 
 func countImpls() []Builtin {
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
+	types := []Type{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes,
 		TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
 	r := make([]Builtin, len(types))
 	for i := range types {

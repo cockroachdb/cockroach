@@ -99,13 +99,13 @@ func initGeneratorBuiltins() {
 var generators = map[string][]Builtin{
 	"pg_catalog.generate_series": {
 		makeGeneratorBuiltin(
-			ArgTypes{TypeInt, TypeInt},
+			ArgTypes{{"a", TypeInt}, {"b", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
 			"Not usable; supported only for ORM compatibility.",
 		),
 		makeGeneratorBuiltin(
-			ArgTypes{TypeInt, TypeInt, TypeInt},
+			ArgTypes{{"a", TypeInt}, {"b", TypeInt}, {"c", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
 			"Not usable; supported only for ORM compatibility.",

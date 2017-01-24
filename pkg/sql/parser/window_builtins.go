@@ -121,38 +121,40 @@ var windows = map[string][]Builtin{
 		makeWindowBuiltin(ArgTypes{}, TypeFloat, newCumulativeDistWindow),
 	},
 	"ntile": {
-		makeWindowBuiltin(ArgTypes{TypeInt}, TypeInt, newNtileWindow),
+		makeWindowBuiltin(ArgTypes{{"n", TypeInt}}, TypeInt, newNtileWindow),
 	},
 	"lag": mergeBuiltinSlices(
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(false, false, false))
+			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(false, true, false))
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(false, true, true))
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
+				t, makeLeadLagWindowConstructor(false, true, true))
 		}, anyElementTypes...),
 	),
 	"lead": mergeBuiltinSlices(
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(true, false, false))
+			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(true, true, false))
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(true, true, false))
 		}, anyElementTypes...),
 		collectWindowBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(true, true, true))
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
+				t, makeLeadLagWindowConstructor(true, true, true))
 		}, anyElementTypes...),
 	),
 	"first_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t}, t, newFirstValueWindow)
+		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newFirstValueWindow)
 	}, anyElementTypes...),
 	"last_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t}, t, newLastValueWindow)
+		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newLastValueWindow)
 	}, anyElementTypes...),
 	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
+		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, newNthValueWindow)
 	}, anyElementTypes...),
 }
 
