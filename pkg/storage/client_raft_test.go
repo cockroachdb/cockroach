@@ -2590,7 +2590,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 	replica := mtc.stores[0].LookupReplica(splitKey, nil)
 	if replica == nil {
-		t.Fatalf("lookup replica at key %s returned nil", splitKey)
+		t.Fatalf("lookup replica at key %q returned nil", splitKey)
 	}
 	if replica.RaftStatus() != nil {
 		t.Fatalf("expected replica Raft group to be uninitialized")

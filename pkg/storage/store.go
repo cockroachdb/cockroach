@@ -405,14 +405,6 @@ type Store struct {
 	gossipRangeCountdown int32
 	gossipLeaseCountdown int32
 
-	// systemConfigHash and nodeLivenessHash are hashes of the system
-	// data as of the last time they were gossiped. These values are
-	// atomically updated, and will be non-nil only if the store holds a
-	// replica that has been the leaseholder of the range containing the
-	// relevant system data.
-	systemConfigHash atomic.Value
-	nodeLivenessHash atomic.Value
-
 	coalescedMu struct {
 		syncutil.Mutex
 		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
@@ -1295,17 +1287,15 @@ func (s *Store) startGossip() {
 		},
 		{
 			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan, func(r *Replica) error {
-					return r.maybeGossipSystemConfig(ctx)
-				})
+				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan, (*Replica).maybeGossipSystemConfig)
 			},
 			description: "system config",
 			interval:    systemDataGossipInterval,
 		},
 		{
 			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan, func(r *Replica) error {
-					return r.maybeGossipNodeLiveness(ctx)
+				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan, func(r *Replica, ctx context.Context) error {
+					return r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan)
 				})
 			},
 			description: "node liveness",
@@ -1380,7 +1370,7 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 // data gossip function (e.g. Replica.maybeGossipSystemConfig or
 // Replica.maybeGossipNodeLiveness).
 func (s *Store) maybeGossipSystemData(
-	ctx context.Context, span roachpb.Span, gossipFn func(*Replica) error,
+	ctx context.Context, span roachpb.Span, gossipFn func(*Replica, context.Context) error,
 ) error {
 	repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
 	if repl == nil {
@@ -1396,7 +1386,7 @@ func (s *Store) maybeGossipSystemData(
 		return pErr.GoError()
 	}
 	if hasLease {
-		return gossipFn(repl)
+		return gossipFn(repl, ctx)
 	}
 	return nil
 }

@@ -251,8 +251,7 @@ type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
-	store *Store
-
+	store      *Store
 	abortCache *AbortCache // Avoids anomalous reads after abort
 
 	// creatingReplica is set when a replica is created as uninitialized
@@ -4364,77 +4363,55 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 		return nil
 	}
 
-	// If the contents in gossip match last read system config, skip gossip.
-	var lastHash []byte
-	if val := r.store.systemConfigHash.Load(); val != nil {
-		lastHash = val.([]byte)
-	}
-	if cfg, ok := r.store.Gossip().GetSystemConfig(); ok && bytes.Equal(cfg.Hash(), lastHash) {
-		return nil
-	}
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
-	kvs, hash, err := r.loadSystemConfigSpan()
+	loadedCfg, err := r.loadSystemConfig(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
-	r.store.systemConfigHash.Store(hash)
 
-	log.VEventf(ctx, 2, "gossiping system config from store %d, range %d, hash %x",
-		r.store.StoreID(), r.RangeID, hash)
-
-	cfg := &config.SystemConfig{Values: kvs}
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
-		return errors.Wrap(err, "failed to gossip system config")
+	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) {
+		return nil
 	}
-	return nil
+
+	log.VEventf(ctx, 2, "gossiping system config")
+
+	return errors.Wrap(r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0), "failed to gossip system config")
 }
 
-// maybeGossipNodeLiveness gossips information for node liveness, if
-// this replica contains the records and holds the lease. Gossips only
-// node liveness records which have changed since the last gossip.
-func (r *Replica) maybeGossipNodeLiveness(ctx context.Context) error {
-	if r.store.Gossip() == nil || r.store.cfg.NodeLiveness == nil || !r.IsInitialized() {
+// maybeGossipNodeLiveness gossips information for all node liveness
+// records stored on this range. To scan and gossip, this replica
+// must hold the lease to a range which contains some or all of the
+// node liveness records. After scanning the records, it checks
+// against what's already in gossip and only gossips records which
+// are out of date.
+func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span) error {
+	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return nil
 	}
 
-	if !r.ContainsKey(keys.NodeLivenessSpan.Key) || !r.shouldGossip() {
-		return nil
-	}
-
-	// If gossiped node liveness matches last read node liveness records, skip gossip.
-	var lastHash []byte
-	if val := r.store.nodeLivenessHash.Load(); val != nil {
-		lastHash = val.([]byte)
-	}
-	if bytes.Equal(r.store.cfg.NodeLiveness.Hash(), lastHash) {
+	if !r.ContainsKeyRange(span.Key, span.EndKey) || !r.shouldGossip() {
 		return nil
 	}
 
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
-	// Read all node liveness records to recompute the hash.
-	ba.Add(&roachpb.ScanRequest{Span: keys.NodeLivenessSpan})
+	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
 	br, result, pErr :=
 		r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
-		return errors.Wrap(pErr.GoError(), "couldn't scan node liveness records")
+		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
 	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
-		return errors.Errorf("unexpected intents on node liveness: %+v", *result.Local.intents)
+		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, *result.Local.intents)
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-
-	// Gossip only node liveness records within the requested span.
-	log.VEvent(ctx, 2, "gossiping node liveness record(s)")
-	ls := make(livenessSlice, len(kvs))
-	for i, kv := range kvs {
+	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
+	for _, kv := range kvs {
 		var liveness, exLiveness Liveness
 		if err := kv.Value.GetProto(&liveness); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}
-		ls[i] = liveness
-
 		key := gossip.MakeNodeLivenessKey(liveness.NodeID)
 		// Look up liveness from gossip; skip gossiping anew if unchanged.
 		if err := r.store.Gossip().GetInfoProto(key, &exLiveness); err == nil {
@@ -4446,11 +4423,6 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context) error {
 			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", liveness)
 		}
 	}
-
-	// Update the hash of node liveness contents.
-	sort.Sort(ls)
-	r.store.nodeLivenessHash.Store(ls.Hash())
-
 	return nil
 }
 
@@ -4496,11 +4468,9 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
 
-// loadSystemConfigSpan scans the entire SystemConfig span and returns the full
-// list of key/value pairs along with the sha1 checksum of the contents (key
-// and value).
-func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
-	ctx := r.AnnotateCtx(context.TODO())
+// loadSystemConfig scans the system config span and returns the system
+// config.
+func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
@@ -4510,17 +4480,17 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba,
 	)
 	if pErr != nil {
-		return nil, nil, pErr.GoError()
+		return config.SystemConfig{}, pErr.GoError()
 	}
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
 		r.store.intentResolver.processIntentsAsync(r, intents)
-		return nil, nil, errSystemConfigIntent
+		return config.SystemConfig{}, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	return kvs, config.SystemConfig{Values: kvs}.Hash(), nil
+	return config.SystemConfig{Values: kvs}, nil
 }
 
 // needsSplitBySize returns true if the size of the range requires it

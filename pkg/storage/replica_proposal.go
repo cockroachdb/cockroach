@@ -699,15 +699,13 @@ func (r *Replica) handleLocalEvalResult(
 	}
 
 	if lResult.maybeGossipSystemConfig {
-		r.store.systemConfigHash.Store([]byte(nil))
 		if err := r.maybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)
 		}
 		lResult.maybeGossipSystemConfig = false
 	}
 	if lResult.maybeGossipNodeLiveness != nil {
-		r.store.nodeLivenessHash.Store([]byte(nil))
-		if err := r.maybeGossipNodeLiveness(ctx); err != nil {
+		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
 			log.Error(ctx, err)
 		}
 		lResult.maybeGossipNodeLiveness = nil
