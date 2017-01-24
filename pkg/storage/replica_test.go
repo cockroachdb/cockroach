@@ -5466,7 +5466,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	}
 
 	// Verify that the intent trips up loading the SystemConfig data.
-	if _, _, err := repl.loadSystemConfigSpan(); err != errSystemConfigIntent {
+	if _, err := repl.loadSystemConfig(context.Background()); err != errSystemConfigIntent {
 		t.Fatal(err)
 	}
 
@@ -5479,13 +5479,13 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 			return err
 		}
 
-		kvs, _, err := repl.loadSystemConfigSpan()
+		cfg, err := repl.loadSystemConfig(context.Background())
 		if err != nil {
 			return err
 		}
 
-		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemConfigSpan.Key) {
-			return errors.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, kvs)
+		if len(cfg.Values) != 1 || !bytes.Equal(cfg.Values[0].Key, keys.SystemConfigSpan.Key) {
+			return errors.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, cfg)
 		}
 		return nil
 	})
