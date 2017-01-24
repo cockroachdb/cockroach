@@ -23,7 +23,7 @@ import (
 	"testing"
 )
 
-//go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -ignore README.md -prefix ../../../resource ../../../resource/test_certs/...
+//go:generate go-bindata -mode 0644 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md test_certs
 //go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go
 
