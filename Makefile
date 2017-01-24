@@ -58,11 +58,6 @@ $(error bash is required)
 endif
 export GIT_PAGER :=
 
-# Note: We pass `-v` to `go build` and `go test -i` so that warnings
-# from the linker aren't suppressed. The usage of `-v` also shows when
-# dependencies are rebuilt which is useful when switching between
-# normal and race test builds.
-
 ifeq ($(STATIC),1)
 # Static linking with glibc is a bad time; see
 # https://github.com/golang/go/issues/13470. If a static build is
@@ -87,20 +82,19 @@ start: build
 start:
 	$(COCKROACH) start $(STARTFLAGS)
 
-
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings
+# from the linker aren't suppressed. The usage of `-v` also shows when
+# dependencies are rebuilt which is useful when switching between
+# normal and race test builds.
 .PHONY: install
 install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
-	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS) $(BUILDTARGET)
-	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
+	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
-# If STATIC=1, tests are statically linked.
-# eg: to statically build the sql tests, run:
-#   make STATIC=1 testbuild PKG=./pkg/sql
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \
@@ -239,13 +233,11 @@ GLOCK := ../../../../bin/glock
 #        |  |~ GOPATH/src/github.com
 #        |~ GOPATH/src/github.com/cockroachdb
 
-$(GLOCK):
-	$(GO) install ./vendor/github.com/robfig/glock
-
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE glide.lock
+.bootstrap: $(GITHOOKS) GLOCKFILE glide.lock
 	git submodule update --init
+	$(GO) install ./vendor/github.com/robfig/glock
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
 
