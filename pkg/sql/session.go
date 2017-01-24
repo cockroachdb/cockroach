@@ -344,6 +344,8 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	ts.schemaChangers = schemaChangerCollection{}
 }
 
+// willBeRetried returns true if the SQL transaction is going to be retried
+// because of err.
 func (ts *txnState) willBeRetried() bool {
 	return ts.autoRetry || ts.retryIntent
 }
@@ -400,7 +402,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	if err == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
 	}
-	if _, ok := err.(*roachpb.RetryableTxnError); !ok || !ts.willBeRetried() {
+	if retErr, ok := err.(*roachpb.RetryableTxnError); !ok || !ts.willBeRetried() || !client.IsRetryableErrMeantForTxn(retErr, ts.txn) {
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)
 		// This call rolls back a PENDING transaction and cleans up all its

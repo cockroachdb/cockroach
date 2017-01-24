@@ -135,7 +135,7 @@ func (tu *tableUpdater) row(ctx context.Context, values parser.DTuple) (parser.D
 	return tu.ru.updateRow(ctx, tu.b, oldValues, updateValues)
 }
 
-func (tu *tableUpdater) finalize(_ context.Context) error {
+func (tu *tableUpdater) finalize(ctx context.Context) error {
 	var err error
 	if tu.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
