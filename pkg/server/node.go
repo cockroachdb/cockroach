@@ -137,11 +137,11 @@ type Node struct {
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) {
-	r, err := db.Inc(ctx, keys.NodeIDGenerator, 1)
+	val, err := incVal(ctx, db, keys.NodeIDGenerator, 1)
 	if err != nil {
-		return 0, errors.Errorf("unable to allocate node ID: %s", err)
+		return 0, errors.Wrap(err, "unable to allocate node ID")
 	}
-	return roachpb.NodeID(r.ValueInt()), nil
+	return roachpb.NodeID(val), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
@@ -150,11 +150,29 @@ func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) 
 func allocateStoreIDs(
 	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
 ) (roachpb.StoreID, error) {
-	r, err := db.Inc(ctx, keys.StoreIDGenerator, inc)
+	val, err := incVal(ctx, db, keys.StoreIDGenerator, inc)
 	if err != nil {
-		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
+		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", inc, nodeID)
 	}
-	return roachpb.StoreID(r.ValueInt() - inc + 1), nil
+	return roachpb.StoreID(val - inc + 1), nil
+}
+
+// incVal increments a key's value by a specified amount and returns the new
+// value.
+// It performs the increment as a retryable non-transactional increment. The key
+// might be incremented multiple times because of the retries.
+func incVal(ctx context.Context, db *client.DB, key roachpb.Key, inc int64) (int64, error) {
+	var err error
+	var res client.KeyValue
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+		res, err = db.Inc(ctx, key, inc)
+		switch err.(type) {
+		case *roachpb.WriteTooOldError, *roachpb.AmbiguousResultError:
+			continue
+		}
+		break
+	}
+	return res.ValueInt(), err
 }
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
@@ -533,7 +551,7 @@ func (n *Node) bootstrapStores(
 	inc := int64(len(bootstraps))
 	firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "error allocating store ids: %+v", err)
 	}
 	sIdent := roachpb.StoreIdent{
 		ClusterID: n.ClusterID,
