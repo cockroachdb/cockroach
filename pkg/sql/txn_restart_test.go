@@ -1236,8 +1236,21 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 		t.Fatal(err)
 	}
 
-	_, err := sqlDB.Exec(`UPDATE t.test SET v = 'updated' WHERE (`+
-		`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1) > 0)`, bogusTxnID)
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We're going to use FORCE_RETRY() to generate an error for a different
+	// transaction than the one we initiate. We need call that function in a
+	// transaction that already has an id (so, it can't be the first query in the
+	// transaction), because the "wrong txn id" detection mechanism doesn't work
+	// when the txn doesn't have an id yet (see TODO in
+	// IsRetryableErrMeantForTxn).
+	_, err = tx.Exec(`SELECT * FROM t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1)`, bogusTxnID)
 	if isRetryableErr(err) {
 		t.Fatalf("expected non-retryable error, got: %s", err)
 	}
