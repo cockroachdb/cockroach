@@ -29,9 +29,6 @@ import (
 type renderNode struct {
 	planner *planner
 
-	// top refers to the surrounding selectTopNode.
-	top *selectTopNode
-
 	// source describes where the data is coming from.
 	// populated initially by initFrom().
 	// potentially modified by index selection.
@@ -287,7 +284,6 @@ func (p *planner) SelectClause(
 		distinct: distinctPlan,
 		limit:    limitPlan,
 	}
-	s.top = result
 	limitPlan.setTop(result)
 	distinctPlan.setTop(result)
 
