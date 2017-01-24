@@ -251,12 +251,8 @@ type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
-	store *Store
-	// sha1 hash of the system config @ last gossip. No synchronized access;
-	// must only be accessed from maybeGossipSystemConfig (which in turn is
-	// only called from the Raft-processing goroutine).
-	systemDBHash []byte
-	abortCache   *AbortCache // Avoids anomalous reads after abort
+	store      *Store
+	abortCache *AbortCache // Avoids anomalous reads after abort
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -4368,27 +4364,18 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	}
 
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
-	kvs, hash, err := r.loadSystemConfigSpan()
+	loadedCfg, err := r.loadSystemConfig(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
-	if bytes.Equal(r.systemDBHash, hash) {
+
+	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) {
 		return nil
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "gossiping system config from store %d, range %d, hash %x",
-			r.store.StoreID(), r.RangeID, hash)
-	}
+	log.VEventf(ctx, 2, "gossiping system config")
 
-	cfg := &config.SystemConfig{Values: kvs}
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
-		return errors.Wrap(err, "failed to gossip system config")
-	}
-
-	// Successfully gossiped. Update tracking hash.
-	r.systemDBHash = hash
-	return nil
+	return errors.Wrap(r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0), "failed to gossip system config")
 }
 
 // maybeGossipNodeLiveness gossips information for all node liveness
@@ -4483,11 +4470,9 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
 
-// loadSystemConfigSpan scans the entire SystemConfig span and returns the full
-// list of key/value pairs along with the sha1 checksum of the contents (key
-// and value).
-func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
-	ctx := r.AnnotateCtx(context.TODO())
+// loadSystemConfig scans the system config span and returns the system
+// config.
+func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
@@ -4497,17 +4482,17 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba,
 	)
 	if pErr != nil {
-		return nil, nil, pErr.GoError()
+		return config.SystemConfig{}, pErr.GoError()
 	}
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
 		r.store.intentResolver.processIntentsAsync(r, intents)
-		return nil, nil, errSystemConfigIntent
+		return config.SystemConfig{}, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	return kvs, config.SystemConfig{Values: kvs}.Hash(), nil
+	return config.SystemConfig{Values: kvs}, nil
 }
 
 // needsSplitBySize returns true if the size of the range requires it
