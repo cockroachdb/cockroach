@@ -62,15 +62,15 @@ SET
 		t.Fatal(err)
 	}
 
-	expectedCols := []string{"Field", "Type", "Null", "Default"}
+	expectedCols := []string{"Field", "Type", "Null", "Default", "Indices"}
 	if !reflect.DeepEqual(expectedCols, cols) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`},
-		{`name`, `STRING`, `false`, `NULL`},
-		{`id`, `INT`, `true`, `NULL`},
+		{`parentID`, `INT`, `false`, `NULL`, `{primary}`},
+		{`name`, `STRING`, `false`, `NULL`, `{primary}`},
+		{`id`, `INT`, `true`, `NULL`, `{}`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -82,13 +82,13 @@ SET
 	}
 
 	expected = `
-+----------+--------+-------+---------+
-|  Field   |  Type  | Null  | Default |
-+----------+--------+-------+---------+
-| parentID | INT    | false | NULL    |
-| name     | STRING | false | NULL    |
-| id       | INT    | true  | NULL    |
-+----------+--------+-------+---------+
++----------+--------+-------+---------+-----------+
+|  Field   |  Type  | Null  | Default |  Indices  |
++----------+--------+-------+---------+-----------+
+| parentID | INT    | false | NULL    | {primary} |
+| name     | STRING | false | NULL    | {primary} |
+| id       | INT    | true  | NULL    | {}        |
++----------+--------+-------+---------+-----------+
 (3 rows)
 `
 
