@@ -97,7 +97,7 @@ func canConstantBecome(c Constant, typ Type) bool {
 // past the decimal point as an DInt. This is possible, but it is not desirable.
 func shouldConstantBecome(c Constant, typ Type) bool {
 	if num, ok := c.(*NumVal); ok {
-		if typ == TypeInt && num.Kind() == constant.Float {
+		if UnwrapType(typ) == TypeInt && num.Kind() == constant.Float {
 			return false
 		}
 	}
@@ -256,6 +256,12 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 			dd.SetScale(dd.Scale() - eScale)
 		}
 		return dd, nil
+	case TypeOid:
+		d, err := expr.ResolveAsType(ctx, TypeInt)
+		if err != nil {
+			return nil, err
+		}
+		return NewDOidFromDInt(d.(*DInt)), nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
@@ -357,6 +363,9 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	case TypeString:
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
+	case TypeName:
+		expr.resString = DString(expr.s)
+		return NewDNameFromDString(&expr.resString), nil
 	case TypeBytes:
 		expr.resBytes = DBytes(expr.s)
 		return &expr.resBytes, nil

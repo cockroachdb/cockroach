@@ -114,8 +114,8 @@ func (n *limitNode) estimateLimit() (count, offset int64) {
 			// The limit can be a simple DInt here either because it was
 			// entered as such in the query, or as a result of constant
 			// folding prior to type checking.
-			if d, ok := datum.src.(*parser.DInt); ok {
-				*datum.dst = int64(*d)
+			if i, ok := parser.AsDInt(datum.src); ok {
+				*datum.dst = int64(i)
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func (n *limitNode) evalLimit() error {
 				continue
 			}
 
-			dstDInt := *dstDatum.(*parser.DInt)
+			dstDInt := parser.MustBeDInt(dstDatum)
 			val := int64(dstDInt)
 			if val < 0 {
 				return fmt.Errorf("negative value for %s", datum.name)

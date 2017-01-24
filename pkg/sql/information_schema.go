@@ -72,6 +72,13 @@ func dStringOrNull(s string) parser.Datum {
 	return parser.NewDString(s)
 }
 
+func dNameOrNull(s string) parser.Datum {
+	if s == "" {
+		return parser.DNull
+	}
+	return parser.NewDName(s)
+}
+
 func dStringPtrOrNull(s *string) parser.Datum {
 	if s == nil {
 		return parser.DNull
@@ -775,8 +782,8 @@ func forEachUser(p *planner, fn func(username string) error) error {
 			break
 		}
 		row := plan.Values()
-		username := row[0].(*parser.DString)
-		if err := fn(string(*username)); err != nil {
+		username := parser.MustBeDString(row[0])
+		if err := fn(string(username)); err != nil {
 			return err
 		}
 	}
