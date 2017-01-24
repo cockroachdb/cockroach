@@ -101,7 +101,11 @@ func NewOrdinalReference(r int) *IndexedVar {
 	return &IndexedVar{Idx: r, container: nil}
 }
 
-// IndexedVarHelper is a structure that helps with initialization of IndexedVars.
+// IndexedVarHelper wraps an IndexedVarContainer (an interface) and creates
+// IndexedVars bound to that container.
+//
+// It also keeps track of which indexes from the container are used by
+// expressions.
 type IndexedVarHelper struct {
 	vars      []IndexedVar
 	container IndexedVarContainer
@@ -193,6 +197,8 @@ func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 // linked expressions is up to date, especially after
 // optimizations/transforms which eliminate sub-expressions. The
 // optimizations performed by setNeededColumns() work then best.
+//
+// TODO(knz): groupNode and windowNode hold on to IndexedVar's after a Reset().
 func (h *IndexedVarHelper) Reset() {
 	h.vars = make([]IndexedVar, len(h.vars))
 }
