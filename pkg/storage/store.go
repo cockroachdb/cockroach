@@ -100,7 +100,7 @@ const (
 	// This ensures that system data is always eventually gossiped, even
 	// if a range lease holder experiences a failure causing a missed
 	// gossip update.
-	systemDataGossipInterval = 1 * time.Minute
+	systemDataGossipInterval = 15 * time.Second
 
 	// prohibitRebalancesBehindThreshold is the maximum number of log entries a
 	// store allows its replicas to be behind before it starts declining incoming
@@ -439,12 +439,6 @@ type Store struct {
 	// the time of its creation was riddled with deadlock (but that situation
 	// has likely improved).
 	drainLeases atomic.Value
-
-	// These vars are atomically updated from 0 to 1 once per store
-	// lifetime to ensure we gossip system data in the event that the
-	// node ends up owning the relevant range lease on a restart.
-	haveGossipedSystemConfig int32
-	haveGossipedNodeLiveness int32
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
@@ -1293,14 +1287,16 @@ func (s *Store) startGossip() {
 		},
 		{
 			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan)
+				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan, (*Replica).maybeGossipSystemConfig)
 			},
 			description: "system config",
 			interval:    systemDataGossipInterval,
 		},
 		{
 			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan)
+				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan, func(r *Replica, ctx context.Context) error {
+					return r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan)
+				})
 			},
 			description: "node liveness",
 			interval:    systemDataGossipInterval,
@@ -1314,19 +1310,28 @@ func (s *Store) startGossip() {
 		gossipFn := gossipFn // per-iteration copy
 		s.stopper.RunWorker(func() {
 			ctx := s.AnnotateCtx(context.Background())
-			// Run the first time without waiting for the Ticker and signal the WaitGroup.
-			if err := gossipFn.fn(ctx); err != nil {
-				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-			}
-			s.initComplete.Done()
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
-			for {
+			for first := true; ; {
+				// Retry in a backoff loop until gossipFn succeeds.
+				retryOptions := base.DefaultRetryOptions()
+				retryOptions.Closer = s.stopper.ShouldStop()
+				for loop := retry.Start(retryOptions); loop.Next(); {
+					if err := gossipFn.fn(ctx); err != nil {
+						log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+						continue
+					}
+					break
+				}
+				if first {
+					s.initComplete.Done()
+					first = false
+					if s.cfg.TestingKnobs.DisablePeriodicGossips {
+						return
+					}
+				}
 				select {
 				case <-ticker.C:
-					if err := gossipFn.fn(ctx); err != nil {
-						log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-					}
 				case <-s.stopper.ShouldStop():
 					return
 				}
@@ -1364,11 +1369,9 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 // span and acquires the range lease, which in turn triggers a system
 // data gossip function (e.g. Replica.maybeGossipSystemConfig or
 // Replica.maybeGossipNodeLiveness).
-func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) error {
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
-		return nil
-	}
-
+func (s *Store) maybeGossipSystemData(
+	ctx context.Context, span roachpb.Span, gossipFn func(*Replica, context.Context) error,
+) error {
 	repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
 	if repl == nil {
 		// This store has no range with this configuration.
@@ -1378,8 +1381,12 @@ func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) er
 	// gossip. If an unexpected error occurs (i.e. nobody else seems to
 	// have an active lease but we still failed to obtain it), return
 	// that error.
-	if _, pErr := repl.getLeaseForGossip(ctx); pErr != nil {
+	hasLease, pErr := repl.getLeaseForGossip(ctx)
+	if pErr != nil {
 		return pErr.GoError()
+	}
+	if hasLease {
+		return gossipFn(repl, ctx)
 	}
 	return nil
 }

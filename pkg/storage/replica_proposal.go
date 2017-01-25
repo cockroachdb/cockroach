@@ -17,12 +17,10 @@
 package storage
 
 import (
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -432,23 +430,6 @@ func (r *Replica) leasePostApply(
 		newLease.OwnedBy(r.store.StoreID())) {
 		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
 	}
-
-	// Potentially re-gossip if the range contains system data (e.g.
-	// system config or node liveness) and the lease is changing hands
-	// or this is the first time that either system data has been
-	// gossiped.
-	if iAmTheLeaseHolder {
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedSystemConfig, 0, 1) {
-			if err := r.maybeGossipSystemConfig(ctx); err != nil {
-				log.Error(ctx, err)
-			}
-		}
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedNodeLiveness, 0, 1) {
-			if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Error(ctx, err)
-			}
-		}
-	}
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership
@@ -723,6 +704,12 @@ func (r *Replica) handleLocalEvalResult(
 		}
 		lResult.maybeGossipSystemConfig = false
 	}
+	if lResult.maybeGossipNodeLiveness != nil {
+		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
+			log.Error(ctx, err)
+		}
+		lResult.maybeGossipNodeLiveness = nil
+	}
 
 	if originReplica.StoreID == r.store.StoreID() {
 		if lResult.leaseMetricsResult != nil {
@@ -733,16 +720,10 @@ func (r *Replica) handleLocalEvalResult(
 				r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
 			}
 		}
-		if lResult.maybeGossipNodeLiveness != nil {
-			if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
-				log.Error(ctx, err)
-			}
-		}
 	}
 	// Satisfy the assertions for all of the items processed only on the
 	// proposer (the block just above).
 	lResult.leaseMetricsResult = nil
-	lResult.maybeGossipNodeLiveness = nil
 
 	if (lResult != LocalEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, LocalEvalResult{}))

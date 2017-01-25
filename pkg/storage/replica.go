@@ -4410,8 +4410,7 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	for _, kv := range kvs {
 		var liveness, exLiveness Liveness
 		if err := kv.Value.GetProto(&liveness); err != nil {
-			log.Errorf(ctx, "failed to unmarshal liveness value %s: %s", kv.Key, err)
-			continue
+			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
 		}
 		key := gossip.MakeNodeLivenessKey(liveness.NodeID)
 		// Look up liveness from gossip; skip gossiping anew if unchanged.
@@ -4421,8 +4420,7 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 			}
 		}
 		if err := r.store.Gossip().AddInfoProto(key, &liveness, 0); err != nil {
-			log.Errorf(ctx, "failed to gossip node liveness (%+v): %s", liveness, err)
-			continue
+			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", liveness)
 		}
 	}
 	return nil
