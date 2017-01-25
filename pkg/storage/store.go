@@ -1314,19 +1314,25 @@ func (s *Store) startGossip() {
 		gossipFn := gossipFn // per-iteration copy
 		s.stopper.RunWorker(func() {
 			ctx := s.AnnotateCtx(context.Background())
-			// Run the first time without waiting for the Ticker and signal the WaitGroup.
-			if err := gossipFn.fn(ctx); err != nil {
-				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-			}
-			s.initComplete.Done()
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
-			for {
+			for first := true; ; {
+				// Retry in a backoff loop until gossipFn succeeds.
+				retryOptions := base.DefaultRetryOptions()
+				retryOptions.Closer = s.stopper.ShouldStop()
+				for loop := retry.Start(retryOptions); loop.Next(); {
+					if err := gossipFn.fn(ctx); err != nil {
+						log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+						continue
+					}
+					break
+				}
+				if first {
+					s.initComplete.Done()
+					first = false
+				}
 				select {
 				case <-ticker.C:
-					if err := gossipFn.fn(ctx); err != nil {
-						log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-					}
 				case <-s.stopper.ShouldStop():
 					return
 				}
