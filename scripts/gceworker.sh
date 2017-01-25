@@ -4,7 +4,6 @@ set -euo pipefail
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
-GOVERSION=${GOVERSION-1.7.4}
 NAME="${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}"
 
 case ${1-} in
@@ -24,7 +23,7 @@ case ${1-} in
     "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${NAME}" --command=true
 
     gcloud compute copy-files "$(dirname "${0}")/../build/bootstrap" "${NAME}:bootstrap"
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.

@@ -11,8 +11,7 @@ LOCATION="${LOCATION-eastus}"
 MACHINE_SIZE="${MACHINE_SIZE-Standard_F16}"
 USER="${USER-$(id -un)}"
 CLUSTER="azworker-${USER}"
-GOVERSION=${GOVERSION-1.7.4}
-NAME="${AZWORKER_NAME-${CLUSTER}-azworker$(echo "${GOVERSION}" | tr -d '.')}"
+NAME="${AZWORKER_NAME-${CLUSTER}-azworker}"
 
 # Names for various resources just reuse cluster/vm name depending on scope.
 RG="${CLUSTER}"
@@ -52,7 +51,7 @@ case ${1-} in
     "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${FQDN}" true
 
     rsync -az "$(dirname "${0}")/../build/bootstrap/" "${FQDN}:bootstrap/"
-    ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
+    ssh -A "${FQDN}" ./bootstrap/bootstrap-debian.sh
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
     # halts the VM, but halting the VM doesn't stop billing. The VM
@@ -74,6 +73,7 @@ case ${1-} in
     ;;
     ssh)
     shift
+    # shellcheck disable=SC2029
     ssh -A "${FQDN}" -- "$@"
     ;;
     *)
