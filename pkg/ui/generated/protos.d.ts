@@ -6138,6 +6138,15 @@ getDistribution?() : string;
 
 
 
+type?: string;
+		
+
+getType?() : string;
+		setType?(type : string): void;
+		
+
+
+
 dependencies?: string;
 		
 
