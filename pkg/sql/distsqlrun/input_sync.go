@@ -165,6 +165,22 @@ func (s *orderedSynchronizer) NextRow() (sqlbase.EncDatumRow, error) {
 	return s.sources[s.heap[0]].row, nil
 }
 
+// ConsumerDone is part of the RowSource interface.
+func (s *orderedSynchronizer) ConsumerDone() {
+	if !s.initialized {
+		for i := range s.sources {
+			s.sources[i].src.ConsumerDone()
+		}
+	} else {
+		// The sources that are not in the heap have been consumed already. It would
+		// be ok to call ConsumerDone() on them too, but avoiding the call may be a
+		// bit faster (in most cases there should be no sources left).
+		for _, sIdx := range s.heap {
+			s.sources[sIdx].src.ConsumerDone()
+		}
+	}
+}
+
 func makeOrderedSync(ordering sqlbase.ColumnOrdering, sources []RowSource) (RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))

@@ -70,6 +70,8 @@ func (d *distinct) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting distinct")
 	}
 
+	defer d.input.ConsumerDone()
+
 	var scratch []byte
 	for {
 		row, err := d.input.NextRow()
