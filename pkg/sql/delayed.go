@@ -30,8 +30,6 @@ type delayedNode struct {
 
 type nodeConstructor func(p *planner) (planNode, error)
 
-func (d *delayedNode) SetLimitHint(_ int64, _ bool) {}
-
 func (d *delayedNode) Close() {
 	if d.plan != nil {
 		d.plan.Close()

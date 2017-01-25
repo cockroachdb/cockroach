@@ -19,7 +19,7 @@ package sql
 import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // optimizePlan transforms the query plan into its final form.  This
-// includes calling expandPlan().  The SQL "prepare" phase, as well as
+// includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
 func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
@@ -64,6 +64,23 @@ var _ planObserver = &subqueryInitializer{}
 // subqueryNode implements the planObserver interface.
 func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 	if sq.plan != nil && !sq.expanded {
+		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
+			numRows := parser.DInt(1)
+			if sq.execMode == execModeOneRow {
+				// When using a sub-query in a scalar context, we must
+				// appropriately reject sub-queries that return more than 1
+				// row.
+				numRows = 2
+			}
+
+			top := &selectTopNode{
+				source: sq.plan,
+				limit:  &limitNode{p: i.p, countExpr: parser.NewDInt(numRows)},
+			}
+			top.limit.top = top
+			sq.plan = top
+		}
+
 		needed := make([]bool, len(sq.plan.Columns()))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.
@@ -71,6 +88,7 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 				needed[i] = true
 			}
 		}
+
 		var err error
 		sq.plan, err = i.p.optimizePlan(sq.plan, needed)
 		if err != nil {

@@ -45,7 +45,8 @@ EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
 ----
 0  split
 0           subqueries  1
-1  nullrow
+1  limit
+2  nullrow
 
 statement ok
 ALTER TABLE abc SPLIT AT ((SELECT 1))
@@ -68,6 +69,15 @@ SELECT (SELECT * FROM abc)
 
 query error more than one row returned by a subquery used as an expression
 SELECT (SELECT a FROM abc)
+
+query ITTT
+EXPLAIN SELECT EXISTS (SELECT a FROM abc)
+----
+-1           subqueries  1
+0   limit
+1   scan
+1            table       abc@primary
+0   nullrow
 
 query I
 SELECT (SELECT a FROM abc WHERE false)
