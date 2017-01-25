@@ -26,7 +26,7 @@ imports:
 - name: github.com/cenk/backoff
   version: b02f2bbce11d7ea6b97f282ef1771b0fe2f65ef3
 - name: github.com/chzyer/readline
-  version: c914be64f07d9998f52bf0d598ec26d457168c0f
+  version: eef24db1d59cac55d773312ab6efe1890187f2de
 - name: github.com/client9/misspell
   version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
   subpackages:
