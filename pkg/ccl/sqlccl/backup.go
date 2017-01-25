@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -587,4 +588,78 @@ func MakeRekeyMVCCKeyValFunc(
 		}
 		return f(kv)
 	}
+}
+
+func backupPlanHook(
+	baseCtx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+) (func() ([]parser.DTuple, error), sql.ResultColumns, error) {
+	backup, ok := stmt.(*parser.Backup)
+	if !ok {
+		return nil, nil, nil
+	}
+	header := sql.ResultColumns{
+		{Name: "basePath", Typ: parser.TypeString},
+		{Name: "startTs", Typ: parser.TypeString},
+		{Name: "endTs", Typ: parser.TypeString},
+		{Name: "dataSize", Typ: parser.TypeInt},
+	}
+	return func() ([]parser.DTuple, error) {
+		// TODO(dan): Move this span into sql.
+		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
+		defer tracing.FinishSpan(span)
+
+		startTime := hlc.ZeroTimestamp
+		if backup.IncrementalFrom != nil {
+			return nil, errors.Errorf("INCREMENTAL FROM is not yet supported")
+		}
+		// TODO(dan): Don't ignore the database named passed in.
+		endTime := cfg.Clock.Now()
+		desc, err := Backup(ctx, *cfg.DB, backup.To, endTime)
+		if err != nil {
+			return nil, err
+		}
+		ret := []parser.DTuple{{
+			parser.NewDString(backup.To),
+			parser.NewDString(startTime.String()),
+			parser.NewDString(endTime.String()),
+			parser.NewDInt(parser.DInt(desc.DataSize)),
+		}}
+		return ret, nil
+	}, header, nil
+}
+
+func restorePlanHook(
+	baseCtx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+) (func() ([]parser.DTuple, error), sql.ResultColumns, error) {
+	restore, ok := stmt.(*parser.Restore)
+	if !ok {
+		return nil, nil, nil
+	}
+	return func() ([]parser.DTuple, error) {
+		// TODO(dan): Move this span into sql.
+		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
+		defer tracing.FinishSpan(span)
+
+		// TODO(dan): To keep PRs more manageable, this only allows the previous
+		// behavior of one database. Support all the various options this syntax
+		// allows.
+		if len(restore.Targets.Databases) != 1 || len(restore.Targets.Tables) != 0 {
+			targets := parser.AsString(restore.Targets)
+			return nil, errors.Errorf("only one DATABASE is currently supported, got: %q", targets)
+		}
+		table := parser.TableName{DatabaseName: restore.Targets.Databases[0], TableName: "*"}
+
+		if len(restore.From) != 1 {
+			return nil, errors.Errorf("only one FROM is currently supported, got: %q", restore.From)
+		}
+		from := restore.From[0]
+
+		_, err := Restore(ctx, *cfg.DB, from, table)
+		return nil, err
+	}, nil, nil
+}
+
+func init() {
+	sql.AddPlanHook(backupPlanHook)
+	sql.AddPlanHook(restorePlanHook)
 }
