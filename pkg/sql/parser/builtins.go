@@ -1484,7 +1484,7 @@ var Builtins = map[string][]Builtin{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_catalog.pg_backend_pid": {
 		Builtin{
-			Types:      NamedArgTypes{},
+			Types:      ArgTypes{},
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
 				return NewDInt(-1), nil
