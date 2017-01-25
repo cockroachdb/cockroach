@@ -4,9 +4,8 @@ set -euo pipefail
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
-GOVERSION=${GOVERSION-1.7.4}
 
-name=${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}
+name=${GCEWORKER_NAME-gceworker}
 
 case ${1-} in
     create)
@@ -23,7 +22,7 @@ case ${1-} in
     sleep 20 # avoid SSH timeout on copy-files
 
     gcloud compute copy-files "$(dirname "${0}")" "${name}:../build/bootstrap"
-    gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
+    gcloud compute ssh "${name}" --ssh-flag="-A" --command=./bootstrap/bootstrap-debian.sh
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
