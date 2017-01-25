@@ -357,6 +357,36 @@ func TestBackupRestoreBank(t *testing.T) {
 	}
 }
 
+func TestPresplitRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, _, _, kvDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
+	defer cleanupFn()
+
+	numRangesTests := []int{0, 1, 2, 3, 4, 10}
+	for testNum, numRanges := range numRangesTests {
+		t.Run(strconv.Itoa(numRanges), func(t *testing.T) {
+			baseKey := keys.MakeTablePrefix(uint32(keys.MaxReservedDescID + testNum))
+			var splitPoints []roachpb.Key
+			for i := 0; i < numRanges; i++ {
+				key := encoding.EncodeUvarintAscending(append([]byte(nil), baseKey...), uint64(i))
+				splitPoints = append(splitPoints, key)
+			}
+			if err := presplitRanges(ctx, *kvDB, splitPoints); err != nil {
+				t.Error(err)
+			}
+			for _, splitPoint := range splitPoints {
+				// presplitRanges makes the keys into row sentinels, so we have
+				// to match that behavior.
+				splitKey := keys.MakeRowSentinelKey(splitPoint)
+				if err := kvDB.AdminSplit(ctx, splitKey); !testutils.IsError(err, "already split") {
+					t.Errorf("missing split %s: %+v", splitKey, err)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkClusterBackup(b *testing.B) {
 	defer tracing.Disable()()
 
