@@ -14,15 +14,16 @@ import (
 	"hash/crc32"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
-	"path/filepath"
+	"sort"
 	"strings"
-	"sync"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,41 +31,75 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
 const (
-	dataSSTableName      = "data.sst"
-	backupDescriptorName = "BACKUP"
+	// BackupDescriptorName is the file name used for serialized
+	// BackupDescriptor protos.
+	BackupDescriptorName = "BACKUP"
 )
 
-// AllRangeDescriptors fetches all meta2 RangeDescriptor using the given txn.
-func AllRangeDescriptors(txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
-	// TODO(dan): Iterate with some batch size.
-	rows, err := txn.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+// ReadBackupDescriptor reads and unmarshals a BackupDescriptor from given base.
+func ReadBackupDescriptor(
+	ctx context.Context, dir storageccl.ExportStorage,
+) (BackupDescriptor, error) {
+	r, err := dir.ReadFile(ctx, BackupDescriptorName)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to scan range descriptors")
+		return BackupDescriptor{}, err
 	}
+	defer r.Close()
+	descBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return BackupDescriptor{}, err
+	}
+	var backupDesc BackupDescriptor
+	if err := backupDesc.Unmarshal(descBytes); err != nil {
+		return BackupDescriptor{}, err
+	}
+	// TODO(dan): Sanity check this BackupDescriptor: non-empty EndTime,
+	// non-empty Paths, and non-overlapping Spans and keyranges in Files.
+	return backupDesc, nil
+}
 
-	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
-	for i, row := range rows {
-		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
-		}
+// ValidatePreviousBackups checks that the timestamps of previous backups are
+// consistent. The most recently backed-up time is returned.
+//
+// TODO(dan): This should call into restoreTablesRequests instead to get the
+// full validation logic.
+func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp, error) {
+	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
+		// Full backup.
+		return hlc.ZeroTimestamp, nil
 	}
-	return rangeDescs, nil
+	var endTime hlc.Timestamp
+	for _, uri := range uris {
+		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
+		if err != nil {
+			return hlc.ZeroTimestamp, err
+		}
+		backupDesc, err := ReadBackupDescriptor(ctx, dir)
+		if err != nil {
+			return hlc.ZeroTimestamp, err
+		}
+		// TODO(dan): This check assumes that every backup is of the entire
+		// database, which is stricter than it needs to be.
+		if backupDesc.StartTime != endTime {
+			return hlc.ZeroTimestamp, errors.Errorf("missing backup between %s and %s in %s",
+				endTime, backupDesc.StartTime, dir)
+		}
+		endTime = backupDesc.EndTime
+	}
+	return endTime, nil
 }
 
 func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
-	// TODO(dan): Iterate with some batch size.
 	rows, err := txn.Scan(startKey, endKey, 0)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to scan SQL descriptors")
@@ -79,41 +114,44 @@ func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	return sqlDescs, nil
 }
 
+type backupFileDescriptors []BackupDescriptor_File
+
+func (r backupFileDescriptors) Len() int      { return len(r) }
+func (r backupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r backupFileDescriptors) Less(i, j int) bool {
+	if cmp := bytes.Compare(r[i].Span.Key, r[j].Span.Key); cmp != 0 {
+		return cmp < 0
+	}
+	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
+}
+
 // Backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
-// - /<base>/<node_id>/<key_range>/data.sst
-// - <base> is given by the user and is expected to eventually be cloud storage
-// - The <key_range>s are non-overlapping.
-//
-// TODO(dan): Bikeshed this directory structure and naming.
+// - <dir>/<unique_int>.sst
+// - <dir> is given by the user and may be cloud storage
+// - Each file contains data for a key range that doesn't overlap with any other
+//   file.
 func Backup(
-	ctx context.Context, db client.DB, base string, endTime hlc.Timestamp,
-) (desc BackupDescriptor, retErr error) {
-	// TODO(dan): Optionally take a start time for an incremental backup.
-	// TODO(dan): Take a uri for the path prefix and support various cloud storages.
+	ctx context.Context, db client.DB, target string, startTime hlc.Timestamp, endTime hlc.Timestamp,
+) (BackupDescriptor, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
-	var rangeDescs []roachpb.RangeDescriptor
 	var sqlDescs []sqlbase.Descriptor
 
-	opt := client.TxnExecOptions{
-		AutoRetry:  true,
-		AutoCommit: true,
+	exportStore, err := storageccl.ExportStorageFromURI(ctx, target)
+	if err != nil {
+		return BackupDescriptor{}, err
 	}
+	defer exportStore.Close()
 
 	{
-		// TODO(dan): Pick an appropriate end time and set it in the txn.
 		txn := client.NewTxn(ctx, db)
+		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
 			sql.SetTxnTimestamps(txn, endTime)
-
-			rangeDescs, err = AllRangeDescriptors(txn)
-			if err != nil {
-				return err
-			}
 			sqlDescs, err = allSQLDescriptors(txn)
 			return err
 		})
@@ -122,214 +160,290 @@ func Backup(
 		}
 	}
 
-	var dataSize int64
-	backupDescs := make([]BackupRangeDescriptor, len(rangeDescs))
-	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
-	for i, rangeDesc := range rangeDescs {
-		backupDescs[i] = BackupRangeDescriptor{
-			StartKey:  rangeDesc.StartKey.AsRawKey(),
-			EndKey:    rangeDesc.EndKey.AsRawKey(),
-			StartTime: hlc.Timestamp{},
-		}
-		if backupDescs[i].StartKey.Compare(keys.LocalMax) < 0 {
-			backupDescs[i].StartKey = keys.LocalMax
-		}
+	// Backup users, descriptors, and the entire keyspace for user data.
+	// TODO(dan): Tighten this up to only the data for the tables requested in
+	// the BACKUP request.
+	descriptorStartKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	usersStartKey := roachpb.Key(keys.MakeTablePrefix(keys.UsersTableID))
+	requests := []roachpb.Span{
+		{
+			Key:    descriptorStartKey,
+			EndKey: descriptorStartKey.PrefixEnd(),
+		},
+		{
+			Key:    usersStartKey,
+			EndKey: usersStartKey.PrefixEnd(),
+		},
+		// TODO(dan): Only backup the data in the requested database(s).
+		{
+			Key:    keys.UserTableDataMin,
+			EndKey: keys.MaxKey,
+		},
+	}
 
-		nodeID := 0
-		dir := filepath.Join(base, fmt.Sprintf("%03d", nodeID))
-		dir = filepath.Join(dir, fmt.Sprintf("%x-%x", rangeDesc.StartKey, rangeDesc.EndKey))
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return BackupDescriptor{}, err
-		}
-
-		var kvs []client.KeyValue
-
-		txn := client.NewTxn(ctx, db)
-		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
-			var err error
-			sql.SetTxnTimestamps(txn, endTime)
-
-			// TODO(dan): Iterate with some batch size.
-			kvs, err = txn.Scan(backupDescs[i].StartKey, backupDescs[i].EndKey, 0)
-			return err
-		})
+	desc := BackupDescriptor{StartTime: startTime, EndTime: endTime, Descriptors: sqlDescs}
+	for _, req := range requests {
+		desc.Spans = append(desc.Spans, req)
+		file, dataSize, err := export(ctx, db, startTime, endTime, req, exportStore)
 		if err != nil {
 			return BackupDescriptor{}, err
 		}
-		if len(kvs) == 0 {
+		if file.Path == "" {
 			if log.V(1) {
-				log.Infof(ctx, "skipping backup of empty range %s-%s",
-					backupDescs[i].StartKey, backupDescs[i].EndKey)
+				log.Infof(ctx, "skipped backup of empty range %s", file.Span)
 			}
 			continue
 		}
-
-		backupDescs[i].Path = filepath.Join(dir, dataSSTableName)
-
-		writeSST := func() (writeSSTErr error) {
-			// This is a function so the defered Close (and resultant flush) is
-			// called before the checksum is computed.
-			sst := engine.MakeRocksDBSstFileWriter()
-			if err := sst.Open(backupDescs[i].Path); err != nil {
-				return err
-			}
-			defer func() {
-				if closeErr := sst.Close(); closeErr != nil && writeSSTErr == nil {
-					writeSSTErr = closeErr
-				}
-			}()
-			// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
-			for _, kv := range kvs {
-				mvccKV := engine.MVCCKeyValue{
-					Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
-					Value: kv.Value.RawBytes,
-				}
-				if err := sst.Add(mvccKV); err != nil {
-					return err
-				}
-			}
-			dataSize += sst.DataSize
-			return nil
-		}
-		if err := writeSST(); err != nil {
-			return BackupDescriptor{}, err
-		}
-
-		crc.Reset()
-		f, err := os.Open(backupDescs[i].Path)
-		if err != nil {
-			return BackupDescriptor{}, err
-		}
-		defer f.Close()
-		if _, err := io.Copy(crc, f); err != nil {
-			return BackupDescriptor{}, err
-		}
-		backupDescs[i].CRC = crc.Sum32()
+		desc.Files = append(desc.Files, file)
+		desc.DataSize += dataSize
 	}
-
-	desc = BackupDescriptor{
-		EndTime:  endTime,
-		Ranges:   backupDescs,
-		SQL:      sqlDescs,
-		DataSize: dataSize,
-	}
+	sort.Sort(backupFileDescriptors(desc.Files))
 
 	descBuf, err := desc.Marshal()
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
-	if err = ioutil.WriteFile(filepath.Join(base, backupDescriptorName), descBuf, 0600); err != nil {
+	writer, err := exportStore.PutFile(ctx, BackupDescriptorName)
+	if err != nil {
+		return BackupDescriptor{}, err
+	}
+	defer writer.Cleanup()
+	if err = ioutil.WriteFile(writer.LocalFile(), descBuf, 0600); err != nil {
+		return BackupDescriptor{}, err
+	}
+	if err := writer.Finish(); err != nil {
 		return BackupDescriptor{}, err
 	}
 
 	return desc, nil
 }
 
-// Ingest loads some data in an sstable into an empty range. Only the keys
-// between startKey and endKey are loaded. If newTableID is non-zero, every
-// row's key is rewritten to be for that table.
-func Ingest(
+// export dumps the requested kv entries into files of non-overlapping key
+// ranges in a format suitable for bulk import. Returns a descriptor of the
+// exported file and the number of exported bytes.
+func export(
 	ctx context.Context,
-	txn *client.Txn,
-	path string,
-	checksum uint32,
-	startKey, endKey roachpb.Key,
-	newTableID sqlbase.ID,
-) error {
-	// TODO(mjibson): An appropriate value for this should be determined. The
-	// current value was guessed at but appears to work well.
-	const batchSize = 10000
+	db client.DB,
+	startTime, endTime hlc.Timestamp,
+	span roachpb.Span,
+	exportStore storageccl.ExportStorage,
+) (BackupDescriptor_File, int64, error) {
+	// TODO(dan): Use the NodeID of where this came from instead of rand.Int63.
+	filename := fmt.Sprintf("%d.sst", rand.Int63())
+	writer, err := exportStore.PutFile(ctx, filename)
+	if err != nil {
+		return BackupDescriptor_File{}, 0, err
+	}
+	path := writer.LocalFile()
+	defer writer.Cleanup()
 
-	// TODO(dan): Check if the range being ingested into is empty. If newTableID
-	// is non-zero, it'll have to be derived from startKey and endKey.
+	sstWriter := engine.MakeRocksDBSstFileWriter()
+	sst := &sstWriter
+	if err := sst.Open(path); err != nil {
+		return BackupDescriptor_File{}, 0, err
+	}
+	defer func() {
+		if sst != nil {
+			if closeErr := sst.Close(); closeErr != nil {
+				log.Warningf(ctx, "could not close sst writer %s", path)
+			}
+		}
+	}()
 
+	var kvs []client.KeyValue
+
+	txn := client.NewTxn(ctx, db)
+	opt := client.TxnExecOptions{
+		AutoRetry:  true,
+		AutoCommit: true,
+	}
+	err = txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		var err error
+		sql.SetTxnTimestamps(txn, endTime)
+
+		// TODO(dan): Iterate with some batch size.
+		kvs, err = txn.Scan(span.Key, span.EndKey, 0)
+		return err
+	})
+	if err != nil {
+		return BackupDescriptor_File{}, 0, err
+	}
+	if len(kvs) == 0 {
+		// SSTables require at least one entry. It's silly to save an empty one,
+		// anyway.
+		return BackupDescriptor_File{}, 0, nil
+	}
+
+	var dataSize int64
+	for _, kv := range kvs {
+		mvccKV := engine.MVCCKeyValue{
+			Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
+			Value: kv.Value.RawBytes,
+		}
+		if log.V(3) {
+			log.Infof(ctx, "export %+v %+v", mvccKV.Key, mvccKV.Value)
+		}
+		if err := sst.Add(mvccKV); err != nil {
+			return BackupDescriptor_File{}, 0, errors.Wrapf(err, "adding key %s", mvccKV.Key)
+		}
+		dataSize += int64(len(kv.Key) + len(kv.Value.RawBytes))
+	}
+
+	if err := sst.Close(); err != nil {
+		return BackupDescriptor_File{}, 0, err
+	}
+	sst = nil
+	// The data we've written to sst isn't leaked on errors below because the
+	// deferred writer.Cleanup above removes it.
+
+	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return BackupDescriptor_File{}, 0, err
 	}
-	defer f.Close()
-	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	if _, err := io.Copy(crc, f); err != nil {
+		f.Close()
+		return BackupDescriptor_File{}, 0, err
+	}
+	f.Close()
+
+	if err := writer.Finish(); err != nil {
+		return BackupDescriptor_File{}, 0, err
+	}
+
+	res := BackupDescriptor_File{
+		Span: span,
+		Path: filename,
+		CRC:  crc.Sum32(),
+	}
+
+	return res, dataSize, nil
+}
+
+type importFile struct {
+	Path string
+	Dir  roachpb.ExportStorage
+	CRC  uint32
+}
+
+// Import loads some data in sstables into an empty range. Only the keys between
+// startKey and endKey are loaded. Every row's key is rewritten to be for
+// newTableID.
+func Import(
+	ctx context.Context,
+	db client.DB,
+	startKey, endKey roachpb.Key,
+	files []importFile,
+	kr storageccl.KeyRewriter,
+) error {
+	if log.V(1) {
+		log.Infof(ctx, "Import %s-%s (%d files)", startKey, endKey, len(files))
+	}
+	if len(files) == 0 {
 		return nil
 	}
-	if c := crc.Sum32(); c != checksum {
-		return errors.Errorf("%s: checksum mismatch got %d expected %d", path, c, checksum)
-	}
 
-	sst, err := engine.MakeRocksDBSstFileReader()
-	if err != nil {
-		return err
-	}
-	defer sst.Close()
-	if err := sst.AddFile(path); err != nil {
-		return err
-	}
+	// Arrived at by tuning and watching the effect on BenchmarkRestore.
+	const batchSizeBytes = 1000000
 
-	b := txn.NewBatch()
+	b := &client.Batch{}
 	var v roachpb.Value
-	count := 0
-	ingestFunc := func(kv engine.MVCCKeyValue) (bool, error) {
+	bytes := 0
+
+	writeBatch := func() error {
+		if err := db.Run(ctx, b); err != nil {
+			return err
+		}
+		b = &client.Batch{}
+		bytes = 0
+		return nil
+	}
+
+	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
+		var ok bool
+		kv.Key.Key, ok = kr.RewriteKey(append([]byte(nil), kv.Key.Key...))
+		if !ok {
+			// If the key rewriter didn't match this key, it's not data for the
+			// table(s) we're interested in.
+			if log.V(3) {
+				log.Infof(ctx, "skipping %s\n", kv.Key.Key)
+			}
+			return false, nil
+		}
+
+		// Rewriting the key means the checksum needs to be updated.
 		v = roachpb.Value{RawBytes: kv.Value}
 		v.ClearChecksum()
+
 		if log.V(3) {
 			log.Infof(ctx, "Put %s %s\n", kv.Key.Key, v.PrettyPrint())
 		}
-		b.Put(kv.Key.Key, &v)
-		count++
-		if count > batchSize {
-			if err := txn.Run(b); err != nil {
-				return true, err
+		b.CPut(kv.Key.Key, &v, nil)
+		bytes += len(kv.Key.Key) + len(v.RawBytes)
+		if bytes > batchSizeBytes {
+			if err := writeBatch(); err != nil {
+				return false, err
 			}
-			b = txn.NewBatch()
-			count = 0
 		}
+
 		return false, nil
 	}
-	if newTableID != 0 {
-		// MakeRekeyMVCCKeyValFunc modifies the keys, but this is safe because
-		// the one we get back from rocksDBIterator.Key is a copy (not a
-		// reference to the mmaped file.)
-		ingestFunc = MakeRekeyMVCCKeyValFunc(newTableID, ingestFunc)
-	}
+
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey}
-	if err := sst.Iterate(startKeyMVCC, endKeyMVCC, ingestFunc); err != nil {
-		return err
+	for _, file := range files {
+		if log.V(1) {
+			log.Infof(ctx, "Import %s-%s %s\n", startKey, endKey, file.Path)
+		}
+
+		dir, err := storageccl.MakeExportStorage(ctx, file.Dir)
+		if err != nil {
+			return err
+		}
+
+		localPath, err := dir.FetchFile(ctx, file.Path)
+		if err != nil {
+			return err
+		}
+
+		sst, err := engine.MakeRocksDBSstFileReader()
+		if err != nil {
+			return err
+		}
+		defer sst.Close()
+
+		// Add each file in its own sst reader because AddFile requires the
+		// affected keyrange be empty and the keys in these files might overlap.
+		// This becomes less heavyweight when we figure out how to use RocksDB's
+		// TableReader directly.
+		if err := sst.AddFile(localPath); err != nil {
+			return err
+		}
+
+		if err := sst.Iterate(startKeyMVCC, endKeyMVCC, importFunc); err != nil {
+			return err
+		}
 	}
-	return txn.Run(b)
+
+	if bytes > 0 {
+		if err := writeBatch(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-// IntersectHalfOpen returns the common range between two key intervals or
-// (nil, nil) if there is no common range. Exported for testing.
-func IntersectHalfOpen(start1, end1, start2, end2 []byte) ([]byte, []byte) {
-	if bytes.Compare(start1, end2) < 0 && bytes.Compare(start2, end1) < 0 {
-		start, end := start1, end1
-		if bytes.Compare(start1, start2) < 0 {
-			start = start2
-		}
-		if bytes.Compare(end1, end2) > 0 {
-			end = end2
-		}
-		return start, end
-	}
-	return nil, nil
-}
-
-// restoreTable inserts the given DatabaseDescriptor. If the name conflicts with
-// an existing table, the one being restored is rekeyed with a new ID and the
-// old data is deleted.
-func restoreTable(
-	ctx context.Context,
-	db client.DB,
-	database sqlbase.DatabaseDescriptor,
-	table *sqlbase.TableDescriptor,
-	ranges []BackupRangeDescriptor,
+func assertDatabasesExist(
+	txn *client.Txn,
+	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
+	tables []*sqlbase.TableDescriptor,
 ) error {
-	if log.V(1) {
-		log.Infof(ctx, "Restoring Table %q", table.Name)
-	}
+	for _, table := range tables {
+		database, ok := databasesByID[table.ParentID]
+		if !ok {
+			return errors.Errorf("no database with ID %d for table %q", table.ParentID, table.Name)
+		}
 
-	var newTableID sqlbase.ID
-	if err := db.Txn(ctx, func(txn *client.Txn) error {
 		// Make sure there's a database with a name that matches the original.
 		existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
 		if err != nil {
@@ -340,87 +454,209 @@ func restoreTable(
 			return errors.Errorf("a database named %q needs to exist to restore table %q",
 				database.Name, table.Name)
 		}
-
-		// Assign a new ID for the table. TODO(dan): For now, we're always
-		// generating a new ID, but varints get longer as they get bigger and so
-		// our keys will, too. We should someday figure out how to overwrite an
-		// existing table and steal its ID.
-		newTableID, err = sql.GenerateUniqueDescID(txn)
-		return err
-	}); err != nil {
-		return err
 	}
+	return nil
+}
 
-	// Create the iteration keys before we give the table its new ID.
-	tableStartKeyOld := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID))
-	tableEndKeyOld := tableStartKeyOld.PrefixEnd()
-
-	// This loop makes restoring multiple tables O(N*M), where N is the number
-	// of tables and M is the number of ranges. We could reduce this using an
-	// interval tree if necessary.
-	var wg sync.WaitGroup
-	result := struct {
-		syncutil.Mutex
-		firstErr error
-		numErrs  int
-	}{}
-	for _, rangeDesc := range ranges {
-		if len(rangeDesc.Path) == 0 {
-			// Empty path means empty range.
-			continue
+func newTableIDs(
+	ctx context.Context,
+	db client.DB,
+	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
+	tables []*sqlbase.TableDescriptor,
+) (map[sqlbase.ID]sqlbase.ID, error) {
+	var newTableIDs map[sqlbase.ID]sqlbase.ID
+	newTableIDsFunc := func(txn *client.Txn) error {
+		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
+		for _, table := range tables {
+			newTableID, err := sql.GenerateUniqueDescID(txn)
+			if err != nil {
+				return err
+			}
+			newTableIDs[table.ID] = newTableID
 		}
+		return nil
+	}
+	if err := db.Txn(ctx, newTableIDsFunc); err != nil {
+		return nil, err
+	}
+	return newTableIDs, nil
+}
 
-		intersectBegin, intersectEnd := IntersectHalfOpen(
-			rangeDesc.StartKey, rangeDesc.EndKey, tableStartKeyOld, tableEndKeyOld)
-		if intersectBegin != nil && intersectEnd != nil {
-			// Write the data under the new ID.
-			// TODO(dan): There's no SQL descriptors that point at this yet, so it
-			// should be possible to remove it from the one txn this is all currently
-			// run under. If we do that, make sure this data gets cleaned up on errors.
-			wg.Add(1)
-			go func(desc BackupRangeDescriptor) {
-				for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-					err := db.Txn(ctx, func(txn *client.Txn) error {
-						return Ingest(ctx, txn, desc.Path, desc.CRC, intersectBegin, intersectEnd, newTableID)
-					})
-					if _, ok := err.(*client.AutoCommitError); ok {
-						log.Errorf(ctx, "auto commit error during ingest: %s", err)
-						// TODO(dan): Ingest currently does not rely on the
-						// range being empty, but the plan is that it will. When
-						// that change happens, this will have to delete any
-						// partially ingested data or something.
-						continue
-					}
+type intervalSpan roachpb.Span
 
-					if err != nil {
-						log.Errorf(ctx, "%T %s", err, err)
-						result.Lock()
-						defer result.Unlock()
-						if result.firstErr != nil {
-							result.firstErr = err
-						}
-						result.numErrs++
-					}
-					break
-				}
-				wg.Done()
-			}(rangeDesc)
+var _ interval.Interface = intervalSpan{}
+
+// ID is part of `interval.Interface` but unused in makeImportRequests.
+func (ie intervalSpan) ID() uintptr { return 0 }
+
+// Range is part of `interval.Interface`.
+func (ie intervalSpan) Range() interval.Range {
+	return interval.Range{Start: []byte(ie.Key), End: []byte(ie.EndKey)}
+}
+
+type importEntryType int
+
+const (
+	backupSpan importEntryType = iota
+	backupFile
+	tableSpan
+	request
+)
+
+type importEntry struct {
+	roachpb.Span
+	entryType importEntryType
+
+	// Only set if entryType is backupSpan
+	backup BackupDescriptor
+
+	// Only set if entryType is backupFile
+	dir  roachpb.ExportStorage
+	file BackupDescriptor_File
+
+	// Only set if entryType is request
+	files []importFile
+}
+
+// makeImportRequests pivots the backups, which are grouped by time, into
+// requests for import, which are grouped by keyrange.
+//
+// The core logic of this is in OverlapCoveringMerge, which accepts sets of
+// non-overlapping key ranges (aka coverings) each with a payload, and returns
+// them aligned with the payloads in the same order as in the input.
+//
+// Example (input):
+// - [A, C) backup t0 to t1 -> /file1
+// - [C, D) backup t0 to t1 -> /file2
+// - [A, B) backup t1 to t2 -> /file3
+// - [B, C) backup t1 to t2 -> /file4
+// - [C, D) backup t1 to t2 -> /file5
+// - [B, D) requested table data to be restored
+//
+// Example (output):
+// - [A, B) -> /file1, /file3
+// - [B, C) -> /file1, /file4, requested (note that file1 was split into two ranges)
+// - [C, D) -> /file2, /file5, requested
+//
+// This would be turned into two Import requests, one restoring [B, C) out of
+// /file1 and /file3, the other restoring [C, D) out of /file2 and /file5.
+// Nothing is restored out of /file3 and only part of /file1 is used.
+//
+// NB: All grouping operates in the pre-rewrite keyspace, meaning the keyranges
+// as they were backed up, not as they're being restored.
+func makeImportRequests(
+	tables []*sqlbase.TableDescriptor, backups []BackupDescriptor,
+) ([]importEntry, error) {
+	// Put the prefix begin to prefix end for every index of every table being
+	// restored into an interval tree to figure out which keyranges of the
+	// backups we need to restore. They only overlap if any of them are
+	// interleaved.
+	sstIntervalTree := interval.Tree{Overlapper: interval.Range.OverlapExclusive}
+	for _, table := range tables {
+		for _, index := range table.AllNonDropIndexes() {
+			indexSSTStartKey := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, index.ID))
+			indexSSTEndKey := indexSSTStartKey.PrefixEnd()
+			ie := intervalSpan(roachpb.Span{
+				Key:    []byte(indexSSTStartKey),
+				EndKey: []byte(indexSSTEndKey),
+			})
+			if err := sstIntervalTree.Insert(ie, false); err != nil {
+				return nil, err
+			}
 		}
 	}
-	wg.Wait()
-	// All concurrent accesses have finished, we don't need the lock anymore.
-	if result.firstErr != nil {
-		// This leaves the data that did get imported in case the user wants to
-		// retry.
-		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return errors.Wrapf(result.firstErr, "ingest encountered %d errors", result.numErrs)
-	}
 
-	table.ID = newTableID
-	return db.Txn(ctx, func(txn *client.Txn) error {
-		// Pass the descriptors by value to keep this idempotent.
-		return restoreTableDesc(ctx, txn, database, *table)
+	// Now put the merged table data covering first into the
+	// OverlapCoveringMerge input.
+	var tableSpanCovering intervalccl.Covering
+	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
+		tableSpanCovering = append(tableSpanCovering, intervalccl.Range{
+			Start: r.Range().Start,
+			End:   r.Range().End,
+			Payload: importEntry{
+				Span:      roachpb.Span{Key: []byte(r.Range().Start), EndKey: []byte(r.Range().End)},
+				entryType: tableSpan,
+			},
+		})
+		return false
 	})
+	backupCoverings := []intervalccl.Covering{tableSpanCovering}
+
+	// Iterate over backups creating two coverings for each. First the spans
+	// that were backed up, then the files in the backup. The latter is a subset
+	// when some of the keyranges in the former didn't change since the previous
+	// backup. These alternate (backup1 spans, backup1 files, backup2 spans,
+	// backup2 files) so they will retain that alternation in the output of
+	// OverlapCoveringMerge.
+	for _, b := range backups {
+		var backupSpanCovering intervalccl.Covering
+		for _, s := range b.Spans {
+			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
+				Start:   s.Key,
+				End:     s.EndKey,
+				Payload: importEntry{Span: s, entryType: backupSpan, backup: b},
+			})
+		}
+		backupCoverings = append(backupCoverings, backupSpanCovering)
+		var backupFileCovering intervalccl.Covering
+		for _, f := range b.Files {
+			backupFileCovering = append(backupFileCovering, intervalccl.Range{
+				Start: f.Span.Key,
+				End:   f.Span.EndKey,
+				Payload: importEntry{
+					Span:      f.Span,
+					entryType: backupFile,
+					dir:       b.Dir,
+					file:      f,
+				},
+			})
+		}
+		backupCoverings = append(backupCoverings, backupFileCovering)
+	}
+
+	// Group ranges covered by backups with ones needed to restore the selected
+	// tables. Note that this breaks intervals up as necessary to align them.
+	// See the function godoc for details.
+	importRanges := intervalccl.OverlapCoveringMerge(backupCoverings)
+
+	// Translate the output of OverlapCoveringMerge into requests.
+	var requestEntries []importEntry
+	for _, importRange := range importRanges {
+		needed := false
+		ts := hlc.ZeroTimestamp
+		var files []importFile
+		payloads := importRange.Payload.([]interface{})
+		for _, p := range payloads {
+			ie := p.(importEntry)
+			switch ie.entryType {
+			case tableSpan:
+				needed = true
+			case backupSpan:
+				if !ts.Equal(ie.backup.StartTime) {
+					return nil, errors.Errorf("mismatched start time %s vs %s", ts, ie.backup.StartTime)
+				}
+				ts = ie.backup.EndTime
+			case backupFile:
+				if len(ie.file.Path) > 0 {
+					files = append(files, importFile{
+						Dir:  ie.dir,
+						Path: ie.file.Path,
+						CRC:  ie.file.CRC,
+					})
+				}
+			}
+		}
+		if needed {
+			// If needed is false, we have data backed up that is not necessary
+			// for this restore. Skip it.
+			requestEntries = append(requestEntries, importEntry{
+				Span:      roachpb.Span{Key: importRange.Start, EndKey: importRange.End},
+				entryType: request,
+				files:     files,
+			})
+		}
+	}
+	return requestEntries, nil
 }
 
 // presplitRanges concurrently creates the splits described by `input`. It does
@@ -482,6 +718,78 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 	return wg.FirstError()
 }
 
+func restoreTableDescs(
+	ctx context.Context,
+	db client.DB,
+	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
+	tables []*sqlbase.TableDescriptor,
+	newTableIDs map[sqlbase.ID]sqlbase.ID,
+) ([]sqlbase.TableDescriptor, error) {
+	newTables := make([]sqlbase.TableDescriptor, len(tables))
+	restoreTableDescsFunc := func(txn *client.Txn) error {
+		// Recheck that the necessary databases exist. This was checked at the
+		// beginning, but check again in case one was deleted or renamed during
+		// the data import.
+		if err := assertDatabasesExist(txn, databasesByID, tables); err != nil {
+			return err
+		}
+
+		for i := range tables {
+			newTables[i] = *tables[i]
+			newTableID, ok := newTableIDs[newTables[i].ID]
+			if !ok {
+				return errors.Errorf("missing table ID for %d %q", newTables[i].ID, newTables[i].Name)
+			}
+			newTables[i].ID = newTableID
+
+			if err := newTables[i].ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+				// TODO(dan): We need this sort of logic for FKs, too.
+
+				for j := range index.Interleave.Ancestors {
+					newTableID, ok = newTableIDs[index.Interleave.Ancestors[j].TableID]
+					if !ok {
+						return errors.Errorf("not restoring %d", index.Interleave.Ancestors[j].TableID)
+					}
+					index.Interleave.Ancestors[j].TableID = newTableID
+				}
+
+				oldInterleavedBy := index.InterleavedBy
+				index.InterleavedBy = nil
+				for _, ib := range oldInterleavedBy {
+					if newTableID, ok = newTableIDs[ib.Table]; ok {
+						newIB := ib
+						newIB.Table = newTableID
+						index.InterleavedBy = append(index.InterleavedBy, newIB)
+					}
+				}
+
+				return nil
+			}); err != nil {
+				return err
+			}
+			database, ok := databasesByID[newTables[i].ParentID]
+			if !ok {
+				return errors.Errorf("no database with ID %d", newTables[i].ParentID)
+			}
+
+			// Pass the descriptors by value to keep this idempotent.
+			if err := restoreTableDesc(ctx, txn, *database, newTables[i]); err != nil {
+				return err
+			}
+		}
+		for _, newTable := range newTables {
+			if err := newTable.Validate(txn); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := db.Txn(ctx, restoreTableDescsFunc); err != nil {
+		return nil, err
+	}
+	return newTables, nil
+}
+
 func restoreTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
@@ -533,10 +841,6 @@ func restoreTableDesc(
 	} else {
 		existingIDKV.Value.ClearChecksum()
 		b.CPut(tableIDKey, table.ID, existingIDKV.Value)
-		// TODO(dan): This doesn't work for interleaved tables. Fix it when we
-		// fix the empty range interleaved table TODO below.
-		existingDataPrefix := roachpb.Key(keys.MakeTablePrefix(uint32(existingTable.ID)))
-		b.DelRange(existingDataPrefix, existingDataPrefix.PrefixEnd(), false)
 		zoneKey, _, descKey := sql.GetKeysForTableDescriptor(existingTable)
 		// Delete the desc and zone entries. Leave the name because the new
 		// table is using it.
@@ -546,109 +850,174 @@ func restoreTableDesc(
 	return txn.Run(b)
 }
 
+// userTablesAndDBsMatchingName returns the Descriptors in `descs` that match
+// `name`. Databases are returned in a map that is keyed by ID, tables are
+// returned in a slice.
 func userTablesAndDBsMatchingName(
 	descs []sqlbase.Descriptor, name parser.TableName,
-) ([]sqlbase.Descriptor, error) {
+) (map[sqlbase.ID]*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
 	tableName := name.TableName.Normalize()
 	dbName := name.DatabaseName.Normalize()
 
-	matches := make([]sqlbase.Descriptor, 0, len(descs))
-	dbIDsToName := make(map[sqlbase.ID]string)
+	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor, len(descs))
+	tables := make([]*sqlbase.TableDescriptor, 0, len(descs))
 	for _, desc := range descs {
 		if db := desc.GetDatabase(); db != nil {
 			if db.ID == keys.SystemDatabaseID {
 				continue // Not a user database.
 			}
 			if n := parser.Name(db.Name).Normalize(); dbName == "*" || n == dbName {
-				matches = append(matches, desc)
-				dbIDsToName[db.ID] = n
+				databasesByID[db.ID] = db
 			}
 			continue
 		}
 	}
 	for _, desc := range descs {
 		if table := desc.GetTable(); table != nil {
-			if _, ok := dbIDsToName[table.ParentID]; !ok {
+			if _, ok := databasesByID[table.ParentID]; !ok {
 				continue
 			}
 			if tableName == "*" || parser.Name(table.Name).Normalize() == tableName {
-				matches = append(matches, desc)
+				tables = append(tables, table)
 			}
 		}
 	}
-	return matches, nil
+	return databasesByID, tables, nil
 }
 
-// Restore imports a SQL table (or tables) from a set of non-overlapping sstable
+// Restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
 func Restore(
-	ctx context.Context, db client.DB, base string, table parser.TableName,
+	ctx context.Context, db client.DB, uris []string, table parser.TableName,
 ) ([]sqlbase.TableDescriptor, error) {
-	// TODO(dan): It's currently impossible to restore two interleaved tables
-	// because one of them won't be to an empty range.
-
-	descBytes, err := ioutil.ReadFile(filepath.Join(base, backupDescriptorName))
-	if err != nil {
-		return nil, err
-	}
-	var backupDesc BackupDescriptor
-	if err := backupDesc.Unmarshal(descBytes); err != nil {
-		return nil, err
-	}
-
-	matches, err := userTablesAndDBsMatchingName(backupDesc.SQL, table)
-	if err != nil {
-		return nil, err
-	}
-	if len(matches) == 0 {
-		return nil, errors.Errorf("no tables found: %s", &table)
-	}
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
-	for _, desc := range matches {
-		if db := desc.GetDatabase(); db != nil {
-			databasesByID[db.ID] = db
-		}
-	}
-
-	var restored []sqlbase.TableDescriptor
-	for _, desc := range matches {
-		if tableOld := desc.GetTable(); tableOld != nil {
-			table := *tableOld
-			database, ok := databasesByID[table.ParentID]
-			if !ok {
-				return nil, errors.Wrapf(err, "no database with ID %d", table.ParentID)
-			}
-			if err := restoreTable(ctx, db, *database, &table, backupDesc.Ranges); err != nil {
-				return nil, err
-			}
-			restored = append(restored, table)
-		}
-	}
-	return restored, err
-}
-
-// MakeRekeyMVCCKeyValFunc takes an iterator function for MVCCKeyValues and
-// returns a new iterator function where the keys are rewritten inline to the
-// have the given table ID.
-func MakeRekeyMVCCKeyValFunc(
-	newTableID sqlbase.ID, f func(kv engine.MVCCKeyValue) (bool, error),
-) func(engine.MVCCKeyValue) (bool, error) {
-	encodedNewTableID := encoding.EncodeUvarintAscending(nil, uint64(newTableID))
-	return func(kv engine.MVCCKeyValue) (bool, error) {
-		if encoding.PeekType(kv.Key.Key) != encoding.Int {
-			return false, errors.Errorf("unable to decode table key: %s", kv.Key.Key)
-		}
-		existingTableIDLen, err := encoding.PeekLength(kv.Key.Key)
+	backupDescs := make([]BackupDescriptor, len(uris))
+	for i, uri := range uris {
+		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
 		if err != nil {
-			return false, err
+			return nil, errors.Wrapf(err, "failed to create export storage handler from %q", uri)
 		}
-		if existingTableIDLen == len(encodedNewTableID) {
-			copy(kv.Key.Key, encodedNewTableID)
-		} else {
-			kv.Key.Key = append(encodedNewTableID, kv.Key.Key[existingTableIDLen:]...)
+		backupDescs[i], err = ReadBackupDescriptor(ctx, dir)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read backup descriptor")
 		}
-		return f(kv)
+		backupDescs[i].Dir = dir.Conf()
 	}
+	if len(backupDescs) == 0 {
+		return nil, errors.Errorf("no backups found")
+	}
+	lastBackupDesc := backupDescs[len(backupDescs)-1]
+
+	// TODO(dan): The descriptors are also stored in the backup, use those
+	// instead and stop saving them in the BackupDescriptor.
+	databasesByID, tables, err := userTablesAndDBsMatchingName(lastBackupDesc.Descriptors, table)
+	if err != nil {
+		return nil, err
+	}
+	if len(tables) == 0 {
+		return nil, errors.Errorf("no tables found: %s", table.String())
+	}
+
+	// Fail fast if the necessary databases don't exist since the below logic
+	// leaks table IDs when Restore fails.
+	if err := db.Txn(ctx, func(txn *client.Txn) error {
+		return assertDatabasesExist(txn, databasesByID, tables)
+	}); err != nil {
+		return nil, err
+	}
+
+	// Assign a new ID for each table. This will leak if Restore later returns
+	// an error, but we can't use a KV transaction as restarts would be terrible
+	// (and our bulk import primitives are non-transactional).
+	//
+	// TODO(dan): For now, we're always generating a new ID, but varints get
+	// longer as they get bigger and so our keys will, too. We should someday
+	// figure out how to reclaim ids.
+	newTableIDs, err := newTableIDs(ctx, db, databasesByID, tables)
+	if err != nil {
+		return nil, errors.Wrapf(err, "reserving %d new table IDs for restore", len(tables))
+	}
+	kr, err := MakeKeyRewriterForNewTableIDs(tables, newTableIDs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "creating key rewriter for %d tables", len(tables))
+	}
+
+	// Verify that for any interleaved index being restored, the interleave
+	// parent is also being restored. Otherwise, the interleave entries in the
+	// restored IndexDescriptors won't have anything to point to.
+	// TODO(dan): It seems like this restriction could be lifted by restoring
+	// stub TableDescriptors for the missing interleave parents.
+	for _, table := range tables {
+		for _, index := range table.AllNonDropIndexes() {
+			for _, a := range index.Interleave.Ancestors {
+				if _, ok := newTableIDs[a.TableID]; !ok {
+					return nil, errors.Errorf(
+						"cannot restore table %q without interleave parent table %d",
+						table.Name, a.TableID)
+				}
+			}
+			for _, d := range index.InterleavedBy {
+				if _, ok := newTableIDs[d.Table]; !ok {
+					return nil, errors.Errorf(
+						"cannot restore table %q without interleave child table %d",
+						table.Name, d.Table)
+				}
+			}
+		}
+	}
+
+	// Pivot the backups, which are grouped by time, into requests for import,
+	// which are grouped by keyrange.
+	importRequests, err := makeImportRequests(tables, backupDescs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+	}
+
+	// The Import (and resulting WriteBatch) requests made below run on
+	// leaseholders, so presplit the ranges to balance the work among many
+	// nodes.
+	splitKeys := make([]roachpb.Key, len(importRequests))
+	for i, r := range importRequests {
+		var ok bool
+		splitKeys[i], ok = kr.RewriteKey(append([]byte(nil), r.Key...))
+		if !ok {
+			return nil, errors.Errorf("failed to rewrite key: %s", r.Key)
+		}
+	}
+	if err := presplitRanges(ctx, db, splitKeys); err != nil {
+		return nil, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
+	}
+	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
+	// rebalance.
+
+	var wg utilccl.WaitGroupWithError
+	for i := range importRequests {
+		wg.Add(1)
+		go func(i importEntry) {
+			wg.Done(Import(ctx, db, i.Key, i.EndKey, i.files, kr))
+		}(importRequests[i])
+	}
+	wg.Wait()
+	if err := wg.FirstError(); err != nil {
+		// This leaves the data that did get imported in case the user wants to
+		// retry.
+		// TODO(dan): Build tooling to allow a user to restart a failed restore.
+		return nil, errors.Wrapf(err, "importing %d ranges", len(importRequests))
+	}
+
+	// Write the new TableDescriptors and flip the namespace entries over to
+	// them. After this call, any queries on a table will be served by the newly
+	// restored data.
+	// TODO(dan): Gossip this out and wait for any outstanding leases to expire.
+	newTables, err := restoreTableDescs(ctx, db, databasesByID, tables, newTableIDs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
+	}
+
+	// TODO(dan): Delete any old table data here. The first version of restore
+	// assumes that it's operating on a new cluster. If it's not empty,
+	// everything works but the table data is left abandoned.
+
+	return newTables, nil
 }
 
 func backupPlanHook(
@@ -659,7 +1028,7 @@ func backupPlanHook(
 		return nil, nil, nil
 	}
 	header := sql.ResultColumns{
-		{Name: "basePath", Typ: parser.TypeString},
+		{Name: "to", Typ: parser.TypeString},
 		{Name: "startTs", Typ: parser.TypeString},
 		{Name: "endTs", Typ: parser.TypeString},
 		{Name: "dataSize", Typ: parser.TypeInt},
@@ -671,11 +1040,15 @@ func backupPlanHook(
 
 		startTime := hlc.ZeroTimestamp
 		if backup.IncrementalFrom != nil {
-			return nil, errors.Errorf("INCREMENTAL FROM is not yet supported")
+			var err error
+			startTime, err = ValidatePreviousBackups(ctx, backup.IncrementalFrom)
+			if err != nil {
+				return nil, err
+			}
 		}
 		// TODO(dan): Don't ignore the database named passed in.
 		endTime := cfg.Clock.Now()
-		desc, err := Backup(ctx, *cfg.DB, backup.To, endTime)
+		desc, err := Backup(ctx, *cfg.DB, backup.To, startTime, endTime)
 		if err != nil {
 			return nil, err
 		}
@@ -711,12 +1084,7 @@ func restorePlanHook(
 		}
 		table := parser.TableName{DatabaseName: restore.Targets.Databases[0], TableName: "*"}
 
-		if len(restore.From) != 1 {
-			return nil, errors.Errorf("only one FROM is currently supported, got: %q", restore.From)
-		}
-		from := restore.From[0]
-
-		_, err := Restore(ctx, *cfg.DB, from, table)
+		_, err := Restore(ctx, *cfg.DB, restore.From, table)
 		return nil, err
 	}
 	return fn, nil, nil
