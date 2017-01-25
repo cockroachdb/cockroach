@@ -667,7 +667,7 @@ func (r *Replica) handleReplicatedEvalResult(
 }
 
 func (r *Replica) handleLocalEvalResult(
-	ctx context.Context, originReplica roachpb.ReplicaDescriptor, lResult LocalEvalResult,
+	ctx context.Context, lResult LocalEvalResult,
 ) (shouldAssert bool) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
@@ -723,26 +723,22 @@ func (r *Replica) handleLocalEvalResult(
 		}
 		lResult.maybeGossipSystemConfig = false
 	}
-
-	if originReplica.StoreID == r.store.StoreID() {
-		if lResult.leaseMetricsResult != nil {
-			switch metric := *lResult.leaseMetricsResult; metric {
-			case leaseRequestSuccess, leaseRequestError:
-				r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
-			case leaseTransferSuccess, leaseTransferError:
-				r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
-			}
+	if lResult.maybeGossipNodeLiveness != nil {
+		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
+			log.Error(ctx, err)
 		}
-		if lResult.maybeGossipNodeLiveness != nil {
-			if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
-				log.Error(ctx, err)
-			}
-		}
+		lResult.maybeGossipNodeLiveness = nil
 	}
-	// Satisfy the assertions for all of the items processed only on the
-	// proposer (the block just above).
-	lResult.leaseMetricsResult = nil
-	lResult.maybeGossipNodeLiveness = nil
+
+	if lResult.leaseMetricsResult != nil {
+		switch metric := *lResult.leaseMetricsResult; metric {
+		case leaseRequestSuccess, leaseRequestError:
+			r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
+		case leaseTransferSuccess, leaseTransferError:
+			r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
+		}
+		lResult.leaseMetricsResult = nil
+	}
 
 	if (lResult != LocalEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, LocalEvalResult{}))
@@ -752,10 +748,7 @@ func (r *Replica) handleLocalEvalResult(
 }
 
 func (r *Replica) handleEvalResult(
-	ctx context.Context,
-	originReplica roachpb.ReplicaDescriptor,
-	lResult *LocalEvalResult,
-	rResult *storagebase.ReplicatedEvalResult,
+	ctx context.Context, lResult *LocalEvalResult, rResult *storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 	shouldAssert := false
@@ -763,7 +756,7 @@ func (r *Replica) handleEvalResult(
 		shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
 	}
 	if lResult != nil {
-		shouldAssert = r.handleLocalEvalResult(ctx, originReplica, *lResult) || shouldAssert
+		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
 	}
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
