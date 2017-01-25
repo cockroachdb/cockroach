@@ -20,8 +20,21 @@
 GO ?= go
 # Allow setting of go build flags from the command line.
 GOFLAGS :=
-# Set to 1 to use static linking for all builds (including tests).
-STATIC :=
+# Possible values:
+# <empty>: use the default toolchain
+# release: target Linux 2.6.32, dynamically link to GLIBC 2.12.2
+# musl:  target Linux 3.2.84, statically link musl 1.1.16
+#
+# Both release and musl only work in the cockroachdb/builder docker image,
+# as they depend on cross-compilation toolchains available there.
+#
+# The release variant targets RHEL/CentOS 6.
+#
+# The musl variant targets the latest musl version (at the time of writing).
+# The kernel version is the lowest available in combination with this version
+# of musl. See:
+# https://github.com/crosstool-ng/crosstool-ng/issues/540#issuecomment-276508500.
+TYPE :=
 
 COCKROACH := ./cockroach
 
@@ -58,12 +71,18 @@ $(error bash is required)
 endif
 export GIT_PAGER :=
 
-ifeq ($(STATIC),1)
-# Static linking with glibc is a bad time; see
-# https://github.com/golang/go/issues/13470. If a static build is
-# requested, only link libgcc and libstdc++ statically.
-# TODO(peter): Allow this only when `go env CC` reports "gcc".
-override LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+ifeq ($(TYPE),release)
+export CC  = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-gcc
+export CXX = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
+override LDFLAGS += -linkmode external -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override GOFLAGS += -installsuffix release
+endif
+
+ifeq ($(TYPE),musl)
+export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
+export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
+override LDFLAGS += -linkmode external -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=musl
+override GOFLAGS += -installsuffix musl
 endif
 
 .PHONY: all
