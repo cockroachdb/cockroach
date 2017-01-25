@@ -1482,6 +1482,17 @@ var Builtins = map[string][]Builtin{
 
 	// pg_catalog functions.
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
+	"pg_catalog.pg_backend_pid": {
+		Builtin{
+			Types:      NamedArgTypes{},
+			ReturnType: TypeInt,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return NewDInt(-1), nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; supported only for ORM compatibility",
+		},
+	},
 
 	// Postgres defines pg_get_expr as a function that "decompiles the internal form
 	// of an expression", which is provided in the pg_node_tree type. In Cockroach's
