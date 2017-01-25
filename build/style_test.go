@@ -568,7 +568,6 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
-		t.Skip("TODO(dt): need to update this upstream or pull it into repo")
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "returncheck", pkgScope)
 		if err != nil {
