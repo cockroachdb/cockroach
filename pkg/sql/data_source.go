@@ -519,13 +519,12 @@ func (p *planner) getSubqueryPlan(
 }
 
 func (p *planner) getGeneratorPlan(t *parser.FuncExpr) (planDataSource, error) {
-	plan, name, err := p.makeGenerator(t)
+	plan, err := p.makeGenerator(t)
 	if err != nil {
 		return planDataSource{}, err
 	}
-	tn := parser.TableName{TableName: parser.Name(name)}
 	return planDataSource{
-		info: newSourceInfoForSingleTable(tn, plan.Columns()),
+		info: newSourceInfoForSingleTable(parser.TableName{}, plan.Columns()),
 		plan: plan,
 	}, nil
 }
