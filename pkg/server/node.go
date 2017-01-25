@@ -167,7 +167,7 @@ func incVal(ctx context.Context, db *client.DB, key roachpb.Key, inc int64) (int
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		res, err = db.Inc(ctx, key, inc)
 		switch err.(type) {
-		case *roachpb.WriteTooOldError, *roachpb.AmbiguousResultError:
+		case *roachpb.RetryableTxnError, *roachpb.AmbiguousResultError:
 			continue
 		}
 		break
