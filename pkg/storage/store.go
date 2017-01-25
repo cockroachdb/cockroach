@@ -1277,31 +1277,53 @@ func (s *Store) WaitForInit() {
 	s.initComplete.Wait()
 }
 
+var errPeriodicGossipsDisabled = errors.New("periodic gossip is disabled")
+
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
 func (s *Store) startGossip() {
+	wakeReplica := func(ctx context.Context, repl *Replica) error {
+		// Acquire the range lease, which in turn triggers system data gossip
+		// functions (e.g. maybeGossipSystemConfig or maybeGossipNodeLiveness).
+		_, pErr := repl.getLeaseForGossip(ctx)
+		return pErr.GoError()
+	}
+
+	if s.cfg.TestingKnobs.DisablePeriodicGossips {
+		wakeReplica = func(context.Context, *Replica) error {
+			return errPeriodicGossipsDisabled
+		}
+	}
+
 	gossipFns := []struct {
-		fn          func(context.Context) error
+		key         roachpb.Key
+		fn          func(context.Context, *Replica) error
 		description string
 		interval    time.Duration
 	}{
 		{
-			fn:          s.maybeGossipFirstRange,
+			key: roachpb.KeyMin,
+			fn: func(ctx context.Context, repl *Replica) error {
+				pErr := repl.maybeGossipFirstRange(ctx)
+				// Ignore errors where the state of the range is not known.
+				if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok && nlErr.LeaseHolder == nil {
+					return nil
+				}
+				return pErr.GoError()
+			},
 			description: "first range descriptor",
 			interval:    sentinelGossipInterval,
 		},
 		{
-			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan)
-			},
+			key:         keys.SystemConfigSpan.Key,
+			fn:          wakeReplica,
 			description: "system config",
 			interval:    systemDataGossipInterval,
 		},
 		{
-			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan)
-			},
+			key:         keys.NodeLivenessSpan.Key,
+			fn:          wakeReplica,
 			description: "node liveness",
 			interval:    systemDataGossipInterval,
 		},
@@ -1314,74 +1336,35 @@ func (s *Store) startGossip() {
 		gossipFn := gossipFn // per-iteration copy
 		s.stopper.RunWorker(func() {
 			ctx := s.AnnotateCtx(context.Background())
-			// Run the first time without waiting for the Ticker and signal the WaitGroup.
-			if err := gossipFn.fn(ctx); err != nil {
-				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-			}
-			s.initComplete.Done()
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
-			for {
+			for first := true; ; {
+				// Retry in a backoff loop until gossipFn succeeds.
+				retryOptions := base.DefaultRetryOptions()
+				retryOptions.Closer = s.stopper.ShouldStop()
+				for r := retry.Start(retryOptions); r.Next(); {
+					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key), nil); repl != nil {
+						if err := gossipFn.fn(ctx, repl); err != nil {
+							log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+							if err != errPeriodicGossipsDisabled {
+								continue
+							}
+						}
+					}
+					break
+				}
+				if first {
+					s.initComplete.Done()
+					first = false
+				}
 				select {
 				case <-ticker.C:
-					if err := gossipFn.fn(ctx); err != nil {
-						log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-					}
 				case <-s.stopper.ShouldStop():
 					return
 				}
 			}
 		})
 	}
-}
-
-// maybeGossipFirstRange checks whether the store has a replica of the
-// first range and if so instructs it to gossip the cluster ID,
-// sentinel gossip and first range descriptor. This is done in a retry
-// loop in the event that the returned error indicates that the state
-// of the range lease is not known. This can happen on lease command
-// timeouts. The retry loop makes sure we try hard to keep asking for
-// the lease instead of waiting for the next sentinelGossipInterval
-// to transpire.
-func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
-	retryOptions := base.DefaultRetryOptions()
-	retryOptions.Closer = s.stopper.ShouldStop()
-	for loop := retry.Start(retryOptions); loop.Next(); {
-		repl := s.LookupReplica(roachpb.RKeyMin, nil)
-		if repl != nil {
-			pErr := repl.maybeGossipFirstRange(ctx)
-			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || nlErr.LeaseHolder != nil {
-				return pErr.GoError()
-			}
-		} else {
-			return nil
-		}
-	}
-	return nil
-}
-
-// maybeGossipSystemData looks for the range containing the specified
-// span and acquires the range lease, which in turn triggers a system
-// data gossip function (e.g. Replica.maybeGossipSystemConfig or
-// Replica.maybeGossipNodeLiveness).
-func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) error {
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
-		return nil
-	}
-
-	repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
-	if repl == nil {
-		// This store has no range with this configuration.
-		return nil
-	}
-	// Wake up the replica. If it acquires a fresh lease, gossip the
-	// gossip. If an unexpected error occurs (i.e. nobody else seems to
-	// have an active lease but we still failed to obtain it), return
-	// that error.
-	if _, pErr := repl.getLeaseForGossip(ctx); pErr != nil {
-		return pErr.GoError()
-	}
-	return nil
 }
 
 // systemGossipUpdate is a callback for gossip updates to
