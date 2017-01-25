@@ -78,6 +78,7 @@ func initBacktrace(logDir string) *stop.Stopper {
 	tracer.AddKV(nil, "cgo-compiler", info.CgoCompiler)
 	tracer.AddKV(nil, "go-version", info.GoVersion)
 	tracer.AddKV(nil, "platform", info.Platform)
+	tracer.AddKV(nil, "type", info.Type)
 	tracer.AddKV(nil, "tag", info.Tag)
 	tracer.AddKV(nil, "time", info.Time)
 
