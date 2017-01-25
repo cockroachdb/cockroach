@@ -6643,6 +6643,10 @@ func checkValue(ctx context.Context, tc *testContext, key []byte, expectedVal []
 func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	cfg := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()

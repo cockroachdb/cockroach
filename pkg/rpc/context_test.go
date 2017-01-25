@@ -198,6 +198,10 @@ func (ln *interceptingListener) Accept() (net.Conn, error) {
 func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
