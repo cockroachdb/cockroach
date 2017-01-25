@@ -36,7 +36,6 @@ import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway"
 	_ "github.com/jteeuwen/go-bindata/go-bindata"
 	_ "github.com/kisielk/errcheck"
-	_ "github.com/kkaneda/returncheck"
 	_ "github.com/mattn/goveralls"
 	_ "github.com/mdempsky/unconvert"
 	_ "github.com/mibk/dupl"
