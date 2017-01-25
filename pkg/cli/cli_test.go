@@ -259,6 +259,10 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 

@@ -620,6 +620,9 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestUnconvert", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "unconvert", pkgScope)
 		if err != nil {
@@ -647,6 +650,9 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestMetacheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
