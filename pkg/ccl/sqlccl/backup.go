@@ -16,11 +16,14 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -418,6 +422,68 @@ func restoreTable(
 		// Pass the descriptors by value to keep this idempotent.
 		return restoreTableDesc(ctx, txn, database, *table)
 	})
+}
+
+// presplitRanges creates multiple splits at once. It does this by finding the
+// middle range, splitting at the Start key and recursively presplitting the
+// resulting left and right hand ranges. NB: The split code assumes that the LHS
+// is the smaller, so normally you'd split from the left, but this method should
+// only be called on empty keyranges, so it's okay.
+//
+// The `input` parameter is expected to be sorted by start key.
+func presplitRanges(
+	baseCtx context.Context, db client.DB, input []roachpb.Span, kr storageccl.KeyRewriter,
+) error {
+	ctx, span := tracing.ChildSpan(baseCtx, "presplitRanges")
+	defer tracing.FinishSpan(span)
+
+	if len(input) == 0 {
+		return nil
+	}
+
+	var wg utilccl.WaitGroupWithError
+	var splitFn func([]roachpb.Span)
+	splitFn = func(ranges []roachpb.Span) {
+		// Pick the index such that it's 0 if len(ranges) == 1.
+		splitIdx := len(ranges) / 2
+		splitKey, ok := kr.RewriteKey(append([]byte(nil), ranges[splitIdx].Key...))
+		if !ok {
+			err := errors.Errorf("could not rewrite key: %s", ranges[splitIdx].Key)
+			log.Errorf(ctx, "presplitRanges: %+v", err)
+			wg.Done(err)
+			return
+		}
+		// AdminSplit requires that the key be a valid table key, which means
+		// the last byte is a uvarint indicating how much of the end of the key
+		// needs to be stripped off to get the key's row prefix. The start keys
+		// input to restore don't have this suffix, so make them row sentinels,
+		// which means nothing should be stripped (aka appends 0). See
+		// EnsureSafeSplitKey for more context.
+		splitKey = keys.MakeRowSentinelKey(splitKey)
+		if err := db.AdminSplit(ctx, splitKey); err != nil {
+			if !strings.Contains(err.Error(), "already split at") {
+				log.Errorf(ctx, "presplitRanges: %+v", err)
+				wg.Done(err)
+				return
+			}
+		}
+
+		rangesLeft, rangesRight := ranges[:splitIdx], ranges[splitIdx+1:]
+		if len(rangesLeft) > 0 {
+			wg.Add(1)
+			go splitFn(rangesLeft)
+		}
+		if len(rangesRight) > 0 {
+			wg.Add(1)
+			go splitFn(rangesRight)
+		}
+		wg.Done(nil)
+	}
+
+	wg.Add(1)
+	splitFn(input)
+	wg.Wait()
+	return wg.FirstError()
 }
 
 func restoreTableDesc(

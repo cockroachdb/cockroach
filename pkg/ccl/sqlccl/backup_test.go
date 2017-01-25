@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -166,12 +167,14 @@ func backupRestoreTestSetup(
 	kvDB = tc.Server(0).KVClient().(*client.DB)
 
 	sqlDB.Exec(bankCreateDatabase)
-	sqlDB.Exec(bankCreateTable)
-	for _, insert := range bankDataInsertStmts(numAccounts) {
-		sqlDB.Exec(insert)
-	}
-	for _, split := range bankSplitStmts(numAccounts, backupRestoreDefaultRanges) {
-		sqlDB.Exec(split)
+	if numAccounts > 0 {
+		sqlDB.Exec(bankCreateTable)
+		for _, insert := range bankDataInsertStmts(numAccounts) {
+			sqlDB.Exec(insert)
+		}
+		for _, split := range bankSplitStmts(numAccounts, backupRestoreDefaultRanges) {
+			sqlDB.Exec(split)
+		}
 	}
 
 	targets := make([]base.ReplicationTarget, backupRestoreClusterSize-1)
@@ -338,6 +341,41 @@ func TestBackupRestoreBank(t *testing.T) {
 		if sum != 0 {
 			t.Fatalf("The bank is not in good order. Total value: %d", sum)
 		}
+	}
+}
+
+func TestPresplitRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, _, _, kvDB, _, cleanupFn := backupRestoreTestSetup(t, 0)
+	defer cleanupFn()
+
+	numRangesTests := []int{0, 1, 2, 3, 4, 10}
+	for testNum, numRanges := range numRangesTests {
+		t.Run(strconv.Itoa(numRanges), func(t *testing.T) {
+			baseKey := keys.MakeTablePrefix(uint32(keys.MaxReservedDescID + testNum))
+			kr := storageccl.KeyRewriter{roachpb.KeyRewrite{
+				OldPrefix: baseKey,
+				NewPrefix: baseKey,
+			}}
+			var ranges []roachpb.Span
+			for i := 0; i < numRanges; i++ {
+				key := encoding.EncodeUvarintAscending(append([]byte(nil), baseKey...), uint64(i))
+				ranges = append(ranges, roachpb.Span{Key: key})
+				// EndKey is unused by presplitRanges.
+			}
+			if err := presplitRanges(ctx, *kvDB, ranges, kr); err != nil {
+				t.Error(err)
+			}
+			for _, r := range ranges {
+				// presplitRanges makes the keys into row sentinels, so we have
+				// to match that behavior.
+				splitKey := keys.MakeRowSentinelKey(r.Key)
+				if err := kvDB.AdminSplit(ctx, splitKey); !testutils.IsError(err, "already split") {
+					t.Errorf("missing split %s: %+v", splitKey, err)
+				}
+			}
+		})
 	}
 }
 
