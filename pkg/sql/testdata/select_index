@@ -107,6 +107,22 @@ EXPLAIN (DEBUG) SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC
 0  /t/a_desc/3/'three'  NULL  ROW
 1  /t/a_desc/2/'two'    NULL  ROW
 
+# Index selection occurs in direct join operands too.
+query ITTT
+EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
+----
+0   join
+0                type       inner
+0                equality   (b) = (b)
+1   index-join
+2   scan
+2                table      t@bc
+2                spans      /#-/"3"
+2   scan
+2                table      t@primary
+1   scan
+1                table      t@primary
+
 statement ok
 TRUNCATE TABLE t
 

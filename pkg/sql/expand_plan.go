@@ -128,6 +128,17 @@ func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 		n.right.plan, err = doExpandPlan(params, n.right.plan)
 
 	case *ordinalityNode:
+		// If there's a desired ordering on the ordinality column, drop it.
+		if len(params.desiredOrdering) > 0 {
+			newDesired := make(sqlbase.ColumnOrdering, 0, len(params.desiredOrdering))
+			for _, ordInfo := range params.desiredOrdering {
+				if ordInfo.ColIdx == len(n.columns)-1 {
+					break
+				}
+				newDesired = append(newDesired, ordInfo)
+			}
+			params.desiredOrdering = newDesired
+		}
 		n.source, err = doExpandPlan(params, n.source)
 		if err != nil {
 			return plan, err
@@ -162,6 +173,9 @@ func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 	case *limitNode, *sortNode, *windowNode, *groupNode, *distinctNode:
 		panic(fmt.Sprintf("expand for %T must be handled by selectTopNode", plan))
 
+	case *scanNode:
+		plan, err = expandScanNode(params, n)
+
 	case *renderNode:
 		plan, err = expandRenderNode(params, n)
 
@@ -177,7 +191,6 @@ func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 		n.plan, err = doExpandPlan(params, n.plan)
 
 	case *valuesNode:
-	case *scanNode:
 	case *alterTableNode:
 	case *copyNode:
 	case *createDatabaseNode:
@@ -294,55 +307,42 @@ func expandSelectTopNode(params expandParameters, n *selectTopNode) (planNode, e
 	return n.plan, nil
 }
 
-func expandRenderNode(params expandParameters, s *renderNode) (planNode, error) {
-	maybeScanNode := s.source.plan
-	if where, ok := maybeScanNode.(*filterNode); ok {
-		maybeScanNode = where.source.plan
+func expandScanNode(params expandParameters, s *scanNode) (planNode, error) {
+	var analyzeOrdering analyzeOrderingFn
+	if len(params.desiredOrdering) > 0 {
+		analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
+			match := computeOrderingMatch(params.desiredOrdering, indexOrdering, false)
+			return match, len(params.desiredOrdering)
+		}
 	}
 
-	if scan, ok := maybeScanNode.(*scanNode); ok {
-		var analyzeOrdering analyzeOrderingFn
-		if len(params.desiredOrdering) > 0 {
-			analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
-				selOrder := s.computeOrdering(indexOrdering)
-				match := computeOrderingMatch(params.desiredOrdering, selOrder, false)
-				return match, len(params.desiredOrdering)
-			}
-		}
-
-		// If we have a reasonable limit, prefer an order matching index even if
-		// it is not covering - unless we are grouping, in which case the limit
-		// applies to the grouping results and not to the rows we scan.
-		var preferOrderMatchingIndex bool
-		if len(params.desiredOrdering) > 0 && params.numRowsHint <= 1000 {
-			preferOrderMatchingIndex = true
-		}
-
-		plan, err := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
-		if err != nil {
-			return s, err
-		}
-
-		// Update s.source.info with the new plan. This removes the
-		// filterNode, if any.
-		s.source.plan = plan
+	// If we have a reasonable limit, prefer an order matching index even if
+	// it is not covering.
+	var preferOrderMatchingIndex bool
+	if len(params.desiredOrdering) > 0 && params.numRowsHint <= 1000 {
+		preferOrderMatchingIndex = true
 	}
 
-	// Expand the source node. We need to do this before computing the
-	// ordering, since expansion may modify the ordering.
-	// The outer desired ordering is not valid for the inner plan,
-	// so we simply discard it.
-	params.desiredOrdering = nil
-	var err error
-	s.source.plan, err = doExpandPlan(params, s.source.plan)
+	plan, err := selectIndex(s, analyzeOrdering, preferOrderMatchingIndex)
 	if err != nil {
 		return s, err
+	}
+	return plan, nil
+}
+
+func expandRenderNode(params expandParameters, r *renderNode) (planNode, error) {
+	params.desiredOrdering = translateOrdering(params.desiredOrdering, r)
+
+	var err error
+	r.source.plan, err = doExpandPlan(params, r.source.plan)
+	if err != nil {
+		return r, err
 	}
 
 	// Elide the render node if it renders its source as-is.
 
-	sourceCols := s.source.plan.Columns()
-	if len(s.columns) == len(sourceCols) && s.source.info.viewDesc == nil {
+	sourceCols := r.source.plan.Columns()
+	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
 		// 1) we don't drop renderNodes which also interface to a view, because
 		// CREATE VIEW needs it.
 		// TODO(knz) make this optimization conditional on a flag, which can
@@ -355,12 +355,12 @@ func expandRenderNode(params expandParameters, s *renderNode) (planNode, error) 
 		// TODO(knz) investigate this further and enable the optimization fully.
 
 		foundNonTrivialRender := false
-		for i, e := range s.render {
-			if s.columns[i].omitted {
+		for i, e := range r.render {
+			if r.columns[i].omitted {
 				continue
 			}
 			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) &&
-				(iv.Idx == i && sourceCols[i].Name == s.columns[i].Name) {
+				(iv.Idx == i && sourceCols[i].Name == r.columns[i].Name) {
 				continue
 			}
 			foundNonTrivialRender = true
@@ -368,11 +368,50 @@ func expandRenderNode(params expandParameters, s *renderNode) (planNode, error) 
 		}
 		if !foundNonTrivialRender {
 			// Nothing special rendered, remove the render node entirely.
-			return s.source.plan, nil
+			return r.source.plan, nil
 		}
 	}
 
-	s.ordering = s.computeOrdering(s.source.plan.Ordering())
+	r.ordering = r.computeOrdering(r.source.plan.Ordering())
 
-	return s, nil
+	return r, nil
+}
+
+// translateOrdering modifies a desired ordering on the output of the
+// renderNode to a desired ordering on its its input.
+//
+// For example, it translates a desired ordering [@2 asc, @1 desc] for
+// a render node that renders [@4, @3, @2] into a desired ordering [@3
+// asc, @4 desc].
+func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbase.ColumnOrdering {
+	var desiredUp sqlbase.ColumnOrdering
+
+	for _, colOrder := range desiredDown {
+		rendered := r.render[colOrder.ColIdx]
+		if _, ok := rendered.(parser.Datum); ok {
+			// Simple constants do not participate in ordering. Just ignore.
+			continue
+		}
+		if v, ok := rendered.(*parser.IndexedVar); ok {
+			// This is a simple render, so we can propagate the desired ordering.
+			// However take care of avoiding duplicate ordering requests in
+			// case there is more than one render for the same source column.
+			duplicate := false
+			for _, desiredOrderCol := range desiredUp {
+				if desiredOrderCol.ColIdx == v.Idx {
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				desiredUp = append(desiredUp,
+					sqlbase.ColumnOrderInfo{ColIdx: v.Idx, Direction: colOrder.Direction})
+			}
+			continue
+		}
+		// Anything else and we can't propagate the desired order.
+		break
+	}
+
+	return desiredUp
 }
