@@ -69,6 +69,9 @@ endif
 .PHONY: all
 all: build test check
 
+.PHONY: short
+short: build testshort checkshort
+
 .PHONY: buildoss
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: build
@@ -199,6 +202,11 @@ dupl:
 check: override TAGS += check
 check:
 	$(GO) test ./build -v -tags '$(TAGS)' -run 'TestStyle/$(TESTS)'
+
+.PHONY: checkshort
+checkshort: override TAGS += check
+checkshort:
+	$(GO) test ./build -v -tags '$(TAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
 clean:
