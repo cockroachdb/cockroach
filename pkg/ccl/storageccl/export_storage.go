@@ -127,7 +127,7 @@ type ExportStorage interface {
 type ExportFileWriter interface {
 	// LocalFile returns the path to a local path to which a caller should write.
 	LocalFile() string
-	// Finish indicates that no further writes to the local file are exepcted and
+	// Finish indicates that no further writes to the local file are expected and
 	// that the implementation should store the content (copy it, upload, etc) if
 	// that has not already been done in a streaming fashion (e.g. via a pipe).
 	Finish() error
@@ -199,7 +199,7 @@ func (l localFileStorageWriter) Finish() error {
 
 func (l localFileStorageWriter) Cleanup() {
 	if err := os.RemoveAll(l.LocalFile()); err != nil {
-		log.Warningf(context.TODO(), "could not remove %s: %+v", l.LocalFile(), err)
+		log.Warningf(context.TODO(), "could not remove %q: %+v", l.LocalFile(), err)
 	}
 }
 

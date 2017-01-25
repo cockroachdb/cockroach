@@ -1559,6 +1559,8 @@ func dbIterate(
 	return it.Error()
 }
 
+// TODO(dan): Rename this to RocksDBSSTFileReader and RocksDBSSTFileWriter.
+
 // RocksDBSstFileReader allows iteration over a number of non-overlapping
 // sstables exported by `RocksDBSstFileWriter`.
 type RocksDBSstFileReader struct {
