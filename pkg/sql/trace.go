@@ -182,6 +182,5 @@ func (n *explainTraceNode) Values() parser.DTuple {
 	return n.rows[0]
 }
 
-func (*explainTraceNode) MarkDebug(_ explainMode)      {}
-func (*explainTraceNode) DebugValues() debugValues     { return debugValues{} }
-func (*explainTraceNode) SetLimitHint(_ int64, _ bool) {}
+func (*explainTraceNode) MarkDebug(_ explainMode)  {}
+func (*explainTraceNode) DebugValues() debugValues { return debugValues{} }

@@ -29,9 +29,6 @@ import (
 type renderNode struct {
 	planner *planner
 
-	// top refers to the surrounding selectTopNode.
-	top *selectTopNode
-
 	// source describes where the data is coming from.
 	// populated initially by initFrom().
 	// potentially modified by index selection.
@@ -136,10 +133,6 @@ func (s *renderNode) Next() (bool, error) {
 
 	err := s.renderRow()
 	return err == nil, err
-}
-
-func (s *renderNode) SetLimitHint(numRows int64, soft bool) {
-	s.source.plan.SetLimitHint(numRows, soft)
 }
 
 func (s *renderNode) Close() {
@@ -287,7 +280,6 @@ func (p *planner) SelectClause(
 		distinct: distinctPlan,
 		limit:    limitPlan,
 	}
-	s.top = result
 	limitPlan.setTop(result)
 	distinctPlan.setTop(result)
 

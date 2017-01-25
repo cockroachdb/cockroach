@@ -31,6 +31,7 @@ type limitNode struct {
 	plan       planNode
 	countExpr  parser.TypedExpr
 	offsetExpr parser.TypedExpr
+	evaluated  bool
 	count      int64
 	offset     int64
 	rowIndex   int64
@@ -79,25 +80,13 @@ func (n *limitNode) Start() error {
 		return err
 	}
 
-	if err := n.evalLimit(); err != nil {
-		return err
-	}
-
-	// Propagate the local limit upstream.
-	// Note that this must be called *after* all upstream nodes have been started.
-	n.plan.SetLimitHint(getLimit(n.count, n.offset), false /* hard */)
-
-	return nil
+	return n.evalLimit()
 }
 
-// estimateLimit returns the Count and Offset fields if they are constants,
-// otherwise MaxInt64, 0. Used by index selection.
+// estimateLimit pre-computes the count and offset fields if they are constants,
+// otherwise predefines them to be MaxInt64, 0. Used by index selection.
 // This must be called after type checking and constant folding.
-func (n *limitNode) estimateLimit() (count, offset int64) {
-	if n == nil {
-		return math.MaxInt64, 0
-	}
-
+func (n *limitNode) estimateLimit() {
 	n.count = math.MaxInt64
 	n.offset = 0
 
@@ -119,7 +108,6 @@ func (n *limitNode) estimateLimit() (count, offset int64) {
 			}
 		}
 	}
-	return n.count, n.offset
 }
 
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
@@ -157,6 +145,7 @@ func (n *limitNode) evalLimit() error {
 			*datum.dst = val
 		}
 	}
+	n.evaluated = true
 	return nil
 }
 
@@ -238,30 +227,4 @@ func (n *limitNode) Next() (bool, error) {
 
 func (n *limitNode) Close() {
 	n.plan.Close()
-}
-
-// getLimit computes the actual number of rows to request from the
-// data source to honour both the required count and offset together.
-// This also ensures that the resulting number of rows does not
-// overflow.
-func getLimit(count, offset int64) int64 {
-	if offset > math.MaxInt64-count {
-		count = math.MaxInt64 - offset
-	}
-	return count + offset
-}
-
-func (n *limitNode) SetLimitHint(count int64, soft bool) {
-	// A higher-level limitNode or EXPLAIN is pushing a limit down onto
-	// this node. Accept it unless the local limit is definitely
-	// smaller, in which case we propagate that as a hard limit instead.
-	// TODO(radu): we may get a smaller "soft" limit from the upper node
-	// and we may have a larger "hard" limit locally. In general, it's
-	// not clear which of those results in less work.
-	hintCount := count
-	if hintCount > n.count {
-		hintCount = n.count
-		soft = false
-	}
-	n.plan.SetLimitHint(getLimit(hintCount, n.offset), soft)
 }

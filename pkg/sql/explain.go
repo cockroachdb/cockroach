@@ -249,6 +249,5 @@ func (n *explainDebugNode) Values() parser.DTuple {
 	}
 }
 
-func (*explainDebugNode) MarkDebug(_ explainMode)      {}
-func (*explainDebugNode) DebugValues() debugValues     { return debugValues{} }
-func (*explainDebugNode) SetLimitHint(_ int64, _ bool) {}
+func (*explainDebugNode) MarkDebug(_ explainMode)  {}
+func (*explainDebugNode) DebugValues() debugValues { return debugValues{} }

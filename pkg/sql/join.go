@@ -270,9 +270,6 @@ func (p *planner) makeJoin(
 	}, nil
 }
 
-// SetLimitHint implements the planNode interface.
-func (n *joinNode) SetLimitHint(numRows int64, soft bool) {}
-
 // Columns implements the planNode interface.
 func (n *joinNode) Columns() ResultColumns { return n.columns }
 

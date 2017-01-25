@@ -30,6 +30,26 @@ import (
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
 func (p *planner) expandPlan(plan planNode) (planNode, error) {
+	params := expandParameters{p: p}
+	return doExpandPlan(params.clear(), plan)
+}
+
+// expandParameters propagates the known row limit and desired ordering at
+// a given level to the levels under it (upstream).
+type expandParameters struct {
+	p               *planner
+	numRowsHint     int64
+	desiredOrdering sqlbase.ColumnOrdering
+}
+
+func (p expandParameters) clear() expandParameters {
+	p.numRowsHint = math.MaxInt64
+	p.desiredOrdering = nil
+	return p
+}
+
+// doExpandPlan is the algorithm that supports expandPlan().
+func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 	if plan == nil {
 		return nil, nil
 	}
@@ -37,29 +57,29 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
-		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
+		n.sourcePlan, err = doExpandPlan(params.clear(), n.sourcePlan)
 
 	case *updateNode:
-		n.run.rows, err = p.expandPlan(n.run.rows)
+		n.run.rows, err = doExpandPlan(params.clear(), n.run.rows)
 
 	case *insertNode:
-		n.run.rows, err = p.expandPlan(n.run.rows)
+		n.run.rows, err = doExpandPlan(params.clear(), n.run.rows)
 
 	case *deleteNode:
-		n.run.rows, err = p.expandPlan(n.run.rows)
+		n.run.rows, err = doExpandPlan(params.clear(), n.run.rows)
 
 	case *createViewNode:
-		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
+		n.sourcePlan, err = doExpandPlan(params.clear(), n.sourcePlan)
 
 	case *explainDebugNode:
-		n.plan, err = p.expandPlan(n.plan)
+		n.plan, err = doExpandPlan(params.clear(), n.plan)
 		if err != nil {
 			return plan, err
 		}
 		n.plan.MarkDebug(explainDebug)
 
 	case *explainTraceNode:
-		n.plan, err = p.expandPlan(n.plan)
+		n.plan, err = doExpandPlan(params.clear(), n.plan)
 		if err != nil {
 			return plan, err
 		}
@@ -67,7 +87,7 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 
 	case *explainPlanNode:
 		if n.expanded {
-			n.plan, err = p.expandPlan(n.plan)
+			n.plan, err = doExpandPlan(params.clear(), n.plan)
 			if err != nil {
 				return plan, err
 			}
@@ -75,42 +95,46 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 			// during the plan's Start() phase. This may trigger additional
 			// optimizations (eg. in sortNode) which the user of EXPLAIN will be
 			// interested in.
-			n.plan.SetLimitHint(math.MaxInt64, true)
+			setUnlimited(n.plan)
 		}
 
 	case *indexJoinNode:
 		// We ignore the return value because we know the scanNode is preserved.
-		_, err = p.expandPlan(n.table)
+		_, err = doExpandPlan(params, n.index)
 		if err != nil {
 			return plan, err
 		}
-		_, err = p.expandPlan(n.index)
+
+		// The row limit and desired ordering, if any, only propagates on
+		// the index side.
+		_, err = doExpandPlan(params.clear(), n.table)
 
 	case *unionNode:
-		n.right, err = p.expandPlan(n.right)
+		n.right, err = doExpandPlan(params, n.right)
 		if err != nil {
 			return plan, err
 		}
-		n.left, err = p.expandPlan(n.left)
+		n.left, err = doExpandPlan(params, n.left)
 
 	case *filterNode:
-		n.source.plan, err = p.expandPlan(n.source.plan)
+		n.source.plan, err = doExpandPlan(params, n.source.plan)
 
 	case *joinNode:
-		n.left.plan, err = p.expandPlan(n.left.plan)
+		params = params.clear()
+		n.left.plan, err = doExpandPlan(params, n.left.plan)
 		if err != nil {
 			return plan, err
 		}
-		n.right.plan, err = p.expandPlan(n.right.plan)
+		n.right.plan, err = doExpandPlan(params, n.right.plan)
 
 	case *ordinalityNode:
-		n.source, err = p.expandPlan(n.source)
+		n.source, err = doExpandPlan(params, n.source)
 		if err != nil {
 			return plan, err
 		}
 
 		// We are going to "optimize" the ordering. We had an ordering
-		// initially from the source, but expandPlan() may have caused it to
+		// initially from the source, but expand() may have caused it to
 		// change. So here retrieve the ordering of the source again.
 		origOrdering := n.source.Ordering()
 
@@ -136,21 +160,21 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 		}
 
 	case *limitNode, *sortNode, *windowNode, *groupNode, *distinctNode:
-		panic(fmt.Sprintf("expandPlan for %T must be handled by selectTopNode", plan))
+		panic(fmt.Sprintf("expand for %T must be handled by selectTopNode", plan))
 
 	case *renderNode:
-		plan, err = p.expandSelectNode(n)
+		plan, err = expandRenderNode(params, n)
 
 	case *selectTopNode:
-		plan, err = p.expandSelectTopNode(n)
+		plan, err = expandSelectTopNode(params, n)
 
 	case *delayedNode:
-		v, err := n.constructor(p)
+		v, err := n.constructor(params.p)
 		if err != nil {
 			return plan, err
 		}
 		n.plan = v
-		n.plan, err = p.expandPlan(n.plan)
+		n.plan, err = doExpandPlan(params, n.plan)
 
 	case *valuesNode:
 	case *scanNode:
@@ -174,29 +198,38 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 	return plan, err
 }
 
-func (p *planner) expandSelectTopNode(n *selectTopNode) (planNode, error) {
+func expandSelectTopNode(params expandParameters, n *selectTopNode) (planNode, error) {
 	if n.plan != nil {
 		// Plan is already expanded. Just elide.
 		return n.plan, nil
 	}
 
+	if n.limit != nil {
+		// Estimate the limit parameters. We can't full eval them just yet,
+		// because evaluation requires running potential sub-queries, which
+		// cannot occur during expand.
+		n.limit.estimateLimit()
+		params.numRowsHint = getLimit(n.limit.count, n.limit.offset)
+	}
+
+	expandSourceParams := params
+	if n.group != nil {
+		expandSourceParams.desiredOrdering = n.group.desiredOrdering
+		// Under a group node, there may be arbitrarily more rows
+		// than those required by the context.
+		expandSourceParams.numRowsHint = math.MaxInt64
+	} else if n.sort != nil {
+		expandSourceParams.desiredOrdering = n.sort.ordering
+	}
+
 	var err error
-	n.source, err = p.expandPlan(n.source)
+	n.source, err = doExpandPlan(expandSourceParams, n.source)
 	if err != nil {
 		return n, err
 	}
 	n.plan = n.source
 
 	if n.group != nil {
-		if len(n.group.desiredOrdering) > 0 {
-			match := computeOrderingMatch(n.group.desiredOrdering, n.plan.Ordering(), false)
-			if match == len(n.group.desiredOrdering) {
-				// We have a single MIN/MAX function and the underlying plan's
-				// ordering matches the function. We only need to retrieve one row.
-				n.plan.SetLimitHint(1, false /* !soft */)
-				n.group.needOnlyOneRow = true
-			}
-		}
 		n.group.plan = n.plan
 		n.plan = n.group
 	}
@@ -261,23 +294,7 @@ func (p *planner) expandSelectTopNode(n *selectTopNode) (planNode, error) {
 	return n.plan, nil
 }
 
-func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
-	// Get the ordering for index selection (if any).
-	var ordering sqlbase.ColumnOrdering
-	var grouping bool
-
-	if s.top.group != nil {
-		ordering = s.top.group.desiredOrdering
-		grouping = true
-	} else if s.top.sort != nil {
-		ordering = s.top.sort.ordering
-	}
-
-	// Estimate the limit parameters. We can't full eval them just yet,
-	// because evaluation requires running potential sub-queries, which
-	// cannot occur during expandPlan.
-	limitCount, limitOffset := s.top.limit.estimateLimit()
-
+func expandRenderNode(params expandParameters, s *renderNode) (planNode, error) {
 	maybeScanNode := s.source.plan
 	if where, ok := maybeScanNode.(*filterNode); ok {
 		maybeScanNode = where.source.plan
@@ -285,10 +302,11 @@ func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 
 	if scan, ok := maybeScanNode.(*scanNode); ok {
 		var analyzeOrdering analyzeOrderingFn
-		if ordering != nil {
+		if len(params.desiredOrdering) > 0 {
 			analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
 				selOrder := s.computeOrdering(indexOrdering)
-				return computeOrderingMatch(ordering, selOrder, false), len(ordering)
+				match := computeOrderingMatch(params.desiredOrdering, selOrder, false)
+				return match, len(params.desiredOrdering)
 			}
 		}
 
@@ -296,7 +314,7 @@ func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 		// it is not covering - unless we are grouping, in which case the limit
 		// applies to the grouping results and not to the rows we scan.
 		var preferOrderMatchingIndex bool
-		if !grouping && len(ordering) > 0 && limitCount <= 1000-limitOffset {
+		if len(params.desiredOrdering) > 0 && params.numRowsHint <= 1000 {
 			preferOrderMatchingIndex = true
 		}
 
@@ -312,8 +330,11 @@ func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 
 	// Expand the source node. We need to do this before computing the
 	// ordering, since expansion may modify the ordering.
+	// The outer desired ordering is not valid for the inner plan,
+	// so we simply discard it.
+	params.desiredOrdering = nil
 	var err error
-	s.source.plan, err = p.expandPlan(s.source.plan)
+	s.source.plan, err = doExpandPlan(params, s.source.plan)
 	if err != nil {
 		return s, err
 	}

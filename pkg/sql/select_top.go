@@ -34,12 +34,6 @@ type selectTopNode struct {
 	plan planNode
 }
 
-func (n *selectTopNode) SetLimitHint(numRows int64, soft bool) {
-	if n.plan != nil {
-		n.plan.SetLimitHint(numRows, soft)
-	}
-}
-
 func (n *selectTopNode) Columns() ResultColumns {
 	if n.plan != nil {
 		return n.plan.Columns()

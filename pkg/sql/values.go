@@ -287,5 +287,3 @@ func (n *valuesNode) InitMinHeap() {
 	n.invertSorting = false
 	heap.Init(n)
 }
-
-func (*valuesNode) SetLimitHint(_ int64, _ bool) {}

@@ -19,7 +19,6 @@ package sql
 import (
 	"container/heap"
 	"fmt"
-	"math"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -312,24 +311,6 @@ func (n *sortNode) DebugValues() debugValues {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
 	return n.debugVals
-}
-
-func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
-	if !n.needSort {
-		// The limit is only useful to the wrapped node if we don't need to sort.
-		n.plan.SetLimitHint(numRows, soft)
-	} else {
-		// The special value math.MaxInt64 means "no limit".
-		if numRows != math.MaxInt64 {
-			v := n.p.newContainerValuesNode(n.plan.Columns(), int(numRows))
-			v.ordering = n.ordering
-			if soft {
-				n.sortStrategy = newIterativeSortStrategy(v)
-			} else {
-				n.sortStrategy = newSortTopKStrategy(v, numRows)
-			}
-		}
-	}
 }
 
 func (n *sortNode) Start() error {

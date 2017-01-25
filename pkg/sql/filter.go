@@ -37,11 +37,6 @@ type filterNode struct {
 	debugVals debugValues
 }
 
-// SetLimitHint implements the planNode interface.
-func (f *filterNode) SetLimitHint(numRows int64, soft bool) {
-	f.source.plan.SetLimitHint(numRows, soft || f.filter != nil)
-}
-
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
 func (f *filterNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
 	return f.source.plan.Values()[idx].Eval(ctx)
