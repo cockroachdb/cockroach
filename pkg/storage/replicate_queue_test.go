@@ -39,6 +39,10 @@ import (
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	// Set the gossip stores interval lower to speed up rebalancing. With the
 	// default of 5s we have to wait ~5s for the rebalancing to start.
 	defer func(v time.Duration) {

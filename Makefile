@@ -113,6 +113,9 @@ else
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 endif
 
+testshort: GOFLAGS += -short
+testshort: test
+
 testrace: GOFLAGS += -race
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 testrace: test

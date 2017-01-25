@@ -1187,6 +1187,10 @@ func TestLogic(t *testing.T) {
 func TestLogicDistSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	defer sql.SetDefaultDistSQLMode("ON")()
 
 	TestLogic(t)
