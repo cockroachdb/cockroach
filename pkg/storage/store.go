@@ -1321,9 +1321,11 @@ func (s *Store) startGossip() {
 				retryOptions := base.DefaultRetryOptions()
 				retryOptions.Closer = s.stopper.ShouldStop()
 				for loop := retry.Start(retryOptions); loop.Next(); {
-					if err := gossipFn.fn(ctx); err != nil {
-						log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-						continue
+					if !s.cfg.TestingKnobs.DisablePeriodicGossips {
+						if err := gossipFn.fn(ctx); err != nil {
+							log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+							continue
+						}
 					}
 					break
 				}
@@ -1371,10 +1373,6 @@ func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
 // data gossip function (e.g. Replica.maybeGossipSystemConfig or
 // Replica.maybeGossipNodeLiveness).
 func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) error {
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
-		return nil
-	}
-
 	repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
 	if repl == nil {
 		// This store has no range with this configuration.
