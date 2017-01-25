@@ -315,6 +315,14 @@ func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		if err != nil {
 			return err
 		}
+
+		// If the current expression is a set-returning function, we need to move
+		// it up to the sources list as a cross join and add a render for the
+		// function's column in the join.
+		if e := extractSetReturningFunction(exprs); e != nil {
+			cols, exprs, hasStar, err = s.transformToCrossJoin(e, desiredType)
+		}
+
 		s.isStar = s.isStar || hasStar
 		_ = s.addOrMergeRenders(cols, exprs, false)
 	}
@@ -326,6 +334,45 @@ func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		panic(fmt.Sprintf("%d renders but %d columns!", len(s.render), len(s.columns)))
 	}
 	return nil
+}
+
+// extractSetReturningFunction checks if the first expression in the list is a
+// FuncExpr that returns a TypeTable, returning it if so.
+func extractSetReturningFunction(exprs []parser.TypedExpr) *parser.FuncExpr {
+	if len(exprs) == 1 && exprs[0].ResolvedType().FamilyEqual(parser.TypeTable) {
+		switch e := exprs[0].(type) {
+		case *parser.FuncExpr:
+			return e
+		}
+	}
+	return nil
+}
+
+// transformToCrossJoin moves a would-be render expression into a data source
+// cross-joined with the renderNode's existing data sources, returning a
+// render expression that points at the new data source.
+func (s *renderNode) transformToCrossJoin(
+	e *parser.FuncExpr, desiredType parser.Type,
+) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
+	src, err := s.planner.getDataSource(e, nil, publicColumns)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	src, err = s.planner.makeJoin("CROSS JOIN", s.source, src, nil)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	s.source = src
+	s.sourceInfo = multiSourceInfo{s.source.info}
+	// We must regenerate the var helper at this point since we changed
+	// the source list.
+	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
+
+	newTarget := parser.SelectExpr{
+		Expr: s.ivarHelper.IndexedVar(s.ivarHelper.NumVars() - 1),
+	}
+	return s.planner.computeRender(newTarget, desiredType,
+		s.source.info, s.ivarHelper, true)
 }
 
 func (s *renderNode) initWhere(where *parser.Where) (*filterNode, error) {
