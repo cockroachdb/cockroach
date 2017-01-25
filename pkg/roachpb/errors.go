@@ -183,8 +183,7 @@ func (e *Error) GoError() error {
 			Backoff:     backoff,
 		}
 	}
-	detail := e.GetDetail()
-	return detail
+	return e.GetDetail()
 }
 
 // setGoError sets Error using err.
