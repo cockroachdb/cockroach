@@ -2311,16 +2311,11 @@ func (r *Replica) propose(
 	ctx context.Context, lease *roachpb.Lease, ba roachpb.BatchRequest, endCmds *endCmds,
 ) (chan proposalResult, func() bool, error) {
 	r.mu.Lock()
-	if err := r.mu.destroyed; err != nil {
-		r.mu.Unlock()
-		return nil, nil, err
-	}
-	repDesc, err := r.getReplicaDescriptorLocked()
-	if err != nil {
-		r.mu.Unlock()
-		return nil, nil, err
-	}
+	err := r.mu.destroyed
 	r.mu.Unlock()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// submitProposalLocked calls withRaftGroupLocked which requires that
 	// raftMu is held. In order to maintain our lock ordering we need to lock
@@ -2348,8 +2343,7 @@ func (r *Replica) propose(
 				"requestToProposal returned error %s without eval results", err)
 		}
 		intents := proposal.Local.detachIntents()
-		r.handleEvalResult(ctx, repDesc, proposal.Local,
-			proposal.command.ReplicatedEvalResult)
+		r.handleEvalResult(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
 		if endCmds != nil {
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
@@ -2361,6 +2355,11 @@ func (r *Replica) propose(
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	repDesc, err := r.getReplicaDescriptorLocked()
+	if err != nil {
+		return nil, nil, err
+	}
 	r.insertProposalLocked(proposal, repDesc, lease)
 
 	if err := r.submitProposalLocked(proposal); err != nil {
@@ -3602,7 +3601,7 @@ func (r *Replica) processRaftCommand(
 		//
 		// Note that this must happen after committing (the engine.Batch), but
 		// before notifying a potentially waiting client.
-		r.handleEvalResult(ctx, raftCmd.OriginReplica, lResult, raftCmd.ReplicatedEvalResult)
+		r.handleEvalResult(ctx, lResult, raftCmd.ReplicatedEvalResult)
 	}
 
 	if proposedLocally {
