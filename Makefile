@@ -63,7 +63,7 @@ ifeq ($(STATIC),1)
 # https://github.com/golang/go/issues/13470. If a static build is
 # requested, only link libgcc and libstdc++ statically.
 # TODO(peter): Allow this only when `go env CC` reports "gcc".
-LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+override LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 endif
 
 .PHONY: all
@@ -87,7 +87,7 @@ start:
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: install
-install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
+install: override LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
@@ -113,12 +113,12 @@ else
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 endif
 
-testrace: GOFLAGS += -race
+testrace: override GOFLAGS += -race
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 testrace: test
 
 .PHONY: testslow
-testslow: TESTFLAGS += -v
+testslow: override TESTFLAGS += -v
 testslow: gotestdashi
 ifeq ($(BENCHES),-)
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
@@ -127,7 +127,7 @@ else
 endif
 
 .PHONY: testraceslow
-testraceslow: GOFLAGS += -race
+testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testraceslow: testslow
 
@@ -149,7 +149,7 @@ else
 endif
 
 .PHONY: stressrace
-stressrace: GOFLAGS += -race
+stressrace: override GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 stressrace: stress
 
@@ -192,7 +192,7 @@ dupl:
 	| dupl -files $(DUPLFLAGS)
 
 .PHONY: check
-check: TAGS += check
+check: override TAGS += check
 check:
 	$(GO) test ./build -v -tags '$(TAGS)' -run 'TestStyle/$(TESTS)'
 
