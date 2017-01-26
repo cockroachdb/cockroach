@@ -129,11 +129,6 @@ If left unspecified, defaults to 25% of the physical memory, or
 		Description: `The name of the database to connect to.`,
 	}
 
-	Deps = FlagInfo{
-		Name:        "deps",
-		Description: `Include dependency versions`,
-	}
-
 	DumpMode = FlagInfo{
 		Name: "dump-mode",
 		Description: `
