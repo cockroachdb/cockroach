@@ -396,6 +396,10 @@ DELETE FROM employees WHERE id = 2
 statement error foreign key violation
 DELETE FROM employees WHERE id > 1
 
+# This drops the table and the reference to the same table,
+# and tests that a duplicate schema change is only applied once.
+# If the DROP TABLE were applied twice the duplicate would return
+# pq: descriptor not found
 statement ok
 DROP TABLE employees
 
