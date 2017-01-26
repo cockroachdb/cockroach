@@ -4376,7 +4376,6 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0); err != nil {
 		return errors.Wrap(err, "failed to gossip system config")
 	}
-	atomic.StoreInt32(&r.store.haveGossipedSystemConfig, 1)
 	return nil
 }
 
@@ -4427,7 +4426,6 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 			continue
 		}
 	}
-	atomic.StoreInt32(&r.store.haveGossipedNodeLiveness, 1)
 	return nil
 }
 
