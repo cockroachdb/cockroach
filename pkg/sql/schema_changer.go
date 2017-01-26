@@ -189,15 +189,6 @@ func (sc *SchemaChanger) ExtendLease(
 	return nil
 }
 
-func isSchemaChangeRetryError(err error) bool {
-	switch err {
-	case sqlbase.ErrDescriptorNotFound:
-		return false
-	default:
-		return !sqlbase.IsIntegrityConstraintError(err)
-	}
-}
-
 // maybe Add/Drop/Rename a table depending on the state of a table descriptor.
 // This method returns true if the table is deleted.
 func (sc *SchemaChanger) maybeAddDropRename(
@@ -601,33 +592,6 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 	desc.Mutations = newMutations
 }
 
-// IsDone returns true if the work scheduled for the schema changer
-// is complete.
-func (sc *SchemaChanger) IsDone() (bool, error) {
-	var done bool
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		done = true
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-		if sc.mutationID == sqlbase.InvalidMutationID {
-			if tableDesc.UpVersion {
-				done = false
-			}
-		} else {
-			for _, mutation := range tableDesc.Mutations {
-				if mutation.MutationID == sc.mutationID {
-					done = false
-					break
-				}
-			}
-		}
-		return nil
-	})
-	return done, err
-}
-
 // TestingSchemaChangerCollection is an exported (for testing) version of
 // schemaChangerCollection.
 // TODO(andrei): get rid of this type once we can have tests internal to the sql
@@ -850,20 +814,15 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						err := sc.exec()
-						if err != nil {
-							if err == errExistingSchemaChangeLease {
-							} else if err == sqlbase.ErrDescriptorNotFound {
+						if err := sc.exec(); err != nil {
+							if err != errExistingSchemaChangeLease {
+								log.Warningf(context.TODO(), "Error executing schema change: %s", err)
+							}
+							if err == sqlbase.ErrDescriptorNotFound {
 								// Someone deleted this table. Don't try to run the schema
 								// changer again. Note that there's no gossip update for the
 								// deletion which would remove this schemaChanger.
 								delete(s.schemaChangers, tableID)
-							} else {
-								// We don't need to act on integrity
-								// constraints violations because exec()
-								// purges mutations that violate integrity
-								// constraints.
-								log.Warningf(context.TODO(), "Error executing schema change: %s", err)
 							}
 						}
 						// Advance the execAfter time so that this schema
