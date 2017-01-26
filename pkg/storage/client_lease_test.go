@@ -17,14 +17,20 @@
 package storage_test
 
 import (
+	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -156,4 +162,74 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
 		t.Fatalf("expected lease type epoch; got %d", lt)
 	}
+}
+
+// TestStoreGossipSystemData verifies that the system-config and node-liveness
+// data is gossiped at startup.
+func TestStoreGossipSystemData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	sc.EnableEpochRangeLeases = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	splitKey := keys.SystemConfigSplitKey
+	splitArgs := adminSplitArgs(splitKey, splitKey)
+	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+		t.Fatalf("failed to increment: %s", err)
+	}
+
+	mtc.stopStore(0)
+
+	getSystemConfig := func() config.SystemConfig {
+		systemConfig, ok := mtc.gossips[0].GetSystemConfig()
+		if !ok {
+			return config.SystemConfig{}
+		}
+		return systemConfig
+	}
+	getNodeLiveness := func() storage.Liveness {
+		var liveness storage.Liveness
+		if err := mtc.gossips[0].GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
+			return liveness
+		}
+		return storage.Liveness{}
+	}
+
+	// Clear the system-config and node liveness gossip data. This is necessary
+	// because multiTestContext.restartStore reuse the Gossip structure.
+	if err := mtc.gossips[0].AddInfoProto(
+		gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := mtc.gossips[0].AddInfoProto(
+		gossip.MakeNodeLivenessKey(1), &storage.Liveness{}, 0); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if !reflect.DeepEqual(getSystemConfig(), config.SystemConfig{}) {
+			return errors.New("system config not empty")
+		}
+		if getNodeLiveness() != (storage.Liveness{}) {
+			return errors.New("node liveness not empty")
+		}
+		return nil
+	})
+
+	// Restart the store and verify that both the system-config and node-liveness
+	// data is gossiped.
+	mtc.restartStore(0)
+	testutils.SucceedsSoon(t, func() error {
+		if reflect.DeepEqual(getSystemConfig(), config.SystemConfig{}) {
+			return errors.New("system config not gossiped")
+		}
+		if getNodeLiveness() == (storage.Liveness{}) {
+			return errors.New("node liveness not gossiped")
+		}
+		return nil
+	})
 }
