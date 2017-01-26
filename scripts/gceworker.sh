@@ -36,7 +36,7 @@ case ${1-} in
     stop)
     gcloud compute instances stop "${name}"
     ;;
-    destroy)
+    delete)
     gcloud compute instances delete "${name}"
     ;;
     ssh)
@@ -44,7 +44,7 @@ case ${1-} in
     gcloud compute ssh "${name}" --ssh-flag="-A" -- "$@"
     ;;
     *)
-    echo "$0: unknown command: ${1-}, use one of create, start, stop, destroy, or ssh"
+    echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"
     exit 1
     ;;
 esac
