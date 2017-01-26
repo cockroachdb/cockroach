@@ -46,23 +46,20 @@ case ${1-} in
         --vnet-name "${NET}" \
         --vnet-subnet-name "${SUBNET}"
 
-    # Wait for vm and sshd to start up.
-    sleep 20
-
     # Clear any cached host keys for this hostname and accept the new one.
     ssh-keygen -R "${FQDN}"
-    ssh -o StrictHostKeyChecking=no  "${FQDN}" true
+    # Retry while vm and sshd to start up.
+    "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${FQDN}" true
 
-    # Copy and run the bootstrapping scripts.
-    rsync -az "$(dirname "${0}")/" "${FQDN}:scripts/"
-    ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
+    rsync -az "$(dirname "${0}")/../build/bootstrap" "${FQDN}:bootstrap"
+    ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
     # halts the VM, but halting the VM doesn't stop billing. The VM
     # must instead be "deallocated" with the azure API.
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
-    #ssh "${FQDN}" "sudo cp scripts/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+    #ssh "${FQDN}" "sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
     echo "VM now running at ${FQDN}"
     ;;
@@ -72,7 +69,7 @@ case ${1-} in
     stop)
     azure vm deallocate "${RG}" "${NAME}"
     ;;
-    destroy)
+    delete)
     azure group delete "${RG}"
     ;;
     ssh)
@@ -80,7 +77,7 @@ case ${1-} in
     ssh -A "${FQDN}" -- "$@"
     ;;
     *)
-    echo "$0: unknown command: ${1-}, use one of create, start, stop, destroy, or ssh"
+    echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"
     exit 1
     ;;
 esac

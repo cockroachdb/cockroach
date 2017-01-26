@@ -1,4 +1,4 @@
-FROM buildpack-deps:jessie-curl
+FROM jessie:8.7
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 
