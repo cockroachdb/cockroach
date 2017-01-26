@@ -601,33 +601,6 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 	desc.Mutations = newMutations
 }
 
-// IsDone returns true if the work scheduled for the schema changer
-// is complete.
-func (sc *SchemaChanger) IsDone() (bool, error) {
-	var done bool
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		done = true
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-		if sc.mutationID == sqlbase.InvalidMutationID {
-			if tableDesc.UpVersion {
-				done = false
-			}
-		} else {
-			for _, mutation := range tableDesc.Mutations {
-				if mutation.MutationID == sc.mutationID {
-					done = false
-					break
-				}
-			}
-		}
-		return nil
-	})
-	return done, err
-}
-
 // TestingSchemaChangerCollection is an exported (for testing) version of
 // schemaChangerCollection.
 // TODO(andrei): get rid of this type once we can have tests internal to the sql
