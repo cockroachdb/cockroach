@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -438,12 +437,14 @@ func (r *Replica) leasePostApply(
 	// or this is the first time that either system data has been
 	// gossiped.
 	if iAmTheLeaseHolder {
-		if leaseChangingHands || atomic.LoadInt32(&r.store.haveGossipedSystemConfig) == 0 {
+		// Gossip system data if the lease is changing hands or if the epoch of an
+		// epoch-based lease changes (which will happen at startup if a node
+		// reacquires a lease it previously held). Note that Lease.Epoch is 0 for
+		// expiration-based leases.
+		if leaseChangingHands || prevLease.Epoch != newLease.Epoch {
 			if err := r.maybeGossipSystemConfig(ctx); err != nil {
 				log.Error(ctx, err)
 			}
-		}
-		if leaseChangingHands || atomic.LoadInt32(&r.store.haveGossipedNodeLiveness) == 0 {
 			if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
 				log.Error(ctx, err)
 			}
