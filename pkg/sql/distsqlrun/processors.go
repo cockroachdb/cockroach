@@ -143,8 +143,9 @@ func (h *procOutputHelper) close(err error) {
 }
 
 // noopProcessor is a processor that simply passes rows through from the
-// synchronizer to the post-processing stage. It can be useful in the last stage
-// of a computation, where we may only need the synchronizer to join streams.
+// synchronizer to the post-processing stage. It can be useful for its
+// post-processing or in the last stage of a computation, where we may only
+// need the synchronizer to join streams.
 type noopProcessor struct {
 	flowCtx *FlowCtx
 	input   RowSource
