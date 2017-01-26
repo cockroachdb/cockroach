@@ -16,11 +16,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -419,6 +421,65 @@ func restoreTable(
 		// Pass the descriptors by value to keep this idempotent.
 		return restoreTableDesc(ctx, txn, database, *table)
 	})
+}
+
+// presplitRanges concurrently creates the splits described by `input`. It does
+// this by finding the middle key, splitting and recursively presplitting the
+// resulting left and right hand ranges. NB: The split code assumes that the LHS
+// of the resulting ranges is the smaller, so normally you'd split from the
+// left, but this method should only be called on empty keyranges, so it's okay.
+//
+// The `input` parameter expected to be sorted.
+func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) error {
+	// TODO(dan): This implementation does nothing to control the maximum
+	// parallelization or number of goroutines spawned. Revisit (possibly via a
+	// semaphore) if this becomes a problem in practice.
+
+	ctx, span := tracing.ChildSpan(baseCtx, "presplitRanges")
+	defer tracing.FinishSpan(span)
+
+	if len(input) == 0 {
+		return nil
+	}
+
+	var wg utilccl.WaitGroupWithError
+	var splitFn func([]roachpb.Key)
+	splitFn = func(splitPoints []roachpb.Key) {
+		// Pick the index such that it's 0 if len(splitPoints) == 1.
+		splitIdx := len(splitPoints) / 2
+		// AdminSplit requires that the key be a valid table key, which means
+		// the last byte is a uvarint indicating how much of the end of the key
+		// needs to be stripped off to get the key's row prefix. The start keys
+		// input to restore don't have this suffix, so make them row sentinels,
+		// which means nothing should be stripped (aka appends 0). See
+		// EnsureSafeSplitKey for more context.
+		splitKey := append([]byte(nil), splitPoints[splitIdx]...)
+		splitKey = keys.MakeRowSentinelKey(splitKey)
+		if err := db.AdminSplit(ctx, splitKey); err != nil {
+			if !strings.Contains(err.Error(), "already split at") {
+				log.Errorf(ctx, "presplitRanges: %+v", err)
+				wg.Done(err)
+				return
+			}
+		}
+
+		splitPointsLeft, splitPointsRight := splitPoints[:splitIdx], splitPoints[splitIdx+1:]
+		if len(splitPointsLeft) > 0 {
+			wg.Add(1)
+			go splitFn(splitPointsLeft)
+		}
+		if len(splitPointsRight) > 0 {
+			wg.Add(1)
+			// Save a few goroutines by reusing this one.
+			splitFn(splitPointsRight)
+		}
+		wg.Done(nil)
+	}
+
+	wg.Add(1)
+	splitFn(input)
+	wg.Wait()
+	return wg.FirstError()
 }
 
 func restoreTableDesc(
