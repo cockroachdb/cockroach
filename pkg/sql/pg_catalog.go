@@ -61,8 +61,11 @@ var pgCatalog = virtualSchema{
 		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
 		pgCatalogEnumTable,
+		pgCatalogForeignServerTable,
+		pgCatalogForeignTableTable,
 		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
+		pgCatalogInheritsTable,
 		pgCatalogNamespaceTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
@@ -743,6 +746,41 @@ CREATE TABLE pg_catalog.pg_enum (
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-server.html.
+var pgCatalogForeignServerTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_server (
+  oid OID,
+  srvname NAME,
+  srvowner OID,
+  srvfdw OID,
+  srvtype STRING,
+  srvversion STRING,
+  srvacl STRING,
+  srvoptions STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Foreign servers are not supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-table.html.
+var pgCatalogForeignTableTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_table (
+  ftrelid OID,
+  ftserver OID,
+  ftoptions STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Foreign tables are not supported.
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
 var pgCatalogIndexTable = virtualSchemaTable{
 	schema: `
@@ -915,6 +953,21 @@ func indexDefFromDescriptor(
 		indexDef.Interleave = intlDef
 	}
 	return indexDef.String(), nil
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-inherits.html.
+var pgCatalogInheritsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_inherits (
+	inhrelid OID,
+	inhparent OID,
+	inhseqno INT
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Table inheritance is not supported.
+		return nil
+	},
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-namespace.html.
