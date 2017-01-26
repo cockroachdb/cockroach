@@ -46,12 +46,10 @@ case ${1-} in
         --vnet-name "${NET}" \
         --vnet-subnet-name "${SUBNET}"
 
-    # Wait for vm and sshd to start up.
-    sleep 20
-
     # Clear any cached host keys for this hostname and accept the new one.
     ssh-keygen -R "${FQDN}"
-    ssh -o StrictHostKeyChecking=no  "${FQDN}" true
+    # Retry while vm and sshd to start up.
+    "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${FQDN}" true
 
     rsync -az "$(dirname "${0}")/../build/bootstrap" "${FQDN}:bootstrap"
     ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
