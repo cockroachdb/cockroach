@@ -819,7 +819,8 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 }
 
 func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines), cliCtx.prettyFmt)
+	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines),
+		cliCtx.tableDisplayFormat)
 	if c.exitErr != nil {
 		fmt.Fprintln(osStderr, c.exitErr)
 		if c.errExit {
@@ -918,9 +919,10 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(conn *sqlConn, stmts []string, pretty bool) error {
+func runStatements(conn *sqlConn, stmts []string, displayFormat tableDisplayFormat) error {
 	for _, stmt := range stmts {
-		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt), pretty); err != nil {
+		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt),
+			displayFormat); err != nil {
 			return err
 		}
 	}
@@ -946,7 +948,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts, cliCtx.prettyFmt)
+		return runStatements(conn, sqlCtx.execStmts, cliCtx.tableDisplayFormat)
 	}
 	// Use the same as the default global readline config.
 	conf := readline.Config{

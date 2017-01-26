@@ -61,7 +61,7 @@ var debugCtx = debugContext{
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
-	cliCtx.prettyFmt = false
+	cliCtx.tableDisplayFormat = tableDisplayTSV
 	dumpCtx.dumpMode = dumpBoth
 }
 
@@ -394,13 +394,17 @@ func init() {
 	tableOutputCommands := []*cobra.Command{sqlShellCmd}
 	tableOutputCommands = append(tableOutputCommands, userCmds...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
+
+	// By default, these commands print their output as pretty-formatted
+	// tables on terminals, and TSV when redirected to a file. The user
+	// can override with --format.
+	cliCtx.tableDisplayFormat = tableDisplayTSV
+	if isInteractive {
+		cliCtx.tableDisplayFormat = tableDisplayPretty
+	}
 	for _, cmd := range tableOutputCommands {
 		f := cmd.Flags()
-
-		// By default, these commands print their output as pretty-formatted
-		// tables on terminals, and TSV when redirected to a file. The user
-		// can override with --pretty.
-		boolFlag(f, &cliCtx.prettyFmt, cliflags.Pretty, isInteractive)
+		varFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
