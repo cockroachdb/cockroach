@@ -72,7 +72,7 @@ case ${1-} in
     stop)
     azure vm deallocate "${RG}" "${NAME}"
     ;;
-    destroy)
+    delete)
     azure group delete "${RG}"
     ;;
     ssh)
@@ -80,7 +80,7 @@ case ${1-} in
     ssh -A "${FQDN}" -- "$@"
     ;;
     *)
-    echo "$0: unknown command: ${1-}, use one of create, start, stop, destroy, or ssh"
+    echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"
     exit 1
     ;;
 esac
