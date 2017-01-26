@@ -5,13 +5,12 @@ set -euo pipefail
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 GOVERSION=${GOVERSION-1.7.4}
-
-name=${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}
+NAME="${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}"
 
 case ${1-} in
     create)
     gcloud compute instances \
-           create "${name}" \
+           create "${NAME}" \
            --machine-type "custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
@@ -19,31 +18,31 @@ case ${1-} in
            --image "ubuntu-1604-xenial-v20170113" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
-           --boot-disk-device-name "${name}"
+           --boot-disk-device-name "${NAME}"
 
     # Retry while vm and sshd to start up.
-    "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${name}" --command=true
+    "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${NAME}" --command=true
 
-    gcloud compute copy-files "$(dirname "${0}")/../build/bootstrap" "${name}:bootstrap"
-    gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
+    gcloud compute copy-files "$(dirname "${0}")/../build/bootstrap" "${NAME}:bootstrap"
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
-    gcloud compute ssh "${name}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+    gcloud compute ssh "${NAME}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
     ;;
     start)
-    gcloud compute instances start "${name}"
+    gcloud compute instances start "${NAME}"
     ;;
     stop)
-    gcloud compute instances stop "${name}"
+    gcloud compute instances stop "${NAME}"
     ;;
     delete)
-    gcloud compute instances delete "${name}"
+    gcloud compute instances delete "${NAME}"
     ;;
     ssh)
     shift
-    gcloud compute ssh "${name}" --ssh-flag="-A" -- "$@"
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" -- "$@"
     ;;
     *)
     echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"
