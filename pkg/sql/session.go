@@ -438,6 +438,12 @@ type schemaChangerCollection struct {
 }
 
 func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
+	// Ignore duplicates.
+	for _, sc := range scc.schemaChangers {
+		if sc.sc.tableID == schemaChanger.tableID && sc.sc.mutationID == schemaChanger.mutationID {
+			return
+		}
+	}
 	scc.schemaChangers = append(
 		scc.schemaChangers,
 		struct {
@@ -476,17 +482,12 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.db = *e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			if done, err := sc.IsDone(); err != nil {
-				log.Warning(ctx, err)
-				break
-			} else if done {
-				break
-			}
 			if err := sc.exec(); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again
 					continue
 				}
+
 				// All other errors can be reported; we report it as the result
 				// corresponding to the statement that enqueued this changer.
 				// There's some sketchiness here: we assume there's a single result
