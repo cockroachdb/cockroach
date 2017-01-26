@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -476,17 +477,18 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.db = *e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			if done, err := sc.IsDone(); err != nil {
-				log.Warning(ctx, err)
-				break
-			} else if done {
-				break
-			}
 			if err := sc.exec(); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again
 					continue
 				}
+				if err == sqlbase.ErrDescriptorNotFound {
+					// Ignore this error because this is a legitimate
+					// schema change completion.
+					log.Warning(ctx, err)
+					break
+				}
+
 				// All other errors can be reported; we report it as the result
 				// corresponding to the statement that enqueued this changer.
 				// There's some sketchiness here: we assume there's a single result
