@@ -1112,7 +1112,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if req, ok := args.Req.(*roachpb.EndTransactionRequest); ok {
-				if bytes.Contains(req.Key, []byte(keys.DescIDGenerator)) {
+				if bytes.Contains(req.Key, []byte(keys.SystemConfigSpan.Key)) {
 					hitError = true
 					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
 				}

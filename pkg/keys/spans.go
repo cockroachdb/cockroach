@@ -26,7 +26,10 @@ var (
 	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
 
 	// SystemConfigSpan is the range of system objects which will be gossiped.
-	SystemConfigSpan = roachpb.Span{Key: TableDataMin, EndKey: SystemConfigTableDataMax}
+	SystemConfigSpan = roachpb.Span{
+		Key:    MakeRowSentinelKey(TableDataMin),
+		EndKey: SystemConfigTableDataMax,
+	}
 
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
 	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataMin}

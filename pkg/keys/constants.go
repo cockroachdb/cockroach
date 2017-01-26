@@ -234,7 +234,7 @@ var (
 	ReportUsagePrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("update-")))
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MinInt64))
+	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, 0))
 	// TableDataMin is the end of the range of table data keys.
 	TableDataMax = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MaxInt64))
 

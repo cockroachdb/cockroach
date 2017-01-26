@@ -375,8 +375,17 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (ZoneConfig, error) {
 func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
 	tableStart := roachpb.RKey(keys.SystemConfigTableDataMax)
 	if !tableStart.Less(endKey) {
-		// This range is before the user tables span: no required splits.
-		return nil
+		// Split the system-config span from the rest of the system data.
+		systemConfigStart := roachpb.RKey(keys.TableDataMin)
+		if !systemConfigStart.Less(endKey) {
+			// This range is before the system config span: no required splits.
+			return nil
+		}
+		if !startKey.Less(systemConfigStart) {
+			return nil
+		}
+		// NB: Split keys need to be valid column keys.
+		return []roachpb.RKey{keys.MakeRowSentinelKey(systemConfigStart)}
 	}
 
 	startID, ok := ObjectIDForKey(startKey)
