@@ -388,7 +388,7 @@ type rngInfo struct {
 }
 
 func resolveSpans(
-	ctx context.Context, it *distsqlplan.SpanResolverIterator, spans ...spanWithDir,
+	ctx context.Context, it distsqlplan.SpanResolverIterator, spans ...spanWithDir,
 ) ([][]rngInfo, error) {
 	res := make([][]rngInfo, 0)
 	for _, span := range spans {
