@@ -225,8 +225,11 @@ pg_database
 pg_depend
 pg_description
 pg_enum
+pg_foreign_server
+pg_foreign_table
 pg_index
 pg_indexes
+pg_inherits
 pg_namespace
 pg_proc
 pg_range
@@ -267,8 +270,11 @@ pg_roles
 pg_range
 pg_proc
 pg_namespace
+pg_inherits
 pg_indexes
 pg_index
+pg_foreign_table
+pg_foreign_server
 pg_enum
 pg_description
 pg_depend
@@ -306,8 +312,11 @@ def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
 def            pg_catalog          pg_enum            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
 def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_range           SYSTEM VIEW  1
@@ -360,8 +369,11 @@ def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
 def            pg_catalog          pg_enum            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
 def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_range           SYSTEM VIEW  1
@@ -405,8 +417,11 @@ def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
 def            pg_catalog          pg_enum            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
 def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_range           SYSTEM VIEW  1
