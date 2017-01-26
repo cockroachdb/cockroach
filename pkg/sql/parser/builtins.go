@@ -1620,6 +1620,31 @@ var Builtins = map[string][]Builtin{
 				"Currently, CockroachDB does not support adding comments to columns.",
 		},
 	},
+	"pg_catalog.obj_description": {
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info: "obj_description returns the comment for a database object. " +
+				"Currently, CockroachDB does not support database object comments.",
+		},
+	},
+	"pg_catalog.shobj_description": {
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}, {"catalog_name", TypeString}},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info: "shobj_description returns the comment for a shared database " +
+				"object. Currently, CockroachDB does not support database object " +
+				"comments.",
+		},
+	},
 	"pg_catalog.array_in": {
 		Builtin{
 			Types:      ArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
