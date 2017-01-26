@@ -502,6 +502,16 @@ SELECT '2015-08-24 23:45:45.53453-05:00'::timestamptz
 ----
 2015-08-24 23:45:45.53453 -0500 -0500
 
+query T
+SELECT '2015-08-24 23:45:45.534 -02:00'::timestamp
+----
+2015-08-25 01:45:45.534 +0000 +0000
+
+query T
+SELECT '2015-08-24 23:45:45.534 -02:00'::timestamptz
+----
+2015-08-24 20:45:45.534 -0500 -0500
+
 statement error cannot find time zone "foobar": timezone data cannot be found
 SET TIME ZONE 'foobar'
 
