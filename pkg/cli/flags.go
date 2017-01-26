@@ -421,8 +421,6 @@ func init() {
 		boolFlag(f, &debugCtx.replicated, cliflags.Replicated, false)
 	}
 
-	boolFlag(versionCmd.Flags(), &versionIncludesDeps, cliflags.Deps, false)
-
 	cobra.OnInitialize(extraFlagInit)
 }
 

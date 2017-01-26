@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -48,15 +47,13 @@ func Main() {
 // Proxy to allow overrides in tests.
 var osStderr = os.Stderr
 
-var versionIncludesDeps bool
-
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "output version information",
 	Long: `
 Output build version information.
 `,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		info := build.GetInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 		fmt.Fprintf(tw, "Build Tag:    %s\n", info.Tag)
@@ -65,11 +62,8 @@ Output build version information.
 		fmt.Fprintf(tw, "Platform:     %s\n", info.Platform)
 		fmt.Fprintf(tw, "Go Version:   %s\n", info.GoVersion)
 		fmt.Fprintf(tw, "C Compiler:   %s\n", info.CgoCompiler)
-		if versionIncludesDeps {
-			fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
-				strings.Replace(strings.Replace(info.Dependencies, " ", "\n\t", -1), ":", "\t", -1))
-		}
-		_ = tw.Flush()
+		fmt.Fprintf(tw, "Build SHA-1:  %s\n", info.Revision)
+		return tw.Flush()
 	},
 }
 
