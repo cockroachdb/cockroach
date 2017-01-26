@@ -413,7 +413,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer stopper.Stop()
 	s, _ := createTestStore(t, stopper)
 
-	dataMaxAddr, err := keys.Addr(keys.SystemConfigTableDataMax)
+	dataMaxAddr, err := keys.Addr(keys.TableDataMin)
 	if err != nil {
 		t.Fatal(err)
 	}
