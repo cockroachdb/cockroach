@@ -200,13 +200,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
-	isDone, err := changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
-	}
 
 	// Check that MaybeIncrementVersion increments the version
 	// correctly.
@@ -219,13 +212,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	); err != nil {
 		t.Fatal(err)
 	}
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isDone {
-		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
-	}
+
 	desc, err = changer.MaybeIncrementVersion()
 	if err != nil {
 		t.Fatal(err)
@@ -239,13 +226,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	newVersion = savedTableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
 	}
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
@@ -310,14 +290,10 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		}
 	}
 	// RunStateMachineBeforeBackfill() doesn't complete the schema change.
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isDone {
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Mutations) == 0 {
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
-
 }
 
 func TestAsyncSchemaChanger(t *testing.T) {
