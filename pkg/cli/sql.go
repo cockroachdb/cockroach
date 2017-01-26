@@ -17,6 +17,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql/driver"
 	"errors"
@@ -60,7 +61,10 @@ Open a sql shell running against a cockroach database.
 // command-line processing.
 type cliState struct {
 	conn *sqlConn
-	ins  *readline.Instance
+	// ins is used to read lines if isInteractive is true.
+	ins *readline.Instance
+	// buf is used to read lines if isInteractive is false.
+	buf *bufio.Reader
 
 	// Options
 	//
@@ -547,7 +551,27 @@ func (c *cliState) doContinueLine(nextState cliStateEnum) cliStateEnum {
 // input was successful it populates c.lastInputLine.  Otherwise
 // c.exitErr is set in some cases and an error/retry state is returned.
 func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
-	l, err := c.ins.Readline()
+	var l string
+	var err error
+	if c.ins != nil {
+		l, err = c.ins.Readline()
+	} else {
+		l, err = c.buf.ReadString('\n')
+		// bufio.ReadString() differs from readline.Readline in the handling of
+		// EOF. Readline only returns EOF when there is nothing left to read and
+		// there is no partial line while bufio.ReadString() returns EOF when the
+		// end of input has been reached but will return the non-empty partial line
+		// as well. We workaround this by converting the bufio behavior to match
+		// the Readline behavior.
+		if err == io.EOF && len(l) != 0 {
+			err = nil
+		} else if err == nil {
+			// From the bufio.ReadString docs: ReadString returns err != nil if and
+			// only if the returned data does not end in delim. To match the behavior
+			// of readline.Readline, we strip off the trailing delimiter.
+			l = l[:len(l)-1]
+		}
+	}
 
 	switch err {
 	case nil:
@@ -829,13 +853,23 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
-			// The readline initialization is not placed in
-			// the doStart() method because of the defer.
-			c.ins, c.exitErr = readline.NewEx(config)
-			if c.exitErr != nil {
-				return c.exitErr
+			// chzyer/readline is exceptionally slow at reading long lines, so we
+			// only use it in interactive mode.
+			if isInteractive {
+				// The readline initialization is not placed in
+				// the doStart() method because of the defer.
+				c.ins, c.exitErr = readline.NewEx(config)
+				if c.exitErr != nil {
+					return c.exitErr
+				}
+				defer func() { _ = c.ins.Close() }()
+			} else {
+				stdin := config.Stdin
+				if stdin == nil {
+					stdin = os.Stdin
+				}
+				c.buf = bufio.NewReader(stdin)
 			}
-			defer func() { _ = c.ins.Close() }()
 
 			state = c.doStart(cliQuerySyntax)
 
