@@ -21,7 +21,7 @@ eexpect "root@"
 # Check that \q terminates the client.
 send "\\q\r"
 eexpect eof
-spawn $argv sql --pretty=false
+spawn $argv sql --format=tsv
 eexpect root@
 
 # Check that \| reads statements.
