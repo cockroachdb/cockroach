@@ -963,6 +963,7 @@ const (
 	timestampWithOffsetSecondsZoneFormat  = timestampWithOffsetZoneFormat + ":00"
 	timestampWithNamedZoneFormat          = timestampFormat + " MST"
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
+	timestampSequelizeFormat              = timestampFormat + ".000 -07:00"
 
 	TimestampNodeFormat = timestampFormat + ".999999-07:00"
 )
@@ -975,6 +976,7 @@ var timeFormats = []string{
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	timestampRFC3339NanoWithoutZoneFormat,
+	timestampSequelizeFormat,
 	TimestampNodeFormat,
 }
 
