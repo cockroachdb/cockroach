@@ -277,7 +277,6 @@ EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 1  render                    ("b + 2")
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
-2          spans  ALL
 
 # Check that the sort picks up a renamed render properly.
 query ITTTTT
@@ -288,7 +287,6 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 1  render                    (y)
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
-2          spans  ALL
 
 # Check that the sort reuses a render behind a rename properly.
 query ITTTTT
@@ -299,7 +297,6 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 1  render                    (y)
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
-2          spans  ALL
 
 statement ok
 CREATE TABLE abc (
