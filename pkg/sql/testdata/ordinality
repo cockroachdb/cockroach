@@ -93,7 +93,7 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALI
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a';
 ----
-0  filter                          (x, ordinality)  +ordinality,unique
-1  ordinality                      (x, ordinality)  +ordinality,unique
-2  scan                            (x)
+0  filter                          (x, ordinality)  +x,unique
+1  ordinality                      (x, ordinality)  +x,unique
+2  scan                            (x)              +x,unique
 2              table  foo@primary

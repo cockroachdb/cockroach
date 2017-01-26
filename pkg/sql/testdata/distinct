@@ -110,8 +110,7 @@ EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 1  sort
 1            order  +"y + z"
 2  scan
-2            table  xyz@foo
-2            spans  ALL
+2            table  xyz@primary
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by z
