@@ -20,7 +20,9 @@ case ${1-} in
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${name}"
-    sleep 20 # avoid SSH timeout on copy-files
+
+    # Retry while vm and sshd to start up.
+    "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${name}" --command=true
 
     gcloud compute copy-files "$(dirname "${0}")/../build/bootstrap" "${name}:bootstrap"
     gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"

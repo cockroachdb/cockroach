@@ -36,7 +36,7 @@ travis_retry() {
     result=$?
     [ $result -eq 0 ] && break
     count=$((count + 1))
-    sleep 1
+    sleep 10
   done
 
   [ $count -gt 3 ] && {
