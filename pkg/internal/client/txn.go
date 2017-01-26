@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -50,6 +51,9 @@ type Txn struct {
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
+	// txnAnchorKey is the key at which to anchor the transaction record. If
+	// unset, the first key written in the transaction will be used.
+	txnAnchorKey roachpb.Key
 	// commitTriggers are run upon successful commit.
 	commitTriggers []func()
 	// The txn has to be committed by this deadline. A nil value indicates no
@@ -146,12 +150,27 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 // This can be done by making sure a system key is the first key touched in the
 // transaction.
 func (txn *Txn) SetSystemConfigTrigger() {
-	txn.systemConfigTrigger = true
+	if !txn.systemConfigTrigger {
+		txn.systemConfigTrigger = true
+		// The system-config trigger must be run on the system-config range which
+		// means any transaction with the trigger set needs to be anchored to the
+		// system-config range.
+		txn.SetTxnAnchorKey(keys.SystemConfigSpan.Key)
+	}
 }
 
 // SystemConfigTrigger returns the systemConfigTrigger flag.
 func (txn *Txn) SystemConfigTrigger() bool {
 	return txn.systemConfigTrigger
+}
+
+// SetTxnAnchorKey sets the key at which to anchor the transaction record. The
+// transaction anchor key defaults to the first key written in a transaction.
+func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
+	if txn.Proto.Writing {
+		panic("must set txn anchor key before any txn writes")
+	}
+	txn.txnAnchorKey = key
 }
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
@@ -682,7 +701,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 	// the coordinator when the first intent has been created, and which
 	// lives for the life of the transaction.
 	firstWriteIndex := -1
-	var firstWriteKey roachpb.Key
+	txnAnchorKey := txn.txnAnchorKey
 
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
@@ -691,9 +710,13 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 				return nil, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
 			}
 		}
-		if roachpb.IsTransactionWrite(args) && firstWriteIndex == -1 {
-			firstWriteKey = args.Header().Key
-			firstWriteIndex = i
+		if roachpb.IsTransactionWrite(args) {
+			if firstWriteIndex == -1 {
+				firstWriteIndex = i
+			}
+			if len(txnAnchorKey) == 0 {
+				txnAnchorKey = args.Header().Key
+			}
 		}
 	}
 
@@ -710,7 +733,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 		// sure we set the key in the begin transaction request to the original.
 		bt := &roachpb.BeginTransactionRequest{
 			Span: roachpb.Span{
-				Key: firstWriteKey,
+				Key: txnAnchorKey,
 			},
 		}
 		if txn.Proto.Key != nil {

@@ -849,7 +849,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
 		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
-		expKeys := make([]roachpb.Key, 0, maxTableID+numReservedTables)
+		var expKeys []roachpb.Key
+		expKeys = append(expKeys,
+			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin))
 		for i := 1; i <= int(numReservedTables); i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix,

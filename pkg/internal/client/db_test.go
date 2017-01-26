@@ -394,6 +394,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "SetUserPriority"}:        {},
 		{txnType, "SetSystemConfigTrigger"}: {},
 		{txnType, "SystemConfigTrigger"}:    {},
+		{txnType, "SetTxnAnchorKey"}:        {},
 		{txnType, "UpdateDeadlineMaybe"}:    {},
 		{txnType, "AddCommitTrigger"}:       {},
 	}
