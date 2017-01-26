@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -706,6 +707,11 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 	// If we're not yet writing in this txn, but intend to, insert a
 	// begin transaction request before the first write command.
 	if needBeginTxn {
+		// If we're setting the system-config trigger, anchor the transaction to
+		// the system-config range.
+		if txn.systemConfigTrigger {
+			firstWriteKey = keys.SystemConfigSpan.Key
+		}
 		// If the transaction already has a key (we're in a restart), make
 		// sure we set the key in the begin transaction request to the original.
 		bt := &roachpb.BeginTransactionRequest{
