@@ -52,6 +52,9 @@ type TestServerInterface interface {
 
 	Start(params base.TestServerArgs) error
 
+	// NodeID returns the ID of this node within its cluster.
+	NodeID() roachpb.NodeID
+
 	// ServingAddr returns the server's address.
 	ServingAddr() string
 
