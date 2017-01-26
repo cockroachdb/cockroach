@@ -79,6 +79,7 @@ type ValueGenerator interface {
 }
 
 var _ ValueGenerator = &seriesValueGenerator{}
+var _ ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
@@ -109,6 +110,20 @@ var generators = map[string][]Builtin{
 			TTuple{TypeInt},
 			makeSeriesGenerator,
 			"Not usable; supported only for ORM compatibility.",
+		),
+	},
+	"unnest": {
+		makeGeneratorBuiltin(
+			ArgTypes{{"input", TypeIntArray}},
+			TTuple{TypeInt},
+			makeArrayGenerator,
+			"Returns the input array as a set of rows",
+		),
+		makeGeneratorBuiltin(
+			ArgTypes{{"input", TypeStringArray}},
+			TTuple{TypeString},
+			makeArrayGenerator,
+			"Returns the input array as a set of rows",
 		),
 	},
 }
@@ -177,4 +192,42 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 // Values implements the ValueGenerator interface.
 func (s *seriesValueGenerator) Values() DTuple {
 	return DTuple{NewDInt(DInt(s.value))}
+}
+
+func makeArrayGenerator(_ *EvalContext, args DTuple) (ValueGenerator, error) {
+	arr := args[0].(*DArray)
+	return &arrayValueGenerator{array: arr}, nil
+}
+
+// arrayValueGenerator is a value generator that returns each element of an
+// array.
+type arrayValueGenerator struct {
+	array     *DArray
+	nextIndex int
+}
+
+// ColumnTypes implements the ValueGenerator interface.
+func (s *arrayValueGenerator) ColumnTypes() TTuple { return TTuple{s.array.ParamTyp} }
+
+// Start implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Start() error {
+	s.nextIndex = -1
+	return nil
+}
+
+// Close implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Close() {}
+
+// Next implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Next() (bool, error) {
+	s.nextIndex++
+	if s.nextIndex >= s.array.Len() {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Values() DTuple {
+	return DTuple{s.array.Array[s.nextIndex]}
 }
