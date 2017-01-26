@@ -91,11 +91,24 @@ message ProcessorCoreUnion {
   optional DistinctSpec distinct = 7;
   optional MergeJoinerSpec mergeJoiner = 8;
   optional HashJoinerSpec hashJoiner = 9;
+  optional ValuesCoreSpec values = 10;
 }
 
-// NoopCoreSpec indicates a "no-op" processor core. This is used when only a
-// synchronizer is required, e.g. at the final endpoint.
+// NoopCoreSpec indicates a "no-op" processor core. This is used when we just
+// need post-processing or when only a synchronizer is required (e.g. at the
+// final endpoint).
 message NoopCoreSpec {
+}
+
+// ValuesCoreSpec is the core of a processor that has no inputs and generates
+// "pre-canned" rows. This is not intended to be used for very large datasets.
+message ValuesCoreSpec {
+  // There is one DatumInfo for each element in a row.
+  repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
+
+  // Each raw block encodes one or more data rows; each datum is encoded
+  // according to the corresponding DatumInfo.
+  repeated bytes raw_bytes = 2;
 }
 
 message TableReaderSpan {

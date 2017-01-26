@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 )
 
@@ -60,6 +61,15 @@ func colListStr(cols []uint32) string {
 
 func (*NoopCoreSpec) summary() (string, []string) {
 	return "No-op", []string{}
+}
+
+func (v *ValuesCoreSpec) summary() (string, []string) {
+	var bytes uint64
+	for _, b := range v.RawBytes {
+		bytes += uint64(len(b))
+	}
+	detail := fmt.Sprintf("%s (%d chunks)", humanize.IBytes(bytes), len(v.RawBytes))
+	return "Values", []string{detail}
 }
 
 func (a *AggregatorSpec) summary() (string, []string) {
