@@ -114,3 +114,18 @@ SELECT 3 + x FROM generate_series(1,2) AS a(x)
 # render expressions into cross joins.
 query error pq: unsupported binary operator: <int> \+ <setof tuple\{int\}>
 SELECT 3 + generate_series(1,2)
+
+query I
+SELECT * from unnest(ARRAY[1,2]);
+----
+1
+2
+
+query IT
+SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b']);
+----
+1  a
+1  b
+2  a
+2  b
+
