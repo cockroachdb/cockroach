@@ -152,11 +152,12 @@ with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`,
 	}
 
-	Pretty = FlagInfo{
-		Name: "pretty",
+	TableDisplayFormat = FlagInfo{
+		Name: "format",
 		Description: `
-Causes table rows to be formatted as tables using ASCII art.
-When not specified, table rows are printed as tab-separated values (TSV).`,
+Selects how to display table rows in results. Possible values: tsv,
+csv, pretty, records, sql, html. If left unspecified, defaults to tsv
+for non-interactive sessions and pretty for interactive sessions.`,
 	}
 
 	Join = FlagInfo{
