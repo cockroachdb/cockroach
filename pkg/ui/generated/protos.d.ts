@@ -6102,11 +6102,11 @@ getTime?() : string;
 
 
 
-dependencies?: string;
+revision?: string;
 		
 
-getDependencies?() : string;
-		setDependencies?(dependencies : string): void;
+getRevision?() : string;
+		setRevision?(revision : string): void;
 		
 
 

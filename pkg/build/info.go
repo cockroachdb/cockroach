@@ -42,7 +42,7 @@ var (
 	// top-level Makefile when compiling release binaries.
 	tag         = "unknown" // Tag of this build (git describe)
 	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
-	deps        string      // Git SHAs of dependencies
+	rev         string      // SHA-1 of this build (git rev-parse)
 	cgoCompiler = C.GoString(C.compilerVersion())
 	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
@@ -69,7 +69,7 @@ func GetInfo() Info {
 		GoVersion:    runtime.Version(),
 		Tag:          tag,
 		Time:         utcTime,
-		Dependencies: deps,
+		Revision:     rev,
 		CgoCompiler:  cgoCompiler,
 		Platform:     platform,
 		Distribution: Distribution,
