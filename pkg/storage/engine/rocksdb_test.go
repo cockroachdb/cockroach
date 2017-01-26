@@ -22,13 +22,11 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -401,129 +399,6 @@ func TestConcurrentBatch(t *testing.T) {
 		}
 		if elapsed := timeutil.Since(start); elapsed >= 10*time.Second {
 			t.Fatalf("write took %0.1fs\n", elapsed.Seconds())
-		}
-	}
-}
-
-func BenchmarkRocksDBSstFileWriter(b *testing.B) {
-	dir, err := ioutil.TempDir("", "BenchmarkRocksDBSstFileWriter")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	const maxEntries = 100000
-	const keyLen = 10
-	const valLen = 100
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	kv := MVCCKeyValue{
-		Key:   MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts},
-		Value: make([]byte, valLen),
-	}
-
-	b.ResetTimer()
-	sst := MakeRocksDBSstFileWriter()
-	if err := sst.Open(filepath.Join(dir, "sst")); err != nil {
-		b.Fatal(sst)
-	}
-	defer func() {
-		if err := sst.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}()
-	for i := 1; i <= b.N; i++ {
-		if i%maxEntries == 0 {
-			if err := sst.Close(); err != nil {
-				b.Fatal(err)
-			}
-			sst = MakeRocksDBSstFileWriter()
-			if err := sst.Open(filepath.Join(dir, "sst")); err != nil {
-				b.Fatal(sst)
-			}
-		}
-
-		b.StopTimer()
-		kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
-		copy(kv.Value, kv.Key.Key)
-		b.StartTimer()
-		if err := sst.Add(kv); err != nil {
-			b.Fatal(err)
-		}
-	}
-	b.SetBytes(keyLen + valLen)
-}
-
-func BenchmarkRocksDBSstFileReader(b *testing.B) {
-	dir, err := ioutil.TempDir("", "BenchmarkRocksDBSstFileReader")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	sstPath := filepath.Join(dir, "sst")
-	{
-		const maxEntries = 100000
-		const keyLen = 10
-		const valLen = 100
-		b.SetBytes(keyLen + valLen)
-
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		kv := MVCCKeyValue{
-			Key:   MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts},
-			Value: make([]byte, valLen),
-		}
-
-		sst := MakeRocksDBSstFileWriter()
-		if err := sst.Open(sstPath); err != nil {
-			b.Fatal(sst)
-		}
-		var entries = b.N
-		if entries > maxEntries {
-			entries = maxEntries
-		}
-		for i := 0; i < entries; i++ {
-			kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
-			copy(kv.Value, kv.Key.Key)
-			if err := sst.Add(kv); err != nil {
-				b.Fatal(err)
-			}
-		}
-		if err := sst.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.ResetTimer()
-	sst, err := MakeRocksDBSstFileReader()
-	if err != nil {
-		b.Fatal(err)
-	}
-	if err := sst.AddFile(sstPath); err != nil {
-		b.Fatal(err)
-	}
-	defer sst.Close()
-	count := 0
-	iterateFn := func(kv MVCCKeyValue) (bool, error) {
-		count++
-		if count >= b.N {
-			return true, nil
-		}
-		return false, nil
-	}
-	for {
-		if err := sst.Iterate(MVCCKey{Key: keys.MinKey}, MVCCKey{Key: keys.MaxKey}, iterateFn); err != nil {
-			b.Fatal(err)
-		}
-		if count >= b.N {
-			break
 		}
 	}
 }

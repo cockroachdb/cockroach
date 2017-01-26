@@ -177,16 +177,6 @@ struct DBIterator {
 
 }  // extern "C"
 
-namespace {
-
-// NOTE: these constants must be kept in sync with the values in
-// storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
-// kKeyLocalRangePrefix are the mvcc-encoded prefixes.
-const rocksdb::Slice kKeyLocalRangeIDPrefix("\x01i", 2);
-const rocksdb::Slice kKeyLocalMax("\x02", 1);
-
-const DBStatus kSuccess = { NULL, 0 };
-
 std::string ToString(DBSlice s) {
   return std::string(s.data, s.len);
 }
@@ -223,6 +213,16 @@ std::string EncodeKey(DBKey k) {
   s.push_back(char(s.size() - k.key.len));
   return s;
 }
+
+namespace {
+
+// NOTE: these constants must be kept in sync with the values in
+// storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
+// kKeyLocalRangePrefix are the mvcc-encoded prefixes.
+const rocksdb::Slice kKeyLocalRangeIDPrefix("\x01i", 2);
+const rocksdb::Slice kKeyLocalMax("\x02", 1);
+
+const DBStatus kSuccess = { NULL, 0 };
 
 // When we're performing a prefix scan, we want to limit the scan to
 // the keys that have the matching prefix. Prefix in this case refers
@@ -2247,53 +2247,10 @@ DBString DBGetUserProperties(DBEngine* db) {
   return db->GetUserProperties();
 }
 
-DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
-  const std::vector<std::string> paths = { ToString(path) };
-  rocksdb::Status status = db->rep->AddFile(paths);
-  if (!status.ok()) {
-    return ToDBStatus(status);
-  }
-  return kSuccess;
+rocksdb::DB* RawDB(DBEngine *db) {
+  return db->rep;
 }
 
-struct DBSstFileWriter {
-  std::unique_ptr<rocksdb::Options> options;
-  rocksdb::SstFileWriter rep;
-
-  DBSstFileWriter(rocksdb::Options* o)
-      : options(o),
-        rep(rocksdb::EnvOptions(), *o, o->comparator) {
-  }
-  virtual ~DBSstFileWriter() { }
-};
-
-DBSstFileWriter* DBSstFileWriterNew() {
-  rocksdb::Options* options = new rocksdb::Options();
-  options->comparator = &kComparator;
-  return new DBSstFileWriter(options);
-}
-
-DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw, DBSlice path) {
-  rocksdb::Status status = fw->rep.Open(ToString(path));
-  if (!status.ok()) {
-    return ToDBStatus(status);
-  }
-  return kSuccess;
-}
-
-DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Add(EncodeKey(key), ToSlice(val));
-  if (!status.ok()) {
-    return ToDBStatus(status);
-  }
-  return kSuccess;
-}
-
-DBStatus DBSstFileWriterClose(DBSstFileWriter* fw) {
-  rocksdb::Status status = fw->rep.Finish();
-  delete fw;
-  if (!status.ok()) {
-    return ToDBStatus(status);
-  }
-  return kSuccess;
+rocksdb::Comparator* CockroachComparator() {
+  return (rocksdb::Comparator*)&kComparator;
 }
