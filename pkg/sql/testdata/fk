@@ -396,6 +396,14 @@ DELETE FROM employees WHERE id = 2
 statement error foreign key violation
 DELETE FROM employees WHERE id > 1
 
+# This drops the table and the reference to the same table that show up as
+# two SchemaChangers for the same table. One of them is charged with
+# incrementing the version followed by a table DROP, and the second
+# increments the table version so that other nodes on the cluster
+# are aware that the FK reference is no more. But, only the table DROP
+# needs to be executed, for if the second SchemaChanger executes it will
+# return a error: pq: descriptor not found. This test that DROPs a table
+# with a FK also tests that the second SchemaChange is not executed.
 statement ok
 DROP TABLE employees
 
