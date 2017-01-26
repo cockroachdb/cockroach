@@ -438,12 +438,12 @@ func (r *Replica) leasePostApply(
 	// or this is the first time that either system data has been
 	// gossiped.
 	if iAmTheLeaseHolder {
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedSystemConfig, 0, 1) {
+		if leaseChangingHands || atomic.LoadInt32(&r.store.haveGossipedSystemConfig) == 0 {
 			if err := r.maybeGossipSystemConfig(ctx); err != nil {
 				log.Error(ctx, err)
 			}
 		}
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedNodeLiveness, 0, 1) {
+		if leaseChangingHands || atomic.LoadInt32(&r.store.haveGossipedNodeLiveness) == 0 {
 			if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
 				log.Error(ctx, err)
 			}

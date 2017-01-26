@@ -1314,14 +1314,26 @@ func (s *Store) startGossip() {
 		gossipFn := gossipFn // per-iteration copy
 		s.stopper.RunWorker(func() {
 			ctx := s.AnnotateCtx(context.Background())
-			// Run the first time without waiting for the Ticker and signal the WaitGroup.
-			if err := gossipFn.fn(ctx); err != nil {
-				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-			}
-			s.initComplete.Done()
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
-			for {
+			for first := true; ; {
+				// Retry in a backoff loop until gossipFn succeeds. The gossipFn might
+				// temporarily fail (e.g. because node liveness hasn't initialized yet
+				// making it impossible to get an epoch-based range lease), in which
+				// case we want to retry quickly.
+				retryOptions := base.DefaultRetryOptions()
+				retryOptions.Closer = s.stopper.ShouldStop()
+				for r := retry.Start(retryOptions); r.Next(); {
+					if err := gossipFn.fn(ctx); err != nil {
+						log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+						continue
+					}
+					break
+				}
+				if first {
+					first = false
+					s.initComplete.Done()
+				}
 				select {
 				case <-ticker.C:
 					if err := gossipFn.fn(ctx); err != nil {
@@ -1374,6 +1386,7 @@ func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) er
 		// This store has no range with this configuration.
 		return nil
 	}
+	ctx = repl.AnnotateCtx(ctx)
 	// Wake up the replica. If it acquires a fresh lease, gossip the
 	// gossip. If an unexpected error occurs (i.e. nobody else seems to
 	// have an active lease but we still failed to obtain it), return
