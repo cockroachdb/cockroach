@@ -702,6 +702,10 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// OnCampaign is called if the replica campaigns for Raft leadership
+	// when initializing the Raft group. Note that this method is invoked
+	// with both Replica.raftMu and Replica.mu locked.
+	OnCampaign func(*Replica)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.

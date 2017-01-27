@@ -199,6 +199,14 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
+	return r.mu.replicaID
+}
+
+func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
+	return r.mu.state.Desc
+}
+
 func (r *Replica) RaftLock() {
 	r.raftMu.Lock()
 }
