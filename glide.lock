@@ -199,10 +199,8 @@ imports:
   - internal/errcheck
 - name: github.com/kisielk/gotool
   version: 0de1eaf82fa3f583ce21fde859f1e7e0c5e9b220
-- name: github.com/kkaneda/returncheck
-  version: bf081fa7155e3a27df1f056a49d50685edfa5b1b
-  subpackages:
-  - internal
+- name: github.com/cockroachdb/returncheck
+  version: f3a399c4b3744afe51001fb5f969bfcb78dc599a
 - name: github.com/kr/pretty
   version: cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 - name: github.com/kr/text
