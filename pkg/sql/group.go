@@ -574,7 +574,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			return false, expr
 		}
 		f := v.groupNode.newAggregateFuncHolder(
-			v.preRender.render[groupIdx], groupIdx, parser.NewIdentAggregate,
+			v.preRender.render[groupIdx], groupIdx, true, parser.NewIdentAggregate,
 		)
 
 		return false, v.addAggregation(f)
@@ -607,7 +607,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 			argRenderIdx := v.preRender.addOrReuseRender(col, argExpr, true /* reuse */)
 
-			f := v.groupNode.newAggregateFuncHolder(t, argRenderIdx, agg)
+			f := v.groupNode.newAggregateFuncHolder(t, argRenderIdx, false, agg)
 			if t.Type == parser.DistinctFuncType {
 				f.setDistinct()
 			}
@@ -675,6 +675,8 @@ type aggregateFuncHolder struct {
 	// renderNode underneath.
 	filterRenderIdx int
 
+	identAggregate bool
+
 	create        func(*parser.EvalContext) parser.AggregateFunc
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
@@ -683,15 +685,19 @@ type aggregateFuncHolder struct {
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr parser.TypedExpr, argRenderIdx int, create func(*parser.EvalContext) parser.AggregateFunc,
+	expr parser.TypedExpr,
+	argRenderIdx int,
+	identAggregate bool,
+	create func(*parser.EvalContext) parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
-		expr:          expr,
-		argRenderIdx:  argRenderIdx,
-		create:        create,
-		group:         n,
-		buckets:       make(map[string]parser.AggregateFunc),
-		bucketsMemAcc: n.planner.session.TxnState.OpenAccount(),
+		expr:           expr,
+		argRenderIdx:   argRenderIdx,
+		create:         create,
+		group:          n,
+		identAggregate: identAggregate,
+		buckets:        make(map[string]parser.AggregateFunc),
+		bucketsMemAcc:  n.planner.session.TxnState.OpenAccount(),
 	}
 	return res
 }

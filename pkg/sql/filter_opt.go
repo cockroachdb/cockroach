@@ -241,21 +241,7 @@ func (p *planner) propagateFilters(
 		return plan, parser.DBoolTrue, nil
 
 	case *groupNode:
-		// Filters can't propagate across aggregates:
-		//   SELECT * FROM (SELECT MAX(x) AS m FROM foo GROUP BY y) WHERE m > 123
-		// can only be filtered after the aggregation has occurred.
-		// They can however propagate across non-aggregated GROUP BY columns:
-		//   SELECT * FROM (SELECT MAX(x) AS m, y FROM foo GROUP BY y) WHERE y > 123
-		// can be transformed to:
-		//   SELECT MAX(x) AS m, y FROM (SELECT * FROM foo WHERE y > 123) GROUP BY y
-		// However we don't do that yet.
-		// For now, simply trigger optimization for the child node.
-		//
-		// TODO(knz): implement the aforementioned optimization.
-		//
-		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-			return plan, extraFilter, err
-		}
+		return p.addGroupFilter(ctx, n, info, extraFilter)
 
 	case *limitNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
@@ -400,6 +386,47 @@ func (p *planner) propagateOrWrapFilters(
 	return f, nil
 }
 
+// addGroupFilter attempts to add the extraFilter to the groupNode.
+// The filter is only propagated to the sub-plan if it is expressed
+// using simple column references to the source.
+func (p *planner) addGroupFilter(
+	ctx context.Context, g *groupNode, info *dataSourceInfo, extraFilter parser.TypedExpr,
+) (planNode, parser.TypedExpr, error) {
+	// outerFilter is the filter expressed using values rendered by this groupNode.
+	var outerFilter parser.TypedExpr = parser.DBoolTrue
+	// innerFilter is the filter on the source planNode.
+	var innerFilter parser.TypedExpr = parser.DBoolTrue
+
+	if !isFilterTrue(extraFilter) {
+		// The filter that's being added refers to the rendered
+		// expressions, not the render's source node.
+		convFunc := func(v parser.VariableExpr) (bool, parser.Expr) {
+			if iv, ok := v.(*parser.IndexedVar); ok {
+				f := g.funcs[iv.Idx]
+				if f.identAggregate {
+					return true, &parser.IndexedVar{Idx: f.argRenderIdx}
+				}
+			}
+			return false, v
+		}
+
+		// Do the replacement proper.
+		innerFilter, outerFilter = splitFilter(extraFilter, convFunc)
+	}
+
+	// Propagate the inner filter.
+	newPlan, err := p.propagateOrWrapFilters(
+		ctx, g.plan, info, innerFilter)
+	if err != nil {
+		return g, extraFilter, err
+	}
+
+	// Attach what remains as the new source.
+	g.plan = newPlan
+
+	return g, outerFilter, nil
+}
+
 // addRenderFilter attempts to add the extraFilter to the renderNode.
 // The filter is only propagated to the sub-plan if it is expressed
 // using renders that are either simple datums or simple column
@@ -478,7 +505,7 @@ func (p *planner) addRenderFilter(
 	}
 
 	// Propagate the inner filter.
-	newPlan, err := s.planner.propagateOrWrapFilters(
+	newPlan, err := p.propagateOrWrapFilters(
 		ctx, s.source.plan, s.source.info, innerFilter)
 	if err != nil {
 		return s, extraFilter, err

@@ -85,21 +85,19 @@ EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2
 ----
-0  render                                                  (z int, v int)
+0  render                                                                                          (z int, v int)
 0          render 0     ((2)[int] * (count(k))[int])[int]
 0          render 1     (v)[int]
-1  filter                                                  (v int, "count(k)" int, v int)
-1          filter       ((v)[int] < (2)[int])[bool]
-2  group                                                   (v int, "count(k)" int, v int)
-2          aggregate 0  (v)[int]
-2          aggregate 1  (count((k)[int]))[int]
-2          aggregate 2  (v)[int]
-3  render                                                  (v int, k int)
-3          render 0     (v)[int]
-3          render 1     (k)[int]
-4  scan                                                    (k int, v int)
-4          table        t@primary
-4          filter       ((v)[int] > (123)[int])[bool]
+1  group                                                                                           (v int, "count(k)" int, v int)
+1          aggregate 0  (v)[int]
+1          aggregate 1  (count((k)[int]))[int]
+1          aggregate 2  (v)[int]
+2  render                                                                                          (v int, k int)
+2          render 0     (v)[int]
+2          render 1     (k)[int]
+3  scan                                                                                            (k int, v int)
+3          table        t@primary
+3          filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2
@@ -107,19 +105,14 @@ EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v
 0  render                                                  (z int, v int)
 0          render 0     ((2)[int] * (count(k))[int])[int]
 0          render 1     (v)[int]
-1  filter                                                  (v int, "count(k)" int, v int)
-1          filter       ((v)[int] < (2)[int])[bool]
-2  group                                                   (v int, "count(k)" int, v int)
-2          aggregate 0  (v)[int]
-2          aggregate 1  (count((k)[int]))[int]
-2          aggregate 2  (v)[int]
-3  render                                                  (v int, k int)
-3          render 0     (v)[int]
-3          render 1     (k)[int]
-4  scan                                                    (k int, v int)
-4          table        t@primary
-4          spans        ALL
-4          filter       ((v)[int] > (123)[int])[bool]
+1  group                                                   (v int, "count(k)" int, v int)
+1          aggregate 0  (v)[int]
+1          aggregate 1  (count((k)[int]))[int]
+1          aggregate 2  (v)[int]
+2  render                                                  (v int, k int)
+2          render 0     (v)[int]
+2          render 1     (k)[int]
+3  empty                                                   ()
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
