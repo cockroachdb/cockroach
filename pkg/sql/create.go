@@ -485,6 +485,7 @@ type createTableNode struct {
 	n          *parser.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
 	sourcePlan planNode
+	count      int
 }
 
 // CreateTable creates a table.
@@ -681,14 +682,15 @@ func (n *createTableNode) Start() error {
 		if err = n.p.startPlan(insertPlan); err != nil {
 			return err
 		}
-		// This loop is done here instead of in the Next method
-		// since CREATE TABLE is a DDL statement and Executor only
+		// This driver function call is done here instead of in the Next
+		// method since CREATE TABLE is a DDL statement and Executor only
 		// runs Next() for statements with type "Rows".
-		for done := true; done; done, err = insertPlan.Next() {
-			if err != nil {
-				return err
-			}
+		count, err := countRowsAffected(insertPlan)
+		if err != nil {
+			return err
 		}
+		// Passing the affected rows num back
+		n.count = count
 	}
 	return nil
 }
