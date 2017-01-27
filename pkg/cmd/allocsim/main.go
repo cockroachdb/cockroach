@@ -115,7 +115,7 @@ func (a *allocSim) maybeLogError(err error) {
 }
 
 func (a *allocSim) worker(i, workers int) {
-	const insert = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3))`
+	const insert = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
 
 	r := newRand()
 	db := a.DB[i%len(a.DB)]
