@@ -4350,10 +4350,12 @@ func (r *Replica) shouldGossip() bool {
 // (which provide the necessary serialization to avoid data races).
 func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	if r.store.Gossip() == nil || !r.IsInitialized() {
+		log.Infof(ctx, "gossip not initialized")
 		return nil
 	}
 
 	if !r.ContainsKey(keys.SystemConfigSpan.Key) || !r.shouldGossip() {
+		log.Infof(ctx, "not system config span or lease not held")
 		return nil
 	}
 
@@ -4368,8 +4370,10 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	}
 
 	log.VEventf(ctx, 2, "gossiping system config")
-
-	return errors.Wrap(r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0), "failed to gossip system config")
+	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0); err != nil {
+		return errors.Wrap(err, "failed to gossip system config")
+	}
+	return nil
 }
 
 // maybeGossipNodeLiveness gossips information for all node liveness
