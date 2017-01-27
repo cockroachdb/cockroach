@@ -179,7 +179,6 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &renderNode{}
-var _ planNode = &selectTopNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
 var _ planNode = &unionNode{}
