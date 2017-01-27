@@ -6138,6 +6138,15 @@ getDistribution?() : string;
 
 
 
+dependencies?: string;
+		
+
+getDependencies?() : string;
+		setDependencies?(dependencies : string): void;
+		
+
+
+
 }
 
 	export interface InfoMessage extends Info {
