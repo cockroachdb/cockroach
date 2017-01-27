@@ -457,8 +457,14 @@ func (r *RocksDB) Clear(key MVCCKey) error {
 
 // ClearRange removes a set of entries, from start (inclusive) to end
 // (exclusive).
-func (r *RocksDB) ClearRange(iter Iterator, start, end MVCCKey) error {
-	return dbClearRange(r.rdb, iter, start, end)
+func (r *RocksDB) ClearRange(start, end MVCCKey) error {
+	return dbClearRange(r.rdb, start, end)
+}
+
+// ClearIterRange removes a set of entries, from start (inclusive) to end
+// (exclusive).
+func (r *RocksDB) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	return dbClearIterRange(r.rdb, iter, start, end)
 }
 
 // Iterate iterates from start to end keys, invoking f on each
@@ -769,10 +775,19 @@ func (r *distinctBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
-func (r *distinctBatch) ClearRange(iter Iterator, start, end MVCCKey) error {
+func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
+	if !r.writeOnly {
+		panic("readable batch")
+	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
-	return dbClearRange(r.batch, iter, start, end)
+	return dbClearRange(r.batch, start, end)
+}
+
+func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	return dbClearIterRange(r.batch, iter, start, end)
 }
 
 func (r *distinctBatch) close() {
@@ -986,13 +1001,25 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
-func (r *rocksDBBatch) ClearRange(iter Iterator, start, end MVCCKey) error {
+func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
+	if !r.writeOnly {
+		panic("readable batch")
+	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
-	return dbClearRange(r.batch, iter, start, end)
+	return dbClearRange(r.batch, start, end)
+}
+
+func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	return dbClearIterRange(r.batch, iter, start, end)
 }
 
 // NewIterator returns an iterator over the batch and underlying engine. Note
@@ -1473,12 +1500,16 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
 }
 
-func dbClearRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
+func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
+	return statusToError(C.DBDeleteRange(rdb, goToCKey(start), goToCKey(end)))
+}
+
+func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
 	getter, ok := iter.(dbIteratorGetter)
 	if !ok {
 		return errors.Errorf("%T is not a RocksDB iterator", iter)
 	}
-	return statusToError(C.DBDeleteRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
+	return statusToError(C.DBDeleteIterRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
 }
 
 func dbIterate(

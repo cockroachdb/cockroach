@@ -134,7 +134,13 @@ type Writer interface {
 	// ClearRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear, this method actually removes entries from
 	// the storage engine.
-	ClearRange(iter Iterator, start, end MVCCKey) error
+	ClearRange(start, end MVCCKey) error
+	// ClearIterRange removes a set of entries, from start (inclusive) to end
+	// (exclusive). Similar to Clear and ClearRange, this method actually removes
+	// entries from the storage engine. Unlike ClearRange, the entries to remove
+	// are determined by iterating over iter and per-key tombstones are
+	// generated.
+	ClearIterRange(iter Iterator, start, end MVCCKey) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
