@@ -1336,13 +1336,18 @@ func (r *Replica) assertStateLocked(reader engine.Reader) {
 func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.internalRaftGroup == nil {
+	// If this replica hasn't initialized the Raft group and isn't the
+	// lease owner, unquiesce and wake the leader to ensure replica
+	// comes up to date. If it's the lease owner, the command will
+	// proceed (or the lease will be renewed).
+	if r.mu.internalRaftGroup == nil && !r.mu.state.Lease.OwnedBy(r.store.StoreID()) {
 		// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
 		r.mu.Unlock()
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		r.mu.Lock()
-		if err := r.withRaftGroupLocked(true /* shouldCampaign */, func(raftGroup *raft.RawNode) (bool, error) {
+		// !shouldCampaign avoids multiple replicas campaigning after a split.
+		if err := r.withRaftGroupLocked(false /* !shouldCampaign */, func(raftGroup *raft.RawNode) (bool, error) {
 			return true, nil
 		}); err != nil {
 			log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
