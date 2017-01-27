@@ -2069,7 +2069,7 @@ func evalChangeFrozen(
 		// we don't do it (yet); for now we'll assume that the update steps
 		// are carried out in correct order.
 		log.Warningf(ctx, "freeze %s issued from %s is applied by %s",
-			desc, args.MustVersion, bi)
+			desc, args.MustVersion, &bi)
 	}
 
 	// Generally, we want to act only if the request hits the Range's StartKey.
