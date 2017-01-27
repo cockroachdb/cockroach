@@ -51,7 +51,7 @@ case ${1-} in
     # Retry while vm and sshd to start up.
     "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${FQDN}" true
 
-    rsync -az "$(dirname "${0}")/../build/bootstrap" "${FQDN}:bootstrap"
+    rsync -az "$(dirname "${0}")/../build/bootstrap/" "${FQDN}:bootstrap/"
     ssh -A "${FQDN}" "GOVERSION=${GOVERSION} ./bootstrap/bootstrap-debian.sh"
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
