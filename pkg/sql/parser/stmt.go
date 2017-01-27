@@ -120,12 +120,11 @@ func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
 func (*CreateTable) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (stmt *CreateTable) StatementTag() string {
-	if stmt.As() {
+func (n *CreateTable) StatementTag() string {
+	if n.As() {
 		return "SELECT"
-	} else {
-		return "CREATE TABLE"
 	}
+	return "CREATE TABLE"
 }
 
 // StatementType implements the Statement interface.
