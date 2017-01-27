@@ -601,7 +601,7 @@ func Restore(
 		return nil, err
 	}
 	if len(matches) == 0 {
-		return nil, errors.Errorf("no tables found: %q", table)
+		return nil, errors.Errorf("no tables found: %s", &table)
 	}
 	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
 	for _, desc := range matches {
