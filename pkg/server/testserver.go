@@ -301,7 +301,9 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 // process.
 func ExpectedInitialRangeCount() int {
 	bootstrap := GetBootstrapSchema()
-	return bootstrap.SystemDescriptorCount() - bootstrap.SystemConfigDescriptorCount() + 1
+	return bootstrap.SystemDescriptorCount() -
+		bootstrap.SystemConfigDescriptorCount() +
+		2 /* first-range + system-config-range */
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial

@@ -234,11 +234,14 @@ var (
 	ReportUsagePrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("update-")))
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MinInt64))
+	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, 0))
 	// TableDataMin is the end of the range of table data keys.
 	TableDataMax = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MaxInt64))
 
-	// SystemConfigTableDataMax is the end key of system config structured data.
+	// SystemConfigSplitKey is the key to split at immediately prior to the
+	// system config span. NB: Split keys need to be valid column keys.
+	SystemConfigSplitKey = MakeRowSentinelKey(TableDataMin)
+	// SystemConfigTableDataMax is the end key of system config span.
 	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
 
 	// UserTableDataMin is the start key of user structured data.

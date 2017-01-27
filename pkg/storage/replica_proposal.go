@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -433,20 +432,19 @@ func (r *Replica) leasePostApply(
 		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
 	}
 
-	// Potentially re-gossip if the range contains system data (e.g.
-	// system config or node liveness) and the lease is changing hands
-	// or this is the first time that either system data has been
-	// gossiped.
+	// Potentially re-gossip if the range contains system data (e.g. system
+	// config or node liveness). We need to perform this gossip at startup as
+	// soon as possible. Trying to minimize how often we gossip is a fool's
+	// errand. The node liveness info will be gossiped frequently (every few
+	// seconds) in any case due to the liveness heartbeats. And the system config
+	// will be gossiped rarely because it falls on a range with an epoch-based
+	// range lease that is only reacquired extremely infrequently.
 	if iAmTheLeaseHolder {
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedSystemConfig, 0, 1) {
-			if err := r.maybeGossipSystemConfig(ctx); err != nil {
-				log.Error(ctx, err)
-			}
+		if err := r.maybeGossipSystemConfig(ctx); err != nil {
+			log.Error(ctx, err)
 		}
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedNodeLiveness, 0, 1) {
-			if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Error(ctx, err)
-			}
+		if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+			log.Error(ctx, err)
 		}
 	}
 }
