@@ -249,12 +249,10 @@ func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 		plan, err = expandRenderNode(params, n)
 
 	case *delayedNode:
-		v, err := n.constructor(params.p)
-		if err != nil {
-			return plan, err
+		n.plan, err = n.constructor(params.p)
+		if err == nil {
+			n.plan, err = doExpandPlan(params, n.plan)
 		}
-		n.plan = v
-		n.plan, err = doExpandPlan(params, n.plan)
 
 	case *valuesNode:
 	case *alterTableNode:

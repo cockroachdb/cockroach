@@ -20,11 +20,11 @@ import (
 	"log"
 	"os"
 
-	"honnef.co/go/lint"
-	"honnef.co/go/lint/lintutil"
-	"honnef.co/go/simple"
-	"honnef.co/go/staticcheck"
-	"honnef.co/go/unused"
+	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/lint/lintutil"
+	"honnef.co/go/tools/simple"
+	"honnef.co/go/tools/staticcheck"
+	"honnef.co/go/tools/unused"
 )
 
 type metaChecker struct {
