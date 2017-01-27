@@ -879,3 +879,16 @@ func (b *ExportStorage_S3) Keys() s3gof3r.Keys {
 		SecretKey: b.Secret,
 	}
 }
+
+// InsertRangeInfo inserts ri into a slice of RangeInfo's if a descriptor for
+// the same range is not already present. If it is present, it's overwritten;
+// the rationale being that ri is newer information than what we had before.
+func InsertRangeInfo(ris []RangeInfo, ri RangeInfo) []RangeInfo {
+	for i := range ris {
+		if ris[i].Desc.RangeID == ri.Desc.RangeID {
+			ris[i] = ri
+			return ris
+		}
+	}
+	return append(ris, ri)
+}

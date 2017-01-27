@@ -112,7 +112,7 @@ func initRowFetcher(
 	}
 	if err := fetcher.Init(
 		desc, colIdxMap, index, reverseScan, isSecondaryIndex,
-		desc.Columns, valNeededForCol,
+		desc.Columns, valNeededForCol, true, /* returnRangeInfo */
 	); err != nil {
 		return nil, false, err
 	}

@@ -266,8 +266,9 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	}
 
 	return tu.fetcher.Init(
-		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
-		tu.fetchCols, valNeededForCol)
+		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
+		false /* reverse */, false, /* isSecondaryIndex */
+		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/)
 }
 
 func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
@@ -618,7 +619,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 	var rf sqlbase.RowFetcher
 	err := rf.Init(
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
-		false, false, td.rd.fetchCols, valNeededForCol)
+		false /*reverse*/, false, /*isSecondaryIndex*/
+		td.rd.fetchCols, valNeededForCol, false /* returnRangeInfo */)
 	if err != nil {
 		return resume, err
 	}
@@ -710,7 +712,8 @@ func (td *tableDeleter) deleteIndexScan(
 	var rf sqlbase.RowFetcher
 	err := rf.Init(
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
-		false, false, td.rd.fetchCols, valNeededForCol)
+		false /* reverse */, false, /*isSecondaryIndex */
+		td.rd.fetchCols, valNeededForCol, false /* returnRangeInfo */)
 	if err != nil {
 		return resume, err
 	}
