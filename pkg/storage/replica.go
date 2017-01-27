@@ -440,13 +440,13 @@ var _ KeyRange = &Replica{}
 // initialized) Raft group. The supplied function should return true for the
 // unquiesceAndWakeLeader argument if the replica should be unquiesced (and the
 // leader awoken). See handleRaftReady for an instance of where this value
-// varies. The shouldCampaign argument indicates whether a new raft group
+// varies. The shouldCampaignOnCreation argument indicates whether a new raft group
 // should be campaigned upon creation and is used to eagerly campaign idle
 // replicas.
 //
 // Requires that both Replica.mu and Replica.raftMu are held.
 func (r *Replica) withRaftGroupLocked(
-	shouldCampaign bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	shouldCampaignOnCreation bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	if r.mu.destroyed != nil {
 		// Silently ignore all operations on destroyed replicas. We can't return an
@@ -460,11 +460,11 @@ func (r *Replica) withRaftGroupLocked(
 		return nil
 	}
 
-	if shouldCampaign {
+	if shouldCampaignOnCreation {
 		// Special handling of idle replicas: we campaign their Raft group upon
 		// creation if we gossiped our store descriptor more than the election
 		// timeout in the past.
-		shouldCampaign = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
+		shouldCampaignOnCreation = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
 	}
 
 	ctx := r.AnnotateCtx(context.TODO())
@@ -482,7 +482,7 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		if !shouldCampaign {
+		if !shouldCampaignOnCreation {
 			// Automatically campaign and elect a leader for this group if there's
 			// exactly one known node for this group.
 			//
@@ -510,13 +510,19 @@ func (r *Replica) withRaftGroupLocked(
 			// performed. Perhaps we should move the logic for campaigning single
 			// replica ranges there so that normally we only eagerly campaign when
 			// proposing.
-			shouldCampaign = r.isSoloReplicaLocked()
+			shouldCampaignOnCreation = r.isSoloReplicaLocked()
 		}
-		if shouldCampaign {
+		if shouldCampaignOnCreation {
 			log.VEventf(ctx, 3, "campaigning")
+			log.Infof(ctx, "campaigning")
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
+			if fn := r.store.cfg.TestingKnobs.OnCampaign; fn != nil {
+				fn(r)
+			}
+		} else {
+			log.Infof(ctx, "initializing raft group but not campaigning")
 		}
 	}
 
@@ -1332,17 +1338,30 @@ func (r *Replica) assertStateLocked(reader engine.Reader) {
 
 // maybeInitializeRaftGroup check whether the internal Raft group has
 // not yet been initialized. If not, it is created and set to campaign
-// if possible.
+// if this replica is the most recent owner of the range lease.
 func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// If this replica hasn't initialized the Raft group, create it and
+	// unquiesce and wake the leader to ensure the replica comes up to date.
 	if r.mu.internalRaftGroup == nil {
 		// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
 		r.mu.Unlock()
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		r.mu.Lock()
-		if err := r.withRaftGroupLocked(true /* shouldCampaign */, func(raftGroup *raft.RawNode) (bool, error) {
+		// Campaign if this replica is the current lease holder to avoid
+		// an election storm after a recent split. If no replica is the
+		// lease holder, all replicas must campaign to avoid waiting for
+		// an election timeout to acquire the lease. In the latter case,
+		// there's less chance of an election storm because this replica
+		// will only campaign if it's been idle for >= election timeout,
+		// so there's most likely been no traffic to the range.
+		shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
+			r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
+		st := r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+		log.Infof(ctx, "lease status: %d, lease: %s", st.state, st.lease)
+		if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
 			return true, nil
 		}); err != nil {
 			log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
@@ -4350,12 +4369,10 @@ func (r *Replica) shouldGossip() bool {
 // (which provide the necessary serialization to avoid data races).
 func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	if r.store.Gossip() == nil || !r.IsInitialized() {
-		log.Infof(ctx, "gossip not initialized")
 		return nil
 	}
 
 	if !r.ContainsKey(keys.SystemConfigSpan.Key) || !r.shouldGossip() {
-		log.Infof(ctx, "not system config span or lease not held")
 		return nil
 	}
 
