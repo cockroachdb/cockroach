@@ -576,8 +576,7 @@ func TestEngineScan2(t *testing.T) {
 	}, t)
 }
 
-func TestEngineDeleteRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, end MVCCKey) error) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		keys := []MVCCKey{
 			mvccKey("a"),
@@ -594,15 +593,30 @@ func TestEngineDeleteRange(t *testing.T) {
 		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
 
 		// Delete a range of keys
-		iter := engine.NewIterator(false)
-		if err := engine.ClearRange(iter, mvccKey("aa"), mvccKey("abc")); err != nil {
+		if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
 			t.Error("Not expecting an error")
 		}
-		iter.Close()
 		// Verify what's left
 		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10,
 			[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
 	}, t)
+
+}
+
+func TestEngineDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
+		return engine.ClearRange(start, end)
+	})
+}
+
+func TestEngineDeleteIterRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
+		iter := engine.NewIterator(false)
+		defer iter.Close()
+		return engine.ClearIterRange(iter, start, end)
+	})
 }
 
 func TestSnapshot(t *testing.T) {
