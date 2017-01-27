@@ -59,7 +59,11 @@ func TestDumpRow(t *testing.T) {
 		tz timestamptz,
 		e1 decimal(2),
 		e2 decimal(2, 1),
-		s1 string(1)
+		s1 string(1),
+		FAMILY "primary" (i, f, d, t, n, o, tz, e1, e2, s1, rowid),
+		FAMILY fam_1_s (s),
+		FAMILY fam_2_b (b),
+		FAMILY fam_3_e (e)
 	);
 	INSERT INTO d.t VALUES (
 		1,
