@@ -1332,17 +1332,22 @@ func (r *Replica) assertStateLocked(reader engine.Reader) {
 
 // maybeInitializeRaftGroup check whether the internal Raft group has
 // not yet been initialized. If not, it is created and set to campaign
-// if possible.
+// if this replica is the most recent owner of the range lease.
 func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// If this replica hasn't initialized the Raft group, create it and
+	// unquiesce and wake the leader to ensure the replica comes up to date.
 	if r.mu.internalRaftGroup == nil {
 		// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
 		r.mu.Unlock()
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		r.mu.Lock()
-		if err := r.withRaftGroupLocked(true /* shouldCampaign */, func(raftGroup *raft.RawNode) (bool, error) {
+		// Only campaign if this replica is the lease owner to avoid a
+		// campaign storm after a recent split.
+		shouldCampaign := r.mu.state.Lease.OwnedBy(r.store.StoreID())
+		if err := r.withRaftGroupLocked(shouldCampaign, func(raftGroup *raft.RawNode) (bool, error) {
 			return true, nil
 		}); err != nil {
 			log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
